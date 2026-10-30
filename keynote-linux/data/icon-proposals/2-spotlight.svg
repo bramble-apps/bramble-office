@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 2 · Spotlight: a slide on stage, lit from above (GNOME purples and yellow) -->
+  <defs>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9f06b" stop-opacity=".95"/><stop offset="1" stop-color="#f9f06b" stop-opacity=".15"/></linearGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9141ac"/><stop offset="1" stop-color="#613583"/></linearGradient>
+  </defs>
+  <rect x="8" y="14" width="112" height="104" rx="14" fill="#3d3846"/>
+  <rect x="8" y="8" width="112" height="104" rx="14" fill="url(#stage)"/>
+  <path d="M52 8h24l26 78H26z" fill="url(#beam)"/>
+  <rect x="26" y="38" width="76" height="48" rx="4" fill="#ffffff"/>
+  <path d="M56 50l20 12-20 12z" fill="#9141ac"/>
+  <rect x="26" y="80" width="76" height="6" fill="#deddda"/>
+  <ellipse cx="64" cy="96" rx="44" ry="6" fill="#241f31" opacity=".35"/>
+</svg>

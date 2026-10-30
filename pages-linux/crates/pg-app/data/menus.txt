@@ -1,0 +1,824 @@
+=== Letters ===
+  About Letters
+  Support Development…
+  ---
+  Settings…   [⌘,]
+  ---
+  Learn About Apple Creator Studio
+  ---
+  Get Apple Creator Studio
+  ---
+  Provide Letters Feedback
+  ---
+  Privacy & Analytics
+  ---
+  Services
+    <per-user entries removed>
+  ---
+  Hide Letters   [⌘H]
+  Hide Others   [⌥⌘H]
+  Show All (disabled now)
+  ---
+  Quit Letters   [⌘Q]
+  Quit and Keep Windows   [⌥⌘Q]
+
+=== File ===
+  New…   [⌘N]
+  New…   [⌘N]
+  Open…   [⌘O]
+  Open Recent
+    <per-user entries removed>
+  ---
+  Close   [⌘W]
+  Close All   [⌥⌘W]
+  Save   [⌘S]
+  Save As…   [⌥⇧⌘S]
+  Duplicate   [⇧⌘S]
+  Rename…
+  Move To…
+  Revert To
+    Browse All Versions…
+  ---
+  Share…
+  Activity Settings… (disabled now)
+  ---
+  Export To
+    PDF…
+    Word…
+    EPUB…
+    Plain Text…
+    Rich Text Format…
+    Images…
+    Pages ’09…
+  Publish to Apple Books
+  ---
+  Mail Merge… (disabled now)
+  ---
+  Convert to Page Layout
+  ---
+  Reduce File Size…
+  Advanced
+    Change File Type
+      Single File
+      Package
+    Language & Region…
+  ---
+  Set Password…
+  ---
+  Save as Template…
+  ---
+  Page Setup…   [⇧⌘P]
+  Print…   [⌘P]
+
+=== Edit ===
+  Undo   [⌘Z] (disabled now)
+  Redo   [⇧⌘Z] (disabled now)
+  ---
+  Cut   [⌘X] (disabled now)
+  Copy   [⌘C] (disabled now)
+  Paste   [⌘V] (disabled now)
+  Paste and Match Style   [⌥⇧⌘V] (disabled now)
+  Paste and Preserve Style   [⌃⇧⌘V] (disabled now)
+  Paste Formula Results (disabled now)
+  Delete (disabled now)
+  Clear All (disabled now)
+  ---
+  Duplicate Selection   [⌘D] (disabled now)
+  ---
+  Select All   [⌘A]
+  Deselect All   [⇧⌘A]
+  ---
+  Track Changes
+  Accept Change   [⌥⌘A] (disabled now)
+  Reject Change   [⌥⌘R] (disabled now)
+  ---
+  Remove Highlights and Comments  (disabled now)
+  Remove Smart Annotations (disabled now)
+  ---
+  Find
+    Find…   [⌘F]
+    Find Next   [⌘G]
+    Find Previous   [⇧⌘G]
+    ---
+    Hide Find Panel (disabled now)
+    ---
+    Use Selection for Find   [⌘E] (disabled now)
+    Use Selection for Replace (disabled now)
+    ---
+    Jump to Selection   [⌘J]
+  ---
+  Writing Tools
+    Show Writing Tools
+    ---
+    Proofread
+    Rewrite
+    ---
+    Make Friendly
+    Make Professional
+    Make Concise
+    ---
+    Summarize
+    Create Key Points
+    Make List
+    Make Table
+    ---
+    Compose…
+  Spelling and Grammar
+    Show Spelling and Grammar   [⌘:]
+    Check Document Now   [⌘;]
+    ---
+    Check Spelling While Typing
+    Check Grammar With Spelling
+    Correct Spelling Automatically
+  Substitutions
+    Show Substitutions
+    ---
+    Smart Quotes
+    Smart Dashes
+    Smart Web and Email Links
+    Smart Phone Number Links
+    Text Replacement
+  Transformations
+    Make Upper Case (disabled now)
+    Make Lower Case (disabled now)
+    Capitalize (disabled now)
+  Speech
+    Start Speaking
+    Stop Speaking (disabled now)
+  ---
+  Manage Bookmark Suggestions…
+  ---
+  EndNote Citations (disabled now)
+    APA 6th (disabled now)
+    Annotated (disabled now)
+    Author-Date (disabled now)
+    Chicago 16th A (disabled now)
+    MHRA (disabled now)
+    Numbered (disabled now)
+    Show All Fields (disabled now)
+    Turabian Bibliography (disabled now)
+    Vancouver (disabled now)
+  ---
+  AutoFill
+    Contact… (disabled now)
+    Passwords… (disabled now)
+    Credit Card… (disabled now)
+  Start Dictation   [🎤]
+  Emoji & Symbols   [fnE]
+
+=== Insert ===
+  Section
+  ---
+  Page Break   [⌘↩]
+  Line Break
+  Section Break
+  Column Break
+  ---
+  Page Number
+  Page Count
+  Date & Time
+  ---
+  Table of Contents
+    Document
+    Section
+  Footnote
+  ---
+  Table
+    Headers
+    Basic
+    Plain
+    Sums
+  Chart
+    2D Column
+    2D Stacked Column
+    2D Bar
+    2D Stacked Bar
+    2D Line
+    2D Area
+    2D Stacked Area
+    2D Radar
+    2D Pie
+    2D Donut
+    2D Scatter
+    2D Bubble
+    2D Mixed
+    2D 2-Axis
+    ---
+    3D Column
+    3D Stacked Column
+    3D Bar
+    3D Stacked Bar
+    3D Line
+    3D Area
+    3D Stacked Area
+    3D Pie
+    ---
+    Interactive Column
+    Interactive Bar
+    Interactive Scatter
+    Interactive Bubble
+  Text
+  Shape
+    Rectangle
+    Rounded Rectangle
+    Oval
+    Triangle
+    Right Triangle
+    Arrow
+    Double Arrow
+    Diamond
+    Quote Bubble
+    Callout
+    Polygon
+    Star
+  Line
+    Line
+    Line with Arrowhead
+    Line with Two Arrowheads
+    Straight Connection Line
+    Curved Connection Line
+    Right Angle Connection Line
+    ---
+    Draw with Pen   [⌥⇧⌘P]
+  Highlight   [⇧⌘H]
+  Comment   [⇧⌘K]
+  Bookmark   [⌥⌘B]
+  ---
+  Browse Content Hub
+  Generate Image
+  Generate Shape
+  ---
+  Image Playground…
+  Image Gallery
+  Web Video…
+  <<Import From Device - unlocalized>>
+  Record Audio
+  ---
+  Formula
+    Sum (disabled now)
+    Average (disabled now)
+    Minimum (disabled now)
+    Maximum (disabled now)
+    Count (disabled now)
+    Product (disabled now)
+    ---
+    New Formula (disabled now)
+  Equation…   [⌥⌘E]
+  EndNote Citation   [⌥⇧⌘E] (disabled now)
+  Mail Merge Field
+    Full Name
+    First Name
+    Last Name
+    Address (Home)
+    Address (Work)
+    Phone (Mobile)
+    Email (Home)
+    Job Title
+    Company
+    More Fields
+      Name
+        Prefix
+        First Name
+        Middle Name
+        Last Name
+        Suffix
+        Nickname
+        Maiden Name
+      Address
+        Home
+          Full Address (Multiple Lines)
+          Full Address (Single Line)
+          Street
+          City
+          State
+          ZIP
+          Country
+        Work
+          Full Address (Multiple Lines)
+          Full Address (Single Line)
+          Street
+          City
+          State
+          ZIP
+          Country
+        School
+          Full Address (Multiple Lines)
+          Full Address (Single Line)
+          Street
+          City
+          State
+          ZIP
+          Country
+        Other
+          Full Address (Multiple Lines)
+          Full Address (Single Line)
+          Street
+          City
+          State
+          ZIP
+          Country
+      Phone
+        Mobile
+        iPhone
+        Apple Watch
+        Home
+        Work
+        Main
+        Home Fax
+        Work Fax
+        Other Fax
+        Pager
+        Other
+      Email
+        Home
+        Work
+        School
+        iCloud
+        Other
+      Job Title
+      Department
+      Company
+      URL
+        Homepage
+        Home
+        Work
+        Other
+      Birthday
+      Alternate Calendar Birthday
+      Date
+        Anniversary
+        Other
+      Related Name
+        Mother
+        Father
+        Parent
+        Son
+        Daughter
+        Brother
+        Sister
+        Child
+        Friend
+        Spouse
+        Partner
+        Assistant
+        Manager
+      Social Media
+        Twitter
+        Facebook
+        Flickr
+        LinkedIn
+        MySpace
+        Sina Weibo
+        Yelp
+      Messaging
+        Home
+          Facebook
+          Gadu-Gadu
+          Google Talk
+          ICQ
+          Jabber
+          MSN
+          QQ
+          Skype
+          Yahoo
+        Work
+          Facebook
+          Gadu-Gadu
+          Google Talk
+          ICQ
+          Jabber
+          MSN
+          QQ
+          Skype
+          Yahoo
+        Other
+          Facebook
+          Gadu-Gadu
+          Google Talk
+          ICQ
+          Jabber
+          MSN
+          QQ
+          Skype
+          Yahoo
+  ---
+  Choose File   [⇧⌘V]
+
+=== Format ===
+  Font
+    Show Fonts   [⌘T]
+    ---
+    Bold   [⌘B]
+    Italic   [⌘I]
+    Underline   [⌘U]
+    Strikethrough
+    ---
+    Bigger   [⌘+]
+    Smaller   [⌘-]
+    ---
+    Replace Fonts…
+    ---
+    Character Spacing
+      Use None
+      Tighten   [⌥⌘[]
+      Loosen   [⌥⌘]]
+    Ligature
+      Use Default
+      Use None
+      Use All
+    Baseline
+      Use Default
+      Superscript   [⌃⌘+]
+      Subscript   [⌃⌘-]
+      Raise
+      Lower
+    Capitalization
+      None
+      All Caps
+      Small Caps
+      Title Case
+      Start Case
+  Text
+    Align Left   [⌘{]
+    Align Center   [⌘|]
+    Align Right   [⌘}]
+    Justify   [⌥⌘|]
+    Auto-Align Table Cell   [⌥⌘U] (disabled now)
+    ---
+    Increase Indent Level   [⌘]]
+    Decrease Indent Level   [⌘[] (disabled now)
+  ---
+  Table
+    Add Row Above (disabled now)
+    Add Row Below (disabled now)
+    ---
+    Add Column Before (disabled now)
+    Add Column After (disabled now)
+    ---
+    Delete Row   [⌥⌘⌫] (disabled now)
+    Delete Column   [⌃⌘⌫] (disabled now)
+    ---
+    Header Rows
+      0 (disabled now)
+      1 (disabled now)
+      2 (disabled now)
+      3 (disabled now)
+      4 (disabled now)
+      5 (disabled now)
+    Repeat Header Rows on Each Page (disabled now)
+    Header Columns
+      0 (disabled now)
+      1 (disabled now)
+      2 (disabled now)
+      3 (disabled now)
+      4 (disabled now)
+      5 (disabled now)
+    Footer Rows
+      0 (disabled now)
+      1 (disabled now)
+      2 (disabled now)
+      3 (disabled now)
+      4 (disabled now)
+      5 (disabled now)
+    ---
+    Resize Row to Fit Content (disabled now)
+    Resize Column to Fit Content (disabled now)
+    ---
+    Distribute Rows Evenly (disabled now)
+    Distribute Columns Evenly (disabled now)
+    ---
+    Select
+      Row   [⌥⌘↩] (disabled now)
+      Column   [⌃⌘↩] (disabled now)
+      ---
+      First Value in Row   [⌥⌘←] (disabled now)
+      Last Value in Row   [⌥⌘→] (disabled now)
+      ---
+      First Value in Column   [⌥⌘↑] (disabled now)
+      Last Value in Column   [⌥⌘↓] (disabled now)
+      ---
+      Extend to First Value in Row   [⌥⇧⌘←] (disabled now)
+      Extend to Last Value in Row   [⌥⇧⌘→] (disabled now)
+      ---
+      Extend to First Value in Column   [⌥⇧⌘↑] (disabled now)
+      Extend to Last Value in Column   [⌥⇧⌘↓] (disabled now)
+    ---
+    Autofill Cells
+      Autofill   [⌘\] (disabled now)
+      ---
+      Autofill Right (disabled now)
+      Autofill Left (disabled now)
+      Autofill Down (disabled now)
+      Autofill Up (disabled now)
+      ---
+      Autofill from Row Above   [⌥⌘\] (disabled now)
+      Autofill from Column Before   [⌃⌘\] (disabled now)
+    ---
+    Merge Cells   [⌃⌘M] (disabled now)
+    Unmerge Cells   [⌃⇧⌘M] (disabled now)
+  Chart
+    Chart Type
+      2D Column (disabled now)
+      2D Stacked Column (disabled now)
+      2D Bar (disabled now)
+      2D Stacked Bar (disabled now)
+      2D Line (disabled now)
+      2D Area (disabled now)
+      2D Stacked Area (disabled now)
+      2D Radar (disabled now)
+      2D Pie (disabled now)
+      2D Donut (disabled now)
+      ---
+      2D Bubble (disabled now)
+      ---
+      2D 2-Axis (disabled now)
+      ---
+      3D Column (disabled now)
+      3D Stacked Column (disabled now)
+      3D Bar (disabled now)
+      3D Stacked Bar (disabled now)
+      3D Line (disabled now)
+      3D Area (disabled now)
+      3D Stacked Area (disabled now)
+      3D Pie (disabled now)
+      ---
+      Interactive Column (disabled now)
+      Interactive Bar (disabled now)
+      Interactive Scatter (disabled now)
+      Interactive Bubble (disabled now)
+    ---
+    Show Chart Data Editor   [⇧⌘D] (disabled now)
+    ---
+    Show Title (disabled now)
+    Show Legend (disabled now)
+    Show Borders (disabled now)
+    ---
+    Show Y Axis Name (disabled now)
+    Show Y Axis Labels (disabled now)
+    Show Y Axis 2 Name (disabled now)
+    Show Y Axis 2 Title (disabled now)
+    ---
+    Show X Axis Title (disabled now)
+    Show X Axis Labels (disabled now)
+    ---
+    Show Series Names (disabled now)
+    Show Series Value Labels (disabled now)
+  Shapes and Lines
+    Make Editable (disabled now)
+    Reset Text and Object Handles (disabled now)
+    Break Apart (disabled now)
+    Save to My Shapes (disabled now)
+    ---
+    Unite Shapes (disabled now)
+    Intersect Shapes (disabled now)
+    Subtract Shapes (disabled now)
+    Exclude Shapes (disabled now)
+    ---
+    Make Sharp Point (disabled now)
+    Make Smooth Point (disabled now)
+    Make Bézier Point (disabled now)
+    ---
+    Toggle Line Type (disabled now)
+  Image
+    Edit in Pixelmator Pro (disabled now)
+    ---
+    Edit Mask   [⇧⌘M] (disabled now)
+    Reset Mask (disabled now)
+    Mask with Shape
+      Rectangle (disabled now)
+      Rounded Rectangle (disabled now)
+      Oval (disabled now)
+      Triangle (disabled now)
+      Right Triangle (disabled now)
+      Arrow (disabled now)
+      Double Arrow (disabled now)
+      Diamond (disabled now)
+      Quote Bubble (disabled now)
+      Callout (disabled now)
+      Star (disabled now)
+      Polygon (disabled now)
+    ---
+    Remove Watermarks (disabled now)
+    ---
+    Generate from Image (disabled now)
+    Super Resolution (disabled now)
+    ---
+    Remove Background (disabled now)
+    Reset Background (disabled now)
+  Movie
+    Optimize for iPhone and iPad (disabled now)
+  ---
+  Copy Style   [⌥⌘C]
+  Paste Style   [⌥⌘V]
+  ---
+  Conditional Highlighting… (disabled now)
+  ---
+  Add Link
+    Webpage (disabled now)
+    Email (disabled now)
+    Phone Number (disabled now)
+    Bookmark (disabled now)
+  Remove Link (disabled now)
+  ---
+  Phonetic Guide Text… (disabled now)
+  Remove Phonetic Guide Text (disabled now)
+  ---
+  Reapply Page Template (disabled now)
+  Advanced
+    Create Style (disabled now)
+    ---
+    Create Page Template From This Page (disabled now)
+    ---
+    Define as Placeholder Text   [⌃⌥⌘T] (disabled now)
+    Define as Media Placeholder   [⌃⌥⌘I] (disabled now)
+    ---
+    Set as Default Text Box Appearance (disabled now)
+
+=== Arrange ===
+  Bring Forward   [⌥⇧⌘F] (disabled now)
+  Bring to Front   [⇧⌘F] (disabled now)
+  ---
+  Send Backward   [⌥⇧⌘B] (disabled now)
+  Send to Back   [⇧⌘B] (disabled now)
+  ---
+  Align Objects
+    Left (disabled now)
+    Center (disabled now)
+    Right (disabled now)
+    ---
+    Top (disabled now)
+    Middle (disabled now)
+    Bottom (disabled now)
+  Distribute Objects
+    Horizontally (disabled now)
+    Vertically (disabled now)
+    Evenly (disabled now)
+  ---
+  Flip Horizontally (disabled now)
+  Flip Vertically (disabled now)
+  ---
+  Lock   [⌘L] (disabled now)
+  Unlock   [⌥⌘L] (disabled now)
+  ---
+  Group   [⌥⌘G] (disabled now)
+  Ungroup   [⌥⇧⌘G] (disabled now)
+  ---
+  Section Layouts
+    Move Objects to Section Layout (disabled now)
+    Make Layout Objects Selectable
+
+=== View ===
+  Show Tab Bar
+  Show All Tabs
+  ---
+  Inspector
+    Format
+    Document Setup
+    ---
+    Show Next Inspector Tab   [⌃`] (disabled now)
+    Show Previous Inspector Tab   [⌃⇧`] (disabled now)
+    ---
+    Hide Inspector   [⌥⌘I]
+  ---
+  Page Thumbnails
+  Table of Contents
+  Document Only
+  ---
+  Show Word Count   [⇧⌘W]
+  Show Ruler   [⌘R]
+  Guides
+    Hide Guides
+    Hide Page Template Guides
+    ---
+    Clear All Guides on Page (disabled now)
+  ---
+  Go To
+    Next Page (disabled now)
+    Previous Page (disabled now)
+    ---
+    First Page (disabled now)
+    Last Page (disabled now)
+    ---
+    Page…   [⌃⌘G] (disabled now)
+  ---
+  Enter Screen View   [⇧⌘R]
+  ---
+  Edit Page Templates   [⇧⌘E] (disabled now)
+  ---
+  Show Layout   [⇧⌘L]
+  Show Invisibles   [⇧⌘I]
+  ---
+  Show Comments Pane   [⇧⌘T]
+  Comments & Changes
+    Hide Comments
+    ---
+    Show Next Comment or Change   [⌥⌘K] (disabled now)
+    Show Previous Comment or Change   [⌥⇧⌘K] (disabled now)
+    ---
+    Author Color
+      Yellow
+      Green
+      Blue
+      Pink
+      Purple
+      Teal
+      Orange
+      Red
+      Brown
+      Gray Blue
+  Hide Smart Annotations
+  ---
+  Hide Participant Cursors (disabled now)
+  Show Activity Pane (disabled now)
+  ---
+  Show Content Hub
+  Show Arrange Tools
+  Show Colors   [⇧⌘C]
+  Show Adjust Image
+  Show Music Browser
+  Show Photo and Video Browser
+  ---
+  Zoom
+    One Page
+    Two Pages
+    ---
+    Zoom In   [⇧⌘.]
+    Zoom Out   [⇧⌘,]
+    Actual Size   [⌘0]
+    ---
+    Fit Width
+    Fit Page
+    Zoom to Selection   [⇧⌘0] (disabled now)
+  ---
+  Show Warnings
+  Show Sync Status
+  ---
+  Enter Full Screen   [fnF]
+  ---
+  Hide Toolbar   [⌥⌘T]
+  Customize Toolbar…
+
+=== Window ===
+  Minimize   [⌘M]
+  Minimize All   [⌥⌘M]
+  Zoom   [⌃⌘=]
+  Zoom All   [⌃⌥⌘=]
+  Fill   [m28F]
+  Center   [m28C]
+  ---
+  Move & Resize
+    Halves (disabled now)
+    Left   [m28←]
+    Right   [m28→]
+    Top   [m28↑]
+    Bottom   [m28↓]
+    ---
+    Quarters (disabled now)
+    Top Left
+    Top Right
+    Bottom Left
+    Bottom Right
+    ---
+    Arrange (disabled now)
+    Left & Right   [m29←]
+    Left & Quarters   [m31←]
+    Right & Left   [m29→]
+    Right & Quarters   [m31→]
+    Top & Bottom   [m29↑]
+    Top & Quarters   [m31↑]
+    Bottom & Top   [m29↓]
+    Bottom & Quarters   [m31↓]
+    Quarters (disabled now)
+    ---
+    Return to Previous Size   [m28R] (disabled now)
+  Full Screen Tile
+    Left of Screen
+    Right of Screen
+  ---
+  Move to <user device>
+  ---
+  Bring All to Front
+  Arrange in Front
+  Remove Window from Set (disabled now)
+  ---
+  Show Previous Tab   [⌃⇧⇥] (disabled now)
+  Show Next Tab   [⌃⇥] (disabled now)
+  Move Tab to New Window (disabled now)
+  Merge All Windows (disabled now)
+  ---
+  ---
+  UI-doc.pages
+
+=== Help ===
+  Send Pages Feedback
+  ---
+  Pages Help
+  Keyboard Shortcuts
+  Formulas and Functions Help
+  ---
+  What’s New in Pages
+  Welcome to Pages
+  About Premium Features
+  ---
+  Service and Support
+

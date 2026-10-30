@@ -1,0 +1,14 @@
+[package]
+name = "nm-core"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[dependencies]
+kn-format = { path = "../../../keynote-linux/crates/kn-format" }
+kn-model = { path = "../../../keynote-linux/crates/kn-model" }
+roxmltree = "0.20"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+zip = "9"

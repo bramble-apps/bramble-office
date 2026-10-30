@@ -1,0 +1,10 @@
+target/
+
+# Apple-made files used only by tests (or not at all): kept on this computer only
+/crates/pg-core/data/donors/20-comment.pages
+/crates/pg-core/data/donors/21-track-changes.pages
+/crates/pg-core/data/donors/22-link-webpage.pages
+/crates/pg-core/data/donors/23-bookmark.pages
+/crates/pg-core/data/donors/26-section-break.pages
+/crates/pg-core/data/donors/29-equation.pages
+/crates/pg-core/data/donors/35-inline-table.pages

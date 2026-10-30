@@ -1,0 +1,24 @@
+[package]
+name = "pg-app"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[[bin]]
+name = "letters"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+egui = "0.37"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+pg-core = { path = "../pg-core" }
+kn-render = { path = "../../../keynote-linux/crates/kn-render" }
+# the suite's look (colours and colour themes, controls, liquid glass, icons, window frame)
+kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
+tiny-skia = "0.12.0"
+rfd = "0.17.2"
+
+[build-dependencies]
+winresource = "0.1.34"

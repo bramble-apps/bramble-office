@@ -1,0 +1,7 @@
+/target
+*.tmp
+/testdata-private
+dist/
+
+# Apple-made test files: kept on this computer only, never published
+/testdata/

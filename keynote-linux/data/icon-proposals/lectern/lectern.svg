@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Lectern seen from the speaker's spot: the varnished wooden desk runs out of frame at the
+       top and sides; a slide printout rests against the near ledge; the body drops away below -->
+  <defs>
+    <clipPath id="sq"><path d="M46.52,8.00 L81.48,8.00 C92.57,8.00 98.12,8.00 103.12,9.65 L104.09,9.89 C110.60,12.26 115.74,17.40 118.11,23.91 C120.00,29.88 120.00,35.43 120.00,46.52 L120.00,81.48 C120.00,92.57 120.00,98.12 118.35,103.12 L118.11,104.09 C115.74,110.60 110.60,115.74 104.09,118.11 C98.12,120.00 92.57,120.00 81.48,120.00 L46.52,120.00 C35.43,120.00 29.88,120.00 24.88,118.35 L23.91,118.11 C17.40,115.74 12.26,110.60 9.89,104.09 C8.00,98.12 8.00,92.57 8.00,81.48 L8.00,46.52 C8.00,35.43 8.00,29.88 9.89,23.91 C12.26,17.40 17.40,12.26 23.91,9.89 L24.88,9.65 C29.88,8.00 35.43,8.00 46.52,8.00 Z"/></clipPath>
+    <linearGradient id="desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cf6a24"/><stop offset=".5" stop-color="#a94a12"/><stop offset="1" stop-color="#7a3108"/></linearGradient>
+    <linearGradient id="ledge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7b26e"/><stop offset=".25" stop-color="#cf6a24"/><stop offset=".7" stop-color="#8a3a0a"/><stop offset="1" stop-color="#561d03"/></linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a3108"/><stop offset="1" stop-color="#461703"/></linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#561d03"/><stop offset="1" stop-color="#8a3a0a"/></linearGradient>
+    <radialGradient id="spot" cx=".45" cy=".25" r=".75"><stop offset="0" stop-color="#ffcf8f" stop-opacity=".28"/><stop offset="1" stop-color="#ffe2b8" stop-opacity="0"/></radialGradient>
+    <linearGradient id="varnish" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".26" stop-color="#fff" stop-opacity=".05"/><stop offset=".33" stop-color="#fff" stop-opacity=".26"/><stop offset=".40" stop-color="#fff" stop-opacity=".05"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="topgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset=".3" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f8f7f5"/><stop offset="1" stop-color="#e9e7e3"/></linearGradient>
+    <linearGradient id="lipshade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#4a1a03" stop-opacity=".28"/></linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3584e4"/><stop offset="1" stop-color="#1c71d8"/></linearGradient>
+    <!-- wood grain: straight lines bent into flowing grain by low-frequency noise -->
+    <filter id="flow" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.05" numOctaves="2" seed="9" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="pores" x="0" y="0" width="1" height="1">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 1.4" numOctaves="2" seed="5"/>
+      <feColorMatrix values="0 0 0 0 .3  0 0 0 0 .14  0 0 0 0 .05  1.6 0 0 0 -.75"/>
+    </filter>
+    <clipPath id="ledgeclip"><rect y="86" width="128" height="16"/></clipPath>
+    <clipPath id="bodyclip"><rect y="102" width="128" height="26"/></clipPath>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4"/></filter>
+  </defs>
+
+  <path d="M46.52,8.00 L81.48,8.00 C92.57,8.00 98.12,8.00 103.12,9.65 L104.09,9.89 C110.60,12.26 115.74,17.40 118.11,23.91 C120.00,29.88 120.00,35.43 120.00,46.52 L120.00,81.48 C120.00,92.57 120.00,98.12 118.35,103.12 L118.11,104.09 C115.74,110.60 110.60,115.74 104.09,118.11 C98.12,120.00 92.57,120.00 81.48,120.00 L46.52,120.00 C35.43,120.00 29.88,120.00 24.88,118.35 L23.91,118.11 C17.40,115.74 12.26,110.60 9.89,104.09 C8.00,98.12 8.00,92.57 8.00,81.48 L8.00,46.52 C8.00,35.43 8.00,29.88 9.89,23.91 C12.26,17.40 17.40,12.26 23.91,9.89 L24.88,9.65 C29.88,8.00 35.43,8.00 46.52,8.00 Z" fill="#000" opacity=".28" transform="translate(0 2)" filter="url(#drop)"/>
+
+  <g clip-path="url(#sq)">
+    <!-- desk top, out of frame on three sides -->
+    <rect width="128" height="92" fill="url(#desk)"/>
+    <g filter="url(#flow)">
+      <path d="M-10 -8.0 H138" stroke="#4a1a03" stroke-width="0.36" opacity="0.21"/>
+      <path d="M-10 -4.8 H138" stroke="#f0a060" stroke-width="0.31" opacity="0.14"/>
+      <path d="M-10 -3.9 H138" stroke="#f0a060" stroke-width="0.45" opacity="0.11"/>
+      <path d="M-10 -0.5 H138" stroke="#f0a060" stroke-width="0.72" opacity="0.13"/>
+      <path d="M-10 1.4 H138" stroke="#4a1a03" stroke-width="0.38" opacity="0.13"/>
+      <path d="M-10 4.6 H138" stroke="#f0a060" stroke-width="0.82" opacity="0.15"/>
+      <path d="M-10 5.7 H138" stroke="#4a1a03" stroke-width="0.28" opacity="0.15"/>
+      <path d="M-10 8.7 H138" stroke="#f0a060" stroke-width="1.03" opacity="0.14"/>
+      <path d="M-10 10.6 H138" stroke="#f0a060" stroke-width="0.93" opacity="0.12"/>
+      <path d="M-10 12.6 H138" stroke="#4a1a03" stroke-width="0.33" opacity="0.27"/>
+      <path d="M-10 13.9 H138" stroke="#4a1a03" stroke-width="0.82" opacity="0.14"/>
+      <path d="M-10 16.7 H138" stroke="#5e2405" stroke-width="0.96" opacity="0.17"/>
+      <path d="M-10 19.0 H138" stroke="#f0a060" stroke-width="1.02" opacity="0.14"/>
+      <path d="M-10 21.7 H138" stroke="#4a1a03" stroke-width="1.09" opacity="0.27"/>
+      <path d="M-10 24.2 H138" stroke="#4a1a03" stroke-width="0.53" opacity="0.23"/>
+      <path d="M-10 26.5 H138" stroke="#4a1a03" stroke-width="0.43" opacity="0.24"/>
+      <path d="M-10 29.5 H138" stroke="#5e2405" stroke-width="0.30" opacity="0.14"/>
+      <path d="M-10 32.5 H138" stroke="#f0a060" stroke-width="0.93" opacity="0.09"/>
+      <path d="M-10 34.4 H138" stroke="#4a1a03" stroke-width="0.61" opacity="0.08"/>
+      <path d="M-10 36.4 H138" stroke="#4a1a03" stroke-width="0.77" opacity="0.09"/>
+      <path d="M-10 37.4 H138" stroke="#5e2405" stroke-width="1.03" opacity="0.20"/>
+      <path d="M-10 39.0 H138" stroke="#4a1a03" stroke-width="0.51" opacity="0.30"/>
+      <path d="M-10 40.1 H138" stroke="#4a1a03" stroke-width="1.08" opacity="0.29"/>
+      <path d="M-10 41.7 H138" stroke="#5e2405" stroke-width="0.29" opacity="0.11"/>
+      <path d="M-10 44.8 H138" stroke="#5e2405" stroke-width="0.37" opacity="0.16"/>
+      <path d="M-10 47.8 H138" stroke="#f0a060" stroke-width="0.69" opacity="0.13"/>
+      <path d="M-10 50.3 H138" stroke="#4a1a03" stroke-width="1.05" opacity="0.22"/>
+      <path d="M-10 52.5 H138" stroke="#f0a060" stroke-width="0.86" opacity="0.14"/>
+      <path d="M-10 55.7 H138" stroke="#f0a060" stroke-width="0.69" opacity="0.18"/>
+      <path d="M-10 58.0 H138" stroke="#4a1a03" stroke-width="1.09" opacity="0.25"/>
+      <path d="M-10 59.7 H138" stroke="#f0a060" stroke-width="0.79" opacity="0.14"/>
+      <path d="M-10 60.7 H138" stroke="#5e2405" stroke-width="0.83" opacity="0.18"/>
+      <path d="M-10 62.5 H138" stroke="#5e2405" stroke-width="0.27" opacity="0.24"/>
+      <path d="M-10 63.6 H138" stroke="#4a1a03" stroke-width="0.46" opacity="0.29"/>
+      <path d="M-10 65.6 H138" stroke="#5e2405" stroke-width="0.41" opacity="0.12"/>
+      <path d="M-10 68.4 H138" stroke="#5e2405" stroke-width="0.57" opacity="0.15"/>
+      <path d="M-10 71.2 H138" stroke="#4a1a03" stroke-width="0.83" opacity="0.29"/>
+      <path d="M-10 72.5 H138" stroke="#4a1a03" stroke-width="0.48" opacity="0.22"/>
+      <path d="M-10 74.2 H138" stroke="#f0a060" stroke-width="0.33" opacity="0.14"/>
+      <path d="M-10 76.6 H138" stroke="#5e2405" stroke-width="0.44" opacity="0.23"/>
+      <path d="M-10 79.5 H138" stroke="#4a1a03" stroke-width="0.88" opacity="0.10"/>
+      <path d="M-10 81.0 H138" stroke="#f0a060" stroke-width="0.92" opacity="0.11"/>
+      <path d="M-10 81.9 H138" stroke="#4a1a03" stroke-width="0.96" opacity="0.15"/>
+      <path d="M-10 84.3 H138" stroke="#5e2405" stroke-width="0.95" opacity="0.15"/>
+      <path d="M-10 85.4 H138" stroke="#5e2405" stroke-width="0.61" opacity="0.21"/>
+      <path d="M-10 87.6 H138" stroke="#5e2405" stroke-width="0.79" opacity="0.18"/>
+      <path d="M-10 89.2 H138" stroke="#f0a060" stroke-width="0.60" opacity="0.08"/>
+      <path d="M-10 90.6 H138" stroke="#f0a060" stroke-width="1.00" opacity="0.17"/>
+      <path d="M-10 94.0 H138" stroke="#f0a060" stroke-width="1.09" opacity="0.14"/>
+    </g>
+    <rect width="128" height="92" filter="url(#pores)" opacity=".35"/>
+    <rect width="128" height="92" fill="url(#spot)"/>
+
+    <!-- glossy veneer: sky reflection at the top and a diagonal specular sweep -->
+    <rect width="128" height="92" fill="url(#topgloss)"/>
+
+    <g transform="translate(63 86) scale(1.16) translate(-63 -86)">
+    <!-- papers resting on the ledge: a back sheet, then the slide printout (landscape letter, 1.29:1) -->
+    <g transform="rotate(-3 64 58)">
+      <rect x="30" y="32" width="72" height="56" fill="#000" opacity=".35" filter="url(#soft)" transform="translate(1 2)"/>
+      <rect x="30" y="32" width="72" height="56" fill="#e3e1de"/>
+    </g>
+    <rect x="27" y="33" width="72" height="56" fill="#000" opacity=".42" filter="url(#soft)" transform="translate(1 2)"/>
+    <rect x="27" y="30" width="72" height="56" fill="url(#paper)"/>
+    <path d="M27 30.4 H99" stroke="#fff" stroke-width=".8"/>
+    <!-- the printed slide: title and subtitle, a pie on the left, a bar chart on the right -->
+    <rect x="33" y="36" width="30" height="3.4" rx=".6" fill="#3d3846"/>
+    <rect x="33" y="42" width="20" height="1.8" rx=".6" fill="#9a9996"/>
+    <path d="M33 47.5 H93" stroke="#deddda" stroke-width=".6"/>
+    <circle cx="45.5" cy="64" r="11" fill="#000" opacity=".12" filter="url(#soft)"/>
+    <path d="M45.5 63 L45.50 52.00 A11 11 0 0 1 54.79 68.89 Z" fill="#3584e4" stroke="#fff" stroke-width=".7" stroke-linejoin="round"/><path d="M45.5 63 L54.79 68.89 A11 11 0 0 1 40.20 72.64 Z" fill="#33d17a" stroke="#fff" stroke-width=".7" stroke-linejoin="round"/><path d="M45.5 63 L40.20 72.64 A11 11 0 0 1 34.52 62.31 Z" fill="#f6d32d" stroke="#fff" stroke-width=".7" stroke-linejoin="round"/><path d="M45.5 63 L34.52 62.31 A11 11 0 0 1 39.03 54.10 Z" fill="#ff7800" stroke="#fff" stroke-width=".7" stroke-linejoin="round"/><path d="M45.5 63 L39.03 54.10 A11 11 0 0 1 45.50 52.00 Z" fill="#e01b24" stroke="#fff" stroke-width=".7" stroke-linejoin="round"/>
+    <g stroke="#deddda" stroke-width=".5"><path d="M64 57 H94 M64 63 H94 M64 69 H94"/></g>
+    <rect x="66" y="66" width="4.6" height="9" fill="#3584e4"/><rect x="66" y="66" width="4.6" height=".8" fill="#fff" opacity=".35"/><rect x="73" y="61" width="4.6" height="14" fill="#33d17a"/><rect x="73" y="61" width="4.6" height=".8" fill="#fff" opacity=".35"/><rect x="80" y="64" width="4.6" height="11" fill="#f6d32d"/><rect x="80" y="64" width="4.6" height=".8" fill="#fff" opacity=".35"/><rect x="87" y="57" width="4.6" height="18" fill="#ff7800"/><rect x="87" y="57" width="4.6" height=".8" fill="#fff" opacity=".35"/>
+    <path d="M64 75.3 H94" stroke="#77767b" stroke-width=".8"/>
+    <!-- the ledge lip shades the bottom of the page -->
+    <rect x="27" y="80" width="72" height="6" fill="url(#lipshade)"/>
+
+    </g>
+
+    <!-- near ledge: rounded, varnished, edge to edge -->
+    <rect y="86" width="128" height="16" fill="url(#ledge)"/>
+    <g clip-path="url(#ledgeclip)"><g filter="url(#flow)">
+      <path d="M-10 84.0 H138" stroke="#4a1a03" stroke-width="0.57" opacity="0.16"/>
+      <path d="M-10 85.4 H138" stroke="#4a1a03" stroke-width="0.46" opacity="0.10"/>
+      <path d="M-10 88.8 H138" stroke="#4a1a03" stroke-width="0.28" opacity="0.17"/>
+      <path d="M-10 90.9 H138" stroke="#f0a060" stroke-width="0.41" opacity="0.13"/>
+      <path d="M-10 93.9 H138" stroke="#4a1a03" stroke-width="0.90" opacity="0.19"/>
+      <path d="M-10 96.5 H138" stroke="#f0a060" stroke-width="1.02" opacity="0.13"/>
+      <path d="M-10 99.2 H138" stroke="#5e2405" stroke-width="0.94" opacity="0.10"/>
+      <path d="M-10 101.1 H138" stroke="#f0a060" stroke-width="0.30" opacity="0.09"/>
+      <path d="M-10 102.6 H138" stroke="#4a1a03" stroke-width="0.80" opacity="0.19"/>
+    </g></g>
+    <path d="M0 86.6 H128" stroke="#ffd2a8" stroke-width="1.2"/>
+    <path d="M0 88.6 H128" stroke="#fff" stroke-width="2" opacity=".45"/>
+    <path d="M0 91 H128" stroke="#fff" stroke-width="1.2" opacity=".15"/>
+    <path d="M0 101.5 H128" stroke="#3a1503" stroke-width="1" opacity=".6"/>
+
+    <!-- body below, shaded, with a recessed panel -->
+    <rect y="102" width="128" height="26" fill="url(#body)"/>
+    <g clip-path="url(#bodyclip)" opacity=".7"><g filter="url(#flow)">
+      <path d="M-10 100.0 H138" stroke="#5e2405" stroke-width="1.02" opacity="0.14"/>
+      <path d="M-10 102.9 H138" stroke="#4a1a03" stroke-width="0.82" opacity="0.22"/>
+      <path d="M-10 106.0 H138" stroke="#4a1a03" stroke-width="0.70" opacity="0.11"/>
+      <path d="M-10 107.4 H138" stroke="#5e2405" stroke-width="0.36" opacity="0.09"/>
+      <path d="M-10 110.0 H138" stroke="#4a1a03" stroke-width="0.96" opacity="0.30"/>
+      <path d="M-10 111.1 H138" stroke="#5e2405" stroke-width="0.88" opacity="0.26"/>
+      <path d="M-10 114.4 H138" stroke="#5e2405" stroke-width="0.45" opacity="0.16"/>
+      <path d="M-10 117.6 H138" stroke="#f0a060" stroke-width="1.01" opacity="0.15"/>
+      <path d="M-10 120.1 H138" stroke="#4a1a03" stroke-width="0.76" opacity="0.16"/>
+      <path d="M-10 122.5 H138" stroke="#5e2405" stroke-width="0.72" opacity="0.23"/>
+      <path d="M-10 125.3 H138" stroke="#4a1a03" stroke-width="0.87" opacity="0.18"/>
+      <path d="M-10 127.5 H138" stroke="#5e2405" stroke-width="0.69" opacity="0.12"/>
+      <path d="M-10 129.1 H138" stroke="#f0a060" stroke-width="0.49" opacity="0.11"/>
+    </g></g>
+    <rect y="102" width="128" height="6" fill="#000" opacity=".3"/>
+    <rect x="22" y="110" width="84" height="22" rx="2" fill="url(#panel)"/>
+    <path d="M22 110.5 H106" stroke="#2e1002" stroke-width="1" opacity=".6"/>
+    <path d="M22.5 111 V128 M105.5 111 V128" stroke="#c4602a" stroke-width=".8" opacity=".5"/>
+  </g>
+
+  <path d="M46.52,8.00 L81.48,8.00 C92.57,8.00 98.12,8.00 103.12,9.65 L104.09,9.89 C110.60,12.26 115.74,17.40 118.11,23.91 C120.00,29.88 120.00,35.43 120.00,46.52 L120.00,81.48 C120.00,92.57 120.00,98.12 118.35,103.12 L118.11,104.09 C115.74,110.60 110.60,115.74 104.09,118.11 C98.12,120.00 92.57,120.00 81.48,120.00 L46.52,120.00 C35.43,120.00 29.88,120.00 24.88,118.35 L23.91,118.11 C17.40,115.74 12.26,110.60 9.89,104.09 C8.00,98.12 8.00,92.57 8.00,81.48 L8.00,46.52 C8.00,35.43 8.00,29.88 9.89,23.91 C12.26,17.40 17.40,12.26 23.91,9.89 L24.88,9.65 C29.88,8.00 35.43,8.00 46.52,8.00 Z" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1"/>
+</svg>

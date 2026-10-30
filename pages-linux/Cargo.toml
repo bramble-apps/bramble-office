@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "Proprietary"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# same patched toolkit as Keydeck (HiDPI cursor scale, Wayland pinch); see keynote-linux/vendor/README-patches.md
+[patch.crates-io]
+smithay-client-toolkit = { path = "../keynote-linux/vendor/smithay-client-toolkit-0.19.2" }
+winit = { path = "../keynote-linux/vendor/winit-0.30.13" }

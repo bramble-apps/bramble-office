@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- D · The first proposal with skeuomorphic detail: a stack of slides behind the shown one
+       (page edges at the side and bottom), a bevelled blue holder, hinge bolt, metal legs -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62a0ea"/><stop offset="1" stop-color="#3584e4"/></linearGradient>
+    <linearGradient id="metal" x1="0" x2="1"><stop offset="0" stop-color="#77767b"/><stop offset=".5" stop-color="#deddda"/><stop offset="1" stop-color="#5e5c64"/></linearGradient>
+  </defs>
+  <ellipse cx="64" cy="121" rx="36" ry="4" fill="#000" opacity=".18"/>
+  <path d="M59 90h5L50 119h-6z" fill="url(#metal)"/>
+  <path d="M64 90h5l15 29h-6z" fill="url(#metal)"/>
+  <circle cx="64" cy="92" r="4.5" fill="#5e5c64"/><circle cx="64" cy="92" r="2" fill="#c0bfbc"/>
+  <!-- holder with bevel and top highlight -->
+  <rect x="10" y="20" width="108" height="74" rx="8" fill="#1a5fb4"/>
+  <rect x="10" y="14" width="108" height="74" rx="8" fill="url(#face)"/>
+  <path d="M18 14.6h92" stroke="#99c1f1" stroke-width="1.2"/>
+  <!-- stacked slides: page edges peeking right and below -->
+  <rect x="21" y="25" width="90" height="60" rx="2" fill="#9a9996"/>
+  <rect x="20" y="24" width="89" height="59" rx="2" fill="#deddda"/>
+  <rect x="19" y="23" width="88" height="58" rx="2" fill="#f6f5f4"/>
+  <rect x="18" y="22" width="88" height="57" rx="2" fill="#c0bfbc"/>
+  <rect x="18" y="22" width="87" height="56" rx="2" fill="#ffffff"/>
+  <!-- content: title bar, pie, bars with baseline -->
+  <rect x="25" y="29" width="36" height="5" rx="2.5" fill="#1c71d8"/>
+  <circle cx="42" cy="56" r="14" fill="#ffa348"/>
+  <path d="M42 42a14 14 0 0 1 14 14H42z" fill="#e66100"/>
+  <path d="M42 42a14 14 0 0 1 14 14" fill="none" stroke="#ffffff" stroke-width="1"/>
+  <rect x="64" y="58" width="8" height="14" rx="1.5" fill="#99c1f1"/>
+  <rect x="76" y="48" width="8" height="24" rx="1.5" fill="#62a0ea"/>
+  <rect x="88" y="38" width="8" height="34" rx="1.5" fill="#1c71d8"/>
+  <path d="M62 72.5h36" stroke="#9a9996" stroke-width="1"/>
+</svg>

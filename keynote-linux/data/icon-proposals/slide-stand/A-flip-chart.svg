@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- A · Flip chart: a pad of slides on a tripod, with the page edges of the pad showing -->
+  <defs>
+    <linearGradient id="metal" x1="0" x2="1"><stop offset="0" stop-color="#9a9996"/><stop offset=".45" stop-color="#f6f5f4"/><stop offset="1" stop-color="#77767b"/></linearGradient>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62a0ea"/><stop offset="1" stop-color="#1c71d8"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f6f5f4"/></linearGradient>
+  </defs>
+  <ellipse cx="64" cy="121" rx="40" ry="4" fill="#000" opacity=".18"/>
+  <!-- tripod: back leg, front legs with rubber feet -->
+  <path d="M62 86h4l1 30h-6z" fill="#5e5c64"/>
+  <path d="M44 86h6L36 119h-6z" fill="url(#metal)"/>
+  <path d="M78 86h6l14 33h-6z" fill="url(#metal)"/>
+  <rect x="29" y="117" width="8" height="4" rx="1.5" fill="#3d3846"/>
+  <rect x="91" y="117" width="8" height="4" rx="1.5" fill="#3d3846"/>
+  <!-- backing board with bevel -->
+  <rect x="14" y="16" width="100" height="74" rx="6" fill="#1a5fb4"/>
+  <rect x="14" y="14" width="100" height="72" rx="6" fill="url(#board)"/>
+  <path d="M20 14.5h88" stroke="#99c1f1" stroke-width="1" opacity=".9"/>
+  <!-- pad: stacked page edges at the bottom -->
+  <rect x="22" y="22" width="84" height="62" rx="1.5" fill="#c0bfbc"/>
+  <rect x="22" y="22" width="84" height="61" rx="1.5" fill="#deddda"/>
+  <rect x="22" y="22" width="84" height="60" rx="1.5" fill="#f6f5f4"/>
+  <rect x="22" y="22" width="84" height="59" rx="1.5" fill="#deddda"/>
+  <rect x="22" y="22" width="84" height="58" rx="1.5" fill="url(#paper)"/>
+  <!-- slide content -->
+  <rect x="30" y="32" width="38" height="5" rx="2.5" fill="#3584e4"/>
+  <circle cx="44" cy="58" r="13" fill="#ffa348"/>
+  <path d="M44 45a13 13 0 0 1 13 13H44z" fill="#e66100"/>
+  <rect x="64" y="62" width="7" height="12" rx="1" fill="#62a0ea"/>
+  <rect x="75" y="53" width="7" height="21" rx="1" fill="#3584e4"/>
+  <rect x="86" y="44" width="7" height="30" rx="1" fill="#1c71d8"/>
+  <!-- curled corner of the top page -->
+  <path d="M106 66v14H92z" fill="#deddda"/>
+  <path d="M106 66L92 80c4-1 8-5 10-9 1-2 3-4 4-5z" fill="#ffffff"/>
+  <!-- binder clamp with screws -->
+  <rect x="18" y="12" width="92" height="9" rx="3" fill="url(#metal)"/>
+  <rect x="18" y="19" width="92" height="2" fill="#5e5c64" opacity=".5"/>
+  <circle cx="30" cy="16.5" r="2.4" fill="#5e5c64"/><path d="M28.6 16.5h2.8" stroke="#deddda" stroke-width=".8"/>
+  <circle cx="98" cy="16.5" r="2.4" fill="#5e5c64"/><path d="M96.6 16.5h2.8" stroke="#deddda" stroke-width=".8"/>
+</svg>

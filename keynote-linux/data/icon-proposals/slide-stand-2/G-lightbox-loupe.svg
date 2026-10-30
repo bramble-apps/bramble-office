@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- G · Light table: a glowing panel with a faint perspective grid in a brushed bezel, three
+       slide mounts lying on it (each casting a soft shadow), a loupe with glass lens, metal ring
+       and clear acrylic skirt, a front face with rocker switch, power LED and rubber feet -->
+  <defs>
+    <linearGradient id="bezel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5e5c64"/><stop offset="1" stop-color="#9a9996"/></linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f5f4"/><stop offset="1" stop-color="#c0bfbc"/></linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".55" r=".65"><stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#fbfaf0"/><stop offset="1" stop-color="#e8f1fc"/></radialGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62a0ea"/><stop offset="1" stop-color="#99c1f1"/></linearGradient>
+    <linearGradient id="warm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffa348"/><stop offset="1" stop-color="#f8e45c"/></linearGradient>
+    <linearGradient id="plum" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9141ac"/><stop offset="1" stop-color="#dc8add"/></linearGradient>
+    <linearGradient id="eyepiece" x1="0" x2="1"><stop offset="0" stop-color="#241f31"/><stop offset=".3" stop-color="#5e5c64"/><stop offset=".55" stop-color="#3d3846"/><stop offset="1" stop-color="#000000"/></linearGradient>
+    <linearGradient id="ring" x1="0" x2="1"><stop offset="0" stop-color="#77767b"/><stop offset=".4" stop-color="#ffffff"/><stop offset="1" stop-color="#5e5c64"/></linearGradient>
+    <radialGradient id="lens" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#99c1f1"/><stop offset="1" stop-color="#1c71d8"/></radialGradient>
+    <linearGradient id="skirt" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset=".35" stop-color="#fff" stop-opacity=".15"/><stop offset=".8" stop-color="#99c1f1" stop-opacity=".3"/><stop offset="1" stop-color="#fff" stop-opacity=".6"/></linearGradient>
+    <radialGradient id="shadow"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.2"/></filter>
+    <!-- one slide mount: card frame, pressed rim, window -->
+    <g id="mount">
+      <rect x="-12" y="-11" width="24" height="22" rx="2.5" fill="#f6f5f4"/>
+      <rect x="-12" y="-11" width="24" height="22" rx="2.5" fill="none" stroke="#c0bfbc" stroke-width=".8"/>
+      <rect x="-10" y="-9" width="20" height="18" rx="1.5" fill="none" stroke="#ffffff" stroke-width=".8"/>
+    </g>
+  </defs>
+  <ellipse cx="64" cy="105" rx="60" ry="8" fill="url(#shadow)"/>
+
+  <!-- rubber feet -->
+  <rect x="16" y="98" width="12" height="6" rx="2.5" fill="#241f31"/>
+  <rect x="100" y="98" width="12" height="6" rx="2.5" fill="#241f31"/>
+
+  <!-- body: front face with darker lip and top highlight -->
+  <rect x="8" y="80" width="112" height="22" rx="4" fill="#77767b"/>
+  <rect x="8" y="80" width="112" height="19" rx="4" fill="url(#front)"/>
+  <path d="M12 84.6h104" stroke="#ffffff" stroke-width="1"/>
+  <!-- rocker switch and LED -->
+  <rect x="96" y="88" width="12" height="7" rx="1.5" fill="#3d3846"/>
+  <path d="M97.5 89h4.5v5h-4.5z" fill="#5e5c64"/>
+  <path d="M97.5 89.2h4.5" stroke="#9a9996" stroke-width=".8"/>
+  <circle cx="90" cy="91.5" r="1.6" fill="#57e389"/>
+  <circle cx="90" cy="91.5" r="3.2" fill="#57e389" opacity=".25"/>
+  <!-- vent slots -->
+  <path d="M20 89h18M20 92h18" stroke="#9a9996" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M20 89.9h18M20 92.9h18" stroke="#ffffff" stroke-width=".6" stroke-linecap="round" opacity=".8"/>
+
+  <!-- top: bezel then glowing panel (receding trapezoid) -->
+  <path d="M19 34h90l11 50H8z" fill="url(#bezel)"/>
+  <path d="M20 34.6h88" stroke="#c0bfbc" stroke-width="1"/>
+  <path d="M23.5 38h81l8.5 42H15z" fill="url(#glow)"/>
+  <path d="M23.5 38h81" stroke="#77767b" stroke-width="1" opacity=".5"/>
+  <!-- perspective grid on the diffuser -->
+  <g stroke="#99c1f1" stroke-width=".6" opacity=".7">
+    <path d="M40 38l-3.3 42M56.5 38l-1.8 42M73 38v42M89.5 38l1.8 42"/>
+    <path d="M21.8 46.5h84.4M19.7 57h88.6M17.2 69.5h93.6"/>
+  </g>
+
+  <!-- mount shadows -->
+  <g opacity=".3" filter="url(#soft)">
+    <rect x="23" y="44" width="24" height="18" rx="2.5" transform="rotate(-9 35 53)"/>
+    <rect x="51" y="41" width="24" height="18" rx="2.5" transform="rotate(5 63 50)"/>
+    <rect x="31" y="63" width="27" height="20" rx="2.5" transform="rotate(7 44.5 73)"/>
+  </g>
+
+  <!-- mount A: landscape photo -->
+  <g transform="translate(35 51) rotate(-9) scale(1 .8)">
+    <use href="#mount"/>
+    <rect x="-8" y="-7" width="16" height="14" fill="url(#sky)"/>
+    <circle cx="4" cy="-2.5" r="2.2" fill="#f9f06b"/>
+    <path d="M-8 7l5-7 4 4 3-3 4 6z" fill="#2ec27e"/>
+  </g>
+  <!-- mount B: chart slide -->
+  <g transform="translate(63 48) rotate(5) scale(1 .8)">
+    <use href="#mount"/>
+    <rect x="-8" y="-7" width="16" height="14" fill="url(#warm)"/>
+    <rect x="-6" y="-5" width="8" height="2" rx="1" fill="#ffffff"/>
+    <rect x="-5" y="1" width="2.6" height="5" fill="#c64600"/>
+    <rect x="-1" y="-1" width="2.6" height="7" fill="#c64600"/>
+    <rect x="3" y="-3" width="2.6" height="9" fill="#c64600"/>
+  </g>
+  <!-- mount C (nearer, larger): title slide -->
+  <g transform="translate(44.5 71) rotate(7) scale(1.12 .86)">
+    <use href="#mount"/>
+    <rect x="-8" y="-7" width="16" height="14" fill="url(#plum)"/>
+    <rect x="-6" y="-4" width="12" height="2.4" rx="1.2" fill="#ffffff"/>
+    <rect x="-4" y="0" width="8" height="1.4" rx=".7" fill="#ffffff" opacity=".7"/>
+    <circle cx="0" cy="4" r="1.4" fill="#f6d32d"/>
+  </g>
+
+  <!-- loupe: shadow, clear skirt, eyepiece barrel, ring, lens -->
+  <ellipse cx="94" cy="70" rx="16" ry="4.5" fill="#000" opacity=".22" filter="url(#soft)"/>
+  <path d="M84 48l-4 20a14 3.8 0 0 0 28 0l-4-20z" fill="url(#skirt)"/>
+  <path d="M84 48l-4 20a14 3.8 0 0 0 28 0l-4-20" fill="none" stroke="#9a9996" stroke-width=".8"/>
+  <path d="M86 51l-3 15" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="83" y="37" width="22" height="12" fill="url(#eyepiece)"/>
+  <ellipse cx="94" cy="49" rx="11" ry="3" fill="#241f31"/>
+  <path d="M85.5 39v8" stroke="#77767b" stroke-width="1" stroke-linecap="round"/>
+  <g stroke="#000" stroke-width=".6" opacity=".5"><path d="M89 40v8M93 40v8.5M97 40v8.5M101 40v8"/></g>
+  <ellipse cx="94" cy="37" rx="11" ry="3.6" fill="url(#ring)"/>
+  <ellipse cx="94" cy="37" rx="8.5" ry="2.6" fill="url(#lens)"/>
+  <path d="M88.5 36.4q2.5-1.6 6-1.4" fill="none" stroke="#ffffff" stroke-width=".9" stroke-linecap="round"/>
+</svg>

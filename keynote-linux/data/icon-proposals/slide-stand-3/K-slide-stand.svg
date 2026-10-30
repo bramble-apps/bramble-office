@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- K · Slide Stand: blue board on a plain three-leg stand; a page stack of three sheets on the board,
+       the front one gently lifting at the bottom-right corner, with a clean bar chart -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62a0ea"/><stop offset="1" stop-color="#3584e4"/></linearGradient>
+    <linearGradient id="lip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c71d8"/><stop offset="1" stop-color="#1a5fb4"/></linearGradient>
+    <linearGradient id="leg" x1="0" x2="1"><stop offset="0" stop-color="#9a9996"/><stop offset=".3" stop-color="#f6f5f4"/><stop offset=".65" stop-color="#c0bfbc"/><stop offset="1" stop-color="#77767b"/></linearGradient>
+    <linearGradient id="legBack" x1="0" x2="1"><stop offset="0" stop-color="#5e5c64"/><stop offset=".4" stop-color="#77767b"/><stop offset="1" stop-color="#3d3846"/></linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#77767b"/><stop offset="1" stop-color="#3d3846"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f6f5f4"/></linearGradient>
+    <linearGradient id="lift" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".09"/></linearGradient>
+    <linearGradient id="bY" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6d32d"/><stop offset="1" stop-color="#e5a50a"/></linearGradient>
+    <linearGradient id="bG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#33d17a"/><stop offset="1" stop-color="#26a269"/></linearGradient>
+    <linearGradient id="bB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3584e4"/><stop offset="1" stop-color="#1a5fb4"/></linearGradient>
+    <linearGradient id="bR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ed333b"/><stop offset="1" stop-color="#c01c28"/></linearGradient>
+    <linearGradient id="under" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0bfbc"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+    <radialGradient id="floor"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.1"/></filter>
+    <filter id="softer" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+  <ellipse cx="64" cy="117" rx="42" ry="5.5" fill="url(#floor)"/>
+
+  <!-- back leg -->
+  <path d="M62 92h4l-.4 19.5q-.1 1.5-1.6 1.5t-1.6-1.5z" fill="url(#legBack)"/>
+  <!-- front legs: tapered tubes with a darker rubber tip and a 1px edge highlight -->
+  <g transform="translate(57 92) rotate(28)">
+    <path d="M-3.2 0h6.4l-.9 25.6q-.1 2.4-2.3 2.4t-2.3-2.4z" fill="url(#leg)"/>
+    <path d="M-2.65 22h5.3l-.25 3.6q-.1 2.4-2.4 2.4t-2.4-2.4z" fill="#3d3846"/>
+    <path d="M-1.9 1v20" stroke="#ffffff" stroke-width=".8" opacity=".7"/>
+  </g>
+  <g transform="translate(71 92) rotate(-28)">
+    <path d="M-3.2 0h6.4l-.9 25.6q-.1 2.4-2.3 2.4t-2.3-2.4z" fill="url(#leg)"/>
+    <path d="M-2.65 22h5.3l-.25 3.6q-.1 2.4-2.4 2.4t-2.4-2.4z" fill="#3d3846"/>
+    <path d="M-1.9 1v20" stroke="#ffffff" stroke-width=".8" opacity=".7"/>
+  </g>
+  <!-- head block -->
+  <rect x="51" y="84" width="26" height="12" rx="3.5" fill="url(#head)"/>
+  <rect x="52" y="94.6" width="24" height="1.4" rx=".7" fill="#241f31" opacity=".5"/>
+  <path d="M53 92.6h22" stroke="#9a9996" stroke-width=".8" opacity=".8"/>
+
+  <!-- board: lip, 1px top highlight, face -->
+  <rect x="12" y="14" width="104" height="78" rx="8" fill="url(#lip)"/>
+  <rect x="12" y="12" width="104" height="76" rx="8" fill="#99c1f1"/>
+  <rect x="12" y="13" width="104" height="75" rx="8" fill="url(#face)"/>
+  <rect x="13.5" y="14.5" width="101" height="72" rx="6.5" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+
+  <!-- page stack: shadow on the board, two sheets beneath, the front sheet -->
+  <rect x="22" y="22" width="84" height="62" rx="1.5" fill="#000" opacity=".3" filter="url(#softer)"/>
+  <g transform="rotate(2.4 64 52)">
+    <rect x="22" y="20" width="84" height="62" rx="1.5" fill="#c0bfbc"/>
+    <rect x="22" y="20" width="84" height="61" rx="1.5" fill="#deddda"/>
+  </g>
+  <rect x="22" y="21" width="84" height="62" rx="1.5" fill="#000" opacity=".18" filter="url(#soft)" transform="rotate(-1.4 64 52)"/>
+  <g transform="rotate(-1.4 64 52)">
+    <rect x="22" y="20" width="84" height="62" rx="1.5" fill="#9a9996"/>
+    <rect x="22" y="20" width="84" height="61.2" rx="1.5" fill="#f6f5f4"/>
+  </g>
+  <!-- edge lines of the pad under the front sheet -->
+  <rect x="22" y="20" width="85.4" height="63.4" rx="1.5" fill="#9a9996"/>
+  <rect x="22" y="20" width="84.8" height="62.8" rx="1.5" fill="#ffffff"/>
+  <rect x="22" y="20" width="84.4" height="62.2" rx="1.5" fill="#c0bfbc"/>
+  <!-- shadow under the lifted corner -->
+  <path d="M92 82.2c6-.4 11.5-2.5 14-6.5v6.5z" fill="#000" opacity=".22" filter="url(#soft)"/>
+  <!-- front sheet, bottom-right corner lifted -->
+  <path d="M23.5 20h81a1.5 1.5 0 0 1 1.5 1.5V74c-2.6 4.2-8 6.6-15 7H23.5a1.5 1.5 0 0 1-1.5-1.5v-58A1.5 1.5 0 0 1 23.5 20z" fill="url(#paper)"/>
+  <path d="M23.5 20h81a1.5 1.5 0 0 1 1.5 1.5V74c-2.6 4.2-8 6.6-15 7H23.5a1.5 1.5 0 0 1-1.5-1.5v-58A1.5 1.5 0 0 1 23.5 20z" fill="url(#lift)"/>
+  <!-- underside of the lifted corner -->
+  <path d="M106 74c-2.6 4.2-8 6.6-15 7c6.8 1 12.6-.6 15-3.6z" fill="url(#under)"/>
+  <path d="M106 74c-2.6 4.2-8 6.6-15 7" fill="none" stroke="#deddda" stroke-width=".6"/>
+  <path d="M91 81c6.8 1 12.6-.6 15-3.6" fill="none" stroke="#9a9996" stroke-width=".5"/>
+
+  <!-- slide content: title, subtitle, four bars on a baseline -->
+  <rect x="30" y="28" width="36" height="6" rx="3" fill="#1c71d8"/>
+  <rect x="30" y="38" width="22" height="3" rx="1.5" fill="#c0bfbc"/>
+  <rect x="34" y="60" width="11" height="14" rx="1.5" fill="url(#bY)"/>
+  <rect x="34" y="60" width="11" height="2" rx="1" fill="#f9f06b"/>
+  <rect x="49" y="52" width="11" height="22" rx="1.5" fill="url(#bG)"/>
+  <rect x="49" y="52" width="11" height="2" rx="1" fill="#8ff0a4"/>
+  <rect x="64" y="44" width="11" height="30" rx="1.5" fill="url(#bB)"/>
+  <rect x="64" y="44" width="11" height="2" rx="1" fill="#99c1f1"/>
+  <rect x="79" y="36" width="11" height="38" rx="1.5" fill="url(#bR)"/>
+  <rect x="79" y="36" width="11" height="2" rx="1" fill="#f66151"/>
+  <path d="M30 74.5h66" stroke="#9a9996" stroke-width="1"/>
+</svg>

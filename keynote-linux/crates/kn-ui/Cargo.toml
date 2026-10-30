@@ -1,0 +1,31 @@
+[package]
+name = "kn-ui"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+# Keydeck's look, shared with Numdeck: colours and colour themes, controls (steppers, toggles,
+# disclosures), liquid glass and translucent panes, toolbar icons, window frame.
+[dependencies]
+spellbook = "0.4.2"
+eframe = { version = "0.37.0", default-features = false }
+egui = "0.37"
+kn-format = { version = "0.1.0", path = "../kn-format" }
+kn-model = { version = "0.1.0", path = "../kn-model" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+tiny-skia = "0.12.0"
+serde_json = "1.0.154"
+zip = "9.0.5"
+# the patched winit (vendor/): Wayland client-side shadow margins for the window frame
+winit = { version = "0.30.13", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
+ureq = "3.5.0"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+window-vibrancy = "0.6"
+
+# macOS: our own NSVisualEffectView, put BEHIND the content view (window-vibrancy adds it as a
+# subview of the content view, which on a layer-backed Metal view covers everything drawn)
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSVisualEffectView", "NSWindow", "NSColor", "NSGraphics"] }
+raw-window-handle = "0.6"

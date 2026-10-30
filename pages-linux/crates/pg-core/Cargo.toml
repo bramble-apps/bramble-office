@@ -1,0 +1,15 @@
+[package]
+name = "pg-core"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[dependencies]
+kn-format = { path = "../../../keynote-linux/crates/kn-format" }
+kn-model = { path = "../../../keynote-linux/crates/kn-model" }
+kn-render = { path = "../../../keynote-linux/crates/kn-render" }
+tiny-skia = "0.12.0"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+roxmltree = "0.20"
+swash = "0.2.10"

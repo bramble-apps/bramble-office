@@ -1,0 +1,45 @@
+Keynote transition effect IDs (KN.SlideArchive.transition.attributes.animationAttributes.effect)
+UI / AppleScript name                    stored effect string
+magic move                               apple:magic-move-implied-motion-path
+shimmer                                  apple:ca-text-shimmer
+sparkle                                  apple:ca-text-sparkle
+swing                                    apple:ca-swing
+object cube                              apple:ca-cube
+object flip                              apple:ca-dissolve-and-flip
+object pop                               apple:ca-pop
+object push                              apple:ca-push
+object revolve                           apple:ca-revolve
+object zoom                              apple:ca-zoom
+perspective                              apple:ca-isometric
+clothesline                              apple:ClotheslinePush
+confetti                                 com.apple.iWork.Keynote.KLNConfetti
+dissolve                                 apple:dissolve
+drop                                     apple:bounce
+droplet                                  apple:droplet
+fade through color                       com.apple.iWork.Keynote.BLTFadeThruColor
+grid                                     apple:apple-grid
+iris                                     apple:wipe-iris
+move in                                  apple:slide
+push                                     apple:push
+reveal                                   apple:reveal
+switch                                   apple:FlipThrough
+wipe                                     apple:wipe
+blinds                                   com.apple.iWork.Keynote.BLTBlinds
+color planes                             com.apple.iWork.Keynote.KLNColorPlanes
+cube                                     apple:3D-cube
+doorway                                  apple:doorway
+fall                                     apple:fall
+flip                                     apple:revolve
+flop                                     com.apple.iWork.Keynote.BUKFlop
+mosaic                                   com.apple.iWork.Keynote.BLTMosaicFlip
+page flip                                apple:pageflip
+pivot                                    apple:pivot
+reflection                               com.apple.iWork.Keynote.BLTReflection
+revolving door                           com.apple.iWork.Keynote.BLTRevolvingDoor
+scale                                    apple:scale
+swap                                     com.apple.iWork.Keynote.KLNSwap
+swoosh                                   com.apple.iWork.Keynote.BLTSwoosh
+twirl                                    apple:twirl
+twist                                    com.apple.iWork.Keynote.BUKTwist
+fade and move                            apple:fade-and-move
+radial wipe                              apple:radial wipe

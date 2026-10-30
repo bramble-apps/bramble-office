@@ -1,0 +1,4 @@
+target/
+
+# Apple-made test files: kept on this computer only, never published
+/testdata/

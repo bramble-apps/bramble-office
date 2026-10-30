@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- F · Wall-mounted roller screen: cylindrical case with end caps, wall brackets with slotted
+       screws, woven matte fabric with black masking border and an inner shadow under the case,
+       a projected slide with a red laser dot, weighted bottom bar, pull cord with a wooden toggle -->
+  <defs>
+    <linearGradient id="case" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#deddda"/><stop offset=".25" stop-color="#ffffff"/><stop offset=".6" stop-color="#c0bfbc"/><stop offset="1" stop-color="#77767b"/></linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#77767b"/><stop offset=".3" stop-color="#9a9996"/><stop offset="1" stop-color="#241f31"/></linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a9996"/><stop offset=".4" stop-color="#5e5c64"/><stop offset="1" stop-color="#241f31"/></linearGradient>
+    <linearGradient id="slide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3584e4"/><stop offset="1" stop-color="#1a5fb4"/></linearGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <radialGradient id="hot" cx=".45" cy=".4" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="laser"><stop offset="0" stop-color="#ffffff"/><stop offset=".25" stop-color="#ff7b7b"/><stop offset=".5" stop-color="#e01b24" stop-opacity=".7"/><stop offset="1" stop-color="#e01b24" stop-opacity="0"/></radialGradient>
+    <radialGradient id="screw" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#c0bfbc"/><stop offset="1" stop-color="#5e5c64"/></radialGradient>
+    <linearGradient id="wood" x1="0" x2="1"><stop offset="0" stop-color="#865e3c"/><stop offset=".4" stop-color="#cdab8f"/><stop offset="1" stop-color="#63452c"/></linearGradient>
+    <pattern id="weave" width="2" height="2" patternUnits="userSpaceOnUse">
+      <rect width="1" height="1" fill="#000" opacity=".07"/><rect x="1" y="1" width="1" height="1" fill="#000" opacity=".07"/>
+      <rect x="1" width="1" height="1" fill="#fff" opacity=".05"/>
+    </pattern>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+
+  <!-- soft shadow on the wall behind the hanging screen -->
+  <rect x="18" y="16" width="94" height="84" rx="3" fill="#000" opacity=".22" filter="url(#drop)"/>
+
+  <!-- wall brackets with screws -->
+  <rect x="20" y="5" width="12" height="9" rx="2" fill="#5e5c64"/>
+  <rect x="96" y="5" width="12" height="9" rx="2" fill="#5e5c64"/>
+  <path d="M21.5 5.6h9M97.5 5.6h9" stroke="#9a9996" stroke-width=".8"/>
+  <circle cx="26" cy="9" r="2.2" fill="url(#screw)"/><path d="M24.6 9h2.8" stroke="#3d3846" stroke-width=".8"/>
+  <circle cx="102" cy="9" r="2.2" fill="url(#screw)"/><path d="M101 7.9l2 2.2" stroke="#3d3846" stroke-width=".8"/>
+
+  <!-- screen fabric: masking border, weave, slide, inner shadow -->
+  <rect x="17" y="20" width="94" height="72" fill="#3d3846"/>
+  <rect x="20" y="20" width="88" height="69" fill="#f6f5f4"/>
+  <rect x="25" y="26" width="78" height="54" fill="url(#slide)"/>
+  <!-- projected slide content -->
+  <rect x="31" y="32" width="34" height="5" rx="2.5" fill="#ffffff"/>
+  <rect x="31" y="41" width="24" height="2.5" rx="1.25" fill="#99c1f1"/>
+  <rect x="31" y="46" width="20" height="2.5" rx="1.25" fill="#99c1f1"/>
+  <circle cx="81" cy="56" r="13" fill="none" stroke="#f6d32d" stroke-width="7"/>
+  <path d="M81 43a13 13 0 0 1 12.5 16.4" fill="none" stroke="#ff7800" stroke-width="7"/>
+  <path d="M30 76l9-10 6 6 7-9 10 13z" fill="#57e389"/>
+  <path d="M30 76l9-10 6 6 7-9 10 13z" fill="none" stroke="#26a269" stroke-width=".8"/>
+  <rect x="25" y="26" width="78" height="54" fill="url(#hot)"/>
+  <!-- fabric texture over everything on the screen -->
+  <rect x="17" y="20" width="94" height="72" fill="url(#weave)"/>
+  <rect x="17" y="20" width="94" height="6" fill="url(#inner)"/>
+  <path d="M17.5 20v72M110.5 20v72" stroke="#000" stroke-width="1" opacity=".18"/>
+
+  <!-- laser dot with glow -->
+  <circle cx="74" cy="47" r="6" fill="url(#laser)"/>
+  <circle cx="74" cy="47" r="1.4" fill="#ffffff"/>
+
+  <!-- roller case: tube with specular line, shade line, end caps -->
+  <rect x="12" y="11" width="104" height="12" rx="6" fill="url(#case)"/>
+  <path d="M18 13.6h92" stroke="#ffffff" stroke-width="1.2" opacity=".95"/>
+  <path d="M16 21.3h96" stroke="#5e5c64" stroke-width="1" opacity=".6"/>
+  <rect x="8" y="10" width="10" height="14" rx="3" fill="url(#cap)"/>
+  <rect x="110" y="10" width="10" height="14" rx="3" fill="url(#cap)"/>
+  <path d="M10 10.7h6M112 10.7h6" stroke="#c0bfbc" stroke-width=".9"/>
+  <circle cx="13" cy="17" r="1.6" fill="url(#screw)"/>
+  <circle cx="115" cy="17" r="1.6" fill="url(#screw)"/>
+
+  <!-- weighted bottom bar with top highlight and end caps -->
+  <rect x="13" y="89" width="102" height="7" rx="3.5" fill="url(#bar)"/>
+  <path d="M17 89.7h94" stroke="#c0bfbc" stroke-width="1"/>
+  <rect x="11" y="88.5" width="5" height="8" rx="2" fill="#241f31"/>
+  <rect x="112" y="88.5" width="5" height="8" rx="2" fill="#241f31"/>
+
+  <!-- pull cord: eyelet, braided cord, wooden toggle with grain -->
+  <circle cx="64" cy="97" r="2" fill="none" stroke="#9a9996" stroke-width="1.2"/>
+  <path d="M64 99v10" stroke="#5e5c64" stroke-width="1.6"/>
+  <path d="M64 100v1m0 2v1m0 2v1" stroke="#c0bfbc" stroke-width="1.6"/>
+  <rect x="60" y="108" width="8" height="13" rx="4" fill="url(#wood)"/>
+  <path d="M62 110.5q1 4 0 8M65.5 110q-.8 5 .3 9" fill="none" stroke="#63452c" stroke-width=".5" opacity=".7"/>
+  <path d="M61.5 109.5h4" stroke="#e8d3c0" stroke-width=".8" stroke-linecap="round"/>
+</svg>

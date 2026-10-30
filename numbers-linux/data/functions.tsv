@@ -1,0 +1,354 @@
+name	category	tsce_function_index	syntax	description
+ABS	Numeric functions	1	ABS(num-dur)	The ABS function returns the absolute value of a number value or of a duration value .
+ACCRINT	Financial functions	2	ACCRINT(issue, first, settle, annual-rate, par, frequency, days-basis)	The ACCRINT function returns the accrued interest on a security that pays periodic interest.
+ACCRINTM	Financial functions	3	ACCRINTM(issue, settle, annual-rate, par, days-basis)	The ACCRINTM function calculates the total accrued interest added to the purchase price of a security and paid to the seller when the security pays interest only at maturity.
+ACOS	Trigonometric functions	4	ACOS(num)	The ACOS function returns the inverse cosine (arccosine) of a number.
+ACOSH	Trigonometric functions	5	ACOSH(num)	The ACOSH function returns the inverse hyperbolic cosine (hyperbolic arccosine) of a number.
+ACOT	Trigonometric functions	374	ACOT(num)	The ACOT function returns the inverse cotangent (arccotangent) of a number.
+ACOTH	Trigonometric functions	375	ACOTH(num)	The ACOTH function returns the inverse hyperbolic cotangent of a number.
+ADDRESS	Reference functions	6	ADDRESS(row, column, addr-type, addr-style, table)	The ADDRESS function constructs a cell address string from separate row, column, and table identifiers.
+AND	Logical and information functions	7	AND(test-expression, test-expression…)	The AND function returns the boolean value TRUE if all arguments are true, and the boolean value FALSE otherwise.
+AREAS	Reference functions	8	AREAS(areas)	The AREAS function returns the number of ranges the function references.
+ARRAYTOTEXT	Text functions	341	ARRAYTOTEXT(array, format)	The ARRAYTOTEXT function returns the textual form of an array .
+ASIN	Trigonometric functions	9	ASIN(num)	The ASIN function returns the arcsine (the inverse sine) of a number.
+ASINH	Trigonometric functions	10	ASINH(num)	The ASINH function returns the inverse hyperbolic sine of a number.
+ATAN	Trigonometric functions	11	ATAN(num)	The ATAN function returns the inverse tangent (arctangent) of a number.
+ATAN2	Trigonometric functions	12	ATAN2(x, y)	The ATAN2 function returns the angle, relative to the positive x-axis, of the line passing through the origin and the specified point.
+ATANH	Trigonometric functions	13	ATANH(num)	The ATANH function returns the inverse hyperbolic tangent of a number.
+AVEDEV	Statistical functions	14	AVEDEV(value, value…)	The AVEDEV function returns the average of the difference of a set of numbers from their average (arithmetic mean).
+AVERAGE	Statistical functions	15	AVERAGE(value, value…)	The AVERAGE function returns the average (arithmetic mean) of a set of numbers.
+AVERAGEA	Statistical functions	16	AVERAGEA(value, value…)	The AVERAGEA function returns the average (arithmetic mean) of a set containing any value .
+AVERAGEIF	Statistical functions	234	AVERAGEIF(test-values, condition, avg-values)	The AVERAGEIF function returns the average (arithmetic mean) of the cells in a set that meet a given condition .
+AVERAGEIFS	Statistical functions	232	AVERAGEIFS(avg-values, test-values, condition, test-values…, condition…)	The AVERAGEIFS function returns the average (arithmetic mean) of the cells in a given set where one or more sets meet one or more related conditions .
+BASETONUM	Engineering functions	252	BASETONUM(convert-string, base)	The BASETONUM function converts a number of the specified base into a number in base 10.
+BESSELJ	Engineering functions	237	BESSELJ(any-x-value, n-value)	The BESSELJ function returns the integer Bessel function J n (x).
+BESSELY	Engineering functions	238	BESSELY(pos-x-value, n-value)	The BESSELY function returns the integer Bessel function Y n (x).
+BETADIST	Statistical functions	258	BETADIST(x-value, alpha, beta, x-lower, x-upper)	The BETADIST function returns the cumulative beta distribution probability value.
+BETAINV	Statistical functions	259	BETAINV(probability, alpha, beta, x-lower, x-upper)	The BETAINV function returns the inverse of the given cumulative beta distribution probability value.
+BIN2DEC	Engineering functions	268	BIN2DEC(binary-string, convert-length)	The BIN2DEC function converts a binary number to the corresponding decimal number.
+BIN2HEX	Engineering functions	267	BIN2HEX(binary-string, convert-length)	The BIN2HEX function converts a binary number to the corresponding hexadecimal number.
+BIN2OCT	Engineering functions	269	BIN2OCT(binary-string, convert-length)	The BIN2OCT function converts a binary number to the corresponding octal number.
+BINOMDIST	Statistical functions	242	BINOMDIST(success-num, trials, prob-success, function-type)	The BINOMDIST function returns the binomial distribution of the specified type.
+BITAND	Engineering functions	330	BITAND(value-1, value-2)	The BITAND function returns the bitwise AND of two numbers.
+BITLSHIFT	Engineering functions	333	BITLSHIFT(value, shift-amount)	The BITLSHIFT function returns a number shifted left by the specified number of bit positions.
+BITOR	Engineering functions	331	BITOR(value-1, value-2)	The BITOR function returns the bitwise OR of two numbers.
+BITRSHIFT	Engineering functions	334	BITRSHIFT(value, shift-amount)	The BITRSHIFT function returns a number shifted right by the specified number of bit positions.
+BITXOR	Engineering functions	332	BITXOR(value-1, value-2)	The BITXOR function returns the bitwise XOR of two numbers.
+BONDDURATION	Financial functions	194	BONDDURATION(settle, maturity, annual-rate, annual-yield, frequency, days-basis)	The BONDDURATION function returns the weighted average of the present value of the cash flows for an assumed par value of $100.
+BONDMDURATION	Financial functions	195	BONDMDURATION(settle, maturity, annual-rate, annual-yield, frequency, days-basis)	The BONDMDURATION function returns the modified weighted average of the present value of the cash flows for an assumed par value of $100.
+BYCOL	Logical and information functions	370	BYCOL(array, LAMBDA(parameter, calculation)	The BYCOL function applies a LAMBDA function to each column and returns an array of the results.
+BYROW	Logical and information functions	369	BYROW(array, LAMBDA(parameter, calculation)	The BYROW function applies a LAMBDA function to each row and returns an array of the results.
+CEILING	Numeric functions	17	CEILING(num-to-round, multiple-factor)	The CEILING function rounds a number away from 0 to the nearest multiple of the specified factor.
+CHAR	Text functions	18	CHAR(code-number)	The CHAR function returns the character that corresponds to a decimal Unicode character code.
+CHIDIST	Statistical functions	246	CHIDIST(x-value, degrees-freedom)	The CHIDIST function returns the one-tailed probability of the chi-square distribution.
+CHIINV	Statistical functions	256	CHIINV(probability, degrees-freedom)	The CHIINV function returns the inverse of the one-tailed probability of the chi-square distribution.
+CHITEST	Statistical functions	247	CHITEST(actual-values, expected-values)	The CHITEST function returns the value from the chi-square distribution for the given data.
+CHOOSE	Reference functions	19	CHOOSE(index, value, value…)	The CHOOSE function returns a value from a collection of values based on a specified index value.
+CHOOSECOLS	Reference functions	354	CHOOSECOLS(array, column-index, column-index…)	The CHOOSECOLS function returns specific columns from an array .
+CHOOSEROWS	Reference functions	353	CHOOSEROWS(array, row-index, row-index…)	The CHOOSEROWS function returns specific rows from an array .
+CLEAN	Text functions	20	CLEAN(text)	The CLEAN function removes most common nonprinting characters (Unicode character codes 0–31) from text.
+CODE	Text functions	21	CODE(code-string)	The CODE function returns the decimal Unicode number of the first character in a specified string.
+COLUMN	Reference functions	22	COLUMN(reference)	The COLUMN function returns the column number of the column containing a specified cell.
+COLUMNS	Reference functions	23	COLUMNS(range, headers)	The COLUMNS function returns the number of columns included in a specified collection of cells.
+COMBIN	Numeric functions	24	COMBIN(total-items, group-size)	The COMBIN function returns the number of different ways you can combine a number of items into groups of a specific size, ignoring the order within the groups.
+COMBINA	Numeric functions	383	COMBINA(total-items, group-size)	The COMBINA function returns the number of different ways you can combine a number of items into groups of a specific size, where repetition is allowed and the order within the groups is ignored.
+CONCAT	Text functions	329	CONCAT(string, string…)	The CONCAT function joins (concatenates) values or the contents of cell ranges or strings.
+CONCATENATE	Text functions	25	CONCATENATE(string, string…)	The CONCATENATE function joins (concatenates) values or the contents of referenced cells.
+CONFIDENCE	Statistical functions	26	CONFIDENCE(alpha, stdev, sample-size)	The CONFIDENCE function returns a value for creating a statistical confidence interval for a sample from a population with a known standard deviation.
+CONVERT	Engineering functions	255	CONVERT(convert-num, from-unit, to-unit)	The CONVERT function converts a number from one measurement system to its corresponding value in another measurement system.
+CORREL	Statistical functions	27	CORREL(x-values, y-values)	The CORREL function returns the correlation between two sets using linear regression analysis.
+COS	Trigonometric functions	28	COS(radian-angle)	The COS function returns the cosine of an angle that is expressed in radians.
+COSH	Trigonometric functions	29	COSH(num)	The COSH function returns the hyperbolic cosine of a number.
+COT	Trigonometric functions	376	COT(radian-angle)	The COT function returns the cotangent of an angle that is expressed in radians.
+COTH	Trigonometric functions	377	COTH(num)	The COTH function returns the hyperbolic cotangent of a number.
+COUNT	Statistical functions	30	COUNT(value, value…)	The COUNT function returns the number of its arguments that contain numbers, numeric expressions, or dates.
+COUNTA	Statistical functions	31	COUNTA(value, value…)	The COUNTA function returns the number of its arguments that are not empty.
+COUNTBLANK	Statistical functions	32	COUNTBLANK(range)	The COUNTBLANK function returns the number of cells in a collection that are empty.
+COUNTIF	Statistical functions	33	COUNTIF(test-array, condition)	The COUNTIF function returns the number of cells in a collection that satisfy a given condition .
+COUNTIFS	Statistical functions	233	COUNTIFS(test-values, condition, test-values…, condition…)	The COUNTIFS function returns the number of cells in one or more collections that satisfy given conditions (one condition per collection).
+COUNTMATCHES	Text functions	317	COUNTMATCHES(source-string, search-string)	The COUNTMATCHES function returns a number value representing the number of times a given substring appears in the original string value.
+COUPDAYBS	Financial functions	34	COUPDAYBS(settle, maturity, frequency, days-basis)	The COUPDAYBS function returns the number of days between the beginning of the coupon period in which settlement occurs and the settlement date.
+COUPDAYS	Financial functions	35	COUPDAYS(settle, maturity, frequency, days-basis)	The COUPDAYS function returns the number of days in the coupon period in which settlement occurs.
+COUPDAYSNC	Financial functions	36	COUPDAYSNC(settle, maturity, frequency, days-basis)	The COUPDAYSNC function returns the number of days between the settlement date and the end of the coupon period in which settlement occurs.
+COUPNUM	Financial functions	37	COUPNUM(settle, maturity, frequency, days-basis)	The COUPNUM function returns the number of coupons remaining to be paid between the settlement date and the maturity date.
+COVAR	Statistical functions	38	COVAR(dataset-1, dataset-2)	The COVAR function returns the covariance of two sets of number values .
+CRITBINOM	Statistical functions	251	CRITBINOM(trials, prob-success, alpha)	The CRITBINOM function returns the smallest value for which the cumulative binomial distribution is greater than or equal to a given value.
+CSC	Trigonometric functions	378	CSC(radian-angle)	The CSC function returns the cosecant of an angle that is expressed in radians.
+CSCH	Trigonometric functions	379	CSCH(num)	The CSCH function returns the hyperbolic cosecant of a number.
+CUMIPMT	Financial functions	201	CUMIPMT(periodic-rate, num-periods, present-value, starting-per, ending-per, when-due)	The CUMIPMT function returns the total interest included in loan or annuity payments over a chosen time interval based on fixed periodic payments and a fixed interest rate.
+CUMPRINC	Financial functions	202	CUMPRINC(periodic-rate, num-periods, present-value, starting-per, ending-per, when-due)	The CUMPRINC function returns the total principal included in loan or annuity payments over a chosen time interval based on fixed periodic payments and a fixed interest rate.
+CURRENCY	Financial functions	300	CURRENCY(currency-1, currency-2, price)	The CURRENCY function returns data from the previous market day’s close about the exchange rate between two currencies, retrieved remotely via the internet.
+CURRENCYCODE	Financial functions	303	CURRENCYCODE(value)	The CURRENCYCODE function returns the currency code of a given currency value, or the currency code for the language and region set for the computer or for the current document.
+CURRENCYCONVERT	Financial functions	302	CURRENCYCONVERT(value, currency-code)	The CURRENCYCONVERT function returns the price of a given currency value in a different currency, using exchange rate data from the previous market day’s close, retrieved remotely via the internet.
+CURRENCYH	Financial functions	301	CURRENCYH(currency-1, currency-2, close, date)	The CURRENCYH function returns historical data on the exchange rate between two currencies for a given date.
+DATE	Date and time functions	39	DATE(year, month, day)	The DATE function combines separate values for year, month, and day and returns a date/time value .
+DATEDIF	Date and time functions	40	DATEDIF(start-date, end-date, calc-method)	The DATEDIF function returns the number of days, months, or years between two dates.
+DATEVALUE	Date and time functions	228	DATEVALUE(date-text)	The DATEVALUE function returns a date/time value for a given date string .
+DAY	Date and time functions	41	DAY(date)	The DAY function returns the day of the month for a given date/time value or date string .
+DAYNAME	Date and time functions	236	DAYNAME(day-num)	The DAYNAME function returns the name of the day of the week for a given date/time value , date string , or number value .
+DAYS	Date and time functions	389	DAYS(end-date, start-date)	The DAYS function returns the number of days between two date/time values or date strings .
+DAYS360	Date and time functions	261	DAYS360(start-date, end-date, use-euro-method)	The DAYS360 function returns the number of days between two dates based on twelve 30-day months and a 360-day year.
+DB	Financial functions	42	DB(cost, salvage, life, depr-period, first-year-months)	The DB function returns the amount of depreciation of an asset for a specified period using the fixed-declining balance method.
+DDB	Financial functions	43	DDB(cost, salvage, life, depr-period, depr-factor)	The DDB function returns the amount of depreciation of an asset based on a specified depreciation rate.
+DEC2BIN	Engineering functions	265	DEC2BIN(decimal-string, convert-length)	The DEC2BIN function converts a decimal number to the corresponding binary number.
+DEC2HEX	Engineering functions	264	DEC2HEX(decimal-string, convert-length)	The DEC2HEX function converts a decimal number to the corresponding hexadecimal number.
+DEC2OCT	Engineering functions	266	DEC2OCT(decimal-string, convert-length)	The DEC2OCT function converts a decimal number to the corresponding octal number.
+DEGREES	Trigonometric functions	44	DEGREES(radian-angle)	The DEGREES function returns the number of degrees in an angle expressed in radians.
+DELTA	Engineering functions	223	DELTA(compare-from, compare-to)	The DELTA function determines whether two number values are exactly equal.
+DEVSQ	Statistical functions	221	DEVSQ(num-value, num-value…)	The DEVSQ function returns the sum of the squares of deviations of a set of numbers from their average (arithmetic mean).
+DISC	Financial functions	45	DISC(settle, maturity, price, redemption, days-basis)	The DISC function returns the annual discount rate of a security that pays no interest and is sold at a discount to its redemption value.
+DOLLAR	Text functions	46	DOLLAR(num, places)	The DOLLAR function returns a string formatted as currency from a given number value .
+DROP	Reference functions	351	DROP(array, number-of-rows, number-of-columns)	The DROP function excludes a specified number of rows or columns from the start or end of an array .
+DUR2DAYS	Duration functions	210	DUR2DAYS(duration)	The DUR2DAYS function converts a duration value to a number of days.
+DUR2HOURS	Duration functions	207	DUR2HOURS(duration)	The DUR2HOURS function converts a duration value to a number of hours.
+DUR2MILLISECONDS	Duration functions	277	DUR2MILLISECONDS(duration)	The DUR2MILLISECONDS function converts a duration value to a number of milliseconds.
+DUR2MINUTES	Duration functions	208	DUR2MINUTES(duration)	The DUR2MINUTES function converts a duration value to a number of minutes.
+DUR2SECONDS	Duration functions	209	DUR2SECONDS(duration)	The DUR2SECONDS function converts a duration value to a number of seconds.
+DUR2WEEKS	Duration functions	211	DUR2WEEKS(duration)	The DUR2WEEKS function converts a duration value to a number of weeks.
+DURATION	Duration functions	212	DURATION(weeks, days, hours, minutes, seconds, milliseconds)	The DURATION function combines separate values for weeks, days, hours, minutes, seconds, and milliseconds and returns a duration value .
+EDATE	Date and time functions	47	EDATE(start-date, month-offset)	The EDATE function returns a date/time value that is some number of months before or after a given date.
+EFFECT	Financial functions	185	EFFECT(nominal-rate, num-periods-year)	The EFFECT function returns the effective annual interest rate from the nominal annual interest rate based on the number of compounding periods per year.
+EOMONTH	Date and time functions	203	EOMONTH(start-date, month-offset)	The EOMONTH function returns a date/time value that is the last day of the month, some number of months before or after a given date.
+ERF	Engineering functions	196	ERF(lower, upper)	The ERF function returns the error function integrated between two values.
+ERFC	Engineering functions	197	ERFC(lower)	The ERFC function returns the complementary ERF function integrated between a given lower bound and infinity.
+EVEN	Numeric functions	48	EVEN(num-to-round)	The EVEN function rounds a number away from 0 to the next even number.
+EXACT	Text functions	49	EXACT(string-1, string-2)	The EXACT function returns TRUE if the argument strings are identical in case and content.
+EXP	Numeric functions	50	EXP(exponent)	The EXP function returns e (the base of natural logarithms) raised to the specified power.
+EXPAND	Reference functions	352	EXPAND(array, number-of-rows, number-of-columns, pad-with)	The EXPAND function adds rows or columns to an array based on specified dimensions.
+EXPONDIST	Statistical functions	213	EXPONDIST(x-value, lambda, function-type)	The EXPONDIST function returns the exponential distribution of the specified type.
+FACT	Numeric functions	51	FACT(fact-num)	The FACT function returns the factorial of a number.
+FACTDOUBLE	Numeric functions	224	FACTDOUBLE(fact-num)	The FACTDOUBLE function returns the double factorial of a number.
+FALSE	Logical and information functions	52	FALSE()	The FALSE function returns the boolean value FALSE.
+FDIST	Statistical functions	244	FDIST(x-value, d-f-numerator, d-f-denominator)	The FDIST function returns the F probability distribution.
+FILTER	Reference functions	342	FILTER(array, test-array, if-empty)	The FILTER function filters an array based on specified criteria.
+FIND	Text functions	53	FIND(search-string, source-string, start-pos)	The FIND function returns the starting position of one string within another.
+FINV	Statistical functions	257	FINV(prob, d-f-numerator, d-f-denominator)	The FINV function returns the inverse of the F probability distribution.
+FISHER	Statistical functions	386	FISHER(x-value)	The FISHER function returns the Fisher transformation of a number value .
+FISHERINV	Statistical functions	387	FISHERINV(y-value)	The FISHERINV function returns the inverse of the Fisher transformation of a number value .
+FIXED	Text functions	54	FIXED(num, places, no-commas)	The FIXED function rounds a number to the specified number value of decimal places and then returns the result as a string value.
+FLOOR	Numeric functions	55	FLOOR(num-to-round, factor)	The FLOOR function rounds a number toward 0 to the nearest multiple of the specified factor.
+FORECAST	Statistical functions	56	FORECAST(x-value, y-values, x-values)	The FORECAST function returns the forecasted y value for a given x based on sample values using linear regression analysis.
+FORMULATEXT	Reference functions	323	FORMULATEXT(reference)	The FORMULATEXT function returns a formula as a text string.
+FREQUENCY	Statistical functions	222	FREQUENCY(data-values, interval-values)	The FREQUENCY function returns an array of how often data values occur within a collection of interval values.
+FV	Financial functions	57	FV(periodic-rate, num-periods, payment, present-value, when-due)	The FV function returns the future value of an investment based on a series of regular periodic cash flows (payments of a constant amount and all cash flows at constant intervals) and at a fixed interest rate.
+GAMMA	Statistical functions	384	GAMMA(x-value)	The GAMMA function returns the gamma function value of a number value .
+GAMMADIST	Statistical functions	229	GAMMADIST(x-value, alpha, beta, function-type)	The GAMMADIST function returns the gamma distribution of the specified type.
+GAMMAINV	Statistical functions	230	GAMMAINV(probability, alpha, beta)	The GAMMAINV function returns the inverse gamma cumulative distribution.
+GAMMALN	Statistical functions	227	GAMMALN(pos-x-value)	The GAMMALN function returns the natural logarithm of the gamma function, G(x).
+GCD	Numeric functions	58	GCD(num-value, num-value…)	The GCD function returns the greatest common divisor of a collection of number values .
+GEOMEAN	Statistical functions	263	GEOMEAN(pos-num, pos-num…)	The GEOMEAN function returns the geometric mean of the specified number values .
+GESTEP	Engineering functions	225	GESTEP(compare-num, step-number)	The GESTEP function determines if one number value is greater than or exactly equal to the second number value.
+GETPIVOTDATA	Reference functions	325	GETPIVOTDATA(aggregate-field, pivot-cell, field-name, item, field-name…, item…)	The GETPIVOTDATA function returns aggregate data from a pivot table.
+HARMEAN	Statistical functions	262	HARMEAN(pos-num, pos-num…)	The HARMEAN function returns the harmonic mean of the specified number values .
+HEX2BIN	Engineering functions	273	HEX2BIN(hex-string, convert-length)	The HEX2BIN function converts a hexadecimal number to the corresponding binary number.
+HEX2DEC	Engineering functions	274	HEX2DEC(hex-string , convert-length)	The HEX2DEC function converts a hexadecimal number to the corresponding decimal number.
+HEX2OCT	Engineering functions	275	HEX2OCT(hex-string, convert-length)	The HEX2OCT function converts a hexadecimal number to the corresponding octal number.
+HLOOKUP	Reference functions	59	HLOOKUP(search-for, rows-range, return-row, close-match)	The HLOOKUP function returns a value from a collection of rows by using the top row of values to pick a column and a row number to pick a row within that column.
+HOUR	Date and time functions	60	HOUR(time)	The HOUR function returns the hour for a given date/time value or time string .
+HSTACK	Reference functions	355	HSTACK(array, array…)	The HSTACK function adjoins arrays horizontally and in sequence to form a larger array.
+HYPERLINK	Reference functions	61	HYPERLINK(url, link-text)	The HYPERLINK function creates a clickable link that opens a webpage or new email message.
+IF	Logical and information functions	62	IF(if-expression, if-true , if-false)	The IF function returns one of two values, depending on whether a specified expression evaluates to a boolean value of TRUE or FALSE.
+IFERROR	Logical and information functions	235	IFERROR(any-expression, if-error)	The IFERROR function returns a value that you specify if a given value evaluates to an error; otherwise it returns the given value.
+IFS	Logical and information functions	313	IFS(ifs-expression, ifs-true , ifs-expression… , ifs-true…)	The IFS function checks specified expressions and returns a value based on the first condition that evaluates to a boolean value of TRUE.
+INDEX	Reference functions	63	INDEX(range, row-index, column-index, area-index)	The INDEX function returns the value in the cell located at the intersection of the specified row and column within a collection of cells or from an array returned by an array function .
+INDIRECT	Reference functions	64	INDIRECT(addr-string, addr-style)	The INDIRECT function returns the contents of a cell or range referenced by an address specified as a string value .
+INT	Numeric functions	65	INT(num-to-round)	The INT function returns the nearest integer that is less than or equal to the number.
+INTERCEPT	Statistical functions	66	INTERCEPT(y-values, x-numbers)	The INTERCEPT function returns the y-intercept of the best-fit line for the collection using linear regression analysis.
+INTERSECT.RANGES	Reference functions	280	INTERSECT.RANGES(range, range…)	The INTERSECT.RANGES function returns a single value or an array of values contained at the intersection of the specified collections .
+INTRATE	Financial functions	199	INTRATE(settle, maturity, invest-amount, maturity-amt, days-basis)	The INTRATE function returns the effective annual interest rate for a security that pays interest only at maturity.
+IPMT	Financial functions	67	IPMT(periodic-rate, period, num-periods, present-value, future-value, when-due)	The IPMT function returns the interest portion of a specified loan or annuity payment based on fixed, periodic payments and a fixed interest rate.
+IRR	Financial functions	68	IRR(flows-range, estimate)	The IRR function returns the internal rate of return for an investment that is based on a series of potentially irregular cash flows (payments that do not need to be a constant amount) that occur at regular time intervals.
+ISBLANK	Logical and information functions	69	ISBLANK(cell)	The ISBLANK function returns the boolean value TRUE if the specified cell is empty and the boolean value FALSE otherwise.
+ISDATE	Logical and information functions	306	ISDATE(cell)	The ISDATE function returns the boolean value TRUE if the given expression evaluates to a date; otherwise it returns the boolean value FALSE.
+ISERROR	Logical and information functions	70	ISERROR(any-expression)	The ISERROR function returns the boolean value TRUE if a given expression evaluates to an error and the boolean value FALSE otherwise.
+ISEVEN	Logical and information functions	71	ISEVEN(num)	The ISEVEN function returns the boolean value TRUE if the given number is even (leaves no remainder when divided by 2); otherwise it returns the boolean value FALSE.
+ISNUMBER	Logical and information functions	304	ISNUMBER(cell)	The ISNUMBER function returns the boolean value TRUE if the given expression evaluates to a number; otherwise it returns the boolean value FALSE.
+ISNUMBERORDATE	Logical and information functions	373	ISNUMBERORDATE(cell)	The ISNUMBERORDATE function returns the boolean value TRUE if the given expression evaluates to a number or date; otherwise, it returns the boolean value FALSE.
+ISODD	Logical and information functions	72	ISODD(num)	The ISODD function returns the boolean value TRUE if the given number is odd (leaves a remainder when divided by 2); otherwise it returns the boolean value FALSE.
+ISOMITTED	Logical and information functions	371	ISOMITTED(parameter)	The ISOMITTED function determines if the parameter in a LAMBDA function has been passed to the LAMBDA.
+ISOWEEKNUM	Date and time functions	335	ISOWEEKNUM(date)	The ISOWEEKNUM function returns the ISO (International Organization for Standardization) week number for a specific date.
+ISPMT	Financial functions	73	ISPMT(periodic-rate, period, num-periods, present-value)	The ISPMT function returns the periodic interest portion for a fixed-rate loan where an equal principal reduction occurs at the beginning of each period and an interest payment on the outstanding balance is made at the end of each period.
+ISTEXT	Logical and information functions	305	ISTEXT(cell)	The ISTEXT function returns the boolean value TRUE if the given expression evaluates to a string; otherwise it returns the boolean value FALSE.
+LAMBDA.APPLY	Logical and information functions	372	LAMBDA.APPLY(test-value, LAMBDA(parameter, parameter…, calculation)	The LAMBDA.APPLY function is used to test LAMBDA functions.
+LARGE	Statistical functions	74	LARGE(value-set, ranking)	The LARGE function returns the n th -largest value within a collection.
+LCM	Numeric functions	75	LCM(num-value, num-value…)	The LCM function returns the least common multiple of a collection of number values .
+LEFT	Text functions	76	LEFT(source-string, string-length)	The LEFT function returns a string value consisting of the specified number of characters from the left end of a given string value.
+LEN	Text functions	77	LEN(source-string)	The LEN function returns the number of graphemes in a string value .
+LINEST	Statistical functions	276	LINEST(known-y-values, known-x-values, nonzero-y-intercept, more-stats)	The LINEST function returns an array of the statistics for a straight line that best fits the given data using the least squares method.
+LN	Numeric functions	78	LN(pos-num)	The LN function returns the natural logarithm of a number (the power to which e must be raised to result in the number).
+LOG	Numeric functions	79	LOG(pos-num, base)	The LOG function returns the logarithm of a number using a specified base.
+LOG10	Numeric functions	80	LOG10(pos-num)	The LOG10 function returns the base-10 logarithm of a number.
+LOGINV	Statistical functions	240	LOGINV(probability, mean, stdev)	The LOGINV function returns the inverse of the log-normal cumulative distribution function of x.
+LOGNORMDIST	Statistical functions	239	LOGNORMDIST(pos-x-value, mean, stdev)	The LOGNORMDIST function returns the log-normal distribution.
+LOOKUP	Reference functions	81	LOOKUP(search-for, search-where, result-values)	The LOOKUP function finds a match for a given search value in one collection , and then returns the value in the cell with the same relative position in a second collection.
+LOWER	Text functions	82	LOWER(source-string)	The LOWER function returns a string value that is entirely lowercase, regardless of the case of the characters in the specified string value.
+MAKEARRAY	Logical and information functions	365	MAKEARRAY(number-of-rows, number-of-columns, LAMBDA(row_index, column_index, calculation)	The MAKEARRAY function returns an array of numbers with a specified number of rows and columns calculated by a LAMBDA function.
+MAP	Logical and information functions	366	MAP(array, array…, LAMBDA(parameter, calculation)	The MAP function maps each value in an array to a new value determined by a LAMBDA function, and returns a new array.
+MATCH	Reference functions	83	MATCH(search-for, search-where, matching-method)	The MATCH function returns the position of a value within a collection .
+MAX	Statistical functions	84	MAX(value, value…)	The MAX function returns the largest numeric value in a set of number values , date/time values or duration values .
+MAXA	Statistical functions	85	MAXA(value, value…)	The MAXA function returns the largest numeric value in a set containing any values .
+MAXIFS	Statistical functions	309	MAXIFS(range, criteria-range, criteria, criteria-range…, criteria…)	The MAXIFS function returns the largest numeric value in a range of cells, determined by a set of criteria.
+MDETERM	Numeric functions	359	MDETERM(matrix)	The MDETERM function returns the determinant of a matrix.
+MEDIAN	Statistical functions	86	MEDIAN(value, value…)	The MEDIAN function returns the median value in a set of numbers.
+MID	Text functions	87	MID(source-string, start-pos, string-length)	The MID function returns a string value consisting of the given number of characters from a string value starting at the specified position.
+MIN	Statistical functions	88	MIN(value, value…)	The MIN function returns the smallest numeric value in a set of number values , date/time values , or duration values .
+MINA	Statistical functions	89	MINA(value, value…)	The MINA function returns the smallest numeric value in a set containing any values .
+MINIFS	Statistical functions	310	MINIFS(range, criteria-range, criteria, criteria-range…, criteria…)	The MINIFS function returns the smallest numeric value in a range of cells, determined by a set of criteria.
+MINUTE	Date and time functions	90	MINUTE(time)	The MINUTE function returns the minutes for a given date/time value or time string .
+MINVERSE	Numeric functions	360	MINVERSE(matrix)	The MINVERSE function returns the inverse matrix of a matrix.
+MIRR	Financial functions	91	MIRR(flows-range, finance-rate, reinvest-rate)	The MIRR function returns the modified internal rate of return for an investment that is based on a series of potentially irregular cash flows (payments that do not need to be a constant amount) that occur at regular time intervals.
+MMULT	Numeric functions	361	MMULT(matrix-1, matrix-2)	The MMULT function returns the matrix product of two matrices.
+MOD	Numeric functions	92	MOD(dividend, divisor)	The MOD function returns the remainder from a division.
+MODE	Statistical functions	93	MODE(value, value…)	The MODE function returns the most frequently occurring value in a set of numeric values.
+MONTH	Date and time functions	94	MONTH(date)	The MONTH function returns the month for a given date/time value or date string .
+MONTHNAME	Date and time functions	205	MONTHNAME(month-num)	The MONTHNAME function returns the name of the month for a given number value .
+MROUND	Numeric functions	95	MROUND(num-to-round, factor)	The MROUND function rounds a number to the nearest multiple of a specified factor.
+MULTINOMIAL	Numeric functions	250	MULTINOMIAL(non-neg-num, non-neg-num…)	The MULTINOMIAL function returns the multinomial coefficient of the given numbers.
+MUNIT	Numeric functions	362	MUNIT(matrix-size)	The MUNIT function returns a unit matrix of a specified dimension.
+NEGBINOMDIST	Statistical functions	243	NEGBINOMDIST(f-num, s-num, prob-success)	The NEGBINOMDIST function returns the negative binomial distribution.
+NETWORKDAYS	Date and time functions	260	NETWORKDAYS(start-date, end-date, exclude-dates)	The NETWORKDAYS function returns the number of working days between two dates.
+NOMINAL	Financial functions	186	NOMINAL(effective-int-rate, num-periods-year)	The NOMINAL function returns the nominal annual interest rate from the effective annual interest rate based on the number of compounding periods per year.
+NORMDIST	Statistical functions	187	NORMDIST(num, average, stdev, function-type)	The NORMDIST function returns the normal distribution of the specified type.
+NORMINV	Statistical functions	189	NORMINV(probability, average, stdev)	The NORMINV function returns the inverse of the cumulative normal distribution.
+NORMSDIST	Statistical functions	188	NORMSDIST(num)	The NORMSDIST function returns the standard normal distribution.
+NORMSINV	Statistical functions	190	NORMSINV(probability)	The NORMSINV function returns the inverse of the cumulative standard normal distribution.
+NOT	Logical and information functions	96	NOT(any-expression)	The NOT function returns the opposite of the boolean value of a specified expression.
+NOW	Date and time functions	97	NOW()	The NOW function returns a date/time value that’s the current time in the file’s time zone (see Notes below).
+NPER	Financial functions	98	NPER(periodic-rate, payment, present-value, future-value, when-due)	The NPER function returns the number of payment periods for a loan or annuity based on a series of regular periodic cash flows (payments of a constant amount and all cash flows at constant intervals) and at a fixed interest rate.
+NPV	Financial functions	99	NPV(periodic-discount-rate, cash-flow, cash-flow…)	The NPV function returns the net present value of an investment based on a series of potentially irregular cash flows that occur at regular time intervals.
+NUMTOBASE	Engineering functions	253	NUMTOBASE(decimal-string, base, convert-length)	The NUMTOBASE function converts a number from base 10 into a number in the specified base.
+OCT2BIN	Engineering functions	270	OCT2BIN(octal-string, convert-length)	The OCT2BIN function converts an octal number to the corresponding binary number.
+OCT2DEC	Engineering functions	271	OCT2DEC(octal-string , convert-length)	The OCT2DEC function converts an octal number to the corresponding decimal number.
+OCT2HEX	Engineering functions	272	OCT2HEX(octal-string, convert-length)	The OCT2HEX function converts an octal number to the corresponding hexadecimal number.
+ODD	Numeric functions	100	ODD(num-to-round)	The ODD function rounds a number away from 0 to the next odd number.
+OFFSET	Reference functions	101	OFFSET(base, row-offset, column-offset, rows, columns)	The OFFSET function returns an array of cells that is the specified number of rows and columns away from the specified base cell.
+OR	Logical and information functions	102	OR(any-expression, any-expression…)	The OR function returns the boolean value TRUE if any argument is true; otherwise it returns the boolean value FALSE.
+PEARSON	Statistical functions	390	PEARSON(x-values, y-values)	The PEARSON function returns the Pearson product-moment correlation coefficient for two sets of values.
+PERCENTILE	Statistical functions	103	PERCENTILE(value-set, percentile-value)	The PERCENTILE function returns the value within a set of numeric values that corresponds to a particular percentile.
+PERCENTRANK	Statistical functions	226	PERCENTRANK(value-set, value, significance)	The PERCENTRANK function returns the rank of a value in a set as a percentage of the set.
+PERMUT	Statistical functions	245	PERMUT(num, num-chosen)	The PERMUT function returns the number of permutations for a given number of objects that can be selected from a total number of objects.
+PERMUTATIONA	Statistical functions	388	PERMUTATIONA(num, num-chosen)	The PERMUTATIONA function returns the number of permutations for a given number of objects selected from a total number of objects, where repetition is allowed.
+PHI	Statistical functions	385	PHI(z-value)	The PHI function returns the value of the probability density function for a standard normal distribution at a specified value.
+PI	Numeric functions	104	PI()	The PI function returns the approximate value of π (pi), the ratio of a circle’s circumference to its diameter.
+PLAINTEXT	Text functions	297	PLAINTEXT(source-string)	The PLAINTEXT function returns a string value stripped of any rich text attributes in the input value.
+PMT	Financial functions	105	PMT(periodic-rate, num-periods, present-value, future-value, when-due)	The PMT function returns the fixed periodic payment for a loan or annuity based on a series of regular periodic cash flows (payments of a constant amount and all cash flows at constant intervals) and a fixed interest rate.
+POISSON	Statistical functions	106	POISSON(events, average, function-type)	The POISSON function returns the Poisson distribution probability for a given number of events.
+POLYNOMIAL	Numeric functions	287	POLYNOMIAL(x-value , coefficients)	The POLYNOMIAL function evaluates a polynomial at a given point.
+POWER	Numeric functions	107	POWER(number, exponent)	The POWER function returns a number raised to a power.
+PPMT	Financial functions	108	PPMT(periodic-rate, period, num-periods, present-value, future-value, when-due)	The PPMT function returns the principal portion of a specified loan or annuity payment based on fixed periodic payments and a fixed interest rate.
+PRICE	Financial functions	109	PRICE(settle, maturity, annual-rate, annual-yield, redemption, frequency, days-basis)	The PRICE function returns the price of a security that pays periodic interest per $100 of redemption (par) value.
+PRICEDISC	Financial functions	110	PRICEDISC(settle, maturity, annual-yield, redemption, days-basis)	The PRICEDISC function returns the price of a security that is sold at a discount to redemption value and does not pay interest per $100 of redemption (par) value.
+PRICEMAT	Financial functions	111	PRICEMAT(settle, maturity, issue, annual-rate, annual-yield, days-basis)	The PRICEMAT function returns the price of a security that pays interest only at maturity per $100 of redemption (par) value.
+PROB	Statistical functions	112	PROB(num-set, probability-values, lower, upper)	The PROB function returns the probability of a collection of values, if you know the probabilities of the individual values.
+PRODUCT	Numeric functions	113	PRODUCT(num-value, num-value…)	The PRODUCT function returns the product of a collection of number values .
+PROPER	Text functions	114	PROPER(source-string)	The PROPER function returns a string value where the first letter of each word is uppercase and all remaining characters are lowercase, regardless of the case of the characters in the specified string value.
+PV	Financial functions	115	PV(periodic-rate, num-periods, payment, future-value, when-due)	The PV function returns the present value of an investment or annuity based on a series of regular periodic cash flows (payments of a constant amount and all cash flows at constant intervals) and at a fixed interest rate.
+QUARTILE	Statistical functions	249	QUARTILE(num-set, quartile-num)	The QUARTILE function returns the value for the specified quartile from a given set of numbers.
+QUOTIENT	Numeric functions	116	QUOTIENT(dividend, divisor)	The QUOTIENT function returns the integer quotient of two numbers.
+RADIANS	Trigonometric functions	117	RADIANS(degree-angle)	The RADIANS function returns the number of radians in an angle expressed in degrees.
+RAND	Numeric functions	118	RAND()	The RAND function returns a random number that is greater than or equal to 0 and less than 1.
+RANDARRAY	Numeric functions	346	RANDARRAY(number-of-rows, number-of-columns, min-value, max-value, result-type)	The RANDARRAY function returns an array of random numbers based on your specifications.
+RANDBETWEEN	Numeric functions	119	RANDBETWEEN(lower, upper)	The RANDBETWEEN function returns a random integer within the specified range.
+RANK	Statistical functions	120	RANK(value, value-set, ranking-order)	The RANK function returns the rank of a value within a set of numeric values.
+RATE	Financial functions	121	RATE(num-periods, payment, present-value, future-value, when-due, estimate)	The RATE function returns the interest rate of an investment, loan, or annuity based on a series of regular periodic cash flows (payments of a constant amount and all cash flows at constant intervals) and at a fixed interest rate.
+RECEIVED	Financial functions	200	RECEIVED(settle, maturity, invest-amount, annual-rate, days-basis)	The RECEIVED function returns the maturity value for a security that pays interest only at maturity.
+REDUCE	Logical and information functions	367	REDUCE(initial-value, array, LAMBDA(accumulator, value, calculation)	The REDUCE function returns a value for an array calculated by a LAMBDA function.
+REFERENCE.NAME	Reference functions	322	REFERENCE.NAME(reference, reference-specificity, reference-style)	The REFERENCE.NAME function returns a string representation of the given cell reference.
+REGEX	Text functions	321	REGEX(regular-expression-string, case-sensitive)	The REGEX function enables usage of regular expressions in other text and conditional functions.
+REGEX.EXTRACT	Text functions	324	REGEX.EXTRACT(source-string, regular-expression-string, match-occurrence, capture-group-occurrence)	The REGEX.EXTRACT function returns the matches or capture groups in a match of a given regular expression in a source string.
+REPLACE	Text functions	122	REPLACE(source-string, start-pos, replace-length, new-string)	The REPLACE function returns a string value where a specified number of characters of a given string value have been replaced with a new string value.
+REPT	Text functions	123	REPT(source-string, repeat-number)	The REPT function returns a string value that contains a given string value repeated a specified number of times.
+RIGHT	Text functions	124	RIGHT(source-string, string-length)	The RIGHT function returns a string value consisting of the specified number of characters from the right end of a given string value.
+ROMAN	Numeric functions	125	ROMAN(arabic-num, roman-style)	The ROMAN function converts a number to Roman numerals.
+ROUND	Numeric functions	126	ROUND(num-to-round, digits)	The ROUND function returns a number rounded to the specified number of places.
+ROUNDDOWN	Numeric functions	127	ROUNDDOWN(num-to-round, digits)	The ROUNDDOWN function returns a number rounded toward 0 to the specified number of places.
+ROUNDUP	Numeric functions	128	ROUNDUP(num-to-round, digits)	The ROUNDUP function returns a number rounded away from 0 to the specified number of places.
+ROW	Reference functions	129	ROW(reference)	The ROW function returns the row number of the row containing a specified cell or range of cells.
+ROWS	Reference functions	130	ROWS(range, headers)	The ROWS function returns the number of rows included in a specified collection of cells.
+RSQ	Statistical functions	391	RSQ(x-values, y-values)	The RSQ function returns the R-squared value (coefficient of determination) of the best-fit linear regression line through a set of data points.
+SCAN	Logical and information functions	368	SCAN(initial-value, array, LAMBDA(accumulator, value, calculation)	The SCAN function scans an array and returns intermediate values calculated by a LAMBDA function.
+SEARCH	Text functions	131	SEARCH(search-string, source-string, start-pos)	The SEARCH function returns the starting position of one string value within another, ignoring case and allowing wildcards .
+SEC	Trigonometric functions	380	SEC(radian-angle)	The SEC function returns the secant of an angle that is expressed in radians.
+SECH	Trigonometric functions	381	SECH(num)	The SECH function returns the hyperbolic secant of a number.
+SECOND	Date and time functions	132	SECOND(time)	The SECOND function returns the seconds for a given date/time value or time string .
+SEQUENCE	Numeric functions	338	SEQUENCE(number-of-rows, number-of-columns, start, step)	The SEQUENCE function returns an array of sequential, numeric values based on your specifications.
+SERIESSUM	Numeric functions	286	SERIESSUM(x-value , power , step-value , coefficients)	The SERIESSUM function computes and returns the sum of a power series.
+SIGN	Numeric functions	133	SIGN(num)	The SIGN function returns 1 when the argument number is positive, –1 when it is negative, and 0 when it is zero.
+SIN	Trigonometric functions	134	SIN(radian-angle)	The SIN function returns the sine of an angle that is expressed in radians.
+SINH	Trigonometric functions	135	SINH(num)	The SINH function returns the hyperbolic sine of the specified number.
+SLN	Financial functions	136	SLN(cost, salvage, life)	The SLN function returns the depreciation of an asset for a single period using the straight-line method.
+SLOPE	Statistical functions	137	SLOPE(y-values, x-values)	The SLOPE function returns the slope of the best-fit line for the set using linear regression analysis.
+SMALL	Statistical functions	138	SMALL(value-set, ranking)	The SMALL function returns the n th -smallest value within a set of numeric values.
+SORT	Reference functions	343	SORT(array, sort-index, sort-order, sort-by)	The SORT function sorts an array .
+SORTBY	Reference functions	344	SORTBY(array, sort-by-array, sort-order, sort-by-array…)	The SORTBY function sorts an array based on the values in another array .
+SQRT	Numeric functions	139	SQRT(num)	The SQRT function returns the square root of a number value .
+SQRTPI	Numeric functions	219	SQRTPI(non-neg-number)	The SQRTPI function returns the square root of a number value after it has been multiplied by π (pi).
+STANDARDIZE	Statistical functions	198	STANDARDIZE(num, average, stdev)	The STANDARDIZE function returns a normalized value from a distribution characterized by a given mean and standard deviation.
+STDEV	Statistical functions	140	STDEV(value, value…)	The STDEV function returns the standard deviation—a measure of dispersion—of a set of numeric values based on their sample (unbiased) variance.
+STDEVA	Statistical functions	141	STDEVA(value, value…)	The STDEVA function returns the standard deviation—a measure of dispersion—of a set containing any values , based on the sample (unbiased) variance.
+STDEVP	Statistical functions	142	STDEVP(value, value…)	The STDEVP function returns the standard deviation—a measure of dispersion—of a set of numeric values based on their population (true) variance.
+STDEVPA	Statistical functions	143	STDEVPA(value, value…)	The STDEVPA function returns the standard deviation—a measure of dispersion—of a set of any values , based on the population (true) variance.
+STOCK	Financial functions	298	STOCK(symbol, price)	The STOCK function returns data from the previous market day’s close about a given stock, retrieved remotely via the internet.
+STOCKH	Financial functions	299	STOCKH(symbol, close, date)	The STOCKH function returns historical price information about a stock for a given date, retrieved remotely via the internet.
+STRIPDURATION	Duration functions	278	STRIPDURATION(any-value)	The STRIPDURATION function evaluates any value and returns either the number of days represented, if a duration value , or the specified value.
+SUBSTITUTE	Text functions	144	SUBSTITUTE(source-string, existing-string, new-string, occurrence)	The SUBSTITUTE function returns a string value where the specified characters of a given string value have been replaced with a new string value.
+SUBTOTAL	Numeric functions	316	SUBTOTAL(function-num, range, range…)	The SUBTOTAL function returns a subtotal for a range of cells.
+SUM	Numeric functions	168	SUM(value, value…)	The SUM function returns the sum of a collection of numbers.
+SUMIF	Numeric functions	145	SUMIF(test-values, condition, sum-values)	The SUMIF function returns the sum of a collection of numbers, including only numbers that satisfy a specified condition .
+SUMIFS	Numeric functions	231	SUMIFS(sum-values, test-values, condition, test-values…, condition…)	The SUMIFS function returns the sum of the cells in a collection where the test values meet the given conditions .
+SUMPRODUCT	Numeric functions	146	SUMPRODUCT(range, range…)	The SUMPRODUCT function returns the sum of the products of corresponding numbers in one or more collections.
+SUMSQ	Numeric functions	147	SUMSQ(num-value, num-value…)	The SUMSQ function returns the sum of the squares of a collection consisting of number values .
+SUMX2MY2	Numeric functions	216	SUMX2MY2(set-1-values, set-2-values)	The SUMX2MY2 function returns the sum of the difference of the squares of corresponding values in two collections.
+SUMX2PY2	Numeric functions	217	SUMX2PY2(set-1-values, set-2-values)	The SUMX2PY2 function returns the sum of the squares of corresponding values in two collections.
+SUMXMY2	Numeric functions	218	SUMXMY2(set-1-values, set-2-values)	The SUMXMY2 function returns the sum of the squares of the differences between corresponding values in two collections.
+SWITCH	Logical and information functions	336	SWITCH(expression, switch-value, if-match, [default or switch-value…], [if-match…])	The SWITCH function evaluates a value against a list, and returns a result that corresponds with either the first matching value or an optional value if there is no match.
+SYD	Financial functions	148	SYD(cost, salvage, life, depr-period)	The SYD function returns the amount of depreciation of an asset for a specified period using the sum-of-the-years-digits method.
+T	Text functions	149	T(cell)	The T function returns the text contained in a cell.
+TAKE	Reference functions	350	TAKE(array, number-of-rows, number-of-columns)	The TAKE function returns a specific number of rows and columns from an array .
+TAN	Trigonometric functions	150	TAN(radian-angle)	The TAN function returns the tangent of an angle that is expressed in radians.
+TANH	Trigonometric functions	151	TANH(num)	The TANH function returns the hyperbolic tangent of the specified number.
+TDIST	Statistical functions	241	TDIST(x-value, degrees-freedom, tails)	The TDIST function returns the probability from Student’s t-distribution.
+TEXTAFTER	Text functions	320	TEXTAFTER(source-string, search-string, occurrence)	The TEXTAFTER function returns a string value consisting of all characters that appear after a given substring in the original string value.
+TEXTBEFORE	Text functions	318	TEXTBEFORE(source-string, search-string, occurrence)	The TEXTBEFORE function returns a string value consisting of all characters that appear before a given substring in the original string value.
+TEXTBETWEEN	Text functions	319	TEXTBETWEEN(source-string, first-search-string, second-search-string, first-occurrence, second-occurrence)	The TEXTBETWEEN function returns a string value consisting of all characters that appear between two given substrings in the original string value.
+TEXTJOIN	Text functions	328	TEXTJOIN(delimiter, ignore-empty, string, string…)	The TEXTJOIN function combines the contents of cell ranges or strings with a specified delimiter between each value.
+TEXTSPLIT	Text functions	347	TEXTSPLIT(string, column-delimiter, row-delimiter, ignore-empty, case-sensitive, pad-with)	The TEXTSPLIT function splits the contents of a cell or string by a specified delimiter.
+TIME	Date and time functions	152	TIME(hours, minutes, seconds)	The TIME function converts separate number values for hours, minutes, and seconds into a date/time value .
+TIMEVALUE	Date and time functions	153	TIMEVALUE(time)	The TIMEVALUE function returns the time as a decimal fraction of a 24-hour day for a given date/time value or time string .
+TINV	Statistical functions	254	TINV(probability, degrees-freedom)	The TINV function returns the t value (a function of the probability and degrees of freedom) from Student’s t-distribution.
+TOCOL	Reference functions	348	TOCOL(array, ignore, scan-by)	The TOCOL function returns an array in a single column.
+TODAY	Date and time functions	154	TODAY()	The TODAY function returns the current date in the file’s time zone (see Notes below).
+TOROW	Reference functions	349	TOROW(array, ignore, scan-by)	The TOROW function returns an array in a single row.
+TRANSPOSE	Reference functions	220	TRANSPOSE(range-array)	The TRANSPOSE function returns a vertical collection of cells as a horizontal array of cells, or vice versa.
+TRIM	Text functions	155	TRIM(source-string)	The TRIM function returns a string based on a given string, after removing extra spaces.
+TRUE	Logical and information functions	156	TRUE()	The TRUE function returns the boolean value TRUE.
+TRUNC	Numeric functions	157	TRUNC(number, digits)	The TRUNC function truncates a number to the specified number of digits.
+TTEST	Statistical functions	248	TTEST(sample-1-values, sample-2-values, tails, test-type)	The TTEST function returns the probability associated with Student’s t-test, based on the t-distribution function.
+UNION.RANGES	Reference functions	285	UNION.RANGES(compact-mode, range, range…)	The UNION.RANGES function returns an array that represents a collection representing the union of the specified collections.
+UNIQUE	Reference functions	345	UNIQUE(array, unique-by, occurrence)	The UNIQUE function returns each individual value present in an array .
+UPPER	Text functions	158	UPPER(source-string)	The UPPER function returns a string value that is entirely uppercase, regardless of the case of the characters in the specified string value.
+VALUE	Text functions	159	VALUE(source-string)	The VALUE function returns a number value , even if the argument is formatted as text.
+VAR	Statistical functions	160	VAR(value, value…)	The VAR function returns the sample (unbiased) variance—a measure of dispersion—of a set of numeric values.
+VARA	Statistical functions	161	VARA(value, value…)	The VARA function returns the sample (unbiased) variance—a measure of dispersion—of a collection of any values .
+VARP	Statistical functions	162	VARP(value, value…)	The VARP function returns the population (true) variance—a measure of dispersion—of a set of numeric values.
+VARPA	Statistical functions	163	VARPA(value, value…)	The VARPA function returns the population (true) variance—a measure of dispersion—of a set of any values .
+VDB	Financial functions	164	VDB(cost, salvage, life, starting-per, ending-per, depr-factor, no-switch)	The VDB function returns the amount of depreciation of an asset over a chosen time interval, based on a specified depreciation rate.
+VLOOKUP	Reference functions	165	VLOOKUP(search-for, columns-range, return-column, close-match)	The VLOOKUP function returns a value from a collection of columns by using the left column of values to pick a row and a column number to pick a column in that row.
+VSTACK	Reference functions	356	VSTACK(array, array…)	The VSTACK function adjoins arrays vertically and in sequence to form a larger array.
+WEEKDAY	Date and time functions	166	WEEKDAY(date, first-day)	The WEEKDAY function returns a number that is the day of the week for a given date/time value or date string .
+WEEKNUM	Date and time functions	206	WEEKNUM(date, first-day)	The WEEKNUM function returns the number of the week within the year for a given date/time value or date string .
+WEIBULL	Statistical functions	288	WEIBULL(x-value, alpha, beta, function-type)	The WEIBULL function returns the Weibull distribution of the specified type.
+WORKDAY	Date and time functions	204	WORKDAY(date, work-days, exclude-dates)	The WORKDAY function returns the date/time value that is the given number of working days before or after a given date.
+WRAPCOLS	Reference functions	357	WRAPCOLS(array, wrap-count, pad-with)	The WRAPCOLS function converts the provided row or column of values into a two-dimensional array by wrapping values into separate columns.
+WRAPROWS	Reference functions	358	WRAPROWS(array, wrap-count, pad-with)	The WRAPROWS function converts the provided row or column of values into a two-dimensional array by wrapping values into separate rows.
+XIRR	Financial functions	311	XIRR(payments, dates, guess)	The XIRR function returns the internal rate of return for an investment that is based on a series of irregularly spaced cash flows.
+XLOOKUP	Reference functions	314	XLOOKUP(search-value, search-range, return-range, if-not-found, match-type, search-type)	The XLOOKUP function searches a range for a specified value and returns the value from the same row in another column.
+XMATCH	Reference functions	315	XMATCH(search-value, search-range, match-type, search-type)	The XMATCH function returns a specified item’s relative position in a range of cells.
+XNPV	Financial functions	312	XNPV(discount, payments, dates)	The XNPV function returns the present value of an investment or annuity based on a series of irregularly spaced cash flows and at a discount interest rate.
+XOR	Logical and information functions	382	XOR(any-expression, any-expression…)	The XOR function returns the boolean value TRUE if an odd number of the arguments are true, and the boolean value FALSE otherwise.
+YEAR	Date and time functions	167	YEAR(date)	The YEAR function returns the year for a given date/time value or date string .
+YEARFRAC	Date and time functions	214	YEARFRAC(start-date, end-date, days-basis)	The YEARFRAC function returns the fraction of a year represented by the number of whole days between two dates.
+YIELD	Financial functions	191	YIELD(settle, maturity, annual-rate, price, redemption, frequency, days-basis)	The YIELD function returns the effective annual interest rate for a security that pays regular periodic interest.
+YIELDDISC	Financial functions	192	YIELDDISC(settle, maturity, price, redemption, days-basis)	The YIELDDISC function returns the effective annual interest rate for a security that is sold at a discount to redemption value and pays no interest.
+YIELDMAT	Financial functions	193	YIELDMAT(settle, maturity, issue, annual-rate, price, days-basis)	The YIELDMAT function returns the effective annual interest rate for a security that only pays interest at maturity.
+ZTEST	Statistical functions	215	ZTEST(value-set, value, stdev)	The ZTEST function returns the one-tailed probability value of the Z-test.

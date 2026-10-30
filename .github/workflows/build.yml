@@ -1,0 +1,149 @@
+# Builds Keydeck, Values and Letters for Linux, Windows and macOS (Apple silicon and Intel).
+# Pushing a tag such as v0.1.0 also publishes a GitHub release with every download; Run
+# workflow (the Actions tab) builds without publishing.
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      systems:
+        description: "Which systems to build"
+        type: choice
+        options: [all, linux, windows, macos]
+        default: all
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    if: ${{ github.event_name == 'push' || inputs.systems == 'all' || inputs.systems == 'linux' }}
+    # (the oldest supported runner, so the programs run on as many distributions as possible)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxrender1 libxfixes3 libgtk-3-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            keynote-linux
+            numbers-linux
+            pages-linux
+      - name: Build
+        run: |
+          (cd keynote-linux && cargo build --release -p kn-app)
+          (cd numbers-linux && cargo build --release -p nm-app)
+          (cd pages-linux && cargo build --release -p pg-app)
+      - name: Package
+        run: |
+          mkdir -p out/bramble-office dist
+          cp keynote-linux/target/release/keydeck numbers-linux/target/release/values pages-linux/target/release/letters out/bramble-office/
+          cp LICENSE README.md out/bramble-office/
+          tar -C out -czf dist/Bramble-Office-linux-x86_64.tar.gz bramble-office
+      - name: AppImages
+        run: |
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          export APPIMAGETOOL="$PWD/appimagetool" APPIMAGE_EXTRACT_AND_RUN=1
+          S=keynote-linux/tools/suite/appimage.sh
+          $S keynote-linux/target/release/keydeck keydeck Keydeck "Presentations that open and save Apple Keynote files" "Office;Presentation;" "application/x-iwork-keynote-sffkey;application/vnd.apple.keynote;application/vnd.openxmlformats-officedocument.presentationml.presentation;" keynote-linux/crates/kn-app/data/icons/keydeck-256.png dist/Keydeck-x86_64.AppImage
+          $S numbers-linux/target/release/values values Values "Spreadsheets that open and save Apple Numbers files" "Office;Spreadsheet;" "application/x-iwork-numbers-sffnumbers;application/vnd.apple.numbers;text/csv;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;" numbers-linux/crates/nm-app/data/icons/numdeck-256.png dist/Values-x86_64.AppImage
+          $S pages-linux/target/release/letters letters Letters "Word processing and page layout that open and save Apple Pages files" "Office;WordProcessor;" "application/x-iwork-pages-sffpages;application/vnd.apple.pages;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/rtf;text/markdown;text/plain;" pages-linux/crates/pg-app/data/icons/letters-256.png dist/Letters-x86_64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  windows:
+    if: ${{ github.event_name == 'push' || inputs.systems == 'all' || inputs.systems == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            keynote-linux
+            numbers-linux
+            pages-linux
+      - name: Build
+        shell: bash
+        # (all three, even when one fails, so one run shows every error)
+        run: |
+          ok=0
+          (cd keynote-linux && cargo build --release -p kn-app) || ok=1
+          (cd numbers-linux && cargo build --release -p nm-app) || ok=1
+          (cd pages-linux && cargo build --release -p pg-app) || ok=1
+          exit $ok
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out/bramble-office, dist | Out-Null
+          Copy-Item keynote-linux/target/release/keydeck.exe, numbers-linux/target/release/values.exe, pages-linux/target/release/letters.exe, LICENSE, README.md out/bramble-office/
+          Compress-Archive -Path out/bramble-office -DestinationPath dist/Bramble-Office-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    if: ${{ github.event_name == 'push' || inputs.systems == 'all' || inputs.systems == 'macos' }}
+    strategy:
+      matrix:
+        include:
+          - { arch: apple-silicon, target: aarch64-apple-darwin, min: "11.0" }
+          - { arch: intel, target: x86_64-apple-darwin, min: "10.15" }
+    runs-on: macos-15
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.min }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          workspaces: |
+            keynote-linux
+            numbers-linux
+            pages-linux
+      - name: Build the app bundles
+        run: |
+          keynote-linux/packaging/build-macos.sh
+          numbers-linux/packaging/build-macos.sh
+          pages-linux/packaging/build-macos.sh
+      - name: Package
+        run: |
+          mkdir -p out/bramble-office dist
+          cp -R keynote-linux/dist/Keydeck.app numbers-linux/dist/Values.app pages-linux/dist/Letters.app out/bramble-office/
+          cp LICENSE README.md out/bramble-office/
+          ditto -c -k --keepParent out/bramble-office dist/Bramble-Office-macos-${{ matrix.arch }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/*
+
+  release:
+    # a tag publishes the downloads as a GitHub release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Bramble Office ${GITHUB_REF_NAME#v}" --generate-notes

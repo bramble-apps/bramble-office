@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- L · Slide Stand: a pedestal with a cradle holding a fanned stack of slide cards; the front
+       card is a blue slide with a title and a pie chart, the cards behind show their edges -->
+  <defs>
+    <linearGradient id="slide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3584e4"/><stop offset="1" stop-color="#1c71d8"/></linearGradient>
+    <linearGradient id="alu" x1="0" x2="1"><stop offset="0" stop-color="#77767b"/><stop offset=".3" stop-color="#deddda"/><stop offset=".55" stop-color="#c0bfbc"/><stop offset="1" stop-color="#5e5c64"/></linearGradient>
+    <linearGradient id="tray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#deddda"/><stop offset=".8" stop-color="#9a9996"/><stop offset="1" stop-color="#77767b"/></linearGradient>
+    <linearGradient id="baseTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0bfbc"/><stop offset="1" stop-color="#9a9996"/></linearGradient>
+    <linearGradient id="baseSide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5e5c64"/><stop offset="1" stop-color="#3d3846"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#deddda"/></linearGradient>
+    <linearGradient id="pie" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8e45c"/><stop offset="1" stop-color="#f5c211"/></linearGradient>
+    <linearGradient id="wedge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffa348"/><stop offset="1" stop-color="#e66100"/></linearGradient>
+    <radialGradient id="sheen" cx=".3" cy=".15" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="colShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".35"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <radialGradient id="floor"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>
+  </defs>
+  <ellipse cx="64" cy="117" rx="36" ry="5" fill="url(#floor)"/>
+
+  <!-- base: side band, lighter top face with 1px highlight -->
+  <rect x="36" y="108" width="56" height="9" rx="4.5" fill="url(#baseSide)"/>
+  <rect x="38" y="105" width="52" height="7" rx="3.5" fill="#deddda"/>
+  <rect x="38" y="106" width="52" height="6" rx="3" fill="url(#baseTop)"/>
+  <path d="M41 106.5h46" stroke="#f6f5f4" stroke-width=".8" stroke-linecap="round"/>
+  <!-- column, shaded under the cradle -->
+  <rect x="60" y="86" width="8" height="22" fill="url(#alu)"/>
+  <rect x="60" y="86" width="8" height="7" fill="url(#colShade)"/>
+  <ellipse cx="64" cy="107.5" rx="6" ry="1.4" fill="#3d3846" opacity=".45"/>
+
+  <!-- back of the cradle slot -->
+  <rect x="17" y="78" width="94" height="6" rx="2" fill="#3d3846"/>
+
+  <!-- page stack: three cards fanned around the cradle, each with a soft shadow on the next -->
+  <g transform="rotate(5 64 84)">
+    <rect x="21" y="23" width="86" height="60" rx="2.5" fill="#9a9996"/>
+    <rect x="21" y="23" width="86" height="59" rx="2.5" fill="url(#paper)" stroke="#c0bfbc" stroke-width=".6"/>
+  </g>
+  <rect x="21" y="25" width="86" height="60" rx="2.5" fill="#000" opacity=".25" filter="url(#soft)" transform="rotate(-3.5 64 84)"/>
+  <g transform="rotate(-3.5 64 84)">
+    <rect x="21" y="23" width="86" height="60" rx="2.5" fill="#c0bfbc"/>
+    <rect x="21" y="23" width="86" height="59" rx="2.5" fill="#f6f5f4"/>
+    <rect x="22" y="23.4" width="84" height=".8" rx=".4" fill="#ffffff"/>
+  </g>
+  <rect x="20" y="27" width="88" height="58" rx="3" fill="#000" opacity=".3" filter="url(#soft)" transform="rotate(1.2 64 84)"/>
+  <g transform="rotate(1.2 64 84)">
+    <rect x="20" y="25" width="88" height="60" rx="3" fill="#ffffff"/>
+    <rect x="20" y="25.6" width="88" height="59.4" rx="3" fill="#9a9996"/>
+    <rect x="20.6" y="26" width="86.8" height="58.6" rx="2.6" fill="#f6f5f4"/>
+  </g>
+  <!-- front card: blue slide with a 1px top highlight -->
+  <rect x="20" y="28" width="88" height="57" rx="3" fill="#000" opacity=".3" filter="url(#soft)"/>
+  <rect x="20" y="26" width="88" height="58" rx="3" fill="#99c1f1"/>
+  <rect x="20" y="27" width="88" height="57" rx="3" fill="url(#slide)"/>
+  <rect x="20" y="27" width="88" height="57" rx="3" fill="url(#sheen)"/>
+  <rect x="29" y="35" width="32" height="6" rx="3" fill="#ffffff"/>
+  <rect x="29" y="46" width="24" height="3" rx="1.5" fill="#99c1f1"/>
+  <rect x="29" y="52" width="18" height="3" rx="1.5" fill="#99c1f1"/>
+  <!-- pie: soft drop, body, cut-out wedge lifted toward the light -->
+  <circle cx="83" cy="57.5" r="14" fill="#000" opacity=".22" filter="url(#soft)"/>
+  <circle cx="83" cy="56" r="14" fill="url(#pie)"/>
+  <path d="M83 56V42a14 14 0 0 1 13.5 17.6z" fill="#000" opacity=".25" filter="url(#soft)" transform="translate(1.6 .2)"/>
+  <path d="M83 56V42a14 14 0 0 1 13.5 17.6z" fill="url(#wedge)" transform="translate(1.6 -1.6)"/>
+  <path d="M84.6 54.4V40.4a14 14 0 0 1 3 .3" fill="none" stroke="#ffbe6f" stroke-width="1" stroke-linecap="round"/>
+  <path d="M71 51.5a14 14 0 0 1 9-9.2" fill="none" stroke="#f9f06b" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- cradle front lip: brushed tray with top highlight and a dark underside -->
+  <path d="M14 80h100v3.5a6.5 6.5 0 0 1-6.5 6.5h-87A6.5 6.5 0 0 1 14 83.5z" fill="url(#tray)"/>
+  <path d="M15 80.6h98" stroke="#ffffff" stroke-width="1.2"/>
+  <path d="M17 89.5h94" stroke="#3d3846" stroke-width="1" opacity=".55"/>
+</svg>

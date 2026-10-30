@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}canvas{display:block}</style></head><body><canvas id="c"></canvas><script>
+const items=[["E-tripod-flip-pad.svg","E · Tripod Flip Pad"],["F-wall-screen.svg","F · Wall Screen"],["G-lightbox-loupe.svg","G · Light Table"],["H-clicker-laser.svg","H · Clicker + Laser"],["I-carousel-projector.svg","I · Carousel Projector"],["J-chalkboard-magnets.svg","J · Chalkboard Easel"]];
+Promise.all(items.map(([f])=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=f;}))).then(imgs=>{
+const W=items.length*300+40,H=2*400;const c=document.getElementById('c');c.width=W;c.height=H;const g=c.getContext('2d');
+for(let row=0;row<2;row++){g.fillStyle=row?'#242424':'#fafafa';g.fillRect(0,row*400,W,400);
+ imgs.forEach((im,k)=>{const x=40+k*300,y=row*400+24;g.drawImage(im,x,y,256,256);
+  let sx=x+10;[64,48,32,16].forEach(s=>{g.drawImage(im,sx,y+268+(64-s),s,s);sx+=s+16;});
+  g.fillStyle=row?'#eeeeee':'#222222';g.font='bold 18px Cantarell, Noto Sans, sans-serif';g.fillText(items[k][1],x,y+360);});}
+});
+</script></body></html>

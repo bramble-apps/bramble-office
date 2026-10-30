@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Values
+Comment=Spreadsheets that open and save Apple Numbers files
+Exec=values %f
+Icon=numdeck
+Terminal=false
+Categories=Office;Spreadsheet;
+MimeType=application/x-iwork-numbers-sffnumbers;application/vnd.apple.numbers;text/csv;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;
+StartupWMClass=numdeck

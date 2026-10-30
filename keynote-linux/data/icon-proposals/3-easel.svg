@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 3 · Easel: a slide on a wooden easel (GNOME browns, playful shapes) -->
+  <path d="M40 120l18-92h12l18 92h-7L66 42h-4L47 120z" fill="#865e3c"/>
+  <path d="M60 120l2-40h4l2 40z" fill="#63452c"/>
+  <rect x="58" y="12" width="12" height="10" rx="3" fill="#63452c"/>
+  <rect x="14" y="26" width="100" height="70" rx="6" fill="#c0bfbc"/>
+  <rect x="14" y="20" width="100" height="70" rx="6" fill="#ffffff"/>
+  <rect x="14" y="84" width="100" height="6" fill="#deddda"/>
+  <rect x="20" y="88" width="88" height="8" rx="3" fill="#986a44"/>
+  <circle cx="42" cy="50" r="14" fill="#ed333b"/>
+  <rect x="62" y="36" width="34" height="14" rx="7" fill="#3584e4"/>
+  <path d="M62 76l17-20 17 20z" fill="#33d17a"/>
+</svg>

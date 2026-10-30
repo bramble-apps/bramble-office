@@ -1,0 +1,3 @@
+[build]
+# RAM is tight and Keydeck builds on the same machine
+jobs = 2

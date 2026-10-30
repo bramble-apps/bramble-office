@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "Proprietary"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# GNOME 46 never sends preferred_buffer_scale for cursor surfaces: patched toolkit uses the scale
+# of the output the cursor is on (sharp system cursor on HiDPI). See vendor/README-patches.md.
+[patch.crates-io]
+smithay-client-toolkit = { path = "vendor/smithay-client-toolkit-0.19.2" }
+# winit 0.30 has touchpad pinch only on macOS / iOS: the patched copy adds Wayland's pointer
+# gestures (pinch -> WindowEvent::PinchGesture -> egui zoom). See vendor/README-patches.md.
+winit = { path = "vendor/winit-0.30.13" }

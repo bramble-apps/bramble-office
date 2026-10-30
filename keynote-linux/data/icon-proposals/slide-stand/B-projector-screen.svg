@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- B · Pull-down screen: roller case with end caps, the screen sheet and its handle bar -->
+  <defs>
+    <linearGradient id="case" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f5f4"/><stop offset=".5" stop-color="#c0bfbc"/><stop offset="1" stop-color="#77767b"/></linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5e5c64"/><stop offset="1" stop-color="#241f31"/></linearGradient>
+    <linearGradient id="sheet" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#deddda"/><stop offset=".08" stop-color="#ffffff"/><stop offset="1" stop-color="#f6f5f4"/></linearGradient>
+    <linearGradient id="slide" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#62a0ea"/><stop offset="1" stop-color="#1a5fb4"/></linearGradient>
+  </defs>
+  <ellipse cx="64" cy="122" rx="30" ry="3.5" fill="#000" opacity=".18"/>
+  <!-- stand pole and base -->
+  <rect x="62" y="96" width="4" height="22" fill="#77767b"/>
+  <path d="M42 120l22-6 22 6z" fill="#5e5c64"/>
+  <!-- screen sheet with side shading -->
+  <path d="M16 20h96v74H16z" fill="url(#sheet)"/>
+  <path d="M16 20h3v74h-3zM109 20h3v74h-3z" fill="#000" opacity=".06"/>
+  <rect x="24" y="28" width="80" height="54" rx="2" fill="url(#slide)"/>
+  <rect x="24" y="28" width="80" height="1.5" fill="#99c1f1"/>
+  <path d="M40 68l16-18 12 12 8-8 16 14z" fill="#ffffff" opacity=".9"/>
+  <circle cx="84" cy="42" r="6" fill="#f8e45c"/>
+  <!-- bottom bar and pull ring -->
+  <rect x="14" y="92" width="100" height="5" rx="2.5" fill="url(#cap)"/>
+  <circle cx="64" cy="101" r="3.2" fill="none" stroke="#5e5c64" stroke-width="1.6"/>
+  <!-- roller case with end caps and highlight -->
+  <rect x="8" y="10" width="112" height="12" rx="6" fill="url(#case)"/>
+  <rect x="14" y="11.2" width="100" height="1.6" rx=".8" fill="#ffffff" opacity=".85"/>
+  <rect x="6" y="9" width="10" height="14" rx="4" fill="url(#cap)"/>
+  <rect x="112" y="9" width="10" height="14" rx="4" fill="url(#cap)"/>
+  <rect x="7.5" y="10.5" width="7" height="2" rx="1" fill="#9a9996" opacity=".6"/>
+  <rect x="113.5" y="10.5" width="7" height="2" rx="1" fill="#9a9996" opacity=".6"/>
+</svg>

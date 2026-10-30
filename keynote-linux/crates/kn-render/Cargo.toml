@@ -1,0 +1,16 @@
+[package]
+name = "kn-render"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[dependencies]
+cosmic-text = "0.19.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tiff", "gif", "webp", "bmp"] }
+kn-format = { version = "0.1.0", path = "../kn-format" }
+kn-model = { version = "0.1.0", path = "../kn-model" }
+swash = "0.2.10"
+tiny-skia = "0.12.0"
+
+[dev-dependencies]
+zip = "9"

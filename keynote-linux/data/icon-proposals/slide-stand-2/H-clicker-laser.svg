@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- H · Slide + presenter clicker: a slide stack in a graphite frame slotted into an oak block
+       (end grain, felt pads), and a remote clicker in front: bevelled next/prev buttons, red
+       laser button, chrome emitter cap, lanyard; its faint beam ends in a glowing dot on the chart -->
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#77767b"/><stop offset="1" stop-color="#3d3846"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f6f5f4"/></linearGradient>
+    <linearGradient id="oak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cdab8f"/><stop offset="1" stop-color="#986a44"/></linearGradient>
+    <linearGradient id="body" x1="0" x2="1"><stop offset="0" stop-color="#5e5c64"/><stop offset=".3" stop-color="#3d3846"/><stop offset="1" stop-color="#000000"/></linearGradient>
+    <linearGradient id="btn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a9996"/><stop offset="1" stop-color="#3d3846"/></linearGradient>
+    <linearGradient id="chrome" x1="0" x2="1"><stop offset="0" stop-color="#77767b"/><stop offset=".4" stop-color="#ffffff"/><stop offset="1" stop-color="#5e5c64"/></linearGradient>
+    <linearGradient id="beam" x1="1" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ed333b" stop-opacity=".7"/><stop offset="1" stop-color="#ed333b" stop-opacity=".15"/></linearGradient>
+    <radialGradient id="laser"><stop offset="0" stop-color="#ffffff"/><stop offset=".25" stop-color="#ff8080"/><stop offset=".5" stop-color="#e01b24" stop-opacity=".65"/><stop offset="1" stop-color="#e01b24" stop-opacity="0"/></radialGradient>
+    <radialGradient id="shadow"><stop offset="0" stop-color="#000" stop-opacity=".28"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.6"/></filter>
+  </defs>
+  <ellipse cx="60" cy="102" rx="50" ry="6" fill="url(#shadow)"/>
+
+  <!-- graphite frame: lip, face, highlight -->
+  <rect x="8" y="14" width="100" height="72" rx="6" fill="#241f31"/>
+  <rect x="8" y="12" width="100" height="72" rx="6" fill="url(#frame)"/>
+  <path d="M14 12.6h88" stroke="#c0bfbc" stroke-width="1"/>
+  <!-- slide stack: offset sheets with alternating edges -->
+  <rect x="17" y="21" width="85" height="57" rx="1" fill="#9a9996"/>
+  <rect x="16" y="20" width="85" height="57" rx="1" fill="#f6f5f4"/>
+  <rect x="15" y="19" width="85" height="57" rx="1" fill="#c0bfbc"/>
+  <rect x="14" y="18" width="85" height="57" rx="1" fill="url(#paper)"/>
+  <!-- content: title, bullets, column chart -->
+  <rect x="20" y="24" width="32" height="5" rx="2.5" fill="#3d3846"/>
+  <circle cx="22" cy="37" r="1.8" fill="#3584e4"/><rect x="26" y="36" width="20" height="2.4" rx="1.2" fill="#c0bfbc"/>
+  <circle cx="22" cy="44" r="1.8" fill="#33d17a"/><rect x="26" y="43" width="16" height="2.4" rx="1.2" fill="#c0bfbc"/>
+  <circle cx="22" cy="51" r="1.8" fill="#f6d32d"/><rect x="26" y="50" width="18" height="2.4" rx="1.2" fill="#c0bfbc"/>
+  <rect x="52" y="52" width="9" height="16" rx="1" fill="#99c1f1"/>
+  <rect x="64" y="44" width="9" height="24" rx="1" fill="#62a0ea"/>
+  <rect x="76" y="36" width="9" height="32" rx="1" fill="#3584e4"/>
+  <rect x="88" y="28" width="9" height="40" rx="1" fill="#1a5fb4"/>
+  <path d="M50 68.5h49" stroke="#9a9996" stroke-width="1"/>
+
+  <!-- oak base: slot, top face, front with grain, felt pads -->
+  <rect x="18" y="96" width="10" height="4" rx="1.5" fill="#3d3846"/>
+  <rect x="88" y="96" width="10" height="4" rx="1.5" fill="#3d3846"/>
+  <rect x="14" y="82" width="88" height="16" rx="3" fill="#63452c"/>
+  <rect x="14" y="82" width="88" height="14" rx="3" fill="url(#oak)"/>
+  <path d="M18 82.6h80" stroke="#e8d3c0" stroke-width="1"/>
+  <rect x="20" y="83.5" width="76" height="2" rx="1" fill="#3d3846" opacity=".6"/>
+  <g fill="none" stroke="#865e3c" stroke-width=".6" opacity=".7">
+    <path d="M17 89c12-1.5 22 1.5 34 0s22-2 30 0 14 1 18 0"/>
+    <path d="M17 92.5c10 1 20-1.5 32 0s26 1.5 34-.5 12-.5 16 0"/>
+    <path d="M40 88.5c4-.8 8-.8 12 0M66 93.5c3 .6 7 .6 10 0"/>
+  </g>
+  <ellipse cx="28" cy="90" rx="3" ry="1.6" fill="none" stroke="#865e3c" stroke-width=".6" opacity=".7"/>
+
+  <!-- laser beam and dot (points along the clicker axis) -->
+  <path d="M82.4 70.2L58.6 41.8" stroke="url(#beam)" stroke-width="1.2" stroke-linecap="round"/>
+  <circle cx="58" cy="41" r="6.5" fill="url(#laser)"/>
+  <circle cx="58" cy="41" r="1.5" fill="#ffffff"/>
+
+  <!-- clicker: cast shadow, then the remote rotated toward the slide -->
+  <rect x="-10" y="-25" width="20" height="50" rx="10" transform="translate(101 93) rotate(-40)" fill="#000" opacity=".35" filter="url(#soft)"/>
+  <path d="M113 107c2 6 6 10 10 14" fill="none" stroke="#1a5fb4" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M113 107c2 6 6 10 10 14" fill="none" stroke="#62a0ea" stroke-width=".7" stroke-linecap="round"/>
+  <g transform="translate(99 90) rotate(-40)">
+    <rect x="-10" y="-25" width="20" height="50" rx="10" fill="url(#body)"/>
+    <rect x="-10" y="-25" width="20" height="50" rx="10" fill="none" stroke="#000" stroke-width=".8"/>
+    <path d="M-8.2 -15v31" stroke="#9a9996" stroke-width=".9" stroke-linecap="round" opacity=".8"/>
+    <!-- chrome emitter cap with lens -->
+    <path d="M-6 -22.5a10 10 0 0 1 12 0z" fill="url(#chrome)"/>
+    <ellipse cx="0" cy="-23.6" rx="1.6" ry=".9" fill="#e01b24"/>
+    <!-- laser button -->
+    <circle cx="0" cy="-15" r="2.8" fill="#a51d2d"/>
+    <circle cx="0" cy="-15.3" r="2.2" fill="#e01b24"/>
+    <path d="M-1.3 -16.2a1.6 1.6 0 0 1 2.2-.6" fill="none" stroke="#f66151" stroke-width=".7"/>
+    <!-- next button: recessed ring, bevelled face, specular arc, chevron -->
+    <circle cx="0" cy="-3" r="7" fill="#000"/>
+    <circle cx="0" cy="-3.3" r="6" fill="url(#btn)"/>
+    <path d="M-4.4 -6.5a6 6 0 0 1 8.8 0" fill="none" stroke="#deddda" stroke-width=".8"/>
+    <path d="M-2.6 -1.5L0 -5.6 2.6 -1.5z" fill="#f6f5f4" stroke="#f6f5f4" stroke-width=".6" stroke-linejoin="round"/>
+    <!-- prev button -->
+    <circle cx="0" cy="10" r="5" fill="#000"/>
+    <circle cx="0" cy="9.8" r="4.2" fill="url(#btn)"/>
+    <path d="M-3 7.6a4.2 4.2 0 0 1 6 0" fill="none" stroke="#c0bfbc" stroke-width=".7"/>
+    <path d="M-1.9 8.6L0 11.6 1.9 8.6z" fill="#deddda" stroke="#deddda" stroke-width=".5" stroke-linejoin="round"/>
+    <!-- lanyard eyelet -->
+    <ellipse cx="0" cy="20.5" rx="2" ry="1.3" fill="#000"/>
+    <ellipse cx="0" cy="20.8" rx="2" ry="1.1" fill="none" stroke="#77767b" stroke-width=".5"/>
+  </g>
+</svg>
