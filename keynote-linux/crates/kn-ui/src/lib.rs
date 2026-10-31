@@ -4,11 +4,14 @@
 //! equal spacing and sizes) and `winframe` (the window frame and title bar).
 #![allow(non_snake_case)]
 
+#[cfg(target_os = "android")]
+pub mod android;
 pub mod chartdata;
 pub mod chartpicker;
 pub mod chartpanes;
 pub mod colors;
 pub mod contenthub;
+pub mod files;
 pub mod glass;
 pub mod gpu;
 pub mod media;
@@ -21,6 +24,22 @@ pub mod theme;
 pub mod welcome;
 pub mod typing;
 pub mod winframe;
+
+/// First thing in every app's update, once per frame: on Android, files picked in the system
+/// picker (they arrive as dropped files) and the on-screen keyboard; nothing elsewhere.
+pub fn begin_frame(ctx: &egui::Context) {
+    #[cfg(target_os = "android")]
+    android::frame(ctx);
+    let _ = ctx;
+}
+
+/// An app's own text editor (not an egui text field) is taking typing this frame: on Android
+/// the on-screen keyboard shows while it is.
+pub fn typing(ctx: &egui::Context) {
+    #[cfg(target_os = "android")]
+    android::typing(ctx);
+    let _ = ctx;
+}
 
 /// The pointer is over a window, popover or menu (anything above the panels): canvases leave
 /// the scroll wheel and pinch to it then.
@@ -55,6 +74,10 @@ pub fn open_command(target: impl AsRef<std::ffi::OsStr>) -> std::process::Comman
 
 /// Opens a web address (or file) with the system's default app, in the background.
 pub fn open_url(url: &str) {
+    #[cfg(target_os = "android")]
+    if android::open_url(url) {
+        return;
+    }
     let url = url.to_string();
     std::thread::spawn(move || {
         use std::process::Stdio;

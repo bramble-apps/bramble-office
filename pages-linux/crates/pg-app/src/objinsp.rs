@@ -266,7 +266,7 @@ pub(crate) fn fill_editor(ui: &mut egui::Ui, salt: &str, fill: &Fill, doc: Optio
     // a picture from disk into the document: (data, pixel size)
     let mut doc = doc;
     let pick = |doc: &mut Option<&mut kn_model::Document>| -> Option<(u64, (f32, f32))> {
-        let path = rfd::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Image").pick_file()?;
+        let path = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Image").pick_file()?;
         let bytes = std::fs::read(&path).ok()?;
         let (w, h) = image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format().ok()?.into_dimensions().ok()?;
         let name = path.file_name()?.to_string_lossy().to_string();

@@ -173,7 +173,7 @@ pub fn choose(app: &mut App) {
     let mut exts: Vec<&str> = IMAGE_EXT.to_vec();
     exts.extend(MOVIE_EXT);
     exts.extend(AUDIO_EXT);
-    if let Some(p) = rfd::FileDialog::new().add_filter("Pictures, Movies and Sounds", &exts).pick_file() {
+    if let Some(p) = kn_ui::files::FileDialog::new().add_filter("Pictures, Movies and Sounds", &exts).pick_file() {
         insert_path(app, p);
     }
 }
@@ -218,7 +218,7 @@ pub fn pick_gallery(app: &mut App, adding_to: Option<ObjId>) {
     app.media.adding_to = adding_to;
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let files = rfd::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
+        let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
         let pics: Vec<(String, Vec<u8>)> = files.iter().filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?))).collect();
         let _ = tx.send(pics);
     });

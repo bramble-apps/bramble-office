@@ -679,7 +679,7 @@ fn title_item(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, tr: Rect, c
                             }
                         }
                         if ui.button("Other…").clicked() {
-                            if let Some(f) = rfd::FileDialog::new().set_title("Where").pick_folder() {
+                            if let Some(f) = kn_ui::files::FileDialog::new().set_title("Where").pick_folder() {
                                 *dir = Some(f);
                             }
                         }

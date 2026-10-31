@@ -132,7 +132,7 @@ pub fn start_move(app: &mut App) {
     }
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let _ = tx.send(rfd::FileDialog::new().set_title("Move To").pick_folder());
+        let _ = tx.send(kn_ui::files::FileDialog::new().set_title("Move To").pick_folder());
     });
     app.fileops.move_to = Some(rx);
 }

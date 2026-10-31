@@ -241,12 +241,12 @@ fn start_pick(app: &mut App) {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
         let r = match format {
-            Format::Pdf => rfd::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file(),
-            Format::Movie => rfd::FileDialog::new().add_filter("MPEG-4 Movie", &["mp4"]).set_file_name(format!("{name}.mp4")).save_file(),
-            Format::Gif => rfd::FileDialog::new().add_filter("Animated GIF", &["gif"]).set_file_name(format!("{name}.gif")).save_file(),
-            Format::Pptx => rfd::FileDialog::new().add_filter("PowerPoint", &["pptx"]).set_file_name(format!("{name}.pptx")).save_file(),
-            Format::Html => rfd::FileDialog::new().set_title("Name of the web page folder").set_file_name(name.clone()).save_file(),
-            _ => rfd::FileDialog::new().set_title("Choose a folder for the images").pick_folder(),
+            Format::Pdf => kn_ui::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file(),
+            Format::Movie => kn_ui::files::FileDialog::new().add_filter("MPEG-4 Movie", &["mp4"]).set_file_name(format!("{name}.mp4")).save_file(),
+            Format::Gif => kn_ui::files::FileDialog::new().add_filter("Animated GIF", &["gif"]).set_file_name(format!("{name}.gif")).save_file(),
+            Format::Pptx => kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).set_file_name(format!("{name}.pptx")).save_file(),
+            Format::Html => kn_ui::files::FileDialog::new().set_title("Name of the web page folder").set_file_name(name.clone()).save_file(),
+            _ => kn_ui::files::FileDialog::new().set_title("Choose a folder for the images").pick_folder(),
         };
         let _ = tx.send(r);
     });

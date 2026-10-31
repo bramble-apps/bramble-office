@@ -93,7 +93,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
                 _ => app.notify("Couldn't save the template"),
             }
         } else if save_as {
-            let file = rfd::FileDialog::new().set_file_name(format!("{}.nmbtemplate", name.trim())).add_filter("Numbers Template", &["nmbtemplate"]).save_file();
+            let file = kn_ui::files::FileDialog::new().set_file_name(format!("{}.nmbtemplate", name.trim())).add_filter("Numbers Template", &["nmbtemplate"]).save_file();
             if let (Some(f), Some(b)) = (file, template_bytes(app)) {
                 if let Err(e) = std::fs::write(&f, b) {
                     app.notify(format!("Couldn't save the template: {e}"));

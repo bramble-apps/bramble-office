@@ -352,7 +352,7 @@ pub fn settings_window(app: &mut App, ctx: &egui::Context) {
                     kn_ui::scale::combo(ui, "ui-scale", &mut s.ui_scale);
                     ui.end_row();
                     // (Windows: always the app's own title bar, with the menus in it)
-                    if cfg!(target_os = "windows") {
+                    if cfg!(any(target_os = "windows", target_os = "android")) {
                         return;
                     }
                     ui.label("Window:");

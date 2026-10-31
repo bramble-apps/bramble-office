@@ -2076,7 +2076,11 @@ impl eframe::App for App {
         let t0 = std::time::Instant::now();
         kn_ui::glass::native_blur(frame, kn_ui::glass::translucent_panes());
         let ctx = ui.ctx().clone();
+        kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        if self.canvas.editing.is_some() || self.canvas.edit.is_some() {
+            kn_ui::typing(&ctx);
+        }
         self.pointer_held = ctx.input(|i| i.pointer.any_down() || i.pointer.any_released());
         fit_window_to_screen(&ctx);
         // documents opened from Finder, Open With or the Dock come as an Apple event (patched
@@ -2088,6 +2092,19 @@ impl eframe::App for App {
             }
             // (the event may come while the app is idle: look again shortly)
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        // dropped files (on Android, also files picked in the system picker): spreadsheets
+        // open, pictures, movies and sounds go on the sheet
+        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+        for p in dropped {
+            let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
+            if ["numbers", "xlsx", "xlsm", "csv", "tsv", "txt", "nmbtemplate"].contains(&ext.as_str()) {
+                self.templates.chooser = false;
+                self.open(&p);
+            } else if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
+                crate::media::insert_path(self, p);
+            }
         }
         // our own frame (Keydeck's): shadow, rounded corners and outline where the desktop
         // leaves frames to apps
@@ -2453,11 +2470,11 @@ fn csv_field(s: &str) -> String {
 }
 
 /// A native file dialog; none while NM_SCRIPT drives the app (a dialog would wait for a person).
-pub(crate) fn file_dialog<T>(f: impl FnOnce(rfd::FileDialog) -> Option<T>) -> Option<T> {
+pub(crate) fn file_dialog<T>(f: impl FnOnce(kn_ui::files::FileDialog) -> Option<T>) -> Option<T> {
     if std::env::var_os("NM_SCRIPT").is_some() {
         return None;
     }
-    f(rfd::FileDialog::new())
+    f(kn_ui::files::FileDialog::new())
 }
 
 /// NM_SCRIPT="click 400 300; dclick 400 300; drag 100 100 300 100; type hello; key Enter; key ctrl+Z; wait"

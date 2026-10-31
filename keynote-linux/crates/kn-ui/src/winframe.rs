@@ -147,7 +147,10 @@ impl Default for ButtonLayout {
     fn default() -> Self {
         #[cfg(target_os = "macos")]
         return ButtonLayout { left: vec!["close".into(), "minimize".into(), "maximize".into()], right: vec![] };
-        #[cfg(not(target_os = "macos"))]
+        // (Android: apps fill the screen, with no window buttons)
+        #[cfg(target_os = "android")]
+        return ButtonLayout { left: vec![], right: vec![] };
+        #[cfg(not(any(target_os = "macos", target_os = "android")))]
         ButtonLayout { left: vec![], right: vec!["minimize".into(), "maximize".into(), "close".into()] }
     }
 }

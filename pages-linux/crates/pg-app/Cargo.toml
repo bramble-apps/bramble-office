@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
 
+# the app itself (also Android's native library: tools/android/build-apk.sh)
+[lib]
+name = "pg_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "letters"
 path = "src/main.rs"
@@ -18,7 +23,6 @@ kn-render = { path = "../../../keynote-linux/crates/kn-render" }
 kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 tiny-skia = "0.12.0"
-rfd = "0.17.2"
 
 [build-dependencies]
 winresource = "0.1.34"

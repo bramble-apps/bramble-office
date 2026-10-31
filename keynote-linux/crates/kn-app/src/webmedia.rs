@@ -33,7 +33,7 @@ pub fn pick_gallery(app: &mut App) {
     app.webmedia.adding_to = None;
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let files = rfd::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
+        let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
         let pics: Vec<(String, Vec<u8>)> = files
             .iter()
             .filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?)))

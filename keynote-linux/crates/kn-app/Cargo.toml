@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
 
+# the app itself (also Android's native library: tools/android/build-apk.sh)
+[lib]
+name = "kn_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "keydeck"
 path = "src/main.rs"
@@ -16,7 +21,6 @@ kn-format = { version = "0.1.0", path = "../kn-format" }
 kn-model = { version = "0.1.0", path = "../kn-model" }
 kn-render = { version = "0.1.0", path = "../kn-render" }
 kn-ui = { version = "0.1.0", path = "../kn-ui" }
-rfd = "0.17.2"
 zip = "9.0.5"
 roxmltree = "0.20"
 # GNOME-style (Adwaita) title bar for Settings > Title bar: System (Wayland has no server-side ones on GNOME)

@@ -1098,7 +1098,7 @@ impl App {
     pub fn pick_open(&mut self) {
         let (tx, rx) = channel();
         std::thread::spawn(move || {
-            let f = rfd::FileDialog::new().add_filter("Presentations", &["key", "pptx"]).add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_title("Open").pick_file();
+            let f = kn_ui::files::FileDialog::new().add_filter("Presentations", &["key", "pptx"]).add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_title("Open").pick_file();
             let _ = tx.send(f);
         });
         self.jobs.push(Job::PickOpen(rx));
@@ -1112,7 +1112,7 @@ impl App {
             let mut all: Vec<&str> = crate::media::IMAGE_EXT.to_vec();
             all.extend(crate::media::MOVIE_EXT);
             all.extend(crate::media::AUDIO_EXT);
-            let f = rfd::FileDialog::new()
+            let f = kn_ui::files::FileDialog::new()
                 .add_filter("Pictures, Movies and Sounds", &all)
                 .add_filter("Pictures", crate::media::IMAGE_EXT)
                 .add_filter("Movies", crate::media::MOVIE_EXT)
@@ -1138,7 +1138,7 @@ impl App {
     pub fn pick_image(&mut self) {
         let (tx, rx) = channel();
         std::thread::spawn(move || {
-            let f = rfd::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Insert Picture").pick_file();
+            let f = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Insert Picture").pick_file();
             let _ = tx.send(f.map(|p| (p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), std::fs::read(&p))));
         });
         self.jobs.push(Job::PickImage(rx));
@@ -1164,9 +1164,9 @@ impl App {
         let (tx, rx) = channel();
         std::thread::spawn(move || {
             let f = if name.to_ascii_lowercase().ends_with(".pptx") {
-                rfd::FileDialog::new().add_filter("PowerPoint", &["pptx"]).add_filter("Keynote Presentation", &["key"]).set_file_name(&name).save_file()
+                kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).add_filter("Keynote Presentation", &["key"]).set_file_name(&name).save_file()
             } else {
-                rfd::FileDialog::new().add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_file_name(&name).save_file()
+                kn_ui::files::FileDialog::new().add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_file_name(&name).save_file()
             };
             let _ = tx.send(f);
         });
@@ -2152,7 +2152,11 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         crate::glass::native_blur(_frame, crate::glass::translucent_panes());
         let ctx = ui.ctx().clone();
+        kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        if self.canvas.editing.is_some() {
+            kn_ui::typing(&ctx);
+        }
         fit_window_to_screen(&ctx);
         // macOS: documents opened from Finder / Open With / the Dock arrive as an Apple event
         // (patched winit queues them), not on the command line
@@ -2207,10 +2211,16 @@ impl App {
         self.closing_ui(&ctx);
         self.all_tabs_ui(&ctx);
 
-        // dropped files
+        // dropped files (on Android, also files picked in the system picker): presentations
+        // open, pictures, movies and sounds go on the slide
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
-        if let Some(p) = dropped.into_iter().find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("key") || e.eq_ignore_ascii_case("pptx"))) {
-            self.open_path(p);
+        for p in dropped {
+            let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if ext == "key" || ext == "pptx" {
+                self.open_path(p);
+            } else if self.doc.is_some() && crate::media::IMAGE_EXT.iter().chain(crate::media::MOVIE_EXT).chain(crate::media::AUDIO_EXT).any(|e| *e == ext) {
+                self.insert_media_path(p);
+            }
         }
 
         if self.play.is_some() {

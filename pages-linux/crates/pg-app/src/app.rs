@@ -969,7 +969,11 @@ impl eframe::App for App {
         let t0 = std::time::Instant::now();
         kn_ui::glass::native_blur(frame, kn_ui::glass::translucent_panes());
         let ctx = ui.ctx().clone();
+        kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        if self.cursor.is_some() && !self.chooser {
+            kn_ui::typing(&ctx);
+        }
         fit_window_to_screen(&ctx);
         #[cfg(target_os = "macos")]
         {
@@ -1285,11 +1289,11 @@ impl App {
 
 }
 
-pub(crate) fn file_dialog<T>(f: impl FnOnce(rfd::FileDialog) -> Option<T>) -> Option<T> {
+pub(crate) fn file_dialog<T>(f: impl FnOnce(kn_ui::files::FileDialog) -> Option<T>) -> Option<T> {
     if std::env::var_os("CS_SCRIPT").is_some() || std::env::var_os("CS_SNAP").is_some() {
         return None;
     }
-    f(rfd::FileDialog::new())
+    f(kn_ui::files::FileDialog::new())
 }
 
 /// CS_SCRIPT="click 400 300; dclick 400 300; drag 100 100 300 100; type hello; key Enter; key ctrl+Z; wait"
