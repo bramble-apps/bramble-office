@@ -7,7 +7,7 @@
 <p align="center">
   <b>Keydeck</b> · <b>Values</b> · <b>Letters</b><br>
   Free desktop apps that open, edit and save Apple Keynote, Numbers and Pages files,<br>
-  and work with PowerPoint, Excel and Word too. For Linux, Windows, macOS and Android.
+  and work with PowerPoint, Excel and Word too. For Linux, Windows and macOS.
 </p>
 
 <p align="center">
