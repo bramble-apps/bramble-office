@@ -22,6 +22,8 @@ pub struct Settings {
     pub ruler_units: u8,
     /// Settings > Scaling: percent, 0 = the system's (kn_ui::scale).
     pub ui_scale: u32,
+    /// Settings > Layout (Android): 0 automatic, 1 phone, 2 tablet (kn_ui::form).
+    pub ui_layout: u8,
     pub guides_center: bool,
     pub guides_edges: bool,
     pub guides_spacing: bool,
@@ -71,6 +73,7 @@ impl Default for Settings {
             default_zoom: 1.25,
             ruler_units: 0,
             ui_scale: 0,
+            ui_layout: 0,
             guides_center: true,
             guides_edges: true,
             guides_spacing: true,
@@ -113,6 +116,7 @@ impl Settings {
                 "default_zoom" => s.default_zoom = v.parse().unwrap_or(1.25),
                 "ruler_units" => s.ruler_units = v.parse().unwrap_or(0).min(3),
                 "ui_scale" => s.ui_scale = v.parse().unwrap_or(0).min(400),
+                "ui_layout" => s.ui_layout = v.parse().unwrap_or(0).min(2),
                 "guides_center" => s.guides_center = on,
                 "guides_edges" => s.guides_edges = on,
                 "guides_spacing" => s.guides_spacing = on,
@@ -140,8 +144,8 @@ impl Settings {
         let Some(dir) = config_dir("numdeck") else { return };
         let _ = std::fs::create_dir_all(&dir);
         let text = format!(
-            "show_size_while_moving={}\nautocomplete_cells={}\nformula_suggestions={}\nauthor={}\ndefault_zoom={}\nruler_units={}\nguides_center={}\nguides_edges={}\nguides_spacing={}\nguides_sizing={}\nsmart_quotes={}\nsmart_dashes={}\ncapitalize={}\nauthor_color={}\nsaved_colors={}\ntext_replacement={}\nspell_check={}\ngrammar={}\nautocorrect={}\ntoolbar_items={}\ntoolbar_mode={}\nsmart_links={}\nsmart_phone_links={}\nui_scale={}\n",
-            self.show_size_while_moving, self.autocomplete_cells, self.formula_suggestions, self.author, self.default_zoom, self.ruler_units, self.guides_center, self.guides_edges, self.guides_spacing, self.guides_sizing, self.smart_quotes, self.smart_dashes, self.capitalize, self.author_color, self.saved_colors, self.text_replacement, self.spell_check, self.grammar, self.autocorrect, self.toolbar_items, self.toolbar_mode, self.smart_links, self.smart_phone_links, self.ui_scale
+            "show_size_while_moving={}\nautocomplete_cells={}\nformula_suggestions={}\nauthor={}\ndefault_zoom={}\nruler_units={}\nguides_center={}\nguides_edges={}\nguides_spacing={}\nguides_sizing={}\nsmart_quotes={}\nsmart_dashes={}\ncapitalize={}\nauthor_color={}\nsaved_colors={}\ntext_replacement={}\nspell_check={}\ngrammar={}\nautocorrect={}\ntoolbar_items={}\ntoolbar_mode={}\nsmart_links={}\nsmart_phone_links={}\nui_scale={}\nui_layout={}\n",
+            self.show_size_while_moving, self.autocomplete_cells, self.formula_suggestions, self.author, self.default_zoom, self.ruler_units, self.guides_center, self.guides_edges, self.guides_spacing, self.guides_sizing, self.smart_quotes, self.smart_dashes, self.capitalize, self.author_color, self.saved_colors, self.text_replacement, self.spell_check, self.grammar, self.autocorrect, self.toolbar_items, self.toolbar_mode, self.smart_links, self.smart_phone_links, self.ui_scale, self.ui_layout
         );
         let _ = std::fs::write(dir.join("settings.txt"), text);
     }
@@ -226,6 +230,12 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     ui.label("Scaling:");
                     kn_ui::scale::combo(ui, "ui-scale", &mut s.ui_scale);
                     ui.end_row();
+                    // (Android: the phone or tablet layout, or by the window's width)
+                    if cfg!(target_os = "android") {
+                        ui.label("Layout:");
+                        kn_ui::form::combo(ui, "ui-layout", &mut s.ui_layout);
+                        ui.end_row();
+                    }
                     // (Windows: always the app's own title bar, with the menus in it)
                     if !cfg!(any(target_os = "windows", target_os = "android")) {
                         ui.label("Window:");

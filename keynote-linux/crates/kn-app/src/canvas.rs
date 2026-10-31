@@ -388,8 +388,9 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         canvas_inner(app, ui, &scene, &view, &resp);
     });
     app.canvas_scroll = out.state.clamped_offset();
+    kn_ui::touch::pan_area(avail);
     // under the floating toolbar the slide shows blurred, sharpening again just below it
-    let edge = Rect::from_min_max(avail.min, egui::pos2(avail.max.x, avail.min.y + inset + 18.0));
+    let edge = Rect::from_min_max(avail.min, egui::pos2(avail.max.x, avail.min.y + inset + crate::glass::FEATHER_REACH));
     crate::glass::set_backdrop(ui.ctx(), None);
     let reach = Rect::from_min_max(slide_rect.min - slide_rect.size(), slide_rect.max + slide_rect.size());
     // translucent panes show the slide where it runs on under them (blurred)
@@ -417,8 +418,6 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
             // toolbar blurs, also what hangs off the slide (no sharp line at the slide's edge)
             let full = Rect::from_min_max(slide_rect.min - slide_rect.size(), slide_rect.max + slide_rect.size());
             let p = ui.painter_at(solid);
-            p.rect_filled(solid, 0.0, crate::theme::CANVAS_BG());
-            p.image(tex.id(), full, uv, Color32::WHITE);
             // (the toolbar's liquid glass refracts this)
             crate::glass::set_backdrop(ui.ctx(), Some(crate::glass::Backdrop { tex: tex.id(), slide: full, clip: solid }));
             if look == crate::glass::ToolbarBackground::Tinted {
@@ -428,21 +427,25 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
                 let reach = solid.expand(16.0);
                 let region = Rect::from_min_max(((reach.min - slide_rect.min) / scale).to_pos2(), ((reach.max - slide_rect.min) / scale).to_pos2());
                 let px = [(reach.width() / 2.0).ceil() as u32, (reach.height() / 2.0).ceil() as u32];
-                let band = app.tex.band_blur(ui.ctx(), &mut app.renderer, doc, &scene, scene.slide, rev, region, px, 2);
+                let band = app.tex.band_blur(ui.ctx(), &mut app.renderer, doc, &scene, scene.slide, rev, region, px, 2, None);
                 p.rect_filled(solid, 0.0, crate::theme::CANVAS_BG());
+                p.image(tex.id(), full, uv, Color32::WHITE);
                 p.image(band.id(), reach, uv, Color32::WHITE);
                 crate::glass::set_backdrop(ui.ctx(), Some(crate::glass::Backdrop { tex: band.id(), slide: reach, clip: solid }));
                 p.rect_filled(solid, 0.0, crate::glass::ToolbarBackground::tint());
                 return;
             }
-            let bands = 9;
-            for k in 0..bands {
-                let y0 = solid.max.y + (edge.max.y - solid.max.y) * k as f32 / bands as f32;
-                let y1 = solid.max.y + (edge.max.y - solid.max.y) * (k + 1) as f32 / bands as f32;
-                let a = 1.0 - (k as f32 + 0.5) / bands as f32;
-                let band = Rect::from_min_max(egui::pos2(edge.min.x, y0), egui::pos2(edge.max.x, y1));
-                ui.painter_at(band).image(tex.id(), full, uv, Color32::from_white_alpha((a * 255.0) as u8));
-            }
+            // a progressive blur: full under the buttons, thinning row by row to sharp below the
+            // toolbar (worked at half a point per pixel; what's off the slide blurs to the
+            // canvas colour)
+            let reach = edge.expand2(egui::vec2(16.0, 0.0));
+            let region = Rect::from_min_max(((reach.min - slide_rect.min) / scale).to_pos2(), ((reach.max - slide_rect.min) / scale).to_pos2());
+            let px = [(reach.width() / 2.0).ceil() as u32, (reach.height() / 2.0).ceil() as u32];
+            let rows = crate::glass::feather_rows(reach, solid);
+            let band = app.tex.band_blur(ui.ctx(), &mut app.renderer, doc, &scene, scene.slide, rev, region, px, 5, Some(rows));
+            crate::glass::set_backdrop(ui.ctx(), Some(crate::glass::Backdrop { tex: band.id(), slide: reach, clip: solid }));
+            let fade = ui.painter_at(edge);
+            crate::glass::paint_feathered(&fade, None, band.id(), reach, solid);
         }
     }
 }
@@ -1189,6 +1192,8 @@ fn canvas_inner(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &Vie
         }
         let corners = [Point::new(0.0, 0.0), Point::new(g.w, 0.0), Point::new(g.w, g.h), Point::new(0.0, g.h)]
             .map(|p| view.to_screen(g.to_slide(p)));
+        // (a finger on the selection or its handles moves or resizes it)
+        kn_ui::touch::grab(Rect::from_points(&corners).expand(handle_r + 12.0));
         let outline = Stroke::new(1.0, theme::ACCENT());
         for i in 0..4 {
             painter.line_segment([corners[i], corners[(i + 1) % 4]], outline);

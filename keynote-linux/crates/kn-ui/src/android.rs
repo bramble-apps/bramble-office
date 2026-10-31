@@ -90,6 +90,7 @@ fn take_picked() -> Vec<PathBuf> {
 }
 
 pub(crate) fn frame(ctx: &egui::Context) {
+    test_snapshots(ctx);
     let picked = take_picked();
     if !picked.is_empty() {
         PICKING.store(false, Ordering::Relaxed);
@@ -194,4 +195,25 @@ fn out_dir() -> Option<PathBuf> {
     let dir = PathBuf::from(std::env::var_os("HOME")?).join("out").join(format!("{stamp:x}"));
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
+}
+
+/// Automated checks (Waydroid's own screenshots come out black): with KN_UI_SNAPDIR set (in the
+/// env file), the app saves what it shows as snap.png there whenever a file snap-now appears.
+fn test_snapshots(ctx: &egui::Context) {
+    let Some(dir) = std::env::var_os("KN_UI_SNAPDIR").map(PathBuf::from) else { return };
+    let trigger = dir.join("snap-now");
+    if trigger.exists() {
+        let _ = std::fs::remove_file(&trigger);
+        let out = dir.join("snap.png");
+        let cb = egui::ScreenshotCallback::new(move |img: std::sync::Arc<egui::ColorImage>| {
+            let [w, h] = img.size;
+            let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+            if let Some(buf) = image::RgbaImage::from_raw(w as u32, h as u32, bytes) {
+                let _ = buf.save(&out);
+            }
+        });
+        ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(cb));
+        ctx.request_repaint();
+    }
+    ctx.request_repaint_after(std::time::Duration::from_millis(500));
 }

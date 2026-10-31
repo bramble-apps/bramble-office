@@ -33,6 +33,8 @@ pub struct Settings {
     pub ruler_units: u8,
     /// Settings > Scaling: percent, 0 = the system's (kn_ui::scale).
     pub ui_scale: u32,
+    /// Settings > Layout (Android): 0 automatic, 1 phone, 2 tablet (kn_ui::form).
+    pub ui_layout: u8,
     /// Rulers > Place origin at center of ruler.
     pub ruler_origin_center: bool,
     /// Slideshow > Show slideshow controls on pointer move / Show pointer only on slides with
@@ -96,6 +98,7 @@ impl Default for Settings {
             guides_sizing: true,
             ruler_units: 0,
             ui_scale: 0,
+            ui_layout: 0,
             toolbar_background: "feathered".into(),
             ruler_origin_center: false,
             show_pointer_always: true,
@@ -204,6 +207,9 @@ impl Settings {
                 s.toolbar_background = v.to_string();
                 continue;
             }
+            if k == "ui_layout" {
+                s.ui_layout = v.parse().unwrap_or(0).min(2);
+            }
             if k == "ui_scale" {
                 s.ui_scale = v.parse().unwrap_or(0).min(400);
                 continue;
@@ -230,6 +236,7 @@ impl Settings {
         let mut text: String = me.flags().iter().map(|(k, v)| format!("{k}={}\n", **v)).collect();
         text.push_str(&format!("ruler_units={}\n", self.ruler_units));
         text.push_str(&format!("ui_scale={}\n", self.ui_scale));
+        text.push_str(&format!("ui_layout={}\n", self.ui_layout));
         text.push_str(&format!("toolbar_background={}\n", self.toolbar_background));
         text.push_str(&format!("author_color={}\n", self.author_color));
         text.push_str(&format!("toolbar_items={}\n", self.toolbar_items));
@@ -351,6 +358,12 @@ pub fn settings_window(app: &mut App, ctx: &egui::Context) {
                     ui.label("Scaling:");
                     kn_ui::scale::combo(ui, "ui-scale", &mut s.ui_scale);
                     ui.end_row();
+                    // (Android: the phone or tablet layout, or by the window's width)
+                    if cfg!(target_os = "android") {
+                        ui.label("Layout:");
+                        kn_ui::form::combo(ui, "ui-layout", &mut s.ui_layout);
+                        ui.end_row();
+                    }
                     // (Windows: always the app's own title bar, with the menus in it)
                     if cfg!(any(target_os = "windows", target_os = "android")) {
                         return;

@@ -378,7 +378,8 @@ impl App {
         let active = self.saved_views.as_ref().map(|u| u.active_sheet).unwrap_or(0);
         if let Some(i) = self.saved_views.as_ref().and_then(|u| u.inspector) {
             // NM_INSPECTOR (checks) always shows it
-            self.inspector = i || std::env::var_os("NM_INSPECTOR").is_some();
+            // (the phone layout: documents open with the inspector closed)
+            self.inspector = (i || std::env::var_os("NM_INSPECTOR").is_some()) && !kn_ui::form::was_compact();
         }
         // Numbers' own pivot tables: their fields, to show and refresh (Mac N29-C1)
         let apple_epoch = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
@@ -2051,7 +2052,9 @@ impl App {
 
 
 impl eframe::App for App {
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // fingers: one scrolls the sheet, a hold is a right click (the iPad's way)
+        kn_ui::touch::raw_input(ctx, raw);
         // NM_SCRIPT starts once the window has settled (after NM_CELL / NM_EDIT at frame 3)
         if self.snap.as_ref().is_some_and(|(_, n)| *n >= 12) {
             if let Some(evs) = self.script.pop_front() {
@@ -2078,6 +2081,7 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        kn_ui::form::set_pref(self.settings.ui_layout);
         if self.canvas.editing.is_some() || self.canvas.edit.is_some() {
             kn_ui::typing(&ctx);
         }
@@ -2305,7 +2309,15 @@ impl App {
         let mut right_w = 0.0;
         let mut insp_top = top_y;
         // the inspector slides in and out, pushing the sheet (Mac N21: ~233–250 ms, ease-in-out)
-        let t = kn_ui::theme::slide(&ctx, egui::Id::unique("inspector-slide"), self.inspector);
+        // (the phone layout: the inspector is a sheet from the bottom, closed to begin with)
+        let compact = kn_ui::form::compact(&ctx);
+        if kn_ui::form::switched(&ctx) == Some(true) {
+            self.inspector = false;
+        }
+        if compact && self.inspector {
+            kn_ui::form::sheet(ui, "inspector-sheet", theme::PANEL_BG(), |ui| crate::inspector::inspector(self, ui));
+        }
+        let t = kn_ui::theme::slide(&ctx, egui::Id::unique("inspector-slide"), self.inspector && !compact);
         if t > 0.0 {
             const W: f32 = 300.0;
             let r = egui::Panel::right("inspector")

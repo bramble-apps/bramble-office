@@ -12,6 +12,7 @@ pub mod chartpanes;
 pub mod colors;
 pub mod contenthub;
 pub mod files;
+pub mod form;
 pub mod glass;
 pub mod gpu;
 pub mod media;
@@ -21,13 +22,16 @@ pub mod snap;
 pub mod spell;
 pub mod shapelib;
 pub mod theme;
+pub mod touch;
 pub mod welcome;
 pub mod typing;
 pub mod winframe;
 
-/// First thing in every app's update, once per frame: on Android, files picked in the system
-/// picker (they arrive as dropped files) and the on-screen keyboard; nothing elsewhere.
+/// First thing in every app's update, once per frame: tooltips off while using a finger; on
+/// Android, files picked in the system picker (they arrive as dropped files) and the on-screen
+/// keyboard.
 pub fn begin_frame(ctx: &egui::Context) {
+    touch::frame(ctx);
     #[cfg(target_os = "android")]
     android::frame(ctx);
     let _ = ctx;

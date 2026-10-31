@@ -96,20 +96,16 @@ pub fn shapes(ctx: &egui::Context, r: Rect, radius: f32, lens: bool) -> Vec<egui
             let depth = (radius * 0.9).min(r.height() * 0.3).max(2.0);
             let pull = depth * 0.85;
             let mut m = Mesh::with_texture(b.tex);
-            m.colored_vertex(center, fade(center));
-            m.vertices[0].uv = uv(center);
+            let vert = |pos: Pos2, uv: Pos2, color: Color32| egui::epaint::Vertex { pos, uv, color };
+            m.vertices.push(vert(center, uv(center), fade(center)));
             let n = pts.len() as u32;
             for (q, nrm) in &pts {
                 // inner ring: undistorted; rim: pulled inward; then a hair outside it fading out
                 // (meshes aren't anti-aliased: this feather smooths the edge)
                 let inner = *q - *nrm * depth;
-                let i = m.vertices.len();
-                m.colored_vertex(inner, fade(inner));
-                m.vertices[i].uv = uv(inner);
-                m.colored_vertex(*q - *nrm * FEATHER, fade(*q));
-                m.vertices[i + 1].uv = uv(*q - *nrm * pull);
-                m.colored_vertex(*q + *nrm * FEATHER, Color32::TRANSPARENT);
-                m.vertices[i + 2].uv = uv(*q - *nrm * pull);
+                m.vertices.push(vert(inner, uv(inner), fade(inner)));
+                m.vertices.push(vert(*q - *nrm * FEATHER, uv(*q - *nrm * pull), fade(*q)));
+                m.vertices.push(vert(*q + *nrm * FEATHER, uv(*q - *nrm * pull), Color32::TRANSPARENT));
             }
             for k in 0..n {
                 let (a, b2) = (1 + 3 * k, 1 + 3 * ((k + 1) % n));
@@ -151,10 +147,52 @@ pub fn shapes(ctx: &egui::Context, r: Rect, radius: f32, lens: bool) -> Vec<egui
     out
 }
 
+/// How far below the toolbar the feathered blur reaches (it starts fading inside the toolbar).
+pub const FEATHER_REACH: f32 = 40.0;
+
+/// The feathered look under a floating toolbar: `fill` and then `tex` (a progressive blur
+/// covering `tex_rect`, see progressive_blur) over `band` and `FEATHER_REACH` below it. The blur
+/// itself thins out row by row; only its last, nearly sharp part fades into the page, so
+/// there's no line where it starts or ends.
+pub fn paint_feathered(painter: &egui::Painter, fill: Option<Color32>, tex: egui::TextureId, tex_rect: Rect, band: Rect) {
+    if let Some(fill) = fill {
+        painter.add(egui::Shape::mesh(feather_mesh(band, |_| (egui::epaint::WHITE_UV, fill), egui::TextureId::default())));
+    }
+    let uv = |p: egui::Pos2| egui::pos2((p.x - tex_rect.min.x) / tex_rect.width(), (p.y - tex_rect.min.y) / tex_rect.height());
+    painter.add(egui::Shape::mesh(feather_mesh(band, |p| (uv(p), Color32::WHITE), tex)));
+}
+
+/// A mesh over `band` and `FEATHER_REACH` below it whose alpha eases from 1 to 0 (see paint_feathered).
+fn feather_mesh(band: Rect, at: impl Fn(egui::Pos2) -> (egui::Pos2, Color32), tex: egui::TextureId) -> egui::Mesh {
+    let (start, end) = (band.max.y + FEATHER_REACH * 0.45, band.max.y + FEATHER_REACH);
+    let mut mesh = egui::Mesh::with_texture(tex);
+    let mut row = |y: f32, a: f32| {
+        for x in [band.min.x, band.max.x] {
+            let p = egui::pos2(x, y);
+            let (uv, c) = at(p);
+            mesh.vertices.push(egui::epaint::Vertex { pos: p, uv, color: c.gamma_multiply(a) });
+        }
+    };
+    row(band.min.y, 1.0);
+    let steps = 32;
+    for k in 0..=steps {
+        let t = k as f32 / steps as f32;
+        // smootherstep: no visible start or end of the fade
+        let a = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+        row(start + (end - start) * t, a);
+    }
+    for k in 1..(mesh.vertices.len() as u32 / 2) {
+        let i = 2 * k;
+        mesh.add_triangle(i - 2, i - 1, i);
+        mesh.add_triangle(i - 1, i + 1, i);
+    }
+    mesh
+}
+
 /// What shows under a floating toolbar where the document runs on beneath it (Settings).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ToolbarBackground {
-    /// the blurred document at full strength, then an 18 pt band fading back to sharp
+    /// the blurred document at full strength, easing back to sharp below the toolbar
     Feathered,
     /// as Pages 15.4: the blurred document under a 60 % tint, with a hard bottom edge
     Tinted,
@@ -399,6 +437,37 @@ mod mac_vibrancy {
             *fx = Some(v);
         });
     }
+}
+
+/// Where the feathered blur is full and where it has thinned to nothing, as fractions of the
+/// height of `tex_rect` (for progressive_blur, with the band painted by paint_feathered).
+pub fn feather_rows(tex_rect: Rect, band: Rect) -> (f32, f32) {
+    let f = |y: f32| ((y - tex_rect.min.y) / tex_rect.height()).clamp(0.0, 1.0);
+    (f(band.max.y - band.height() * 0.35), f(band.max.y + FEATHER_REACH * 0.85))
+}
+
+/// A progressive blur, as Apple's scroll-edge effect: rows above `full` (a fraction of the
+/// height) blurred `passes` times by `radius` pixels, rows below `sharp` not at all, and the
+/// strength easing between them (each row mixed from the two nearest blur levels).
+pub fn progressive_blur(img: &egui::ColorImage, radius: usize, passes: usize, full: f32, sharp: f32) -> egui::ColorImage {
+    let [w, h] = img.size;
+    let levels: Vec<egui::ColorImage> = (0..=radius).map(|r| if r == 0 { img.clone() } else { box_blur(img, r, passes) }).collect();
+    let mut out = img.clone();
+    for y in 0..h {
+        let f = (y as f32 + 0.5) / h as f32;
+        let t = ((f - full) / (sharp - full).max(1e-3)).clamp(0.0, 1.0);
+        // smootherstep from full strength to none
+        let s = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+        let want = s * radius as f32;
+        let (lo, hi) = (want.floor() as usize, (want.ceil() as usize).min(radius));
+        let k = want - lo as f32;
+        for x in 0..w {
+            let (a, b) = (levels[lo].pixels[y * w + x].to_array(), levels[hi].pixels[y * w + x].to_array());
+            let c: [u8; 4] = std::array::from_fn(|i| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * k).round() as u8);
+            out.pixels[y * w + x] = egui::Color32::from_rgba_premultiplied(c[0], c[1], c[2], c[3]);
+        }
+    }
+    out
 }
 
 /// `passes` box blurs of `radius` pixels, across then down (close to a Gaussian).

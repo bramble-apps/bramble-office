@@ -478,6 +478,10 @@ pub fn draw_overlay(app: &App, painter: &egui::Painter, tl: &TextLayout, g: &Geo
             let pts = vec![map(x0, line.top), map(x1, line.top), map(x1, line.top + line.height), map(x0, line.top + line.height)];
             painter.add(egui::Shape::convex_polygon(pts, Color32::from_rgba_unmultiplied(0x3a, 0x82, 0xf7, 90), Stroke::NONE));
         }
+        // (with a finger: handles at both ends, to drag)
+        if let (Some((xa, ta, ha)), Some((xb, tb, hb))) = (caret(tl, a), caret(tl, b)) {
+            kn_ui::touch::selection_handles(painter, [map(xa, ta), map(xa, ta + ha)], [map(xb, tb), map(xb, tb + hb)], theme::ACCENT());
+        }
     }
     let on = (ed.blink.elapsed().as_millis() / 530) % 2 == 0;
     if on {

@@ -1179,23 +1179,33 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
         let gap = ui.spacing().item_spacing.x;
         ui.spacing_mut().button_padding.x = 7.0;
         ui.spacing_mut().item_spacing.x = (gap - 10.0).max(0.0);
-        for m in menus() {
-            // the app menu shows a grid mark instead of its name (as Keydeck shows its own)
-            let app_menu = m.label == "Values";
-            let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
-            let r = ui.menu_button(label, |ui| {
-                menu_body(ui, |ui| {
-                    let kids = has_icons(&m.children);
-                    for c in &m.children {
-                        item_ui(app, ui, &m.label, c, kids, &mut fired);
-                    }
-                })
-            });
-            if app_menu {
-                let b = r.response.rect;
-                kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), kn_ui::icons::Icon::Table, kn_ui::theme::TEXT());
+        // (the phone layout: every menu under one button)
+        let compact = kn_ui::form::compact(ui.ctx());
+        let mut all = |ui: &mut egui::Ui| {
+            for m in menus() {
+                // the app menu shows a grid mark instead of its name (as Keydeck shows its own)
+                let app_menu = m.label == "Values" && !compact;
+                let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
+                let r = ui.menu_button(label, |ui| {
+                    menu_body(ui, |ui| {
+                        let kids = has_icons(&m.children);
+                        for c in &m.children {
+                            item_ui(app, ui, &m.label, c, kids, &mut fired);
+                        }
+                    })
+                });
+                if app_menu {
+                    let b = r.response.rect;
+                    kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), kn_ui::icons::Icon::Table, kn_ui::theme::TEXT());
+                }
+                right = right.max(r.response.rect.max.x);
             }
+        };
+        if compact {
+            let r = ui.menu_button("\u{2630}", |ui| all(ui));
             right = right.max(r.response.rect.max.x);
+        } else {
+            all(ui);
         }
     });
     if let Some(cmd) = fired {

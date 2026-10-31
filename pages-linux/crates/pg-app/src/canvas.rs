@@ -370,15 +370,19 @@ fn paint_toolbar_band(app: &mut App, ui: &egui::Ui) {
         return;
     }
     let rect = app.canvas.rect;
-    let b = Rect::from_min_max(pos2(band.min.x.max(rect.min.x), band.min.y), pos2(band.max.x.min(rect.max.x), band.max.y));
+    // (feathered: the blur runs on below the band, fading out over the page)
+    let reach = if look == ToolbarBackground::Feathered { kn_ui::glass::FEATHER_REACH.min(rect.height()) } else { 0.0 };
+    let b = Rect::from_min_max(pos2(band.min.x.max(rect.min.x), band.min.y), pos2(band.max.x.min(rect.max.x), band.max.y + reach));
     if b.width() < 2.0 || b.height() < 2.0 {
         return;
     }
     let Some(l) = app.layout.take() else { return };
     let region = Rect::from_min_max(app.canvas.to_doc(b.min), app.canvas.to_doc(b.max));
     let ppp = ui.ctx().pixels_per_point();
-    // (a blurred view needs few pixels: an eighth of the screen's in each direction)
-    let k = 0.125;
+    // (a blurred view needs few pixels: an eighth of the screen's in each direction; the
+    // feathered one thins out to sharp, so it gets half)
+    let feathered = look == ToolbarBackground::Feathered;
+    let k = if feathered { 0.5 } else { 0.125 };
     let (w, h) = ((b.width() * ppp * k).ceil().max(1.0) as u32, (b.height() * ppp * k).ceil().max(1.0) as u32);
     let s = app.canvas.zoom * ppp * k;
     let key = {
@@ -440,10 +444,17 @@ fn paint_toolbar_band(app: &mut App, ui: &egui::Ui) {
                         }
                     }
                 }
-                box_blur(pm, (6.0 * ppp * k).ceil().max(1.0) as usize);
+                if !feathered {
+                    box_blur(pm, (6.0 * ppp * k).ceil().max(1.0) as usize);
+                }
             }
             pm.map(|pm| {
-                let img = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], pm.data());
+                let mut img = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], pm.data());
+                if feathered {
+                    // full under the buttons, thinning row by row to sharp below the toolbar
+                    let (full, sharp) = kn_ui::glass::feather_rows(b, band);
+                    img = kn_ui::glass::progressive_blur(&img, (5.0 * ppp * k).ceil().max(1.0) as usize, 3, full, sharp);
+                }
                 // one texture, updated as the view scrolls
                 BAND.with(|c| {
                     let mut c = c.borrow_mut();
@@ -573,6 +584,7 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
     let ctx = ui.ctx().clone();
     let rect = ui.max_rect();
     app.canvas.rect = rect;
+    kn_ui::touch::pan_area(rect);
     app.canvas.size = rect.size();
     let resp = ui.interact(rect, ui.scope_id().with("page-canvas"), Sense::click_and_drag());
     if app.layout.is_none() {
@@ -1055,9 +1067,16 @@ fn paint_overlay(app: &mut App, ui: &egui::Ui, painter: &egui::Painter) {
     if let Some(c) = app.cursor {
         let focused = ui.input(|i| i.viewport().focused.unwrap_or(true));
         if let Some(rects) = selection_rects(app, &l, &c) {
+            let mut ends: Option<([Pos2; 2], [Pos2; 2])> = None;
             for (pi, r) in rects {
                 let sr = Rect::from_min_max(app.canvas.page_to_screen(&l, pi, r.min), app.canvas.page_to_screen(&l, pi, r.max));
                 painter.rect_filled(sr, 0.0, sel_col);
+                let start = ends.map(|e| e.0).unwrap_or([sr.left_top(), sr.left_bottom()]);
+                ends = Some((start, [sr.right_top(), sr.right_bottom()]));
+            }
+            // (with a finger: handles at both ends, to drag)
+            if let Some((s, e)) = ends.filter(|_| !c.is_empty()) {
+                kn_ui::touch::selection_handles(&painter, s, e, theme::ACCENT());
             }
         }
         if c.is_empty() && app.canvas.obj.is_none() {
@@ -1137,6 +1156,8 @@ fn paint_overlay(app: &mut App, ui: &egui::Ui, painter: &egui::Painter) {
             }
         }
         painter.rect_stroke(sr, 0.0, Stroke::new(1.0, theme::ACCENT()), egui::StrokeKind::Middle);
+        // (a finger on the selection or its handles moves or resizes it)
+        kn_ui::touch::grab(sr.expand(16.0));
         if single && app.canvas.drag.is_none() {
             if let Some(c) = control_point(app, &d) {
                 let c = at(c);

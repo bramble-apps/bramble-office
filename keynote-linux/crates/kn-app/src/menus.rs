@@ -889,32 +889,42 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
         let gap = ui.spacing().item_spacing.x;
         ui.spacing_mut().button_padding.x = 7.0;
         ui.spacing_mut().item_spacing.x = (gap - 10.0).max(0.0);
-        for m in menus() {
-            let indent = m.children.iter().any(|c| crate::icons::menu_icon(&c.label).is_some());
-            // the app menu shows Keydeck's mark instead of its name
-            let app_menu = m.label == "Keydeck";
-            let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
-            let r = ui.menu_button(label, |ui| menu_body(ui, |ui| {
-                for c in &m.children {
-                    item_ui(app, ui, &m.label, c, indent, &mut fired);
-                }
-                if m.label == "Window" {
-                    // the open presentations, the active one ticked
-                    ui.separator();
-                    for i in 0..app.tabs.len() {
-                        let name = app.tab_name(i);
-                        if ui.add(egui::Button::new(name).selected(i == app.active_tab)).clicked() {
-                            fired = Some(format!("tab:{i}"));
-                            ui.close();
+        // (the phone layout: every menu under one button)
+        let compact = kn_ui::form::compact(ui.ctx());
+        let mut all = |ui: &mut egui::Ui| {
+            for m in menus() {
+                let indent = m.children.iter().any(|c| crate::icons::menu_icon(&c.label).is_some());
+                // the app menu shows Keydeck's mark instead of its name
+                let app_menu = m.label == "Keydeck" && !compact;
+                let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
+                let r = ui.menu_button(label, |ui| menu_body(ui, |ui| {
+                    for c in &m.children {
+                        item_ui(app, ui, &m.label, c, indent, &mut fired);
+                    }
+                    if m.label == "Window" {
+                        // the open presentations, the active one ticked
+                        ui.separator();
+                        for i in 0..app.tabs.len() {
+                            let name = app.tab_name(i);
+                            if ui.add(egui::Button::new(name).selected(i == app.active_tab)).clicked() {
+                                fired = Some(format!("tab:{i}"));
+                                ui.close();
+                            }
                         }
                     }
+                }));
+                if app_menu {
+                    let b = r.response.rect;
+                    crate::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), crate::icons::Icon::Projector, crate::theme::TEXT());
                 }
-            }));
-            if app_menu {
-                let b = r.response.rect;
-                crate::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), crate::icons::Icon::Projector, crate::theme::TEXT());
+                right = right.max(r.response.rect.max.x);
             }
+        };
+        if compact {
+            let r = ui.menu_button("\u{2630}", |ui| all(ui));
             right = right.max(r.response.rect.max.x);
+        } else {
+            all(ui);
         }
     });
     if let Some(cmd) = fired {

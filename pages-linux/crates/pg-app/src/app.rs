@@ -437,7 +437,11 @@ impl App {
         self.ruler = u.ruler;
         self.word_count = u.word_count;
         self.sidebar = if u.toc { Sidebar::Toc } else if u.thumbnails && std::env::var_os("CS_SIDEBAR").is_some() { Sidebar::Thumbnails } else { self.sidebar };
-        self.inspector = !u.inspector_hidden || self.automated;
+        // (the phone layout: documents open with the inspector and sidebar closed)
+        self.inspector = (!u.inspector_hidden || self.automated) && !kn_ui::form::was_compact();
+        if kn_ui::form::was_compact() {
+            self.sidebar = Sidebar::None;
+        }
         self.canvas.two_up = u.two_up;
         self.wb = Some(p);
         self.word = None;
@@ -942,7 +946,9 @@ fn kn_render_ps_name(family: &str) -> String {
 }
 
 impl eframe::App for App {
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // fingers: one scrolls the page, a hold is a right click (the iPad's way)
+        kn_ui::touch::raw_input(ctx, raw);
         if self.automated {
             // a scripted run takes only its own input (the real keyboard and pointer, if the
             // window has them, would type into the document being tested)
@@ -971,6 +977,7 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        kn_ui::form::set_pref(self.settings.ui_layout);
         if self.cursor.is_some() && !self.chooser {
             kn_ui::typing(&ctx);
         }
@@ -1166,7 +1173,17 @@ impl App {
         let mut right_w = 0.0;
         let mut insp_top = top_y;
         // the inspector slides in and out (Pages: 272 pt; the suite's panels are laid out for 300)
-        let t = kn_ui::theme::slide(&ctx, egui::Id::unique("inspector-slide"), self.inspector);
+        // (the phone layout: the inspector is a sheet from the bottom; it and the sidebar are
+        // closed to begin with)
+        let compact = kn_ui::form::compact(&ctx);
+        if kn_ui::form::switched(&ctx) == Some(true) {
+            self.inspector = false;
+            self.sidebar = Sidebar::None;
+        }
+        if compact && self.inspector {
+            kn_ui::form::sheet(ui, "inspector-sheet", theme::PANEL_BG(), |ui| crate::inspector::inspector(self, ui));
+        }
+        let t = kn_ui::theme::slide(&ctx, egui::Id::unique("inspector-slide"), self.inspector && !compact);
         if t > 0.0 {
             const W: f32 = 300.0;
             let r = egui::Panel::right("inspector")
@@ -1240,9 +1257,13 @@ impl App {
         // under the floating toolbar: the pages scrolled up under it, blurred (and tinted)
         if let Some((tex, r, tinted)) = self.toolbar_band_paint.take() {
             let p = ui.painter().with_clip_rect(r);
-            p.image(tex.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
             if tinted {
+                p.image(tex.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
                 p.rect_filled(r, 0.0, kn_ui::glass::ToolbarBackground::tint());
+            } else if let Some(band) = self.toolbar_band {
+                // full strength under the buttons, easing out over the page below
+                let band = egui::Rect::from_min_max(egui::pos2(r.min.x, band.min.y), egui::pos2(r.max.x, band.max.y));
+                kn_ui::glass::paint_feathered(&p, None, tex.id(), r, band);
             }
         }
         if float_h > 0.0 {

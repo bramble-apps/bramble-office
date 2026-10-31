@@ -1991,6 +1991,8 @@ impl eframe::App for App {
     /// Touchpad scrolling keeps going after the fingers lift, slowing down, as in GNOME / macOS
     /// apps (Linux reports the lift but no momentum of its own).
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // fingers: one scrolls the canvas, a hold is a right click (the iPad's way)
+        kn_ui::touch::raw_input(ctx, raw);
         let now = raw.time.unwrap_or(0.0);
         let dt = self.kinetic.2.map(|t| (now - t).clamp(0.001, 0.1) as f32).unwrap_or(1.0 / 60.0);
         self.kinetic.2 = Some(now);
@@ -2154,6 +2156,7 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         kn_ui::begin_frame(&ctx);
         kn_ui::scale::apply(&ctx, self.settings.ui_scale);
+        kn_ui::form::set_pref(self.settings.ui_layout);
         if self.canvas.editing.is_some() {
             kn_ui::typing(&ctx);
         }
@@ -2369,7 +2372,20 @@ impl App {
         {
             left_edge = left_edge.max(r.response.rect.max.x);
         }
-        let mut insp_open = self.show_inspector && editing_view;
+        // (the phone layout: the inspector is a sheet from the bottom; it and the navigator are
+        // closed to begin with)
+        let compact = kn_ui::form::compact(ui.ctx());
+        if kn_ui::form::switched(ui.ctx()) == Some(true) {
+            self.show_inspector = false;
+            self.show_notes = false;
+            if self.view == ViewMode::Navigator {
+                self.view = ViewMode::SlideOnly;
+            }
+        }
+        if compact && self.show_inspector && editing_view {
+            kn_ui::form::sheet(ui, "inspector-sheet", theme::PANEL_BG(), |ui| crate::inspector::ui(self, ui));
+        }
+        let mut insp_open = self.show_inspector && editing_view && !compact;
         let right_edge = egui::Panel::right("inspector")
             .show_separator_line(false)
             .resizable(false)
@@ -2447,7 +2463,7 @@ impl App {
         let strip = egui::Rect::from_min_max(egui::pos2(window.min.x, top_y), egui::pos2(window.max.x, top_y + buttons_h));
         // the canvas's top edge: the slide blurs under the toolbar (drawn by the canvas) and a
         // tint of the canvas colour fades out below the buttons, in both appearances
-        let edge = egui::Rect::from_min_max(egui::pos2(window.min.x + left_w, top_y), egui::pos2(window.max.x - right_w, top_y + tb_h + 18.0));
+        let edge = egui::Rect::from_min_max(egui::pos2(window.min.x + left_w, top_y), egui::pos2(window.max.x - right_w, top_y + tb_h + crate::glass::FEATHER_REACH));
         // (Keydeck's feathered look only: the Pages and Solid looks have a flat band, hard-edged)
         if edge.width() > 0.0 && crate::glass::toolbar_background() == crate::glass::ToolbarBackground::Feathered {
             let [r, g, b, _] = theme::CANVAS_BG().to_array();
@@ -2456,7 +2472,7 @@ impl App {
             for k in 0..=steps {
                 let t = k as f32 / steps as f32;
                 let y = edge.min.y + t * edge.height();
-                let a = (1.0 - t).powf(1.5) * 0.6;
+                let a = (1.0 - t * t * (3.0 - 2.0 * t)) * 0.35;
                 let col = Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
                 mesh.colored_vertex(egui::pos2(edge.min.x, y), col);
                 mesh.colored_vertex(egui::pos2(edge.max.x, y), col);

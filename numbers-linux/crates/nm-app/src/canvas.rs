@@ -253,6 +253,7 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
         app.canvas.tiles.show_sheet(id);
     }
     let rect = ui.max_rect();
+    kn_ui::touch::pan_area(rect);
     let resp = ui.interact(rect, ui.scope_id().with("sheet"), Sense::click_and_drag());
     // first frame of a sheet: where the document was saved showing it, else its content's
     // top-left with Numbers' margin (40 screen points)
@@ -1289,6 +1290,8 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
         let g = tiles::frame(d);
         let r = view.rect(Rect::from_min_size(Pos2::new(g.x, g.y), Vec2::new(g.w.max(8.0), g.h.max(8.0))));
         painter.rect_stroke(r, 0.0, Stroke::new(1.0, accent()), egui::StrokeKind::Middle);
+        // (a finger on the selection or its handles moves or resizes it)
+        kn_ui::touch::grab(r.expand(16.0));
         // Numbers: eight small square white handles
         for p in handle_points(r) {
             painter.rect(Rect::from_center_size(p, Vec2::splat(7.0)), 1.0, Color32::WHITE, Stroke::new(1.0, Color32::from_gray(0x80)), egui::StrokeKind::Middle);

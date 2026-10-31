@@ -61,7 +61,7 @@ pub struct Textures {
     blurred: Option<((ObjId, u64), TextureHandle)>,
     /// A screen-space blur of the strip under the toolbar (Pages' tinted look):
     /// (slide, rev, region in slide points x1000, pixel size), the picture.
-    band_blur: Option<((ObjId, u64, [i64; 4], [u32; 2]), TextureHandle)>,
+    band_blur: Option<((ObjId, u64, [i64; 4], [u32; 2], Option<[i64; 2]>), TextureHandle)>,
     /// While the slide's on-screen size keeps changing (panel resize, pinch zoom): the width
     /// asked for last and when; the old picture is shown scaled until it settles.
     resizing: Option<(u32, Instant)>,
@@ -403,11 +403,14 @@ impl Textures {
 
     /// The part `region` (slide points; may reach off the slide) blurred at `px` pixels, with a
     /// 3-pass box blur of `radius` pixels: the slide as shown, what hangs off it faded (25 %),
-    /// transparent elsewhere. Made again only when the region, size or slide changes.
+    /// transparent elsewhere. With `progressive` (the rows where it's full and where sharp, as
+    /// fractions of the height), the blur thins out downwards (the feathered toolbar). Made again
+    /// only when the region, size, slide or rows change.
     #[allow(clippy::too_many_arguments)]
-    pub fn band_blur(&mut self, ctx: &egui::Context, r: &mut Renderer, doc: &Document, scene: &SlideScene, slide: ObjId, rev: u64, region: egui::Rect, px: [u32; 2], radius: usize) -> TextureHandle {
+    pub fn band_blur(&mut self, ctx: &egui::Context, r: &mut Renderer, doc: &Document, scene: &SlideScene, slide: ObjId, rev: u64, region: egui::Rect, px: [u32; 2], radius: usize, progressive: Option<(f32, f32)>) -> TextureHandle {
         let q = |v: f32| (v * 1000.0).round() as i64;
-        let key = (slide, rev, [q(region.min.x), q(region.min.y), q(region.max.x), q(region.max.y)], px);
+        let rows = progressive.map(|(a, b)| [q(a), q(b)]);
+        let key = (slide, rev, [q(region.min.x), q(region.min.y), q(region.max.x), q(region.max.y)], px, rows);
         if let Some((k, t)) = &self.band_blur {
             if *k == key {
                 return t.clone();
@@ -419,6 +422,11 @@ impl Textures {
         r.set_async_images(false);
         let img = guarded("band blur", || {
             let mut pm = sk::Pixmap::new(fw, fh)?;
+            if progressive.is_some() {
+                // (opaque: the canvas round the slide, so the band fades out as one picture)
+                let [r, g, b, _] = crate::theme::CANVAS_BG().to_array();
+                pm.fill(sk::Color::from_rgba8(r, g, b, 255));
+            }
             let mut off = sk::Pixmap::new(fw, fh)?;
             let t = sk::Transform::from_scale(s, s).post_translate(-region.min.x * s, -region.min.y * s);
             for d in &scene.drawables {
@@ -437,7 +445,10 @@ impl Textures {
                 r.draw_scene(doc, scene, &mut sl, st, Filter::Except(&[]), true);
                 pm.draw_pixmap(x0, y0, sl.as_ref(), &sk::PixmapPaint::default(), sk::Transform::identity(), None);
             }
-            Some(crate::glass::box_blur(&color_image(&pm), radius, 3))
+            Some(match progressive {
+                Some((full, sharp)) => crate::glass::progressive_blur(&color_image(&pm), radius, 3, full, sharp),
+                None => crate::glass::box_blur(&color_image(&pm), radius, 3),
+            })
         })
         .flatten()
         .unwrap_or_else(|| ColorImage::new([1, 1], vec![egui::Color32::TRANSPARENT]));
