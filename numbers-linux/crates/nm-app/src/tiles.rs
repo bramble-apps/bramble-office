@@ -161,7 +161,8 @@ impl Tiles {
 
     /// Installed font families.
     pub fn font_families(&self) -> Vec<String> {
-        self.renderer.fonts.families().to_vec()
+        // (with Arial, Times New Roman … drawn by the bundled stand-ins where not installed)
+        self.renderer.fonts.menu_families()
     }
 
     /// Work out the frames of the sheet's auto-sized text boxes (see [`frame`]).
@@ -426,6 +427,22 @@ impl Tiles {
                 return Some((tex.id(), *size));
             }
         }
+        let (pm, size) = self.header_rows_pixmap(doc, d, scale)?;
+        let img = egui::ColorImage::from_rgba_premultiplied([pm.width() as usize, pm.height() as usize], pm.data());
+        let tex = ui.ctx().load_texture(format!("header{}", d.id), img, egui::TextureOptions::LINEAR);
+        let size = egui::vec2(size.0, size.1);
+        let id = tex.id();
+        self.headers.insert(d.id, (version, scale, tex, size));
+        Some((id, size))
+    }
+
+    /// Table `d`'s header rows drawn alone at `scale` pixels a point (a point's margin round
+    /// them), with their size in sheet points (the frozen rows kept in view).
+    pub fn header_rows_pixmap(&mut self, doc: &Document, d: &Drawable, scale: f32) -> Option<(sk::Pixmap, (f32, f32))> {
+        let DrawableKind::Table(t) = &d.kind else { return None };
+        if t.header_rows == 0 {
+            return None;
+        }
         let g = t.frame(&d.geom);
         let h: f32 = t.row_heights.iter().take(t.header_rows as usize).sum();
         let mut strip = d.clone();
@@ -444,12 +461,8 @@ impl Tiles {
         let mut pm = sk::Pixmap::new(wpx.max(1), hpx.max(1))?;
         pm.fill(sk::Color::WHITE);
         self.draw_table(doc, &strip, (0, 0), &mut pm, sk::Transform::from_scale(scale, scale).pre_translate(1.0, 1.0));
-        let img = egui::ColorImage::from_rgba_premultiplied([pm.width() as usize, pm.height() as usize], pm.data());
-        let tex = ui.ctx().load_texture(format!("header{}", d.id), img, egui::TextureOptions::LINEAR);
-        let size = egui::vec2(pm.width() as f32 / scale, pm.height() as f32 / scale);
-        let id = tex.id();
-        self.headers.insert(d.id, (version, scale, tex, size));
-        Some((id, size))
+        let size = (pm.width() as f32 / scale, pm.height() as f32 / scale);
+        Some((pm, size))
     }
 
     /// The header columns of table `d` over rows r0..=r1, as a texture with its size in sheet
@@ -465,6 +478,22 @@ impl Tiles {
             if *v == version && ((*sc - scale).abs() < 1e-4 || self.pinching()) && *rows == (r0, r1) {
                 return Some((tex.id(), *size));
             }
+        }
+        let (pm, size) = self.header_cols_pixmap(doc, d, scale, r0, r1)?;
+        let img = egui::ColorImage::from_rgba_premultiplied([pm.width() as usize, pm.height() as usize], pm.data());
+        let tex = ui.ctx().load_texture(format!("hcols{}", d.id), img, egui::TextureOptions::LINEAR);
+        let size = egui::vec2(size.0, size.1);
+        let id = tex.id();
+        self.header_cols.insert(d.id, (version, scale, (r0, r1), tex, size));
+        Some((id, size))
+    }
+
+    /// Table `d`'s header columns over rows r0..=r1 drawn alone at `scale` pixels a point, with
+    /// their size in sheet points (the frozen columns kept in view).
+    pub fn header_cols_pixmap(&mut self, doc: &Document, d: &Drawable, scale: f32, r0: u32, r1: u32) -> Option<(sk::Pixmap, (f32, f32))> {
+        let DrawableKind::Table(t) = &d.kind else { return None };
+        if t.header_cols == 0 || r0 > r1 || r1 >= t.rows {
+            return None;
         }
         let hc = t.header_cols as usize;
         let cols = t.cols as usize;
@@ -492,12 +521,8 @@ impl Tiles {
         let mut pm = sk::Pixmap::new(wpx.max(1), hpx.max(1))?;
         pm.fill(sk::Color::WHITE);
         self.draw_table(doc, &strip, (r0, 0), &mut pm, sk::Transform::from_scale(scale, scale).pre_translate(1.0, 1.0));
-        let img = egui::ColorImage::from_rgba_premultiplied([pm.width() as usize, pm.height() as usize], pm.data());
-        let tex = ui.ctx().load_texture(format!("hcols{}", d.id), img, egui::TextureOptions::LINEAR);
-        let size = egui::vec2(pm.width() as f32 / scale, pm.height() as f32 / scale);
-        let id = tex.id();
-        self.header_cols.insert(d.id, (version, scale, (r0, r1), tex, size));
-        Some((id, size))
+        let size = (pm.width() as f32 / scale, pm.height() as f32 / scale);
+        Some((pm, size))
     }
 
     /// Draw a table (or a part of one: `off` is its first row and column in the whole table),
@@ -582,6 +607,13 @@ impl Tiles {
     }
 
     fn render_tile(&mut self, doc: &Document, drawables: &[Drawable], tx: i32, ty: i32, span: f32, scale: f32) -> egui::ColorImage {
+        let pm = self.tile_pixmap(doc, drawables, tx, ty, span, scale);
+        egui::ColorImage::from_rgba_premultiplied([TILE as usize, TILE as usize], pm.data())
+    }
+
+    /// Tile (`tx`, `ty`) of the sheet, `span` sheet points square, at `scale` pixels a point:
+    /// [`TILE`] pixels square, white where nothing is (the sheet's own tiles, and a front end's).
+    pub fn tile_pixmap(&mut self, doc: &Document, drawables: &[Drawable], tx: i32, ty: i32, span: f32, scale: f32) -> sk::Pixmap {
         let dbg = std::env::var_os("NM_DEBUG").is_some();
         if dbg {
             eprintln!("render tile {tx},{ty} span {span} scale {scale}");
@@ -613,7 +645,7 @@ impl Tiles {
         if dbg {
             eprintln!("rendered tile {tx},{ty}");
         }
-        egui::ColorImage::from_rgba_premultiplied([TILE as usize, TILE as usize], pm.data())
+        pm
     }
 }
 

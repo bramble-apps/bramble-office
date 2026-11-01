@@ -14,7 +14,7 @@ use crate::app::App;
 use crate::objinsp::{c32, color_button, fill_editor, section, stroke_editor};
 
 /// The selected cells as (table, row0, col0, row1, col1), rows in the table's own order.
-fn range(app: &App) -> Option<(ObjId, u32, u32, u32, u32)> {
+pub(crate) fn range(app: &App) -> Option<(ObjId, u32, u32, u32, u32)> {
     let sel = app.sel?;
     // merged cells are taken in whole (a border round a merge goes round all of it)
     let (r0, c0, r1, c1) = app.with_merges(sel.table, sel.block());
@@ -23,7 +23,7 @@ fn range(app: &App) -> Option<(ObjId, u32, u32, u32, u32)> {
 }
 
 /// The cell the cursor is on.
-fn table_cursor(app: &App) -> Option<(ObjId, u32, u32)> {
+pub(crate) fn table_cursor(app: &App) -> Option<(ObjId, u32, u32)> {
     let sel = app.sel?;
     Some((sel.table, app.mrow(sel.table, sel.cursor.0)?, sel.cursor.1))
 }

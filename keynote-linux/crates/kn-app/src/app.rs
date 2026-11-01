@@ -230,7 +230,13 @@ pub struct DocTab {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, files: Vec<PathBuf>) -> App {
-        theme::apply(&cc.egui_ctx);
+        App::with_ctx(&cc.egui_ctx, files)
+    }
+
+    /// The app on an egui context of its own (the desktop's window's, or one no pass runs on:
+    /// the document library for other front ends, ffi.rs).
+    pub fn with_ctx(ctx: &egui::Context, files: Vec<PathBuf>) -> App {
+        theme::apply(ctx);
         let mut renderer = Renderer::new();
         renderer.enable_async_images();
         let mut app = App {
@@ -350,7 +356,7 @@ impl App {
                 _ => ViewMode::Navigator,
             };
         }
-        crate::settings::apply(&cc.egui_ctx, &app.settings);
+        crate::settings::apply(ctx, &app.settings);
         for f in files {
             app.open_path(f);
         }
@@ -643,7 +649,7 @@ impl App {
         self.bump_all();
     }
 
-    fn set_document(&mut self, doc: Document) {
+    pub(crate) fn set_document(&mut self, doc: Document) {
         self.editing_layouts = None;
         if let Some(p) = &doc.path {
             App::remember(p);
@@ -978,7 +984,7 @@ impl App {
         self.closing = tabs;
     }
 
-    fn tab_dirty(&self, i: usize) -> bool {
+    pub(crate) fn tab_dirty(&self, i: usize) -> bool {
         if i == self.active_tab {
             self.doc.as_ref().is_some_and(|d| d.dirty)
         } else {
@@ -1089,7 +1095,7 @@ impl App {
 
     /// Before putting a newly opened/created presentation in: open it in a new tab when this
     /// one already shows a presentation (Keynote with "Prefer tabs" on).
-    fn make_room(&mut self) {
+    pub(crate) fn make_room(&mut self) {
         if self.doc.is_some() {
             self.new_tab();
         }
@@ -2301,6 +2307,7 @@ impl App {
         crate::themes::chooser(self, &ctx);
         crate::chartedit::ui(self, &ctx);
         crate::settings::settings_window(self, &ctx);
+        crate::remote::tick(self, &ctx);
         crate::spellwin::window(self, &ctx);
         crate::webmedia::window(self, &ctx);
         if self.hub.needs_shapes() {

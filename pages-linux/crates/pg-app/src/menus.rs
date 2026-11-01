@@ -518,6 +518,29 @@ fn has_icons(items: &[Item]) -> bool {
     items.iter().any(|c| icon(&c.label).is_some())
 }
 
+/// What a command's item says now (Show / Hide follow the state, Undo names the step).
+fn shown_label(app: &App, name: &str, item_label: &str) -> String {
+    match name {
+        "Inspector > Hide Inspector" if !app.inspector => "Show Inspector".to_string(),
+        "Comments & Changes > Hide Comments" if !app.show_comments => "Show Comments".to_string(),
+        "Hide Toolbar" if !app.show_toolbar => "Show Toolbar".to_string(),
+        "Show Word Count" if app.word_count => "Hide Word Count".to_string(),
+        "Show Ruler" if app.ruler => "Hide Ruler".to_string(),
+        "Show Tab Bar" if app.tabs.show_bar => "Hide Tab Bar".to_string(),
+        "Guides > Hide Guides" if !crate::guides::shown() => "Show Guides".to_string(),
+        "Guides > Hide Page Template Guides" if !crate::guides::template_shown() => "Show Page Template Guides".to_string(),
+        "Show Layout" if app.show_layout => "Hide Layout".to_string(),
+        "Show Invisibles" if app.invisibles => "Hide Invisibles".to_string(),
+        "Show Comments Pane" if app.comments_pane => "Hide Comments Pane".to_string(),
+        "Enter Screen View" if app.screen_view => "Exit Screen View".to_string(),
+        "Find > Hide Find Panel" if app.find.is_none() => "Show Find Panel".to_string(),
+        "Convert to Word Processing" => "Convert to Word Processing".to_string(),
+        "Undo" => app.hist.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".into()),
+        "Redo" => app.hist.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".into()),
+        _ => item_label.to_string(),
+    }
+}
+
 fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: bool, fired: &mut Option<String>) {
     if item.separator {
         ui.separator();
@@ -561,25 +584,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
     if name == "Convert to Page Layout" && !wp {
         name = "Convert to Word Processing".into();
     }
-    let label = match name.as_str() {
-        "Inspector > Hide Inspector" if !app.inspector => "Show Inspector".to_string(),
-        "Comments & Changes > Hide Comments" if !app.show_comments => "Show Comments".to_string(),
-        "Hide Toolbar" if !app.show_toolbar => "Show Toolbar".to_string(),
-        "Show Word Count" if app.word_count => "Hide Word Count".to_string(),
-        "Show Ruler" if app.ruler => "Hide Ruler".to_string(),
-        "Show Tab Bar" if app.tabs.show_bar => "Hide Tab Bar".to_string(),
-        "Guides > Hide Guides" if !crate::guides::shown() => "Show Guides".to_string(),
-        "Guides > Hide Page Template Guides" if !crate::guides::template_shown() => "Show Page Template Guides".to_string(),
-        "Show Layout" if app.show_layout => "Hide Layout".to_string(),
-        "Show Invisibles" if app.invisibles => "Hide Invisibles".to_string(),
-        "Show Comments Pane" if app.comments_pane => "Hide Comments Pane".to_string(),
-        "Enter Screen View" if app.screen_view => "Exit Screen View".to_string(),
-        "Find > Hide Find Panel" if app.find.is_none() => "Show Find Panel".to_string(),
-        "Convert to Word Processing" => "Convert to Word Processing".to_string(),
-        "Undo" => app.hist.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".into()),
-        "Redo" => app.hist.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".into()),
-        _ => item.label.clone(),
-    };
+    let label = shown_label(app, &name, &item.label);
     let mut b = egui::Button::new(atoms(label, indent));
     let shortcut = match name.as_str() {
         "Zoom > Zoom In" => Some("Ctrl++".to_string()),
@@ -671,6 +676,26 @@ fn shortcut_table() -> &'static [(KeyboardShortcut, String, String)] {
     })
 }
 
+/// The menu command of a key pressed with modifiers (front ends without egui input, ffi.rs):
+/// the menus' shortcuts and the extra ones `shortcuts` handles (Undo, Redo, zoom, font size).
+pub fn shortcut_command(m: Modifiers, key: Key) -> Option<String> {
+    let (cmd, shift) = (m.command || m.ctrl, m.shift);
+    let extra = match key {
+        Key::Plus | Key::Equals if cmd && shift => Some("Font > Bigger"),
+        Key::Minus if cmd && shift => Some("Font > Smaller"),
+        Key::Plus | Key::Equals if cmd => Some("Zoom > Zoom In"),
+        Key::Minus if cmd => Some("Zoom > Zoom Out"),
+        Key::Z if cmd && shift => Some("Redo"),
+        Key::Y if cmd => Some("Redo"),
+        Key::Z if cmd => Some("Undo"),
+        _ => None,
+    };
+    if let Some(e) = extra {
+        return Some(e.to_string());
+    }
+    shortcut_table().iter().find(|(k, _, _)| k.logical_key == key && k.modifiers.shift == shift && k.modifiers.alt == m.alt && (k.modifiers.command || k.modifiers.ctrl) == cmd).map(|(_, name, _)| name.clone())
+}
+
 /// Keyboard shortcuts of the menus.
 pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
     if ctx.egui_wants_keyboard_input() {
@@ -735,57 +760,58 @@ pub fn shortcuts_window(app: &mut App, ctx: &egui::Context) {
     let mut open = true;
     egui::Window::new("Keyboard Shortcuts").open(&mut open).default_size([460.0, 560.0]).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            fn walk(ui: &mut egui::Ui, items: &[Item], parent: &str) {
-                for it in items {
-                    if !it.children.is_empty() {
-                        walk(ui, &it.children, &it.label);
-                    } else if let Some(s) = &it.shortcut {
-                        ui.horizontal(|ui| {
-                            ui.label(command_name(parent, &it.label));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(egui::RichText::new(s).monospace()));
-                        });
-                    }
+            for (title, rows) in shortcut_sections() {
+                ui.add_space(6.0);
+                ui.label(kn_ui::theme::bold(&title));
+                for (what, k) in rows {
+                    ui.horizontal(|ui| {
+                        ui.label(what);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(egui::RichText::new(k).monospace()));
+                    });
                 }
-            }
-            fn has(items: &[Item]) -> bool {
-                items.iter().any(|i| i.shortcut.is_some() || has(&i.children))
-            }
-            for m in menus() {
-                if has(&m.children) {
-                    ui.add_space(6.0);
-                    ui.label(kn_ui::theme::bold(&m.label));
-                    walk(ui, &m.children, &m.label);
-                }
-            }
-            ui.add_space(6.0);
-            ui.label(kn_ui::theme::bold("Text"));
-            for (k, what) in [
-                ("Return", "New paragraph (an empty list item ends the list)"),
-                ("Shift+Return", "Line break"),
-                ("Ctrl+Return", "Page break"),
-                ("Tab / Shift+Tab", "Tab, or list level in a list"),
-                ("Ctrl+Left / Right", "Previous / next word"),
-                ("Alt+Up / Down", "Paragraph start / end"),
-                ("Ctrl+Up / Down, Ctrl+Home / End", "Document start / end"),
-                ("Double-click / triple-click", "Select a word / paragraph"),
-                ("Escape", "Leave a text box's text (the box stays selected)"),
-            ] {
-                ui.horizontal(|ui| {
-                    ui.label(what);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(egui::RichText::new(k).monospace()));
-                });
-            }
-            ui.add_space(6.0);
-            ui.label(kn_ui::theme::bold("Objects"));
-            for (k, what) in [("Delete / Backspace", "Delete the object"), ("Arrows / Shift+arrows", "Move 1 / 10 pt"), ("Return", "Edit a text box's text"), ("Ctrl+drag a handle", "Rotate"), ("Escape", "Deselect")] {
-                ui.horizontal(|ui| {
-                    ui.label(what);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(egui::RichText::new(k).monospace()));
-                });
             }
         });
     });
     app.show_shortcuts = open;
+}
+
+/// Help > Keyboard Shortcuts' list: each menu's commands with shortcuts, then the text and
+/// object keys; (title, [(what, keys)]).
+pub fn shortcut_sections() -> Vec<(String, Vec<(String, String)>)> {
+    fn walk(items: &[Item], parent: &str, out: &mut Vec<(String, String)>) {
+        for it in items {
+            if !it.children.is_empty() {
+                walk(&it.children, &it.label, out);
+            } else if let Some(s) = &it.shortcut {
+                out.push((command_name(parent, &it.label), s.clone()));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for m in menus() {
+        let mut rows = Vec::new();
+        walk(&m.children, &m.label, &mut rows);
+        if !rows.is_empty() {
+            out.push((m.label.clone(), rows));
+        }
+    }
+    let pairs = |v: &[(&str, &str)]| v.iter().map(|(k, w)| (w.to_string(), k.to_string())).collect::<Vec<_>>();
+    out.push((
+        "Text".into(),
+        pairs(&[
+            ("Return", "New paragraph (an empty list item ends the list)"),
+            ("Shift+Return", "Line break"),
+            ("Ctrl+Return", "Page break"),
+            ("Tab / Shift+Tab", "Tab, or list level in a list"),
+            ("Ctrl+Left / Right", "Previous / next word"),
+            ("Alt+Up / Down", "Paragraph start / end"),
+            ("Ctrl+Up / Down, Ctrl+Home / End", "Document start / end"),
+            ("Double-click / triple-click", "Select a word / paragraph"),
+            ("Escape", "Leave a text box's text (the box stays selected)"),
+        ]),
+    ));
+    out.push(("Objects".into(), pairs(&[("Delete / Backspace", "Delete the object"), ("Arrows / Shift+arrows", "Move 1 / 10 pt"), ("Return", "Edit a text box's text"), ("Ctrl+drag a handle", "Rotate"), ("Escape", "Deselect")])));
+    out
 }
 
 /// Help > Letters Help: every command that works and its shortcut, opened in the browser.
@@ -1063,7 +1089,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         n if crate::media::command(app, n) => {}
         // Letters menu
         "About Letters" => app.show_about = true,
-        "Support Development…" => kn_ui::open_url(kn_ui::DONATE_URL),
+        "Support Development…" => crate::ffi::open_url(kn_ui::DONATE_URL),
         "Settings…" => app.show_settings = true,
         "Close" => crate::tabs::request_close(app, false),
         "Quit Letters" | "Close All" => crate::tabs::request_close(app, true),
@@ -1803,153 +1829,331 @@ thread_local! {
     static SPELL_MENU: std::cell::RefCell<Option<((u64, ObjId, usize, usize), (usize, usize, String, bool, Vec<String>))>> = const { std::cell::RefCell::new(None) };
 }
 
-/// The right-click menu for what is under the pointer (body text, an object, an empty page).
-pub fn context_menu(app: &mut App, ui: &mut egui::Ui) {
-    let ctx = ui.ctx().clone();
-    let fire = |ui: &mut egui::Ui, app: &App, label: &str, cmd: &str| -> Option<String> {
-        if ui.add_enabled(enabled(app, cmd), egui::Button::new(label)).clicked() {
-            ui.close();
-            return Some(cmd.to_string());
+/// A menu item as data (the right-click menu's: the desktop draws it with egui, the Flutter front
+/// end with its own widgets; both run the item's action string through `menu_action`).
+#[derive(Clone, Debug)]
+pub enum MItem {
+    /// `action`: "cmd:<menu command>" or one of menu_action's own.
+    Cmd { label: String, action: String, enabled: bool, bold: bool, checked: bool },
+    /// A greyed line of text ("No Guesses Found").
+    Note(String),
+    Sep,
+    Sub { label: String, kids: Vec<MItem> },
+}
+
+impl MItem {
+    fn cmd(app: &App, label: &str, cmd: &str) -> MItem {
+        MItem::Cmd { label: label.into(), action: format!("cmd:{cmd}"), enabled: enabled(app, cmd), bold: false, checked: false }
+    }
+    pub fn act(label: impl Into<String>, action: impl Into<String>) -> MItem {
+        MItem::Cmd { label: label.into(), action: action.into(), enabled: true, bold: false, checked: false }
+    }
+    fn sub(label: &str, kids: Vec<MItem>) -> MItem {
+        MItem::Sub { label: label.into(), kids }
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        use serde_json::json;
+        match self {
+            MItem::Cmd { label, action, enabled, bold, checked } => json!({ "label": label, "action": action, "enabled": enabled, "bold": bold, "checked": checked }),
+            MItem::Note(t) => json!({ "label": t, "note": true }),
+            MItem::Sep => json!({ "separator": true }),
+            MItem::Sub { label, kids } => json!({ "label": label, "kids": kids.iter().map(MItem::to_json).collect::<Vec<_>>() }),
         }
-        None
-    };
-    let mut cmd: Option<String> = None;
-    if matches!(app.cursor, Some(Cursor { owner: Owner::HeaderFooter { .. }, .. })) {
-        // a header / footer field: the clipboard and page numbers
-        for (l, c) in [("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        ui.menu_button("Insert Page Number", |ui| crate::hfnumber::menu_items(app, ui));
-        if ui.button("Insert Page Count").clicked() {
-            ui.close();
-            cmd = Some("Page Count".into());
-        }
-    } else if app.sel.is_some() {
-        // table cells (Pages: the cell menu)
-        for (l, c) in [("Add Row Above", "Table > Add Row Above"), ("Add Row Below", "Table > Add Row Below"), ("Add Column Before", "Table > Add Column Before"), ("Add Column After", "Table > Add Column After")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        for (l, c) in [("Delete Row", "Table > Delete Row"), ("Delete Column", "Table > Delete Column")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        for (l, c) in [("Sort Ascending", "Table > Sort Ascending"), ("Sort Descending", "Table > Sort Descending")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        for (l, c) in [("Merge Cells", "Table > Merge Cells"), ("Unmerge Cells", "Table > Unmerge Cells")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        for (l, c) in [("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Delete", "Delete")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-    } else if !app.selected_objs().is_empty() && app.canvas.editing.is_none() {
-        for (l, c) in [("Bring to Front", "Bring to Front"), ("Send to Back", "Send to Back")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.menu_button("Align Objects", |ui| {
-            for h in ["Left", "Center", "Right", "Top", "Middle", "Bottom"] {
-                cmd = cmd.clone().or(fire(ui, app, h, &format!("Align Objects > {h}")));
-            }
-        });
-        ui.separator();
-        for (l, c) in [("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Duplicate", "Duplicate Selection"), ("Delete", "Delete")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        let locked = app.canvas.obj.is_some_and(|o| app.drawables.iter().any(|d| d.id == o && d.locked));
-        cmd = cmd.or(fire(ui, app, if locked { "Unlock" } else { "Lock" }, if locked { "Unlock" } else { "Lock" }));
-        ui.menu_button("Add Link", |ui| {
-            for k in ["Webpage", "Email", "Phone Number"] {
-                cmd = cmd.clone().or(fire(ui, app, k, &format!("Add Link > {k}")));
-            }
-        });
-        if selected_image(app).is_some() {
-            cmd = cmd.or(fire(ui, app, "Edit Mask", "Image > Edit Mask"));
-            cmd = cmd.or(fire(ui, app, "Reset Mask", "Image > Reset Mask"));
-        }
-    } else if app.cursor.is_some() {
-        // a misspelled word: suggestions first
-        if let Some(c) = app.cursor {
-            // worked out once while the menu stays open (the whole text and the suggestions
-            // each frame made hovering the menu lag)
-            let key = (app.version, c.storage, c.anchor, c.caret);
-            let (a, b, word, bad, sugg) = SPELL_MENU.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.as_ref().is_none_or(|(k, _)| *k != key) {
-                    let text = app.doc().map(|d| d.storage_text(c.storage)).unwrap_or_default();
-                    let (a, b) = if c.is_empty() { crate::canvas::word_at(&text, c.caret) } else { c.range() };
-                    let word = text.get(a..b).unwrap_or("").to_string();
-                    let bad = !word.trim().is_empty() && word.chars().all(|ch| ch.is_alphabetic() || ch == '\'') && !kn_ui::spell::misspelled(&word).is_empty();
-                    let sugg = if bad { kn_ui::spell::suggestions(&word) } else { Vec::new() };
-                    *m = Some((key, (a, b, word, bad, sugg)));
-                }
-                m.as_ref().map(|(_, v)| v.clone()).unwrap_or_default()
-            });
-            if bad {
-                for s in sugg.iter().take(5) {
-                    if ui.button(kn_ui::theme::bold(s)).clicked() {
-                        app.cursor = Some(Cursor { anchor: a, caret: b, ..c });
-                        crate::text::replace_selection(app, s, "Spelling", false);
-                        ui.close();
-                    }
-                }
-                if sugg.is_empty() {
-                    ui.label(egui::RichText::new("No Guesses Found").weak());
-                }
-                if ui.button("Learn Spelling").clicked() {
-                    kn_ui::spell::learn(&word);
+    }
+}
+
+/// Draws `items` with egui; the action of the one clicked, if any.
+pub fn show_items(ui: &mut egui::Ui, items: &[MItem]) -> Option<String> {
+    let mut out = None;
+    for it in items {
+        match it {
+            MItem::Cmd { label, action, enabled, bold, checked } => {
+                let text = if *bold { kn_ui::theme::bold(label.as_str()) } else { egui::RichText::new(label.as_str()) };
+                if ui.add_enabled(*enabled, egui::Button::new(text).selected(*checked)).clicked() {
                     ui.close();
+                    out = Some(action.clone());
                 }
-                if ui.button("Ignore Spelling").clicked() {
-                    kn_ui::spell::ignore(&word);
-                    ui.close();
-                }
+            }
+            MItem::Note(t) => {
+                ui.label(egui::RichText::new(t.as_str()).weak());
+            }
+            MItem::Sep => {
                 ui.separator();
             }
-        }
-        for (l, c) in [("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Paste and Match Style", "Paste and Match Style")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        ui.menu_button("Add Link", |ui| {
-            for k in ["Webpage", "Email", "Phone Number", "Bookmark"] {
-                cmd = cmd.clone().or(fire(ui, app, k, &format!("Add Link > {k}")));
-            }
-        });
-        cmd = cmd.or(fire(ui, app, "Remove Link", "Remove Link"));
-        ui.separator();
-        for (l, c) in [("Comment", "Comment"), ("Highlight", "Highlight"), ("Bookmark", "Bookmark")] {
-            cmd = cmd.or(fire(ui, app, l, c));
-        }
-        ui.separator();
-        ui.menu_button("Transformations", |ui| {
-            for k in ["Make Upper Case", "Make Lower Case", "Capitalize"] {
-                cmd = cmd.clone().or(fire(ui, app, k, &format!("Transformations > {k}")));
-            }
-        });
-    } else {
-        cmd = cmd.or(fire(ui, app, "Paste", "Paste"));
-        if app.wb.as_ref().is_some_and(|w| !w.is_word_processing()) {
-            if ui.button("Add Page").clicked() {
-                let at = app.current_page();
-                app.edit_pages("Add Page", |p, h| p.add_layout_page(h, at));
-                ui.close();
-            }
-            if ui.button("Delete Page").clicked() {
-                let at = app.current_page();
-                app.edit_pages("Delete Page", |p, h| p.delete_layout_page(h, at));
-                ui.close();
+            MItem::Sub { label, kids } => {
+                if let Some(a) = ui.menu_button(label.as_str(), |ui| show_items(ui, kids)).inner.flatten() {
+                    out = Some(a);
+                }
             }
         }
-        cmd = cmd.or(fire(ui, app, "Show Invisibles", "Show Invisibles"));
     }
-    crate::guides::menu_items(app, ui);
-    if let Some(c) = cmd {
-        run(app, &ctx, &c);
+    out
+}
+
+/// Runs a menu item's action (`MItem::Cmd`).
+pub fn menu_action(app: &mut App, ctx: &egui::Context, action: &str) {
+    let (kind, rest) = action.split_once(':').unwrap_or((action, ""));
+    match kind {
+        "cmd" => run(app, ctx, rest),
+        // a spelling suggestion: "spell:<start>:<end>:<word>"
+        "spell" => {
+            let mut p = rest.splitn(3, ':');
+            let (a, b) = (p.next().and_then(|v| v.parse().ok()), p.next().and_then(|v| v.parse().ok()));
+            if let (Some(a), Some(b), Some(w), Some(c)) = (a, b, p.next(), app.cursor) {
+                app.cursor = Some(Cursor { anchor: a, caret: b, ..c });
+                crate::text::replace_selection(app, w, "Spelling", false);
+            }
+        }
+        "learn" => kn_ui::spell::learn(rest),
+        "ignore" => kn_ui::spell::ignore(rest),
+        "page" => {
+            let at = app.current_page();
+            if rest == "add" {
+                app.edit_pages("Add Page", |p, h| p.add_layout_page(h, at));
+            } else {
+                app.edit_pages("Delete Page", |p, h| p.delete_layout_page(h, at));
+            }
+        }
+        "pnum" | "pnumfmt" => crate::hfnumber::action(app, kind, rest),
+        "guide" => crate::guides::add_guide(app, rest == "v"),
+        // the on-page controls of a front end (canvas::overlays "controls")
+        "chartedit" => {
+            if let Ok(id) = rest.parse() {
+                crate::chartedit::open(app, id);
+            }
+        }
+        // "galleryshow:<id>:<image>"
+        "galleryshow" => {
+            if let Some((id, k)) = rest.split_once(':').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?))) {
+                crate::mediainsp::show_image(app, id, k);
+            }
+        }
+        // "mediaplay:<id>:<width px>:<height px>"
+        "mediaplay" => {
+            let p: Vec<u64> = rest.split(':').filter_map(|v| v.parse().ok()).collect();
+            if let [id, w, h] = p[..] {
+                crate::media::play(app, ctx, id, [w as u32, h as u32]);
+            }
+        }
+        // "guideput:<page>:<index, -1 new>:<h|v>:<pos, x removed>"
+        "guideput" => {
+            let p: Vec<&str> = rest.split(':').collect();
+            if let [pi, i, hv, pos] = p[..] {
+                crate::guides::put(app, pi.parse().unwrap_or(0), i.parse().ok(), hv == "v", pos.parse().ok());
+            }
+        }
+        "points" => crate::points::action(app, rest),
+        // the toolbar popovers (chrome.rs): a file the front end picked, a table look, a shape
+        "insert" => crate::media::insert_path(app, std::path::Path::new(rest)),
+        "gallery" => {
+            let files: Vec<std::path::PathBuf> = rest.split('\n').filter(|p| !p.is_empty()).map(std::path::PathBuf::from).collect();
+            crate::media::add_gallery_paths(app, &files);
+        }
+        "table" => crate::chrome::insert_table_style(app, rest.parse().unwrap_or(1)),
+        "shape" => match rest {
+            "text" => crate::insert::insert_object(app, pg_core::objects::NewObject::TextBox),
+            "line" => run(app, ctx, "Line > Line"),
+            "arrow" => run(app, ctx, "Line > Line with Arrowhead"),
+            i => {
+                if let Some(s) = i.parse::<usize>().ok().and_then(|i| BasicShape::ALL.get(i)) {
+                    crate::insert::insert_object(app, NewObject::Shape(*s));
+                }
+            }
+        },
+        "media" => {
+            crate::media::command(app, rest);
+        }
+        "tbl" => crate::tables::api_action(app, rest),
+        "side" => crate::sidebar::api_action(app, rest),
+        "find" => crate::find::api_action(app, rest),
+        "notes" => crate::notes::api_action(app, rest),
+        "tab" => crate::tabs::api_action(app, rest),
+        "ruler" => crate::ruler::api_action(app, rest),
+        "wc" => app.word_count_mode = (app.word_count_mode + 1) % 5,
+        "msg" => app.message = None,
+        // a chart from the Chart popover: "chart:<menu name>:<style preset id>"
+        "chart" => {
+            let (name, preset) = rest.rsplit_once(':').unwrap_or((rest, ""));
+            run(app, ctx, &format!("Chart > {name}"));
+            if let (Ok(preset), &[chart]) = (preset.parse::<ObjId>(), &app.selected_objs()[..]) {
+                if app.doc().and_then(|d| d.chart_preset(chart)) != Some(preset) {
+                    app.edit("Chart Style", |d, h| d.apply_chart_preset(h, chart, preset));
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The right-click menu's items for what is under the pointer (body text, an object, an empty
+/// page), as Pages has them.
+pub fn context_items(app: &App) -> Vec<MItem> {
+    let mut v = Vec::new();
+    let cmds = |v: &mut Vec<MItem>, list: &[(&str, &str)]| {
+        for (l, c) in list {
+            v.push(MItem::cmd(app, l, c));
+        }
+    };
+    if matches!(app.cursor, Some(Cursor { owner: Owner::HeaderFooter { .. }, .. })) {
+        // a header / footer field: the clipboard and page numbers
+        cmds(&mut v, &[("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste")]);
+        v.push(MItem::Sep);
+        v.push(MItem::sub("Insert Page Number", crate::hfnumber::items(app)));
+        v.push(MItem::cmd(app, "Insert Page Count", "Page Count"));
+    } else if app.sel.is_some() {
+        // table cells (Pages: the cell menu)
+        cmds(&mut v, &[("Add Row Above", "Table > Add Row Above"), ("Add Row Below", "Table > Add Row Below"), ("Add Column Before", "Table > Add Column Before"), ("Add Column After", "Table > Add Column After")]);
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Delete Row", "Table > Delete Row"), ("Delete Column", "Table > Delete Column")]);
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Sort Ascending", "Table > Sort Ascending"), ("Sort Descending", "Table > Sort Descending")]);
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Merge Cells", "Table > Merge Cells"), ("Unmerge Cells", "Table > Unmerge Cells")]);
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Delete", "Delete")]);
+    } else if !app.selected_objs().is_empty() && app.canvas.editing.is_none() {
+        cmds(&mut v, &[("Bring to Front", "Bring to Front"), ("Send to Back", "Send to Back")]);
+        v.push(MItem::sub("Align Objects", ["Left", "Center", "Right", "Top", "Middle", "Bottom"].iter().map(|h| MItem::cmd(app, h, &format!("Align Objects > {h}"))).collect()));
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Duplicate", "Duplicate Selection"), ("Delete", "Delete")]);
+        v.push(MItem::Sep);
+        let locked = app.canvas.obj.is_some_and(|o| app.drawables.iter().any(|d| d.id == o && d.locked));
+        let l = if locked { "Unlock" } else { "Lock" };
+        v.push(MItem::cmd(app, l, l));
+        v.push(MItem::sub("Add Link", ["Webpage", "Email", "Phone Number"].iter().map(|k| MItem::cmd(app, k, &format!("Add Link > {k}"))).collect()));
+        if selected_image(app).is_some() {
+            cmds(&mut v, &[("Edit Mask", "Image > Edit Mask"), ("Reset Mask", "Image > Reset Mask")]);
+        }
+    } else if let Some(c) = app.cursor {
+        // a misspelled word: suggestions first (worked out once while the menu stays open: the
+        // whole text and the suggestions each frame made hovering the menu lag)
+        let key = (app.version, c.storage, c.anchor, c.caret);
+        let (a, b, word, bad, sugg) = SPELL_MENU.with(|m| {
+            let mut m = m.borrow_mut();
+            if m.as_ref().is_none_or(|(k, _)| *k != key) {
+                let text = app.doc().map(|d| d.storage_text(c.storage)).unwrap_or_default();
+                let (a, b) = if c.is_empty() { crate::canvas::word_at(&text, c.caret) } else { c.range() };
+                let word = text.get(a..b).unwrap_or("").to_string();
+                let bad = !word.trim().is_empty() && word.chars().all(|ch| ch.is_alphabetic() || ch == '\'') && !kn_ui::spell::misspelled(&word).is_empty();
+                let sugg = if bad { kn_ui::spell::suggestions(&word) } else { Vec::new() };
+                *m = Some((key, (a, b, word, bad, sugg)));
+            }
+            m.as_ref().map(|(_, v)| v.clone()).unwrap_or_default()
+        });
+        if bad {
+            for s in sugg.iter().take(5) {
+                v.push(MItem::Cmd { label: s.clone(), action: format!("spell:{a}:{b}:{s}"), enabled: true, bold: true, checked: false });
+            }
+            if sugg.is_empty() {
+                v.push(MItem::Note("No Guesses Found".into()));
+            }
+            v.push(MItem::act("Learn Spelling", format!("learn:{word}")));
+            v.push(MItem::act("Ignore Spelling", format!("ignore:{word}")));
+            v.push(MItem::Sep);
+        }
+        cmds(&mut v, &[("Cut", "Cut"), ("Copy", "Copy"), ("Paste", "Paste"), ("Paste and Match Style", "Paste and Match Style")]);
+        v.push(MItem::Sep);
+        v.push(MItem::sub("Add Link", ["Webpage", "Email", "Phone Number", "Bookmark"].iter().map(|k| MItem::cmd(app, k, &format!("Add Link > {k}"))).collect()));
+        v.push(MItem::cmd(app, "Remove Link", "Remove Link"));
+        v.push(MItem::Sep);
+        cmds(&mut v, &[("Comment", "Comment"), ("Highlight", "Highlight"), ("Bookmark", "Bookmark")]);
+        v.push(MItem::Sep);
+        v.push(MItem::sub("Transformations", ["Make Upper Case", "Make Lower Case", "Capitalize"].iter().map(|k| MItem::cmd(app, k, &format!("Transformations > {k}"))).collect()));
+    } else {
+        v.push(MItem::cmd(app, "Paste", "Paste"));
+        if app.wb.as_ref().is_some_and(|w| !w.is_word_processing()) {
+            v.push(MItem::act("Add Page", "page:add"));
+            v.push(MItem::act("Delete Page", "page:delete"));
+        }
+        v.push(MItem::cmd(app, "Show Invisibles", "Show Invisibles"));
+    }
+    v.extend(crate::guides::items());
+    v
+}
+
+/// A toolbar popover's contents as data (chrome.rs view_menu, insert_menu, shape_popover…).
+pub fn popover_items(app: &App, id: &str) -> serde_json::Value {
+    use serde_json::json;
+    let list = |v: Vec<MItem>| serde_json::Value::Array(v.iter().map(MItem::to_json).collect());
+    let item = |label: &str, cmd: &str| MItem::cmd(app, label, cmd);
+    let on = |label: &str, cmd: &str, checked: bool| MItem::Cmd { label: label.into(), action: format!("cmd:{cmd}"), enabled: true, bold: false, checked };
+    match id {
+        "View" => list(vec![
+            on(if app.screen_view { "Exit Screen View" } else { "Enter Screen View" }, "Enter Screen View", false),
+            MItem::Sep,
+            on("Page Thumbnails", "Page Thumbnails", app.sidebar == Sidebar::Thumbnails),
+            on("Table of Contents", "Table of Contents", app.sidebar == Sidebar::Toc),
+            on("Document Only", "Document Only", app.sidebar == Sidebar::None),
+            MItem::Sep,
+            on(if app.comments_pane { "Hide Comments Pane" } else { "Show Comments Pane" }, "Show Comments Pane", false),
+            on(if app.show_comments { "Hide Comments" } else { "Show Comments" }, "Comments & Changes > Hide Comments", false),
+            MItem::Sep,
+            on("Show Find & Replace", "Find > Find…", false),
+            on(if app.word_count { "Hide Word Count" } else { "Show Word Count" }, "Show Word Count", false),
+            on(if app.ruler { "Hide Ruler" } else { "Show Ruler" }, "Show Ruler", false),
+            MItem::Sep,
+            on(if app.inspector { "Hide Inspector" } else { "Show Inspector" }, "Inspector > Hide Inspector", false),
+        ]),
+        "Insert" => {
+            let mut v: Vec<MItem> = [("Page Break", "Page Break"), ("Line Break", "Line Break"), ("Section Break", "Section Break"), ("Column Break", "Column Break")].iter().map(|(l, c)| item(l, c)).collect();
+            v.push(MItem::Sep);
+            v.push(MItem::sub("Page Number", crate::hfnumber::items(app)));
+            v.extend([("Page Count", "Page Count"), ("Date & Time", "Date & Time")].iter().map(|(l, c)| item(l, c)));
+            v.push(MItem::Sep);
+            v.extend([("Footnote", "Footnote"), ("Equation…", "Equation…"), ("Link", "Add Link > Webpage"), ("Bookmark", "Bookmark")].iter().map(|(l, c)| item(l, c)));
+            v.push(MItem::Sep);
+            v.push(item("Table of Contents", "Table of Contents > Document"));
+            list(v)
+        }
+        "Media" => {
+            let mut v: Vec<MItem> = ["Choose Photo or Video…", "Content Hub", "Choose Music…", "Add Image Gallery…", "Add Web Video…", "Record Audio"].iter().map(|l| MItem::act(*l, format!("media:{l}"))).collect();
+            v.push(MItem::Sep);
+            v.push(MItem::act("Choose File…", "media:Choose File…"));
+            list(v)
+        }
+        "Shape" => {
+            use pg_core::kn_model::PathEl;
+            let shapes: Vec<serde_json::Value> = BasicShape::ALL
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    let path = pg_core::kn_model::path::from_path_source(&s.path_source(), 100.0, 100.0);
+                    let els: Vec<serde_json::Value> = path
+                        .els
+                        .iter()
+                        .map(|e| match e {
+                            PathEl::Move(p) => json!(["M", p.x, p.y]),
+                            PathEl::Line(p) => json!(["L", p.x, p.y]),
+                            PathEl::Quad(c, p) => json!(["Q", c.x, c.y, p.x, p.y]),
+                            PathEl::Cubic(a, b, p) => json!(["C", a.x, a.y, b.x, b.y, p.x, p.y]),
+                            PathEl::Close => json!(["Z"]),
+                        })
+                        .collect();
+                    json!({ "action": format!("shape:{i}"), "name": s.name(), "path": els })
+                })
+                .collect();
+            json!({ "shapes": shapes })
+        }
+        "Chart" => {
+            let Some(doc) = app.doc() else { return serde_json::Value::Null };
+            let styles: Vec<serde_json::Value> = doc
+                .chart_presets()
+                .iter()
+                .map(|p| json!({ "id": p, "colors": doc.chart_preset_colors(*p).iter().map(|c| json!([c.r, c.g, c.b, c.a])).collect::<Vec<_>>() }))
+                .collect();
+            json!({ "styles": styles })
+        }
+        _ => serde_json::Value::Null,
+    }
+}
+
+/// The right-click menu for what is under the pointer.
+pub fn context_menu(app: &mut App, ui: &mut egui::Ui) {
+    let ctx = ui.ctx().clone();
+    let items = context_items(app);
+    if let Some(a) = show_items(ui, &items) {
+        menu_action(app, &ctx, &a);
     }
 }
 
@@ -1979,4 +2183,27 @@ mod audit {
             println!("  {c}");
         }
     }
+}
+
+/// The menus as data, as the desktop shows them now (for the Flutter front end, ffi.rs).
+pub fn as_data(app: &App) -> serde_json::Value {
+    fn item(app: &App, parent: &str, it: &Item) -> serde_json::Value {
+        if it.separator {
+            return serde_json::json!({ "separator": true });
+        }
+        if it.label == "Open Recent" {
+            let kids: Vec<serde_json::Value> = app.recent().iter().map(|p| serde_json::json!({ "label": p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), "command": format!("open:{}", p.display()), "enabled": true })).collect();
+            return serde_json::json!({ "label": "Open Recent", "kids": kids, "enabled": !kids.is_empty() });
+        }
+        if !it.children.is_empty() {
+            let kids: Vec<serde_json::Value> = it.children.iter().map(|c| item(app, &it.label, c)).collect();
+            return serde_json::json!({ "label": it.label, "kids": kids, "enabled": true });
+        }
+        let mut name = command_name(parent, &it.label);
+        if name == "Convert to Page Layout" && !app.wb.as_ref().is_some_and(|w| w.is_word_processing()) {
+            name = "Convert to Word Processing".into();
+        }
+        serde_json::json!({ "label": shown_label(app, &name, &it.label), "command": name, "enabled": enabled(app, &name), "checked": checked(app, &name), "shortcut": it.shortcut })
+    }
+    serde_json::Value::Array(menus().iter().map(|m| item(app, "", m)).collect())
 }

@@ -9,6 +9,10 @@ use kn_model::insert::{BasicShape, NewObject};
 
 use crate::app::{App, InspectorKind, ViewMode};
 
+// the menus as data, for front ends that draw them (ffi.rs)
+#[path = "menusapi.rs"]
+pub mod api;
+
 #[derive(Debug)]
 pub struct Item {
     pub label: String,
@@ -789,15 +793,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
     if let Some(s) = &item.shortcut {
         b = b.shortcut_text(s);
     }
-    let shown = match item.label.as_str() {
-        "Hide Inspector" if !app.show_inspector => Some("Show Inspector"),
-        "Hide Toolbar" if !app.show_toolbar => Some("Show Toolbar"),
-        "Show Object List" if app.show_object_list => Some("Hide Object List"),
-        "Hide Guides" if !app.show_guides => Some("Show Guides"),
-        "Hide Tab Bar" if !app.show_tab_bar => Some("Show Tab Bar"),
-        "Show Slide Layout Guides" if app.show_layout_guides => Some("Hide Slide Layout Guides"),
-        _ => None,
-    };
+    let shown = shown_label(app, &item.label);
     if let Some(l) = shown {
         let mut b2 = if indent { egui::Button::new((lead(), l)) } else { egui::Button::new(l) };
         if let Some(s) = &item.shortcut {
@@ -809,7 +805,37 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
         }
         return;
     }
-    let checked = match item.label.as_str() {
+    let checked = checked(app, &item.label);
+    if checked == Some(true) {
+        b = b.selected(true);
+    }
+    let on = enabled(app, &name);
+    let resp = ui.add_enabled(on, b);
+    if let Some(i) = icon {
+        paint_icon(ui, resp.rect, i, on);
+    }
+    if resp.clicked() {
+        *fired = Some(name);
+        ui.close();
+    }
+}
+
+/// The label a menu item shows now, when it follows the state ("Show Inspector" / "Hide Inspector").
+pub(crate) fn shown_label(app: &App, label: &str) -> Option<&'static str> {
+    match label {
+        "Hide Inspector" if !app.show_inspector => Some("Show Inspector"),
+        "Hide Toolbar" if !app.show_toolbar => Some("Show Toolbar"),
+        "Show Object List" if app.show_object_list => Some("Hide Object List"),
+        "Hide Guides" if !app.show_guides => Some("Show Guides"),
+        "Hide Tab Bar" if !app.show_tab_bar => Some("Show Tab Bar"),
+        "Show Slide Layout Guides" if app.show_layout_guides => Some("Hide Slide Layout Guides"),
+        _ => None,
+    }
+}
+
+/// Whether a menu item shows a tick now (None: it never does).
+pub(crate) fn checked(app: &App, label: &str) -> Option<bool> {
+    match label {
         "Navigator" => Some(app.view == ViewMode::Navigator),
         "Slide Only" => Some(app.view == ViewMode::SlideOnly),
         "Light Table" => Some(app.view == ViewMode::LightTable),
@@ -822,7 +848,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
         "Single File" => app.doc.as_ref().map(|d| !d.package),
         "Package" => app.doc.as_ref().map(|d| d.package),
         "Show Borders" | "Show Y Axis Title" | "Show Y Axis Labels" | "Show Y Axis 2 Title" | "Show Y Axis 2 Labels" | "Show X Axis Title" | "Show X Axis Labels" | "Show Series Value Labels" | "Show Series Names" => {
-            selected_chart(app).and_then(|id| chart_flag_state(app, id, item.label.as_str()))
+            selected_chart(app).and_then(|id| chart_flag_state(app, id, label))
         }
         "Show Presenter Display in Window" => Some(app.settings.presenter_in_window),
         "Auto-Center" => Some(app.auto_center),
@@ -844,18 +870,6 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
         "Text Replacement" => Some(app.settings.text_replacement),
         "In Fullscreen" => Some(!app.settings.play_in_window),
         _ => None,
-    };
-    if checked == Some(true) {
-        b = b.selected(true);
-    }
-    let on = enabled(app, &name);
-    let resp = ui.add_enabled(on, b);
-    if let Some(i) = icon {
-        paint_icon(ui, resp.rect, i, on);
-    }
-    if resp.clicked() {
-        *fired = Some(name);
-        ui.close();
     }
 }
 

@@ -477,7 +477,7 @@ pub(crate) fn table_popover(app: &mut App, ui: &mut egui::Ui) {
 /// The toolbar's Shape popover (Numbers 15.4: Line, Rounded Rectangle, Circle, Square, Arrow
 /// among its first tiles), drawn as the shapes.
 /// Numbers 15.4's Shape popover tiles, in order.
-const SHAPE_TILES: [&str; 12] = ["Text", "Line", "Curve", "Rounded Rectangle", "Circle", "Triangle", "Pentagon", "Square", "Diamond", "Capsule", "Parallelogram", "Arrow"];
+pub(crate) const SHAPE_TILES: [&str; 12] = ["Text", "Line", "Curve", "Rounded Rectangle", "Circle", "Triangle", "Pentagon", "Square", "Diamond", "Capsule", "Parallelogram", "Arrow"];
 
 pub(crate) fn shape_popover(app: &mut App, ui: &mut egui::Ui) {
     // Numbers 15.4's Shape popover (N-ui-5-toolbar-Shape): Text, Line, Curve; Rounded
@@ -646,7 +646,7 @@ pub(crate) fn insert_from_hub(app: &mut App, p: kn_ui::contenthub::Picked) {
 }
 
 /// Inserts one of the Shape popover's tiles.
-fn insert_tile(app: &mut App, name: &'static str) {
+pub(crate) fn insert_tile(app: &mut App, name: &'static str) {
     use nm_core::kn_model::insert::BasicShape;
     match name {
         "Text" => app.insert_text_box(),

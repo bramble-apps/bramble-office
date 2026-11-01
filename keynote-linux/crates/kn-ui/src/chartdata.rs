@@ -240,22 +240,93 @@ impl ChartDataEditor {
                     }
                 });
             });
-            let (series, cats) = if lay.by_row { ("rows", "columns") } else { ("columns", "rows") };
-            let note = if lay.is_round() {
-                format!("Each series ({series}) is a wedge, sized by its first value; the other {cats} aren't drawn.")
-            } else if lay.is_bubble() {
-                format!("Series are {series}: X, Y and bubble Size{}.", if lay.shared_x { " (one X for every series)" } else { " for each series" })
-            } else if lay.is_xy() {
-                format!("Series are {series}: X and Y values{}.", if lay.shared_x { " (one X for every series)" } else { " for each series" })
-            } else {
-                format!("Series are {series}, categories are {cats}. Empty cells are left blank in the chart.")
-            };
+            let note = self.note();
             ui.label(RichText::new(note).small().color(theme::TEXT_DIM()));
         });
         if grid_changed && act == DataAction::None {
             act = DataAction::Grid(self.grid());
         }
         (open, act)
+    }
+}
+
+impl ChartDataEditor {
+    /// The line under the grid: how this chart reads it.
+    fn note(&self) -> String {
+        let lay = &self.layout;
+        let (series, cats) = if lay.by_row { ("rows", "columns") } else { ("columns", "rows") };
+        if lay.is_round() {
+            format!("Each series ({series}) is a wedge, sized by its first value; the other {cats} aren't drawn.")
+        } else if lay.is_bubble() {
+            format!("Series are {series}: X, Y and bubble Size{}.", if lay.shared_x { " (one X for every series)" } else { " for each series" })
+        } else if lay.is_xy() {
+            format!("Series are {series}: X and Y values{}.", if lay.shared_x { " (one X for every series)" } else { " for each series" })
+        } else {
+            format!("Series are {series}, categories are {cats}. Empty cells are left blank in the chart.")
+        }
+    }
+
+    /// The editor as data, for front ends that draw it themselves (Letters' Flutter app):
+    /// what `window` shows.
+    pub fn api_state(&self) -> serde_json::Value {
+        let lay = &self.layout;
+        let n = self.series_count();
+        let cats = if lay.by_row { self.names_c.len() } else { self.names_r.len() };
+        let role = |r: SeriesRole| match r {
+            SeriesRole::X => "X",
+            SeriesRole::Y => "Y",
+            SeriesRole::Size => "Size",
+            SeriesRole::Values => "",
+        };
+        serde_json::json!({
+            "byRow": lay.by_row,
+            "xy": lay.is_xy(),
+            "sharedX": lay.shared_x,
+            "rowNames": self.names_r,
+            "colNames": self.names_c,
+            "cells": self.cells,
+            "colors": (0..n).map(|i| self.color(i).map(|c| c.to_srgba_unmultiplied())).collect::<Vec<_>>(),
+            "roles": (0..n).map(|i| role(lay.role(i))).collect::<Vec<_>>(),
+            "used": (0..cats).map(|i| lay.category_used(i)).collect::<Vec<_>>(),
+            "canRemoveSeries": n > 1,
+            "canRemoveCategory": cats > 1,
+            "note": self.note(),
+        })
+    }
+
+    /// A change from such a front end, as `window` makes it: "dir" (0 rows, 1 columns),
+    /// "sharedX", "addSeries", "addCategory", "removeSeries", "removeCategory", or an edited
+    /// "rowName" / "colName" ({i, text}) or "cell" ({r, c, text}).
+    pub fn api_action(&mut self, key: &str, v: &serde_json::Value) -> DataAction {
+        let by_row = self.layout.by_row;
+        let i = |k: &str| v.get(k).and_then(serde_json::Value::as_u64).unwrap_or(0) as usize;
+        let text = v.get("text").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+        match key {
+            "dir" => return DataAction::Direction(v.as_u64() == Some(0)),
+            "sharedX" => return DataAction::SharedX(v.as_bool().unwrap_or(false)),
+            "addSeries" => self.add_series(),
+            "addCategory" => self.add_category(),
+            "removeSeries" if self.series_count() > 1 => {
+                if by_row { self.remove_row() } else { self.remove_col() }
+            }
+            "removeCategory" if (if by_row { self.names_c.len() } else { self.names_r.len() }) > 1 => {
+                if by_row { self.remove_col() } else { self.remove_row() }
+            }
+            "rowName" => match self.names_r.get_mut(i("i")) {
+                Some(n) => *n = text,
+                None => return DataAction::None,
+            },
+            "colName" => match self.names_c.get_mut(i("i")) {
+                Some(n) => *n = text,
+                None => return DataAction::None,
+            },
+            "cell" => match self.cells.get_mut(i("r")).and_then(|r| r.get_mut(i("c"))) {
+                Some(c) => *c = text,
+                None => return DataAction::None,
+            },
+            _ => return DataAction::None,
+        }
+        DataAction::Grid(self.grid())
     }
 }
 

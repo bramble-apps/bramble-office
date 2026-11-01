@@ -206,7 +206,10 @@ impl Layout {
 
     /// The page and line holding shown offset `s` (caret placement).
     pub fn line_at(&self, s: usize) -> Option<(usize, &PlacedLine)> {
-        let pi = self.pages.iter().rposition(|p| p.start <= s).unwrap_or(0);
+        // the last page starting at or before `s` whose lines reach it (a page with no body
+        // lines of its own, a picture page, can carry a start that isn't in order)
+        let reaches = |p: &Page| p.start <= s && p.lines.iter().any(|l| l.range().0 <= s && s <= l.range().1);
+        let pi = self.pages.iter().rposition(reaches).or_else(|| self.pages.iter().rposition(|p| p.start <= s)).unwrap_or(0);
         let p = self.pages.get(pi)?;
         // lines of a page are in text order; a position at a line's end belongs to it, unless
         // the next line starts there

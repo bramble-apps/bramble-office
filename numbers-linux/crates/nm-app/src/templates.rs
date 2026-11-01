@@ -193,11 +193,11 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
 }
 
 /// The start screen's own templates: (name, Table popover style).
-const STARTERS: [(&str, usize); 6] = [("Blank", 0), ("Basic", 1), ("Plain", 2), ("Totals", 3), ("Checklist", 4), ("Stocks", 5)];
+pub(crate) const STARTERS: [(&str, usize); 6] = [("Blank", 0), ("Basic", 1), ("Plain", 2), ("Totals", 3), ("Checklist", 4), ("Stocks", 5)];
 
 /// Blank's table swapped for one in Table popover style `style` (Blank's own is style 0), in
 /// the same place.
-fn with_table_style(doc: &mut nm_core::kn_model::Document, style: usize) {
+pub(crate) fn with_table_style(doc: &mut nm_core::kn_model::Document, style: usize) {
     if style == 0 {
         return;
     }

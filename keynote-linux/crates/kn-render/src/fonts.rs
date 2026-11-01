@@ -28,7 +28,7 @@ pub struct Fonts {
 }
 
 /// Fonts built into every suite app: (PostScript name, file).
-const BUNDLED: [(&str, &[u8]); 8] = [
+const BUNDLED: [(&str, &[u8]); 20] = [
     ("Carlito", include_bytes!("../fonts/carlito/Carlito-Regular.ttf")),
     ("Carlito-Bold", include_bytes!("../fonts/carlito/Carlito-Bold.ttf")),
     ("Carlito-Italic", include_bytes!("../fonts/carlito/Carlito-Italic.ttf")),
@@ -37,6 +37,28 @@ const BUNDLED: [(&str, &[u8]); 8] = [
     ("Caladea-Bold", include_bytes!("../fonts/caladea/caladea-bold.ttf")),
     ("Caladea-Italic", include_bytes!("../fonts/caladea/caladea-italic.ttf")),
     ("Caladea-BoldItalic", include_bytes!("../fonts/caladea/caladea-bolditalic.ttf")),
+    ("LiberationSans", include_bytes!("../fonts/liberation/LiberationSans-Regular.ttf")),
+    ("LiberationSans-Bold", include_bytes!("../fonts/liberation/LiberationSans-Bold.ttf")),
+    ("LiberationSans-Italic", include_bytes!("../fonts/liberation/LiberationSans-Italic.ttf")),
+    ("LiberationSans-BoldItalic", include_bytes!("../fonts/liberation/LiberationSans-BoldItalic.ttf")),
+    ("LiberationSerif", include_bytes!("../fonts/liberation/LiberationSerif-Regular.ttf")),
+    ("LiberationSerif-Bold", include_bytes!("../fonts/liberation/LiberationSerif-Bold.ttf")),
+    ("LiberationSerif-Italic", include_bytes!("../fonts/liberation/LiberationSerif-Italic.ttf")),
+    ("LiberationSerif-BoldItalic", include_bytes!("../fonts/liberation/LiberationSerif-BoldItalic.ttf")),
+    ("LiberationMono", include_bytes!("../fonts/liberation/LiberationMono-Regular.ttf")),
+    ("LiberationMono-Bold", include_bytes!("../fonts/liberation/LiberationMono-Bold.ttf")),
+    ("LiberationMono-Italic", include_bytes!("../fonts/liberation/LiberationMono-Italic.ttf")),
+    ("LiberationMono-BoldItalic", include_bytes!("../fonts/liberation/LiberationMono-BoldItalic.ttf")),
+];
+
+/// The Microsoft fonts people expect in a font menu, with the bundled metric copies that draw
+/// them when they aren't installed: (family, PostScript name stored in documents, stand-in).
+const EXPECTED: [(&str, &str, &str); 5] = [
+    ("Arial", "ArialMT", "Liberation Sans"),
+    ("Times New Roman", "TimesNewRomanPSMT", "Liberation Serif"),
+    ("Courier New", "CourierNewPSMT", "Liberation Mono"),
+    ("Calibri", "Calibri", "Carlito"),
+    ("Cambria", "Cambria", "Caladea"),
 ];
 
 /// OnlyOffice's stand-ins for fonts that aren't installed (its own metric copies first: what a
@@ -50,8 +72,8 @@ fn word_stand_ins(base: &str) -> Option<&'static [&'static str]> {
     let b = base.to_ascii_lowercase().replace([' ', '-'], "");
     Some(match b.as_str() {
         "helvetica" | "helveticaneue" | "arial" | "arialmt" | "sfprotext" | "sfprodisplay" | "systemfont" | "segoeui" | "tahoma" | "verdana" => &["Liberation Sans", "Arimo"],
-        "timesnewroman" | "timesnewromanps" | "times" | "timesroman" => &["Liberation Serif", "Tinos"],
-        "couriernew" | "courier" | "couriernewps" => &["Liberation Mono", "Cousine"],
+        "timesnewroman" | "timesnewromanps" | "timesnewromanpsmt" | "times" | "timesroman" => &["Liberation Serif", "Tinos"],
+        "couriernew" | "courier" | "couriernewps" | "couriernewpsmt" => &["Liberation Mono", "Cousine"],
         "calibri" => &["Carlito"],
         "cambria" => &["Caladea"],
         "arialnarrow" => &["Liberation Sans Narrow"],
@@ -102,16 +124,19 @@ fn win_metrics(data: &[u8], index: u32) -> Option<(f32, f32, f32)> {
 fn substitutes(base: &str) -> &'static [&'static str] {
     let b = base.to_ascii_lowercase().replace([' ', '-'], "");
     match b.as_str() {
+"arial" | "arialmt" => &["Liberation Sans", "Arimo", "Helvetica Neue", "Nimbus Sans", "DejaVu Sans"],
+        "timesnewroman" | "timesnewromanps" | "timesnewromanpsmt" => &["Liberation Serif", "Tinos", "Nimbus Roman", "Georgia", "DejaVu Serif"],
+        "couriernew" | "couriernewps" | "couriernewpsmt" => &["Liberation Mono", "Cousine", "Nimbus Mono PS", "DejaVu Sans Mono"],
         "helveticaneue" | "helvetica" | "sfprodisplay" | "sfprotext" | "sfpro" | ".sfnsdisplay" | ".sfnstext"
-        | "systemfont" | "applesystemuifont" | "arial" | "arialmt" | "lucidagrande" | "geneva" | "avenir"
+        | "systemfont" | "applesystemuifont" | "lucidagrande" | "geneva" | "avenir"
         | "avenirnext" | "gillsans" | "futura" | "verdana" | "tahoma" | "trebuchetms" | "optima" => {
             &["Helvetica Neue", "Helvetica", "Inter", "Nimbus Sans", "Liberation Sans", "Arimo", "DejaVu Sans", "Noto Sans"]
         }
-        "timesnewroman" | "timesnewromanps" | "times" | "timesroman" | "georgia" | "baskerville"
+"times" | "timesroman" | "georgia" | "baskerville"
         | "hoeferText" | "didot" | "garamond" | "bigcaslon" | "charter" | "iowanoldstyle" | "newyork" => {
             &["Georgia", "Gelasio", "Nimbus Roman", "Liberation Serif", "Tinos", "DejaVu Serif", "Noto Serif"]
         }
-        "courier" | "couriernew" | "couriernewps" | "menlo" | "monaco" | "sfmono" | "andalemono" => {
+"courier" | "menlo" | "monaco" | "sfmono" | "andalemono" => {
             &["Menlo", "Nimbus Mono PS", "Liberation Mono", "Cousine", "DejaVu Sans Mono", "Noto Sans Mono"]
         }
         "markerfelt" | "chalkboard" | "chalkboardse" | "noteworthy" | "chalkduster" | "comicsansms" => {
@@ -203,8 +228,28 @@ impl Fonts {
         &self.families
     }
 
+    /// The families for a font menu: the installed ones, and Arial, Times New Roman, Courier
+    /// New, Calibri and Cambria when they aren't (drawn with the bundled metric copies).
+    pub fn menu_families(&self) -> Vec<String> {
+        let mut out = self.families.clone();
+        for (fam, _, _) in EXPECTED {
+            if !self.has_family(fam) {
+                out.push(fam.to_string());
+            }
+        }
+        out.sort_by_key(|f| f.to_lowercase());
+        out
+    }
+
     /// PostScript name of a family's regular face (what Keynote stores as `font_name`).
     pub fn ps_name_for_family(&self, family: &str) -> Option<String> {
+        // (Arial and the others when only their stand-ins are here: their own names, so the
+        // document keeps asking for Arial)
+        if !self.has_family(family) {
+            if let Some((_, ps, _)) = EXPECTED.iter().find(|(f, _, _)| f.eq_ignore_ascii_case(family)) {
+                return Some(ps.to_string());
+            }
+        }
         let faces: Vec<_> = self.fs.db().faces().filter(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(family))).collect();
         faces
             .iter()
@@ -426,5 +471,15 @@ mod bundled_tests {
         assert_eq!(f.choose("Calibri", false, false).family, "Carlito");
         assert_eq!(f.choose("Calibri-Bold", true, false).family, "Carlito");
         assert_eq!(f.choose("Cambria", false, true).family, "Caladea");
+        // Arial and co. in the font menu, drawn with the bundled Liberation copies
+        let menu = f.menu_families();
+        assert!(["Arial", "Times New Roman", "Courier New"].iter().all(|n| menu.iter().any(|m| m == n)), "{menu:?}");
+        if !f.has_family("Arial") {
+            assert_eq!(f.ps_name_for_family("Arial").as_deref(), Some("ArialMT"));
+            assert_eq!(f.choose("ArialMT", false, false).family, "Liberation Sans");
+        }
+        if !f.has_family("Times New Roman") {
+            assert_eq!(f.choose("TimesNewRomanPSMT", true, false).family, "Liberation Serif");
+        }
     }
 }

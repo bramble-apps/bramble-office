@@ -65,32 +65,38 @@ fn link_window(app: &mut App, ctx: &egui::Context) {
     });
     match done {
         Some(true) => {
-            let t = text.trim();
-            let url = match kind.as_str() {
-                "Email" => format!("mailto:{}", t.trim_start_matches("mailto:")),
-                "Phone Number" => format!("tel:{}", t.trim_start_matches("tel:").replace(' ', "")),
-                "Bookmark" => format!("#bookmark-{t}"),
-                _ if t.contains("://") => t.to_string(),
-                _ => format!("https://{t}"),
-            };
             app.link_edit = None;
-            match app.cursor.filter(|c| !c.is_empty()) {
-                Some(c) => {
-                    let (a, b) = c.range();
-                    app.edit_pages("Add Link", |p, h| p.add_link(h, c.storage, a, b, &url));
-                }
-                None => {
-                    let ids = app.selected_objs();
-                    app.edit("Add Link", |d, h| {
-                        for id in &ids {
-                            d.set_hyperlink(h, *id, Some(&url));
-                        }
-                    });
-                }
-            }
+            link_done(app, &kind, &text);
         }
         Some(false) => app.link_edit = None,
         None => app.link_edit = Some((kind, text)),
+    }
+}
+
+/// Add Link's Done: the link (a URL made from what was typed for its kind) on the selected
+/// text or objects.
+pub fn link_done(app: &mut App, kind: &str, text: &str) {
+    let t = text.trim();
+    let url = match kind {
+        "Email" => format!("mailto:{}", t.trim_start_matches("mailto:")),
+        "Phone Number" => format!("tel:{}", t.trim_start_matches("tel:").replace(' ', "")),
+        "Bookmark" => format!("#bookmark-{t}"),
+        _ if t.contains("://") => t.to_string(),
+        _ => format!("https://{t}"),
+    };
+    match app.cursor.filter(|c| !c.is_empty()) {
+        Some(c) => {
+            let (a, b) = c.range();
+            app.edit_pages("Add Link", |p, h| p.add_link(h, c.storage, a, b, &url));
+        }
+        None => {
+            let ids = app.selected_objs();
+            app.edit("Add Link", |d, h| {
+                for id in &ids {
+                    d.set_hyperlink(h, *id, Some(&url));
+                }
+            });
+        }
     }
 }
 
@@ -114,32 +120,38 @@ fn comment_window(app: &mut App, ctx: &egui::Context) {
     match done {
         Some(true) => {
             app.comment_edit = None;
-            let who = crate::text::author(app);
-            match hl {
-                Some(h) => {
-                    app.edit_pages("Edit Comment", |p, hi| p.set_text_comment(hi, h, text.trim()));
-                }
-                None => {
-                    if let Some(c) = app.cursor {
-                        let (mut a, mut b) = c.range();
-                        if a == b {
-                            // the word at the caret
-                            let t = app.doc().map(|d| d.storage_text(c.storage)).unwrap_or_default();
-                            (a, b) = crate::canvas::word_at(&t, a);
-                        }
-                        let st = c.storage;
-                        let t = text.trim().to_string();
-                        let res = app.edit_pages("Add Comment", |p, h| p.add_text_comment(h, st, a, b, &t, &who));
-                        if res.flatten().is_none() {
-                            app.notify("Select some text to comment on.");
-                        }
-                        app.show_comments = true;
-                    }
-                }
-            }
+            comment_done(app, hl, &text);
         }
         Some(false) => app.comment_edit = None,
         None => app.comment_edit = Some((hl, text)),
+    }
+}
+
+/// The comment window's Done: an existing comment's new text, or a new comment over the
+/// selection (the word at the caret).
+pub fn comment_done(app: &mut App, hl: Option<pg_core::kn_format::ObjId>, text: &str) {
+    let who = crate::text::author(app);
+    match hl {
+        Some(h) => {
+            app.edit_pages("Edit Comment", |p, hi| p.set_text_comment(hi, h, text.trim()));
+        }
+        None => {
+            if let Some(c) = app.cursor {
+                let (mut a, mut b) = c.range();
+                if a == b {
+                    // the word at the caret
+                    let t = app.doc().map(|d| d.storage_text(c.storage)).unwrap_or_default();
+                    (a, b) = crate::canvas::word_at(&t, a);
+                }
+                let st = c.storage;
+                let t = text.trim().to_string();
+                let res = app.edit_pages("Add Comment", |p, h| p.add_text_comment(h, st, a, b, &t, &who));
+                if res.flatten().is_none() {
+                    app.notify("Select some text to comment on.");
+                }
+                app.show_comments = true;
+            }
+        }
     }
 }
 
@@ -163,18 +175,7 @@ fn colors_window(app: &mut App, ctx: &egui::Context) {
         app.colors_pick = c;
         app.show_colors = open;
         if apply {
-            let col = crate::objinsp::from_c32(c);
-            if app.cursor.is_some_and(|c| !c.is_empty()) {
-                crate::textinsp::apply_char(app, "Text Color", crate::text::CharChange::Color(col));
-            } else {
-                let ids = app.selected_objs();
-                let spec = pg_core::kn_model::format::FillSpec::Color(col);
-                app.edit("Fill", |d, h| {
-                    for i in &ids {
-                        d.set_fill(h, *i, &spec);
-                    }
-                });
-            }
+            apply_colors(app, c);
         }
     }
     if app.color_state.saved != before {
@@ -183,8 +184,25 @@ fn colors_window(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// The Colors window's Apply to Selection: the colour on the selected text, else as the
+/// selected objects' fill.
+pub fn apply_colors(app: &mut App, c: Color32) {
+    let col = crate::objinsp::from_c32(c);
+    if app.cursor.is_some_and(|c| !c.is_empty()) {
+        crate::textinsp::apply_char(app, "Text Color", crate::text::CharChange::Color(col));
+    } else {
+        let ids = app.selected_objs();
+        let spec = pg_core::kn_model::format::FillSpec::Color(col);
+        app.edit("Fill", |d, h| {
+            for i in &ids {
+                d.set_fill(h, *i, &spec);
+            }
+        });
+    }
+}
+
 /// A recent document's first page as PNG (Word, RTF and text files hold no preview picture).
-fn first_page_png(p: &std::path::Path) -> Option<Vec<u8>> {
+pub(crate) fn first_page_png(p: &std::path::Path) -> Option<Vec<u8>> {
     let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let doc = match ext.as_str() {
         "docx" => pg_core::wordmode::open_docx(p).ok().map(|o| o.pages),
@@ -201,8 +219,7 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
     if !app.chooser {
         return;
     }
-    const ITEMS: [&str; 6] = ["Blank", "Blank Landscape", "Blank A4", "Note Taking", "Blank Layout", "Essay"];
-    let templates: Vec<kn_ui::welcome::Template> = ITEMS.iter().map(|n| kn_ui::welcome::Template { name: n.to_string(), preview: None }).collect();
+    let templates: Vec<kn_ui::welcome::Template> = crate::chooserapi::ITEMS.iter().map(|n| kn_ui::welcome::Template { name: n.to_string(), preview: None }).collect();
     let recent = app.recent();
     // a hint of each template's contents on its page
     let draw = |p: &egui::Painter, tile: egui::Rect, i: usize| {
@@ -287,26 +304,31 @@ fn new_style(app: &mut App, ctx: &egui::Context) {
     match done {
         Some(true) => {
             app.new_style = None;
-            let Some(c) = app.cursor else { return };
-            let (a, b) = c.range();
-            let st = c.storage;
-            let n = name.trim().to_string();
-            app.edit("Create Style", |d, h| {
-                let Some(cur) = pg_core::edit::para_style_at(d, st, a) else { return };
-                let sheet = d.file.stylesheet_id();
-                let touch: Vec<_> = sheet.into_iter().collect();
-                let Ok(v) = d.structural(h, &touch, |k| k.new_style_variation(cur)) else { return };
-                d.touch(h, v);
-                if let Some(s) = d.file.obj_mut(v).and_then(|m| m.find_super_mut("TSS.StyleArchive")) {
-                    s.set_str("name", &n);
-                    s.set_bool("is_variation", false);
-                }
-                pg_core::edit::set_para_style(d, h, st, a, b, v);
-            });
+            new_style_done(app, &name);
         }
         Some(false) => app.new_style = None,
         None => app.new_style = Some(name),
     }
+}
+
+/// Create Style's Create: a paragraph style named so, from the caret's paragraph's.
+pub fn new_style_done(app: &mut App, name: &str) {
+    let Some(c) = app.cursor else { return };
+    let (a, b) = c.range();
+    let st = c.storage;
+    let n = name.trim().to_string();
+    app.edit("Create Style", |d, h| {
+        let Some(cur) = pg_core::edit::para_style_at(d, st, a) else { return };
+        let sheet = d.file.stylesheet_id();
+        let touch: Vec<_> = sheet.into_iter().collect();
+        let Ok(v) = d.structural(h, &touch, |k| k.new_style_variation(cur)) else { return };
+        d.touch(h, v);
+        if let Some(s) = d.file.obj_mut(v).and_then(|m| m.find_super_mut("TSS.StyleArchive")) {
+            s.set_str("name", &n);
+            s.set_bool("is_variation", false);
+        }
+        pg_core::edit::set_para_style(d, h, st, a, b, v);
+    });
 }
 
 /// Insert > Equation…: LaTeX typed here goes in as an inline picture that keeps its source
@@ -332,53 +354,59 @@ fn equation(app: &mut App, ctx: &egui::Context) {
     match done {
         Some(true) => {
             app.equation = None;
-            let src = src.trim().to_string();
-            // editing an equation: the new one goes where the old one is
-            let target = app.equation_target.take();
-            let target_at = target.and_then(|t| app.wb.as_ref().and_then(|w| w.inline_attachment(t)).map(|(_, b)| (t, b)));
-            let body = app.wb.as_ref().and_then(|w| w.body_storage());
-            let cursor = match (target_at, body) {
-                (Some((_, b)), Some(st)) => Some(crate::app::Cursor { storage: st, owner: Owner::Body, anchor: b, caret: b, goal_x: None }),
-                _ => app.cursor.filter(|c| c.owner == Owner::Body),
-            };
-            match cursor {
-                Some(c) => {
-                    let (png, w, h) = match typeset(&src) {
-                        Some(t) => t,
-                        None => match draw_equation(app, &latex_to_text(&src)) {
-                            Some(t) => t,
-                            None => return app.notify("Couldn't draw the equation"),
-                        },
-                    };
-                    let at = c.range().0;
-                    let res = app.edit_pages("Insert Equation", |p, hh| -> Result<pg_core::kn_format::ObjId, pg_core::kn_format::Error> {
-                        if let Some((old, _)) = target_at {
-                            p.delete_objects(hh, &[old]);
-                        }
-                        let id = p.insert_image(hh, png, "equation.png", pg_core::objects::Placement::Inline { at }, f32::MAX)?;
-                        let g = p.file().obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")).map(pg_core::kn_model::scene::geometry).unwrap_or_default();
-                        p.doc.set_frame(hh, id, pg_core::kn_model::Geometry { w, h, ..g });
-                        p.doc.set_equation_source(hh, id, &src);
-                        Ok(id)
-                    });
-                    match res {
-                        Some(Ok(_)) => {
-                            // the caret after the equation
-                            let after = at + '\u{FFFC}'.len_utf8();
-                            app.cursor = Some(crate::app::Cursor { anchor: after, caret: after, goal_x: None, ..c });
-                        }
-                        Some(Err(e)) => app.notify(format!("Couldn't insert the equation: {e}")),
-                        None => {}
-                    }
-                }
-                None => app.notify("Click in the text where the equation should go."),
-            }
+            equation_done(app, &src);
         }
         Some(false) => {
             app.equation = None;
             app.equation_target = None;
         }
         None => app.equation = Some(src),
+    }
+}
+
+/// Equation's Insert: the typeset formula in the text at the caret (or in place of the one
+/// being edited).
+pub fn equation_done(app: &mut App, src: &str) {
+    let src = src.trim().to_string();
+    // editing an equation: the new one goes where the old one is
+    let target = app.equation_target.take();
+    let target_at = target.and_then(|t| app.wb.as_ref().and_then(|w| w.inline_attachment(t)).map(|(_, b)| (t, b)));
+    let body = app.wb.as_ref().and_then(|w| w.body_storage());
+    let cursor = match (target_at, body) {
+        (Some((_, b)), Some(st)) => Some(crate::app::Cursor { storage: st, owner: Owner::Body, anchor: b, caret: b, goal_x: None }),
+        _ => app.cursor.filter(|c| c.owner == Owner::Body),
+    };
+    match cursor {
+        Some(c) => {
+            let (png, w, h) = match typeset(&src) {
+                Some(t) => t,
+                None => match draw_equation(app, &latex_to_text(&src)) {
+                    Some(t) => t,
+                    None => return app.notify("Couldn't draw the equation"),
+                },
+            };
+            let at = c.range().0;
+            let res = app.edit_pages("Insert Equation", |p, hh| -> Result<pg_core::kn_format::ObjId, pg_core::kn_format::Error> {
+                if let Some((old, _)) = target_at {
+                    p.delete_objects(hh, &[old]);
+                }
+                let id = p.insert_image(hh, png, "equation.png", pg_core::objects::Placement::Inline { at }, f32::MAX)?;
+                let g = p.file().obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")).map(pg_core::kn_model::scene::geometry).unwrap_or_default();
+                p.doc.set_frame(hh, id, pg_core::kn_model::Geometry { w, h, ..g });
+                p.doc.set_equation_source(hh, id, &src);
+                Ok(id)
+            });
+            match res {
+                Some(Ok(_)) => {
+                    // the caret after the equation
+                    let after = at + '\u{FFFC}'.len_utf8();
+                    app.cursor = Some(crate::app::Cursor { anchor: after, caret: after, goal_x: None, ..c });
+                }
+                Some(Err(e)) => app.notify(format!("Couldn't insert the equation: {e}")),
+                None => {}
+            }
+        }
+        None => app.notify("Click in the text where the equation should go."),
     }
 }
 

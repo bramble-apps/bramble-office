@@ -715,9 +715,24 @@ pub fn export_any_headless(input: &std::path::Path, output: &std::path::Path, se
 
 fn export_headless(input: &std::path::Path, output: &std::path::Path, format: Format, width: u32, secs: f32) -> Result<usize, String> {
     let doc = kn_model::Document::open(input).map_err(|e| e.to_string())?;
+    let stem = input.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    export_with(&doc, &mut kn_render::Renderer::new(), output, format, width, secs, stem)
+}
+
+/// An open presentation exported to `output` by its extension (pdf, html), as the headless
+/// export does it (other front ends' File > Export To, ffi.rs).
+pub fn export_doc(doc: &kn_model::Document, r: &mut kn_render::Renderer, output: &std::path::Path) -> Result<usize, String> {
+    let format = match output.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("html") => Format::Html,
+        _ => Format::Pdf,
+    };
+    let stem = output.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    export_with(doc, r, output, format, 1920, 0.0, stem)
+}
+
+fn export_with(doc: &kn_model::Document, r: &mut kn_render::Renderer, output: &std::path::Path, format: Format, width: u32, secs: f32, stem: String) -> Result<usize, String> {
     let slides = doc.slides();
     let size = doc.slide_size();
-    let mut r = kn_render::Renderer::new();
     let frames = matches!(format, Format::Movie | Format::Gif).then(|| std::env::temp_dir().join(format!("kn-export-{}", std::process::id())));
     if let Some(f) = &frames {
         std::fs::create_dir_all(f).map_err(|e| e.to_string())?;
@@ -730,7 +745,7 @@ fn export_headless(input: &std::path::Path, output: &std::path::Path, format: Fo
         width,
         pages: Vec::new(),
         page_size: (size.w, size.h),
-        stem: input.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+        stem,
         frames: frames.clone(),
         seconds: secs,
         texts: Vec::new(),
@@ -739,11 +754,11 @@ fn export_headless(input: &std::path::Path, output: &std::path::Path, format: Fo
         let i = job.indices[k];
         let sc = doc.scene(&slides, i).ok_or("scene")?;
         let pm = if job.format == Format::Pptx {
-            let (ids, xml) = crate::pptx_text::text_boxes(&mut r, &sc);
+            let (ids, xml) = crate::pptx_text::text_boxes(r, &sc);
             job.texts.push(xml);
-            crate::pptx_text::render_without(&mut r, &doc, &sc, job.width, &ids).ok_or("render")?
+            crate::pptx_text::render_without(r, doc, &sc, job.width, &ids).ok_or("render")?
         } else {
-            r.render_scene(&doc, &sc, job.width).ok_or("render")?
+            r.render_scene(doc, &sc, job.width).ok_or("render")?
         };
         job.next = k;
         write_slide(&mut job, &pm)?;

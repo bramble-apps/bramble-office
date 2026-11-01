@@ -8,6 +8,10 @@ use egui::{pos2, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke};
 pub enum Icon {
     /// Keydeck's mark (the app menu): a wall screen on its roller showing a pie and bars.
     Projector,
+    /// Three lines: all the menus (the touch apps' menu button).
+    Menu,
+    Undo,
+    Redo,
     Sidebar,
     Play,
     AddSlide,
@@ -398,6 +402,23 @@ pub fn draw(painter: &Painter, r: Rect, icon: Icon, color: Color32) {
             painter.circle_stroke(p(r, 12.0, 12.0), 8.0 * k, s);
             line(painter, r, &[(8.5, 15.5), (15.5, 8.5)], s);
             line(painter, r, &[(11.0, 8.5), (15.5, 8.5), (15.5, 13.0)], s);
+        }
+        Icon::Menu => {
+            for y in [7.0, 12.0, 17.0] {
+                line(painter, r, &[(4.5, y), (19.5, y)], s);
+            }
+        }
+        Icon::Undo | Icon::Redo => {
+            // a hooked arrow: back along the top, curling down and round
+            let flip = |x: f32| if icon == Icon::Redo { 24.0 - x } else { x };
+            let pts: Vec<(f32, f32)> = (0..=12).map(|k| {
+                let a = -PI / 2.0 + PI * k as f32 / 12.0;
+                (flip(13.0 + 6.0 * a.cos()), 13.0 + 5.0 * a.sin())
+            }).collect();
+            line(painter, r, &[(flip(6.0), 8.0), (flip(13.0), 8.0)], s);
+            line(painter, r, &pts, s);
+            line(painter, r, &[(flip(13.0), 18.0), (flip(8.0), 18.0)], s);
+            line(painter, r, &[(flip(9.5), 4.5), (flip(6.0), 8.0), (flip(9.5), 11.5)], s);
         }
         Icon::Overflow => {
             line(painter, r, &[(6.0, 7.0), (11.0, 12.0), (6.0, 17.0)], s);

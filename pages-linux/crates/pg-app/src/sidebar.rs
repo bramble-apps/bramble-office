@@ -20,7 +20,7 @@ pub fn sidebar(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
-fn page_key(app: &App, pi: usize) -> u64 {
+pub(crate) fn page_key(app: &App, pi: usize) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     if let Some(l) = &app.layout {
@@ -168,5 +168,68 @@ fn toc(app: &mut App, ui: &mut egui::Ui) {
         crate::canvas::deselect_objects(app);
         app.cursor = Some(Cursor { storage: st, owner: Owner::Body, anchor: stored, caret: stored, goal_x: None });
         app.canvas.follow_caret = true;
+    }
+}
+
+// ------------------------------------------------------------------ for other front ends (ffi.rs)
+
+/// The sidebar as data: which (thumbnails / toc / none), the pages (and their thumbnails' keys),
+/// the current page, the headings.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let mode = match app.sidebar {
+        Sidebar::None => return json!({ "mode": "none" }),
+        Sidebar::Toc => "toc",
+        _ => "thumbs",
+    };
+    let Some(l) = app.layout.as_ref() else { return json!({ "mode": mode }) };
+    let pages: Vec<serde_json::Value> = (0..l.page_count()).map(|pi| {
+        let ps = l.page_setup(pi);
+        json!({ "w": ps.width, "h": ps.height, "key": page_key(app, pi) })
+    }).collect();
+    json!({
+        "mode": mode,
+        "pages": pages,
+        "current": app.current_page(),
+        "layoutDoc": app.wb.as_ref().is_some_and(|w| !w.is_word_processing()),
+        "headings": l.headings.iter().map(|(at, level, text, page)| json!([at, level, text.trim(), page])).collect::<Vec<_>>(),
+        "canInsertToc": app.cursor.is_some_and(|c| c.owner == Owner::Body),
+    })
+}
+
+/// Page `pi` drawn for its thumbnail at `scale` pixels a point.
+pub fn render_page(app: &mut App, pi: usize, scale: f32) -> Option<sk::Pixmap> {
+    app.refresh();
+    let l = app.layout.as_ref()?;
+    let ps = l.page_setup(pi);
+    let mut pm = sk::Pixmap::new((ps.width * scale).ceil().max(1.0) as u32, (ps.height * scale).ceil().max(1.0) as u32)?;
+    let drawables: Vec<pg_core::kn_model::Drawable> = crate::canvas::page_layout_drawables(app, l, pi).into_iter().chain(app.drawables_on(pi).cloned()).collect();
+    let pages = app.wb.as_ref()?;
+    pg_core::render::draw_page_with(pages, l, pi, &mut app.canvas.tiles.renderer, &mut pm, sk::Transform::from_scale(scale, scale), Default::default(), &drawables);
+    Some(pm)
+}
+
+/// "go:<page>", "toc:<shown index>", "add:<page>", "delete:<page>".
+pub fn api_action(app: &mut App, a: &str) {
+    let (k, v) = a.split_once(':').unwrap_or((a, ""));
+    let n: usize = v.parse().unwrap_or(0);
+    match k {
+        "go" => crate::menus::go_to_page(app, n),
+        "add" => {
+            app.edit_pages("Add Page", |p, h| p.add_layout_page(h, n));
+        }
+        "delete" => {
+            app.edit_pages("Delete Page", |p, h| p.delete_layout_page(h, n));
+        }
+        "toc" => {
+            let (st, stored) = match (app.wb.as_ref().and_then(|w| w.body_storage()), app.layout.as_ref().and_then(|l| l.body.as_ref())) {
+                (Some(st), Some(b)) => (st, b.to_stored(n)),
+                _ => return,
+            };
+            crate::canvas::deselect_objects(app);
+            app.cursor = Some(Cursor { storage: st, owner: Owner::Body, anchor: stored, caret: stored, goal_x: None });
+            app.canvas.follow_caret = true;
+        }
+        _ => {}
     }
 }

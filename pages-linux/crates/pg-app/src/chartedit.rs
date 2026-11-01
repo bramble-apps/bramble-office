@@ -26,6 +26,14 @@ pub fn open(app: &mut App, chart: ObjId) {
 pub fn ui(app: &mut App, ctx: &egui::Context) {
     let Some(mut ed) = app.chart_edit.take() else { return };
     let (open, act) = ed.window(ctx);
+    apply(app, &mut ed, act);
+    if open {
+        app.chart_edit = Some(ed);
+    }
+}
+
+/// An editor's change as one undo step; the editor then follows the chart.
+pub fn apply(app: &mut App, ed: &mut ChartEdit, act: kn_ui::chartdata::DataAction) {
     if act != kn_ui::chartdata::DataAction::None {
         let id = ed.chart;
         app.edit(act.undo_name(), |d, h| act.apply(d, h, id));
@@ -33,9 +41,6 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         if let Some(d) = app.doc() {
             ed.refresh(d, c.as_ref());
         }
-    }
-    if open {
-        app.chart_edit = Some(ed);
     }
 }
 
@@ -64,4 +69,17 @@ pub fn canvas_button(app: &mut App, ui: &mut egui::Ui) -> bool {
         open(app, id);
     }
     resp.hovered()
+}
+
+/// The Edit Chart Data button for a front end (canvas_button): the chart and its frame (page
+/// points), null when it doesn't show.
+pub fn api_state(app: &App) -> serde_json::Value {
+    if app.chart_edit.is_some() || app.canvas.dragging() {
+        return serde_json::Value::Null;
+    }
+    let [id] = app.selected_objs()[..] else { return serde_json::Value::Null };
+    let Some(d) = app.drawables.iter().find(|d| d.id == id && matches!(d.kind, DrawableKind::Chart(_))) else { return serde_json::Value::Null };
+    let Some(pi) = app.obj_page.get(&id).copied() else { return serde_json::Value::Null };
+    let g = d.geom;
+    serde_json::json!({ "id": id, "page": pi, "frame": [g.x, g.y, g.x + g.w, g.y + g.h] })
 }

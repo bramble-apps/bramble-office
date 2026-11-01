@@ -60,7 +60,8 @@ impl Tiles {
         self.strips.clear();
     }
     pub fn font_families(&self) -> Vec<String> {
-        self.renderer.fonts.families().to_vec()
+        // (with Arial, Times New Roman … drawn by the bundled stand-ins where not installed)
+        self.renderer.fonts.menu_families()
     }
     /// The frame a drawable really occupies (auto-sized text boxes follow their text).
     pub fn effective(&mut self, d: &Drawable) -> Geometry {
@@ -115,6 +116,11 @@ pub struct Canvas {
     /// Document point at the canvas' top-left.
     pub scroll: Vec2,
     pub two_up: bool,
+    /// Fit Width fills the view's whole width, no margin either side (the user's call, the
+    /// touch front end's first, then the desktop's too).
+    pub edge_fit: bool,
+    /// Documents open at Fit Width (the touch front end).
+    pub open_fit_width: bool,
     pub fit: Fit,
     pub tiles: Tiles,
     /// The text box / shape whose text the caret is in.
@@ -162,6 +168,8 @@ impl Default for Canvas {
             zoom: 1.25,
             scroll: Vec2::ZERO,
             two_up: false,
+            edge_fit: true,
+            open_fit_width: false,
             fit: Fit::None,
             tiles: Tiles::default(),
             editing: None,
@@ -248,7 +256,8 @@ impl Canvas {
     /// The zoom that fits a page's width / a whole page / two pages into the view.
     pub fn fit_zoom(&self, setup: &pg_core::PageSetup, fit: Fit) -> f32 {
         let cols = if self.two_up { 2.0 } else { 1.0 };
-        let w = (self.size.x - 40.0).max(100.0) / (setup.width * cols);
+        let margin = if self.edge_fit && fit == Fit::Width { 0.0 } else { 40.0 };
+        let w = (self.size.x - margin).max(100.0) / (setup.width * cols);
         let h = (self.size.y - 24.0).max(100.0) / setup.height;
         match fit {
             Fit::Width => w,
@@ -257,6 +266,12 @@ impl Canvas {
         }
         .clamp(0.1, 4.0)
     }
+}
+
+/// The room left and right of the pages: none when Fit Width fills the view edge to edge
+/// (the touch front end's), so the page is the width of the view and doesn't move sideways.
+fn hpad(c: &Canvas) -> f32 {
+    if c.edge_fit && c.fit == Fit::Width { 0.0 } else { PAD }
 }
 
 /// Page `i`'s rectangle in document points.
@@ -268,28 +283,28 @@ pub fn page_rect(c: &Canvas, l: &Layout, i: usize) -> Rect {
         let off = usize::from(l.setup.facing_pages);
         let k = i + off;
         let (row, col) = (k / 2, k % 2);
-        let doc_w = (2.0 * pw + 2.0 * PAD).max(view_w);
+        let doc_w = (2.0 * pw + 2.0 * hpad(c)).max(view_w);
         let x = doc_w / 2.0 - pw + col as f32 * pw;
         Rect::from_min_size(pos2(x, PAD + row as f32 * (ph + PAD)), vec2(pw, ph))
     } else if l.pages.iter().any(|p| p.setup.is_some()) {
         // a Word document with pages of their own sizes (a landscape section): each page at
         // its size, centred, below the ones before it
         let widest = (0..l.pages.len()).map(|j| l.page_setup(j).width).fold(pw, f32::max);
-        let doc_w = (widest + 2.0 * PAD).max(view_w);
+        let doc_w = (widest + 2.0 * hpad(c)).max(view_w);
         let y: f32 = (0..i).map(|j| l.page_setup(j).height).sum();
         let s = l.page_setup(i);
         Rect::from_min_size(pos2((doc_w - s.width) / 2.0, PAD + y), vec2(s.width, s.height))
     } else {
-        let doc_w = (pw + 2.0 * PAD).max(view_w);
+        let doc_w = (pw + 2.0 * hpad(c)).max(view_w);
         Rect::from_min_size(pos2((doc_w - pw) / 2.0, PAD + i as f32 * ph), vec2(pw, ph))
     }
 }
 
-fn doc_size(c: &Canvas, l: &Layout) -> Vec2 {
+pub(crate) fn doc_size(c: &Canvas, l: &Layout) -> Vec2 {
     let n = l.page_count();
     let last = page_rect(c, l, n.saturating_sub(1));
     let first = page_rect(c, l, 0);
-    vec2(last.max.x.max(first.max.x) + PAD, last.max.y + PAD)
+    vec2(last.max.x.max(first.max.x) + hpad(c), last.max.y + PAD)
 }
 
 impl Canvas {
@@ -370,8 +385,8 @@ fn paint_toolbar_band(app: &mut App, ui: &egui::Ui) {
         return;
     }
     let rect = app.canvas.rect;
-    // (feathered: the blur runs on below the band, fading out over the page)
-    let reach = if look == ToolbarBackground::Feathered { kn_ui::glass::FEATHER_REACH.min(rect.height()) } else { 0.0 };
+    // (feathered: the blur thins out to sharp by the band's foot, not reaching onto the page)
+    let reach = 0.0;
     let b = Rect::from_min_max(pos2(band.min.x.max(rect.min.x), band.min.y), pos2(band.max.x.min(rect.max.x), band.max.y + reach));
     if b.width() < 2.0 || b.height() < 2.0 {
         return;
@@ -602,11 +617,6 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             ctx.request_repaint();
         }
     }
-    // fit modes follow the window
-    if app.canvas.fit != Fit::None && app.canvas.zoom_anim.is_none() {
-        let setup = app.layout.as_ref().unwrap().setup.clone();
-        app.canvas.zoom = app.canvas.fit_zoom(&setup, app.canvas.fit);
-    }
     // scrolling. Trackpad moves are applied as they come (egui smooths the bigger ones over a
     // tenth of a second, which lags when the direction flips); wheel notches ease in over a few
     // frames and a turn the other way drops what's left of them; after the fingers lift, a GTK
@@ -712,10 +722,76 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
         }
     }
     // keep the scroll inside the document
+    settle(app);
+    let painter = ui.painter_at(rect);
+    let settled = paint_pages(app, ui, &painter, rect);
+    paint_toolbar_band(app, ui);
+    paint_overlay(app, ui, &painter);
+    // a shape's points being edited take the pointer near them (Make Editable)
+    let mut points_took = false;
+    if let Some((id, l)) = app.points.id.filter(|_| app.layout.is_some()).map(|id| (id, app.layout.take().unwrap())) {
+        let pi = app.obj_page.get(&id).copied().unwrap_or(0);
+        let origin = page_rect(&app.canvas, &l, pi).min;
+        let (scroll, zoom, rmin) = (app.canvas.scroll, app.canvas.zoom, app.canvas.rect.min);
+        app.layout = Some(l);
+        let to_screen = move |q: Pos2| rmin + (origin + q.to_vec2() - scroll.to_pos2()) * zoom;
+        points_took = crate::points::canvas(app, ui, &resp, &to_screen, zoom);
+    }
+    // a selected table's tabs, buttons, borders and cell editor take the pointer over them
+    let bar_took = scrollbar(app, ui) || crate::chartedit::canvas_button(app, ui) || crate::media::canvas_controls(app, ui) || crate::mediainsp::gallery_controls(app, ui);
+    let table_took = !points_took && !bar_took && crate::tables::ui(app, ui);
+    // the Insert Page Number button of the header / footer field with the caret
+    let hf_took = !points_took && !table_took && !bar_took && crate::hfnumber::ui(app, ui);
+    // guides dragged from the ruler or grabbed on the page
+    let guide_took = !points_took && !table_took && !bar_took && !hf_took && crate::guides::ui(app, ui, &resp);
+    if !points_took && !table_took && !bar_took && !hf_took && !guide_took {
+        interact(app, ui, &resp);
+    }
+    crate::text::handle_input(app, &ctx, !ctx.egui_wants_keyboard_input());
+    if app.word_count {
+        crate::notes::word_count_pill(app, ui, rect);
+    }
+    if let Some((m, _)) = &app.message {
+        let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 60.0), vec2((m.len() as f32 * 7.5 + 40.0).min(rect.width() - 40.0), 34.0));
+        painter.rect_filled(r, 17.0, theme::gray(0x30).gamma_multiply(0.95));
+        painter.text(r.center(), egui::Align2::CENTER_CENTER, m, egui::FontId::proportional(13.0), theme::TEXT());
+    }
+    if app.screen_view {
+        let r = Rect::from_min_size(pos2(rect.max.x - 190.0, rect.min.y + 10.0), vec2(176.0, 26.0));
+        painter.rect_filled(r, 13.0, theme::gray(0x30).gamma_multiply(0.92));
+        painter.circle_filled(pos2(r.min.x + 14.0, r.center().y), 4.0, accent_orange());
+        painter.text(pos2(r.min.x + 26.0, r.center().y), egui::Align2::LEFT_CENTER, "Screen View is on.", egui::FontId::proportional(12.5), theme::TEXT());
+    }
+    settled
+}
+
+/// The canvas's housekeeping after input, each frame (the desktop's canvas pass; the Flutter
+/// front end after each call, ffi.rs): fit zoom, scroll kept in range, scrolling to what must
+/// be seen (the caret after typing, a page asked for), objects' content keys, the page in view.
+pub fn settle(app: &mut App) {
+    if app.layout.is_none() {
+        return;
+    }
+    // fit modes follow the window
+    if app.canvas.fit != Fit::None && app.canvas.zoom_anim.is_none() {
+        let setup = app.layout.as_ref().unwrap().setup.clone();
+        app.canvas.zoom = app.canvas.fit_zoom(&setup, app.canvas.fit);
+    }
+    // keep the caret in view after typing and moves (first: revealed in this same pass,
+    // so a front end reading the scroll straight after sees it)
+    if app.canvas.follow_caret {
+        app.canvas.follow_caret = false;
+        if let Some((c, l)) = app.cursor.filter(|_| app.layout.is_some()).map(|c| (c, app.layout.take().unwrap())) {
+            if let Some((pi, x, top, h)) = caret_rect(app, &l, &c) {
+                app.canvas.reveal = Some((pi, Some(Rect::from_min_size(pos2(x - 2.0, top), vec2(4.0, h)))));
+            }
+            app.layout = Some(l);
+        }
+    }
     {
         let l = app.layout.as_ref().unwrap();
         let size = doc_size(&app.canvas, l);
-        let view = rect.size() / app.canvas.zoom;
+        let view = app.canvas.rect.size() / app.canvas.zoom;
         let max = (size - view).max(Vec2::ZERO);
         // narrower than the view: centred (page_rect centres on the view width)
         app.canvas.scroll = app.canvas.scroll.clamp(Vec2::ZERO, max);
@@ -742,16 +818,6 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             }
         }
     }
-    // keep the caret in view after typing and moves
-    if app.canvas.follow_caret {
-        app.canvas.follow_caret = false;
-        if let Some((c, l)) = app.cursor.filter(|_| app.layout.is_some()).map(|c| (c, app.layout.take().unwrap())) {
-            if let Some((pi, x, top, h)) = caret_rect(app, &l, &c) {
-                app.canvas.reveal = Some((pi, Some(Rect::from_min_size(pos2(x - 2.0, top), vec2(4.0, h)))));
-            }
-            app.layout = Some(l);
-        }
-    }
     // object keys (contents) once per rebuild of the drawables (the version they were built
     // for: an edit after a rebuild in the same frame, such as an inserted chart then given its
     // type, must not leave the old drawable's key under the new version)
@@ -769,51 +835,18 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             .collect();
         app.canvas.tiles.obj_keys_for = built_for;
     }
-    let painter = ui.painter_at(rect);
-    let settled = paint_pages(app, ui, &painter, rect);
-    paint_toolbar_band(app, ui);
-    paint_overlay(app, ui, &painter);
-    // a shape's points being edited take the pointer near them (Make Editable)
-    let mut points_took = false;
-    if let Some((id, l)) = app.points.id.filter(|_| app.layout.is_some()).map(|id| (id, app.layout.take().unwrap())) {
-        let pi = app.obj_page.get(&id).copied().unwrap_or(0);
-        let origin = page_rect(&app.canvas, &l, pi).min;
-        let (scroll, zoom, rmin) = (app.canvas.scroll, app.canvas.zoom, app.canvas.rect.min);
-        app.layout = Some(l);
-        let to_screen = move |q: Pos2| rmin + (origin + q.to_vec2() - scroll.to_pos2()) * zoom;
-        points_took = crate::points::canvas(app, ui, &resp, &to_screen, zoom);
-    }
-    // a selected table's tabs, buttons, borders and cell editor take the pointer over them
-    let bar_took = scrollbar(app, ui) || crate::chartedit::canvas_button(app, ui) || crate::media::canvas_controls(app, ui) || crate::mediainsp::gallery_controls(app, ui);
-    let table_took = !points_took && !bar_took && crate::tables::ui(app, ui);
-    // the Insert Page Number button of the header / footer field with the caret
-    let hf_took = !points_took && !table_took && !bar_took && crate::hfnumber::ui(app, ui);
-    // guides dragged from the ruler or grabbed on the page
-    let guide_took = !points_took && !table_took && !bar_took && !hf_took && crate::guides::ui(app, ui, &resp);
-    if !points_took && !table_took && !bar_took && !hf_took && !guide_took {
-        interact(app, ui, &resp);
-    }
-    crate::text::handle_input(app, &ctx, !ctx.egui_wants_keyboard_input());
     // the page under the view's middle
     if let Some(l) = &app.layout {
-        let mid = app.canvas.to_doc(rect.center());
+        let mid = app.canvas.to_doc(app.canvas.rect.center());
         app.canvas.page_in_view = (0..l.page_count()).find(|i| page_rect(&app.canvas, l, *i).expand(PAD).y_range().contains(mid.y)).unwrap_or(app.canvas.page_in_view);
     }
-    if app.word_count {
-        crate::notes::word_count_pill(app, ui, rect);
-    }
-    if let Some((m, _)) = &app.message {
-        let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 60.0), vec2((m.len() as f32 * 7.5 + 40.0).min(rect.width() - 40.0), 34.0));
-        painter.rect_filled(r, 17.0, theme::gray(0x30).gamma_multiply(0.95));
-        painter.text(r.center(), egui::Align2::CENTER_CENTER, m, egui::FontId::proportional(13.0), theme::TEXT());
-    }
-    if app.screen_view {
-        let r = Rect::from_min_size(pos2(rect.max.x - 190.0, rect.min.y + 10.0), vec2(176.0, 26.0));
-        painter.rect_filled(r, 13.0, theme::gray(0x30).gamma_multiply(0.92));
-        painter.circle_filled(pos2(r.min.x + 14.0, r.center().y), 4.0, accent_orange());
-        painter.text(pos2(r.min.x + 26.0, r.center().y), egui::Align2::LEFT_CENTER, "Screen View is on.", egui::FontId::proportional(12.5), theme::TEXT());
-    }
-    settled
+}
+
+/// For other front ends: the view's size (points); its top-left is the origin of `pointer`'s
+/// positions.
+pub fn set_view(app: &mut App, w: f32, h: f32) {
+    app.canvas.rect = Rect::from_min_size(Pos2::ZERO, vec2(w, h));
+    app.canvas.size = vec2(w, h);
 }
 
 fn accent_orange() -> Color32 {
@@ -857,22 +890,8 @@ fn paint_pages(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, rect: Rect
             let fresh = have.is_some_and(|(k, sc, _)| *k == key && (*sc - scale).abs() < 1e-3);
             let budget = t0.elapsed().as_secs_f32() < 0.012 || have.is_none_or(|(k, _, _)| *k != key);
             if !fresh && !zooming && budget {
-                let drawables: Vec<Drawable> = page_layout_drawables(app, &l, pi)
-                    .into_iter()
-                    .filter(|d| !skip.contains(&d.id))
-                    .chain(app.drawables_on(pi).filter(|d| !skip.contains(&d.id) && !app.layout_drawables.iter().any(|x| x.id == d.id)).cloned())
-                    .collect();
+                let (drawables, base_key) = strip_inputs(app, &l, pi, scale, &skip);
                 if let Some(pages) = app.wb.as_ref() {
-                    // pages with wallpaper share one drawn base per template, background and scale
-                    let page = &l.pages[pi];
-                    let base_key = page.objects.iter().any(|o| o.layout).then(|| {
-                        let mut hs = std::collections::hash_map::DefaultHasher::new();
-                        for o in page.objects.iter().filter(|o| o.layout) {
-                            (o.id, app.canvas.tiles.obj_keys.get(&o.id).copied().unwrap_or(0)).hash(&mut hs);
-                        }
-                        (format!("{:?}", page.background), (scale * 1000.0) as i64, l.setup.width.to_bits(), l.setup.height.to_bits()).hash(&mut hs);
-                        hs.finish()
-                    });
                     if let Some(tex) = render_strip(&mut app.canvas.tiles.renderer, ui, pages, &l, pi, s, scale, &drawables, app.invisibles, base_key) {
                         app.canvas.tiles.strips.insert((pi, s), (key, scale, tex));
                     }
@@ -905,15 +924,96 @@ fn paint_pages(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, rect: Rect
     done
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What page `pi` draws (its objects, less those being dragged) and, for pages with wallpaper,
+/// the key of their shared base at `scale`.
+fn strip_inputs(app: &App, l: &Layout, pi: usize, scale: f32, skip: &[ObjId]) -> (Vec<Drawable>, Option<u64>) {
+    let drawables: Vec<Drawable> = page_layout_drawables(app, l, pi)
+        .into_iter()
+        .filter(|d| !skip.contains(&d.id))
+        .chain(app.drawables_on(pi).filter(|d| !skip.contains(&d.id) && !app.layout_drawables.iter().any(|x| x.id == d.id)).cloned())
+        .collect();
+    // pages with wallpaper share one drawn base per template, background and scale
+    let page = &l.pages[pi];
+    let base_key = page.objects.iter().any(|o| o.layout).then(|| {
+        let mut hs = std::collections::hash_map::DefaultHasher::new();
+        for o in page.objects.iter().filter(|o| o.layout) {
+            (o.id, app.canvas.tiles.obj_keys.get(&o.id).copied().unwrap_or(0)).hash(&mut hs);
+        }
+        (format!("{:?}", page.background), (scale * 1000.0) as i64, l.setup.width.to_bits(), l.setup.height.to_bits()).hash(&mut hs);
+        hs.finish()
+    });
+    (drawables, base_key)
+}
+
+/// The objects being dragged (drawn live over the pages, left out of the strips).
+fn dragged(app: &App) -> Vec<ObjId> {
+    match &app.canvas.drag {
+        Some(Drag::Move { frames, moved: true, .. }) => frames.iter().map(|f| f.0).collect(),
+        Some(Drag::Resize { id, .. }) | Some(Drag::Rotate { id, .. }) => vec![*id],
+        _ => Vec::new(),
+    }
+}
+
+/// For other front ends: a key of what strip `s` of page `pi` shows (it changes when it does).
+pub fn strip_content_key(app: &mut App, pi: usize, s: i32) -> u64 {
+    app.refresh();
+    let Some(l) = app.layout.take() else { return 0 };
+    let k = if pi < l.page_count() { strip_key(app, &l, pi, s, &dragged(app)) } else { 0 };
+    app.layout = Some(l);
+    k
+}
+
+/// For other front ends: strip `s` of page `pi` at `scale` pixels per point.
+pub fn render_strip_pixmap(app: &mut App, pi: usize, s: i32, scale: f32) -> Option<sk::Pixmap> {
+    app.refresh();
+    let l = app.layout.take()?;
+    let r = (|| {
+        if pi >= l.page_count() {
+            return None;
+        }
+        let (drawables, base_key) = strip_inputs(app, &l, pi, scale, &dragged(app));
+        let pages = app.wb.as_ref()?;
+        strip_pixmap(&mut app.canvas.tiles.renderer, pages, &l, pi, s, scale, &drawables, app.invisibles, base_key, true)
+    })();
+    app.layout = Some(l);
+    r
+}
+
+/// For other front ends: a moving object alone (draw_live_object), its box (lt_overlays' live
+/// objects: the frame and 20 round it) at `scale` pixels per point.
+pub fn render_object_pixmap(app: &mut App, id: ObjId, scale: f32) -> Option<sk::Pixmap> {
+    app.refresh();
+    let d = app.drawables.iter().find(|d| d.id == id).cloned()?;
+    let r = frame(app, &d).expand(20.0);
+    let (w, h) = ((r.width() * scale).ceil() as u32, (r.height() * scale).ceil() as u32);
+    let mut pm = sk::Pixmap::new(w.max(1), h.max(1))?;
+    let base = sk::Transform::from_scale(scale, scale).pre_translate(-r.min.x, -r.min.y);
+    let w = app.wb.as_ref()?;
+    app.canvas.tiles.renderer.draw_drawable(&w.doc, &d, &mut pm, base);
+    Some(pm)
+}
+
+pub const STRIP_PT: f32 = STRIP;
+
 #[allow(clippy::too_many_arguments)]
 fn render_strip(renderer: &mut Renderer, ui: &egui::Ui, pages: &pg_core::Pages, l: &Layout, pi: usize, s: i32, scale: f32, drawables: &[Drawable], invisibles: bool, base_key: Option<u64>) -> Option<egui::TextureHandle> {
+    let pm = strip_pixmap(renderer, pages, l, pi, s, scale, drawables, invisibles, base_key, false)?;
+    let img = egui::ColorImage::from_rgba_premultiplied([pm.width() as usize, pm.height() as usize], pm.data());
+    Some(ui.ctx().load_texture(format!("strip-{pi}-{s}"), img, egui::TextureOptions::LINEAR))
+}
+
+/// Strip `s` (STRIP points tall) of page `pi` at `scale` pixels per point. `whole_pixels` (other
+/// front ends): the strip runs from page pixel row round(s × STRIP × scale) to the next strip's,
+/// so strips meet on whole pixels however STRIP × scale comes out (no half-painted seam rows).
+#[allow(clippy::too_many_arguments)]
+fn strip_pixmap(renderer: &mut Renderer, pages: &pg_core::Pages, l: &Layout, pi: usize, s: i32, scale: f32, drawables: &[Drawable], invisibles: bool, base_key: Option<u64>, whole_pixels: bool) -> Option<sk::Pixmap> {
     let w = (l.page_setup(pi).width * scale).ceil() as u32;
-    let h = (STRIP * scale).ceil() as u32;
+    let (row0, row1) = ((s as f32 * STRIP * scale).round(), ((s + 1) as f32 * STRIP * scale).round());
+    let h = if whole_pixels { (row1 - row0) as u32 } else { (STRIP * scale).ceil() as u32 };
     let mut pm = sk::Pixmap::new(w.max(1), h.max(1))?;
-    let y0 = s as f32 * STRIP;
+    let (y0, y1) = if whole_pixels { (row0 / scale, row1 / scale) } else { (s as f32 * STRIP, (s + 1) as f32 * STRIP) };
     let base = sk::Transform::from_scale(scale, scale).pre_translate(0.0, -y0);
-    let mut opts = pg_core::render::RenderOpts { invisibles, clip: Some((y0, y0 + STRIP)), ..Default::default() };
+    let mut opts = pg_core::render::RenderOpts { invisibles, clip: Some((y0, y1)), ..Default::default() };
     // a page with wallpaper: its base drawn once at this scale, its rows copied into the strip
     if let Some(key) = base_key {
         let have = BASES.with(|c| c.borrow().iter().find(|(k, _)| *k == key).map(|(_, p)| p.clone()));
@@ -947,8 +1047,7 @@ fn render_strip(renderer: &mut Renderer, ui: &egui::Ui, pages: &pg_core::Pages, 
         }
     }
     pg_core::render::draw_page_with(pages, l, pi, renderer, &mut pm, base, opts, drawables);
-    let img = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], pm.data());
-    Some(ui.ctx().load_texture(format!("strip-{pi}-{s}"), img, egui::TextureOptions::LINEAR))
+    Some(pm)
 }
 
 /// Selection, caret, find matches, misspellings, object handles, guides, drag previews.
@@ -1603,6 +1702,64 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
             ctx.set_cursor_icon(icon);
         }
     }
+    app.layout = Some(l);
+    if pressed && in_canvas {
+        // a click on the page takes the keyboard back from any field (the text gets it)
+        ctx.memory_mut(|m| {
+            if let Some(f) = m.focused() {
+                m.surrender_focus(f);
+            }
+        });
+    }
+    let down = ctx.input(|i| i.pointer.primary_down());
+    if pointer(app, &PointerIn { pressed, released, down, secondary, pos, mods, time: now, in_canvas }) {
+        ctx.request_repaint();
+    }
+    resp.context_menu(|ui| crate::menus::context_menu(app, ui));
+    let Some(l) = app.layout.take() else { return };
+    // files dropped on the canvas: pictures go in where they're dropped
+    let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
+    for p in dropped {
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
+        if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
+            app.layout = Some(l);
+            crate::media::insert_path(app, &p);
+            return;
+        } else if matches!(ext.as_str(), "pages" | "docx" | "rtf" | "txt" | "md") {
+            app.layout = Some(l);
+            crate::tabs::open_in_tab(app, &p);
+            return;
+        }
+    }
+    app.layout = Some(l);
+}
+
+
+/// A pointer event on the canvas, in the canvas's screen points (the desktop's from egui's
+/// input; the Flutter front end's from its gestures, ffi.rs).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PointerIn {
+    pub pressed: bool,
+    pub released: bool,
+    /// the primary button held (a drag goes on)
+    pub down: bool,
+    pub secondary: bool,
+    pub pos: Option<Pos2>,
+    pub mods: egui::Modifiers,
+    /// seconds (double / triple clicks are presses within 0.45 s)
+    pub time: f64,
+    /// over the canvas itself (not a window or popup on it)
+    pub in_canvas: bool,
+}
+
+/// What a press, drag or release on the canvas does: the caret and selection, objects picked,
+/// moved, resized, rotated, marquee selection (no drawing: the canvas shows the result).
+/// Returns true while a drag needs more frames (text dragged past the edge scrolls).
+pub fn pointer(app: &mut App, p_in: &PointerIn) -> bool {
+    let Some(l) = app.layout.take() else { return false };
+    let (pressed, released, pos, mods, now, secondary, in_canvas) = (p_in.pressed, p_in.released, p_in.pos, p_in.mods, p_in.time, p_in.secondary, p_in.in_canvas);
+    let mut repaint = false;
     // right click: the context menu for what's there
     if secondary && in_canvas {
         if let Some((pi, pt)) = pos.and_then(|p| app.canvas.hit_page(&l, p)) {
@@ -1624,15 +1781,8 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
             }
         }
     }
-    resp.context_menu(|ui| crate::menus::context_menu(app, ui));
     if pressed && in_canvas {
         let p = pos.unwrap();
-        // a click on the page takes the keyboard back from any field (the text gets it)
-        ctx.memory_mut(|m| {
-            if let Some(f) = m.focused() {
-                m.surrender_focus(f);
-            }
-        });
         app.canvas.blink = now;
         // double / triple clicks
         let (t, lp, n) = app.canvas.clicks;
@@ -1742,7 +1892,7 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
                         }) {
                             crate::menus::open_link(app, &url);
                             app.layout = Some(l);
-                            return;
+                            return false;
                         }
                     }
                     match count {
@@ -1775,7 +1925,7 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
     }
     // dragging
     if let (Some(drag), Some(p)) = (app.canvas.drag.clone(), pos) {
-        if ctx.input(|i| i.pointer.primary_down()) {
+        if p_in.down {
             match drag {
                 Drag::Text { owner, storage, anchor, word } => {
                     let (pi, pt) = app.canvas.near_page(&l, p);
@@ -1802,7 +1952,7 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
                     } else if p.y < r.min.y + 20.0 {
                         app.canvas.scroll.y -= 12.0 / app.canvas.zoom;
                     }
-                    ctx.request_repaint();
+                    repaint = true;
                 }
                 Drag::Move { page, start, frames, moved } => {
                     let pt = app.canvas.to_doc(p) - page_rect(&app.canvas, &l, page).min;
@@ -1993,22 +2143,8 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
         app.canvas.live_frame = None;
         app.canvas.marquee = None;
     }
-    // files dropped on the canvas: pictures go in where they're dropped
-    let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
-    for p in dropped {
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-        use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
-        if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
-            app.layout = Some(l);
-            crate::media::insert_path(app, &p);
-            return;
-        } else if matches!(ext.as_str(), "pages" | "docx" | "rtf" | "txt" | "md") {
-            app.layout = Some(l);
-            crate::tabs::open_in_tab(app, &p);
-            return;
-        }
-    }
     app.layout = Some(l);
+    repaint
 }
 
 /// The handle under a screen point of the selected object: (object, handle index).
@@ -2220,3 +2356,169 @@ fn flatten(path: &pg_core::kn_model::Path) -> Vec<Vec<pg_core::kn_model::Point>>
     }
     out
 }
+
+/// What's drawn over the pages for the Flutter front end (ffi.rs), in page points: the caret
+/// [page, x, top, height], the text selection [[page, x0, y0, x1, y1]…], the selected objects
+/// {page, frame, handles (when one is selected and can be resized), locked}, the object whose
+/// text is being edited, and selected table cells.
+pub fn overlays(app: &mut App) -> serde_json::Value {
+    use serde_json::json;
+    app.refresh();
+    let Some(l) = app.layout.take() else { return serde_json::Value::Null };
+    let caret = app.cursor.filter(|c| c.is_empty() && app.canvas.obj.is_none()).and_then(|c| caret_rect(app, &l, &c)).map(|(p, x, t, h)| json!([p, x, t, h]));
+    let rects: Vec<serde_json::Value> = app.cursor.and_then(|c| selection_rects(app, &l, &c)).unwrap_or_default().into_iter().map(|(p, r)| json!([p, r.min.x, r.min.y, r.max.x, r.max.y])).collect();
+    let sel = app.selected_objs();
+    let editing = app.canvas.editing;
+    let mut objects = Vec::new();
+    for id in &sel {
+        // a table with cells selected shows the cell selection instead (paint_overlay)
+        if app.sel.is_some_and(|s| s.table == *id) {
+            continue;
+        }
+        // Make Editable: only the points show (controls "points")
+        if app.points.id == Some(*id) && app.canvas.obj == Some(*id) {
+            continue;
+        }
+        let Some(d) = app.drawables.iter().find(|d| d.id == *id).cloned() else { continue };
+        let r = frame(app, &d);
+        let page = app.obj_page.get(id).copied().unwrap_or(0);
+        let handles: Vec<serde_json::Value> = if sel.len() == 1 && editing != Some(*id) && !d.locked { handle_points(r).iter().map(|p| json!([p.x, p.y])).collect() } else { Vec::new() };
+        objects.push(json!({ "id": id, "page": page, "frame": [r.min.x, r.min.y, r.max.x, r.max.y], "handles": handles, "locked": d.locked, "editing": editing == Some(*id) }));
+    }
+    let cells = app.sel.and_then(|s| {
+        let d = app.drawables.iter().find(|d| d.id == s.table)?;
+        let DrawableKind::Table(t) = &d.kind else { return None };
+        let page = app.obj_page.get(&s.table).copied().unwrap_or(0);
+        let (r0, r1) = (s.anchor.0.min(s.cursor.0), s.anchor.0.max(s.cursor.0));
+        let (c0, c1) = (s.anchor.1.min(s.cursor.1), s.anchor.1.max(s.cursor.1));
+        let (x0, y0, _, _) = crate::tables::cell_box(t, r0, c0);
+        let (x1, y1, w1, h1) = crate::tables::cell_box(t, r1, c1);
+        Some(json!({ "page": page, "rect": [d.geom.x + x0, d.geom.y + y0, d.geom.x + x1 + w1, d.geom.y + y1 + h1] }))
+    });
+    // a drag going on: the objects' offset (and snapping guides), a frame being resized or
+    // rotated, the marquee (page points)
+    let live = app.canvas.live.as_ref().map(|(d, guides)| {
+        let page = match &app.canvas.drag {
+            Some(Drag::Move { page, .. }) => *page,
+            _ => 0,
+        };
+        let lines: Vec<serde_json::Value> = guides
+            .iter()
+            .filter_map(|g| match g {
+                kn_ui::snap::Guide::Line(a, b) => Some(json!([a.x, a.y, b.x, b.y])),
+                _ => None,
+            })
+            .collect();
+        (page, d.x, d.y, lines)
+    });
+    // the moving objects themselves, drawn live at the offset (draw_live_object): each one's
+    // box (its frame and 20 round it, page points) for lt_render_object
+    let live = live.map(|(page, dx, dy, lines)| {
+        let ids = dragged(app);
+        let boxes: Vec<serde_json::Value> = match &app.canvas.drag {
+            Some(Drag::Move { .. }) => ids
+                .iter()
+                .filter_map(|id| {
+                    let d = app.drawables.iter().find(|d| d.id == *id).cloned()?;
+                    let r = frame(app, &d).expand(20.0);
+                    Some(json!({ "id": id, "page": app.obj_page.get(id).copied().unwrap_or(page), "box": [r.min.x, r.min.y, r.width(), r.height()] }))
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        json!({ "page": page, "dx": dx, "dy": dy, "ids": ids, "guides": lines, "objects": boxes })
+    });
+    // find matches (the current one stronger)
+    let find: Vec<serde_json::Value> = match (&app.find, &l.body) {
+        (Some((_, matches, cur)), Some(body)) => matches
+            .iter()
+            .enumerate()
+            .flat_map(|(k, (a, b))| range_rects(&l, body.to_shown(*a), body.to_shown(*b)).into_iter().map(move |(pi, r)| json!([pi, r.min.x, r.min.y, r.max.x, r.max.y, k == *cur])))
+            .collect(),
+        _ => Vec::new(),
+    };
+    // the header / footer fields while the caret is in one (paint_overlay)
+    let hf: Vec<serde_json::Value> = match app.cursor {
+        Some(Cursor { owner: Owner::HeaderFooter { page }, storage, .. }) => {
+            let footer = l.pages.get(page).is_some_and(|pg| pg.footers.iter().any(|f| f.storage == storage));
+            let mut rects: Vec<Rect> = hf_fields(&l, page).into_iter().filter(|f| f.2 == footer).map(|f| f.0).collect();
+            rects.sort_by(|a, b| a.min.x.total_cmp(&b.min.x));
+            let n = rects.len();
+            rects
+                .into_iter()
+                .enumerate()
+                .map(|(k, r)| json!([page, r.min.x + if k == 0 { -5.0 } else { 2.0 }, r.min.y - 2.0, r.max.x + if k + 1 == n { 5.0 } else { -2.0 }, r.max.y + 2.0]))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    // misspelled words in the body (the word being typed isn't marked yet)
+    let mut spell: Vec<serde_json::Value> = Vec::new();
+    if app.settings.spell_check {
+        if let Some(body) = &l.body {
+            let caret = match app.cursor {
+                Some(Cursor { owner: Owner::Body, caret, .. }) => Some(body.to_shown(caret)),
+                _ => None,
+            };
+            for (pi, para) in body.tb.paragraphs.iter().enumerate() {
+                let text = &body.tb.text[para.start..para.end];
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                text.hash(&mut h);
+                let bad = app.canvas.spell_cache.entry(h.finish()).or_insert_with(|| kn_ui::spell::misspelled(text)).clone();
+                for (a, b) in bad {
+                    let (a, b) = (para.start + a, para.start + b);
+                    if caret.is_some_and(|c| c >= a && c <= b) {
+                        continue;
+                    }
+                    for (qi, r) in range_rects(&l, a, b) {
+                        spell.push(json!([qi, r.min.x, r.max.x, r.max.y - 1.5]));
+                    }
+                }
+                let _ = pi;
+            }
+        }
+    }
+    let live_frame = app.canvas.live_frame.map(|(id, g)| json!({ "id": id, "page": app.obj_page.get(&id).copied().unwrap_or(0), "frame": [g.x, g.y, g.w, g.h], "angle": g.angle }));
+    // size and position while dragging (Settings > Rulers; paint_overlay): [page, frame's right,
+    // its top, text] for each object moved or resized
+    let mut measure: Vec<serde_json::Value> = Vec::new();
+    if app.canvas.drag.is_some() && app.settings.show_size_while_moving {
+        let off = app.canvas.live.as_ref().map(|(v, _)| *v).unwrap_or(Vec2::ZERO);
+        let moving: Vec<ObjId> = match &app.canvas.drag {
+            Some(Drag::Move { frames, moved: true, .. }) => frames.iter().map(|f| f.0).collect(),
+            _ => Vec::new(),
+        };
+        for id in &sel {
+            if !(moving.contains(id) || app.canvas.live_frame.is_some()) {
+                continue;
+            }
+            let Some(d) = app.drawables.iter().find(|d| d.id == *id).cloned() else { continue };
+            let mut r = frame(app, &d);
+            if let Some((_, g)) = app.canvas.live_frame.filter(|(lid, _)| lid == id) {
+                r = Rect::from_min_size(pos2(g.x, g.y), vec2(g.w.max(1.0), g.h.max(1.0)));
+            }
+            if moving.contains(id) {
+                r = r.translate(off);
+            }
+            let units = |v: f32| crate::ruler::fmt_len(v, app.settings.ruler_units);
+            let text = if app.canvas.live_frame.is_some() { format!("w: {}  h: {}", units(r.width()), units(r.height())) } else { format!("x: {}  y: {}", units(r.min.x), units(r.min.y)) };
+            measure.push(json!([app.obj_page.get(id).copied().unwrap_or(0), r.max.x, r.min.y, text]));
+        }
+    }
+    let marquee = match (&app.canvas.drag, app.canvas.marquee) {
+        (Some(Drag::Marquee { page, .. }), Some(m)) => Some(json!([page, m.min.x, m.min.y, m.max.x, m.max.y])),
+        _ => None,
+    };
+    app.layout = Some(l);
+    // the on-page controls (canvas's points, chart, media, gallery, page number and guides)
+    let controls = json!({
+        "points": crate::points::api_state(app),
+        "chart": crate::chartedit::api_state(app),
+        "media": crate::media::api_state(app),
+        "gallery": crate::mediainsp::gallery_api(app),
+        "pageNumber": crate::hfnumber::api_state(app),
+        "guides": crate::guides::api_state(app),
+    });
+    json!({ "caret": caret, "rects": rects, "objects": objects, "cells": cells, "live": live, "liveFrame": live_frame, "marquee": marquee, "dragging": app.canvas.drag.is_some(), "measure": measure, "find": find, "hf": hf, "spell": spell, "controls": controls, "version": app.version })
+}
+

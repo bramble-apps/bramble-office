@@ -1367,6 +1367,21 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         }
     }
     cmd = cmd.merge(std::mem::take(&mut play.child_cmd));
+    // Keydeck Remote: a linked phone or tablet moves the show
+    for c in crate::remote::take_cmds() {
+        match c {
+            crate::remote::Cmd::Next => cmd.fwd = true,
+            crate::remote::Cmd::Prev => cmd.back = true,
+            crate::remote::Cmd::Stop => cmd.esc = true,
+            crate::remote::Cmd::Goto(i) if i < app.slides.len() => {
+                play.last_viewed = play.index;
+                play.index = i;
+                play.step = 0;
+                play.anim = None;
+            }
+            _ => {}
+        }
+    }
     if play.clicks.first().is_some_and(|t| since(play.started).as_secs_f32() >= *t) {
         play.clicks.remove(0);
         cmd.fwd = true;
@@ -1681,6 +1696,8 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
     }
 
     // ------------------------------------------------------------------ draw
+    // what linked remotes see: this slide and build, the next, the notes
+    crate::remote::publish(app, Some((play.index, play.step)));
     let frames = video_frames(&mut play, &ctx);
     let idle = play.anim.is_none();
     if play.anim.is_some() {
@@ -1688,6 +1705,8 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
     }
     if slides_here {
         draw_slides(app, &mut play, &ctx, &ui.painter_at(rect), rect, &scene, &frames);
+        // a remote's laser pointer and highlights over the slide
+        crate::remote::draw_overlay(&ui.painter_at(rect), rect);
         video_controls(&mut play, ui, &map, &scene);
     } else {
         let view = presenter_view(app, &play, &scene, &frames);

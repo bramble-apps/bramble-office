@@ -22,7 +22,7 @@ pub fn open(app: &mut App) {
 
 pub fn ui(app: &mut App, ctx: &egui::Context) {
     let Some(mut st) = app.replace_fonts.take() else { return };
-    let families: Vec<String> = app.renderer.fonts.families().to_vec();
+    let families: Vec<String> = app.renderer.fonts.menu_families();
     let mut open = true;
     let mut apply = false;
     egui::Window::new("Replace Fonts").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(true).default_width(520.0).open(&mut open).show(ctx, |ui| {

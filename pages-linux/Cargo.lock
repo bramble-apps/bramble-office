@@ -2404,12 +2404,14 @@ dependencies = [
 name = "pg-app"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "eframe",
  "egui",
  "image",
  "kn-render",
  "kn-ui",
  "pg-core",
+ "serde_json",
  "tiny-skia 0.12.0",
  "winit",
  "winresource",
@@ -2427,6 +2429,14 @@ dependencies = [
  "swash",
  "tiny-skia 0.12.0",
  "zip",
+]
+
+[[package]]
+name = "pg-ffi"
+version = "0.1.0"
+dependencies = [
+ "pg-core",
+ "serde_json",
 ]
 
 [[package]]

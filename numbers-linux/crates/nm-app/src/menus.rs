@@ -487,7 +487,7 @@ const QUALIFIED: &[&str] = &[
     "Advanced", "Revert To", "Spelling and Grammar", "Substitutions", "Transformations", "Shapes and Lines", "Image",
 ];
 
-fn command_name(parent: &str, label: &str) -> String {
+pub(crate) fn command_name(parent: &str, label: &str) -> String {
     if QUALIFIED.contains(&parent) { format!("{parent} > {label}") } else { label.to_string() }
 }
 
@@ -1002,7 +1002,7 @@ pub(crate) fn enabled(app: &App, name: &str) -> bool {
 }
 
 /// Ticks for the items that are on.
-fn checked(app: &App, name: &str) -> Option<bool> {
+pub(crate) fn checked(app: &App, name: &str) -> Option<bool> {
     let t = selected_table(app);
     for (prefix, kind) in [("Header Rows > ", HeaderKind::Rows), ("Header Columns > ", HeaderKind::Columns), ("Footer Rows > ", HeaderKind::Footer)] {
         if let Some(n) = name.strip_prefix(prefix) {
@@ -1133,20 +1133,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
         return;
     }
     let name = command_name(parent, &item.label);
-    // labels that follow the state ("Hide Inspector" / "Show Inspector")
-    let label = match name.as_str() {
-        "Inspector > Hide Inspector" if !app.inspector => "Show Inspector".to_string(),
-        "Comments > Hide Comments" if !app.show_comments => "Show Comments".to_string(),
-        "Show Rulers" if app.show_rulers => "Hide Rulers".to_string(),
-        "Guides > Hide Guides" if !app.show_guides => "Show Guides".to_string(),
-        "Hide Toolbar" if !app.show_toolbar => "Show Toolbar".to_string(),
-        "Find > Hide Find Panel" if app.find.is_none() => "Show Find Panel".to_string(),
-        "Undo" => app.hist.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".into()),
-        "Redo" => app.hist.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".into()),
-        "Lock" | "Unlock" => item.label.clone(),
-        n if crate::organize::is_menu(n) => crate::organize::label(app, n).unwrap_or_else(|| item.label.clone()),
-        _ => item.label.clone(),
-    };
+    let label = shown_label(app, &name, &item.label);
     let mut b = egui::Button::new(atoms(label, indent));
     let shortcut = match name.as_str() {
         "Font > Bigger" | "Font > Smaller" => None,
@@ -1168,6 +1155,24 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, parent: &str, item: &Item, indent: 
     if r.clicked() {
         *fired = Some(name);
         ui.close();
+    }
+}
+
+/// A menu item's label as it shows now: some follow the state ("Hide Inspector" / "Show
+/// Inspector", "Undo Typing").
+pub(crate) fn shown_label(app: &App, name: &str, label: &str) -> String {
+    match name {
+        "Inspector > Hide Inspector" if !app.inspector => "Show Inspector".to_string(),
+        "Comments > Hide Comments" if !app.show_comments => "Show Comments".to_string(),
+        "Show Rulers" if app.show_rulers => "Hide Rulers".to_string(),
+        "Guides > Hide Guides" if !app.show_guides => "Show Guides".to_string(),
+        "Hide Toolbar" if !app.show_toolbar => "Show Toolbar".to_string(),
+        "Find > Hide Find Panel" if app.find.is_none() => "Show Find Panel".to_string(),
+        "Undo" => app.hist.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".into()),
+        "Redo" => app.hist.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".into()),
+        "Lock" | "Unlock" => label.to_string(),
+        n if crate::organize::is_menu(n) => crate::organize::label(app, n).unwrap_or_else(|| label.to_string()),
+        _ => label.to_string(),
     }
 }
 
@@ -1237,6 +1242,11 @@ fn shortcut_table() -> &'static [(KeyboardShortcut, String, String)] {
         out.sort_by_key(|(k, _, _)| std::cmp::Reverse(k.modifiers.shift as u8 + k.modifiers.alt as u8 + k.modifiers.command as u8));
         out
     })
+}
+
+/// The menu command a shortcut runs (Ctrl+letter from a front end's keyboard).
+pub fn shortcut_command(mods: Modifiers, key: Key) -> Option<String> {
+    shortcut_table().iter().find(|(k, _, _)| k.logical_key == key && k.modifiers.matches_exact(mods)).map(|(_, c, _)| c.clone())
 }
 
 /// While typing in a cell or a text field these stay with the text (copy, select all, …).
@@ -1363,7 +1373,7 @@ fn text_prop(app: &mut App, label: &str, prop: TextProp) {
 }
 
 /// The selected cell's or object's character style (for Bold etc. to toggle).
-fn current_char(app: &App) -> Option<nm_core::kn_model::CharStyle> {
+pub(crate) fn current_char(app: &App) -> Option<nm_core::kn_model::CharStyle> {
     // the character at the start of the text selection being edited
     if let Some(e) = app.canvas.editing.as_ref() {
         let at = e.cursor.min(e.anchor);
@@ -1669,7 +1679,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
     };
     match name {
         "About Values" => app.show_about = true,
-        "Support Development…" => kn_ui::open_url(kn_ui::DONATE_URL),
+        "Support Development…" => crate::ffi::open_url(kn_ui::DONATE_URL),
         "Settings…" => app.show_settings = true,
         "Quit Values" | "Close" | "Close All" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         // Numbers' template chooser (Blank and My Templates)

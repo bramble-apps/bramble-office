@@ -357,6 +357,45 @@ pub fn combo<'a>(id: impl std::hash::Hash + std::fmt::Debug) -> egui::ComboBox<'
     })
 }
 
+/// A font menu you can type in: the combo's list with a search field over it, focused as it
+/// opens. Typing narrows the list (names starting with the text first); Return picks the first
+/// name left, or the name typed when none is. Returns the family picked.
+pub fn font_combo(ui: &mut egui::Ui, id: &str, current: &str, fonts: &[String], width: f32) -> Option<String> {
+    let qid = egui::Id::unique((id, "font-search"));
+    let mut picked = None;
+    let r = combo(id).selected_text(current).width(width).height(400.0).show_ui(ui, |ui| {
+        let mut q: String = ui.data_mut(|d| d.get_temp::<String>(qid)).unwrap_or_default();
+        let te = ui.add(egui::TextEdit::singleline(&mut q).hint_text("Search").desired_width(f32::INFINITY));
+        // (focus once, as the list opens)
+        if !ui.data(|d| d.get_temp::<bool>(qid.with("focused")).unwrap_or(false)) {
+            te.request_focus();
+            ui.data_mut(|d| d.insert_temp(qid.with("focused"), true));
+        }
+        let t = q.trim().to_lowercase();
+        let mut list: Vec<&String> = fonts.iter().filter(|f| t.is_empty() || f.to_lowercase().contains(&t)).collect();
+        list.sort_by_key(|f| !f.to_lowercase().starts_with(&t));
+        if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            picked = list.first().map(|f| f.to_string()).or_else(|| (!q.trim().is_empty()).then(|| q.trim().to_string()));
+            ui.close();
+        }
+        ui.separator();
+        for f in list {
+            if ui.selectable_label(f == current, f.as_str()).clicked() {
+                picked = Some(f.clone());
+            }
+        }
+        ui.data_mut(|d| d.insert_temp(qid, q));
+    });
+    // closed: next time it opens empty, focused again
+    if r.inner.is_none() {
+        ui.data_mut(|d| {
+            d.remove::<String>(qid);
+            d.remove::<bool>(qid.with("focused"));
+        });
+    }
+    picked.filter(|f| f != current)
+}
+
 /// macOS checkbox: blue rounded square with a white tick when on.
 pub fn checkbox(ui: &mut egui::Ui, on: &mut bool, text: impl Into<egui::WidgetText>) -> egui::Response {
     let text: egui::WidgetText = text.into();
@@ -368,6 +407,9 @@ pub fn checkbox(ui: &mut egui::Ui, on: &mut bool, text: impl Into<egui::WidgetTe
         resp.mark_changed();
     }
     let enabled = ui.is_enabled();
+    // (named for accessibility, and for front ends that read the controls: pg-app ffi.rs)
+    let (state, name) = (*on, galley.text().to_string());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, enabled, state, name.clone()));
     let b = egui::Rect::from_center_size(egui::pos2(rect.min.x + 9.0, rect.center().y), egui::vec2(17.0, 17.0));
     if *on {
         ui.painter().rect_filled(b, 4.0, if enabled { ACCENT() } else { Color32::from_gray(90) });
@@ -404,6 +446,7 @@ pub fn stepper(ui: &mut egui::Ui, v: &mut f64, step: f64, range: std::ops::Range
             // ids from this stepper's own field (the enclosing scope is shared by the steppers
             // of a panel, so ids from it collided and clicks went nowhere)
             let resp = ui.interact(half, r.id.with(("step", dir as i32)), egui::Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, if dir > 0.0 { "step+" } else { "step-" }));
             let c = half.center();
             let col = if resp.hovered() { Color32::WHITE } else { TEXT_DIM() };
             let dy = 2.0 * dir as f32;
@@ -442,6 +485,7 @@ pub fn disclosure(ui: &mut egui::Ui, id: &str, title: &str, swatch: Option<Swatc
     ui.add_space(4.0);
     ui.separator();
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::DisclosureTriangle, true, open, title));
     let p = ui.painter();
     let c = egui::pos2(rect.min.x + 6.0, rect.center().y);
     let s = Stroke::new(1.4, TEXT_DIM());
@@ -477,6 +521,8 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         *on = !*on;
         resp.mark_changed();
     }
+    let state = *on;
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, state, "switch"));
     // its own time: the apps make popups instant (animation_time 0) but macOS switches glide
     let k = ui.ctx().animate_bool_with_time(resp.id, *on, 0.2);
     let p = ui.painter();

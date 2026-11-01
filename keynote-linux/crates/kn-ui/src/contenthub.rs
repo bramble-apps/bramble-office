@@ -387,6 +387,12 @@ fn file_name(item: &Item, ext: &str) -> String {
 }
 
 fn load_thumb(url: &str) -> Option<image::RgbaImage> {
+    let bytes = std::fs::read(thumb_file(url)?).ok()?;
+    Some(image::load_from_memory(&bytes).ok()?.to_rgba8())
+}
+
+/// A thumbnail in the disk cache (fetched first when it isn't there).
+pub fn thumb_file(url: &str) -> Option<PathBuf> {
     let dir = cache_dir();
     let key: u64 = url.bytes().fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
     let path = dir.join(format!("{key:016x}"));
@@ -399,7 +405,8 @@ fn load_thumb(url: &str) -> Option<image::RgbaImage> {
             b
         }
     };
-    Some(image::load_from_memory(&bytes).ok()?.to_rgba8())
+    let _ = bytes;
+    Some(path)
 }
 
 // ------------------------------------------------------------------ look
@@ -463,6 +470,11 @@ impl Hub {
             }
             _ => {}
         }
+    }
+
+    /// The tab it opened on (0 Browse … 4 Shapes), for front ends that draw it themselves.
+    pub fn tab_index(&self) -> usize {
+        self.tab as usize
     }
 
     /// Asks the app for its shapes again (after My Shapes changed).
@@ -1176,6 +1188,99 @@ impl Hub {
         }
         let _ = &mut picked;
         picked
+    }
+}
+
+/// The hub as data, for front ends that draw it themselves (Letters' Flutter app); the
+/// searches and downloads block, so they run on a worker there.
+pub mod api {
+    use super::*;
+    use kn_model::PathEl;
+    use serde_json::{json, Value};
+
+    fn els(p: &kn_model::Path) -> Vec<Value> {
+        p.els
+            .iter()
+            .map(|e| match e {
+                PathEl::Move(p) => json!(["M", p.x, p.y]),
+                PathEl::Line(p) => json!(["L", p.x, p.y]),
+                PathEl::Quad(c, p) => json!(["Q", c.x, c.y, p.x, p.y]),
+                PathEl::Cubic(a, b, p) => json!(["C", a.x, a.y, b.x, b.y, p.x, p.y]),
+                PathEl::Close => json!(["Z"]),
+            })
+            .collect()
+    }
+
+    /// An outline as [w, h, [els]].
+    pub fn outline(p: &kn_model::Path, w: f32, h: f32) -> Value {
+        json!([w, h, els(p)])
+    }
+
+    /// The tabs, each tab's chips (with their search words), the library's categories and
+    /// shapes (category, name; their index is lib_shape's) and the icons the tabs and chips use.
+    pub fn catalog() -> Value {
+        let cat = |c: &Cat| json!([c.0, c.1, cat_words(c)]);
+        let lib: Vec<Value> = shapelib::shapes().iter().map(|s| json!([s.category, s.name])).collect();
+        let mut icons: Vec<&str> = TABS.iter().map(|t| t.2).collect();
+        icons.extend(PHOTOS.iter().chain(ILLUSTRATIONS).chain(BACKGROUNDS).map(|c| c.1));
+        icons.extend(["Star", "Square", "Soccer ball", "Arrow right", "Chat", "Music note", "Leaf", "Cube", "User", "House", "Heart", "Cpu", "Briefcase", "Shapes"]);
+        let icon_paths: serde_json::Map<String, Value> = icons.iter().filter_map(|n| crate::shapelib::named(n).map(|s| (n.to_string(), outline(&s.outline(), s.w, s.h)))).collect();
+        json!({
+            "tabs": TABS.iter().map(|t| json!([t.1, t.2])).collect::<Vec<_>>(),
+            "photos": PHOTOS.iter().map(cat).collect::<Vec<_>>(),
+            "illustrations": ILLUSTRATIONS.iter().map(cat).collect::<Vec<_>>(),
+            "backgrounds": BACKGROUNDS.iter().map(cat).collect::<Vec<_>>(),
+            "libCategories": shapelib::categories(),
+            "lib": lib,
+            "icons": icon_paths,
+        })
+    }
+
+    /// A library shape's outline ([w, h, els]).
+    pub fn lib_shape(i: usize) -> Value {
+        shapelib::shapes().get(i).map(|s| outline(&s.outline(), s.w, s.h)).unwrap_or(Value::Null)
+    }
+
+    /// The library shapes a search finds (their indexes).
+    pub fn lib_search(q: &str) -> Value {
+        let all = shapelib::shapes();
+        json!(shapelib::search(q).iter().filter_map(|s| all.iter().position(|x| std::ptr::eq(x, *s))).collect::<Vec<_>>())
+    }
+
+    /// The search words for what's typed.
+    pub fn query(q: &str) -> String {
+        query_words(q)
+    }
+
+    fn item_json(it: &Item) -> Value {
+        json!({"title": it.title, "file": it.file, "author": it.author, "licence": it.licence, "creditNeeded": it.credit_needed, "page": it.page_url, "thumb": it.thumb_url, "w": it.w, "h": it.h})
+    }
+
+    fn item_from(v: &Value) -> Item {
+        let s = |k: &str| v[k].as_str().unwrap_or_default().to_string();
+        Item { title: s("title"), file: s("file"), author: s("author"), licence: s("licence"), credit_needed: v["creditNeeded"].as_bool().unwrap_or(true), page_url: s("page"), thumb_url: s("thumb"), w: v["w"].as_u64().unwrap_or(0) as u32, h: v["h"].as_u64().unwrap_or(0) as u32 }
+    }
+
+    /// One page of pictures: {items, next} or {error}.
+    pub fn search_page(words: &str, offset: usize) -> Value {
+        match search(words, offset) {
+            Ok((items, next)) => json!({"items": items.iter().map(item_json).collect::<Vec<_>>(), "next": next}),
+            Err(e) => json!({"error": e}),
+        }
+    }
+
+    /// The picture for an item (search_page's) saved in `dir`: {path, name, credit} or {error}.
+    pub fn download_to(item: &Value, dir: &std::path::Path) -> Value {
+        match download(&item_from(item)) {
+            Ok(p) => {
+                let path = dir.join(&p.name);
+                match std::fs::write(&path, &p.bytes) {
+                    Ok(()) => json!({"path": path, "name": p.name, "credit": p.credit}),
+                    Err(e) => json!({"error": e.to_string()}),
+                }
+            }
+            Err(e) => json!({"error": e}),
+        }
     }
 }
 

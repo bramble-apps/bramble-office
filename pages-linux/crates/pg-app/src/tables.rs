@@ -119,7 +119,7 @@ pub fn extend_to(app: &mut App, id: ObjId, pt: egui::Pos2) {
 }
 
 /// A cell's box inside the table (merged cells cover their span).
-fn cell_box(t: &TableData, r: u32, c: u32) -> (f32, f32, f32, f32) {
+pub(crate) fn cell_box(t: &TableData, r: u32, c: u32) -> (f32, f32, f32, f32) {
     let (r1, c1) = t.merge_at(r, c).map(|m| (m.row + m.rows - 1, m.col + m.cols - 1)).unwrap_or((r, c));
     let x = t.col_widths.iter().take(c as usize).sum::<f32>();
     let y = t.row_heights.iter().take(r as usize).sum::<f32>();
@@ -248,7 +248,8 @@ fn tab_move(app: &mut App, back: bool) {
 }
 
 /// Keys while cells are selected (and no cell is being edited).
-pub fn handle_keys(app: &mut App, ctx: &egui::Context, tab: Option<bool>) {
+/// Keys and text for the selected cells (`command`: Ctrl / Cmd held).
+pub fn key_events(app: &mut App, ctx: &egui::Context, tab: Option<bool>, events: &[Event], command: bool) {
     let Some(s) = app.sel else { return };
     if editing() {
         return;
@@ -257,10 +258,9 @@ pub fn handle_keys(app: &mut App, ctx: &egui::Context, tab: Option<bool>) {
         tab_move(app, shift);
         return;
     }
-    let events = ctx.input(|i| i.events.clone());
-    for e in events {
+    for e in events.iter().cloned() {
         match e {
-            Event::Text(t) if !t.is_empty() && !ctx.input(|i| i.modifiers.command) => {
+            Event::Text(t) if !t.is_empty() && !command => {
                 // typing replaces the cell's content
                 let (r, c) = s.cursor;
                 app.sel = Some(Sel::cell(s.table, r, c));
@@ -404,6 +404,195 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) -> bool {
     }
     let busy = with(|u| u.tab_drag.is_some() || u.border_drag.is_some() || u.fill_drag.is_some());
     busy || pointer.is_some_and(|q| hot.iter().any(|r| r.contains(q)))
+}
+
+// ------------------------------------------------------------------ for other front ends (ffi.rs)
+
+/// The selected table as the canvas's table chrome needs it (page points): its place, rows and
+/// columns, the cells selected, the cell being edited and that cell's look.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let id = match app.selected_objs()[..] {
+        [id] if app.table(id).is_some() && app.canvas.editing.is_none() => id,
+        _ => return serde_json::Value::Null,
+    };
+    let Some((d, t)) = app.table(id) else { return serde_json::Value::Null };
+    if d.geom.angle.rem_euclid(360.0) != 0.0 {
+        return serde_json::Value::Null;
+    }
+    let sel = app.sel.filter(|s| s.table == id).map(|s| {
+        let (r0, c0, r1, c1) = app.with_merges(id, s.block());
+        json!([r0, c0, r1, c1])
+    });
+    let editing = with(|u| u.cell.clone()).filter(|c| c.0 == id).map(|(_, r, c, text, _)| {
+        let style = t.cell_styles.get((r * t.cols + c) as usize).cloned().unwrap_or_default();
+        let col = |k: pg_core::kn_model::Color| json!([k.r, k.g, k.b, k.a]);
+        let fill = match &style.fill {
+            pg_core::kn_model::Fill::Color(k) if k.a > 0.99 => Some(col(*k)),
+            pg_core::kn_model::Fill::Gradient { stops, .. } if !stops.is_empty() => Some(col(stops[0].1)),
+            _ => None,
+        };
+        let align = match style.align {
+            pg_core::kn_model::Align::Center => "center",
+            pg_core::kn_model::Align::Right => "right",
+            pg_core::kn_model::Align::Natural if text.trim().parse::<f64>().is_ok() => "right",
+            _ => "left",
+        };
+        json!({
+            "r": r, "c": c, "text": text,
+            "size": if style.text.size > 0.0 { style.text.size } else { 11.0 },
+            "color": (style.text.color.a > 0.0).then(|| col(style.text.color)),
+            "fill": fill, "align": align, "padding": style.padding,
+            "valign": format!("{:?}", style.valign),
+        })
+    });
+    let empty = |k: u32, rows: bool| {
+        let cell = |r: u32, c: u32| t.cells.get((r * t.cols + c) as usize).is_none_or(|x| x.trim().is_empty());
+        if rows { (0..t.cols).all(|c| cell(k, c)) } else { (0..t.rows).all(|r| cell(r, k)) }
+    };
+    let floor = |rows: bool, cur: u32| (1..cur).rev().take_while(|&k| empty(k, rows)).last().unwrap_or(cur).max(1);
+    json!({
+        "id": id,
+        "page": app.obj_page.get(&id).copied().unwrap_or(0),
+        "x": d.geom.x, "y": d.geom.y,
+        "colWidths": t.col_widths, "rowHeights": t.row_heights,
+        "rows": t.rows, "cols": t.cols,
+        "headerRows": t.header_rows, "footerRows": t.footer_rows,
+        "locked": d.locked,
+        "sel": sel,
+        "anchor": app.sel.filter(|s| s.table == id).map(|s| json!([s.anchor.0, s.anchor.1])),
+        "editing": editing,
+        "rowFloor": floor(true, t.rows), "colFloor": floor(false, t.cols),
+    })
+}
+
+/// A row / column tab's menu (tab_menu) as menu data.
+pub fn tab_menu_items(app: &App, rows: bool, i: u32) -> Vec<crate::menus::MItem> {
+    use crate::menus::MItem;
+    let item = |label: &str, cmd: &str| MItem::Cmd { label: label.into(), action: format!("cmd:{cmd}"), enabled: crate::menus::enabled(app, cmd), bold: false, checked: false };
+    let mut v = Vec::new();
+    if rows {
+        v.extend([item("Add Row Above", "Table > Add Row Above"), item("Add Row Below", "Table > Add Row Below"), MItem::Sep, item("Delete Row", "Table > Delete Row")]);
+    } else {
+        v.extend([item("Sort Ascending", "Table > Sort Ascending"), item("Sort Descending", "Table > Sort Descending"), MItem::Sep, item("Add Column Before", "Table > Add Column Before"), item("Add Column After", "Table > Add Column After"), MItem::Sep, item("Delete Column", "Table > Delete Column")]);
+    }
+    v.push(MItem::Sep);
+    v.push(MItem::act(if rows { "Fit Height to Content" } else { "Fit Width to Content" }, format!("tbl:fit:{}:{i}", u8::from(rows))));
+    v.push(MItem::Sep);
+    v.extend([item("Cut", "Cut"), item("Copy", "Copy"), item("Paste", "Paste")]);
+    v.push(MItem::act("Clear All", "tbl:clear"));
+    v
+}
+
+/// A table chrome action: "select:r0:c0:r1:c1", "all", "edit:r:c", "text:<text>", "commit",
+/// "commitTab:<0|1 back>", "cancel", "size:<rows 0|1>:i:pt", "count:<rows>:n", "move:lo:hi:before",
+/// "autofill:r1:c1", "fit:<rows>:i", "clear", "moveStart" (the table follows the pointer).
+pub fn api_action(app: &mut App, a: &str) {
+    let Some(id) = app.selected_objs().first().copied().filter(|id| app.table(*id).is_some()) else { return };
+    let parts: Vec<&str> = a.splitn(2, ':').collect();
+    let (kind, rest) = (parts[0], parts.get(1).copied().unwrap_or(""));
+    let nums: Vec<u32> = rest.split(':').filter_map(|x| x.parse().ok()).collect();
+    let n = |i: usize| nums.get(i).copied().unwrap_or(0);
+    match kind {
+        "select" => {
+            commit(app);
+            select_range(app, id, (n(0), n(1)), (n(2), n(3)));
+        }
+        "all" => {
+            commit(app);
+            app.sel = None;
+        }
+        "edit" => {
+            commit(app);
+            app.sel = Some(Sel::cell(id, n(0), n(1)));
+            open_editor(app, id, n(0), n(1), None);
+        }
+        "type" => {
+            // typing on selected cells replaces the cursor cell's content
+            if let Some(s) = app.sel {
+                let (r, c) = s.cursor;
+                app.sel = Some(Sel::cell(id, r, c));
+                open_editor(app, id, r, c, Some(rest.to_string()));
+            }
+        }
+        "text" => with(|u| {
+            if let Some(c) = u.cell.as_mut() {
+                c.3 = rest.to_string();
+            }
+        }),
+        "commit" | "commitTab" => {
+            let cell = with(|u| u.cell.as_ref().map(|c| (c.1, c.2)));
+            commit(app);
+            if let Some((r, c)) = cell {
+                app.sel = Some(Sel::cell(id, r, c));
+                if kind == "commitTab" {
+                    tab_move(app, rest == "1");
+                }
+            }
+        }
+        "cancel" => {
+            with(|u| u.cell = None);
+            if let Some(orig) = with(|u| u.edit_orig.take()) {
+                let s = app.sel;
+                if let Some(s) = s {
+                    let (r, c) = s.cursor;
+                    app.edit("Typing", |d, h| {
+                        let r2 = d.set_cell(h, id, r, c, &CellInput::parse(&orig));
+                        d.recalc_formulas(h, id);
+                        r2
+                    });
+                }
+            }
+        }
+        "size" => {
+            let rows = n(0) == 1;
+            let size: f32 = rest.split(':').nth(2).and_then(|x| x.parse().ok()).unwrap_or(30.0);
+            let i = n(1);
+            app.edit(if rows { "Resize Row" } else { "Resize Column" }, |d, h| d.set_table_sizes(h, id, rows, &[(i, size.max(if rows { 12.0 } else { 20.0 }))]));
+        }
+        "count" => {
+            let rows = n(0) == 1;
+            let cur = app.table(id).map(|(_, t)| if rows { t.rows } else { t.cols }).unwrap_or(1);
+            set_count(app, id, rows, cur, n(1).clamp(1, 255));
+        }
+        "move" => {
+            let (lo, hi, before) = (n(0), n(1), n(2));
+            let cols = app.table(id).map(|(_, t)| t.cols).unwrap_or(1);
+            match app.edit(if hi > lo { "Move Rows" } else { "Move Row" }, |d, h| d.move_table_rows(h, id, lo, hi, before)) {
+                Some(Ok(at)) => select_range(app, id, (at, 0), (at + hi - lo, cols - 1)),
+                Some(Err(e)) => app.notify(e.to_string()),
+                None => {}
+            }
+        }
+        "autofill" => {
+            if let Some(s) = app.sel {
+                let (r0, c0, r1, c1) = app.with_merges(id, s.block());
+                let (to_r1, to_c1) = (n(0).max(r1), n(1).max(c1));
+                if (to_r1, to_c1) != (r1, c1) {
+                    if let Some(Err(e)) = app.edit("Autofill", |d, h| d.autofill(h, id, (r0, c0, r1, c1), (r0, c0, to_r1, to_c1))) {
+                        app.notify(e.to_string());
+                    }
+                    app.sel = Some(Sel { table: id, anchor: (r0, c0), cursor: (to_r1, to_c1) });
+                }
+            }
+        }
+        "fit" => {
+            let (rows, i) = (n(0) == 1, n(1));
+            app.edit(if rows { "Fit Height to Content" } else { "Fit Width to Content" }, |d, h| d.fit_table_to_content(h, id, rows, &[i]));
+        }
+        "clear" => clear_cells(app, "Clear All"),
+        // the corner button dragged: the table moves with the pointer (view point x, y)
+        "moveStart" => {
+            commit(app);
+            app.sel = None;
+            let page = app.obj_page.get(&id).copied().unwrap_or(0);
+            let xy: Vec<f32> = rest.split(':').filter_map(|v| v.parse().ok()).collect();
+            if xy.len() == 2 && !app.drawables.iter().any(|d| d.id == id && d.locked) {
+                crate::canvas::start_move(app, id, page, egui::pos2(xy[0], xy[1]));
+            }
+        }
+        _ => {}
+    }
 }
 
 const BAR: f32 = 20.0;

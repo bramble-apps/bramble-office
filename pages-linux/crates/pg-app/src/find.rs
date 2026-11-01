@@ -140,3 +140,54 @@ pub fn find_bar(app: &mut App, ui: &mut egui::Ui) {
         app.replace = None;
     }
 }
+
+// ------------------------------------------------------------------ for other front ends (ffi.rs)
+
+/// The find bar as data (null: closed).
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let Some((q, matches, cur)) = app.find.clone() else { return serde_json::Value::Null };
+    json!({ "query": q, "count": matches.len(), "cur": cur, "case": app.find_case, "words": app.find_words, "replace": app.replace })
+}
+
+/// "q:<text>", "step:<1 next|0>", "case:<0|1>", "words:<0|1>", "replaceOpen", "replaceClose"
+/// (back to plain Find), "with:<text>", "replace", "replaceAll", "close".
+pub fn api_action(app: &mut App, a: &str) {
+    let (k, v) = a.split_once(':').unwrap_or((a, ""));
+    match k {
+        "q" => {
+            let m = search(app, v);
+            let found = !m.is_empty();
+            app.find = Some((v.to_string(), m, 0));
+            if found {
+                show_match(app, 0);
+            }
+        }
+        "step" => step(app, v == "1"),
+        "case" | "words" => {
+            if k == "case" {
+                app.find_case = v == "1";
+            } else {
+                app.find_words = v == "1";
+            }
+            if let Some((q, _, _)) = app.find.clone() {
+                let m = search(app, &q);
+                let found = !m.is_empty();
+                app.find = Some((q, m, 0));
+                if found {
+                    show_match(app, 0);
+                }
+            }
+        }
+        "replaceOpen" => app.replace = Some(String::new()),
+        "replaceClose" => app.replace = None,
+        "with" => app.replace = Some(v.to_string()),
+        "replace" => replace(app, false),
+        "replaceAll" => replace(app, true),
+        "close" => {
+            app.find = None;
+            app.replace = None;
+        }
+        _ => {}
+    }
+}

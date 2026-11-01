@@ -147,34 +147,106 @@ pub fn canvas(app: &mut App, ui: &egui::Ui, resp: &egui::Response, to_screen: &d
         painter.circle(at(n.pt), 4.5, accent, Stroke::new(1.0, Color32::WHITE));
         if resp.drag_stopped() {
             app.points.drag = None;
-            // the frame follows the outline (Pages keeps the frame around the points)
-            let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-            for sp in &e.subpaths {
-                for n in &sp.nodes {
-                    for q in [n.pt, n.inc, n.out] {
-                        (x0, y0, x1, y1) = (x0.min(q.x), y0.min(q.y), x1.max(q.x), y1.max(q.y));
-                    }
-                }
-            }
-            let fit = x1 > x0 && y1 > y0;
-            if fit {
-                for sp in &mut e.subpaths {
-                    for n in &mut sp.nodes {
-                        for q in [&mut n.pt, &mut n.inc, &mut n.out] {
-                            q.x -= x0;
-                            q.y -= y0;
-                        }
-                    }
-                }
-            }
-            let ng = pg_core::kn_model::Geometry { x: g.x + x0, y: g.y + y0, w: x1 - x0, h: y1 - y0, ..g };
-            app.edit("Edit Points", |doc, h| {
-                if fit {
-                    doc.set_frame(h, id, ng);
-                }
-                doc.set_editable_nodes(h, id, &e)
-            });
+            commit(app, id, e, g);
         }
     }
     used
+}
+
+/// The edited points stored as one undo step; the frame follows the outline (Pages keeps the
+/// frame around the points).
+fn commit(app: &mut App, id: ObjId, mut e: Editable, g: pg_core::kn_model::Geometry) {
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for sp in &e.subpaths {
+        for n in &sp.nodes {
+            for q in [n.pt, n.inc, n.out] {
+                (x0, y0, x1, y1) = (x0.min(q.x), y0.min(q.y), x1.max(q.x), y1.max(q.y));
+            }
+        }
+    }
+    let fit = x1 > x0 && y1 > y0;
+    if fit {
+        for sp in &mut e.subpaths {
+            for n in &mut sp.nodes {
+                for q in [&mut n.pt, &mut n.inc, &mut n.out] {
+                    q.x -= x0;
+                    q.y -= y0;
+                }
+            }
+        }
+    }
+    let ng = pg_core::kn_model::Geometry { x: g.x + x0, y: g.y + y0, w: x1 - x0, h: y1 - y0, ..g };
+    app.edit("Edit Points", |doc, h| {
+        if fit {
+            doc.set_frame(h, id, ng);
+        }
+        doc.set_editable_nodes(h, id, &e)
+    });
+}
+
+/// The points being edited for a front end (canvas): the shape, its page, the frame's origin
+/// (page points), the points [subpath, index, kind (0 sharp, 1 smooth, 2 bézier), x, y, in x,
+/// in y, out x, out y] (relative to the origin) and the selected one; null when none.
+pub fn api_state(app: &mut App) -> serde_json::Value {
+    use serde_json::json;
+    if app.points.id.is_some() && app.canvas.obj != app.points.id {
+        app.points = PointEdit::default();
+    }
+    let Some((id, e, g)) = nodes(app) else { return serde_json::Value::Null };
+    if g.angle.rem_euclid(360.0) != 0.0 {
+        return serde_json::Value::Null;
+    }
+    let page = app.obj_page.get(&id).copied().unwrap_or(0);
+    let mut v = Vec::new();
+    for (s, sp) in e.subpaths.iter().enumerate() {
+        for (i, n) in sp.nodes.iter().enumerate() {
+            let kind = match n.kind {
+                NodeKind::Sharp => 0,
+                NodeKind::Smooth => 1,
+                _ => 2,
+            };
+            v.push(json!([s, i, kind, n.pt.x, n.pt.y, n.inc.x, n.inc.y, n.out.x, n.out.y]));
+        }
+    }
+    json!({ "id": id, "page": page, "origin": [g.x, g.y], "nodes": v, "selected": app.points.selected.map(|(s, i)| json!([s, i])) })
+}
+
+/// A front end's point actions (canvas): "sel:<s>:<i>" selects a point; "move:<s>:<i>:<part>:
+/// <dx>:<dy>" moves it (part 0) or its in / out handle (1 / 2) by page points, one undo step;
+/// "stop" ends the editing.
+pub fn action(app: &mut App, arg: &str) {
+    let p: Vec<&str> = arg.split(':').collect();
+    let num = |k: usize| p.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    match p.first().copied() {
+        Some("sel") => app.points.selected = Some((num(1) as usize, num(2) as usize)),
+        Some("move") => {
+            let Some((id, mut e, g)) = nodes(app) else { return };
+            let (s, i, k) = (num(1) as usize, num(2) as usize, num(3) as u8);
+            let Some(n) = e.subpaths.get_mut(s).and_then(|sp| sp.nodes.get_mut(i)) else { return };
+            let d = Point::new(num(4), num(5));
+            let shift = |q: &mut Point| {
+                q.x += d.x;
+                q.y += d.y;
+            };
+            match k {
+                0 => {
+                    shift(&mut n.pt);
+                    shift(&mut n.inc);
+                    shift(&mut n.out);
+                }
+                _ => {
+                    let (moved, other) = if k == 1 { (&mut n.inc, &mut n.out) } else { (&mut n.out, &mut n.inc) };
+                    shift(moved);
+                    if n.kind == NodeKind::Smooth {
+                        let m = *moved;
+                        *other = Point::new(2.0 * n.pt.x - m.x, 2.0 * n.pt.y - m.y);
+                    }
+                }
+            }
+            app.points.selected = Some((s, i));
+            commit(app, id, e, g);
+        }
+        Some("stop") => app.points = PointEdit::default(),
+        _ => {}
+    }
 }

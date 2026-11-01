@@ -28,7 +28,7 @@ pub struct CellEdit {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Drag {
+pub(crate) enum Drag {
     Cells(ObjId),
     Columns(ObjId),
     Rows(ObjId),
@@ -60,7 +60,7 @@ enum Drag {
 
 /// The edges each selection handle moves (left, top, right, bottom), in the order the handles
 /// are drawn: top-left, top, top-right, left, right, bottom-left, bottom, bottom-right.
-const HANDLE_EDGES: [(bool, bool, bool, bool); 8] = [
+pub(crate) const HANDLE_EDGES: [(bool, bool, bool, bool); 8] = [
     (true, true, false, false),
     (false, true, false, false),
     (false, true, true, false),
@@ -72,20 +72,20 @@ const HANDLE_EDGES: [(bool, bool, bool, bool); 8] = [
 ];
 
 /// The handle points of a selected object's screen rect, in [`HANDLE_EDGES`] order.
-fn handle_points(r: Rect) -> [Pos2; 8] {
+pub(crate) fn handle_points(r: Rect) -> [Pos2; 8] {
     [r.left_top(), r.center_top(), r.right_top(), r.left_center(), r.right_center(), r.left_bottom(), r.center_bottom(), r.right_bottom()]
 }
 
 pub struct Canvas {
     pub zoom: f32,
     /// Sheet point at the top-left corner of the canvas; None = place on the next frame.
-    origin: Option<Pos2>,
+    pub(crate) origin: Option<Pos2>,
     pub(crate) tiles: Tiles,
     /// Keydeck's in-place text editing state (the ported inspector reads it; Values edits
     /// text in its own field, so it stays empty).
     pub editing: Option<crate::textedit::Editing>,
     pub edit: Option<CellEdit>,
-    drag: Option<Drag>,
+    pub(crate) drag: Option<Drag>,
     /// A selected chart, shape, text box or image (tables select cells instead).
     pub obj: Option<ObjId>,
     /// Shift-click: several objects selected, `obj` first (valid while it is `obj`'s; see
@@ -95,7 +95,7 @@ pub struct Canvas {
     /// Renaming a table in place: (table, its new name). Double-click the title (Numbers).
     pub title_edit: Option<(ObjId, String)>,
     /// Size of the canvas in the last frame (screen points), and a sheet rect to bring into view.
-    size: Vec2,
+    pub(crate) size: Vec2,
     pub reveal: Option<Rect>,
     /// Tab pressed this frame (with Shift?): taken out of egui's input so it moves between
     /// cells instead of between widgets.
@@ -104,14 +104,14 @@ pub struct Canvas {
     pub return_col: Option<u32>,
     /// The cell an arrow key landed on inside a merge: leaving it again goes on from that row /
     /// column (Numbers, Mac N16: Down into D23:F23 from E22, Down again -> E24).
-    merge_entry: Option<(u32, u32)>,
+    pub(crate) merge_entry: Option<(u32, u32)>,
     /// Clicking cells while typing a formula: the text before the inserted reference, the
     /// reference text, and the cell the click / drag started on.
-    pick: Option<(String, String, (u32, u32))>,
+    pub(crate) pick: Option<(String, String, (u32, u32))>,
     /// A zoom step on its way (menu, Ctrl+Plus/Minus, Zoom to Selection): from zoom, to zoom,
     /// the sheet point to end at the view's centre (None: the view's top-left stays put, as
     /// Numbers' zoom steps do, Mac N21), seconds it takes, started at.
-    zoom_anim: Option<(f32, f32, Option<Pos2>, f32, std::time::Instant)>,
+    pub(crate) zoom_anim: Option<(f32, f32, Option<Pos2>, f32, std::time::Instant)>,
 }
 
 impl Default for Canvas {
@@ -180,14 +180,14 @@ pub fn col_name(mut c: u32) -> String {
 }
 
 /// Edges of the columns and rows of a table, in sheet points from its top-left.
-struct Grid {
-    g: Geometry,
-    xs: Vec<f32>,
-    ys: Vec<f32>,
+pub(crate) struct Grid {
+    pub(crate) g: Geometry,
+    pub(crate) xs: Vec<f32>,
+    pub(crate) ys: Vec<f32>,
 }
 
 impl Grid {
-    fn new(g: Geometry, t: &TableData) -> Grid {
+    pub(crate) fn new(g: Geometry, t: &TableData) -> Grid {
         let mut xs = vec![0.0];
         for c in 0..t.cols as usize {
             xs.push(xs[c] + t.col_widths.get(c).copied().unwrap_or(98.0));
@@ -198,22 +198,22 @@ impl Grid {
         }
         Grid { g, xs, ys }
     }
-    fn w(&self) -> f32 {
+    pub(crate) fn w(&self) -> f32 {
         *self.xs.last().unwrap()
     }
-    fn h(&self) -> f32 {
+    pub(crate) fn h(&self) -> f32 {
         *self.ys.last().unwrap()
     }
-    fn col_at(&self, x: f32) -> Option<u32> {
+    pub(crate) fn col_at(&self, x: f32) -> Option<u32> {
         let x = x - self.g.x;
         (x >= 0.0 && x < self.w()).then(|| self.xs.partition_point(|&e| e <= x).saturating_sub(1) as u32)
     }
-    fn row_at(&self, y: f32) -> Option<u32> {
+    pub(crate) fn row_at(&self, y: f32) -> Option<u32> {
         let y = y - self.g.y;
         (y >= 0.0 && y < self.h()).then(|| self.ys.partition_point(|&e| e <= y).saturating_sub(1) as u32)
     }
     /// Sheet rect of a block of cells (inclusive).
-    fn block(&self, r0: u32, c0: u32, r1: u32, c1: u32) -> Rect {
+    pub(crate) fn block(&self, r0: u32, c0: u32, r1: u32, c1: u32) -> Rect {
         Rect::from_min_max(
             Pos2::new(self.g.x + self.xs[c0 as usize], self.g.y + self.ys[r0 as usize]),
             Pos2::new(self.g.x + self.xs[c1 as usize + 1], self.g.y + self.ys[r1 as usize + 1]),
@@ -240,7 +240,7 @@ impl View {
 }
 
 /// How far (0..1, eased) zoom `z` is on the geometric way from `z0` to `z1`.
-fn zoom_progress(z0: f32, z1: f32, z: f32) -> f32 {
+pub(crate) fn zoom_progress(z0: f32, z1: f32, z: f32) -> f32 {
     if (z1 / z0).ln().abs() < 1e-6 { 1.0 } else { ((z / z0).ln() / (z1 / z0).ln()).clamp(0.0, 1.0) }
 }
 
@@ -1760,7 +1760,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
 /// The values of table `t`'s column `col` (body rows, other than `row`) that start with
 /// `typed` (any case), text only, each once, alphabetically, other than `typed` itself; none
 /// for a formula, an empty or a several-line entry.
-fn column_matches(app: &App, t: ObjId, row: u32, col: u32, typed: &str) -> Vec<String> {
+pub(crate) fn column_matches(app: &App, t: ObjId, row: u32, col: u32, typed: &str) -> Vec<String> {
     let typed_l = typed.to_lowercase();
     if typed.trim().is_empty() || typed.starts_with('=') || typed.contains('\n') {
         return Vec::new();
@@ -1831,7 +1831,7 @@ pub fn commit(app: &mut App) {
     }
 }
 
-fn move_cursor(app: &mut App, dr: i32, dc: i32, extend: bool) {
+pub(crate) fn move_cursor(app: &mut App, dr: i32, dc: i32, extend: bool) {
     let entry = app.canvas.merge_entry.take();
     let Some(sel) = app.sel else { return };
     let Some((_, t)) = app.table(sel.table) else { return };
@@ -1918,7 +1918,7 @@ pub fn copy(app: &mut App, ctx: &egui::Context, cut: bool) {
 }
 
 /// Paste tab-separated text at the cursor (clipped to the table).
-fn paste(app: &mut App, text: &str) {
+pub(crate) fn paste(app: &mut App, text: &str) {
     let Some(sel) = app.sel else { return };
     let Some((_, t)) = app.table(sel.table) else { return };
     let (rows, cols) = (t.rows, t.cols);
@@ -2221,7 +2221,7 @@ pub fn table_menu(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
-const REF_COLORS: [Color32; 6] = [
+pub(crate) const REF_COLORS: [Color32; 6] = [
     Color32::from_rgb(0x2f, 0x7d, 0xf6),
     Color32::from_rgb(0xe6, 0x5c, 0x2e),
     Color32::from_rgb(0x9b, 0x4d, 0xd6),
@@ -2311,7 +2311,7 @@ mod tests {
 
 /// A click on a checkbox toggles it; on a star rating sets the stars up to the one clicked
 /// (`dx`: sheet points from the cell's left edge).
-fn click_control(app: &mut App, t: ObjId, r: u32, c: u32, dx: f32) {
+pub(crate) fn click_control(app: &mut App, t: ObjId, r: u32, c: u32, dx: f32) {
     use nm_core::controls::{self, Control};
     let Some(mr) = app.mrow(t, r) else { return };
     let Some((shown, size)) = app.table(t).map(|(_, td)| {
@@ -2335,7 +2335,7 @@ fn click_control(app: &mut App, t: ObjId, r: u32, c: u32, dx: f32) {
 }
 
 /// The function name being typed at the end of a formula ("=SUM(A1, VLO" -> "VLO").
-fn function_token(text: &str) -> Option<&str> {
+pub(crate) fn function_token(text: &str) -> Option<&str> {
     if !text.trim_start().starts_with('=') {
         return None;
     }
@@ -2350,7 +2350,7 @@ fn function_token(text: &str) -> Option<&str> {
 }
 
 /// Tab / Shift+Tab: next / previous cell in the row, remembering where the run started.
-fn tab_move(app: &mut App, back: bool) {
+pub(crate) fn tab_move(app: &mut App, back: bool) {
     let Some(sel) = app.sel else { return };
     if app.canvas.return_col.is_none() {
         app.canvas.return_col = Some(sel.cursor.1);
@@ -2359,7 +2359,7 @@ fn tab_move(app: &mut App, back: bool) {
 }
 
 /// Return: the next row, in the column a run of Tabs started from (else this column).
-fn return_move(app: &mut App) {
+pub(crate) fn return_move(app: &mut App) {
     let Some(sel) = app.sel else { return };
     let col = app.canvas.return_col.take().unwrap_or(sel.cursor.1);
     let Some((_, t)) = app.table(sel.table) else { return };
@@ -2376,7 +2376,7 @@ fn return_move(app: &mut App) {
 }
 
 /// Option+arrow: a row above / below or a column before / after the cursor.
-fn insert_next_to(app: &mut App, axis: Axis, after: bool) {
+pub(crate) fn insert_next_to(app: &mut App, axis: Axis, after: bool) {
     let Some(sel) = app.sel else { return };
     let t = sel.table;
     if axis == Axis::Row && app.categorized(t) {
@@ -2460,7 +2460,7 @@ fn tooltip(painter: &egui::Painter, at: Pos2, text: &str) {
 }
 
 /// Add (or remove, while they're empty) rows at the bottom and columns at the right.
-fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
+pub(crate) fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
     let Some((rows, cols)) = app.table(t).map(|(_, d)| (d.rows, d.cols)) else { return };
     if dr != 0 && app.categorized(t) {
         app.notify("Rows wait until categories are off.");
@@ -2499,7 +2499,7 @@ fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
 
 /// Move the content of the cells in block `src` (shown rows) so its top-left lands on `to`:
 /// formulas move as formulas, values as what they show (Numbers' drag of a selection).
-fn move_cells(app: &mut App, t: ObjId, src: (u32, u32, u32, u32), to: (u32, u32)) {
+pub(crate) fn move_cells(app: &mut App, t: ObjId, src: (u32, u32, u32, u32), to: (u32, u32)) {
     let mut moved: Vec<((u32, u32), Option<String>, String)> = Vec::new();
     for r in src.0..=src.2 {
         for c in src.1..=src.3 {

@@ -42,7 +42,7 @@ pub fn target(app: &App) -> Option<Target> {
 }
 
 /// The character look at the target (the first character of a selection, or what typing gets).
-fn char_style(app: &App, t: &Target) -> CharStyle {
+pub(crate) fn char_style(app: &App, t: &Target) -> CharStyle {
     let Some(d) = app.doc() else { return CharStyle::default() };
     let ps = pg_core::edit::para_style_at(d, t.storage, t.a);
     let at = if t.a < t.b { t.a + 1 } else { t.a };
@@ -66,13 +66,13 @@ fn char_style(app: &App, t: &Target) -> CharStyle {
 }
 
 /// The paragraph properties chain of the paragraph at the target.
-fn para_chain(app: &App, t: &Target) -> Vec<Msg> {
+pub(crate) fn para_chain(app: &App, t: &Target) -> Vec<Msg> {
     let Some(d) = app.doc() else { return Vec::new() };
     let ps = pg_core::edit::para_style_at(d, t.storage, t.a);
     kn_model::style::chain(&d.file, ps).into_iter().filter_map(|m| m.msg("para_properties").cloned()).collect()
 }
 
-fn lookup<T>(chain: &[Msg], f: impl Fn(&Msg) -> Option<T>) -> Option<T> {
+pub(crate) fn lookup<T>(chain: &[Msg], f: impl Fn(&Msg) -> Option<T>) -> Option<T> {
     chain.iter().find_map(f)
 }
 
@@ -122,6 +122,7 @@ fn style_button(app: &mut App, ui: &mut egui::Ui, t: &Target) {
     let r = fr.response.rect;
     kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.max.x - 22.0, r.center().y), egui::vec2(16.0, 16.0)), kn_ui::icons::Icon::ChevronDown, crate::look::style_button_colors().1);
     let pr = ui.interact(r, ui.scope_id().with("para-style"), egui::Sense::click());
+    pr.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Paragraph Style"));
     let mut pick = None;
     let mut update = false;
     let mut create = false;
@@ -242,14 +243,12 @@ fn style_tab(app: &mut App, ui: &mut egui::Ui, t: &Target) {
     }
     let fonts = app.font_names.clone().unwrap_or_default();
     let mut changes: Vec<(&str, CharChange)> = Vec::new();
-    theme::combo("font").selected_text(&family).width(ui.available_width()).height(400.0).show_ui(ui, |ui| {
-        for f in &fonts {
-            if ui.selectable_label(*f == family, f).clicked() && *f != family {
-                let ps = app.canvas.tiles.ps_name_for_family(f).unwrap_or_else(|| f.replace(' ', ""));
-                changes.push(("Font", CharChange::Font(ps)));
-            }
-        }
-    });
+    // (type to find one, or a name that isn't in the list)
+    let w = ui.available_width();
+    if let Some(f) = theme::font_combo(ui, "font", &family, &fonts, w) {
+        let ps = app.canvas.tiles.ps_name_for_family(&f).unwrap_or_else(|| f.replace(' ', ""));
+        changes.push(("Font", CharChange::Font(ps)));
+    }
     ui.horizontal(|ui| {
         let typeface = match (cs.bold, cs.italic) {
             (true, true) => "Bold Italic",
@@ -286,6 +285,7 @@ fn style_tab(app: &mut App, ui: &mut egui::Ui, t: &Target) {
             for (i, (lab, on)) in ["B", "I", "U", "S"].iter().zip(states).enumerate() {
                 let r = egui::Rect::from_min_size(egui::pos2(rect.min.x + cw * i as f32, rect.min.y), egui::vec2(cw, rect.height()));
                 let resp = ui.interact(r, ui.scope_id().with(("bius", i)), egui::Sense::click());
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, ["Bold", "Italic", "Underline", "Strikethrough"][i]));
                 if on {
                     p.rect_filled(r.shrink(1.0), 6.0, theme::ACCENT());
                 } else if resp.hovered() {

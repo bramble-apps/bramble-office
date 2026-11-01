@@ -22,6 +22,8 @@ kn-model = { version = "0.1.0", path = "../kn-model" }
 kn-render = { version = "0.1.0", path = "../kn-render" }
 kn-ui = { version = "0.1.0", path = "../kn-ui" }
 zip = "9.0.5"
+# the document library for other front ends (ffi.rs): its answers as JSON
+serde_json = "1.0.154"
 roxmltree = "0.20"
 # GNOME-style (Adwaita) title bar for Settings > Title bar: System (Wayland has no server-side ones on GNOME)
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }

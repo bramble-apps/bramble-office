@@ -127,7 +127,7 @@ pub fn items(app: &App) -> Vec<String> {
     out
 }
 
-fn set_items(app: &mut App, list: &[String]) {
+pub(crate) fn set_items(app: &mut App, list: &[String]) {
     let is_default = list.len() == DEFAULT.len() && list.iter().zip(DEFAULT).all(|(a, b)| a == b);
     app.settings.toolbar_items = if is_default { String::new() } else { list.join(",") };
     app.settings.save();
@@ -208,7 +208,7 @@ fn entry_width(ui: &egui::Ui, id: &str, mode: u8, alone: bool) -> f32 {
 }
 
 /// Whether an item can be used now (items that don't apply to the selection are greyed).
-fn enabled(app: &mut App, id: &str, sc: Option<&kn_model::SlideScene>) -> bool {
+pub(crate) fn enabled(app: &mut App, id: &str, sc: Option<&kn_model::SlideScene>) -> bool {
     let has_doc = app.doc.is_some();
     let sel = app.sel.len();
     let type_of = |app: &App, i: usize| app.sel.get(i).and_then(|id| app.doc.as_ref().map(|d| d.file.type_name(*id).to_string())).unwrap_or_default();
@@ -285,7 +285,7 @@ fn command(app: &App, id: &str) -> Option<&'static str> {
 }
 
 /// Toggle items shown pressed.
-fn pressed(app: &App, id: &str) -> bool {
+pub(crate) fn pressed(app: &App, id: &str) -> bool {
     match id {
         "TSKToolbarItemObjectList" => app.show_object_list,
         "KNMacToolbarItemEditLayouts" => app.editing_layouts.is_some(),
@@ -294,7 +294,7 @@ fn pressed(app: &App, id: &str) -> bool {
 }
 
 /// An item's label (some read differently when on).
-fn label(app: &App, id: &str) -> &'static str {
+pub(crate) fn label(app: &App, id: &str) -> &'static str {
     match id {
         "TSKToolbarItemGuides" if !app.show_guides => "Guides",
         _ => def(id).map(|d| d.label).unwrap_or(""),
@@ -854,7 +854,7 @@ fn popup(app: &mut App, id: &str, resp: &egui::Response) {
 }
 
 /// A click on an item without a popover.
-fn run(app: &mut App, ctx: &egui::Context, id: &str) {
+pub(crate) fn run(app: &mut App, ctx: &egui::Context, id: &str) {
     match id {
         "TSKToolbarItemPlay" => app.start_slideshow(app.cur),
         "KNMacToolbarItemPlayInWindow" => {

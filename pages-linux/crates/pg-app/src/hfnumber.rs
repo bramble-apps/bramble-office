@@ -32,31 +32,44 @@ fn target(app: &App) -> Option<Target> {
 /// The Page Number submenu's items (the Insert menu and a header / footer's right-click menu):
 /// "1", "Page 1", "1 of 3", "Page 1 of 3" at the caret, then the number style of the page
 /// numbers in that text (1 2 3, i ii iii, I II III, a b c, A B C).
-pub fn menu_items(app: &mut App, ui: &mut egui::Ui) {
+pub fn items(app: &App) -> Vec<crate::menus::MItem> {
+    use crate::menus::MItem;
     let Some(t) = target(app) else {
-        ui.add_enabled(false, egui::Button::new("Place the caret in text first"));
-        return;
+        return vec![MItem::Cmd { label: "Place the caret in text first".into(), action: String::new(), enabled: false, bold: false, checked: false }];
     };
     let (page_no, count) = app.layout.as_ref().map(|l| (l.pages.get(t.page).map(|p| p.number).unwrap_or(1), l.page_count())).unwrap_or((1, 1));
     let current = app.doc().and_then(|d| pg_core::edit::page_field_format(d, t.storage));
     let fmt = |n: usize| pg_core::kn_model::text::format_number(n as u32, current.unwrap_or(0)).trim_start_matches('(').trim_end_matches(['.', ')']).to_string();
     let (n, c) = (fmt(page_no), fmt(count));
-    for (k, label) in [n.clone(), format!("Page {n}"), format!("{n} of {c}"), format!("Page {n} of {c}")].into_iter().enumerate() {
-        if ui.add(egui::Button::new(label).min_size(egui::vec2(180.0, 0.0))).clicked() {
-            insert(app, t, k);
-            ui.close();
+    let mut v: Vec<MItem> = [n.clone(), format!("Page {n}"), format!("{n} of {c}"), format!("Page {n} of {c}")].into_iter().enumerate().map(|(k, label)| MItem::act(label, format!("pnum:{k}"))).collect();
+    v.push(MItem::Sep);
+    let kids = [(0u64, "1, 2, 3"), (6, "i, ii, iii"), (3, "I, II, III"), (12, "a, b, c"), (9, "A, B, C")]
+        .into_iter()
+        .map(|(code, label)| MItem::Cmd { label: label.into(), action: format!("pnumfmt:{code}"), enabled: current.is_some(), bold: false, checked: current.unwrap_or(0) == code })
+        .collect();
+    v.push(MItem::Sub { label: "Number Format".into(), kids });
+    v
+}
+
+/// The Page Number items' actions: "pnum" (kind 0..3), "pnumfmt" (a number style code).
+pub fn action(app: &mut App, kind: &str, arg: &str) {
+    let Some(t) = target(app) else { return };
+    match kind {
+        "pnum" => insert(app, t, arg.parse().unwrap_or(0)),
+        _ => {
+            let code: u64 = arg.parse().unwrap_or(0);
+            app.edit("Page Number Format", |d, h| pg_core::edit::set_page_field_format(d, h, t.storage, code));
         }
     }
-    ui.separator();
-    ui.menu_button("Number Format", |ui| {
-        for (code, label) in [(0u64, "1, 2, 3"), (6, "i, ii, iii"), (3, "I, II, III"), (12, "a, b, c"), (9, "A, B, C")] {
-            let on = current.unwrap_or(0) == code;
-            if ui.add_enabled(current.is_some(), egui::Button::new(format!("{}  {label}", if on { "✓" } else { "   " }))).clicked() {
-                app.edit("Page Number Format", |d, h| pg_core::edit::set_page_field_format(d, h, t.storage, code));
-                ui.close();
-            }
-        }
-    });
+}
+
+/// The Page Number submenu (egui).
+pub fn menu_items(app: &mut App, ui: &mut egui::Ui) {
+    let items = items(app);
+    if let Some(a) = crate::menus::show_items(ui, &items) {
+        let (k, rest) = a.split_once(':').unwrap_or((a.as_str(), ""));
+        action(app, k, rest);
+    }
 }
 
 /// Insert "1" / "Page 1" / "1 of N" / "Page 1 of N" into the field: at the caret when it is in
@@ -97,6 +110,22 @@ fn insert(app: &mut App, t: Target, kind: usize) {
     if let Some(pos) = end {
         app.cursor = Some(Cursor { storage: st, owner: t.owner, anchor: pos, caret: pos, goal_x: None });
     }
+}
+
+/// The Insert Page Number button for a front end (ui): the page, the field with the caret and
+/// its band (page points), whether it's the footer's; null when the button doesn't show.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let Some(c) = app.cursor else { return serde_json::Value::Null };
+    let Owner::HeaderFooter { page } = c.owner else { return serde_json::Value::Null };
+    let Some(l) = app.layout.as_ref() else { return serde_json::Value::Null };
+    let fields = crate::canvas::hf_fields(l, page);
+    let Some((field, _, footer)) = fields.iter().find(|f| f.1 == c.storage).copied() else { return serde_json::Value::Null };
+    if app.doc().is_some_and(|d| fields.iter().any(|f| pg_core::edit::page_field_format(d, f.1).is_some())) {
+        return serde_json::Value::Null;
+    }
+    let band = fields.iter().filter(|f| f.2 == footer).fold(field, |r, f| r.union(f.0));
+    json!({ "page": page, "field": [field.min.x, field.min.y, field.max.x, field.max.y], "band": [band.min.x, band.min.y, band.max.x, band.max.y], "footer": footer, "items": items(app).iter().map(|i| i.to_json()).collect::<Vec<_>>() })
 }
 
 thread_local! {

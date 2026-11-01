@@ -3,7 +3,7 @@
 //! HiDPI screen's usual size).
 
 /// The choices after Default, in percent.
-pub const CHOICES: [u32; 10] = [50, 75, 90, 100, 110, 125, 150, 175, 200, 250];
+pub const CHOICES: [u32; 15] = [50, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
 
 fn label(pct: u32) -> String {
     if pct == 0 { "Default".into() } else { format!("{pct}%") }

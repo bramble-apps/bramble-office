@@ -81,12 +81,15 @@ pub struct App {
     pub find: Option<(String, Vec<(usize, ObjId, u32, u32)>, usize)>,
     /// Find & Replace: the replacement text (None: the bar shows Find only).
     pub replace: Option<String>,
+    /// Find's options: Match Case, Whole Words (the front end's Search Options).
+    pub find_case: bool,
+    pub find_words: bool,
     /// A password-protected file waiting for its password: (path, hint, typed, wrong).
-    password: Option<(PathBuf, String, String, bool)>,
+    pub password: Option<(PathBuf, String, String, bool)>,
     /// Add Comment: (table, model row, column, text, author).
     pub comment_dialog: Option<(ObjId, u32, u32, String, String)>,
     /// File > Set Password: (password, again, hint).
-    set_password: Option<(String, String, String)>,
+    pub set_password: Option<(String, String, String)>,
     /// The formula text last looked up: (version, table, model row, column) -> text.
     formula_cache: Option<((u64, ObjId, u32, u32), Option<String>)>,
     /// NM_PERF: time spent building each frame (ms).
@@ -211,11 +214,16 @@ pub struct CurSheet {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext, file: Option<PathBuf>) -> App {
+        App::with_ctx(&cc.egui_ctx, file)
+    }
+
+    /// The app on `ctx` (the desktop window's, or a context no pass ever runs on: ffi.rs).
+    pub fn with_ctx(ctx: &egui::Context, file: Option<PathBuf>) -> App {
         // Keydeck's look and settings (colour theme, appearance, glass)
         let look = crate::look::Look::load();
-        look.apply(&cc.egui_ctx);
+        look.apply(ctx);
         // Ctrl+Plus / Minus zoom the sheet, not the whole interface (egui's own keyboard zoom off)
-        cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let mut app = App {
             wb: None,
             hist: History::default(),
@@ -237,6 +245,8 @@ impl App {
             automated: std::env::var_os("NM_SNAP").is_some(),
             find: None,
             replace: None,
+            find_case: false,
+            find_words: false,
             formula_cache: None,
             password: None,
             set_password: None,
@@ -363,7 +373,8 @@ impl App {
         }
         let Some(file) = recent_path() else { return };
         let mut list = self.recent();
-        list.retain(|x| x != p);
+        // (Android's picker hands over a fresh copy of the file each time: one entry per name)
+        list.retain(|x| x != p && !(cfg!(target_os = "android") && x.file_name() == p.file_name()));
         list.insert(0, p.to_path_buf());
         list.truncate(10);
         let _ = std::fs::create_dir_all(file.parent().unwrap());
@@ -854,7 +865,12 @@ impl App {
     pub fn pick_image(&mut self) {
         let Some(id) = self.replace_target.take() else { return };
         let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
-        let bytes = match std::fs::read(&p) {
+        self.replace_image(id, &p);
+    }
+
+    /// Image > Replace with the picture at `p`.
+    pub fn replace_image(&mut self, id: ObjId, p: &Path) {
+        let bytes = match std::fs::read(p) {
             Ok(b) => b,
             Err(e) => return self.notify(format!("Couldn't read the picture: {e}")),
         };
@@ -1389,7 +1405,6 @@ impl App {
     /// Matches of `q` (case-insensitive, in what the cells show) on every sheet.
     pub fn search(&self, q: &str) -> Vec<(usize, ObjId, u32, u32)> {
         let Some(wb) = &self.wb else { return Vec::new() };
-        let q = q.to_lowercase();
         let mut out = Vec::new();
         if q.is_empty() {
             return out;
@@ -1402,7 +1417,7 @@ impl App {
                         continue;
                     }
                     for c in 0..t.cols {
-                        if t.cells[(r * t.cols + c) as usize].to_lowercase().contains(&q) {
+                        if !find_spans(&t.cells[(r * t.cols + c) as usize], q, self.find_case, self.find_words).is_empty() {
                             out.push((si, d.id, r, c));
                         }
                     }
@@ -1414,6 +1429,23 @@ impl App {
 
     /// View > Show Colors (Apple's Colors window, kn-ui's), with Fill Selection for the selected
     /// cells or objects; and the window a colour well's wheel button opens.
+    /// The Colors window's Fill Selection: the selected cells' or objects' fill.
+    pub fn fill_selection(&mut self, c: Color32) {
+        let col = nm_core::kn_model::Color { r: f32::from(c.r()) / 255.0, g: f32::from(c.g()) / 255.0, b: f32::from(c.b()) / 255.0, a: f32::from(c.a()) / 255.0 };
+        let spec = nm_core::kn_model::format::FillSpec::Color(col);
+        if let Some(sel) = self.sel {
+            crate::canvas::commit(self);
+            let t = sel.table;
+            let blocks = self.model_blocks(t, sel.block());
+            self.edit("Fill", |d, h| blocks.iter().try_for_each(|b| d.set_cells_fill(h, t, *b, Some(&spec)).map(|_| ())));
+        } else {
+            let ids = self.selected_objs();
+            self.edit("Fill", |d, h| ids.iter().for_each(|i| {
+                d.set_fill(h, *i, &spec);
+            }));
+        }
+    }
+
     fn colors_window(&mut self, ctx: &egui::Context) {
         // saved colours: from the settings at first, back into them when they change
         if self.color_state.saved.is_empty() && !self.settings.saved_colors.is_empty() {
@@ -1435,19 +1467,7 @@ impl App {
             self.colors_pick = c;
             self.show_colors = open;
             if apply {
-                let col = nm_core::kn_model::Color { r: f32::from(c.r()) / 255.0, g: f32::from(c.g()) / 255.0, b: f32::from(c.b()) / 255.0, a: f32::from(c.a()) / 255.0 };
-                let spec = nm_core::kn_model::format::FillSpec::Color(col);
-                if let Some(sel) = self.sel {
-                    crate::canvas::commit(self);
-                    let t = sel.table;
-                    let blocks = self.model_blocks(t, sel.block());
-                    self.edit("Fill", |d, h| blocks.iter().try_for_each(|b| d.set_cells_fill(h, t, *b, Some(&spec)).map(|_| ())));
-                } else {
-                    let ids = self.selected_objs();
-                    self.edit("Fill", |d, h| ids.iter().for_each(|i| {
-                        d.set_fill(h, *i, &spec);
-                    }));
-                }
+                self.fill_selection(c);
             }
         }
         if self.color_state.saved != before {
@@ -1483,7 +1503,7 @@ impl App {
     }
 
     /// Select match `i` of the find results, switching sheet and scrolling to it.
-    fn show_match(&mut self, i: usize) {
+    pub(crate) fn show_match(&mut self, i: usize) {
         let Some((_, results, cur)) = &mut self.find else { return };
         let Some(&(si, t, r, c)) = results.get(i) else { return };
         *cur = i;
@@ -1591,7 +1611,7 @@ impl App {
                 continue;
             }
             let Some(old) = td.cells.get((r * td.cols + c) as usize) else { continue };
-            edits.push((t, mr, c, replace_ci(old, &q, &with)));
+            edits.push((t, mr, c, replace_spans(old, &q, &with, self.find_case, self.find_words)));
         }
         let n = edits.len();
         if n == 0 {
@@ -2613,6 +2633,48 @@ fn one_line(s: &str) -> String {
 }
 
 /// `text` with every `q` (any case) replaced by `with`.
+/// Where `q` is in `text` (byte ranges): any case unless `case`, and only as a whole word
+/// (no letter or digit either side) with `words`.
+pub(crate) fn find_spans(text: &str, q: &str, case: bool, words: bool) -> Vec<(usize, usize)> {
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let (hay, needle) = if case { (text.to_string(), q.to_string()) } else { (text.to_lowercase(), q.to_lowercase()) };
+    // (lower-casing changed the lengths: only exact matches are placed safely)
+    let (hay, needle) = if hay.len() != text.len() { (text.to_string(), q.to_string()) } else { (hay, needle) };
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    let mut out = Vec::new();
+    let mut i = 0;
+    while let Some(k) = hay[i..].find(&needle) {
+        let (a, b) = (i + k, i + k + needle.len());
+        if !words || (!word(text[..a].chars().last()) && !word(text[b..].chars().next())) {
+            out.push((a, b));
+        }
+        i = a + needle.len().max(1);
+        while i < hay.len() && !hay.is_char_boundary(i) {
+            i += 1;
+        }
+        if i >= hay.len() {
+            break;
+        }
+    }
+    out
+}
+
+/// `text` with each match of `q` (find_spans) replaced by `with`.
+fn replace_spans(text: &str, q: &str, with: &str, case: bool, words: bool) -> String {
+    let mut out = String::new();
+    let mut i = 0;
+    for (a, b) in find_spans(text, q, case, words) {
+        out.push_str(&text[i..a]);
+        out.push_str(with);
+        i = b;
+    }
+    out.push_str(&text[i..]);
+    out
+}
+
+#[allow(dead_code)]
 fn replace_ci(text: &str, q: &str, with: &str) -> String {
     let lower = text.to_lowercase();
     let ql = q.to_lowercase();
@@ -2636,6 +2698,9 @@ mod replace_tests {
     #[test]
     fn replaces_any_case() {
         assert_eq!(super::replace_ci("Hello hello HELLO", "hello", "bye"), "bye bye bye");
+        assert_eq!(super::replace_spans("Hello hello HELLO", "hello", "bye", false, false), "bye bye bye");
+        assert_eq!(super::replace_spans("Hello hello HELLO", "hello", "bye", true, false), "Hello bye HELLO");
+        assert_eq!(super::replace_spans("Fun Funds fun", "fun", "x", false, true), "x Funds x");
         assert_eq!(super::replace_ci("abc", "x", "y"), "abc");
         assert_eq!(super::replace_ci("Straße", "ß", "ss"), "Strasse");
     }

@@ -134,8 +134,13 @@ fn word_right(s: &str, i: usize) -> usize {
 
 /// Apply keyboard input. Returns true if the text changed.
 pub fn handle_keys(app: &mut App, ctx: &egui::Context, tl: Option<&TextLayout>) {
-    let Some(storage) = app.canvas.editing.as_ref().map(|e| e.storage) else { return };
     let events = ctx.input(|i| i.events.clone());
+    handle_events(app, ctx, tl, events);
+}
+
+/// Apply `events` (typed text, keys, clipboard) to the text being edited.
+pub fn handle_events(app: &mut App, ctx: &egui::Context, tl: Option<&TextLayout>, events: Vec<Event>) {
+    let Some(storage) = app.canvas.editing.as_ref().map(|e| e.storage) else { return };
     for ev in events {
         let Some(doc) = app.doc.as_mut() else { return };
         let text = doc.storage_text(storage);

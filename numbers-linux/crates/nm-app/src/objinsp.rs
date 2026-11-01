@@ -64,7 +64,7 @@ fn segmented(ui: &mut egui::Ui, labels: &[&str], cur: &mut usize, radius: f32) {
 /// Format > Gallery (Keynote 15.4, R29): Title and Caption (one per image or the same for all),
 /// the images (pick one to show it, + to add more, − to remove it) and the shown image's
 /// description.
-fn shown_file_name(stored: &str) -> String {
+pub(crate) fn shown_file_name(stored: &str) -> String {
     let base = stored.rsplit('/').next().unwrap_or(stored);
     let (stem, ext) = base.rsplit_once('.').unwrap_or((base, ""));
     let stem = match stem.rsplit_once('-') {
@@ -1057,13 +1057,12 @@ pub(crate) fn text(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
         app.font_names = Some(crate::editing::font_names(app));
     }
     let fonts = app.font_names.clone().unwrap_or_default();
-    theme::combo("font").selected_text(&family).width(ui.available_width()).height(400.0).show_ui(ui, |ui| {
-        for f in &fonts {
-            if ui.selectable_label(*f == family, f).clicked() && *f != family {
-                changes.push(("Font", TextProp::Font(f.replace(' ', ""))));
-            }
-        }
-    });
+    // (type to find one, or a name that isn't in the list)
+    let w = ui.available_width();
+    if let Some(f) = theme::font_combo(ui, "font", &family, &fonts, w) {
+        let ps = app.canvas.tiles.ps_name_for_family(&f).unwrap_or_else(|| f.replace(' ', ""));
+        changes.push(("Font", TextProp::Font(ps)));
+    }
     ui.horizontal(|ui| {
         let typeface = match (run.bold, run.italic) {
             (true, true) => "Bold Italic",

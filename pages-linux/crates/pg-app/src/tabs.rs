@@ -49,7 +49,7 @@ pub struct Tabs {
     pub show_bar: bool,
     pub show_all: bool,
     /// Tabs to close, one by one (a changed one asks first); quitting closes them all.
-    closing: Vec<usize>,
+    pub(crate) closing: Vec<usize>,
     quitting: bool,
 }
 
@@ -238,7 +238,7 @@ pub fn dirty(app: &App, i: usize) -> bool {
     }
 }
 
-fn name(app: &App, i: usize) -> String {
+pub(crate) fn name(app: &App, i: usize) -> String {
     if i == app.tabs.active {
         return app.title();
     }
@@ -309,17 +309,7 @@ pub fn on_close_requested(app: &mut App) -> bool {
 /// Work through the tabs to close: clean ones close at once, a changed one shows the
 /// "save the changes" question (its tab brought to the front).
 pub fn closing_ui(app: &mut App, ctx: &egui::Context) {
-    while let Some(&i) = app.tabs.closing.last() {
-        if i >= app.tabs.len() {
-            app.tabs.closing.pop();
-            continue;
-        }
-        if !dirty(app, i) || (app.automated && app.tabs.quitting) {
-            app.tabs.closing.pop();
-            close_now(app, ctx, i);
-            continue;
-        }
-        select(app, i);
+    if closing_step(app, ctx) {
         let mut choice = None;
         egui::Window::new("Unsaved changes").collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(format!("Do you want to save the changes to “{}”?", app.title()));
@@ -335,25 +325,8 @@ pub fn closing_ui(app: &mut App, ctx: &egui::Context) {
                 }
             });
         });
-        match choice {
-            Some(0) => {
-                if let Some(w) = &mut app.wb {
-                    w.doc.dirty = false;
-                }
-            }
-            Some(1) => {
-                app.tabs.closing.clear();
-                app.tabs.quitting = false;
-            }
-            Some(2) => {
-                app.save(false);
-                // saving can be cancelled (Save As for a new document): stop there
-                if app.doc().is_some_and(|d| d.dirty) {
-                    app.tabs.closing.clear();
-                    app.tabs.quitting = false;
-                }
-            }
-            _ => {}
+        if let Some(c) = choice {
+            closing_choice(app, c);
         }
         return;
     }
@@ -363,6 +336,48 @@ pub fn closing_ui(app: &mut App, ctx: &egui::Context) {
             w.doc.dirty = false;
         }
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+}
+
+/// Close the clean tabs waiting to close; true when a changed one waits for the "save the
+/// changes" question (its tab brought to the front).
+pub fn closing_step(app: &mut App, ctx: &egui::Context) -> bool {
+    while let Some(&i) = app.tabs.closing.last() {
+        if i >= app.tabs.len() {
+            app.tabs.closing.pop();
+            continue;
+        }
+        if !dirty(app, i) || (app.automated && app.tabs.quitting) {
+            app.tabs.closing.pop();
+            close_now(app, ctx, i);
+            continue;
+        }
+        select(app, i);
+        return true;
+    }
+    false
+}
+
+/// The question's answer: 0 Don't Save, 1 Cancel, 2 Save.
+pub fn closing_choice(app: &mut App, choice: u8) {
+    match choice {
+        0 => {
+            if let Some(w) = &mut app.wb {
+                w.doc.dirty = false;
+            }
+        }
+        1 => {
+            app.tabs.closing.clear();
+            app.tabs.quitting = false;
+        }
+        _ => {
+            app.save(false);
+            // saving can be cancelled (Save As for a new document): stop there
+            if app.doc().is_some_and(|d| d.dirty) {
+                app.tabs.closing.clear();
+                app.tabs.quitting = false;
+            }
+        }
     }
 }
 
@@ -461,6 +476,28 @@ pub fn bar(app: &mut App, ui: &mut egui::Ui) {
     }
     if let Some(i) = close {
         app.tabs.closing = vec![i];
+    }
+}
+
+/// For other front ends: the tab bar (null when it doesn't show): the tabs' names, which are
+/// edited, the active one.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    if bar_height(app) <= 0.0 {
+        return serde_json::Value::Null;
+    }
+    let tabs: Vec<serde_json::Value> = (0..app.tabs.len()).map(|i| json!({ "name": name(app, i), "edited": dirty(app, i) })).collect();
+    json!({ "tabs": tabs, "active": app.tabs.active })
+}
+
+/// "select:<i>", "close:<i>" (a changed one asks first), "new" (the bar's "+").
+pub fn api_action(app: &mut App, a: &str) {
+    let (k, v) = a.split_once(':').unwrap_or((a, ""));
+    match (k, v.parse::<usize>()) {
+        ("select", Ok(i)) => select(app, i),
+        ("close", Ok(i)) if i < app.tabs.len() => app.tabs.closing = vec![i],
+        ("new", _) => new_tab(app),
+        _ => {}
     }
 }
 

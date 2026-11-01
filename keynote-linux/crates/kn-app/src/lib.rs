@@ -9,6 +9,12 @@ mod builds;
 mod canvas;
 mod chartedit;
 mod editing;
+// the document library for other front ends (the Flutter app): its C ABI, the inspector as data
+pub mod ffi;
+mod inspapi;
+mod dlgapi;
+// Keydeck Remote: phones and tablets control the slideshow over the local network
+mod remote;
 mod export;
 mod filemenu;
 mod find;

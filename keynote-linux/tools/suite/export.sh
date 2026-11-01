@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copy the committed state of Keydeck, Values and Letters into the combined Bramble Office repo
+# Copy the committed state of Keydeck, Values and Letters (desktop and the Flutter Android apps) into the combined Bramble Office repo
 # (a fresh copy without the development history, for sharing or publishing), then commit there.
 #   tools/suite/export.sh <bramble-office dir> [commit message]
 # Only committed files are copied, so nothing ignored (the private test files) can leak out.
@@ -10,7 +10,7 @@ out=${1:?usage: export.sh <bramble-office dir> [message]}
 msg=${2:-"Update from the development repos"}
 mkdir -p "$out"
 [ -d "$out/.git" ] || git -C "$out" init -q -b main
-for r in keynote-linux numbers-linux pages-linux; do
+for r in keynote-linux numbers-linux pages-linux letters_mobile keydeck_mobile values_mobile; do
   rm -rf "${out:?}/$r"
   mkdir -p "$out/$r"
   git -C "$P/$r" archive HEAD | tar -x -C "$out/$r"

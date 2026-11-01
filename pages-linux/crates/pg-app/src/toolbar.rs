@@ -35,6 +35,9 @@ const fn d(id: &'static str, label: &'static str, tip: &'static str, icon: Icon,
 pub const ITEMS: &[Def] = &[
     d(VIEW, "View", "Choose what to show or hide while creating a document.", Icon::Sidebar, None),
     d(ZOOM, "Zoom", "Click to enlarge or reduce the view of the document.", Icon::ChevronDown, None),
+    d("Menus", "Menus", "All the menus.", Icon::Menu, None),
+    d("Undo", "Undo", "Undo the last change.", Icon::Undo, Some("Undo")),
+    d("Redo", "Redo", "Redo what was undone.", Icon::Redo, Some("Redo")),
     d("AddPage", "Add Page", "Add a page to this document.", Icon::AddSlide, None),
     d("Insert", "Insert", "Choose an item to add to this document.", Icon::AddSlide, None),
     d("Table", "Table", "Choose a table to add to this document.", Icon::Table, None),
@@ -83,7 +86,7 @@ pub fn def(id: &str) -> Option<&'static Def> {
     ITEMS.iter().find(|d| d.id == id)
 }
 
-fn is_space(id: &str) -> bool {
+pub(crate) fn is_space(id: &str) -> bool {
     id == SPACE || id == FLEX
 }
 
@@ -102,7 +105,7 @@ pub fn items(app: &App) -> Vec<String> {
     out
 }
 
-fn set_items(app: &mut App, list: &[String]) {
+pub(crate) fn set_items(app: &mut App, list: &[String]) {
     let is_default = list.len() == DEFAULT.len() && list.iter().zip(DEFAULT).all(|(a, b)| a == b);
     app.settings.toolbar_items = if is_default { String::new() } else { list.join(",") };
     app.settings.save();
@@ -172,7 +175,7 @@ fn entry_width(ui: &egui::Ui, id: &str, mode: u8, alone: bool) -> f32 {
 }
 
 /// Whether an item can be used now (items that don't apply to the selection are greyed).
-fn enabled(app: &App, id: &str) -> bool {
+pub(crate) fn enabled(app: &App, id: &str) -> bool {
     match id {
         "Share" => false,
         "Comment" => crate::menus::enabled(app, "Comment"),
@@ -185,7 +188,7 @@ fn enabled(app: &App, id: &str) -> bool {
     }
 }
 
-fn pressed(app: &App, id: &str) -> bool {
+pub(crate) fn pressed(app: &App, id: &str) -> bool {
     match id {
         "Format" => app.inspector && app.insp_mode == InspMode::Format,
         "Document" => app.inspector && app.insp_mode == InspMode::Document,
@@ -198,6 +201,8 @@ fn pressed(app: &App, id: &str) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn cell(ui: &mut egui::Ui, rect: Rect, icon_rect: Rect, salt: (&str, usize), icon: Icon, text: &str, mode: u8, on: bool, enabled: bool, sense: Sense) -> egui::Response {
     let resp = ui.interact(rect, ui.scope_id().with(salt), sense);
+    // (named, for accessibility and for the Flutter front end: ffi.rs)
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, enabled, on, salt.0));
     let hover = resp.hovered() && enabled;
     let bg = if on { theme::gray(0x5a) } else if hover { theme::gray(0x48) } else { Color32::TRANSPARENT };
     let col = if enabled { theme::gray(0xee) } else { theme::gray(0x70) };
@@ -224,56 +229,55 @@ fn cell(ui: &mut egui::Ui, rect: Rect, icon_rect: Rect, salt: (&str, usize), ico
 
 /// Items with a popover or menu of their own.
 fn popup(app: &mut App, id: &str, resp: &egui::Response) {
+    let behavior = if id == "Chart" { egui::PopupCloseBehavior::CloseOnClickOutside } else { egui::PopupCloseBehavior::CloseOnClick };
+    if has_popup(id) {
+        egui::Popup::menu(resp).close_behavior(behavior).show(|ui| popover_body(app, id, ui));
+    }
+}
+
+/// What an item's popover holds (also shown by the Flutter front end, ffi.rs).
+pub fn popover_body(app: &mut App, id: &str, ui: &mut egui::Ui) {
+    let ctx = ui.ctx().clone();
     match id {
-        VIEW => {
-            egui::Popup::menu(resp).show(|ui| crate::chrome::view_menu(app, ui));
-        }
-        "Insert" => {
-            egui::Popup::menu(resp).show(|ui| crate::chrome::insert_menu(app, ui));
-        }
-        "Table" => {
-            egui::Popup::menu(resp).show(|ui| crate::chrome::table_popover(app, ui));
-        }
+        VIEW => crate::chrome::view_menu(app, ui),
+        "Insert" => crate::chrome::insert_menu(app, ui),
+        "Table" => crate::chrome::table_popover(app, ui),
         "Chart" => {
             // the suite's chart popover: previews of every type in the document's chart styles
-            egui::Popup::menu(resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-                let ctx = ui.ctx().clone();
-                let (ids, cols) = app.doc().map(kn_ui::chartpicker::styles).unwrap_or_default();
-                if let Some(p) = kn_ui::chartpicker::picker(ui, &cols) {
-                    crate::menus::run(app, &ctx, &format!("Chart > {}", p.name));
-                    if let (Some(&preset), &[chart]) = (ids.get(p.style), &app.selected_objs()[..]) {
-                        if app.doc().and_then(|d| d.chart_preset(chart)) != Some(preset) {
-                            app.edit("Chart Style", |d, h| d.apply_chart_preset(h, chart, preset));
-                        }
+            let (ids, cols) = app.doc().map(kn_ui::chartpicker::styles).unwrap_or_default();
+            if let Some(p) = kn_ui::chartpicker::picker(ui, &cols) {
+                crate::menus::run(app, &ctx, &format!("Chart > {}", p.name));
+                if let (Some(&preset), &[chart]) = (ids.get(p.style), &app.selected_objs()[..]) {
+                    if app.doc().and_then(|d| d.chart_preset(chart)) != Some(preset) {
+                        app.edit("Chart Style", |d, h| d.apply_chart_preset(h, chart, preset));
                     }
-                    ui.close();
                 }
-            });
+                ui.close();
+            }
         }
-        "Shape" => {
-            egui::Popup::menu(resp).show(|ui| crate::chrome::shape_popover(app, ui));
-        }
+        "Shape" => crate::chrome::shape_popover(app, ui),
         "Media" => {
             // Pages' Media ▾ (its Apple Intelligence and iPhone camera items aside)
-            egui::Popup::menu(resp).show(|ui| {
-                let ctx = ui.ctx().clone();
-                for (k, label) in ["Choose Photo or Video…", "Content Hub", "Choose Music…", "Add Image Gallery…", "Add Web Video…", "Record Audio", "Choose File…"].iter().enumerate() {
-                    if k == 6 {
-                        ui.separator();
-                    }
-                    if ui.button(*label).clicked() {
-                        ui.close();
-                        crate::media::command(app, label);
-                        let _ = &ctx;
-                    }
+            for (k, label) in ["Choose Photo or Video…", "Content Hub", "Choose Music…", "Add Image Gallery…", "Add Web Video…", "Record Audio", "Choose File…"].iter().enumerate() {
+                if k == 6 {
+                    ui.separator();
                 }
-            });
+                if ui.button(*label).clicked() {
+                    ui.close();
+                    crate::media::command(app, label);
+                }
+            }
         }
         _ => {}
     }
 }
 
-fn has_popup(id: &str) -> bool {
+/// A toolbar item's own action, by id (the Flutter front end's toolbar).
+pub fn press(app: &mut App, ctx: &egui::Context, id: &str) {
+    run(app, ctx, id);
+}
+
+pub fn has_popup(id: &str) -> bool {
     matches!(id, VIEW | "Insert" | "Table" | "Chart" | "Shape" | "Media")
 }
 
@@ -422,6 +426,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         let sense = if customizing || ctrl { Sense::click_and_drag() } else if on { Sense::click() } else { Sense::hover() };
         if id == ZOOM {
             let resp = ui.interact(r, ui.scope_id().with(("tb", i)), sense);
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, ZOOM));
             let zr = Rect::from_center_size(pos2(r.center().x, cy), vec2(76.0, cap_h - 4.0));
             if resp.hovered() {
                 ui.painter().rect_filled(zr.shrink(2.0), 16.0, theme::gray(0x48));
@@ -466,6 +471,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     if !overflow.is_empty() {
         let r = Rect::from_center_size(pos2(bar.max.x - overflow_w / 2.0, cy), vec2(40.0, cap_h - 4.0));
         let resp = ui.interact(r, ui.scope_id().with("tb-overflow"), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "More"));
         ui.painter().rect_filled(r, r.height() / 2.0, if resp.hovered() { theme::gray(0x48) } else { theme::gray(0x36) });
         draw(ui.painter(), Rect::from_center_size(r.center(), vec2(18.0, 18.0)), Icon::Overflow, theme::TEXT());
         egui::Popup::menu(&resp).show(|ui| {

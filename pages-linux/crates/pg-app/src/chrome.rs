@@ -60,9 +60,7 @@ pub(crate) fn title_item(app: &mut App, ui: &mut egui::Ui, name_r: Rect, cy: f32
         if app.doc_title.is_some() {
             app.doc_title = None;
         } else {
-            let stem = path.as_ref().and_then(|p| p.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.trim_end_matches(".pages").trim_end_matches(".docx").to_string());
-            let dir = path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
-            app.doc_title = Some((stem, dir));
+            title_open(app);
             return;
         }
     }
@@ -149,61 +147,81 @@ pub(crate) fn title_item(app: &mut App, ui: &mut egui::Ui, name_r: Rect, cy: f32
         }
     }
     if let Some((pick, name, dir)) = format_change {
-        let name = name.trim().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
-        match pick {
-            // to Word: saved as a .docx beside it now (Word + Letters keeps everything)
-            1 | 2 => {
-                let hybrid = pick == 2;
-                match app.word.as_mut() {
-                    Some(w) => {
-                        w.hybrid = hybrid;
-                        if let Some(d) = app.wb.as_mut() {
-                            d.doc.dirty = true;
-                        }
+        title_format(app, pick, name, dir);
+    }
+    if apply || close {
+        match app.doc_title.take() {
+            Some((name, dir)) if apply => title_apply(app, &name, dir),
+            _ => {}
+        }
+    }
+}
+
+/// The title popover: the name and folder of the document to edit (a click on the title).
+pub(crate) fn title_open(app: &mut App) {
+    let path = app.word.as_ref().map(|w| w.path.clone()).or_else(|| app.doc().and_then(|d| d.path.clone()));
+    let name = app.title();
+    let stem = path.as_ref().and_then(|p| p.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.trim_end_matches(".pages").trim_end_matches(".docx").to_string());
+    let dir = path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
+    app.doc_title = Some((stem, dir));
+}
+
+/// The title popover's Format: 0 Pages, 1 Word, 2 Word + Letters.
+pub(crate) fn title_format(app: &mut App, pick: usize, name: String, dir: Option<std::path::PathBuf>) {
+    let name = name.trim().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
+    match pick {
+        // to Word: saved as a .docx beside it now (Word + Letters keeps everything)
+        1 | 2 => {
+            let hybrid = pick == 2;
+            match app.word.as_mut() {
+                Some(w) => {
+                    w.hybrid = hybrid;
+                    if let Some(d) = app.wb.as_mut() {
+                        d.doc.dirty = true;
                     }
-                    None => {
-                        let dir = dir.or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
-                        if let Some(dir) = dir {
-                            let target = dir.join(format!("{}.docx", if name.is_empty() { "Untitled" } else { &name }));
-                            app.save_word(&target, hybrid);
-                        }
+                }
+                None => {
+                    let dir = dir.or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
+                    if let Some(dir) = dir {
+                        let target = dir.join(format!("{}.docx", if name.is_empty() { "Untitled" } else { &name }));
+                        app.save_word(&target, hybrid);
                     }
                 }
             }
-            // to Pages: the next save writes a .pages document
-            _ => {
-                if app.word.take().is_some() {
-                    if let Some(d) = app.wb.as_mut() {
-                        d.doc.path = None;
-                        d.doc.dirty = true;
-                        // laid out as Pages lays it out from now on
-                        d.word_layout = false;
-                    }
-                    app.untitled_name = Some(name);
-                    app.notify("Save to keep it as a Pages document.");
+        }
+        // to Pages: the next save writes a .pages document
+        _ => {
+            if app.word.take().is_some() {
+                if let Some(d) = app.wb.as_mut() {
+                    d.doc.path = None;
+                    d.doc.dirty = true;
+                    // laid out as Pages lays it out from now on
+                    d.word_layout = false;
                 }
+                app.untitled_name = Some(name);
+                app.notify("Save to keep it as a Pages document.");
             }
         }
     }
-    if apply || close {
-        if let (true, Some((name, Some(dir)))) = (apply, app.doc_title.take()) {
-            let name = name.trim().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
-            if !name.is_empty() && !name.contains('/') {
-                // a Word file keeps its extension (and its mode)
-                if let Some(w) = app.word.clone() {
-                    let target = dir.join(format!("{name}.docx"));
-                    if target != w.path {
-                        app.save_word(&target, w.hybrid);
-                        if target.exists() && w.path.exists() {
-                            let _ = std::fs::remove_file(&w.path);
-                        }
-                    }
-                } else {
-                    crate::fileops::relocate(app, dir.join(format!("{name}.pages")));
+}
+
+/// The title popover closed keeping what was typed: the document renamed or moved.
+pub(crate) fn title_apply(app: &mut App, name: &str, dir: Option<std::path::PathBuf>) {
+    let Some(dir) = dir else { return };
+    let name = name.trim().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
+    if !name.is_empty() && !name.contains('/') {
+        // a Word file keeps its extension (and its mode)
+        if let Some(w) = app.word.clone() {
+            let target = dir.join(format!("{name}.docx"));
+            if target != w.path {
+                app.save_word(&target, w.hybrid);
+                if target.exists() && w.path.exists() {
+                    let _ = std::fs::remove_file(&w.path);
                 }
             }
+        } else {
+            crate::fileops::relocate(app, dir.join(format!("{name}.pages")));
         }
-        app.doc_title = None;
     }
 }
 

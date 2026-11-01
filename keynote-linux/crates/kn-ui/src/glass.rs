@@ -147,7 +147,8 @@ pub fn shapes(ctx: &egui::Context, r: Rect, radius: f32, lens: bool) -> Vec<egui
     out
 }
 
-/// How far below the toolbar the feathered blur reaches (it starts fading inside the toolbar).
+/// How long the feathered blur's fade is. It's done by the toolbar's foot (the user's call: it
+/// used to reach this far onto the page below, blurring a page's top edge at rest).
 pub const FEATHER_REACH: f32 = 40.0;
 
 /// The feathered look under a floating toolbar: `fill` and then `tex` (a progressive blur
@@ -164,7 +165,9 @@ pub fn paint_feathered(painter: &egui::Painter, fill: Option<Color32>, tex: egui
 
 /// A mesh over `band` and `FEATHER_REACH` below it whose alpha eases from 1 to 0 (see paint_feathered).
 fn feather_mesh(band: Rect, at: impl Fn(egui::Pos2) -> (egui::Pos2, Color32), tex: egui::TextureId) -> egui::Mesh {
-    let (start, end) = (band.max.y + FEATHER_REACH * 0.45, band.max.y + FEATHER_REACH);
+    // (no fade of its own any more: the blur has thinned to sharp by the toolbar's foot, and
+    // under the band there's no page to fade into)
+    let (start, end) = (band.max.y, band.max.y);
     let mut mesh = egui::Mesh::with_texture(tex);
     let mut row = |y: f32, a: f32| {
         for x in [band.min.x, band.max.x] {
@@ -443,7 +446,9 @@ mod mac_vibrancy {
 /// height of `tex_rect` (for progressive_blur, with the band painted by paint_feathered).
 pub fn feather_rows(tex_rect: Rect, band: Rect) -> (f32, f32) {
     let f = |y: f32| ((y - tex_rect.min.y) / tex_rect.height()).clamp(0.0, 1.0);
-    (f(band.max.y - band.height() * 0.35), f(band.max.y + FEATHER_REACH * 0.85))
+    // (full under the buttons, thinning over the band's last FEATHER_REACH points to sharp
+    // just before the toolbar's foot)
+    (f((band.max.y - band.height() * 0.35 - FEATHER_REACH).max(band.min.y)), f(band.max.y - 2.0))
 }
 
 /// A progressive blur, as Apple's scroll-edge effect: rows above `full` (a fraction of the

@@ -35,10 +35,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
     if !with(|w| w.open) {
         return;
     }
-    let range = app.sel.map(|s| {
-        let (r0, c0, r1, c1) = s.block();
-        (s.table, r0, c0, r1, c1)
-    });
+    let range = range(app);
     let can = range.is_some_and(|(t, ..)| app.doc().is_some_and(|d| d.can_highlight(t)));
     let has_rules = range.is_some_and(|(t, r0, c0, r1, c1)| app.doc().is_some_and(|d| (r0..=r1).any(|r| (c0..=c1).any(|c| !d.highlight_rules(t, r, c).is_empty()))));
     let mut open = true;
@@ -77,17 +74,31 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         });
     });
     with(|w| w.open = open);
-    let Some((t, r0, c0, r1, c1)) = range else { return };
     if clear {
-        crate::tables::commit(app);
-        if let Some(Err(e)) = app.edit("Clear Rules", |d, h| d.clear_highlight_rules(h, t, (r0, c0, r1, c1))) {
-            app.notify(e.to_string());
-        }
-        return;
+        clear_rules(app);
+    } else if add {
+        add_rule(app);
     }
-    if !add {
-        return;
+}
+
+/// The selected cells: (table, block).
+fn range(app: &App) -> Option<(pg_core::kn_format::ObjId, u32, u32, u32, u32)> {
+    app.sel.map(|s| {
+        let (r0, c0, r1, c1) = s.block();
+        (s.table, r0, c0, r1, c1)
+    })
+}
+
+fn clear_rules(app: &mut App) {
+    let Some((t, r0, c0, r1, c1)) = range(app) else { return };
+    crate::tables::commit(app);
+    if let Some(Err(e)) = app.edit("Clear Rules", |d, h| d.clear_highlight_rules(h, t, (r0, c0, r1, c1))) {
+        app.notify(e.to_string());
     }
+}
+
+fn add_rule(app: &mut App) {
+    let Some((t, r0, c0, r1, c1)) = range(app) else { return };
     let (cmp, look, value) = with(|w| (Cmp::ALL[w.cmp], LOOKS[w.look], w.value.trim().replace(',', "").parse::<f64>()));
     let Ok(value) = value else { return };
     crate::tables::commit(app);
@@ -95,5 +106,41 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         Some(Ok(n)) => app.notify(format!("Rule added to {n} cell{}", if n == 1 { "" } else { "s" })),
         Some(Err(e)) => app.notify(e.to_string()),
         None => {}
+    }
+}
+
+/// The window as data (dlgapi): None while closed.
+pub fn api_state(app: &App) -> Option<serde_json::Value> {
+    if !with(|w| w.open) {
+        return None;
+    }
+    let range = range(app);
+    let can = range.is_some_and(|(t, ..)| app.doc().is_some_and(|d| d.can_highlight(t)));
+    let has_rules = range.is_some_and(|(t, r0, c0, r1, c1)| app.doc().is_some_and(|d| (r0..=r1).any(|r| (c0..=c1).any(|c| !d.highlight_rules(t, r, c).is_empty()))));
+    let label = match range {
+        Some((_, r0, c0, r1, c1)) if can => format!("Rule for {} selected cell{}", (r1 - r0 + 1) * (c1 - c0 + 1), if (r0, c0) == (r1, c1) { "" } else { "s" }),
+        Some(_) => "This table can't take rules.".into(),
+        None => "Select table cells first.".into(),
+    };
+    Some(with(|w| {
+        serde_json::json!({
+            "id": "condHighlight", "title": "Conditional Highlighting", "label": label, "italic": !can, "can": can, "hasRules": has_rules,
+            "cmp": w.cmp, "cmps": Cmp::ALL.iter().map(|c| c.name()).collect::<Vec<_>>(),
+            "look": w.look, "looks": LOOKS.iter().map(|l| l.name).collect::<Vec<_>>(),
+            "value": w.value,
+        })
+    }))
+}
+
+/// A control in the window (dlgapi): "cmp" / "look" (index), "value" (text), "add", "clear",
+/// "close".
+pub fn api_set(app: &mut App, key: &str, v: &serde_json::Value) {
+    match key {
+        "cmp" => with(|w| w.cmp = (v.as_u64().unwrap_or(0) as usize).min(Cmp::ALL.len() - 1)),
+        "look" => with(|w| w.look = (v.as_u64().unwrap_or(0) as usize).min(LOOKS.len() - 1)),
+        "value" => with(|w| w.value = v.as_str().unwrap_or_default().to_string()),
+        "add" => add_rule(app),
+        "clear" => clear_rules(app),
+        _ => with(|w| w.open = false),
     }
 }

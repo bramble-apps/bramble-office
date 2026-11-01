@@ -186,7 +186,7 @@ pub struct App {
     script: std::collections::VecDeque<Vec<egui::Event>>,
     script_cmds: Vec<String>,
     pub automated: bool,
-    password: Option<(PathBuf, String, String, bool)>,
+    pub(crate) password: Option<(PathBuf, String, String, bool)>,
     pub set_password: Option<(String, String, String)>,
     perf: Vec<f32>,
     pub buttons: kn_ui::winframe::ButtonLayout,
@@ -241,9 +241,14 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext, files: Vec<PathBuf>) -> App {
+        Self::with_ctx(&cc.egui_ctx, files)
+    }
+
+    /// The app on a context of its own (also without a window: the Flutter front end, ffi.rs).
+    pub fn with_ctx(ctx: &egui::Context, files: Vec<PathBuf>) -> App {
         let look = crate::look::Look::load();
-        look.apply(&cc.egui_ctx);
-        cc.egui_ctx.options_mut(|o| {
+        look.apply(ctx);
+        ctx.options_mut(|o| {
             o.zoom_with_keyboard = false;
             // a wheel notch goes as far as in GTK apps (about the viewport^(2/3)), not egui's 40
             // (the page canvas eases notches itself, at the same distance)
@@ -433,6 +438,10 @@ impl App {
     }
 
     pub fn load(&mut self, p: Pages) {
+        // (the touch front end: documents open fitting the width)
+        if self.canvas.open_fit_width {
+            self.canvas.fit = crate::canvas::Fit::Width;
+        }
         let u = p.ui_state();
         self.ruler = u.ruler;
         self.word_count = u.word_count;
@@ -841,7 +850,12 @@ impl App {
     pub fn pick_image(&mut self) {
         let Some(id) = self.replace_target.take() else { return };
         let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
-        let bytes = match std::fs::read(&p) {
+        self.replace_image(id, &p);
+    }
+
+    /// Replaces picture `id`'s image with the file at `p` (PNG or JPEG).
+    pub fn replace_image(&mut self, id: ObjId, p: &std::path::Path) {
+        let bytes = match std::fs::read(p) {
             Ok(b) => b,
             Err(e) => return self.notify(format!("Couldn't read the picture: {e}")),
         };
@@ -856,6 +870,29 @@ impl App {
         });
         if let Some(Err(e)) = res {
             self.notify(format!("Couldn't replace the picture: {e}"));
+        }
+    }
+
+    /// The Password window's Open: the document with what was typed, or "isn't right".
+    pub fn password_open(&mut self) {
+        let Some((path, hint, typed, wrong)) = &mut self.password else { return };
+        match Pages::open_with_password(path.as_path(), typed, hint) {
+            Ok(doc) => {
+                self.password = None;
+                self.load(doc);
+            }
+            Err(_) => *wrong = true,
+        }
+    }
+
+    /// Set Password closed: None (Cancel), Some(None) (Remove Password) or the new password
+    /// and hint.
+    pub fn set_password_done(&mut self, d: Option<Option<(String, String)>>) {
+        self.set_password = None;
+        if let (Some(choice), Some(w)) = (d, &mut self.wb) {
+            w.doc.password = choice;
+            w.doc.dirty = true;
+            self.notify("The password applies from the next save.");
         }
     }
 
@@ -1032,13 +1069,7 @@ impl App {
                 });
             });
             match done {
-                Some(true) => match Pages::open_with_password(path.as_path(), typed, hint) {
-                    Ok(doc) => {
-                        self.password = None;
-                        self.load(doc);
-                    }
-                    Err(_) => *wrong = true,
-                },
+                Some(true) => self.password_open(),
                 Some(false) => self.password = None,
                 None => {}
             }
@@ -1076,12 +1107,7 @@ impl App {
                 });
             });
             if let Some(d) = done {
-                self.set_password = None;
-                if let (Some(choice), Some(w)) = (d, &mut self.wb) {
-                    w.doc.password = choice;
-                    w.doc.dirty = true;
-                    self.notify("The password applies from the next save.");
-                }
+                self.set_password_done(d);
             }
         }
         crate::tabs::closing_ui(self, ctx);

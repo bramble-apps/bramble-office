@@ -181,6 +181,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let (look0, s0) = (app.look.clone(), app.settings.clone());
+    // (the Default Font field's list: the font menu's)
+    let fonts = app.canvas.tiles.font_families();
     let key = egui::Id::unique("settings-tab");
     let mut tab: usize = ctx.data(|d| d.get_temp(key)).unwrap_or(0);
     egui::Window::new("Settings").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut open).min_width(500.0).show(ctx, |ui| {
@@ -276,7 +278,11 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     ui.end_row();
                     ui.label("Default Font:");
                     ui.horizontal(|ui| {
-                        ui.add(egui::TextEdit::singleline(&mut s.default_font).hint_text("Helvetica Neue").desired_width(150.0));
+                        // (pick one, or type to find one or a name that isn't in the list)
+                        let shown = if s.default_font.is_empty() { "Helvetica Neue".to_string() } else { s.default_font.clone() };
+                        if let Some(f) = theme::font_combo(ui, "default-font", &shown, &fonts, 150.0) {
+                            s.default_font = f;
+                        }
                         theme::stepper32(ui, &mut s.default_font_size, 1.0, 6.0..=96.0, " pt", 0);
                     });
                     ui.end_row();

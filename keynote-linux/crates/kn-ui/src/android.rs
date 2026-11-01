@@ -17,6 +17,13 @@ static TYPING: AtomicBool = AtomicBool::new(false);
 /// The on-screen keyboard was asked for.
 static KEYBOARD: AtomicBool = AtomicBool::new(false);
 
+/// Logcat and panics written to it, for code started without android_main (the Flutter apps'
+/// engines).
+pub fn init_logging(tag: &'static str) {
+    android_logger::init_once(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag(tag));
+    std::panic::set_hook(Box::new(|p| log::error!("{p}")));
+}
+
 /// At the start of android_main: logcat, the app, and HOME and the XDG folders (Android sets
 /// none) in the app's own storage, where settings, recent files and caches go.
 pub fn init(app: &AndroidApp, tag: &'static str) {

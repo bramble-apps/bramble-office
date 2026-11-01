@@ -183,6 +183,25 @@ pub fn comments_pane(app: &mut App, ui: &mut egui::Ui) {
 }
 
 /// The word count pill at the bottom of the canvas (click to switch what it counts).
+/// What the word count pill says ("1,234 words", "12 of 1,234 words").
+pub fn word_count_label(app: &App) -> String {
+    let text = app.wb.as_ref().map(|w| pg_core::text_plain(&w.body_text())).unwrap_or_default();
+    let (sel_text, has_sel) = match app.cursor {
+        Some(c) if !c.is_empty() => (crate::text::selected_stored(app).map(|s| pg_core::text_plain(&s)).unwrap_or_default(), true),
+        _ => (String::new(), false),
+    };
+    let t = if has_sel { &sel_text } else { &text };
+    let n = match app.word_count_mode {
+        1 => t.chars().filter(|c| *c != '\n').count(),
+        2 => t.chars().filter(|c| !c.is_whitespace()).count(),
+        3 => t.split('\n').filter(|l| !l.trim().is_empty()).count(),
+        4 => app.page_count(),
+        _ => t.split_whitespace().filter(|w| w.chars().any(|c| c.is_alphanumeric())).count(),
+    };
+    let what = ["words", "characters", "characters without spaces", "paragraphs", "pages"][app.word_count_mode as usize % 5];
+    if has_sel && app.word_count_mode != 4 { format!("{} of {} {what}", group(n), group(count_all(&text, app.word_count_mode))) } else { format!("{} {what}", group(n)) }
+}
+
 pub fn word_count_pill(app: &mut App, ui: &egui::Ui, rect: Rect) {
     let text = app.wb.as_ref().map(|w| pg_core::text_plain(&w.body_text())).unwrap_or_default();
     let (sel_text, has_sel) = match app.cursor {
@@ -229,4 +248,96 @@ fn group(n: usize) -> String {
         out.push(c);
     }
     out
+}
+
+/// For other front ends: the comments & changes bar (null when it doesn't show) and the
+/// comments pane (null when closed), as annotation_bar and comments_pane draw them.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::{json, Value};
+    let list = annotations(app);
+    let rgba = |c: pg_core::kn_model::Color| json!([c.r, c.g, c.b, c.a]);
+    let bar = app.has_annotations_bar().then(|| {
+        let tracking = app.wb.as_ref().is_some_and(|w| w.tracking());
+        let nc = list.iter().filter(|a| a.2.is_some()).count();
+        let nch = list.iter().filter(|a| a.3.is_some()).count();
+        let label = match (nc, nch) {
+            (0, 0) => "No Comments or Changes".to_string(),
+            (c, 0) => format!("{c} {}", if c == 1 { "Comment" } else { "Comments" }),
+            (0, h) => format!("{h} {}", if h == 1 { "Change" } else { "Changes" }),
+            (c, h) => format!("{} Comments & Changes", c + h),
+        };
+        let can = app.cursor.is_some_and(|c| c.owner == Owner::Body);
+        json!({
+            "pane": app.comments_pane,
+            "label": label,
+            "canComment": can,
+            "canHighlight": can && app.cursor.is_some_and(|c| !c.is_empty()),
+            "review": tracking || nch > 0,
+            "here": change_here(app).is_some(),
+            "tracking": tracking,
+        })
+    });
+    let pane = app.comments_pane.then(|| {
+        let body = app.wb.as_ref().map(|w| w.body_text()).unwrap_or_default();
+        let cards: Vec<Value> = list
+            .iter()
+            .filter_map(|(a, b, c, ch)| {
+                let (who, color, what) = match (c, ch) {
+                    (Some(c), _) => (c.author.clone(), c.color, if c.text.is_empty() { "Highlight".to_string() } else { c.text.clone() }),
+                    (_, Some(ch)) => (ch.author.clone(), ch.color, format!("{} “{}”", if ch.deletion { "Deleted" } else { "Added" }, pg_core::text_plain(&ch.text).chars().take(60).collect::<String>())),
+                    _ => return None,
+                };
+                let date = c.as_ref().and_then(|c| c.date).or(ch.as_ref().and_then(|c| c.date)).map(pg_core::kn_model::comments::format_date);
+                let quote: String = pg_core::text_plain(body.get(*a..*b).unwrap_or("")).chars().take(80).collect();
+                Some(json!({
+                    "who": if who.is_empty() { "Author".to_string() } else { who },
+                    "color": rgba(color),
+                    "date": date,
+                    "quote": if c.is_some() && !quote.is_empty() { Value::String(quote) } else { Value::Null },
+                    "what": what,
+                    "comment": c.as_ref().map(|c| c.highlight),
+                }))
+            })
+            .collect();
+        json!({ "cards": cards })
+    });
+    json!({ "bar": bar, "pane": pane })
+}
+
+/// "pane" (show / hide the comments pane), "step:<1 next|0>", "accept", "reject",
+/// "acceptAll", "rejectAll", "track:<0|1>", "go:<card>", "delete:<highlight>",
+/// "edit:<highlight>".
+pub fn api_action(app: &mut App, a: &str) {
+    let (k, v) = a.split_once(':').unwrap_or((a, ""));
+    match k {
+        "pane" => app.comments_pane = !app.comments_pane,
+        "step" => step(app, v == "1"),
+        "accept" => accept(app, true),
+        "reject" => accept(app, false),
+        "acceptAll" => resolve_all(app, true),
+        "rejectAll" => resolve_all(app, false),
+        "track" => {
+            let on = v == "1";
+            app.edit_pages("Track Changes", |p, h| p.set_tracking(h, on));
+        }
+        "go" => {
+            let list = annotations(app);
+            if let (Some(a), Some(st)) = (v.parse::<usize>().ok().and_then(|i| list.get(i)), app.wb.as_ref().and_then(|w| w.body_storage())) {
+                app.cursor = Some(Cursor { storage: st, owner: Owner::Body, anchor: a.0, caret: a.1, goal_x: None });
+                app.canvas.follow_caret = true;
+            }
+        }
+        "delete" => {
+            if let (Ok(h), Some(st)) = (v.parse(), app.wb.as_ref().and_then(|w| w.body_storage())) {
+                app.edit_pages("Delete Comment", |p, hi| p.delete_text_comment(hi, st, h));
+            }
+        }
+        "edit" => {
+            let text = annotations(app).into_iter().find_map(|x| x.2.filter(|c| v.parse() == Ok(c.highlight))).map(|c| (c.highlight, c.text));
+            if let Some((h, t)) = text {
+                app.comment_edit = Some((Some(h), t));
+            }
+        }
+        _ => {}
+    }
 }

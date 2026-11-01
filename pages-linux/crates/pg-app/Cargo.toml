@@ -16,6 +16,8 @@ path = "src/main.rs"
 [dependencies]
 eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
 egui = "0.37"
+# the widgets as data, for the Flutter front end (ffi.rs)
+serde_json = "1.0.154"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 pg-core = { path = "../pg-core" }
 kn-render = { path = "../../../keynote-linux/crates/kn-render" }

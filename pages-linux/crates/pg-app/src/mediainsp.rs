@@ -51,10 +51,23 @@ pub fn apply_gallery_pos(drawables: &mut [Drawable]) {
     });
 }
 
-fn show_image(app: &mut App, id: ObjId, k: usize) {
+pub(crate) fn show_image(app: &mut App, id: ObjId, k: usize) {
     with(|s| s.gallery_pos.insert(id, k));
     // relayout without marking the document edited
     app.version += 1;
+}
+
+/// The movie's length in seconds (ffprobe, once per movie; 0 when it can't be read).
+pub(crate) fn movie_length(app: &App, id: ObjId, m: &pg_core::kn_model::MovieData) -> f32 {
+    let known = with(|s| match s.movie_len {
+        Some((mid, l, at)) if mid == id && (l > 0.0 || at.elapsed().as_secs_f32() < 2.0) => Some(l),
+        _ => None,
+    });
+    known.unwrap_or_else(|| {
+        let l = m.movie_data.and_then(|data| app.doc().and_then(|doc| media::cache_file(doc, data))).and_then(|(p, _)| media::duration(&p)).unwrap_or(0.0) as f32;
+        with(|s| s.movie_len = Some((id, l, std::time::Instant::now())));
+        l
+    })
 }
 
 pub fn movie_panel(app: &mut App, ui: &mut egui::Ui, d: &Drawable) {
@@ -124,7 +137,7 @@ pub fn movie_panel(app: &mut App, ui: &mut egui::Ui, d: &Drawable) {
 }
 
 /// A package data file's name as Pages shows it: "Data/gallery-1-452.png" -> "gallery-1.png".
-fn shown_file_name(stored: &str) -> String {
+pub(crate) fn shown_file_name(stored: &str) -> String {
     let base = stored.rsplit('/').next().unwrap_or(stored);
     let (stem, ext) = base.rsplit_once('.').unwrap_or((base, ""));
     let stem = match stem.rsplit_once('-') {
@@ -283,4 +296,19 @@ pub fn gallery_controls(app: &mut App, ui: &mut egui::Ui) -> bool {
         show_image(app, id, k);
     }
     hot
+}
+
+/// A selected gallery's arrows and "2 of 5" for a front end (gallery_controls): the image, its
+/// frame (page points), the image shown and how many; null when none.
+pub fn gallery_api(app: &App) -> serde_json::Value {
+    let Some(id) = app.canvas.obj else { return serde_json::Value::Null };
+    let Some(d) = app.drawables.iter().find(|d| d.id == id) else { return serde_json::Value::Null };
+    let DrawableKind::Image(im) = &d.kind else { return serde_json::Value::Null };
+    let n = im.gallery.len();
+    let Some(&pi) = app.obj_page.get(&id) else { return serde_json::Value::Null };
+    if n < 2 {
+        return serde_json::Value::Null;
+    }
+    let g = d.geom;
+    serde_json::json!({ "id": id, "page": pi, "frame": [g.x, g.y, g.x + g.w, g.y + g.h], "shown": im.gallery_shown.min(n - 1), "n": n })
 }

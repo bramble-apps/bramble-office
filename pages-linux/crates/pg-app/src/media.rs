@@ -24,6 +24,8 @@ struct State {
     /// The movie / web video playing in place (and one waiting for its stream).
     player: Option<Player>,
     waiting: Option<ObjId>,
+    /// The size a waiting video starts at (a front end's ▶).
+    waiting_px: [u32; 2],
 }
 
 thread_local! {
@@ -81,6 +83,8 @@ pub fn command(app: &mut App, name: &str) -> bool {
     }
     match name {
         "Content Hub" => app.hub.show_hub(),
+        // (the Shape popover's Browse Content Hub)
+        "Content Hub Shapes" => app.hub.show_tab(kn_ui::contenthub::Tab::Shapes),
         "Choose Photo or Video…" => {
             let all: Vec<&str> = media::IMAGE_EXT.iter().chain(media::MOVIE_EXT).copied().collect();
             for p in pick(&[("Photos and videos", &all)], true) {
@@ -109,6 +113,11 @@ pub fn command(app: &mut App, name: &str) -> bool {
 /// Add Image Gallery: the first picture inserted, the others added to it.
 fn add_gallery(app: &mut App) {
     let files = pick(&[("Pictures", media::IMAGE_EXT)], true);
+    add_gallery_paths(app, &files);
+}
+
+/// An image gallery of these pictures: the first inserted, the others added to it.
+pub fn add_gallery_paths(app: &mut App, files: &[std::path::PathBuf]) {
     let mut imgs: Vec<(Vec<u8>, String)> = files.iter().filter_map(|p| Some((std::fs::read(p).ok()?, p.file_name()?.to_string_lossy().to_string()))).collect();
     if imgs.is_empty() {
         return;
@@ -156,32 +165,10 @@ fn record_window(app: &mut App, ctx: &egui::Context) {
         }
     });
     if start {
-        let path = std::env::temp_dir().join(format!("letters-recording-{}.wav", std::process::id()));
-        let child = std::process::Command::new("pw-record")
-            .arg(&path)
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
-        match child {
-            Ok(c) => with(|s| s.recorder = Some((c, path, std::time::Instant::now()))),
-            Err(e) => app.notify(format!("Couldn't start recording: {e}")),
-        }
+        record_start(app);
     }
     if stop || (!open && recording.is_some()) {
-        if let Some((mut child, path, _)) = with(|s| s.recorder.take()) {
-            // stop politely so the file is finished properly
-            let _ = std::process::Command::new("kill").args(["-INT", &child.id().to_string()]).status();
-            let _ = child.wait();
-            if stop {
-                // AAC as Pages records, when ffmpeg is there
-                let m4a = path.with_extension("m4a");
-                let ok = std::process::Command::new("ffmpeg").args(["-v", "error", "-y", "-i"]).arg(&path).args(["-c:a", "aac", "-b:a", "128k"]).arg(&m4a).status().is_ok_and(|s| s.success());
-                let named = std::env::temp_dir().join(if ok { "Recording.m4a" } else { "Recording.wav" });
-                let _ = std::fs::rename(if ok { &m4a } else { &path }, &named);
-                insert_path(app, &named);
-            }
-        }
+        record_stop(app, stop);
         if stop {
             open = false;
         }
@@ -189,7 +176,117 @@ fn record_window(app: &mut App, ctx: &egui::Context) {
     with(|s| s.record_open = open);
 }
 
+/// Record Audio is open, and how long it has been recording (seconds).
+pub fn record_state() -> Option<Option<u64>> {
+    with(|s| s.record_open.then(|| s.recorder.as_ref().map(|r| r.2.elapsed().as_secs())))
+}
+
+pub fn record_close() {
+    with(|s| s.record_open = false);
+}
+
+/// ● Record: the default microphone into a temporary file.
+pub fn record_start(app: &mut App) {
+    let path = std::env::temp_dir().join(format!("letters-recording-{}.wav", std::process::id()));
+    let child = std::process::Command::new("pw-record")
+        .arg(&path)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
+    match child {
+        Ok(c) => with(|s| s.recorder = Some((c, path, std::time::Instant::now()))),
+        Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+    }
+}
+
+/// The recording stopped; with `insert`, it goes in as a sound (AAC when ffmpeg is there).
+pub fn record_stop(app: &mut App, insert: bool) {
+    if let Some((mut child, path, _)) = with(|s| s.recorder.take()) {
+        // stop politely so the file is finished properly
+        let _ = std::process::Command::new("kill").args(["-INT", &child.id().to_string()]).status();
+        let _ = child.wait();
+        if insert {
+            // AAC as Pages records, when ffmpeg is there
+            let m4a = path.with_extension("m4a");
+            let ok = std::process::Command::new("ffmpeg").args(["-v", "error", "-y", "-i"]).arg(&path).args(["-c:a", "aac", "-b:a", "128k"]).arg(&m4a).status().is_ok_and(|s| s.success());
+            let named = std::env::temp_dir().join(if ok { "Recording.m4a" } else { "Recording.wav" });
+            let _ = std::fs::rename(if ok { &m4a } else { &path }, &named);
+            insert_path(app, &named);
+        }
+    }
+}
+
 fn web_window(app: &mut App, ctx: &egui::Context) {
+    web_poll(app);
+    let Some(mut url) = with(|s| s.web_sheet.clone()) else { return };
+    let busy = with(|s| s.web_fetch.is_some());
+    let mut open = true;
+    let mut go = false;
+    egui::Window::new("Add Web Video").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
+        ui.label("Paste a YouTube or Vimeo link.");
+        let r = ui.add(egui::TextEdit::singleline(&mut url).hint_text("https://www.youtube.com/watch?v=…").desired_width(360.0));
+        let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        ui.horizontal(|ui| {
+            let ok = media::web::video_link(url.trim());
+            if busy {
+                ui.spinner();
+                ui.label("Looking it up…");
+            } else if ui.add_enabled(ok, egui::Button::new("Insert")).clicked() || (ok && enter) {
+                go = true;
+            }
+        });
+    });
+    if go {
+        let ctx2 = ctx.clone();
+        web_go(&url, move || ctx2.request_repaint());
+        open = false;
+    }
+    with(|s| s.web_sheet = if open { Some(url) } else { None });
+    if !open {
+        web_close();
+    }
+}
+
+/// Add Web Video is open: (the link typed, a lookup running).
+pub fn web_state() -> (Option<String>, bool) {
+    with(|s| (s.web_sheet.clone(), s.web_fetch.is_some()))
+}
+
+/// The link typed so far (for Insert's state).
+pub fn web_edit(url: &str) {
+    with(|s| s.web_sheet = Some(url.to_string()));
+}
+
+/// Add Web Video closed: without a lookup, not replacing after all.
+pub fn web_close() {
+    with(|s| {
+        s.web_sheet = None;
+        if s.web_fetch.is_none() {
+            s.replacing = None;
+        }
+    });
+}
+
+/// Insert: look the link up in the background (`done` when it's back); the window closes.
+pub fn web_go(url: &str, done: impl FnOnce() + Send + 'static) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let u = url.trim().to_string();
+    std::thread::spawn({
+        let u = u.clone();
+        move || {
+            let _ = tx.send(media::web::fetch(u));
+            done();
+        }
+    });
+    with(|s| {
+        s.web_fetch = Some((rx, u));
+        s.web_sheet = None;
+    });
+}
+
+/// A lookup that finished: the poster inserted as a picture that plays the video.
+pub fn web_poll(app: &mut App) {
     // a lookup that finished: the poster inserted as a picture that plays the video
     let done = with(|s| s.web_fetch.as_ref().and_then(|(rx, url)| rx.try_recv().ok().map(|r| (r, url.clone()))));
     if let Some((res, url)) = done {
@@ -225,46 +322,97 @@ fn web_window(app: &mut App, ctx: &egui::Context) {
             }
         }
     }
-    let Some(mut url) = with(|s| s.web_sheet.clone()) else { return };
-    let busy = with(|s| s.web_fetch.is_some());
-    let mut open = true;
-    let mut go = false;
-    egui::Window::new("Add Web Video").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
-        ui.label("Paste a YouTube or Vimeo link.");
-        let r = ui.add(egui::TextEdit::singleline(&mut url).hint_text("https://www.youtube.com/watch?v=…").desired_width(360.0));
-        let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        ui.horizontal(|ui| {
-            let ok = media::web::video_link(url.trim());
-            if busy {
-                ui.spinner();
-                ui.label("Looking it up…");
-            } else if ui.add_enabled(ok, egui::Button::new("Insert")).clicked() || (ok && enter) {
-                go = true;
-            }
-        });
-    });
-    if go {
-        let (tx, rx) = std::sync::mpsc::channel();
-        let u = url.trim().to_string();
-        let ctx2 = ctx.clone();
-        std::thread::spawn({
-            let u = u.clone();
-            move || {
-                let _ = tx.send(media::web::fetch(u));
-                ctx2.request_repaint();
-            }
-        });
-        with(|s| s.web_fetch = Some((rx, u)));
-        open = false;
-    }
-    with(|s| {
-        s.web_sheet = if open { Some(url) } else { None };
-        // closed without looking anything up: not replacing after all
-        if !open && s.web_fetch.is_none() {
-            s.replacing = None;
-        }
-    });
 }
+
+/// Start playing drawable `id` (a web video's page link, or a movie) at `px` pixels.
+fn start_player(app: &App, ctx: &egui::Context, id: ObjId, web: Option<&str>, movie: Option<&pg_core::kn_model::MovieData>, px: [u32; 2]) -> bool {
+    if let Some(url) = web {
+        let Some(stream) = media::web_stream(url) else { return false };
+        let spec = media::Spec { path: PathBuf::from(stream), len: 0, start: 0.0, end: 0.0, volume: 1.0, looping: false, video: Some(px) };
+        with(|s| s.player = Some(Player::start(ctx, id, 1, spec)));
+        return true;
+    }
+    let Some(m) = movie else { return false };
+    let Some(data) = m.movie_data else { return false };
+    let Some((path, len)) = app.doc().and_then(|d| media::cache_file(d, data)) else { return false };
+    let spec = media::Spec::new(path, len, m, Some(px));
+    with(|s| s.player = Some(Player::start(ctx, id, data, spec)));
+    true
+}
+
+/// The movies, sounds and web videos on the pages for a front end's ▶ buttons (canvas_controls):
+/// [{id, page, frame (page points), selected, playing}].
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let sel = app.selected_objs();
+    let playing = with(|s| s.player.as_ref().filter(|p| !p.finished()).map(|p| p.drawable));
+    let v: Vec<serde_json::Value> = app
+        .drawables
+        .iter()
+        .filter(|d| matches!(&d.kind, DrawableKind::Movie(_)) || matches!(&d.kind, DrawableKind::Image(im) if im.web_video.is_some()))
+        .filter_map(|d| {
+            let pi = *app.obj_page.get(&d.id)?;
+            let g = d.geom;
+            Some(json!({ "id": d.id, "page": pi, "frame": [g.x, g.y, g.x + g.w, g.y + g.h], "selected": sel.contains(&d.id), "playing": playing == Some(d.id), "waiting": with(|s| s.waiting) == Some(d.id) }))
+        })
+        .collect();
+    serde_json::Value::Array(v)
+}
+
+/// A front end's ▶ on drawable `id`: play it in place at `px` pixels, or stop it when it plays.
+/// Its frames come through `frame`.
+pub fn play(app: &mut App, ctx: &egui::Context, id: ObjId, px: [u32; 2]) {
+    if with(|s| s.player.as_ref().is_some_and(|p| p.drawable == id && !p.finished())) {
+        with(|s| s.player = None);
+        return;
+    }
+    let Some(d) = app.drawables.iter().find(|d| d.id == id) else { return };
+    let (web, movie) = match &d.kind {
+        DrawableKind::Movie(m) => (None, Some(m.clone())),
+        DrawableKind::Image(im) => (im.web_video.as_ref().map(|w| w.url.clone()), None),
+        _ => return,
+    };
+    let px = [(px[0].max(2) + 1) & !1, (px[1].max(2) + 1) & !1];
+    if !start_player(app, ctx, id, web.as_deref(), movie.as_ref(), px) {
+        if web.is_some() {
+            with(|s| s.waiting = Some(id));
+            with(|s| s.waiting_px = px);
+            app.notify("Loading the video…");
+        } else {
+            app.notify("This movie can't be played (no ffmpeg?)");
+        }
+    }
+}
+
+/// The newest frame of what plays (for a front end): (drawable, [w, h], RGBA), None when no new
+/// frame came; a web video waiting for its stream starts once it's there.
+pub fn frame(app: &mut App, ctx: &egui::Context) -> Option<(ObjId, [usize; 2], Vec<u8>)> {
+    if let Some(id) = with(|s| s.waiting) {
+        let px = with(|s| s.waiting_px);
+        let url = app.drawables.iter().find(|d| d.id == id).and_then(|d| match &d.kind {
+            DrawableKind::Image(im) => im.web_video.as_ref().map(|w| w.url.clone()),
+            _ => None,
+        });
+        match url {
+            Some(u) if start_player(app, ctx, id, Some(&u), None, px) => with(|s| s.waiting = None),
+            Some(_) => {}
+            None => with(|s| s.waiting = None),
+        }
+    }
+    let id = with(|s| s.player.as_mut().filter(|p| !p.finished()).map(|p| {
+        // the frame goes into a texture of the (headless) context; its pixels are read back
+        // from the texture's upload
+        let _ = p.texture(ctx);
+        p.drawable
+    }))?;
+    let mut delta = ctx.tex_manager().write().take_delta();
+    std::mem::take(&mut delta.set).into_values().flatten().filter_map(|d| match d.image {
+        egui::ImageData::Color(c) => Some((id, c.size, c.pixels.iter().flat_map(|p| p.to_srgba_unmultiplied()).collect())),
+        #[allow(unreachable_patterns)]
+        _ => None,
+    }).last()
+}
+
 
 /// Movies, sounds and web videos on the visible pages: a ▶ on each (selected or hovered) to play
 /// it in place; while playing, the video over its frame (a click stops it). True while the
@@ -295,18 +443,7 @@ pub fn canvas_controls(app: &mut App, ui: &mut egui::Ui) -> bool {
     for (id, r, web, movie) in items {
         let start = |app: &mut App, ctx: &egui::Context| -> bool {
             let px = [((r.width() * ctx.pixels_per_point()) as u32 + 1) & !1, ((r.height() * ctx.pixels_per_point()) as u32 + 1) & !1];
-            if let Some(url) = &web {
-                let Some(stream) = media::web_stream(url) else { return false };
-                let spec = media::Spec { path: PathBuf::from(stream), len: 0, start: 0.0, end: 0.0, volume: 1.0, looping: false, video: Some(px) };
-                with(|s| s.player = Some(Player::start(ctx, id, 1, spec)));
-                return true;
-            }
-            let Some(m) = &movie else { return false };
-            let Some(data) = m.movie_data else { return false };
-            let Some((path, len)) = app.doc().and_then(|d| media::cache_file(d, data)) else { return false };
-            let spec = media::Spec::new(path, len, m, Some(px));
-            with(|s| s.player = Some(Player::start(ctx, id, data, spec)));
-            true
+            start_player(app, ctx, id, web.as_deref(), movie.as_ref(), px)
         };
         if with(|s| s.waiting) == Some(id) && start(app, ui.ctx()) {
             with(|s| s.waiting = None);

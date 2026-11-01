@@ -31,9 +31,9 @@ fn c32(c: kn_model::Color) -> Color32 {
 
 // ------------------------------------------------------------------ bullets & lists
 
-const BULLETS: [&str; 12] = ["•", "◦", "▪", "▫", "■", "□", "–", "-", "✓", "★", "➤", "◆"];
+pub(crate) const BULLETS: [&str; 12] = ["•", "◦", "▪", "▫", "■", "□", "–", "-", "✓", "★", "➤", "◆"];
 /// (TSWP.ListStyleArchive.NumberType, how it shows)
-const NUMBER_FORMATS: [(u64, &str); 12] = [
+pub(crate) const NUMBER_FORMATS: [(u64, &str); 12] = [
     (0, "1. 2. 3."),
     (2, "1) 2) 3)"),
     (1, "(1) (2) (3)"),

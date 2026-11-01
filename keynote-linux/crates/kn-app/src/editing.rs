@@ -511,9 +511,10 @@ pub fn font_names(app: &App) -> Vec<String> {
         }
     }
     out.sort();
-    for f in app.renderer.fonts.families() {
-        if !out.contains(f) {
-            out.push(f.clone());
+    // (with Arial, Times New Roman … drawn by the bundled stand-ins where not installed)
+    for f in app.renderer.fonts.menu_families() {
+        if !out.contains(&f) {
+            out.push(f);
         }
     }
     out

@@ -44,6 +44,7 @@ fn segmented(ui: &mut egui::Ui, labels: &[&str], cur: &mut usize, radius: f32) {
         // (the id names the whole switch: the tabs "Style | Text | Arrange" and the Text pane's
         // "Style | Layout" sit in one scope, and a shared ("Style", 0) sent clicks to the wrong one)
         let resp = ui.interact(r, ui.scope_id().with(("seg", labels.join("|"), i)), egui::Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, *cur == i, labels[i]));
         let sel = *cur == i;
         if sel {
             p.rect_filled(r.shrink(1.0), radius - 1.0, theme::ACCENT());
@@ -64,7 +65,7 @@ fn segmented(ui: &mut egui::Ui, labels: &[&str], cur: &mut usize, radius: f32) {
 /// Format > Gallery (Keynote 15.4, R29): Title and Caption (one per image or the same for all),
 /// the images (pick one to show it, + to add more, − to remove it) and the shown image's
 /// description.
-fn shown_file_name(stored: &str) -> String {
+pub(crate) fn shown_file_name(stored: &str) -> String {
     let base = stored.rsplit('/').next().unwrap_or(stored);
     let (stem, ext) = base.rsplit_once('.').unwrap_or((base, ""));
     let stem = match stem.rsplit_once('-') {
@@ -111,6 +112,7 @@ fn image_panel(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
     // two tiles, an icon over its label
     let tile = |ui: &mut egui::Ui, rect: egui::Rect, label: &str, on: bool, draw: &dyn Fn(&egui::Painter, egui::Pos2, egui::Stroke)| -> bool {
         let resp = ui.interact(rect, ui.scope_id().with(("img-tile", label)), egui::Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
         let fill = if on { theme::ACCENT() } else if resp.hovered() { theme::gray(0x48) } else { theme::gray(0x38) };
         ui.painter().rect_filled(rect, 6.0, fill);
         draw(ui.painter(), rect.center() - egui::vec2(0.0, 8.0), egui::Stroke::new(1.4, theme::TEXT()));
@@ -937,6 +939,8 @@ pub(crate) fn icon_segments(ui: &mut egui::Ui, id: &str, n: usize, selected: Opt
         let r = egui::Rect::from_min_size(egui::pos2(rect.min.x + w * i as f32, rect.min.y), egui::vec2(w, rect.height()));
         let resp = ui.interact(r, ui.scope_id().with((id, i)), egui::Sense::click());
         let sel = selected == Some(i);
+        // ("align:0" and the like: the front ends know the icons)
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, sel, format!("{id}:{i}")));
         if sel {
             p.rect_filled(r.shrink(1.0), 6.0, theme::ACCENT());
         } else if resp.hovered() {
@@ -976,6 +980,7 @@ pub(crate) fn text(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
     kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.max.x - 22.0, r.center().y), egui::vec2(16.0, 16.0)), kn_ui::icons::Icon::ChevronDown, theme::gray(0x30));
     // the paragraph styles, each in its own look (Keynote's paragraph style pop-up)
     let pr = ui.interact(r, ui.scope_id().with("para-style"), egui::Sense::click());
+    pr.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Paragraph Style"));
     let mut pick_style = None;
     egui::Popup::menu(&pr).width(r.width()).show(|ui| {
         let styles = app.wb.as_ref().map(|w| &w.doc).map(|d| d.paragraph_styles()).unwrap_or_default();
@@ -1051,13 +1056,12 @@ pub(crate) fn text(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
         app.font_names = Some(crate::editing::font_names(app));
     }
     let fonts = app.font_names.clone().unwrap_or_default();
-    theme::combo("font").selected_text(&family).width(ui.available_width()).height(400.0).show_ui(ui, |ui| {
-        for f in &fonts {
-            if ui.selectable_label(*f == family, f).clicked() && *f != family {
-                changes.push(("Font", TextProp::Font(f.replace(' ', ""))));
-            }
-        }
-    });
+    // (type to find one, or a name that isn't in the list)
+    let w = ui.available_width();
+    if let Some(f) = theme::font_combo(ui, "font", &family, &fonts, w) {
+        let ps = app.canvas.tiles.ps_name_for_family(&f).unwrap_or_else(|| f.replace(' ', ""));
+        changes.push(("Font", TextProp::Font(ps)));
+    }
     ui.horizontal(|ui| {
         let typeface = match (run.bold, run.italic) {
             (true, true) => "Bold Italic",
@@ -1094,6 +1098,7 @@ pub(crate) fn text(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
             for (i, (lab, on)) in ["B", "I", "U", "S"].iter().zip(states).enumerate() {
                 let r = egui::Rect::from_min_size(egui::pos2(rect.min.x + cw * i as f32, rect.min.y), egui::vec2(cw, rect.height()));
                 let resp = ui.interact(r, ui.scope_id().with(("bius", i)), egui::Sense::click());
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, ["Bold", "Italic", "Underline", "Strikethrough"][i]));
                 if on {
                     p.rect_filled(r.shrink(1.0), 6.0, theme::ACCENT());
                 } else if resp.hovered() {
@@ -1339,6 +1344,7 @@ pub(crate) fn arrange(app: &mut App, ui: &mut egui::Ui, selected: &[kn_model::Dr
                 for (i, (label, cmd, top)) in pair.iter().enumerate() {
                     let r = egui::Rect::from_min_size(egui::pos2(rect.min.x + w * i as f32, rect.min.y), egui::vec2(w, rect.height()));
                     let resp = ui.interact(r, ui.scope_id().with(("layer", *label)), egui::Sense::click());
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, *label));
                     if resp.hovered() {
                         ui.painter().rect_filled(r.shrink(2.0), 5.0, theme::gray(0x44));
                     }

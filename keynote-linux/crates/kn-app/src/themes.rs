@@ -181,3 +181,20 @@ fn create(app: &mut App, ctx: &egui::Context, name: &str, file: Result<kn_format
         Err(e) => app.notify(format!("Couldn't create the presentation: {e}")),
     }
 }
+
+/// A theme's preview as a PNG file (other front ends draw it; ffi.rs kd_themes): the built-in
+/// ones written to the cache once, a user theme's own <Theme>.png beside it.
+pub(crate) fn preview_file(name: &str, path: &Option<PathBuf>) -> Option<PathBuf> {
+    let p = path.as_ref()?;
+    let Some(b) = builtin(p) else {
+        let png = p.with_extension("png");
+        return png.is_file().then_some(png);
+    };
+    let base = std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
+    let file = base.join("keydeck").join("theme-previews").join(format!("{name}.png"));
+    if !file.is_file() {
+        std::fs::create_dir_all(file.parent()?).ok()?;
+        std::fs::write(&file, b.2).ok()?;
+    }
+    Some(file)
+}

@@ -205,3 +205,93 @@ pub fn ruler(app: &mut App, ui: &mut egui::Ui) {
     }
     let _ = vec2(0.0, 0.0);
 }
+
+// ------------------------------------------------------------------ for other front ends (ffi.rs)
+
+/// The ruler as data (page points): the current page's width and margins, the column gutters,
+/// the caret paragraph's indents and its column, the units.
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let Some(l) = app.layout.as_ref() else { return serde_json::Value::Null };
+    let setup = &l.setup;
+    let page = app.current_page();
+    let cols: Vec<(f32, f32)> = if l.columns.len() > 1 { l.columns.clone() } else { Vec::new() };
+    let gutters: Vec<(f32, f32)> = cols.windows(2).map(|w| (w[0].0 + w[0].1, w[1].0)).collect();
+    let mut indents = None;
+    let (mut col_l, mut col_r) = (setup.left, setup.width - setup.right);
+    if let (Some(c), Some(body)) = (app.cursor, l.body.as_ref()) {
+        if c.owner == Owner::Body {
+            let pi = body.para_at_stored(c.caret);
+            if let Some(pa) = body.tb.paragraphs.get(pi) {
+                indents = Some((pa.first_line_indent + pa.left_indent, pa.left_indent, pa.right_indent));
+            }
+            if let Some(col) = l.pages.get(page).and_then(|pg| pg.lines.iter().find(|ln| ln.para == pi)).and_then(|ln| l.columns.get(ln.column)) {
+                (col_l, col_r) = (col.0, col.0 + col.1);
+            }
+        }
+    }
+    json!({
+        "page": page, "width": setup.width, "left": setup.left, "right": setup.right,
+        "gutters": gutters.iter().map(|g| json!([g.0, g.1])).collect::<Vec<_>>(),
+        "indents": indents.map(|i| json!([i.0, i.1, i.2])),
+        "colL": col_l, "colR": col_r,
+        "units": app.settings.ruler_units,
+    })
+}
+
+/// "margin:<L|R>:<pt from the page's left>", "gutter:<n>:<pt>", "first:<pt>", "left:<pt>",
+/// "right:<pt>" (each where its marker was let go).
+pub fn api_action(app: &mut App, a: &str) {
+    let parts: Vec<&str> = a.split(':').collect();
+    let Some(l) = app.layout.as_ref() else { return };
+    let setup = l.setup.clone();
+    let st = api_state(app);
+    let f = |k: &str| st.get(k).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let (col_l, col_r) = (f("colL"), f("colR"));
+    let v: f32 = parts.last().and_then(|x| x.parse().ok()).unwrap_or(0.0);
+    let v = v.clamp(0.0, setup.width);
+    match parts.first().copied().unwrap_or("") {
+        "margin" => {
+            let mut s = setup.clone();
+            if parts.get(1) == Some(&"L") {
+                s.left = v.min(setup.width - setup.right - 36.0);
+            } else {
+                s.right = (setup.width - v).min(setup.width - setup.left - 36.0);
+            }
+            app.edit_pages("Margins", |pp, h| pp.set_setup(h, &s));
+        }
+        "gutter" => {
+            let n: usize = parts.get(1).and_then(|x| x.parse().ok()).unwrap_or(0);
+            let cols = app.layout.as_ref().map(|l| l.columns.clone()).unwrap_or_default();
+            let gutters: Vec<(f32, f32)> = cols.windows(2).map(|w| (w[0].0 + w[0].1, w[1].0)).collect();
+            if let Some(&(g0, g1)) = gutters.get(n) {
+                let gap = ((v - (g0 + g1) / 2.0).abs() * 2.0).clamp(0.0, setup.text_width() / cols.len() as f32);
+                let count = cols.len() as u32;
+                let frac = gap / setup.text_width().max(1.0);
+                app.edit_pages("Columns", |pp, h| pp.set_columns(h, count, frac));
+            }
+        }
+        "first" | "left" | "right" => {
+            let ind = st.get("indents").and_then(|v| v.as_array()).map(|a| (a[0].as_f64().unwrap_or(0.0) as f32, a[1].as_f64().unwrap_or(0.0) as f32)).unwrap_or((0.0, 0.0));
+            match parts[0] {
+                "first" => {
+                    let val = v - col_l - ind.1;
+                    crate::textinsp::apply_para(app, "Indent", move |pp| pp.set_f32("first_line_indent", val));
+                }
+                "left" => {
+                    let nl = (v - col_l).max(0.0);
+                    let nf = ind.0 - nl;
+                    crate::textinsp::apply_para(app, "Indent", move |pp| {
+                        pp.set_f32("left_indent", nl);
+                        pp.set_f32("first_line_indent", nf);
+                    });
+                }
+                _ => {
+                    let val = (col_r - v).max(0.0);
+                    crate::textinsp::apply_para(app, "Indent", move |pp| pp.set_f32("right_indent", val));
+                }
+            }
+        }
+        _ => {}
+    }
+}

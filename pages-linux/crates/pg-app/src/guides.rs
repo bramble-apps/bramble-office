@@ -187,6 +187,49 @@ pub fn ui(app: &mut App, ui: &egui::Ui, resp: &egui::Response) -> bool {
     true
 }
 
+/// The guides for a front end (ui): [{page, index, vertical, pos, template}] (page points; a
+/// template's guides can't be moved), the frames of the objects on pages with guides, whether
+/// they show, and the ruler's units (the position label while one is dragged).
+pub fn api_state(app: &App) -> serde_json::Value {
+    use serde_json::json;
+    let n = app.layout.as_ref().map(|l| l.page_count()).unwrap_or(0);
+    let mut v = Vec::new();
+    // the objects' frames (a guide isn't grabbed over one)
+    let mut objects = Vec::new();
+    for pi in 0..n {
+        let (own, tpl) = on_page(app, pi);
+        if !own.is_empty() {
+            objects.extend(app.drawables_on(pi).map(|d| json!([pi, d.geom.x, d.geom.y, d.geom.x + d.geom.w.max(1.0), d.geom.y + d.geom.h.max(1.0)])));
+        }
+        v.extend(tpl.iter().map(|g| json!({ "page": pi, "index": -1, "vertical": g.vertical, "pos": g.pos, "template": true })));
+        v.extend(own.iter().enumerate().map(|(i, g)| json!({ "page": pi, "index": i, "vertical": g.vertical, "pos": g.pos, "template": false })));
+    }
+    json!({ "lines": v, "objects": objects, "shown": shown(), "units": app.settings.ruler_units })
+}
+
+/// A front end's guide drag ended (ui): guide `index` of page `pi` (None: a new one, from the
+/// ruler) put at `pos`, or removed (None: dragged off the page).
+pub fn put(app: &mut App, pi: usize, index: Option<usize>, vertical: bool, pos: Option<f32>) {
+    let mut gs = on_page_own(app, pi);
+    let label = match (index, pos) {
+        (Some(i), Some(p)) if i < gs.len() => {
+            gs[i] = Guide { vertical, pos: p };
+            "Move Guide"
+        }
+        (Some(i), None) if i < gs.len() => {
+            gs.remove(i);
+            "Remove Guide"
+        }
+        (None, Some(p)) => {
+            gs.push(Guide { vertical, pos: p });
+            with(|s| s.shown = true);
+            "Add Guide"
+        }
+        _ => return,
+    };
+    set(app, pi, &gs, label);
+}
+
 fn on_page_own(app: &App, pi: usize) -> Vec<Guide> {
     match (app.wb.as_ref(), app.layout.as_ref()) {
         (Some(w), Some(l)) => w.page_guides(l, pi),
@@ -204,18 +247,26 @@ fn set(app: &mut App, pi: usize, gs: &[Guide], label: &str) {
 }
 
 /// The context menu's guide items (for the page that was right-clicked).
-pub fn menu_items(app: &mut App, ui: &mut egui::Ui) {
-    let Some((pi, q)) = with(|s| s.menu_at) else { return };
-    ui.separator();
-    for (label, vertical) in [("Add Horizontal Guide", false), ("Add Vertical Guide", true)] {
-        if ui.button(label).clicked() {
-            ui.close();
-            let mut gs = on_page_own(app, pi);
-            gs.push(Guide { vertical, pos: if vertical { q.x } else { q.y } });
-            with(|s| s.shown = true);
-            set(app, pi, &gs, "Add Guide");
-        }
+pub fn items() -> Vec<crate::menus::MItem> {
+    use crate::menus::MItem;
+    if with(|s| s.menu_at).is_none() {
+        return Vec::new();
     }
+    vec![MItem::Sep, MItem::act("Add Horizontal Guide", "guide:h"), MItem::act("Add Vertical Guide", "guide:v")]
+}
+
+/// Where the right-click menu opened (page, page point): its Add Guide items put guides there.
+pub fn set_menu_at(at: Option<(usize, Pos2)>) {
+    with(|s| s.menu_at = at);
+}
+
+/// Add Horizontal / Vertical Guide where the right-click menu opened.
+pub fn add_guide(app: &mut App, vertical: bool) {
+    let Some((pi, q)) = with(|s| s.menu_at) else { return };
+    let mut gs = on_page_own(app, pi);
+    gs.push(Guide { vertical, pos: if vertical { q.x } else { q.y } });
+    with(|s| s.shown = true);
+    set(app, pi, &gs, "Add Guide");
 }
 
 /// View > Guides commands.

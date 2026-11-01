@@ -44,7 +44,7 @@ pub fn find_next(app: &mut App) {
 }
 
 /// Change: the word becomes the picked suggestion.
-fn change(app: &mut App) {
+pub(crate) fn change(app: &mut App) {
     let Some(sp) = app.spelling.clone() else { return };
     let (Some((a, b)), Some(new)) = (sp.at, sp.guesses.get(sp.pick).cloned()) else { return };
     let Some(st) = app.wb.as_ref().and_then(|w| w.body_storage()) else { return };

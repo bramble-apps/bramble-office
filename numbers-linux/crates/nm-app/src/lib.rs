@@ -4,6 +4,7 @@
 //! Automated checks with no human present (the app screenshots itself and quits):
 //! `NM_SNAP=out.png [NM_SHEET=n] [NM_CELL=row,col[,row2,col2]] [NM_EDIT=text] [NM_INSPECTOR=table|cell|text|arrange] [NM_ZOOM=0.75] [NM_CMD=insert-table,add-sheet,undo,redo] [NM_SCRIPT="click x y; drag x1 y1 x2 y2; type text; key Enter; wait"] numdeck file.numbers`
 
+mod api;
 mod app;
 mod canvas;
 mod chartedit;
@@ -32,6 +33,9 @@ mod stocks;
 mod tbicons;
 mod templates;
 mod datarefs;
+mod dlgapi;
+mod ffi;
+mod inspapi;
 mod links;
 mod textedit;
 mod tiles;

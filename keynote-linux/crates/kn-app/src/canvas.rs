@@ -9,6 +9,10 @@ use crate::app::{App, Zoom};
 use crate::textures::CanvasKey;
 use crate::theme;
 
+// the canvas as data, for front ends that draw it (ffi.rs)
+#[path = "canvasapi.rs"]
+pub mod api;
+
 #[derive(Clone, Debug)]
 enum Drag {
     /// Moving the selection; `delta` in slide points.
@@ -323,7 +327,8 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
     let size = scene.size;
     let scale = match app.zoom {
         // Keynote leaves about 10 pt round the slide (R35)
-        Zoom::Fit => ((fit.width() - 20.0) / size.w).min((fit.height() - 20.0) / size.h).max(0.02),
+        // edge to edge, no margin round it (as the touch apps fit: the slide meets the panes)
+        Zoom::Fit => (fit.width() / size.w).min(fit.height() / size.h).max(0.02),
         Zoom::Percent(p) => p / 100.0,
     };
     // pinch on a touchpad (or Ctrl + scroll) zooms the slide, like Keynote: about the pointer

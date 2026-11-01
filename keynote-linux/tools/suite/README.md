@@ -140,6 +140,8 @@ folder. Values and Letters build against it by relative path, so keep the three 
   - `crates/kn-app`: the `keydeck` app
 - `numbers-linux/`: **Values** (`crates/nm-core`, `crates/nm-app` → the `values` app)
 - `pages-linux/`: **Letters** (`crates/pg-core`, `crates/pg-app` → the `letters` app)
+- `letters_mobile/`, `keydeck_mobile/`, `values_mobile/`: the Flutter Android apps, built on the same
+  engines through each app's `ffi.rs` (keep them beside the three folders above)
 
 You need a recent stable Rust (`rustup`, edition 2024). On Linux you also need the windowing libraries'
 headers (Debian or Ubuntu: `libxkbcommon-dev libwayland-dev libx11-dev libgtk-3-dev`).
@@ -150,8 +152,9 @@ cd numbers-linux && cargo build --release -p nm-app     # target/release/values
 cd pages-linux   && cargo build --release -p pg-app     # target/release/letters
 ```
 
-Android APKs are built with `keynote-linux/tools/android/build-apk.sh` (it needs the Android SDK and NDK
-and a JDK; see the script). Each folder has a `run.sh` that builds and starts its app; `packaging/` holds the scripts for Linux packages
+The Flutter Android apps build with `tool/build_engine.sh` then `flutter build apk` in their folders (they need
+Flutter, the Android SDK and NDK and a JDK). `keynote-linux/tools/android/build-apk.sh` still builds the older
+all-Rust APKs. Each folder has a `run.sh` that builds and starts its app; `packaging/` holds the scripts for Linux packages
 and macOS app bundles. Every tagged version (`v*`) is built for all systems by
 `.github/workflows/build.yml` and published under [Releases](https://github.com/bramble-apps/bramble-office/releases).
 

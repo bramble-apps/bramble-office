@@ -1648,6 +1648,7 @@ dependencies = [
  "kn-render",
  "kn-ui",
  "roxmltree",
+ "serde_json",
  "window-vibrancy",
  "winit",
  "winresource",

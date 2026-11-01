@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 //! Letters: a word processor and page-layout app for Linux that reads and writes Apple Pages
 //! (`.pages`) documents through the suite's iWork crates.
 //!
@@ -6,8 +7,10 @@
 //! Headless conversion: `letters --pdf|--docx|--rtf|--txt|--epub|--html|--png in out`.
 
 mod app;
+pub mod ffi;
 mod canvas;
 mod chartedit;
+mod chooserapi;
 mod chrome;
 mod dialogs;
 mod editing;
@@ -23,6 +26,8 @@ mod media;
 mod mediainsp;
 mod insert;
 mod inspector;
+mod dlgapi;
+mod inspapi;
 mod look;
 mod mask;
 mod menus;

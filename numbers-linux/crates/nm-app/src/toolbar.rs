@@ -85,7 +85,7 @@ pub fn def(id: &str) -> Option<&'static Def> {
     ITEMS.iter().find(|d| d.id == id)
 }
 
-fn is_space(id: &str) -> bool {
+pub(crate) fn is_space(id: &str) -> bool {
     id == SPACE || id == FLEX
 }
 
@@ -104,7 +104,7 @@ pub fn items(app: &App) -> Vec<String> {
     out
 }
 
-fn set_items(app: &mut App, list: &[String]) {
+pub(crate) fn set_items(app: &mut App, list: &[String]) {
     let is_default = list.len() == DEFAULT.len() && list.iter().zip(DEFAULT).all(|(a, b)| a == b);
     app.settings.toolbar_items = if is_default { String::new() } else { list.join(",") };
     app.settings.save();
@@ -174,7 +174,7 @@ fn entry_width(ui: &egui::Ui, id: &str, mode: u8, alone: bool) -> f32 {
 }
 
 /// Whether an item can be used now (items that don't apply to the selection are greyed).
-fn enabled(app: &App, id: &str) -> bool {
+pub(crate) fn enabled(app: &App, id: &str) -> bool {
     // (plain Excel mode: no objects or comments)
     if app.excel_only() && matches!(id, "Table" | "Chart" | "Text" | "Shape" | "Media" | "Comment") {
         return false;
@@ -190,7 +190,7 @@ fn enabled(app: &App, id: &str) -> bool {
     }
 }
 
-fn pressed(app: &App, id: &str) -> bool {
+pub(crate) fn pressed(app: &App, id: &str) -> bool {
     match id {
         "Format" => app.inspector && app.insp_tab != InspTab::Organize,
         "Organize" => app.inspector && app.insp_tab == InspTab::Organize,
@@ -281,7 +281,7 @@ fn popup(app: &mut App, id: &str, resp: &egui::Response) {
     }
 }
 
-fn has_popup(id: &str) -> bool {
+pub(crate) fn has_popup(id: &str) -> bool {
     matches!(id, VIEW | "Insert" | "Table" | "Chart" | "Shape" | "Media")
 }
 

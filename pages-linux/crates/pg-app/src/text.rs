@@ -631,13 +631,25 @@ pub fn handle_input(app: &mut App, ctx: &egui::Context, _focused: bool) {
         TAB.with(|t| t.set(None));
         return;
     }
+    let (events, time, command) = ctx.input(|i| (i.events.clone(), i.time, i.modifiers.command));
+    keyboard(app, ctx, events, time, command);
+}
+
+/// Tab pressed (Shift: back), for the next `keyboard` (the front ends take it before egui's
+/// focus moving does).
+pub fn press_tab(shift: bool) {
+    TAB.with(|t| t.set(Some(shift)));
+}
+
+/// Keys, text, copy / cut / paste for the canvas: the table cells, the selected objects or the
+/// text at the caret (`time` in seconds, for the caret's blink; `command`: Ctrl / Cmd held).
+pub fn keyboard(app: &mut App, ctx: &egui::Context, events: Vec<Event>, time: f64, command: bool) {
     let tab = TAB.with(|t| t.take());
     // table cells take the keys while selected
     if app.sel.is_some() && app.cursor.is_none() {
-        crate::tables::handle_keys(app, ctx, tab);
+        crate::tables::key_events(app, ctx, tab, &events, command);
         return;
     }
-    let events = ctx.input(|i| i.events.clone());
     let objects_selected = app.canvas.obj.is_some() && app.canvas.editing.is_none();
     if objects_selected {
         crate::insert::object_keys(app, ctx, &events);
@@ -654,7 +666,7 @@ pub fn handle_input(app: &mut App, ctx: &egui::Context, _focused: bool) {
             Event::Text(t) => {
                 if !t.chars().all(|c| c.is_control()) {
                     type_text(app, &t);
-                    app.canvas.blink = ctx.input(|i| i.time);
+                    app.canvas.blink = time;
                 }
             }
             Event::Ime(egui::ImeEvent::Commit(t)) => type_text(app, &t),
@@ -667,7 +679,7 @@ pub fn handle_input(app: &mut App, ctx: &egui::Context, _focused: bool) {
             }
             Event::Key { key, pressed: true, modifiers, .. } => {
                 key_press(app, ctx, key, modifiers);
-                app.canvas.blink = ctx.input(|i| i.time);
+                app.canvas.blink = time;
             }
             _ => {}
         }

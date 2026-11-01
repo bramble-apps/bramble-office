@@ -277,11 +277,13 @@ pub fn settings_window(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let before = app.settings.clone();
-    let mut tab = ctx.data(|d| d.get_temp::<usize>(egui::Id::unique("settings-tab"))).unwrap_or(0);
+    // (KN_SETTINGS_TAB=n, automated checks: the tab shown first)
+    let first = std::env::var("KN_SETTINGS_TAB").ok().and_then(|t| t.parse().ok()).unwrap_or(0);
+    let mut tab = ctx.data(|d| d.get_temp::<usize>(egui::Id::unique("settings-tab"))).unwrap_or(first);
     egui::Window::new("Settings").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut open).min_width(460.0).show(ctx, |ui| {
-        // Keynote's settings toolbar: General, Slideshow, Rulers
+        // Keynote's settings toolbar: General, Slideshow, Rulers, Remotes
         ui.horizontal(|ui| {
-            for (i, name) in ["General", "Slideshow", "Rulers"].iter().enumerate() {
+            for (i, name) in ["General", "Slideshow", "Rulers", "Remotes"].iter().enumerate() {
                 if ui.selectable_label(tab == i, RichText::new(*name).size(13.0)).clicked() {
                     tab = i;
                 }
@@ -396,6 +398,7 @@ pub fn settings_window(app: &mut App, ctx: &egui::Context) {
                     ui.end_row();
                 });
             }
+            3 => crate::remote::settings_tab(ui),
             _ => {
                 egui::Grid::new("settings-rulers").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                     ui.label("Ruler Units:");
