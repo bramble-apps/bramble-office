@@ -4,6 +4,7 @@
 // settings and the slide size. The controls are the suite's touch shapes, grouped in rounded
 // cards as Keynote on iPad (TouchScope), their values from the engine (kd_inspector) and each
 // change sent back as the control's key (kd_inspector_set).
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -84,7 +85,7 @@ class InspectorState extends State<Inspector> {
     final frost = look.light ? 0.86 : 0.64;
     final bg = touchBackground(look);
     final panel = Container(
-      width: 300,
+      width: Platform.isAndroid ? 260 : 300,
       decoration: BoxDecoration(color: look.translucent ? bg.withValues(alpha: frost) : bg, border: Border(left: BorderSide(color: look.separator))),
       padding: EdgeInsets.fromLTRB(12, 12 + widget.topInset, 12, 0),
       child: body,

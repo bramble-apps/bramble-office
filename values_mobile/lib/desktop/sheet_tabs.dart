@@ -21,7 +21,7 @@ class SheetTabs extends StatefulWidget {
   final VoidCallback onChanged;
 
   /// A menu of these items at this point (global).
-  final void Function(List<dynamic> items, Offset global) onMenu;
+  final void Function(List<dynamic> items, Rect global) onMenu;
 
   static const height = 42.0;
 
@@ -52,7 +52,13 @@ class _SheetTabsState extends State<SheetTabs> {
   List<Map<String, dynamic>> get _sheets => [for (final s in (widget.s['sheets'] as List? ?? [])) s as Map<String, dynamic>];
   int get _cur => widget.s['current'] as int? ?? 0;
 
-  void _plus(Offset global) {
+  /// A button's box on the screen (its menu hangs centred under it).
+  static Rect _rect(BuildContext c) {
+    final box = c.findRenderObject() as RenderBox;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  void _plus(Rect global) {
     final sheets = _sheets;
     final visible = sheets.where((s) => s['hidden'] != true).length;
     final cur = _cur < sheets.length ? sheets[_cur]['name'] as String : '';
@@ -68,7 +74,7 @@ class _SheetTabsState extends State<SheetTabs> {
     ], global);
   }
 
-  void _tabMenu(int i, Offset global) {
+  void _tabMenu(int i, Rect global) {
     final n = _sheets.length;
     widget.onMenu([
       {'label': 'Rename', 'action': 'rename:$i', 'enabled': true},
@@ -113,7 +119,7 @@ class _SheetTabsState extends State<SheetTabs> {
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) {
               if (on) {
-                _tabMenu(i, d.globalPosition);
+                _tabMenu(i, _rect(_keys[i]!.currentContext!));
               } else {
                 act('go:$i');
               }
@@ -146,7 +152,7 @@ class _SheetTabsState extends State<SheetTabs> {
           Builder(
             builder: (ctx) => GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTapUp: (d) => _plus(d.globalPosition),
+              onTapUp: (d) => _plus(_rect(ctx)),
               child: SizedBox(width: 44, height: 40, child: CustomPaint(painter: _Plus(look.textDim))),
             ),
           ),

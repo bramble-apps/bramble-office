@@ -535,6 +535,17 @@ pub extern "C" fn kd_popover(id: *const c_char) -> *mut c_char {
                 .collect();
             Some(json!({ "shapes": shapes }))
         }
+        // the theme's chart styles' colours (Letters' Chart popover: its style pages)
+        "Chart" => {
+            let doc = h.app.doc.as_ref()?;
+            let styles: Vec<Value> = doc
+                .chart_presets()
+                .iter()
+                .enumerate()
+                .map(|(i, p)| json!({ "id": i, "colors": doc.chart_preset_colors(*p).into_iter().map(|c| [c.r, c.g, c.b]).collect::<Vec<_>>() }))
+                .collect();
+            Some(json!({ "styles": styles }))
+        }
         "AddSlide" => {
             let doc = h.app.doc.as_ref()?;
             let s = doc.slide_size();
@@ -615,6 +626,37 @@ pub extern "C" fn kd_action(action: *const c_char) {
                     app.go_to(i);
                 }
                 Err(e) => app.notify(format!("Couldn't add the slide: {e}")),
+            }
+            return;
+        }
+        // the Shape popover's Browse Content Hub: the hub on its Shapes tab
+        if a == "hub:shapes" {
+            app.hub.show_tab(kn_ui::contenthub::Tab::Shapes);
+            return;
+        }
+        // the Table popover's: Headers, Basic, Plain, Sums (Insert > Table)
+        if let Some(k) = a.strip_prefix("table:") {
+            if let Some(name) = k.parse::<usize>().ok().and_then(|k| ["Headers", "Basic", "Plain", "Sums"].get(k)) {
+                run_command(app, &ctx, &format!("Table > {name}"));
+            }
+            return;
+        }
+        // the Chart popover's: "chart:<2D Column…>:<style>" (the toolbar's chart picker: the
+        // chart, then the style page's preset)
+        if let Some(rest) = a.strip_prefix("chart:") {
+            let (name, style) = rest.rsplit_once(':').unwrap_or((rest, ""));
+            run_command(app, &ctx, &format!("Chart > {name}"));
+            let preset = style.parse::<usize>().ok().and_then(|i| app.doc.as_ref()?.chart_presets().get(i).copied());
+            if let (Some(preset), &[chart]) = (preset, &app.sel[..]) {
+                let slide = app.current_slide().map(|s| s.slide);
+                if let Some(doc) = app.doc.as_mut().filter(|d| d.chart_preset(chart) != Some(preset)) {
+                    doc.begin(&mut app.hist, "Chart Style");
+                    doc.apply_chart_preset(&mut app.hist, chart, preset);
+                    doc.end(&mut app.hist);
+                    if let Some(s) = slide {
+                        app.bump(s);
+                    }
+                }
             }
             return;
         }
@@ -1407,6 +1449,29 @@ mod tests {
         changes("doc.mode", json!(1), "/mode", json!(1));
         changes("doc.idle", json!(true), "/idle", json!(true));
         changes("doc.size", json!("4:3"), "/size", json!([1024.0, 768.0]));
+        // View > Show/Hide Presenter Notes (the menu bar's item and the toolbar's View
+        // drop-down): each hides and shows the notes, and the item's label follows
+        fn notes_item(menu: Value) -> Value {
+            fn find(v: &Value) -> Option<Value> {
+                match v {
+                    Value::Array(a) => a.iter().find_map(find),
+                    Value::Object(o) if o.get("label").and_then(|l| l.as_str()).is_some_and(|l| l.ends_with(" Presenter Notes") && !l.starts_with("Generate")) => Some(v.clone()),
+                    Value::Object(o) => o.get("kids").and_then(find),
+                    _ => None,
+                }
+            }
+            find(&menu).expect("a Presenter Notes item")
+        }
+        for from_popover in [false, true] {
+            for _ in 0..2 {
+                let shown = json(kd_status())["notes"].as_bool().unwrap();
+                let item = if from_popover { notes_item(json(kd_popover(c("View").as_ptr()))) } else { notes_item(json(kd_menus())) };
+                assert_eq!(item["label"], if shown { "Hide Presenter Notes" } else { "Show Presenter Notes" }, "label follows: {item}");
+                let cmd = item.get("command").or(item.get("action")).and_then(|v| v.as_str()).unwrap().trim_start_matches("cmd:").to_string();
+                kd_run(c(&cmd).as_ptr());
+                assert_eq!(json(kd_status())["notes"], json!(!shown), "{cmd} toggles the notes");
+            }
+        }
     }
 
     /// A window open now (kd_status windows), by id.
@@ -1475,6 +1540,30 @@ mod tests {
         assert_eq!(bo["form"][2]["value"], 2, "After Transition: {bo}");
         set("dlg.buildOrder.close", Value::Null);
         assert!(window("buildOrder").is_null());
+        // the toolbar's popovers (Letters'): Table, Chart in a theme style, Media, the hub's Shapes
+        // (the inspector's Format pane names what's selected)
+        fn what() -> Value {
+            let st = json(kd_status());
+            if st["inspector"] != true || st["inspectorMode"] != "Format" {
+                kd_toolbar(c("Format").as_ptr());
+            }
+            let i = json(kd_inspector());
+            assert!(i["what"].is_string(), "{} {}", json(kd_status())["inspectorMode"], i);
+            i["what"].clone()
+        }
+        kd_action(c("table:3").as_ptr());
+        assert_eq!(json(kd_status())["objects"], 1, "a table inserted and selected");
+        assert_eq!(what(), "table");
+        kd_key(c("Escape").as_ptr(), false, false, false);
+        let styles = json(kd_popover(c("Chart").as_ptr()));
+        assert!(styles["styles"].as_array().is_some_and(|s| !s.is_empty() && s[0]["colors"][0].as_array().is_some_and(|c| c.len() == 3)), "{styles}");
+        kd_action(c("chart:2D Pie:1").as_ptr());
+        assert_eq!(json(kd_status())["objects"], 1, "a chart inserted and selected");
+        assert_eq!(what(), "chart");
+        let media = json(kd_popover(c("Media").as_ptr()));
+        assert_eq!(media.as_array().unwrap().iter().filter_map(|m| m["label"].as_str()).collect::<Vec<_>>(), ["Choose Photo or Video…", "Content Hub", "Choose Music…", "Add Image Gallery…", "Add Web Video…", "Record Audio", "Choose File…"]);
+        kd_action(c("hub:shapes").as_ptr());
+        assert!(window("hub").is_object(), "the Content Hub opens");
     }
 
     /// A new presentation from a theme, a text box typed into, a drag, saved as Keynote and as

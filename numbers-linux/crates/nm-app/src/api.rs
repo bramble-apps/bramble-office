@@ -1379,7 +1379,8 @@ pub fn action(app: &mut App, ctx: &egui::Context, a: &str) {
             }
         }
         "media" => match rest {
-            "Content Hub Shapes" | "Content Hub" => app.hub.show_hub(),
+            "Content Hub Shapes" => app.hub.show_tab(kn_ui::contenthub::Tab::Shapes),
+            "Content Hub" => app.hub.show_hub(),
             "Image Gallery" => crate::menus::run(app, ctx, "Image Gallery"),
             _ => {}
         },

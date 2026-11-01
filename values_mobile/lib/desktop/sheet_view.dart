@@ -146,6 +146,7 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
   Offset _menuPoint = Offset.zero;
   String _menuSig = '';
   bool _menuWasUp = false;
+  bool _listMenuUp = false; // the edit menu as a list (showTouchMenu) is open
 
   // ---- the keyboard ----
   final _input = TextEditingController();
@@ -491,15 +492,17 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
   void _showMenu(Offset at) {
     final items = e.contextMenu();
     if (items.isEmpty) return;
-    // text in a text box being edited: the menu as a list (touches go through to the handles)
-    if (_ov['text'] is Map) {
+    // text being edited, or cells: the menu as a list, as Letters' text (touches go through it
+    // to the handles: dragging one closes it and drags); objects keep the bar
+    if (_ov['text'] is Map || _table?['sel'] != null) {
       final local = _menuAnchor(at);
       final box = context.findRenderObject() as RenderBox;
       final anchor = box.localToGlobal(local.topLeft) & local.size;
+      _listMenuUp = true;
       showTouchMenu(context, widget.look, anchor, items, (i) {
         widget.onMenuAction(i['action'] as String? ?? '');
         if (e.status()['editingText'] == true) showKeyboard();
-      }, passThrough: true);
+      }, passThrough: true).whenComplete(() => _listMenuUp = false);
       return;
     }
     setState(() {
@@ -1109,7 +1112,7 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
                   onPointerDown: (ev) {
                     _downAt = ev.localPosition;
                     _downKind = ev.kind;
-                    _menuWasUp = _menu != null;
+                    _menuWasUp = _menu != null || _listMenuUp;
                     _hideMenu();
                     _fingers++;
                     if (_fingers > 1) _multi = true;

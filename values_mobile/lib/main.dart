@@ -487,6 +487,11 @@ class _SheetScreenState extends State<SheetScreen> {
     showTouchMenu(context, Look(_chrome), Rect.fromLTWH(at.dx, at.dy, 0, 0), items, (i) => _popAction(i['action'] as String? ?? ''));
   }
 
+  /// A menu of these items centred under a button (`at`: its box, global), as the toolbar's.
+  void _menuOn(List<dynamic> items, Rect at) {
+    showTouchMenu(context, Look(_chrome), at, items, (i) => _popAction(i['action'] as String? ?? ''), centered: true);
+  }
+
   /// A popover or menu item's action: picking files here first for the media items, a name
   /// asked for a sheet's rename.
   Future<void> _popAction(String a) async {
@@ -604,7 +609,7 @@ class _SheetScreenState extends State<SheetScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           // the toolbar's room
                           if (floatH > 0) Container(height: floatH, color: look.header),
-                          SheetTabs(engine: e, s: (_status['sheets'] as Map<String, dynamic>?) ?? const {}, look: look, onChanged: _refreshAll, onMenu: _menuAt),
+                          SheetTabs(engine: e, s: (_status['sheets'] as Map<String, dynamic>?) ?? const {}, look: look, onChanged: _refreshAll, onMenu: _menuOn),
                           Expanded(
                             child: SheetView(key: _sheet, engine: e, look: look, message: compact ? null : _message, compact: compact, onChanged: _changed, onMenuAction: _popAction, onMenu: _menuAt),
                           ),

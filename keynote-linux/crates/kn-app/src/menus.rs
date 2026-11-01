@@ -829,6 +829,9 @@ pub(crate) fn shown_label(app: &App, label: &str) -> Option<&'static str> {
         "Hide Guides" if !app.show_guides => Some("Show Guides"),
         "Hide Tab Bar" if !app.show_tab_bar => Some("Show Tab Bar"),
         "Show Slide Layout Guides" if app.show_layout_guides => Some("Hide Slide Layout Guides"),
+        "Show Presenter Notes" if app.show_notes => Some("Hide Presenter Notes"),
+        "Show Rulers" if app.show_rulers => Some("Hide Rulers"),
+        "Show Comments" if app.show_comments => Some("Hide Comments"),
         _ => None,
     }
 }

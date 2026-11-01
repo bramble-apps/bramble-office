@@ -104,14 +104,17 @@ pub fn view_items(app: &App) -> Vec<Value> {
     out
 }
 
-/// The Media popover (toolbar.rs popup).
+/// The Media popover, as Letters' (Pages' Media ▾): the pickers are Android's ("media:…").
 pub fn media_items() -> Vec<Value> {
     vec![
-        json!({ "label": "Choose…", "action": "media:Choose Photo or Video…", "enabled": true }),
+        json!({ "label": "Choose Photo or Video…", "action": "media:Choose Photo or Video…", "enabled": true }),
         json!({ "label": "Content Hub", "action": "cmd:Browse Content Hub", "enabled": true }),
-        sep(),
         json!({ "label": "Choose Music…", "action": "media:Choose Music…", "enabled": true }),
+        json!({ "label": "Add Image Gallery…", "action": "cmd:Image Gallery", "enabled": true }),
+        json!({ "label": "Add Web Video…", "action": "cmd:Web Video…", "enabled": true }),
         json!({ "label": "Record Audio", "action": "cmd:Record Audio", "enabled": true }),
+        sep(),
+        json!({ "label": "Choose File…", "action": "media:Choose File…", "enabled": true }),
     ]
 }
 

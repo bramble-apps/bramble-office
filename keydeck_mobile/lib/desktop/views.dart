@@ -4,6 +4,7 @@
 // place), and the presenter notes field under the slide.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -216,10 +217,12 @@ class _OutlineViewState extends State<OutlineView> {
 
 /// View > Show Presenter Notes: the current slide's notes under it, typed into directly.
 class NotesPanel extends StatefulWidget {
-  const NotesPanel({super.key, required this.engine, required this.look, required this.current, required this.revision});
+  const NotesPanel({super.key, required this.engine, required this.look, required this.current, required this.revision, required this.onHide});
   final Engine engine;
   final Look look;
   final int current, revision;
+  /// dragged off the foot (View > Hide Presenter Notes)
+  final VoidCallback onHide;
   @override
   State<NotesPanel> createState() => _NotesPanelState();
 }
@@ -263,14 +266,52 @@ class _NotesPanelState extends State<NotesPanel> {
     super.dispose();
   }
 
+  // (the desktop's notes splitter: 60 to 400 points; kept while the app runs)
+  static double _height = 150;
+  double? _dragFrom;
+
   @override
   Widget build(BuildContext context) {
     final look = widget.look;
+    final max = math.min(400.0, MediaQuery.of(context).size.height * 0.6);
+    final h = _height.clamp(60.0, max);
+    // the top edge: a grabber with touch-sized room; dragged to the foot, the notes hide
+    final handle = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (d) => _dragFrom = h,
+      onVerticalDragUpdate: (d) => setState(() {
+        _dragFrom = (_dragFrom ?? h) - d.delta.dy;
+        _height = _dragFrom!.clamp(60.0, max);
+      }),
+      onVerticalDragEnd: (_) {
+        final hide = (_dragFrom ?? h) < 40;
+        _dragFrom = null;
+        if (hide) {
+          _height = 150;
+          _flush();
+          widget.onHide();
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeRow,
+        child: Container(
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: look.separator))),
+          child: Container(width: 36, height: 4, decoration: BoxDecoration(color: look.textDim.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(2))),
+        ),
+      ),
+    );
+    final dragging = _dragFrom != null && _dragFrom! < 60;
     return Container(
-      height: 150,
-      decoration: BoxDecoration(color: look.panel, border: Border(top: BorderSide(color: look.separator))),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: TextField(
+      height: (dragging ? _dragFrom!.clamp(22.0, 60.0) : h) + 22,
+      color: look.panel,
+      child: Column(children: [
+        handle,
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
         controller: _c,
         maxLines: null,
         expands: true,
@@ -281,7 +322,10 @@ class _NotesPanelState extends State<NotesPanel> {
           _save?.cancel();
           _save = Timer(const Duration(milliseconds: 600), () => widget.engine.action('notes:${_c.text}'));
         },
-      ),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }

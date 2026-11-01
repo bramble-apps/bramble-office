@@ -20,7 +20,7 @@ import 'desktop/layout_grid.dart';
 import 'desktop/look.dart';
 import 'desktop/menubar.dart';
 import 'desktop/navigator.dart';
-import 'desktop/popovers.dart' show showShapePopover;
+import 'desktop/popovers.dart' show showChartPopover, showShapePopover, showTablePopover;
 import 'desktop/scale.dart';
 import 'desktop/show.dart';
 import 'desktop/slide.dart';
@@ -142,6 +142,7 @@ class _DocScreenState extends State<DocScreen> {
 
   /// The phone layout last frame (null before the first); the first frame.
   bool? _wasCompact;
+  bool? _wasInspector;
   bool _firstFrame = true;
   Map<String, dynamic> _chrome = {};
   Map<String, dynamic> _nav = {};
@@ -445,41 +446,19 @@ class _DocScreenState extends State<DocScreen> {
         showTouchMenu(context, look, at, e.popover(id == 'View' ? 'View' : 'Media') as List? ?? [], (i) => _popAction(i['action'] as String? ?? ''), centered: true);
       case 'KNMacToolbarItemAddSlide':
         _layoutPicker(at);
+      // Letters' popovers: the tables, the shapes, the charts in the theme's styles
+      case 'TSKToolbarItemTable':
+        _popAt((ctx) => showTablePopover(ctx, at));
       case 'TSKToolbarItemShape':
-        final ctx0 = _popCtx.currentContext;
-        if (ctx0 == null) return;
-        showShapePopover(ctx0, at, (e.popover('Shape') as Map<String, dynamic>?) ?? {}).then((a) {
-          if (a != null) _popAction(a);
-        });
-      case 'TSKToolbarItemChart' || 'TSKToolbarItemTable':
-        // the Insert menu's Chart and Table lists as touch menus
-        final label = const {'TSKToolbarItemChart': 'Chart', 'TSKToolbarItemTable': 'Table'}[id]!;
-        showTouchMenu(context, look, at, [for (final k in _submenu(label)) _asItem(k)], (i) => _popAction(i['action'] as String? ?? ''), centered: true);
+        _popAt((ctx) => showShapePopover(ctx, at, (e.popover('Shape') as Map<String, dynamic>?) ?? {}));
+      case 'TSKToolbarItemChart':
+        _popAt((ctx) => showChartPopover(ctx, at, (e.popover('Chart') as Map<String, dynamic>?) ?? {}));
       case 'TSKToolbarItemPlay':
         _play();
       default:
         e.toolbar(id);
         _refreshAll();
     }
-  }
-
-  /// A menu bar item's data as a touch menu item (its command as the action).
-  Map<String, dynamic> _asItem(dynamic k) {
-    final m = k as Map<String, dynamic>;
-    if (m['separator'] == true) return m;
-    if (m['kids'] is List) return {'label': m['label'], 'kids': [for (final x in m['kids'] as List) _asItem(x)]};
-    return {'label': m['label'], 'action': 'cmd:${m['command']}', 'enabled': m['enabled'], 'checked': m['checked']};
-  }
-
-  /// The Insert menu's submenu called `label`.
-  List<dynamic> _submenu(String label) {
-    for (final m in _menuData) {
-      if (m['label'] != 'Insert') continue;
-      for (final k in (m['kids'] as List? ?? const [])) {
-        if (k['label'] == label && k['kids'] is List) return k['kids'] as List;
-      }
-    }
-    return const [];
   }
 
   /// The zoom menu: fit, then the zooms (the current one ticked), under the Zoom item.
@@ -513,6 +492,14 @@ class _DocScreenState extends State<DocScreen> {
     }
   }
 
+  Future<void> _popAt(Future<String?> Function(BuildContext ctx) show) async {
+    _doc.currentState?.hideKeyboard();
+    final ctx = _popCtx.currentContext;
+    if (ctx == null) return;
+    final a = await show(ctx);
+    if (a != null) await _popAction(a);
+  }
+
   void _menuAt(List<dynamic> items, Offset at) {
     _doc.currentState?.hideKeyboard();
     showTouchMenu(context, Look(_chrome), Rect.fromLTWH(at.dx, at.dy, 0, 0), items, (i) => _popAction(i['action'] as String? ?? ''));
@@ -530,8 +517,12 @@ class _DocScreenState extends State<DocScreen> {
         for (final p in await pick(FileType.audio)) {
           e.action('insert:$p');
         }
+      case 'media:Choose File…':
+        for (final p in await pick(FileType.any)) {
+          e.action('insert:$p');
+        }
       case 'media:Content Hub Shapes':
-        e.run('Browse Content Hub');
+        e.action('hub:shapes');
       case 'tbcustomize':
         e.inspectorSet('dlg.customize.open', null);
       case 'play':
@@ -596,12 +587,21 @@ class _DocScreenState extends State<DocScreen> {
     final slideSize = size == null ? const Size(1920, 1080) : Size((size[0] as num).toDouble(), (size[1] as num).toDouble());
     final showNav = open && _status['navigator'] == true;
     final playing = _status['playing'] == true;
-    // the slide list: narrower on Android (Letters' sidebarWidth); the inspector a sheet from
-    // the foot whenever the slide would be left less than 420 points beside the panels (an
-    // unfolded phone at Android's 1.25 scale: about 570 points across)
+    // the slide list and the inspector: narrower on Android (Letters' sidebarWidth, its touch
+    // inspector); the inspector a sheet from the foot on a phone only (Letters' compact), a side
+    // pane on an unfolded phone or a tablet. Where the slide would be left less than 420 points
+    // beside both, opening the inspector hides the slide list (View > Slide Only; its toolbar
+    // button brings it back).
     final navW = Platform.isAndroid ? 124.0 : 160.0;
-    final roomW = MediaQuery.of(context).size.width - (showNav && !compact ? navW : 0) - 300;
-    final sheetInsp = compact || roomW < 420;
+    final inspW = Platform.isAndroid ? 260.0 : 300.0;
+    final sheetInsp = compact;
+    if (showInspector && _wasInspector != true && !compact && showNav && MediaQuery.of(context).size.width - navW - inspW < 420) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        e.run('Slide Only');
+        _refreshAll();
+      });
+    }
+    _wasInspector = showInspector;
     final navigator = Navigator2(engine: e, look: look, s: _nav, slide: slideSize, onChanged: _refreshAll, onAction: _popAction, horizontal: compact, topInset: compact ? 0 : floatH);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: look.light ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
@@ -644,7 +644,10 @@ class _DocScreenState extends State<DocScreen> {
                                     )
                                   : ColoredBox(color: look.canvas),
                             ),
-                            if (open && _status['notes'] == true && (_status['view'] == 'Navigator' || _status['view'] == 'SlideOnly')) NotesPanel(engine: e, look: look, current: (_geo['current'] as num?)?.toInt() ?? 0, revision: _rev),
+                            if (open && _status['notes'] == true && (_status['view'] == 'Navigator' || _status['view'] == 'SlideOnly')) NotesPanel(engine: e, look: look, current: (_geo['current'] as num?)?.toInt() ?? 0, revision: _rev, onHide: () {
+                              e.run('Hide Presenter Notes');
+                              _refreshAll();
+                            }),
                             if (open && _status['editingLayouts'] == true)
                               Container(
                                 height: 44,
@@ -661,7 +664,7 @@ class _DocScreenState extends State<DocScreen> {
                             if (compact && showNav) Container(height: 96, decoration: BoxDecoration(border: Border(top: BorderSide(color: look.separator))), child: navigator),
                           ]),
                         ),
-                        if (!sheetInsp) SlidePane(open: showInspector, width: 300, child: Inspector(engine: e, look: look, topInset: floatH, revision: _rev, onChanged: _refreshAll)),
+                        if (!sheetInsp) SlidePane(open: showInspector, width: inspW, child: Inspector(engine: e, look: look, topInset: floatH, revision: _rev, onChanged: _refreshAll)),
                       ]),
                       if (sheetInsp)
                         Positioned.fill(

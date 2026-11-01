@@ -931,6 +931,12 @@ mod tests {
         let undos = || with(|h| h.app.hist.undo_len());
         let set = |k: &str, v: Value| vl_inspector_set(s(k).as_ptr(), s(&v.to_string()).as_ptr());
         let failed: std::cell::RefCell<Vec<String>> = Default::default();
+        // the Shape popover's Browse Content Hub opens the hub on Shapes (Insert's on Browse)
+        vl_action(s("media:Content Hub Shapes").as_ptr());
+        assert_eq!(with(|h| h.app.hub.tab_index()), 4);
+        vl_action(s("media:Content Hub").as_ptr());
+        assert_eq!(with(|h| h.app.hub.tab_index()), 0);
+        with(|h| h.app.hub.open = false);
         let tap_b2 = || {
             let g = json(vl_geometry());
             let (zoom, sx, sy) = (g["zoom"].as_f64().unwrap() as f32, g["scroll"][0].as_f64().unwrap() as f32, g["scroll"][1].as_f64().unwrap() as f32);

@@ -617,7 +617,7 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
     _taps = now.difference(_lastTap).inMilliseconds < 350 && near ? _taps + 1 : 1;
     _lastTap = now;
     _lastTapAt = d.localPosition;
-    final menuWasUp = _menu != null;
+    final menuWasUp = _menu != null || _listMenuUp;
     _hideMenu();
     final p = toSlide(d.localPosition);
     final before = e.hit(p.dx, p.dy, _tol);
@@ -628,11 +628,20 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
     if (editing) showKeyboard();
     // the edit menu: a tap on what was selected already (an object, or the caret itself)
     final caretNow = (_ov['editing'] as Map?)?['caret'];
-    if (!menuWasUp && _taps == 1 && (before['what'] == 'selected' && !editing || (editing && caretBefore != null && jsonEncode(caretBefore) == jsonEncode(caretNow)))) {
+    if (!menuWasUp && _taps == 1 && (before['what'] == 'selected' && !editing || (editing && caretBefore != null && jsonEncode(caretBefore) == jsonEncode(caretNow) && _nearCaret(d.localPosition)))) {
       _showMenu(d.localPosition);
     } else if (_taps >= 2 && editing && ((_ov['editing'] as Map?)?['rects'] as List? ?? const []).isNotEmpty) {
       _showMenu(d.localPosition);
     }
+  }
+
+  /// `at` (local) within a finger's reach of the caret drawn now (Letters: a tap off at the
+  /// line's end puts the caret where it was, and isn't a tap on it).
+  bool _nearCaret(Offset at) {
+    final c = (_ov['editing'] as Map?)?['caret'];
+    if (c is! List || c.length != 2) return false;
+    final r = Rect.fromPoints(_pt(c[0]), _pt(c[1]));
+    return (at.dx - r.center.dx).abs() < 24 && at.dy > r.top - 16 && at.dy < r.bottom + 16;
   }
 
   void _longPress(LongPressStartDetails d) {
@@ -747,6 +756,7 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
   // ---------------------------------------------------------------- the edit menu
 
   List<dynamic>? _menu;
+  bool _listMenuUp = false;
   String _menuSig = '';
   Offset _menuPoint = Offset.zero;
 
@@ -760,10 +770,13 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
       final box = context.findRenderObject() as RenderBox;
       final anchor = box.localToGlobal(local.topLeft) & local.size;
       final typing = _focus.hasFocus;
+      // (touches go through it: dragging a handle closes it and drags; it's still "up" for that
+      // touch, until its closing comes round after it)
+      _listMenuUp = true;
       showTouchMenu(context, widget.look, anchor, items, (i) {
         widget.onMenuAction(i['action'] as String? ?? '');
         if (typing && e.status()['editingText'] == true) showKeyboard();
-      }, passThrough: true);
+      }, passThrough: true).whenComplete(() => _listMenuUp = false);
       return;
     }
     setState(() {
