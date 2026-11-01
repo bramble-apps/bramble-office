@@ -45,7 +45,9 @@ iWork files are read and written natively, not converted: what you don't touch i
 was, so a document can go back and forth with a Mac. Highlights:
 
 - **Keydeck:** transitions and builds including Magic Move, dynamic backgrounds, presenter display,
-  recorded slideshows, charts linked to tables, 18 built-in themes.
+  recorded slideshows, charts linked to tables, 18 built-in themes, and **Keydeck Remote**: run a
+  slideshow on your computer from an Android phone on the same Wi-Fi, with your notes, the next slide,
+  a timer and a laser pointer.
 - **Values:** formulas, charts, pivot tables, categories, filters, conditional highlighting, Excel files kept
   as Excel.
 - **Letters:** live text wrap around pictures and shapes, styles, tables, lists, sections, Word files kept
@@ -122,10 +124,12 @@ The Android versions are new and still rough: expect bugs, and keep copies of im
    **Install anyway**.
 
 Needs Android 8 or later on a 64-bit ARM device (almost every phone and tablet since 2017). The apps
-are the full desktop apps, so they're most comfortable on a tablet or a phone held sideways, ideally with
-a keyboard and mouse. Files open with Android's file picker (Google Drive, Downloads, USB drives and so
-on), and saving writes back to the same place. Things that need desktop programs (movie export, ffmpeg,
-printing, recording) aren't available on Android yet.
+have the same features as the desktop apps with a touch layout: bigger controls, menus and windows that
+come up as sheets on a phone, and the full layout on a tablet or an unfolded phone. Files open with
+Android's file picker (Google Drive, Downloads, USB drives and so on), and saving writes back to the same
+place. Keydeck for Android is also the remote for Keydeck on your computer (Play > Keydeck Remote…; on the
+computer, Settings > Remotes). Things that need desktop programs (movie export, screen recording) aren't
+available on Android.
 
 ## Building from source
 
