@@ -216,6 +216,56 @@ pub extern "C" fn vl_open(path: *const c_char) -> i32 {
     })
 }
 
+thread_local! {
+    /// The spreadsheet vl_open_start is reading on a thread of its own.
+    static OPENING: RefCell<Option<(PathBuf, std::thread::JoinHandle<crate::app::ReadFile>)>> = const { RefCell::new(None) };
+}
+
+/// Opens a spreadsheet as vl_open, reading it on a thread of its own so the app can show
+/// Opening… meanwhile: 1 while it reads (vl_open_poll tells when it's done), else as vl_open
+/// (a template opens at once, as a new spreadsheet).
+#[unsafe(no_mangle)]
+pub extern "C" fn vl_open_start(path: *const c_char) -> i32 {
+    let p = PathBuf::from(arg(path));
+    if crate::app::is_template(&p) {
+        return vl_open(path);
+    }
+    let q = p.clone();
+    let reading = std::thread::spawn(move || crate::app::read_file(&q));
+    OPENING.with(|o| *o.borrow_mut() = Some((p, reading)));
+    1
+}
+
+/// The spreadsheet vl_open_start reads: 1 while it still reads, else as vl_open (it's the
+/// document now, or the message is in vl_error).
+#[unsafe(no_mangle)]
+pub extern "C" fn vl_open_poll() -> i32 {
+    let Some((p, reading)) = OPENING.with(|o| {
+        let mut o = o.borrow_mut();
+        if o.as_ref().is_some_and(|(_, r)| !r.is_finished()) { None } else { o.take() }
+    }) else {
+        return if OPENING.with(|o| o.borrow().is_some()) { 1 } else { -1 };
+    };
+    let read = match reading.join() {
+        Ok(r) => r,
+        Err(_) => {
+            ERR.with(|e| *e.borrow_mut() = "it isn't a spreadsheet Values can read".into());
+            return -1;
+        }
+    };
+    with(|h| {
+        crate::canvas::commit(&mut h.app);
+        h.app.templates.chooser = false;
+        let before = h.app.version;
+        h.app.finish_open(&p, read);
+        if h.app.version == before {
+            ERR.with(|e| *e.borrow_mut() = h.app.message.as_ref().map(|m| m.0.clone()).unwrap_or_else(|| "it isn't a spreadsheet Values can read".into()));
+            return if h.app.password.is_some() { 0 } else { -1 };
+        }
+        0
+    })
+}
+
 /// Saves to `path`: .numbers, or .xlsx (Excel mode, as the desktop's Save of a workbook).
 #[unsafe(no_mangle)]
 pub extern "C" fn vl_save(path: *const c_char) -> i32 {

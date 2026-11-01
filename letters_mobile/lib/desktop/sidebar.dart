@@ -30,19 +30,13 @@ class Sidebar extends StatefulWidget {
   State<Sidebar> createState() => _SidebarState();
 }
 
-class _SidebarState extends State<Sidebar> {
-  /// Thumbnails: page -> (content key, picture). (The key is a 64-bit hash: past 2^63 the JSON
-  /// gives it as a double, so it's kept as a number and compared as one.)
-  final Map<int, (num, ui.Image)> _thumbs = {};
-  final Set<int> _busy = {};
+/// Thumbnails: page -> (content key, picture). (The key is a 64-bit hash: past 2^63 the JSON
+/// gives it as a double, so it's kept as a number and compared as one.) Kept past the sidebar
+/// closing, so opening it again draws only the pages that changed.
+final Map<int, (num, ui.Image)> _thumbs = {};
 
-  @override
-  void dispose() {
-    for (final t in _thumbs.values) {
-      t.$2.dispose();
-    }
-    super.dispose();
-  }
+class _SidebarState extends State<Sidebar> {
+  final Set<int> _busy = {};
 
   void act(String a) {
     widget.engine.action('side:$a');
@@ -77,7 +71,11 @@ class _SidebarState extends State<Sidebar> {
     final pages = [for (final p in (widget.s['pages'] as List? ?? [])) p as Map<String, dynamic>];
     final cur = widget.s['current'] as int? ?? 0;
     final layoutDoc = widget.s['layoutDoc'] == true;
-    _thumbs.removeWhere((k, v) => k >= pages.length);
+    _thumbs.removeWhere((k, v) {
+      if (k < pages.length) return false;
+      v.$2.dispose();
+      return true;
+    });
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 10),
       itemCount: pages.length,

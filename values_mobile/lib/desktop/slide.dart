@@ -32,7 +32,8 @@ class _SlidePaneState extends State<SlidePane> with SingleTickerProviderStateMix
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: _curve,
         builder: (ctx, child) {
-          if (_curve.value == 0) return const SizedBox.shrink();
+          // (shut: kept built offstage, so what it holds stays as it was for the next opening)
+          if (_curve.value == 0) return Offstage(child: SizedBox(width: widget.width, child: child));
           return ClipRect(
             child: SizedBox(
               width: widget.width * _curve.value,

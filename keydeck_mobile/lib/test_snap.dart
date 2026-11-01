@@ -4,7 +4,8 @@
 // On Linux: KEYDECK_SNAP names that folder, and
 // KEYDECK_SCRIPT runs a script of touches and typing (taps and drags as real pointer events),
 // `;`-separated: tap x y | drag x1 y1 x2 y2 [ms] | pinch x y scale | type text | key name |
-// hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | frames (frame timings from
+// hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | phone w h (the test screen's
+// size) | frames (frame timings from
 // here) | report name (their build / raster times appended to frames.txt) | quit.
 import 'dart:async';
 import 'dart:io';
@@ -54,7 +55,7 @@ void _report(String folder, String name) {
   _timings.clear();
 }
 
-Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)? type, void Function(String key)? key}) async {
+Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)? type, void Function(String key)? key, void Function(Size size)? phoneSize}) async {
   Directory? dir;
   try {
     dir = await getExternalStorageDirectory();
@@ -151,6 +152,10 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
           await snap(p[1]);
         case 'frames':
           _startFrames();
+        case 'phone':
+          // the test screen's size changed (folded, unfolded, turned)
+          phoneSize?.call(Size(n(1), n(2)));
+          await frames(300);
         case 'mark':
           stderr.writeln('MARK');
         case 'report':

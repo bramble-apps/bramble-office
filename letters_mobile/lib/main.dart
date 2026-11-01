@@ -17,6 +17,7 @@ import 'desktop/findbar.dart';
 import 'desktop/inspector.dart';
 import 'desktop/look.dart';
 import 'desktop/menubar.dart';
+import 'desktop/opening.dart';
 import 'desktop/popovers.dart';
 import 'desktop/scale.dart';
 import 'desktop/sidebar.dart';
@@ -114,6 +115,11 @@ class _DocScreenState extends State<DocScreen> {
   /// The message pill's text (the engine's message, shown for its 4 seconds).
   String? _message;
   Timer? _messageTimer, _busyTimer;
+
+  /// A document being opened (its name; '' while the system's picker is still copying it):
+  /// the "Opening…" panel shows meanwhile.
+  String? _opening;
+  Timer? _openTimer;
 
   /// The phone layout last frame (null before the first); the first frame.
   bool? _wasCompact;
@@ -214,11 +220,32 @@ class _DocScreenState extends State<DocScreen> {
   // ---- files ----
 
   Future<void> _open() async {
-    final f = await FilePicker.pickFile(type: FileType.any);
-    if (f?.path == null) return;
-    final err = e.open(f!.path!);
-    if (err != null) _toast("Couldn't open it: $err");
-    _refreshAll();
+    final f = await FilePicker.pickFile(
+      type: FileType.any,
+      // (a file from the cloud is copied first: the panel shows from then)
+      onFileLoading: (st) {
+        if (st == FilePickerStatus.picking && mounted) setState(() => _opening = '');
+      },
+    );
+    if (f?.path == null) {
+      if (mounted) setState(() => _opening = null);
+      return;
+    }
+    _openPath(f!.path!, f.name);
+  }
+
+  /// Opens `path` with the "Opening…" panel up while the engine reads it on another thread.
+  void _openPath(String path, [String? name]) {
+    setState(() => _opening = name ?? path.split('/').last);
+    e.openBegin(path);
+    _openTimer?.cancel();
+    _openTimer = Timer.periodic(const Duration(milliseconds: 40), (t) {
+      if (e.openPoll()) return;
+      t.cancel();
+      _openTimer = null;
+      if (mounted) setState(() => _opening = null);
+      _refreshAll();
+    });
   }
 
   Future<void> _saveAs(String ext, {bool export = false}) async {
@@ -274,7 +301,7 @@ class _DocScreenState extends State<DocScreen> {
         return;
     }
     if (cmd.startsWith('open:')) {
-      e.open(cmd.substring(5));
+      return _openPath(cmd.substring(5));
     } else {
       e.run(cmd);
     }
@@ -519,6 +546,12 @@ class _DocScreenState extends State<DocScreen> {
                     Positioned.fill(
                       top: floatH,
                       child: Chooser(w: chooser, press: (b, v) {
+                        // a recent document: the chooser closes, and it opens with the panel up
+                        if (b == 'open') {
+                          e.inspectorSet('dlg.chooser.browse', null);
+                          _refreshAll();
+                          return _openPath(v as String);
+                        }
                         e.inspectorSet('dlg.chooser.$b', v);
                         _refreshAll();
                       }, onBrowse: () {
@@ -549,6 +582,16 @@ class _DocScreenState extends State<DocScreen> {
               ),
             ]),
             // the desktop's windows (dialogs) over everything
+            if (_opening != null)
+              Positioned.fill(
+                child: OpeningPanel(
+                  name: _opening!,
+                  onCancel: () {
+                    e.openCancel();
+                    setState(() => _opening = null);
+                  },
+                ),
+              ),
             Positioned.fill(child: Windows(engine: e, windows: [for (final w in windows) if (w['id'] != 'chooser') w], titleAt: _titleAt, toolbarBottom: DesktopMenuBar.height + tbH, compact: compact, savedColors: _status['savedColors'] as String? ?? '', onChanged: _refreshAll)),
             ]),
           ),

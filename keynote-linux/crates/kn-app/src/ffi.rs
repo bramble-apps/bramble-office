@@ -31,6 +31,18 @@ struct Host {
     /// What kd_render_job's drawings read pictures from: the presentation's data files and
     /// package metadata (shared, not copied), made again when they change.
     draw_doc: Option<(u64, std::sync::Arc<kn_model::Document>)>,
+    /// A presentation being opened on a thread of its own (kd_open_start).
+    opening: Option<Opening>,
+}
+
+/// kd_open_start's presentation: read on another thread while the front end shows the desktop's
+/// "Opening…" panel (its first slide's picture, a sweeping bar and Cancel).
+struct Opening {
+    path: PathBuf,
+    rx: std::sync::mpsc::Receiver<Result<kn_model::Document, String>>,
+    progress: std::sync::Arc<kn_format::progress::Progress>,
+    /// The package's preview picture, copied out to a file (none yet, or none in it).
+    preview: std::sync::Arc<std::sync::Mutex<Option<PathBuf>>>,
 }
 
 thread_local! {
@@ -156,7 +168,7 @@ pub extern "C" fn kd_init() {
         app.renderer.set_async_images(false);
         // (table rows grow to fit what's typed into them, as the desktop's start)
         kn_model::table::set_all_rows_fit(true);
-        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None, play: Default::default(), draw_doc: None }));
+        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None, play: Default::default(), draw_doc: None, opening: None }));
     });
 }
 
@@ -186,31 +198,125 @@ pub extern "C" fn kd_free_bytes(p: *mut u8, len: u32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn kd_open(path: *const c_char) -> i32 {
     let p = PathBuf::from(arg(path));
-    with(|h| {
-        let opened = if crate::pptx::is_pptx(&p) { crate::pptx::open_document(&p) } else { kn_model::Document::open(&p) };
-        match opened {
-            Ok(mut doc) => {
-                if let Some(dir) = crate::themes::theme_dir() {
-                    doc.find_layout_donor(&dir);
-                }
-                if crate::pptx::is_pptx(&p) {
-                    doc.path = Some(p.clone());
-                    match crate::pptx::mode(&p) {
-                        Some((true, _)) => {
-                            h.app.pptx_hybrid.insert(p.clone());
-                        }
-                        _ => {
-                            h.app.pptx_hybrid.remove(&p);
-                        }
-                    }
-                }
-                h.app.make_room();
-                h.app.set_document(doc);
-                h.app.remember_path(&p);
-                0
+    with(|h| match read_document(&p) {
+        Ok(doc) => {
+            take_document(h, &p, doc);
+            0
+        }
+        Err(e) => fail(e),
+    })
+}
+
+/// A presentation read from `p` (Keynote or PowerPoint), on whatever thread calls.
+fn read_document(p: &std::path::Path) -> Result<kn_model::Document, String> {
+    let opened = if crate::pptx::is_pptx(p) { crate::pptx::open_document(p) } else { kn_model::Document::open(p) };
+    match opened {
+        Ok(mut doc) => {
+            if let Some(dir) = crate::themes::theme_dir() {
+                doc.find_layout_donor(&dir);
             }
-            Err(kn_format::Error::NeedsPassword(_)) => fail("This presentation is protected with a password (not yet supported here)."),
-            Err(e) => fail(e.to_string()),
+            Ok(doc)
+        }
+        Err(kn_format::Error::NeedsPassword(_)) => Err("This presentation is protected with a password (not yet supported here).".into()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// A presentation read from `p` made the one shown.
+fn take_document(h: &mut Host, p: &std::path::Path, mut doc: kn_model::Document) {
+    if crate::pptx::is_pptx(p) {
+        doc.path = Some(p.to_path_buf());
+        match crate::pptx::mode(p) {
+            Some((true, _)) => {
+                h.app.pptx_hybrid.insert(p.to_path_buf());
+            }
+            _ => {
+                h.app.pptx_hybrid.remove(p);
+            }
+        }
+    }
+    h.app.make_room();
+    h.app.set_document(doc);
+    h.app.remember_path(p);
+}
+
+/// Opens a presentation on a thread of its own (the UI keeps going: kd_open_poll says how it's
+/// getting on, kd_open_cancel stops it). The package's preview picture is copied out first,
+/// for the "Opening…" panel.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_open_start(path: *const c_char) {
+    let p = PathBuf::from(arg(path));
+    with(|h| {
+        if let Some(o) = h.opening.take() {
+            o.progress.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let progress = std::sync::Arc::new(kn_format::progress::Progress::default());
+        let preview = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let (p2, prog, pv) = (p.clone(), progress.clone(), preview.clone());
+        std::thread::spawn(move || {
+            // (the first slide's picture Keynote keeps in the package, as the desktop's panel shows)
+            let shot = (|| {
+                let mut z = zip::ZipArchive::new(std::fs::File::open(&p2).ok()?).ok()?;
+                let entry = if z.index_for_name("preview-web.jpg").is_some() { "preview-web.jpg" } else { "preview.jpg" };
+                let mut bytes = Vec::new();
+                std::io::Read::read_to_end(&mut z.by_name(entry).ok()?, &mut bytes).ok()?;
+                let out = std::env::temp_dir().join(format!("keydeck-opening-{}.jpg", std::process::id()));
+                std::fs::write(&out, bytes).ok()?;
+                Some(out)
+            })();
+            if let Ok(mut g) = pv.lock() {
+                *g = shot;
+            }
+            kn_format::progress::watch(Some(prog));
+            let r = std::panic::catch_unwind(|| read_document(&p2)).unwrap_or_else(|_| Err("the file could not be read (internal error)".into()));
+            // KN_SLOW_OPEN (automated checks): take three seconds, to show the Opening panel
+            if std::env::var_os("KN_SLOW_OPEN").is_some() {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+            kn_format::progress::watch(None);
+            let _ = tx.send(r);
+        });
+        h.opening = Some(Opening { path: p, rx, progress, preview });
+    })
+}
+
+/// How kd_open_start's presentation is getting on: null (nothing being opened); {state:
+/// "opening", name, preview (a picture file, or null)}; {state: "opened"} (it's the one shown
+/// now); {state: "failed", message}; {state: "cancelled"}.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_open_poll() -> *mut c_char {
+    json_out(with(|h| {
+        let o = h.opening.as_ref()?;
+        let r = match o.rx.try_recv() {
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                let name = o.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let preview = o.preview.lock().ok().and_then(|g| g.clone()).map(|p| p.to_string_lossy().to_string());
+                return Some(json!({ "state": "opening", "name": name, "preview": preview }));
+            }
+            Err(_) => Err("the file could not be read (internal error)".to_string()),
+            Ok(r) => r,
+        };
+        let o = h.opening.take()?;
+        if o.progress.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Some(json!({ "state": "cancelled" }));
+        }
+        Some(match r {
+            Ok(doc) => {
+                take_document(h, &o.path, doc);
+                json!({ "state": "opened" })
+            }
+            Err(e) => json!({ "state": "failed", "message": e }),
+        })
+    }))
+}
+
+/// Stops kd_open_start's presentation being opened (kd_open_poll then says "cancelled").
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_open_cancel() {
+    with(|h| {
+        if let Some(o) = &h.opening {
+            o.progress.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     })
 }
@@ -1733,7 +1839,20 @@ mod tests {
             eprintln!("render_jobs_match: no testdata/04-image.key, skipped");
             return;
         };
-        assert_eq!(kd_open(c(&path.to_string_lossy()).as_ptr()), 0);
+        // (opened on a thread of its own, as the front end does: polled till it's shown)
+        kd_open_start(c(&path.to_string_lossy()).as_ptr());
+        let t0 = std::time::Instant::now();
+        loop {
+            let st = json(kd_open_poll());
+            if st["state"] == "opened" {
+                break;
+            }
+            assert_eq!(st["state"], "opening", "{st}");
+            assert!(t0.elapsed().as_secs() < 30);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(json(kd_open_poll()).is_null(), "nothing being opened now");
+        assert_eq!(json(kd_status())["open"], true);
         let (w, h) = (480u32, 270u32);
         let scale = w as f32 / json(kd_geometry())["size"][0].as_f64().unwrap() as f32;
         let mut a = vec![0u8; (w * h * 4) as usize];

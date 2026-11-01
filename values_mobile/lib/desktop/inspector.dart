@@ -20,8 +20,11 @@ import 'widgets.dart';
 import 'windows.dart' show DTextField;
 
 class Inspector extends StatefulWidget {
-  const Inspector({super.key, required this.engine, required this.look, required this.topInset, required this.revision, required this.onChanged, this.sheet = false});
+  const Inspector({super.key, required this.engine, required this.look, required this.topInset, required this.revision, required this.onChanged, this.sheet = false, this.shown = true});
   final Engine engine;
+
+  /// It's showing (shut, it stays built but reads the values again only when it opens).
+  final bool shown;
 
   /// In the phone layout's sheet (it draws the frame).
   final bool sheet;
@@ -40,6 +43,9 @@ class InspectorState extends State<Inspector> {
   Engine get engine => widget.engine;
   Map<String, dynamic> _s = {};
 
+  /// The document changed while it was shut: read again when it opens.
+  bool _stale = false;
+
   /// Disclosure sections' open state (theme::disclosure remembers it per id; open at first).
   final Map<String, bool> _open = {};
 
@@ -52,7 +58,11 @@ class InspectorState extends State<Inspector> {
   @override
   void didUpdateWidget(Inspector oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.revision != widget.revision) _s = widget.engine.inspector();
+    if (oldWidget.revision != widget.revision) _stale = true;
+    if (_stale && widget.shown) {
+      _stale = false;
+      _s = widget.engine.inspector();
+    }
   }
 
   void set(String key, Object? value) {
@@ -2404,7 +2414,8 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
         animation: _h,
         builder: (ctx, child) {
           final h = _h.value;
-          if (h <= 0.5) return const SizedBox.shrink();
+          // (shut: kept built offstage, so what it holds stays as it was for the next opening)
+          if (h <= 0.5) return Offstage(child: SizedBox(height: math.max(_medium, 120), child: child));
           return Stack(children: [
             // (laid out at least 120 tall and clipped, so its first frames opening don't overflow)
             Positioned(left: 0, right: 0, bottom: 0, height: h, child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: 0, maxHeight: math.max(h, 120), child: child!))),

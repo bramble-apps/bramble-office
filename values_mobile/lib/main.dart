@@ -50,7 +50,9 @@ Future<void> main() async {
   final file = Platform.environment['VALUES_OPEN'];
   if (file != null) engine.open(file);
   runApp(RepaintBoundary(key: appShot, child: ValuesApp(engine: engine)));
-  startTestSnapshots(appShot, type: (t) => _typeHook?.call(t), key: (k) => _keyHook?.call(k));
+  startTestSnapshots(appShot, type: (t) => _typeHook?.call(t), key: (k) => _keyHook?.call(k), phone: (s) {
+    if (testPhoneSize.value != null) testPhoneSize.value = s;
+  });
 }
 
 class ValuesApp extends StatelessWidget {
@@ -69,17 +71,21 @@ class ValuesApp extends StatelessWidget {
 }
 
 /// VALUES_PHONE=`w`x`h` (the automated checks): the app in a box that size at the window's top
-/// left, as a phone's screen.
-Widget _testPhone(Widget child) {
+/// left, as a phone's screen (the script's `phone w h` resizes it, as folding or turning one).
+final testPhoneSize = ValueNotifier<Size?>(() {
   final m = RegExp(r'^(\d+)x(\d+)$').firstMatch(Platform.environment['VALUES_PHONE'] ?? '');
-  if (m == null) return child;
-  final size = Size(double.parse(m[1]!), double.parse(m[2]!));
-  return Builder(builder: (ctx) {
+  return m == null ? null : Size(double.parse(m[1]!), double.parse(m[2]!));
+}());
+
+Widget _testPhone(Widget child) {
+  if (testPhoneSize.value == null) return child;
+  return ValueListenableBuilder<Size?>(valueListenable: testPhoneSize, builder: (ctx, size, _) {
+    final box = size!;
     return ColoredBox(
       color: const Color(0xFF000000),
       child: Align(
         alignment: Alignment.topLeft,
-        child: SizedBox.fromSize(size: size, child: ClipRect(child: MediaQuery(data: MediaQuery.of(ctx).copyWith(size: size), child: child))),
+        child: SizedBox.fromSize(size: box, child: ClipRect(child: MediaQuery(data: MediaQuery.of(ctx).copyWith(size: box), child: child))),
       ),
     );
   });
@@ -111,6 +117,10 @@ class _SheetScreenState extends State<SheetScreen> {
   Engine get e => widget.engine;
   final _sheet = GlobalKey<SheetViewState>();
 
+  /// The inspector, one and the same at the side or in the phone layout's sheet (it moves
+  /// between them as the screen changes, keeping what it shows).
+  final _inspector = GlobalKey<InspectorState>();
+
   Map<String, dynamic> _status = {};
   int _rev = 0;
 
@@ -125,6 +135,12 @@ class _SheetScreenState extends State<SheetScreen> {
   /// The phone layout last frame (null before the first); the first frame.
   bool? _wasCompact;
   bool _firstFrame = true;
+
+  /// A spreadsheet is opening (read on the engine's thread): the Opening… card shows.
+  bool _opening = false;
+
+  /// The chooser's backdrop, last seen (the Opening… card stands on it).
+  int? _backdrop;
   Map<String, dynamic> _chrome = {};
   List<dynamic> _menuData = [];
 
@@ -158,9 +174,7 @@ class _SheetScreenState extends State<SheetScreen> {
         return;
       }
       if (k.startsWith('open:')) {
-        final err = e.open(k.substring(5));
-        if (err != null) _toast("Couldn't open it: $err");
-        _refreshAll();
+        _openFile(k.substring(5));
         return;
       }
       if (k.startsWith('save:')) {
@@ -264,7 +278,18 @@ class _SheetScreenState extends State<SheetScreen> {
   Future<void> _open() async {
     final f = await FilePicker.pickFile(type: FileType.any);
     if (f?.path == null) return;
-    final err = e.open(f!.path!);
+    return _openFile(f!.path!);
+  }
+
+  /// Opens a spreadsheet, read off the UI thread while the Opening… card shows (as the
+  /// desktop's welcome card while it opens one).
+  Future<void> _openFile(String path) async {
+    if (_opening) return;
+    _sheet.currentState?.hideKeyboard();
+    setState(() => _opening = true);
+    final err = await e.openInBackground(path);
+    if (!mounted) return;
+    setState(() => _opening = false);
     if (err != null) _toast("Couldn't open it: $err");
     _refreshAll();
   }
@@ -411,8 +436,7 @@ class _SheetScreenState extends State<SheetScreen> {
         return;
     }
     if (cmd.startsWith('open:')) {
-      final err = e.open(cmd.substring(5));
-      if (err != null) _toast("Couldn't open it: $err");
+      return _openFile(cmd.substring(5));
     } else {
       e.run(cmd);
     }
@@ -564,6 +588,7 @@ class _SheetScreenState extends State<SheetScreen> {
     final tbH = _chrome['showToolbar'] == false ? 0.0 : DesktopToolbar.height(_chrome);
     final windows = _status['windows'] as List? ?? const [];
     final chooser = windows.where((w) => w['id'] == 'chooser').firstOrNull as Map<String, dynamic>?;
+    if (chooser?['backdrop'] is int) _backdrop = chooser!['backdrop'] as int;
     // the classic look: the toolbar in a strip of its own; otherwise it floats over the top of
     // the panes, on the header's colour (Values: nothing of the sheet shows under it)
     final classic = look.classic;
@@ -572,14 +597,18 @@ class _SheetScreenState extends State<SheetScreen> {
     // the phone layout (Settings > Layout; Automatic: a phone's screen, under 600 points on its
     // short side — the screen's own size, before Settings > Scaling; an unfolded foldable or a
     // tablet keeps the side pane)
+    // (decided again whenever the screen changes: unfolding, folding, turning it; the
+    // automated checks' phone box counts as a screen)
     final layout = (_chrome['uiLayout'] as num?)?.toInt() ?? 0;
     final view = View.of(context);
-    final compact = layout == 1 || (layout == 0 && _chrome['android'] == true && (view.physicalSize / view.devicePixelRatio).shortestSide < 600);
+    final phone = testPhoneSize.value;
+    final screen = phone ?? view.physicalSize / view.devicePixelRatio;
+    final compact = layout == 1 || (layout == 0 && (_chrome['android'] == true || phone != null) && screen.shortestSide < 600);
     if (compact != _wasCompact) {
-      final into = compact && _wasCompact != null;
       _wasCompact = compact;
-      // into the phone form: the inspector closes (kn_ui form switched)
-      if (into || (compact && _firstFrame)) {
+      // a phone's screen at launch: the inspector starts shut (kn_ui form); later the open
+      // inspector moves between the side and the sheet as the screen changes
+      if (compact && _firstFrame) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_status['inspector'] == true) e.run('Inspector > Hide Inspector');
           _refreshAll();
@@ -627,7 +656,7 @@ class _SheetScreenState extends State<SheetScreen> {
                         ]),
                       ),
                       // (it stays built while it slides out)
-                      if (!compact) SlidePane(open: showInspector, width: 300, child: Inspector(engine: e, look: look, topInset: floatH, revision: _rev, onChanged: _refreshAll)),
+                      if (!compact) SlidePane(open: showInspector, width: 300, child: Inspector(key: _inspector, engine: e, look: look, topInset: floatH, revision: _rev, shown: showInspector, onChanged: _refreshAll)),
                     ]),
                     // the phone layout's inspector: a sheet from the bottom (kn_ui form sheet)
                     if (compact)
@@ -638,7 +667,7 @@ class _SheetScreenState extends State<SheetScreen> {
                             e.run('Inspector > Hide Inspector');
                             _refreshAll();
                           },
-                          child: Inspector(engine: e, look: look, topInset: 0, revision: _rev, onChanged: _refreshAll, sheet: true),
+                          child: Inspector(key: _inspector, engine: e, look: look, topInset: 0, revision: _rev, shown: showInspector, onChanged: _refreshAll, sheet: true),
                         ),
                       ),
                     // the template chooser over the sheet, below the toolbar (welcome.rs overlay)
@@ -646,6 +675,12 @@ class _SheetScreenState extends State<SheetScreen> {
                       Positioned.fill(
                         top: floatH,
                         child: Chooser(w: chooser, press: (b, v) {
+                          // a recent spreadsheet: read off the UI thread, Opening… meanwhile
+                          if (b == 'open') {
+                            e.inspectorSet('dlg.chooser.cancel', null);
+                            _openFile(v as String);
+                            return;
+                          }
                           e.inspectorSet('dlg.chooser.$b', v);
                           _refreshAll();
                         }, onBrowse: () {
@@ -653,6 +688,7 @@ class _SheetScreenState extends State<SheetScreen> {
                           _open();
                         }),
                       ),
+                    if (_opening) Positioned.fill(top: floatH, child: OpeningCard(backdrop: Color(_backdrop ?? (look.light ? 0xFFEBEBEB : 0xFF1E1E1E)))),
                     if (floatH > 0) Positioned(top: 0, left: 0, right: 0, height: floatH, child: _toolbar(windows)),
                   ]),
                 ),

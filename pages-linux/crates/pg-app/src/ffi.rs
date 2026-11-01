@@ -231,6 +231,44 @@ pub extern "C" fn lt_open(path: *const c_char) -> i32 {
     })
 }
 
+/// A file being read on another thread for `lt_open_begin` / `lt_open_poll` (the file, what was
+/// read once done, and whether it was cancelled).
+static OPENING: std::sync::Mutex<Option<(PathBuf, Option<crate::app::ReadFile>)>> = std::sync::Mutex::new(None);
+
+/// Starts opening `path` as `lt_open` would, reading it on another thread so the front end can
+/// show its "Opening…" panel; `lt_open_poll` finishes it.
+#[unsafe(no_mangle)]
+pub extern "C" fn lt_open_begin(path: *const c_char) {
+    let p = PathBuf::from(arg(path));
+    *OPENING.lock().unwrap() = Some((p.clone(), None));
+    std::thread::spawn(move || {
+        let read = crate::app::ReadFile::read(&p);
+        if let Some(o) = OPENING.lock().unwrap().as_mut().filter(|o| o.0 == p) {
+            o.1 = Some(read);
+        }
+    });
+}
+
+/// 1 while the file `lt_open_begin` started is still being read; 0 once it's open (or there's
+/// nothing being opened).
+#[unsafe(no_mangle)]
+pub extern "C" fn lt_open_poll() -> i32 {
+    let mut g = OPENING.lock().unwrap();
+    if g.as_ref().is_some_and(|o| o.1.is_none()) {
+        return 1;
+    }
+    let Some((p, read)) = g.take() else { return 0 };
+    drop(g);
+    with(|h| crate::tabs::open_read_in_tab(&mut h.app, &p, read));
+    0
+}
+
+/// Cancel: what `lt_open_begin` is reading is dropped when it's done.
+#[unsafe(no_mangle)]
+pub extern "C" fn lt_open_cancel() {
+    *OPENING.lock().unwrap() = None;
+}
+
 /// Saves to `path` (.pages, or .docx in Word mode) as File > Save would.
 #[unsafe(no_mangle)]
 pub extern "C" fn lt_save(path: *const c_char) -> i32 {

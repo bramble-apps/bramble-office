@@ -103,6 +103,9 @@ class Engine {
   late final _free = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('kd_free_str');
   late final _error = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_error');
   late final _open = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('kd_open');
+  late final _openStart = _lib.lookupFunction<_VS, _DS>('kd_open_start');
+  late final _openPoll = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_open_poll');
+  late final _openCancel = _lib.lookupFunction<Void Function(), void Function()>('kd_open_cancel');
   late final _new = _lib.lookupFunction<Int32 Function(Uint32), int Function(int)>('kd_new');
   late final _themes = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_themes');
   late final _save = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('kd_save');
@@ -217,6 +220,14 @@ class Engine {
   // ---- files ----
   String get error => _take(_error());
   String? open(String path) => _str(path, _open) == 0 ? null : error;
+
+  /// Opens a presentation on a thread of the engine's own ([openPoll] says how it's going).
+  void openStart(String path) => _str(path, _openStart);
+
+  /// null: nothing being opened; {state: opening, name, preview} | {state: opened} |
+  /// {state: failed, message} | {state: cancelled}.
+  Map<String, dynamic>? openPoll() => _json(_openPoll()) as Map<String, dynamic>?;
+  void openCancel() => _openCancel();
   String? create(int theme) => _new(theme) == 0 ? null : error;
   String? save(String path) => _str(path, _save) == 0 ? null : error;
   String? export(String path) => _str(path, _export) == 0 ? null : error;

@@ -208,17 +208,27 @@ fn active_is_blank(app: &App) -> bool {
 /// Open `p` in its own tab: the tab already showing it, the active tab when that one is an
 /// untouched new document, else a new tab.
 pub fn open_in_tab(app: &mut App, p: &Path) {
+    open_read_in_tab(app, p, None);
+}
+
+/// As `open_in_tab`, with the file already read (`ReadFile::read`, on another thread).
+pub fn open_read_in_tab(app: &mut App, p: &Path, read: Option<crate::app::ReadFile>) {
+    let mut read = read;
+    let mut open = |app: &mut App| match read.take() {
+        Some(r) => app.open_read(p, r),
+        None => app.open(p),
+    };
     if let Some(i) = (0..app.tabs.len()).find(|&i| path_of(app, i).is_some_and(|q| same_file(&q, p))) {
         select(app, i);
         return;
     }
     if active_is_blank(app) {
-        app.open(p);
+        open(app);
         return;
     }
     let back = app.tabs.active;
     new_empty_tab(app);
-    app.open(p);
+    open(app);
     // it didn't open (and isn't waiting for its password): back to where we were
     if app.wb.is_none() && !app.password_pending() {
         let i = app.tabs.active;

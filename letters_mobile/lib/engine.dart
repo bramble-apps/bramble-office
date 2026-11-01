@@ -45,6 +45,9 @@ class Engine {
   late final _free = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('lt_free_str');
   late final _error = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('lt_error');
   late final _open = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('lt_open');
+  late final _openBegin = _lib.lookupFunction<_VS, _DS>('lt_open_begin');
+  late final _openPoll = _lib.lookupFunction<Int32 Function(), int Function()>('lt_open_poll');
+  late final _openCancel = _lib.lookupFunction<Void Function(), void Function()>('lt_open_cancel');
   late final _save = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('lt_save');
   late final _export = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('lt_export');
   late final _scroll = _lib.lookupFunction<Void Function(Float, Float, Float), void Function(double, double, double)>('lt_scroll');
@@ -107,6 +110,11 @@ class Engine {
   // ---- files ----
   String get error => _take(_error());
   String? open(String path) => _str(path, _open) == 0 ? null : error;
+  /// Opening read on another thread (the "Opening…" panel animates meanwhile): start it, then
+  /// poll until it's open (false), or cancel it.
+  void openBegin(String path) => _str(path, _openBegin);
+  bool openPoll() => _openPoll() != 0;
+  void openCancel() => _openCancel();
   void save(String path) => _str(path, _save);
   String? export(String path) => _str(path, _export) == 0 ? null : error;
 

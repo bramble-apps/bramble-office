@@ -47,6 +47,8 @@ class Engine {
   late final _free = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('vl_free_str');
   late final _error = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('vl_error');
   late final _open = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('vl_open');
+  late final _openStart = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('vl_open_start');
+  late final _openPoll = _lib.lookupFunction<Int32 Function(), int Function()>('vl_open_poll');
   late final _save = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('vl_save');
   late final _export = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('vl_export');
   late final _scroll = _lib.lookupFunction<Void Function(Float, Float, Float), void Function(double, double, double)>('vl_scroll');
@@ -106,6 +108,18 @@ class Engine {
   // ---- files ----
   String get error => _take(_error());
   String? open(String path) => _str(path, _open) == 0 ? null : error;
+
+  /// Opens a spreadsheet as [open], read on a thread of the engine's own (the app animates
+  /// Opening… meanwhile): it polls every 50 ms until it's the document.
+  Future<String?> openInBackground(String path) async {
+    var r = _str(path, _openStart);
+    while (r == 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      r = _openPoll();
+    }
+    return r == 0 ? null : error;
+  }
+
   String? save(String path) => _str(path, _save) == 0 ? null : error;
   String? export(String path) => _str(path, _export) == 0 ? null : error;
 

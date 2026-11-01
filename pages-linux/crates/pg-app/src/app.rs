@@ -39,6 +39,24 @@ pub enum Sidebar {
     Toc,
 }
 
+/// A file read from disk for `App::open_read`: the slow part of opening, which can run on
+/// another thread (the touch front end's "Opening…" panel animates meanwhile).
+pub enum ReadFile {
+    Word(Result<pg_core::wordmode::Opened, String>),
+    Doc(Result<Pages, pg_core::kn_format::Error>),
+}
+
+impl ReadFile {
+    pub fn read(p: &Path) -> Self {
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        match ext.as_str() {
+            "docx" => ReadFile::Word(pg_core::wordmode::open_docx(p)),
+            "txt" | "md" | "markdown" | "rtf" | "html" | "htm" => ReadFile::Doc(pg_core::import::import_file(p)),
+            _ => ReadFile::Doc(Pages::open(p)),
+        }
+    }
+}
+
 /// Selected cells of one table: anchor and cursor (inclusive corners).
 /// Word mode (as Values' Excel mode): the .docx it saves to, and whether the whole Letters
 /// document travels inside it.
@@ -496,36 +514,31 @@ impl App {
     }
 
     pub fn open(&mut self, p: &Path) {
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-        // a Word file opens in Word mode: it stays a .docx
-        if ext == "docx" {
-            match pg_core::wordmode::open_docx(p) {
-                Ok(o) => {
-                    self.remember(p);
-                    self.load(o.pages);
-                    self.untitled_name = None;
-                    self.word = Some(WordMode { path: p.to_path_buf(), hybrid: o.hybrid });
-                    if o.changed_elsewhere {
-                        self.notify("This document was changed in another app since Letters saved it: it opened from the Word content, and the Letters-only extras it had are gone.");
-                    }
+        self.open_read(p, ReadFile::read(p));
+    }
+
+    /// Shows a document `ReadFile::read` read from `p` (on any thread).
+    pub fn open_read(&mut self, p: &Path, read: ReadFile) {
+        match read {
+            // a Word file opens in Word mode: it stays a .docx
+            ReadFile::Word(Ok(o)) => {
+                self.remember(p);
+                self.load(o.pages);
+                self.untitled_name = None;
+                self.word = Some(WordMode { path: p.to_path_buf(), hybrid: o.hybrid });
+                if o.changed_elsewhere {
+                    self.notify("This document was changed in another app since Letters saved it: it opened from the Word content, and the Letters-only extras it had are gone.");
                 }
-                Err(e) => self.notify(format!("Couldn't open {}: {e}", p.display())),
             }
-            return;
-        }
-        let opened = match ext.as_str() {
-            "txt" | "md" | "markdown" | "rtf" | "docx" | "html" | "htm" => pg_core::import::import_file(p),
-            _ => Pages::open(p),
-        };
-        match opened {
-            Ok(doc) => {
+            ReadFile::Word(Err(e)) => self.notify(format!("Couldn't open {}: {e}", p.display())),
+            ReadFile::Doc(Ok(doc)) => {
                 self.remember(p);
                 let imported = doc.doc.path.is_none();
                 self.load(doc);
                 self.untitled_name = if imported { p.file_stem().map(|n| n.to_string_lossy().into_owned()) } else { None };
             }
-            Err(pg_core::kn_format::Error::NeedsPassword(hint)) => self.password = Some((p.to_path_buf(), hint, String::new(), false)),
-            Err(e) => self.notify(format!("Couldn't open {}: {e}", p.display())),
+            ReadFile::Doc(Err(pg_core::kn_format::Error::NeedsPassword(hint))) => self.password = Some((p.to_path_buf(), hint, String::new(), false)),
+            ReadFile::Doc(Err(e)) => self.notify(format!("Couldn't open {}: {e}", p.display())),
         }
     }
 

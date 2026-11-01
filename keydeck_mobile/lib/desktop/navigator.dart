@@ -33,10 +33,16 @@ class Navigator2 extends StatefulWidget {
   State<Navigator2> createState() => _NavigatorState();
 }
 
+/// The slides' thumbnails, kept while the app runs (not the list's own: hiding the list and
+/// showing it again, or moving it between the side and the foot, draws none of them again), by
+/// slide key (a slide's key changes when it does): the picture and its width in pixels, and the
+/// width last asked of the engine.
+final _thumbs = <int, (ui.Image, int)>{};
+final _asked = <int, int>{};
+Future<void> _pending = Future.value();
+
 class _NavigatorState extends State<Navigator2> {
   Engine get e => widget.engine;
-  final _thumbs = <int, ui.Image>{};
-  final _asked = <int>{};
   final _scroll = ScrollController();
   int? _dragFrom, _dragTo;
   int _shownCurrent = -1;
@@ -46,34 +52,41 @@ class _NavigatorState extends State<Navigator2> {
   @override
   void dispose() {
     _scroll.dispose();
-    for (final t in _thumbs.values) {
-      t.dispose();
-    }
     super.dispose();
   }
 
-  /// A slide's thumbnail, asked of the engine the first time its key is seen (and again once
-  /// pictures it was missing have arrived; the one it has shows until then).
+  /// A slide's thumbnail: asked of the engine the first time its key is seen, and again only
+  /// when it's shown a good deal bigger or smaller than it was drawn (the one it has shows,
+  /// scaled, meanwhile).
   ui.Image? _thumb(int index, int key, double w, double dpr) {
     final t = _thumbs[key];
-    if (_asked.add(key)) {
-      final pw = (w * dpr).round().clamp(40, 600), ph = (pw * widget.slide.height / widget.slide.width).round();
+    final pw = (w * dpr).round().clamp(40, 600);
+    final asked = _asked[key];
+    if (asked == null || (asked - pw).abs() > asked * 0.25) {
+      _asked[key] = pw;
+      final ph = (pw * widget.slide.height / widget.slide.width).round();
       // (one at a time, in the order asked: a long deck fills in without stalling the window)
       _pending = _pending.then((_) async {
-        if (!mounted) return;
+        if (!mounted) {
+          // (gone before its turn: asked again when shown)
+          if (_asked[key] == pw) _asked.remove(key);
+          return;
+        }
         final img = await e.render(index, pw / widget.slide.width, 0, 0, pw, ph);
-        if (img != null && mounted) {
-          setState(() {
-            _thumbs.remove(key)?.dispose();
-            _thumbs[key] = img;
-          });
+        if (img == null) return;
+        final old = _thumbs[key];
+        _thumbs[key] = (img, pw);
+        if (mounted) {
+          setState(() {});
+          // (the old picture goes once the new one's on screen)
+          WidgetsBinding.instance.addPostFrameCallback((_) => old?.$1.dispose());
+        } else {
+          old?.$1.dispose();
         }
       });
     }
-    return t;
+    return t?.$1;
   }
-
-  Future<void> _pending = Future.value();
 
   void _tap(int i) {
     final shift = HardwareKeyboard.instance.isShiftPressed;
@@ -100,9 +113,9 @@ class _NavigatorState extends State<Navigator2> {
     // (pictures of what the slides no longer show go)
     final keys = {for (final s in slides) (s['key'] as num).toInt()};
     for (final k in [..._thumbs.keys]) {
-      if (!keys.contains(k)) _thumbs.remove(k)?.dispose();
+      if (!keys.contains(k)) _thumbs.remove(k)?.$1.dispose();
     }
-    _asked.retainWhere(keys.contains);
+    _asked.removeWhere((k, _) => !keys.contains(k));
     return LayoutBuilder(builder: (ctx, box) {
       final horizontal = widget.horizontal;
       final thumbW = horizontal ? (box.maxHeight - 26) / aspect : (box.maxWidth - 44).clamp(60.0, 400.0);

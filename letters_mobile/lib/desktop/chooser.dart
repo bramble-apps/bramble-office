@@ -88,9 +88,12 @@ class _ChooserState extends State<Chooser> {
           final sideW = cw > 640 ? 190.0 : 0.0;
           final mainW = cw - sideW;
           final pad = narrow ? 14.0 : 24.0, gap = narrow ? 12.0 : 18.0;
-          // at least two columns: tiles too wide for two are shrunk to fit (their shape kept)
-          final room = mainW - pad - 12 - 6 - 10;
-          final k = math.min(1.0, (room - gap) / (2 * tile0.width));
+          // the tiles fill the width, the same room either side: as many columns as fit at
+          // about their own size (at least two), each a little bigger or smaller to fill the
+          // row (their shape kept)
+          final room = mainW - 2 * pad;
+          final cols = math.max(2, ((room + gap) / (tile0.width + gap)).floor());
+          final k = (room - (cols - 1) * gap - 0.5) / cols / tile0.width;
           final tile = Size(tile0.width * k, tile0.height * k);
           // recent documents' tiles: the templates' shape, a little wider for slides
           final recentTile = tile.width > tile.height ? tile : Size(tile.width * 1.2, tile.height * 1.2);
@@ -146,16 +149,16 @@ class _ChooserState extends State<Chooser> {
                 Positioned(
                   left: sideW + pad - 6,
                   top: 70 - 6,
-                  right: 12,
+                  right: pad - 6,
                   bottom: (narrow ? 58 : 56) + 4,
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                     child: SingleChildScrollView(
                       controller: _scroll,
-                      padding: const EdgeInsets.only(left: 6, top: 6),
+                      padding: const EdgeInsets.only(left: 6, top: 6, right: 6),
                       child: SizedBox(
                         key: _content,
-                        width: mainW - pad - 12 - 16,
+                        width: room,
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (recent.isNotEmpty) ...[
                             _section(look, 'Recent', _recentTop),

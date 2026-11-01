@@ -3,7 +3,8 @@
 // whenever a file `snap-now` appears. On Linux: VALUES_SNAP names that folder, and
 // VALUES_SCRIPT runs a script of touches and typing (taps and drags as real pointer events),
 // `;`-separated: tap x y | drag x1 y1 x2 y2 [ms] | pinch x y scale | type text | key name |
-// hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | quit.
+// hold x1 y1 x2 y2 (stays down) | release | phone w h (VALUES_PHONE's box resized) | wait ms |
+// snap name | quit.
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -14,7 +15,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
-Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)? type, void Function(String key)? key}) async {
+Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)? type, void Function(String key)? key, void Function(Size size)? phone}) async {
   Directory? dir;
   try {
     dir = await getExternalStorageDirectory();
@@ -104,6 +105,9 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
         case 'menu':
           key?.call('menu:${p.sublist(1).join(' ')}');
           await frames(100);
+        case 'phone':
+          phone?.call(Size(n(1), n(2)));
+          await frames(300);
         case 'wait':
           await frames(n(1).toInt());
         case 'snap':

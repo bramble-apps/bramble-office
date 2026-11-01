@@ -5,7 +5,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +19,7 @@ import 'desktop/layout_grid.dart';
 import 'desktop/look.dart';
 import 'desktop/menubar.dart';
 import 'desktop/navigator.dart';
+import 'desktop/opening.dart';
 import 'desktop/popovers.dart' show showChartPopover, showShapePopover, showTablePopover;
 import 'desktop/scale.dart';
 import 'desktop/show.dart';
@@ -55,7 +55,7 @@ Future<void> main() async {
     if (err != null) stderr.writeln('KEYDECK_OPEN: $err');
   }
   runApp(RepaintBoundary(key: appShot, child: KeydeckApp(engine: engine)));
-  startTestSnapshots(appShot, type: (t) => _typeHook?.call(t), key: (k) => _keyHook?.call(k));
+  startTestSnapshots(appShot, type: (t) => _typeHook?.call(t), key: (k) => _keyHook?.call(k), phoneSize: (z) => testPhone.value = z);
 }
 
 class KeydeckApp extends StatelessWidget {
@@ -74,20 +74,24 @@ class KeydeckApp extends StatelessWidget {
 }
 
 /// KEYDECK_PHONE=`w`x`h` (the automated checks): the app in a box that size at the window's top
-/// left, as a phone's screen.
-Widget _testPhone(Widget child) {
+/// left, as a phone's screen (the script's `phone w h` changes it, as folding or turning does).
+final testPhone = ValueNotifier<Size?>(() {
   final m = RegExp(r'^(\d+)x(\d+)$').firstMatch(Platform.environment['KEYDECK_PHONE'] ?? '');
-  if (m == null) return child;
-  final size = Size(double.parse(m[1]!), double.parse(m[2]!));
-  return Builder(builder: (ctx) {
-    return ColoredBox(
+  return m == null ? null : Size(double.parse(m[1]!), double.parse(m[2]!));
+}());
+
+Widget _testPhone(Widget child) {
+  if (testPhone.value == null) return child;
+  return ValueListenableBuilder<Size?>(
+    valueListenable: testPhone,
+    builder: (ctx, size, _) => ColoredBox(
       color: const Color(0xFF000000),
       child: Align(
         alignment: Alignment.topLeft,
         child: SizedBox.fromSize(size: size, child: ClipRect(child: MediaQuery(data: MediaQuery.of(ctx).copyWith(size: size), child: child))),
       ),
-    );
-  });
+    ),
+  );
 }
 
 /// KEYDECK_KEYBOARD=`points` (the automated checks): an on-screen keyboard that tall, as
@@ -108,12 +112,15 @@ Widget _testKeyboard(Widget child) {
 /// screen under 600 points on its short side, judged by the screen's own size, before Settings
 /// > Scaling). KEYDECK_PHONE counts as one.
 bool isCompact(BuildContext context, Map<String, dynamic> chrome) {
+  // (the size read through MediaQuery: folding, unfolding or turning the phone builds the
+  // screen again, the slide list moving between the side and the foot there and then)
+  MediaQuery.sizeOf(context);
   final layout = (chrome['uiLayout'] as num?)?.toInt() ?? 0;
   if (layout == 1) return true;
   if (layout != 0) return false;
   // (the test screen's own size, as a device's before Settings > Scaling)
-  final test = RegExp(r'^(\d+)x(\d+)$').firstMatch(Platform.environment['KEYDECK_PHONE'] ?? '');
-  if (test != null) return math.min(double.parse(test[1]!), double.parse(test[2]!)) < 600;
+  final test = testPhone.value;
+  if (test != null) return test.shortestSide < 600;
   final view = View.of(context);
   return chrome['android'] == true && (view.physicalSize / view.devicePixelRatio).shortestSide < 600;
 }
@@ -286,7 +293,14 @@ class _DocScreenState extends State<DocScreen> {
   Future<void> _open() async {
     final f = await FilePicker.pickFile(type: FileType.any);
     if (f?.path == null) return;
-    final err = e.open(f!.path!);
+    await _openFile(f!.path!);
+  }
+
+  /// Opens a presentation on the engine's own thread, the desktop's "Opening…" panel showing
+  /// once it takes a moment.
+  Future<void> _openFile(String path) async {
+    final err = await openWithPanel(context, e, Look(_chrome), path);
+    if (!mounted) return;
     if (err != null) _toast("Couldn't open it: $err");
     _refreshAll();
   }
@@ -424,8 +438,7 @@ class _DocScreenState extends State<DocScreen> {
         return _play(rehearse: true);
     }
     if (cmd.startsWith('open:')) {
-      final err = e.open(cmd.substring(5));
-      if (err != null) _toast("Couldn't open it: $err");
+      return _openFile(cmd.substring(5));
     } else {
       e.run(cmd);
     }
@@ -733,8 +746,8 @@ class _DocScreenState extends State<DocScreen> {
                               }
                               if (b == 'cancel') e.action('close');
                               if (b == 'open') {
-                                final err = e.open(v as String);
-                                if (err != null) _toast("Couldn't open it: $err");
+                                _openFile(v as String);
+                                return;
                               }
                               _refreshAll();
                             },

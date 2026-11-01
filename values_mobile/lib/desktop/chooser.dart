@@ -82,15 +82,17 @@ class _ChooserState extends State<Chooser> {
         color: Color((w['backdrop'] as int?) ?? 0xFFEBEBEB),
         child: LayoutBuilder(builder: (ctx, box) {
           // (a narrow screen, a phone held upright: the card nearly fills it, 12 points round)
+          // (the whole width, the same room on both sides)
           final narrow = box.maxWidth < 600;
-          final cw = narrow ? box.maxWidth - 24 : (box.maxWidth - 64).clamp(320.0, 1080.0);
-          final ch = narrow ? box.maxHeight - 24 : (box.maxHeight - 64).clamp(300.0, 720.0);
+          final (cw, ch) = _cardSize(box);
           final sideW = cw > 640 ? 190.0 : 0.0;
           final mainW = cw - sideW;
           final pad = narrow ? 14.0 : 24.0, gap = narrow ? 12.0 : 18.0;
-          // at least two columns: tiles too wide for two are shrunk to fit (their shape kept)
-          final room = mainW - pad - 12 - 6 - 10;
-          final k = math.min(1.0, (room - gap) / (2 * tile0.width));
+          // as many columns as fit at the tiles' own width (at least two), the tiles then
+          // grown or shrunk to fill the row (their shape kept)
+          final room = mainW - 2 * pad;
+          final cols = math.max(2, ((room + gap) / (tile0.width + gap)).floor());
+          final k = ((room - (cols - 1) * gap) / cols).floorToDouble() / tile0.width;
           final tile = Size(tile0.width * k, tile0.height * k);
           // recent documents' tiles: the templates' shape, a little wider for slides
           final recentTile = tile.width > tile.height ? tile : Size(tile.width * 1.2, tile.height * 1.2);
@@ -146,16 +148,16 @@ class _ChooserState extends State<Chooser> {
                 Positioned(
                   left: sideW + pad - 6,
                   top: 70 - 6,
-                  right: 12,
+                  right: pad - 6,
                   bottom: (narrow ? 58 : 56) + 4,
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                     child: SingleChildScrollView(
                       controller: _scroll,
-                      padding: const EdgeInsets.only(left: 6, top: 6),
+                      padding: const EdgeInsets.only(left: 6, top: 6, right: 6),
                       child: SizedBox(
                         key: _content,
-                        width: mainW - pad - 12 - 16,
+                        width: room,
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (recent.isNotEmpty) ...[
                             _section(look, 'Recent', _recentTop),
@@ -438,4 +440,50 @@ void _drawTemplate(Canvas c, Rect tile, int? style, Look look) {
   for (var k = 0; k <= cols; k++) {
     c.drawLine(Offset(t.left + k * cw, t.top), Offset(t.left + k * cw, t.bottom), line);
   }
+}
+
+/// welcome.rs `loading`: the chooser's card while a spreadsheet opens, a spinner over
+/// "Opening…" in its middle (on the chooser's backdrop).
+class OpeningCard extends StatelessWidget {
+  const OpeningCard({super.key, required this.backdrop});
+  final Color backdrop;
+
+  @override
+  Widget build(BuildContext context) {
+    final look = LookScope.of(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: ColoredBox(
+        color: backdrop,
+        child: LayoutBuilder(builder: (ctx, box) {
+          final (cw, ch) = _cardSize(box);
+          return Center(
+            child: Container(
+              width: cw,
+              height: ch,
+              decoration: BoxDecoration(
+                color: look.panel,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [BoxShadow(color: Color(look.light ? 0x28000000 : 0x5A000000), offset: const Offset(0, 8), blurRadius: 28)],
+              ),
+              foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: look.separator)),
+              child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
+                SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: look.text)),
+                const SizedBox(height: 8),
+                Text('Opening…', style: Look.font(14, look.text)),
+              ]),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// The chooser's card in the room it has: nearly all of a narrow screen (12 points round),
+/// else 32 points in from every side (at least 320 × 300; no taller than 720).
+(double, double) _cardSize(BoxConstraints box) {
+  final narrow = box.maxWidth < 600;
+  return narrow ? (box.maxWidth - 24, box.maxHeight - 24) : (math.max(320.0, box.maxWidth - 64), (box.maxHeight - 64).clamp(300.0, 720.0));
 }

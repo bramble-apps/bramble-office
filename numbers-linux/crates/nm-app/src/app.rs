@@ -432,40 +432,31 @@ impl App {
     }
 
     pub fn open(&mut self, p: &Path) {
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
         // a template opens as a new, untitled spreadsheet
-        if ext == "nmbtemplate" {
+        if is_template(p) {
             crate::templates::new_from(self, p);
             return;
         }
-        // an Excel workbook stays one (Excel mode): from its Values copy if it has one
-        let mut excel = None;
-        let mut note = None;
-        let opened = match ext.as_str() {
-            "csv" | "tsv" | "txt" => nm_core::import::import_delimited(p),
-            "xlsx" | "xlsm" => nm_core::xlsx::open_xlsx(p).map(|o| {
-                excel = Some(ExcelMode { path: p.to_path_buf(), compat: o.compat, extras: o.extras.clone(), by_sheet: Default::default() });
-                if o.changed_elsewhere {
-                    note = Some("This workbook was changed in another app since Values saved it: it opened from the Excel data, and the Values-only extras it had are gone.".to_string());
-                }
-                o.workbook
-            }),
-            _ => Workbook::open(p),
-        };
-        match opened {
+        let read = read_file(p);
+        self.finish_open(p, read);
+    }
+
+    /// The second half of [`App::open`]: the spreadsheet [`read_file`] read (on any thread)
+    /// becomes the document.
+    pub fn finish_open(&mut self, p: &Path, read: ReadFile) {
+        match read.opened {
             Ok(wb) => {
                 self.remember(p);
                 let imported = wb.doc.path.is_none();
                 self.load(wb);
                 self.untitled_name = if imported { p.file_stem().map(|n| n.to_string_lossy().into_owned()) } else { None };
-                self.excel = excel;
+                self.excel = read.excel;
                 self.apply_rotations();
-                if let Some(n) = note {
+                if let Some(n) = read.note {
                     self.notify(n);
                 }
-                let w = nm_core::import::take_warnings();
-                if !w.is_empty() {
-                    self.notify(w.join("; "));
+                if !read.warnings.is_empty() {
+                    self.notify(read.warnings.join("; "));
                 }
             }
             Err(nm_core::kn_format::Error::NeedsPassword(hint)) => self.password = Some((p.to_path_buf(), hint, String::new(), false)),
@@ -2704,6 +2695,41 @@ mod replace_tests {
         assert_eq!(super::replace_ci("abc", "x", "y"), "abc");
         assert_eq!(super::replace_ci("Straße", "ß", "ss"), "Strasse");
     }
+}
+
+/// A template (.nmbtemplate): it opens as a new, untitled spreadsheet.
+pub fn is_template(p: &Path) -> bool {
+    p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("nmbtemplate"))
+}
+
+/// A spreadsheet read from its file, not yet the document ([`App::finish_open`]).
+pub struct ReadFile {
+    pub opened: Result<Workbook, nm_core::kn_format::Error>,
+    pub excel: Option<ExcelMode>,
+    pub note: Option<String>,
+    /// What the import left out (nm_core's warnings are kept by thread: taken here).
+    pub warnings: Vec<String>,
+}
+
+/// Reads a spreadsheet (Numbers, Excel, CSV / TSV) without the app: the slow half of
+/// [`App::open`], which the Android app runs on a thread of its own while it shows Opening….
+pub fn read_file(p: &Path) -> ReadFile {
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    // an Excel workbook stays one (Excel mode): from its Values copy if it has one
+    let mut excel = None;
+    let mut note = None;
+    let opened = match ext.as_str() {
+        "csv" | "tsv" | "txt" => nm_core::import::import_delimited(p),
+        "xlsx" | "xlsm" => nm_core::xlsx::open_xlsx(p).map(|o| {
+            excel = Some(ExcelMode { path: p.to_path_buf(), compat: o.compat, extras: o.extras.clone(), by_sheet: Default::default() });
+            if o.changed_elsewhere {
+                note = Some("This workbook was changed in another app since Values saved it: it opened from the Excel data, and the Values-only extras it had are gone.".to_string());
+            }
+            o.workbook
+        }),
+        _ => Workbook::open(p),
+    };
+    ReadFile { opened, excel, note, warnings: nm_core::import::take_warnings() }
 }
 
 /// A document kept as an Excel workbook (File > Save writes the .xlsx).
