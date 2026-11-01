@@ -52,20 +52,25 @@ class _NavigatorState extends State<Navigator2> {
     super.dispose();
   }
 
-  /// A slide's thumbnail, asked of the engine the first time its key is seen.
+  /// A slide's thumbnail, asked of the engine the first time its key is seen (and again once
+  /// pictures it was missing have arrived; the one it has shows until then).
   ui.Image? _thumb(int index, int key, double w, double dpr) {
     final t = _thumbs[key];
-    if (t != null) return t;
     if (_asked.add(key)) {
       final pw = (w * dpr).round().clamp(40, 600), ph = (pw * widget.slide.height / widget.slide.width).round();
       // (one at a time, in the order asked: a long deck fills in without stalling the window)
       _pending = _pending.then((_) async {
         if (!mounted) return;
         final img = await e.render(index, pw / widget.slide.width, 0, 0, pw, ph);
-        if (img != null && mounted) setState(() => _thumbs[key] = img);
+        if (img != null && mounted) {
+          setState(() {
+            _thumbs.remove(key)?.dispose();
+            _thumbs[key] = img;
+          });
+        }
       });
     }
-    return null;
+    return t;
   }
 
   Future<void> _pending = Future.value();

@@ -79,9 +79,22 @@ class InspectorSheet extends StatefulWidget {
 }
 
 class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProviderStateMixin {
-  late final _h = AnimationController.unbounded(vsync: this);
+  late final _h = AnimationController.unbounded(vsync: this)..addStatusListener(_settled);
   double _available = 600;
   bool _started = false;
+
+  /// While it's dragged or moving: the height it's laid out at (full), so only a translation
+  /// changes each frame (no layout of what's in it); null at rest (laid out at its height).
+  double? _layoutH;
+  bool _dragging = false;
+
+  void _moving() {
+    if (_layoutH == null) setState(() => _layoutH = _large);
+  }
+
+  void _settled([AnimationStatus? s]) {
+    if (!_dragging && !_h.isAnimating && _layoutH != null && mounted) setState(() => _layoutH = null);
+  }
 
   double get _medium => math.max(200, _available * 0.5);
   double get _large => _available - 8;
@@ -98,11 +111,22 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
     super.dispose();
   }
 
-  void _animateTo(double t) => _h.animateTo(t, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+  void _animateTo(double t) {
+    _moving();
+    _h.animateTo(t, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+  }
+
+  void _dragStart(DragStartDetails d) {
+    _dragging = true;
+    _moving();
+  }
 
   void _drag(DragUpdateDetails d) => _h.value = (_h.value - d.delta.dy).clamp(0.0, _large);
 
   void _dragEnd(DragEndDetails d) {
+    _dragging = false;
+    // (let go where it rests: no animation to end, laid out at its height now)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _settled());
     final v = d.primaryVelocity ?? 0;
     final h = _h.value;
     double target;
@@ -114,6 +138,7 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
       target = [0.0, _medium, _large].reduce((a, b) => (a - h).abs() < (b - h).abs() ? a : b);
     }
     if (target == 0) {
+      _moving();
       _h.animateTo(0, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic).whenComplete(() {
         if (mounted && widget.open) widget.onClose();
       });
@@ -136,9 +161,21 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
         builder: (ctx, child) {
           final h = _h.value;
           if (h <= 0.5) return const SizedBox.shrink();
+          // moving: laid out full height once and slid (a translation of a cached layer); at
+          // rest, laid out at its height (its lists end at the screen's foot)
+          final lh = math.max(_layoutH ?? h, h);
           return Stack(children: [
             // (laid out at least 120 tall and clipped, so its first frames opening don't overflow)
-            Positioned(left: 0, right: 0, bottom: 0, height: h, child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: 0, maxHeight: math.max(h, 120), child: child!))),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: lh,
+              child: Transform.translate(
+                offset: Offset(0, lh - h),
+                child: RepaintBoundary(child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: 0, maxHeight: math.max(lh, 120), child: child!))),
+              ),
+            ),
           ]);
         },
         child: Container(
@@ -150,6 +187,7 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
           // dragging anywhere but a list moves the sheet; the lists scroll as usual
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
+            onVerticalDragStart: _dragStart,
             onVerticalDragUpdate: _drag,
             onVerticalDragEnd: _dragEnd,
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

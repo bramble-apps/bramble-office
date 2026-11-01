@@ -28,6 +28,9 @@ struct Host {
     unsaved: Option<usize>,
     /// The slideshow's textures as the front end has them (showapi.rs).
     play: crate::showapi::Mirror,
+    /// What kd_render_job's drawings read pictures from: the presentation's data files and
+    /// package metadata (shared, not copied), made again when they change.
+    draw_doc: Option<(u64, std::sync::Arc<kn_model::Document>)>,
 }
 
 thread_local! {
@@ -153,7 +156,7 @@ pub extern "C" fn kd_init() {
         app.renderer.set_async_images(false);
         // (table rows grow to fit what's typed into them, as the desktop's start)
         kn_model::table::set_all_rows_fit(true);
-        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None, play: Default::default() }));
+        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None, play: Default::default(), draw_doc: None }));
     });
 }
 
@@ -404,6 +407,125 @@ pub extern "C" fn kd_render(index: u32, scale: f32, x: f32, y: f32, mode: u32, b
     })
 }
 
+/// A drawing of part of a slide for kd_render_job_draw: the scene as it is now and the
+/// presentation's pictures, drawn on whatever thread calls (the front end's worker isolate), so
+/// the UI thread never waits for a slide to be drawn or a photo decoded.
+pub struct RenderJob {
+    doc: std::sync::Arc<kn_model::Document>,
+    scene: kn_model::SlideScene,
+    moving: Vec<kn_format::ObjId>,
+    scale: f32,
+    x: f32,
+    y: f32,
+    mode: u32,
+}
+
+/// The drawing threads' renderer: its own fonts and decoded pictures (decoded where it draws).
+static JOB_RENDERER: std::sync::Mutex<Option<kn_render::Renderer>> = std::sync::Mutex::new(None);
+
+/// What the pictures come from (kd_render_job): the data files and package metadata only (the
+/// renderer reads nothing else), shared with the presentation; made again when they change.
+fn draw_doc(host: &mut Host) -> Option<std::sync::Arc<kn_model::Document>> {
+    use std::hash::{Hash, Hasher};
+    let doc = host.app.doc.as_mut()?;
+    let mut hs = std::collections::hash_map::DefaultHasher::new();
+    host.app.active_tab.hash(&mut hs);
+    doc.path.hash(&mut hs);
+    for e in doc.file.entries.iter().filter(|e| !matches!(e.data, kn_format::EntryData::Iwa(_))) {
+        e.name.hash(&mut hs);
+    }
+    let sig = hs.finish();
+    if let Some((s, d)) = &host.draw_doc {
+        if *s == sig {
+            return Some(d.clone());
+        }
+    }
+    // (the entries kept copied, not the parsed archives: the file's shell cloned without them)
+    let kept: Vec<kn_format::Entry> = doc.file.entries.iter().filter(|e| !matches!(e.data, kn_format::EntryData::Iwa(_)) || e.name.contains("Metadata")).cloned().collect();
+    let entries = std::mem::take(&mut doc.file.entries);
+    let mut file = doc.file.clone();
+    doc.file.entries = entries;
+    file.entries = kept;
+    file.reindex();
+    let d = std::sync::Arc::new(kn_model::Document::from_file(file));
+    host.draw_doc = Some((sig, d.clone()));
+    Some(d)
+}
+
+/// Part of slide `index` to draw off the UI thread (kd_render_job_draw), as kd_render's
+/// arguments; null when there's nothing to draw.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_render_job(index: u32, scale: f32, x: f32, y: f32, mode: u32) -> *mut RenderJob {
+    with(|host| {
+        let index = index as usize;
+        let a = &mut host.app;
+        let sc = if index == a.cur {
+            if mode & 3 == 2 { crate::canvas::api::live_scene(a) } else { crate::canvas::api::scene(a) }
+        } else {
+            a.scene(index)
+        };
+        let scene = sc?;
+        let moving = if index == a.cur { crate::canvas::api::moving(a) } else { Vec::new() };
+        let doc = draw_doc(host)?;
+        Some(Box::into_raw(Box::new(RenderJob { doc, scene, moving, scale, x, y, mode })))
+    })
+    .unwrap_or(std::ptr::null_mut())
+}
+
+/// Layout `index`'s picture (the Add Slide popover's and the slide inspector's) `w` pixels
+/// across, to draw off the UI thread as kd_render_job's.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_layout_job(index: u32, w: u32) -> *mut RenderJob {
+    with(|host| {
+        let doc = host.app.doc.as_ref()?;
+        let (id, _) = doc.layouts().get(index as usize).cloned()?;
+        let scene = doc.layout_scene(id)?;
+        let scale = w as f32 / scene.size.w.max(1.0);
+        let doc = draw_doc(host)?;
+        Some(Box::into_raw(Box::new(RenderJob { doc, scene, moving: Vec::new(), scale, x: 0.0, y: 0.0, mode: 0 })))
+    })
+    .unwrap_or(std::ptr::null_mut())
+}
+
+/// Draws a kd_render_job into `buf` (`w` × `h` RGBA premultiplied) on the calling thread, and
+/// frees it. 0: drawn; -1: not.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_render_job_draw(job: *mut RenderJob, buf: *mut u8, w: u32, h: u32) -> i32 {
+    if job.is_null() {
+        return -1;
+    }
+    let job = unsafe { Box::from_raw(job) };
+    if buf.is_null() {
+        return -1;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Ok(mut g) = JOB_RENDERER.lock() else { return -1 };
+        let r = g.get_or_insert_with(kn_render::Renderer::new);
+        let Some(mut pm) = kn_render::tiny_skia::Pixmap::new(w.max(1), h.max(1)) else { return -1 };
+        let t = kn_render::tiny_skia::Transform::from_row(job.scale, 0.0, 0.0, job.scale, -job.x * job.scale, -job.y * job.scale);
+        let bg = job.mode & 4 == 0 || job.scene.motion.is_none();
+        match job.mode & 3 {
+            2 => {
+                for d in job.scene.drawables.iter().filter(|d| job.moving.contains(&d.id)) {
+                    r.draw_drawable(&job.doc, d, &mut pm, t);
+                }
+            }
+            1 => r.draw_scene(&job.doc, &job.scene, &mut pm, t, kn_render::Filter::Except(&job.moving), bg),
+            _ => r.draw_scene(&job.doc, &job.scene, &mut pm, t, kn_render::Filter::All, bg),
+        }
+        copy_out(&pm, buf, w, h)
+    }))
+    .unwrap_or(-1)
+}
+
+/// Frees a kd_render_job that won't be drawn.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_render_job_free(job: *mut RenderJob) {
+    if !job.is_null() {
+        drop(unsafe { Box::from_raw(job) });
+    }
+}
+
 /// Slide `index`'s dynamic background at `t` seconds, `w` × `h` pixels (-1: it has none).
 #[unsafe(no_mangle)]
 pub extern "C" fn kd_motion(index: u32, t: f32, buf: *mut u8, w: u32, h: u32) -> i32 {
@@ -418,6 +540,37 @@ pub extern "C" fn kd_motion(index: u32, t: f32, buf: *mut u8, w: u32, h: u32) ->
         out[..n].copy_from_slice(&px[..n]);
         0
     })
+}
+
+/// Slide `index`'s dynamic background, for drawing off the UI thread (kd_motion_draw, on any
+/// thread); null: it has none. Freed with kd_motion_free.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_motion_handle(index: u32) -> *mut kn_model::motionbg::MotionBg {
+    with(|host| host.app.scene(index as usize).and_then(|s| s.motion.clone()).map(|mb| Box::into_raw(Box::new(mb)))).unwrap_or(std::ptr::null_mut())
+}
+
+/// A kd_motion_handle's background at `t` seconds, `w` × `h` pixels, on whatever thread calls.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_motion_draw(handle: *const kn_model::motionbg::MotionBg, t: f32, buf: *mut u8, w: u32, h: u32) -> i32 {
+    if handle.is_null() || buf.is_null() {
+        return -1;
+    }
+    let mb = unsafe { &*handle };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let px = kn_render::motion::render(mb, t, w, h);
+        let out = unsafe { std::slice::from_raw_parts_mut(buf, (w * h * 4) as usize) };
+        let n = out.len().min(px.len());
+        out[..n].copy_from_slice(&px[..n]);
+        0
+    }))
+    .unwrap_or(-1)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_motion_free(handle: *mut kn_model::motionbg::MotionBg) {
+    if !handle.is_null() {
+        drop(unsafe { Box::from_raw(handle) });
+    }
 }
 
 /// The theme's dynamic background preset `index` (the slide inspector's), `w` × `h` pixels.
@@ -1564,6 +1717,41 @@ mod tests {
         assert_eq!(media.as_array().unwrap().iter().filter_map(|m| m["label"].as_str()).collect::<Vec<_>>(), ["Choose Photo or Video…", "Content Hub", "Choose Music…", "Add Image Gallery…", "Add Web Video…", "Record Audio", "Choose File…"]);
         kd_action(c("hub:shapes").as_ptr());
         assert!(window("hub").is_object(), "the Content Hub opens");
+    }
+
+    /// Slides drawn off the UI thread (kd_render_job on a thread of its own) come out as
+    /// kd_render draws them, pictures and all.
+    #[test]
+    fn render_jobs_match() {
+        let home = std::env::temp_dir().join("keydeck-ffi-jobs");
+        let _ = std::fs::remove_dir_all(&home);
+        kd_home(c(&home.to_string_lossy()).as_ptr());
+        kd_init();
+        // (testdata/ is kept out of git: this checkout's, else the main checkout's for a worktree)
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Some(path) = [root.join("testdata/04-image.key"), root.join("../../../testdata/04-image.key")].into_iter().find(|p| p.exists()) else {
+            eprintln!("render_jobs_match: no testdata/04-image.key, skipped");
+            return;
+        };
+        assert_eq!(kd_open(c(&path.to_string_lossy()).as_ptr()), 0);
+        let (w, h) = (480u32, 270u32);
+        let scale = w as f32 / json(kd_geometry())["size"][0].as_f64().unwrap() as f32;
+        let mut a = vec![0u8; (w * h * 4) as usize];
+        assert_eq!(kd_render(0, scale, 0.0, 0.0, 0, a.as_mut_ptr(), w, h), 0);
+        let job = kd_render_job(0, scale, 0.0, 0.0, 0) as usize;
+        assert!(job != 0);
+        let b = std::thread::spawn(move || {
+            let mut b = vec![0u8; (w * h * 4) as usize];
+            assert_eq!(kd_render_job_draw(job as *mut RenderJob, b.as_mut_ptr(), w, h), 0);
+            b
+        })
+        .join()
+        .unwrap();
+        let differ = a.iter().zip(&b).filter(|(x, y)| x.abs_diff(**y) > 2).count();
+        assert!(differ < a.len() / 1000, "{differ} of {} bytes differ", a.len());
+        // (the picture is there: not one flat colour)
+        let first = &b[..4];
+        assert!(b.chunks(4).filter(|p| p != &first).count() > 1000);
     }
 
     /// A new presentation from a theme, a text box typed into, a drag, saved as Keynote and as

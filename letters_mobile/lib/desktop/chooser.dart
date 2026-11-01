@@ -4,6 +4,7 @@
 // Cancel / Create. What it shows comes from lt_status "windows" (chooserapi.rs, window
 // "chooser"); its buttons go back as "dlg.chooser.<create|open|browse|cancel>".
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -69,7 +70,7 @@ class _ChooserState extends State<Chooser> {
     final w = widget.w;
     final templates = [for (final t in w['templates'] as List) t as String];
     final recent = [for (final r in (w['recent'] as List? ?? const [])) r as Map<String, dynamic>];
-    final tile = Size(((w['tile'] as List)[0] as num).toDouble(), ((w['tile'] as List)[1] as num).toDouble());
+    final tile0 = Size(((w['tile'] as List)[0] as num).toDouble(), ((w['tile'] as List)[1] as num).toDouble());
     final selected = _selected ?? (templates.contains(w['default']) ? w['default'] as String : (templates.isEmpty ? '' : templates.first));
     final shadow = Color(look.light ? 0x28000000 : 0x5A000000);
     final sep = look.separator;
@@ -80,9 +81,17 @@ class _ChooserState extends State<Chooser> {
       child: ColoredBox(
         color: Color((w['backdrop'] as int?) ?? 0xFFEBEBEB),
         child: LayoutBuilder(builder: (ctx, box) {
-          final cw = (box.maxWidth - 64).clamp(320.0, 1080.0), ch = (box.maxHeight - 64).clamp(300.0, 720.0);
+          // (a narrow screen, a phone held upright: the card nearly fills it, 12 points round)
+          final narrow = box.maxWidth < 600;
+          final cw = narrow ? box.maxWidth - 24 : (box.maxWidth - 64).clamp(320.0, 1080.0);
+          final ch = narrow ? box.maxHeight - 24 : (box.maxHeight - 64).clamp(300.0, 720.0);
           final sideW = cw > 640 ? 190.0 : 0.0;
           final mainW = cw - sideW;
+          final pad = narrow ? 14.0 : 24.0, gap = narrow ? 12.0 : 18.0;
+          // at least two columns: tiles too wide for two are shrunk to fit (their shape kept)
+          final room = mainW - pad - 12 - 6 - 10;
+          final k = math.min(1.0, (room - gap) / (2 * tile0.width));
+          final tile = Size(tile0.width * k, tile0.height * k);
           // recent documents' tiles: the templates' shape, a little wider for slides
           final recentTile = tile.width > tile.height ? tile : Size(tile.width * 1.2, tile.height * 1.2);
           final current = _jump ?? (recent.isEmpty ? 1 : 0);
@@ -125,9 +134,9 @@ class _ChooserState extends State<Chooser> {
                 if (sideW > 0) Positioned(left: sideW - 0.5, top: 0, bottom: 0, width: 1, child: ColoredBox(color: sep)),
                 // header
                 Positioned(
-                  left: sideW + 24,
+                  left: sideW + pad,
                   top: 20,
-                  width: mainW - 48,
+                  width: mainW - 2 * pad,
                   height: 40,
                   child: Align(alignment: Alignment.centerLeft, child: Text(w['title'] as String? ?? '', maxLines: 1, softWrap: false, style: Look.font(26, look.text, bold: true))),
                 ),
@@ -135,10 +144,10 @@ class _ChooserState extends State<Chooser> {
                 // (6 points of room round the tiles: the selection ring stands out 3 from its
                 // tile, and the scrolling area's edge cut it off)
                 Positioned(
-                  left: sideW + 24 - 6,
+                  left: sideW + pad - 6,
                   top: 70 - 6,
                   right: 12,
-                  bottom: 56 + 4,
+                  bottom: (narrow ? 58 : 56) + 4,
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                     child: SingleChildScrollView(
@@ -146,7 +155,7 @@ class _ChooserState extends State<Chooser> {
                       padding: const EdgeInsets.only(left: 6, top: 6),
                       child: SizedBox(
                         key: _content,
-                        width: mainW - 36 - 16,
+                        width: mainW - pad - 12 - 16,
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (recent.isNotEmpty) ...[
                             _section(look, 'Recent', _recentTop),
@@ -155,11 +164,12 @@ class _ChooserState extends State<Chooser> {
                               clipBehavior: Clip.none,
                               child: Row(children: [
                                 for (final (i, r) in recent.indexed) ...[
-                                  if (i > 0) const SizedBox(width: 18),
+                                  if (i > 0) SizedBox(width: gap),
                                   Tooltip(
                                     message: r['path'] as String? ?? '',
                                     waitDuration: const Duration(milliseconds: 600),
                                     child: _Card(
+                                      twoLines: narrow,
                                       size: recentTile,
                                       name: r['name'] as String? ?? '',
                                       thumb: r['thumb'] as String?,
@@ -172,9 +182,10 @@ class _ChooserState extends State<Chooser> {
                             const SizedBox(height: 6 + 14),
                           ],
                           _section(look, w['section'] as String? ?? '', _templatesTop),
-                          Wrap(spacing: 18, runSpacing: 16, children: [
+                          Wrap(spacing: gap, runSpacing: 16, children: [
                             for (final (i, t) in templates.indexed)
                               _Card(
+                                twoLines: narrow,
                                 size: tile,
                                 name: t,
                                 draw: (c, r) => _drawTemplate(c, r, i, look),
@@ -194,11 +205,30 @@ class _ChooserState extends State<Chooser> {
                   left: sideW,
                   right: 0,
                   bottom: 0,
-                  height: 56,
+                  height: narrow ? 58 : 56,
                   child: Container(
                     decoration: BoxDecoration(border: Border(top: BorderSide(color: sep))),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: Row(children: [
+                    padding: EdgeInsets.symmetric(horizontal: narrow ? 12 : 20, vertical: narrow ? 8 : 12),
+                    // (narrow: the three buttons share the width, no hint)
+                    child: narrow
+                        ? Row(children: [
+                            Expanded(child: DButton(width: double.infinity, height: 30, onTap: widget.onBrowse, child: const Text('Open…', maxLines: 1, softWrap: false))),
+                            if (w['cancel'] == true) ...[
+                              const SizedBox(width: 8),
+                              Expanded(child: DButton(width: double.infinity, height: 30, onTap: () => widget.press('cancel', null), child: const Text('Cancel', maxLines: 1, softWrap: false))),
+                            ],
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DButton(
+                                width: double.infinity,
+                                height: 30,
+                                fill: look.accent,
+                                onTap: selected.isEmpty ? null : () => widget.press('create', templates.indexOf(selected)),
+                                child: Text('Create', maxLines: 1, softWrap: false, style: Look.font(16, const Color(0xFFFFFFFF))),
+                              ),
+                            ),
+                          ])
+                        : Row(children: [
                       DButton(width: 90, height: 30, onTap: widget.onBrowse, child: Text('Open…', style: Look.font(14, look.text))),
                       const SizedBox(width: 8),
                       Expanded(child: Text(w['hint'] as String? ?? '', maxLines: 1, overflow: TextOverflow.clip, softWrap: false, style: Look.font(12, look.textDim))),
@@ -257,7 +287,7 @@ class _SideButton extends StatelessWidget {
 
 /// welcome.rs `card`: a picture (or a drawn tile) with its name under it; selected / hover rings.
 class _Card extends StatefulWidget {
-  const _Card({required this.size, required this.name, this.thumb, this.draw, this.selected = false, required this.onTap, this.onDoubleTap});
+  const _Card({required this.size, required this.name, this.thumb, this.draw, this.selected = false, required this.onTap, this.onDoubleTap, this.twoLines = false});
   final Size size;
   final String name;
   final String? thumb;
@@ -265,6 +295,9 @@ class _Card extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback? onDoubleTap;
+
+  /// Its name on up to two lines (small tiles on a phone), not cut off at one.
+  final bool twoLines;
 
   @override
   State<_Card> createState() => _CardState();
@@ -326,7 +359,7 @@ class _CardState extends State<_Card> {
         onDoubleTap: widget.onDoubleTap,
         child: SizedBox(
           width: size.width,
-          height: size.height + 24,
+          height: size.height + (widget.twoLines ? 40 : 24),
           child: Stack(clipBehavior: Clip.none, children: [
             Positioned(
               left: 0,
@@ -350,9 +383,9 @@ class _CardState extends State<_Card> {
               child: Text(
                 shown,
                 textAlign: TextAlign.center,
-                maxLines: 1,
+                maxLines: widget.twoLines ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
-                style: Look.font(12.5, widget.selected ? look.accent : look.text),
+                style: Look.font(widget.twoLines ? 13 : 12.5, widget.selected ? look.accent : look.text),
               ),
             ),
           ]),

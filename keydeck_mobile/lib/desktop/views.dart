@@ -43,14 +43,19 @@ class _LightTableState extends State<LightTable> {
 
   ui.Image? _thumb(int i, int key, double w) {
     final t = _thumbs[key];
-    if (t != null || !_asked.add(key)) return t;
+    if (!_asked.add(key)) return t;
     final pw = (w * 2).round(), ph = (pw * widget.slide.height / widget.slide.width).round();
     _pending = _pending.then((_) async {
       if (!mounted) return;
       final img = await widget.engine.render(i, pw / widget.slide.width, 0, 0, pw, ph);
-      if (img != null && mounted) setState(() => _thumbs[key] = img);
+      if (img != null && mounted) {
+        setState(() {
+          _thumbs.remove(key)?.dispose();
+          _thumbs[key] = img;
+        });
+      }
     });
-    return null;
+    return t;
   }
 
   @override
@@ -266,6 +271,24 @@ class _NotesPanelState extends State<NotesPanel> {
     super.dispose();
   }
 
+  (Look, Widget)? _field;
+
+  Widget _textField(Look look) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: TextField(
+          controller: _c,
+          maxLines: null,
+          expands: true,
+          style: Look.font(15, look.text),
+          cursorColor: look.accent,
+          decoration: InputDecoration(border: InputBorder.none, hintText: 'Click to add notes', hintStyle: Look.font(15, look.textDim)),
+          onChanged: (_) {
+            _save?.cancel();
+            _save = Timer(const Duration(milliseconds: 600), () => widget.engine.action('notes:${_c.text}'));
+          },
+        ),
+      );
+
   // (the desktop's notes splitter: 60 to 400 points; kept while the app runs)
   static double _height = 150;
   double? _dragFrom;
@@ -309,21 +332,9 @@ class _NotesPanelState extends State<NotesPanel> {
       child: Column(children: [
         handle,
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-        controller: _c,
-        maxLines: null,
-        expands: true,
-        style: Look.font(15, look.text),
-        cursorColor: look.accent,
-        decoration: InputDecoration(border: InputBorder.none, hintText: 'Click to add notes', hintStyle: Look.font(15, look.textDim)),
-        onChanged: (_) {
-          _save?.cancel();
-          _save = Timer(const Duration(milliseconds: 600), () => widget.engine.action('notes:${_c.text}'));
-        },
-            ),
-          ),
+          // (the same widget each build while the look stays: a resize lays it out again
+          // without building it again)
+          child: _field?.$1 == look ? _field!.$2 : (_field = (look, _textField(look))).$2,
         ),
       ]),
     );

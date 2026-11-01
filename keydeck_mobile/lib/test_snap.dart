@@ -4,9 +4,11 @@
 // On Linux: KEYDECK_SNAP names that folder, and
 // KEYDECK_SCRIPT runs a script of touches and typing (taps and drags as real pointer events),
 // `;`-separated: tap x y | drag x1 y1 x2 y2 [ms] | pinch x y scale | type text | key name |
-// hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | quit.
+// hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | frames (frame timings from
+// here) | report name (their build / raster times appended to frames.txt) | quit.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -14,6 +16,43 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
+
+/// Frame timings since `frames` (the performance checks).
+final _timings = <ui.FrameTiming>[];
+bool _recording = false;
+
+void _startFrames() {
+  _timings.clear();
+  if (!_recording) {
+    _recording = true;
+    SchedulerBinding.instance.addTimingsCallback(_timings.addAll);
+  }
+}
+
+/// The frames' build, raster and total (vsync to raster end) times: median, 90th, 99th
+/// percentile and worst, in ms, and how many missed 120 and 60 fps.
+void _report(String folder, String name) {
+  double ms(Duration d) => d.inMicroseconds / 1000;
+  String stats(List<double> v) {
+    if (v.isEmpty) return '-';
+    v.sort();
+    double q(double f) => v[math.min(v.length - 1, (v.length * f).floor())];
+    return 'p50 ${q(0.5).toStringAsFixed(1)} p90 ${q(0.9).toStringAsFixed(1)} p99 ${q(0.99).toStringAsFixed(1)} max ${v.last.toStringAsFixed(1)}';
+  }
+
+  final build = [for (final t in _timings) ms(t.buildDuration)];
+  final raster = [for (final t in _timings) ms(t.rasterDuration)];
+  final total = [for (final t in _timings) ms(t.totalSpan)];
+  final over8 = total.where((t) => t > 8.33).length, over16 = total.where((t) => t > 16.7).length;
+  // frames shown a second over the span they cover (a drag that stalls shows fewer)
+  final span = _timings.isEmpty ? 0 : _timings.last.timestampInMicroseconds(ui.FramePhase.rasterFinish) - _timings.first.timestampInMicroseconds(ui.FramePhase.vsyncStart);
+  final fps = span > 0 ? (_timings.length - 1) * 1e6 / span : 0;
+  File('$folder/frames.txt').writeAsStringSync(
+    '$name: ${_timings.length} frames, ${fps.toStringAsFixed(0)} fps; build ${stats(build)}; raster ${stats(raster)}; total ${stats(total)}; >8.3ms $over8, >16.7ms $over16\n',
+    mode: FileMode.append,
+  );
+  _timings.clear();
+}
 
 Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)? type, void Function(String key)? key}) async {
   Directory? dir;
@@ -58,7 +97,8 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
           final ms = p.length > 5 ? n(5).toInt() : 300;
           pointer++;
           send(PointerDownEvent(pointer: pointer, position: a, kind: PointerDeviceKind.touch));
-          const steps = 20;
+          // (a move every 8 ms, as a 120 Hz touch screen sends them)
+          final steps = math.max(20, ms ~/ 8);
           for (var i = 1; i <= steps; i++) {
             await frames(ms ~/ steps);
             send(PointerMoveEvent(pointer: pointer, position: Offset.lerp(a, b, i / steps)!, delta: (b - a) / steps.toDouble(), kind: PointerDeviceKind.touch));
@@ -109,6 +149,12 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
           await frames(n(1).toInt());
         case 'snap':
           await snap(p[1]);
+        case 'frames':
+          _startFrames();
+        case 'mark':
+          stderr.writeln('MARK');
+        case 'report':
+          _report(folder, p[1]);
         case 'quit':
           exit(0);
       }
@@ -126,6 +172,15 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
         keys.deleteSync();
       } catch (_) {}
       for (final l in lines.where((l) => l.trim().isNotEmpty)) {
+        // ("frames" / "report:<name>": the frame timings, as the script's)
+        if (l.trim() == 'frames') {
+          _startFrames();
+          continue;
+        }
+        if (l.trim().startsWith('report:')) {
+          _report(folder, l.trim().substring(7));
+          continue;
+        }
         key?.call(l.trim());
         await Future<void>.delayed(const Duration(milliseconds: 150));
       }

@@ -442,8 +442,12 @@ class _DocScreenState extends State<DocScreen> {
         return;
       case 'Zoom':
         _zoomMenu(at);
-      case 'View' || 'TSKToolbarItemMedia':
-        showTouchMenu(context, look, at, e.popover(id == 'View' ? 'View' : 'Media') as List? ?? [], (i) => _popAction(i['action'] as String? ?? ''), centered: true);
+      // (View: the sidebar button at the toolbar's left end; its menu hangs from the button's
+      // edge, where centring it under the button would push it off the screen and centre it there)
+      case 'View':
+        showTouchMenu(context, look, at, e.popover('View') as List? ?? [], (i) => _popAction(i['action'] as String? ?? ''));
+      case 'TSKToolbarItemMedia':
+        showTouchMenu(context, look, at, e.popover('Media') as List? ?? [], (i) => _popAction(i['action'] as String? ?? ''), centered: true);
       case 'KNMacToolbarItemAddSlide':
         _layoutPicker(at);
       // Letters' popovers: the tables, the shapes, the charts in the theme's styles

@@ -2,8 +2,10 @@
 // desktop's presentations, editing logic and slide drawing, with no interface of its own.
 // Everything on screen is Flutter's; this tells the engine what happened (a tap or a drag at a
 // slide point, text typed, a command) and asks it for state as data and for the slides' pixels.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io' show Platform, stderr;
 import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -35,6 +37,63 @@ dynamic hubSync(String kind, String arg) {
 
 Future<dynamic> hubAsync(String kind, String arg) => Isolate.run(() => hubSync(kind, arg));
 
+/// Pixels drawn on a worker isolate of its own, so the UI thread never waits for them: a
+/// slide's dynamic background (ffi.rs kd_motion_draw: just the background kd_motion_handle
+/// copied out) or a drawing the engine set up (kd_render_job_draw: the scene and pictures).
+class _DrawWorker {
+  SendPort? _to;
+  Future<void>? _starting;
+  final _replies = <int, Completer<TransferableTypedData?>>{};
+  int _next = 0;
+
+  Future<void> _start() async {
+    final from = ReceivePort();
+    final ready = Completer<void>();
+    from.listen((m) {
+      if (m is SendPort) {
+        _to = m;
+        ready.complete();
+      } else if (m is List) {
+        _replies.remove(m[0] as int)?.complete(m[1] as TransferableTypedData?);
+      }
+    });
+    await Isolate.spawn(_main, from.sendPort);
+    await ready.future;
+  }
+
+  /// `kind` 0: a background (`arg` its handle) at `t` seconds; 1: a drawing (`arg` the job).
+  Future<Uint8List?> draw(int kind, int arg, double t, int w, int h) async {
+    await (_starting ??= _start());
+    final id = _next++;
+    final c = _replies[id] = Completer<TransferableTypedData?>();
+    _to!.send([id, kind, arg, t, w, h]);
+    return (await c.future)?.materialize().asUint8List();
+  }
+
+  static void _main(SendPort back) {
+    final lib = DynamicLibrary.open('libkn_app.so');
+    final motion = lib.lookupFunction<Int32 Function(IntPtr, Float, Pointer<Uint8>, Uint32, Uint32), int Function(int, double, Pointer<Uint8>, int, int)>('kd_motion_draw');
+    final job = lib.lookupFunction<Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Uint32), int Function(int, Pointer<Uint8>, int, int)>('kd_render_job_draw');
+    final port = ReceivePort();
+    back.send(port.sendPort);
+    port.listen((m) {
+      final l = m as List;
+      final w = l[4] as int, h = l[5] as int;
+      final buf = malloc<Uint8>(w * h * 4);
+      try {
+        final rc = l[1] == 0 ? motion(l[2] as int, l[3] as double, buf, w, h) : job(l[2] as int, buf, w, h);
+        back.send([l[0], rc == 0 ? TransferableTypedData.fromList([buf.asTypedList(w * h * 4)]) : null]);
+      } finally {
+        malloc.free(buf);
+      }
+    });
+  }
+}
+
+/// Backgrounds play on one worker, slides and thumbnails are drawn on another (a slow photo
+/// never holds up the background).
+final _motionWorker = _DrawWorker(), _slideWorker = _DrawWorker();
+
 class Engine {
   Engine() : _lib = DynamicLibrary.open('libkn_app.so');
   final DynamicLibrary _lib;
@@ -50,8 +109,6 @@ class Engine {
   late final _export = _lib.lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('kd_export');
   late final _geometry = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_geometry');
   late final _navigator = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_navigator');
-  late final _render = _lib.lookupFunction<Int32 Function(Uint32, Float, Float, Float, Uint32, Pointer<Uint8>, Uint32, Uint32), int Function(int, double, double, double, int, Pointer<Uint8>, int, int)>('kd_render');
-  late final _renderLayout = _lib.lookupFunction<Int32 Function(Uint32, Pointer<Uint8>, Uint32, Uint32), int Function(int, Pointer<Uint8>, int, int)>('kd_render_layout');
   late final _hit = _lib.lookupFunction<Pointer<Utf8> Function(Float, Float, Float), Pointer<Utf8> Function(double, double, double)>('kd_hit');
   late final _tap = _lib.lookupFunction<Void Function(Float, Float, Float, Uint32, Bool), void Function(double, double, double, int, bool)>('kd_tap');
   late final _hold = _lib.lookupFunction<Void Function(Float, Float, Float), void Function(double, double, double)>('kd_hold');
@@ -76,6 +133,10 @@ class Engine {
   late final _freeBytes = _lib.lookupFunction<Void Function(Pointer<Uint8>, Uint32), void Function(Pointer<Uint8>, int)>('kd_free_bytes');
   late final _show = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_show');
   late final _showGo = _lib.lookupFunction<_VS, _DS>('kd_show_go');
+  late final _renderJob = _lib.lookupFunction<IntPtr Function(Uint32, Float, Float, Float, Uint32), int Function(int, double, double, double, int)>('kd_render_job');
+  late final _layoutJob = _lib.lookupFunction<IntPtr Function(Uint32, Uint32), int Function(int, int)>('kd_layout_job');
+  late final _motionHandle = _lib.lookupFunction<IntPtr Function(Uint32), int Function(int)>('kd_motion_handle');
+  late final _motionFree = _lib.lookupFunction<Void Function(IntPtr), void Function(int)>('kd_motion_free');
   late final _motion = _lib.lookupFunction<Int32 Function(Uint32, Float, Pointer<Uint8>, Uint32, Uint32), int Function(int, double, Pointer<Uint8>, int, int)>('kd_motion');
   late final _tick = _lib.lookupFunction<Int32 Function(), int Function()>('kd_tick');
   late final _motionPreset = _lib.lookupFunction<Int32 Function(Uint32, Pointer<Uint8>, Uint32, Uint32), int Function(int, Pointer<Uint8>, int, int)>('kd_motion_preset');
@@ -116,20 +177,41 @@ class Engine {
     _init();
   }
 
+  /// KEYDECK_SLOW=<ms> (the performance checks): engine calls over that (4 ms) on the UI thread, to stderr.
+  static final _slow = Platform.environment['KEYDECK_SLOW'] != null;
+  static final _slowUs = ((double.tryParse(Platform.environment['KEYDECK_SLOW'] ?? '') ?? 4) * 1000).round();
+  T _timed<T>(String name, T Function() f) {
+    if (!_slow) return f();
+    final sw = Stopwatch()..start();
+    final r = f();
+    if (sw.elapsedMicroseconds > _slowUs) stderr.writeln('slow ${sw.elapsedMicroseconds / 1000} ms: $name');
+    return r;
+  }
+
   /// Pixels the engine drew into a buffer of `w` × `h`, as an image (null when it couldn't).
   Future<ui.Image?> _image(int w, int h, int Function(Pointer<Uint8> buf) draw) async {
     if (w <= 0 || h <= 0) return null;
-    final buf = calloc<Uint8>(w * h * 4);
-    Uint8List bytes;
+    final n = w * h * 4;
+    final buf = malloc<Uint8>(n);
+    ui.ImmutableBuffer buffer;
     try {
-      if (draw(buf) != 0) return null;
-      bytes = Uint8List.fromList(buf.asTypedList(w * h * 4));
+      if (_timed('draw ${w}x$h', () => draw(buf)) != 0) return null;
+      // (the engine's copy of the pixels, made before the buffer goes)
+      buffer = await ui.ImmutableBuffer.fromUint8List(buf.asTypedList(n));
     } finally {
-      calloc.free(buf);
+      malloc.free(buf);
     }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    return _decode(buffer, w, h);
+  }
+
+  Future<ui.Image> _decode(ui.ImmutableBuffer buffer, int w, int h) async {
     final desc = ui.ImageDescriptor.raw(buffer, width: w, height: h, pixelFormat: ui.PixelFormat.rgba8888);
-    return (await (await desc.instantiateCodec()).getNextFrame()).image;
+    final codec = await desc.instantiateCodec();
+    final img = (await codec.getNextFrame()).image;
+    codec.dispose();
+    desc.dispose();
+    buffer.dispose();
+    return img;
   }
 
   // ---- files ----
@@ -145,23 +227,43 @@ class Engine {
   // ---- the slides ----
 
   /// {size: [w, h], count, current, selected, key}.
-  Map<String, dynamic> geometry() => _map(_geometry());
+  Map<String, dynamic> geometry() => _timed('geometry', () => _map(_geometry()));
 
   /// {slides: [{key, skipped, depth, collapsed, hidden, number, index}], current, selected}.
-  Map<String, dynamic> navigator() => _map(_navigator());
+  Map<String, dynamic> navigator() => _timed('navigator', () => _map(_navigator()));
 
   /// Part of slide `index`: slide points from (`x`, `y`) at `scale` pixels a point, `w` × `h`
   /// pixels. `mode` 0 all, 1 without what's being dragged, 2 only that.
-  Future<ui.Image?> render(int index, double scale, double x, double y, int w, int h, {int mode = 0}) => _image(w, h, (b) => _render(index, scale, x, y, mode, b, w, h));
+  /// (Drawn on the slides' worker isolate: the scene is taken now, the pixels come later.)
+  Future<ui.Image?> render(int index, double scale, double x, double y, int w, int h, {int mode = 0}) => _job(_timed('job', () => _renderJob(index, scale, x, y, mode)), w, h);
+
+  Future<ui.Image?> _job(int job, int w, int h) async {
+    if (job == 0 || w <= 0 || h <= 0) return null;
+    final px = await _slideWorker.draw(1, job, 0, w, h);
+    if (px == null) return null;
+    return _decode(await ui.ImmutableBuffer.fromUint8List(px), w, h);
+  }
 
   /// A layout's picture (the Add Slide popover's `index`), `w` × `h` pixels.
   /// Slide `index`'s dynamic background at `t` seconds, `w` × `h` pixels (null: it has none).
   Future<ui.Image?> motion(int index, double t, int w, int h) => _image(w, h, (b) => _motion(index, t, b, w, h));
 
+  /// Slide `index`'s dynamic background for [motionOff] (0: it has none); [motionFree] it after.
+  int motionHandle(int index) => _motionHandle(index);
+  void motionFree(int handle) => _motionFree(handle);
+
+  /// A [motionHandle]'s background at `t` seconds, drawn on the worker isolate.
+  Future<ui.Image?> motionOff(int handle, double t, int w, int h) async {
+    if (handle == 0 || w <= 0 || h <= 0) return null;
+    final px = await _motionWorker.draw(0, handle, t, w, h);
+    if (px == null) return null;
+    return _decode(await ui.ImmutableBuffer.fromUint8List(px), w, h);
+  }
+
   /// The theme's dynamic background preset `index`, `w` × `h` pixels.
   Future<ui.Image?> motionPreset(int index, int w, int h) => _image(w, h, (b) => _motionPreset(index, b, w, h));
 
-  Future<ui.Image?> renderLayout(int index, int w, int h) => _image(w, h, (b) => _renderLayout(index, b, w, h));
+  Future<ui.Image?> renderLayout(int index, int w, int h) => _job(_layoutJob(index, w), w, h);
 
   /// What's under a slide point: {what: handle|lineEnd|editing|selected|object|none, id, handle}.
   Map<String, dynamic> hit(double x, double y, double tol) => _map(_hit(x, y, tol));
@@ -169,21 +271,21 @@ class Engine {
   void hold(double x, double y, double tol) => _hold(x, y, tol);
 
   /// A drag on the slide: kind 1 starts, 0 moves, 2 ends, 3 cancels.
-  void drag(int kind, double x, double y, double tol, {bool shift = false, bool ctrl = false}) => _drag(kind, x, y, tol, shift, ctrl);
+  void drag(int kind, double x, double y, double tol, {bool shift = false, bool ctrl = false}) => _timed('drag', () => _drag(kind, x, y, tol, shift, ctrl));
 
   /// The caret (end 0) or the text selection's moving end (1) / other end (2) to a slide point.
   void textPoint(double x, double y, int end) => _textPoint(x, y, end);
 
   /// {selection: [{id, corners, handles, line, locked}], editing: {frame, caret, rects, ends},
   /// rubber, dragging, moving, size}.
-  Map<String, dynamic> overlays() => _map(_overlays());
+  Map<String, dynamic> overlays() => _timed('overlays', () => _map(_overlays()));
 
   /// The slide's right-click menu (`slide` ≥ 0: a navigator slide's).
   List<dynamic> contextMenu([int slide = -1]) => (_json(_contextMenu(slide)) as List?) ?? [];
 
   /// A toolbar popover's contents (View, Media: menu items; AddSlide: the layouts).
   dynamic popover(String id) => _str(id, (p) => _json(_popover(p)));
-  void action(String a) => _str(a, _action);
+  void action(String a) => _timed('action $a', () => _str(a, _action));
 
   // ---- typing ----
   void text(String s) => _str(s, _text);
@@ -196,10 +298,10 @@ class Engine {
 
   // ---- commands and state ----
   List<dynamic> menus() => (_json(_menus()) as List?) ?? [];
-  void run(String command) => _str(command, _run);
-  void toolbar(String id) => _str(id, _toolbar);
-  Map<String, dynamic> status() => _map(_status());
-  Map<String, dynamic> chrome() => _map(_chrome());
+  void run(String command) => _timed('run $command', () => _str(command, _run));
+  void toolbar(String id) => _timed('toolbar $id', () => _str(id, _toolbar));
+  Map<String, dynamic> status() => _timed('status', () => _map(_status()));
+  Map<String, dynamic> chrome() => _timed('chrome', () => _map(_chrome()));
 
   final _thumbs = <int, ui.Image?>{};
 
@@ -223,7 +325,7 @@ class Engine {
   }
 
   /// The inspector: which pane shows and its controls' values.
-  Map<String, dynamic> inspector() => _map(_inspector());
+  Map<String, dynamic> inspector() => _timed('inspector', () => _map(_inspector()));
 
   /// Changes an inspector control (`key` as inspector() names it; "dlg.<window>.<button>" for
   /// the windows').
@@ -241,7 +343,7 @@ class Engine {
   Future<ui.Image?> showFrame(int index, int step, int w, int h) => _image(w, h, (b) => _showFrame(index, step, b, w, h));
 
   /// The current slide's presenter notes: {text}.
-  Map<String, dynamic> notes() => _map(_notes());
+  Map<String, dynamic> notes() => _timed('notes', () => _map(_notes()));
 
   /// View > Outline: [{slide, title: {storage, text}?, texts: [{storage, text}], skipped}].
   List<dynamic> outline() => (_json(_outline()) as List?) ?? const [];
@@ -262,7 +364,7 @@ class Engine {
   Uint8List? playFrame(double w, double h, double ppp, List<Map<String, Object>> input) {
     final len = calloc<Uint32>();
     try {
-      final p = _str(jsonEncode(input), (i) => _playFrame(w, h, ppp, i, len));
+      final p = _timed('playFrame', () => _str(jsonEncode(input), (i) => _playFrame(w, h, ppp, i, len)));
       if (p == nullptr) return null;
       final b = Uint8List.fromList(p.asTypedList(len.value));
       _freeBytes(p, len.value);

@@ -83,16 +83,32 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
   bool _motionBusy = false;
   int _motionAt = 0;
 
+  /// The background being played, copied out of the engine for the worker isolate (a slide's
+  /// own, until its key changes: an edit or another slide).
+  int _motionHandle = 0, _motionHandleKey = -2;
+
+  void _freeMotionHandle() {
+    if (_motionHandle != 0) e.motionFree(_motionHandle);
+    _motionHandle = 0;
+    _motionHandleKey = -2;
+  }
+
   Future<void> _motionTick(Duration _) async {
     if (!_motion || _motionBusy || _view.isEmpty) return;
     final now = _motionClock.elapsedMilliseconds;
-    if (now - _motionAt < 33) return;
+    // (60 frames a second, drawn off the UI thread)
+    if (now - _motionAt < 16) return;
     _motionAt = now;
     _motionBusy = true;
     try {
+      if (_motionHandleKey != _key) {
+        _freeMotionHandle();
+        _motionHandle = e.motionHandle(_index);
+        _motionHandleKey = _key;
+      }
       final w = (_slide.width * zoom * _dpr / 2.5).clamp(320.0, 1024.0).round();
       final h = (w * _slide.height / _slide.width).round().clamp(2, 4096);
-      final img = await e.motion(_index, now / 1000, w, h);
+      final img = await e.motionOff(_motionHandle, now / 1000, w, h);
       if (!mounted) return img?.dispose();
       _motionImg?.dispose();
       _motionImg = img;
@@ -179,6 +195,9 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
     _cell.dispose();
     _cellFocus.dispose();
     _motionImg?.dispose();
+    // (a frame still being drawn keeps its background until it's done)
+    final h = _motionHandle;
+    if (h != 0) Future<void>.delayed(const Duration(seconds: 1), () => e.motionFree(h));
     _focus.dispose();
     _input.dispose();
     super.dispose();
@@ -234,9 +253,11 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
   /// The scale pictures are drawn at: the zoom in device pixels, on whole thousandths.
   double get _scale => (zoom * _dpr * 1000).round() / 1000;
 
-  void _queue() {
+  /// Draws the slide again once things rest for `ms` (a resize: once its size has settled, the
+  /// picture scaled meanwhile).
+  void _queue({int ms = 30}) {
     _settle?.cancel();
-    _settle = Timer(const Duration(milliseconds: 30), _render);
+    _settle = Timer(Duration(milliseconds: ms), _render);
   }
 
   /// The whole slide at the zoom (at most 4096 pixels across), and when zoomed in further the
@@ -268,7 +289,7 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
           final x0 = (vis.left * want).floorToDouble() / want, y0 = (vis.top * want).floorToDouble() / want;
           final w = ((vis.right - x0) * want).ceil(), h = ((vis.bottom - y0) * want).ceil();
           final img = await e.render(idx, want, x0, y0, w, h, mode: _bgMode);
-          if (img != null) {
+            if (img != null) {
             _detail?.image.dispose();
             _detail = _Pic(img, Rect.fromLTWH(x0, y0, w / want, h / want), key, want);
           }
@@ -302,6 +323,7 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
         _under?.image.dispose();
         _moving?.image.dispose();
         _under = _moving = null;
+        _movingSel = null;
       } else {
         final s = math.min(_scale, 2048 / _slide.width);
         final w = (_slide.width * s).ceil(), h = (_slide.height * s).ceil();
@@ -309,11 +331,21 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
           final img = await e.render(_index, s, 0, 0, w, h, mode: 1 + _bgMode);
           if (img != null) _under = _Pic(img, Offset.zero & _slide, 0, s);
         }
-        final img = await e.render(_index, s, 0, 0, w, h, mode: 2);
-        if (img != null) {
-          _moving?.image.dispose();
-          _moving = _Pic(img, Offset.zero & _slide, 0, s);
-        }
+        // moved only (their frames the same size): the picture of them slides with them, on
+        // the GPU; drawn again only when one is resized or turned
+        final sel = _selBox();
+        final was = _movingSel;
+        if (_moving != null && was != null && sel != null && (sel.width - was.width).abs() < 0.01 && (sel.height - was.height).abs() < 0.01) return;
+        // (them alone: just the part of the slide round where they are, with room for shadows
+        // and a reflection below, rather than the whole slide each move)
+        final part = _movingPart();
+        final x0 = (part.left * s).floorToDouble() / s, y0 = (part.top * s).floorToDouble() / s;
+        final pw = ((part.right - x0) * s).ceil(), ph = ((part.bottom - y0) * s).ceil();
+        final img = pw > 0 && ph > 0 ? await e.render(_index, s, x0, y0, pw, ph, mode: 2) : null;
+        _moving?.image.dispose();
+        _moving = img == null ? null : _Pic(img, Rect.fromLTWH(x0, y0, pw / s, ph / s), 0, s);
+        // (where they were when drawn: the picture's offset follows the selection from there)
+        _movingSel = img == null ? null : sel;
       }
     } finally {
       _liveBusy = false;
@@ -323,6 +355,39 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
       _liveAgain = false;
       _queueLive();
     }
+  }
+
+  /// The selection's frames' bounds now (slide points), or null.
+  Rect? _selBox() {
+    Rect? r;
+    for (final sel in (_ov['selection'] as List? ?? const [])) {
+      for (final p in (sel['corners'] as List? ?? const [])) {
+        final q = Rect.fromLTWH((p[0] as num).toDouble(), (p[1] as num).toDouble(), 0, 0);
+        r = r == null ? q : r.expandToInclude(q);
+      }
+    }
+    return r;
+  }
+
+  /// The selection's bounds when [_moving] was drawn.
+  Rect? _movingSel;
+
+  /// Where the objects being dragged are now (the selection's frames, in slide points), with
+  /// room round them for text past their frames, shadows and a reflection below.
+  Rect _movingPart() {
+    Rect? r;
+    for (final sel in (_ov['selection'] as List? ?? const [])) {
+      for (final p in (sel['corners'] as List? ?? const [])) {
+        final q = Offset((p[0] as num).toDouble(), (p[1] as num).toDouble());
+        r = r == null ? Rect.fromLTWH(q.dx, q.dy, 0, 0) : r.expandToInclude(Rect.fromLTWH(q.dx, q.dy, 0, 0));
+      }
+    }
+    if (r == null) return Offset.zero & _slide;
+    // (text runs past its frame, a big title's well past it: a quarter of the slide's room
+    // round, and off the slide too, as what's dragged can come in from outside it)
+    final m = math.max(_slide.width, _slide.height) / 4;
+    r = Rect.fromLTRB(r.left - m, r.top - m, r.right + m, r.bottom + m + r.height);
+    return r.intersect((Offset.zero & _slide).inflate(m));
   }
 
   // ---------------------------------------------------------------- the toolbar's band
@@ -710,11 +775,13 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
         _pinchFocal = d.localFocalPoint;
         _paint();
       case 'object':
-        final p = toSlide(d.localFocalPoint);
-        e.drag(0, p.dx, p.dy, _tol);
-        _ov = e.overlays();
-        _queueLive();
-        _paint();
+        // (moves go to the engine once a frame, the latest one: a 120 Hz screen sends more)
+        final first = _dragTo == null;
+        _dragTo = toSlide(d.localFocalPoint);
+        if (first) {
+          SchedulerBinding.instance.scheduleFrameCallback((_) => _flushDrag());
+          SchedulerBinding.instance.scheduleFrame();
+        }
       case 'text0' || 'text1':
         final p = toSlide(d.localFocalPoint);
         e.textPoint(p.dx, p.dy, _gesture == 'text0' ? 2 : 1);
@@ -724,6 +791,19 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
         _pan = _clampPan(_panStart + d.localFocalPoint - _panFrom, zoom);
         _paint();
     }
+  }
+
+  /// The finger's latest place on the slide not yet given to the engine (an object drag).
+  Offset? _dragTo;
+
+  void _flushDrag() {
+    final p = _dragTo;
+    if (p == null || _gesture != 'object') return;
+    _dragTo = null;
+    e.drag(0, p.dx, p.dy, _tol);
+    _ov = e.overlays();
+    _queueLive();
+    _paint();
   }
 
   void _scaleEnd(ScaleEndDetails d) {
@@ -743,7 +823,9 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
         _paint();
         setState(() {});
       case 'object':
+        _flushDrag();
         e.drag(2, 0, 0, _tol);
+        _movingSel = null;
         refresh();
       case 'text0' || 'text1':
         _showMenu(_downAt);
@@ -918,7 +1000,7 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
       final size = box.biggest;
       if (size != _view) {
         _view = size;
-        SchedulerBinding.instance.addPostFrameCallback((_) => _queue());
+        SchedulerBinding.instance.addPostFrameCallback((_) => _queue(ms: 120));
       }
       return TapRegion(
         onTapOutside: (_) => _hideMenu(),
@@ -1120,7 +1202,12 @@ class _SlidePainter extends CustomPainter {
       canvas.drawRect(slideRect, Paint()..color = const Color(0xFFFFFFFF));
     }
     if (band) return;
-    if (live) draw(s._moving!);
+    if (live) {
+      // (slid from where it was drawn to where the selection is now)
+      final now = s._selBox(), was = s._movingSel;
+      final m = s._moving!;
+      draw(now == null || was == null ? m : _Pic(m.image, m.rect.shift(now.topLeft - was.topLeft), m.key, m.scale));
+    }
     _overlay(canvas, look);
   }
 
