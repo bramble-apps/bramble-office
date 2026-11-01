@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use egui::{pos2, vec2, Pos2, Rect, Vec2};
 use nm_core::kn_format::ObjId;
-use nm_core::kn_model::tablerows::Axis;
+use nm_core::kn_model::tablerows::{Axis, HeaderKind};
 use nm_core::kn_model::DrawableKind;
 use serde_json::{json, Value};
 
@@ -709,8 +709,148 @@ pub fn overlays(app: &mut App) -> Value {
         "refs": refs,
         "titles": titles,
         "dataRefs": app.data_refs.is_some(),
+        "controls": controls(app),
         "version": app.version,
     })
+}
+
+/// What the desktop canvas draws over the sheet besides the selection (canvas.rs): the guides
+/// and rulers, the pen bar, link badges, Edit Mask's bar, Edit Data References' bar, a shape's
+/// points, movies' ▶ and a gallery's arrows, the cursor cell's comment. Sheet points.
+fn controls(app: &mut App) -> Value {
+    use nm_core::kn_model::DrawableKind;
+    let fr = |g: nm_core::kn_model::Geometry| json!([g.x, g.y, g.x + g.w, g.y + g.h]);
+    // guides (yours, as the desktop draws them while Hide Guides isn't on) and the rulers
+    let sheet = app.sheets().get(app.sheet).map(|s| s.id);
+    let lines: Vec<Value> = match (app.show_guides, sheet, app.wb.as_ref()) {
+        (true, Some(s), Some(w)) => w.doc.guides(s).iter().map(|g| json!([g.vertical, g.pos])).collect(),
+        _ => Vec::new(),
+    };
+    let guides = json!({ "lines": lines, "rulers": app.show_rulers, "units": app.settings.ruler_units });
+    // Draw with Pen
+    let pen = app.pen.as_ref().map(|_| {
+        let c = app.pen_color;
+        json!({ "color": [c.r(), c.g(), c.b()], "width": app.pen_width })
+    });
+    // objects with a link: the green badge (a tap follows it)
+    let links: Vec<Value> = app
+        .drawables
+        .iter()
+        .filter(|d| !matches!(d.kind, DrawableKind::Table(_)))
+        .filter_map(|d| crate::links::object_link(app, d.id).map(|u| json!({ "id": d.id, "frame": fr(crate::tiles::frame(d)), "url": u })))
+        .collect();
+    // Edit Mask: the mask's frame and the picture's size against it (mask.rs mask_bar)
+    let mask = app.mask_edit.and_then(|id| {
+        let m = crate::mask::mask_box(app, id)?;
+        let g = app.drawables.iter().find(|d| d.id == id)?.geom;
+        Some(json!({ "id": id, "frame": fr(m), "pct": (g.w / m.w.max(0.01) * 100.0).clamp(100.0, 500.0) }))
+    });
+    let data_refs = app.data_refs.map(|m| json!({ "rows": m.rows_are_series }));
+    // movies, sounds, web videos (their ▶) and galleries (their arrows and "2 of 5")
+    let sel = app.canvas.obj;
+    let mut media = Vec::new();
+    let mut gallery = Value::Null;
+    for d in &app.drawables {
+        let g = crate::tiles::frame(d);
+        match &d.kind {
+            DrawableKind::Movie(m) => media.push(json!({ "id": d.id, "frame": fr(g), "audio": m.audio_only, "selected": sel == Some(d.id) })),
+            DrawableKind::Image(im) if im.web_video.is_some() => media.push(json!({ "id": d.id, "frame": fr(g), "web": true, "selected": sel == Some(d.id) })),
+            DrawableKind::Image(im) if im.gallery.len() > 1 && sel == Some(d.id) => {
+                gallery = json!({ "id": d.id, "frame": fr(g), "n": im.gallery.len(), "shown": im.gallery_shown.min(im.gallery.len() - 1) });
+            }
+            _ => {}
+        }
+    }
+    // the cursor cell's comment (the desktop shows it on hover)
+    let comment = app.sel.filter(|s| s.anchor == s.cursor && app.canvas.edit.is_none()).and_then(|s| {
+        let (text, author) = app.comments.get(&s.table)?.get(&(app.mrow(s.table, s.cursor.0)?, s.cursor.1))?.clone();
+        Some(json!({ "text": text, "author": author }))
+    });
+    json!({
+        "guides": guides, "pen": pen, "links": links, "mask": mask, "dataRefs": data_refs,
+        "points": crate::points::api_state(app), "media": media, "gallery": gallery, "comment": comment,
+    })
+}
+
+/// The canvas controls' actions ("ctl:<what>:…"): guides, the pen, links, the mask, data
+/// references, points, movies, galleries.
+fn control_action(app: &mut App, ctx: &egui::Context, a: &str) {
+    let p: Vec<&str> = a.split(':').collect();
+    let f = |k: usize| p.get(k).and_then(|v| v.parse::<f32>().ok());
+    match p.first().copied().unwrap_or_default() {
+        // "guide:<index, -1 new>:<v|h>:<pos, or x to remove>" (canvas.rs: a guide let go)
+        "guide" => {
+            let Some(s) = app.sheets().get(app.sheet).map(|s| s.id) else { return };
+            let Some(mut gs) = app.wb.as_ref().map(|w| w.doc.guides(s)) else { return };
+            let before = gs.clone();
+            let index = p.get(1).and_then(|v| v.parse::<usize>().ok());
+            let vertical = p.get(2) == Some(&"v");
+            match (index, f(3)) {
+                (Some(i), None) if i < gs.len() => {
+                    gs.remove(i);
+                }
+                (Some(i), Some(pos)) if i < gs.len() => gs[i].pos = pos,
+                (None, Some(pos)) => gs.push(nm_core::kn_model::slides::Guide { vertical, pos }),
+                _ => {}
+            }
+            if gs != before {
+                let removed = gs.len() < before.len();
+                app.edit(if removed { "Remove Guide" } else { "Guide" }, |d, h| d.set_guides(h, s, &gs));
+            }
+        }
+        // "pen:color:r:g:b", "pen:width:w", "pen:done", "pen:line:x,y;x,y;…" (a stroke drawn)
+        "pen" => match p.get(1).copied().unwrap_or_default() {
+            "color" => app.pen_color = egui::Color32::from_rgb(f(2).unwrap_or(0.0) as u8, f(3).unwrap_or(0.0) as u8, f(4).unwrap_or(0.0) as u8),
+            "width" => app.pen_width = f(2).unwrap_or(2.0).clamp(1.0, 24.0),
+            "line" => {
+                let pts: Vec<Pos2> = p.get(2).unwrap_or(&"").split(';').filter_map(|q| q.split_once(',').and_then(|(x, y)| Some(pos2(x.parse().ok()?, y.parse().ok()?)))).collect();
+                crate::canvas::pen_stroke(app, pts);
+            }
+            _ => app.pen = None,
+        },
+        "follow" => {
+            if let Some(url) = p.get(1).and_then(|v| v.parse().ok()).and_then(|id| crate::links::object_link(app, id)) {
+                crate::links::follow(app, &url);
+            }
+        }
+        // "mask:size:<percent>", "mask:done"
+        "mask" => match p.get(1).copied() {
+            Some("size") => {
+                if let Some(pct) = f(2) {
+                    crate::mask::set_size(app, pct);
+                }
+            }
+            _ => app.mask_edit = None,
+        },
+        // "datarefs:rows:<0|1>", "datarefs:done", "datarefs:cancel"
+        "datarefs" => match p.get(1).copied() {
+            Some("rows") => {
+                if let Some(m) = app.data_refs.as_mut() {
+                    m.rows_are_series = p.get(2) == Some(&"1");
+                }
+            }
+            Some("done") => crate::datarefs::done(app),
+            _ => {
+                if let Some(m) = app.data_refs.take() {
+                    crate::datarefs::select_chart(app, m.chart);
+                }
+            }
+        },
+        "points" => crate::points::action(app, &p[1..].join(":")),
+        // "galleryshow:<id>:<k>"
+        "galleryshow" => {
+            if let (Some(id), Some(k)) = (p.get(1).and_then(|v| v.parse().ok()), p.get(2).and_then(|v| v.parse().ok())) {
+                crate::inspapi::show_image(app, id, k);
+            }
+        }
+        // "mediaopen:<id>": a movie or sound in the system's player, a web video in the browser
+        "mediaopen" => {
+            if let Some(id) = p.get(1).and_then(|v| v.parse().ok()) {
+                crate::media::open_outside(app, ctx, id);
+            }
+        }
+        _ => {}
+    }
 }
 
 // ------------------------------------------------------------------ the selected table's chrome
@@ -827,6 +967,15 @@ pub fn table_action(app: &mut App, a: &str) {
     let nums: Vec<u32> = rest.split(':').filter_map(|x| x.parse().ok()).collect();
     let n = |i: usize| nums.get(i).copied().unwrap_or(0);
     match kind {
+        // the cells' context menu: Delete Table (canvas.rs table_menu)
+        "deleteTable" => {
+            commit(app);
+            if let Some(sheet) = app.sheets().get(app.sheet).map(|s| s.id) {
+                app.edit("Delete Table", |d, h| nm_core::sheets::detach_drawables(d, h, sheet, &[id]));
+                app.sel = None;
+                app.canvas.obj = None;
+            }
+        }
         "select" => {
             commit(app);
             select_range(app, id, (n(0), n(1)), (n(2), n(3)));
@@ -1002,13 +1151,22 @@ pub fn context_menu(app: &App) -> Value {
         v.push(sep.clone());
         v.extend([item("Delete Row", "Table > Delete Row"), item("Delete Column", "Table > Delete Column")]);
         v.push(sep.clone());
+        // Header Rows / Header Columns / Footer Rows: 0–5 each (canvas.rs table_menu)
+        for (name, kind) in [("Header Rows", HeaderKind::Rows), ("Header Columns", HeaderKind::Columns), ("Footer Rows", HeaderKind::Footer)] {
+            let cur = app.doc().map(|d| d.table_header_count(sel.table, kind)).unwrap_or(0);
+            let kids: Vec<Value> = (0..=5u32).map(|n| json!({ "label": n.to_string(), "action": format!("cmd:{name} > {n}"), "enabled": true, "checked": cur == n })).collect();
+            v.push(json!({ "label": name, "kids": kids }));
+        }
+        v.push(sep.clone());
         v.extend([item("Merge Cells", "Table > Merge Cells"), item("Unmerge Cells", "Table > Unmerge Cells")]);
         v.push(sep.clone());
         v.extend([item("Sort Ascending", "Sort Ascending"), item("Sort Descending", "Sort Descending")]);
         v.push(sep.clone());
         v.extend([item("Autofill Down", "Autofill Cells > Autofill"), item("Clear All", "Clear All")]);
-        v.push(sep);
+        v.push(sep.clone());
         v.extend([item("Copy Style", "Copy Style"), item("Paste Style", "Paste Style")]);
+        v.push(sep);
+        v.push(json!({ "label": "Delete Table", "action": "tbl:deleteTable", "enabled": true }));
         return Value::Array(v);
     }
     v.push(item("Paste", "Paste"));
@@ -1090,11 +1248,20 @@ pub fn popover(app: &App, id: &str) -> Value {
                 sep,
                 on("Sheet", "cmd:Sheet"),
                 sep,
-                { "label": "Formula", "kids": [item("Sum", "Formula > Sum"), item("Average", "Formula > Average"), item("Minimum", "Formula > Minimum"), item("Maximum", "Formula > Maximum"), item("Count", "Formula > Count"), item("Product", "Formula > Product"), item("New Formula", "Formula > New Formula")] },
+                { "label": "Formula", "kids": [item("Sum", "Formula > Sum"), item("Average", "Formula > Average"), item("Minimum", "Formula > Minimum"), item("Maximum", "Formula > Maximum"), item("Count", "Formula > Count"), item("Product", "Formula > Product"), item("New Formula", "Formula > Edit Formula"), item("Stock Quote", "Formula > Stock Quote")] },
                 item("Date & Time", "Date & Time"),
             ])
         }
-        "Media" => json!([on("Choose…", "media:Choose…"), on("Image Gallery", "media:Image Gallery"), sep, item("Content Hub", "Browse Content Hub")]),
+        // Numbers' Media popover (toolbar.rs)
+        "Media" => json!([
+            on("Choose…", "media:Choose…"),
+            item("Content Hub", "Browse Content Hub"),
+            item("Record Audio", "Record Audio"),
+            item("Web Video…", "Web Video…"),
+            on("Image Gallery", "media:Image Gallery"),
+            item("Photos and Videos", "Show Photo and Video Browser"),
+            item("Music", "Show Music Browser"),
+        ]),
         "Table" => {
             let styles: Vec<Value> = nm_core::sheets::TABLE_STYLES.iter().enumerate().map(|(i, n)| json!({ "name": n, "action": format!("table:{i}") })).collect();
             json!({ "styles": styles })
@@ -1222,7 +1389,10 @@ pub fn action(app: &mut App, ctx: &egui::Context, a: &str) {
                 crate::chrome::insert_tile(app, name);
             }
         }
+        "ctl" => control_action(app, ctx, rest),
         "insert" => crate::media::insert_path(app, std::path::PathBuf::from(rest)),
+        // Insert > Image Gallery with the pictures the front end picked (one path a line)
+        "gallery" => crate::media::gallery_from(app, &rest.lines().map(std::path::PathBuf::from).collect::<Vec<_>>()),
         "sheet" => sheet_action(app, rest),
         "tbl" => {
             // (the edit menu's Edit Cell: the cursor cell)

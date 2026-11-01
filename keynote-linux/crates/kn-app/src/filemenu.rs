@@ -8,8 +8,8 @@ use crate::app::App;
 #[derive(Default)]
 pub struct FileOps {
     /// Rename…: the name being typed.
-    rename: Option<String>,
-    focus: bool,
+    pub(crate) rename: Option<String>,
+    pub(crate) focus: bool,
     /// Move To…: folder picked in the background.
     move_to: Option<Receiver<Option<PathBuf>>>,
     /// Name shown for an untitled copy (File > Duplicate).

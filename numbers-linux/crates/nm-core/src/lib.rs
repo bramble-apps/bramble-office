@@ -106,21 +106,52 @@ impl Workbook {
     pub fn drawables_and_views(&self, sheet: &Sheet) -> (Vec<Drawable>, std::collections::HashMap<ObjId, categories::View>) {
         let ctx = kn_model::text::TextContext { slide_number: 1 };
         let mut views = std::collections::HashMap::new();
-        let drawables = sheet
-            .drawables
-            .iter()
-            .filter_map(|&id| {
-                let mut d = kn_model::scene::drawable(self.file(), id, ctx)?;
-                if let kn_model::DrawableKind::Table(t) = &mut d.kind {
-                    self.hide(id, t);
-                    if let Some(g) = categories::groups(self.file(), id) {
-                        views.insert(id, categories::apply(t, &g));
-                    }
+        let mut drawables = Vec::new();
+        for &id in &sheet.drawables {
+            let Some(mut d) = kn_model::scene::drawable(self.file(), id, ctx) else { continue };
+            if let kn_model::DrawableKind::Table(t) = &mut d.kind {
+                self.hide(id, t);
+                if let Some(g) = categories::groups(self.file(), id) {
+                    views.insert(id, categories::apply(t, &g));
                 }
-                Some(d)
-            })
-            .collect();
+            }
+            // (a table's frame is its rows' and columns' sizes, not its stored size)
+            let g = match &d.kind {
+                kn_model::DrawableKind::Table(t) => t.frame(&d.geom),
+                _ => d.geom,
+            };
+            drawables.push(d);
+            drawables.extend(self.captions(id, g, ctx));
+        }
         (drawables, views)
+    }
+
+    /// The shown title (above) and caption (below) of drawable `id` (framed `g`): their
+    /// TSA.CaptionInfoArchive text boxes, placed as Keynote's slide scene places them.
+    fn captions(&self, id: ObjId, g: kn_model::Geometry, ctx: kn_model::text::TextContext) -> Vec<Drawable> {
+        let k = self.file();
+        let Some(dm) = k.obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")) else { return Vec::new() };
+        let mut out = Vec::new();
+        for (field, hidden, title) in [("title", "title_hidden", true), ("caption", "caption_hidden", false)] {
+            if dm.bool(hidden) != Some(false) {
+                continue;
+            }
+            let Some(cid) = dm.ref_id(field).filter(|c| k.type_name(*c) == "TSA.CaptionInfoArchive") else { continue };
+            let Some(mut cd) = kn_model::scene::drawable(k, cid, ctx) else { continue };
+            let (n, size) = match &cd.kind {
+                kn_model::DrawableKind::Shape(s) => s.text.as_ref().map(|t| (t.text.lines().count().max(1) as f32, t.paragraphs.first().and_then(|p| p.runs.first()).map(|r| r.style.size).unwrap_or(20.0))),
+                _ => None,
+            }
+            .unwrap_or((1.0, 20.0));
+            let hgt = n * size * 1.25 + 8.0;
+            cd.geom.x = g.x;
+            cd.geom.w = g.w;
+            cd.geom.h = hgt;
+            cd.geom.angle = 0.0;
+            cd.geom.y = if title { g.y - hgt } else { g.y + g.h };
+            out.push(cd);
+        }
+        out
     }
 
     pub fn table_data(&self, info: ObjId) -> Option<kn_model::TableData> {

@@ -57,8 +57,23 @@ pub fn new_from(app: &mut App, p: &Path) {
     }
 }
 
-fn template_bytes(app: &App) -> Option<Vec<u8>> {
+pub(crate) fn template_bytes(app: &App) -> Option<Vec<u8>> {
     app.doc()?.file.to_zip().ok()
+}
+
+/// Add to Template Chooser: the spreadsheet as a template named `name`.
+pub fn add_to_chooser(app: &mut App, name: &str) {
+    match (dir(), template_bytes(app)) {
+        (Some(d), Some(b)) => {
+            let _ = std::fs::create_dir_all(&d);
+            let file = d.join(format!("{}.nmbtemplate", name.trim().replace('/', "-")));
+            match std::fs::write(&file, b) {
+                Ok(()) => app.notify(format!("\u{201c}{}\u{201d} is in the template chooser (File > New)", name.trim())),
+                Err(e) => app.notify(format!("Couldn't save the template: {e}")),
+            }
+        }
+        _ => app.notify("Couldn't save the template"),
+    }
 }
 
 /// The windows: Save as Template… and the chooser.
@@ -81,17 +96,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             });
         });
         if add {
-            match (dir(), template_bytes(app)) {
-                (Some(d), Some(b)) => {
-                    let _ = std::fs::create_dir_all(&d);
-                    let file = d.join(format!("{}.nmbtemplate", name.trim().replace('/', "-")));
-                    match std::fs::write(&file, b) {
-                        Ok(()) => app.notify(format!("\u{201c}{}\u{201d} is in the template chooser (File > New)", name.trim())),
-                        Err(e) => app.notify(format!("Couldn't save the template: {e}")),
-                    }
-                }
-                _ => app.notify("Couldn't save the template"),
-            }
+            add_to_chooser(app, &name);
         } else if save_as {
             let file = kn_ui::files::FileDialog::new().set_file_name(format!("{}.nmbtemplate", name.trim())).add_filter("Numbers Template", &["nmbtemplate"]).save_file();
             if let (Some(f), Some(b)) = (file, template_bytes(app)) {
@@ -233,6 +238,23 @@ pub const REGIONS: [(&str, &str); 14] = [
     ("CN", "China"),
 ];
 
+/// Language & Region's OK: the spreadsheet's formats follow `lang`_`region`.
+pub fn set_language(app: &mut App, lang: &str, region: &str) {
+    let locale = format!("{lang}_{region}");
+    app.edit("Language & Region", |d, h| nm_core::sheets::set_document_locale(d, h, &locale));
+}
+
+/// What the formats look like in `region` (the window's sample line).
+pub fn language_sample(region: &str) -> String {
+    let us = region == "US";
+    let comma = matches!(region, "FR" | "BE" | "DE" | "ES" | "IT" | "BR" | "CH");
+    format!(
+        "Date: {}    Number: {}",
+        if us { "3/9/27" } else if region == "JP" || region == "CN" || region == "CA" { "2027-03-09" } else { "09/03/27" },
+        if comma { "1 234,56" } else { "1,234.56" }
+    )
+}
+
 pub fn language_window(app: &mut App, ctx: &egui::Context) {
     let Some((mut lang, mut region)) = app.language_edit.take() else { return };
     let mut open = true;
@@ -273,8 +295,7 @@ pub fn language_window(app: &mut App, ctx: &egui::Context) {
         });
     });
     if ok {
-        let locale = format!("{lang}_{region}");
-        app.edit("Language & Region", |d, h| nm_core::sheets::set_document_locale(d, h, &locale));
+        set_language(app, &lang, &region);
     } else if open {
         app.language_edit = Some((lang, region));
     }

@@ -9,8 +9,8 @@ use crate::theme;
 #[derive(Default)]
 pub struct Warnings {
     pub open: bool,
-    list: Vec<String>,
-    missing_fonts: bool,
+    pub(crate) list: Vec<String>,
+    pub(crate) missing_fonts: bool,
 }
 
 /// Look the document over and open the window.

@@ -183,8 +183,11 @@ class _SheetScreenState extends State<SheetScreen> {
 
   void _read() {
     _status = e.status();
-    for (final u in (_status['openUrls'] as List? ?? const [])) {
-      _openUrl(u as String);
+    for (final u in e.takeUrls()) {
+      _openUrl(u);
+    }
+    for (final t in e.takeSpeech()) {
+      _speak(t);
     }
     _chrome = e.chrome();
     // (after the frame: the scale is applied above this screen)
@@ -231,6 +234,19 @@ class _SheetScreenState extends State<SheetScreen> {
       await const MethodChannel('app.bramble.values/open').invokeMethod('url', url);
     } else if (Platform.isLinux) {
       await Process.start('xdg-open', [url], mode: ProcessStartMode.detached);
+    }
+  }
+
+  /// Edit > Speech: Android's text to speech, the desktop's speech-dispatcher ("" stops).
+  Future<void> _speak(String text) async {
+    if (Platform.isAndroid) {
+      await const MethodChannel('app.bramble.values/open').invokeMethod('speak', text);
+    } else if (Platform.isLinux) {
+      try {
+        await Process.start('spd-say', text.isEmpty ? ['--cancel'] : ['--', text], mode: ProcessStartMode.detached);
+      } on ProcessException {
+        _toast('Speech needs speech-dispatcher (spd-say)');
+      }
     }
   }
 

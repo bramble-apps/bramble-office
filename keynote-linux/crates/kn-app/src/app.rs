@@ -103,7 +103,7 @@ pub struct App {
     pub show_settings: bool,
     pub show_goto: bool,
     pub link_dialog: crate::links::LinkDialog,
-    goto_buf: String,
+    pub(crate) goto_buf: String,
     pub show_theme_chooser: bool,
     pub fileops: crate::filemenu::FileOps,
     pub replace_fonts: Option<crate::replacefonts::ReplaceFonts>,
@@ -203,6 +203,8 @@ pub struct App {
     /// The theme chooser is open for File > Change Theme.
     pub changing_theme: bool,
     pub equation: crate::equation::EquationDialog,
+    /// Record Slideshow ended in a front end's show: waiting for its recording of the sound.
+    pub narration_waiting: Option<crate::play::Narration>,
 }
 
 /// A presentation that isn't the active tab: everything that belongs to one document.
@@ -346,6 +348,7 @@ impl App {
             point_edit: None,
             default_textbox: None,
             changing_theme: false,
+            narration_waiting: None,
             equation: Default::default(),
         };
         if let Some(v) = std::env::var_os("KN_VIEW") {
@@ -1215,7 +1218,12 @@ impl App {
         }
     }
 
-    fn poll_jobs(&mut self, ctx: &egui::Context) {
+    /// Background work (opening, inserting media) still running.
+    pub(crate) fn jobs_pending(&self) -> bool {
+        !self.jobs.is_empty()
+    }
+
+    pub(crate) fn poll_jobs(&mut self, ctx: &egui::Context) {
         let mut keep = Vec::new();
         for job in std::mem::take(&mut self.jobs) {
             match job {

@@ -41,7 +41,7 @@ pub fn list(path: &Path) -> Vec<(PathBuf, u64)> {
     v
 }
 
-fn when(secs: u64) -> String {
+pub(crate) fn when(secs: u64) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     match now.saturating_sub(secs) {
         a @ 0..=59 => if a < 10 { "Just now".into() } else { format!("{a} seconds ago") },
@@ -84,15 +84,20 @@ pub fn versions_window(app: &mut App, ctx: &egui::Context) {
     });
     app.show_versions = open;
     if let Some(v) = restore {
-        keep_version(&path);
-        match std::fs::copy(&v, &path) {
-            Ok(_) => {
-                app.open(&path);
-                app.show_versions = false;
-                app.notify("Restored the earlier version");
-            }
-            Err(e) => app.notify(format!("Couldn't restore: {e}")),
+        restore_version(app, &path, &v);
+    }
+}
+
+/// Restore: the kept version `v` back over `path` (the file as it is now kept as a version).
+pub fn restore_version(app: &mut App, path: &Path, v: &Path) {
+    keep_version(path);
+    match std::fs::copy(v, path) {
+        Ok(_) => {
+            app.open(path);
+            app.show_versions = false;
+            app.notify("Restored the earlier version");
         }
+        Err(e) => app.notify(format!("Couldn't restore: {e}")),
     }
 }
 

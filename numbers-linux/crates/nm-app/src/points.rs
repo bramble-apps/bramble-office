@@ -136,3 +136,69 @@ pub fn canvas(app: &mut App, ui: &egui::Ui, resp: &egui::Response, to_screen: &d
     }
     used
 }
+
+/// The points being edited for a front end (api.rs controls): the shape, its frame's origin
+/// (sheet points), the points [subpath, index, kind (0 sharp, 1 smooth, 2 bézier), x, y, in x,
+/// in y, out x, out y] (from the origin) and the selected one; null when none.
+pub fn api_state(app: &mut App) -> serde_json::Value {
+    use serde_json::json;
+    if app.points.id.is_some() && app.canvas.obj != app.points.id {
+        app.points = PointEdit::default();
+    }
+    let Some((id, e, g)) = nodes(app) else { return serde_json::Value::Null };
+    if g.angle.rem_euclid(360.0) != 0.0 {
+        return serde_json::Value::Null;
+    }
+    let mut v = Vec::new();
+    for (s, sp) in e.subpaths.iter().enumerate() {
+        for (i, n) in sp.nodes.iter().enumerate() {
+            let kind = match n.kind {
+                NodeKind::Sharp => 0,
+                NodeKind::Smooth => 1,
+                _ => 2,
+            };
+            v.push(json!([s, i, kind, n.pt.x, n.pt.y, n.inc.x, n.inc.y, n.out.x, n.out.y]));
+        }
+    }
+    json!({ "id": id, "origin": [g.x, g.y], "nodes": v, "selected": app.points.selected.map(|(s, i)| json!([s, i])) })
+}
+
+/// A front end's point actions: "sel:<s>:<i>" selects a point; "move:<s>:<i>:<part>:<dx>:<dy>"
+/// moves it (part 0) or its in / out handle (1 / 2) by sheet points, one undo step; "stop".
+pub fn action(app: &mut App, arg: &str) {
+    let p: Vec<&str> = arg.split(':').collect();
+    let num = |k: usize| p.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    match p.first().copied() {
+        Some("sel") => app.points.selected = Some((num(1) as usize, num(2) as usize)),
+        Some("move") => {
+            let Some((id, mut e, _)) = nodes(app) else { return };
+            let (s, i, k) = (num(1) as usize, num(2) as usize, num(3) as u8);
+            let Some(n) = e.subpaths.get_mut(s).and_then(|sp| sp.nodes.get_mut(i)) else { return };
+            let d = Point::new(num(4), num(5));
+            let shift = |q: &mut Point| {
+                q.x += d.x;
+                q.y += d.y;
+            };
+            match k {
+                0 => {
+                    shift(&mut n.pt);
+                    shift(&mut n.inc);
+                    shift(&mut n.out);
+                }
+                _ => {
+                    let (moved, other) = if k == 1 { (&mut n.inc, &mut n.out) } else { (&mut n.out, &mut n.inc) };
+                    shift(moved);
+                    // a smooth point keeps its handles in line
+                    if n.kind == NodeKind::Smooth {
+                        let m = *moved;
+                        *other = Point::new(2.0 * n.pt.x - m.x, 2.0 * n.pt.y - m.y);
+                    }
+                }
+            }
+            app.points.selected = Some((s, i));
+            app.edit("Edit Points", |doc, h| doc.set_editable_nodes(h, id, &e));
+        }
+        Some("stop") => app.points = PointEdit::default(),
+        _ => {}
+    }
+}

@@ -48,17 +48,25 @@ pub fn mask_bar(app: &mut App, ctx: &egui::Context, at: Pos2) {
         });
     });
     if release {
-        let k = (m.w * pct / 100.0) / g.w.max(0.01);
-        let (cx, cy) = (m.x + m.w / 2.0, m.y + m.h / 2.0);
-        let ng = Geometry { x: cx - (cx - g.x) * k, y: cy - (cy - g.y) * k, w: g.w * k, h: g.h * k, ..g };
-        app.edit("Edit Mask", |d, h| {
-            d.set_frame(h, id, ng);
-            d.set_mask_rect(h, id, m.x - ng.x, m.y - ng.y, m.w, m.h);
-        });
+        set_size(app, pct);
     }
     if done {
         app.mask_edit = None;
     }
+}
+
+/// The picture being masked at `pct` % of the mask's width (100–500), about the mask's centre,
+/// the mask staying put.
+pub fn set_size(app: &mut App, pct: f32) {
+    let Some(id) = app.mask_edit else { return };
+    let (Some(m), Some(g)) = (mask_box(app, id), app.drawables.iter().find(|d| d.id == id).map(|d| d.geom)) else { return };
+    let k = (m.w * pct.clamp(100.0, 500.0) / 100.0) / g.w.max(0.01);
+    let (cx, cy) = (m.x + m.w / 2.0, m.y + m.h / 2.0);
+    let ng = Geometry { x: cx - (cx - g.x) * k, y: cy - (cy - g.y) * k, w: g.w * k, h: g.h * k, ..g };
+    app.edit("Edit Mask", |d, h| {
+        d.set_frame(h, id, ng);
+        d.set_mask_rect(h, id, m.x - ng.x, m.y - ng.y, m.w, m.h);
+    });
 }
 
 /// Dragging a picture whose mask is being edited moves the picture under the mask.

@@ -51,7 +51,22 @@ pub fn action(url: &str) -> LinkAction {
 
 /// Open a URL with the desktop's default handler without blocking the UI.
 pub fn open_url(url: &str) {
+    if FRONT_END.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Ok(mut q) = OPENED.lock() {
+            q.push(url.to_string());
+        }
+        return;
+    }
     kn_ui::open_url(url);
+}
+
+/// A front end runs the app (ffi.rs): pages to open wait for it (take_opened).
+pub static FRONT_END: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The pages asked to be opened since the last call.
+pub fn take_opened() -> Vec<String> {
+    OPENED.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
 }
 
 /// The hyperlink of the topmost linked object under a screen point (slide drawn into `rect`).
@@ -76,11 +91,11 @@ pub fn link_at(scene: &SlideScene, rect: Rect, pos: Pos2) -> Option<String> {
 #[derive(Default)]
 pub struct LinkDialog {
     pub open: bool,
-    kind: usize,
-    text: String,
+    pub(crate) kind: usize,
+    pub(crate) text: String,
     /// Slide links: 0 next, 1 previous, 2 first, 3 last, 4 slide number, 5 exit slideshow.
-    slide_kind: usize,
-    slide_no: usize,
+    pub(crate) slide_kind: usize,
+    pub(crate) slide_no: usize,
 }
 
 impl LinkDialog {
@@ -164,43 +179,53 @@ pub fn dialog(app: &mut App, ctx: &egui::Context) {
                 apply = Some(None);
             }
             if ui.button(RichText::new("Done").strong()).clicked() || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
-                let t = d.text.trim();
-                let slide_url = ["?slide=next", "?slide=previous", "?slide=first", "?slide=last", "", "?action=exitpresentation", "?action=retreat"][d.slide_kind.min(6)];
-                if d.kind == 3 && d.slide_kind == 4 {
-                    slide_target = Some(d.slide_no.saturating_sub(1));
-                }
-                let url = match d.kind {
-                    3 if d.slide_kind == 4 => String::new(),
-                    3 => slide_url.to_string(),
-                    1 => format!("mailto:{t}"),
-                    2 => format!("tel:{}", t.replace(' ', "")),
-                    _ if t.contains("://") => t.to_string(),
-                    _ => format!("https://{t}"),
-                };
-                apply = Some((d.kind == 3 || !t.is_empty()).then_some(url));
+                (apply, slide_target) = d.result();
             }
         });
     });
     app.link_dialog.open = open;
     if let Some(url) = apply {
-        app.link_dialog.open = false;
-        let ids = app.sel.clone();
-        let slide = app.current_slide().map(|s| s.slide);
-        if let Some(doc) = app.doc.as_mut() {
-            doc.begin(&mut app.hist, if url.is_some() { "Add Link" } else { "Remove Link" });
-            for id in ids {
-                match (slide_target, slide) {
-                    // a particular slide: Keynote's ?slideid=<UUID> with the back-index
-                    (Some(t), Some(s)) if url.is_some() => {
-                        doc.set_slide_link(&mut app.hist, id, s, t);
-                    }
-                    _ => doc.set_hyperlink(&mut app.hist, id, url.as_deref()),
+        apply_link(app, url, slide_target);
+    }
+}
+
+impl LinkDialog {
+    /// Done: the link to set (None removes it), and the slide when it links to one by number.
+    pub(crate) fn result(&self) -> (Option<Option<String>>, Option<usize>) {
+        let t = self.text.trim();
+        let slide_url = ["?slide=next", "?slide=previous", "?slide=first", "?slide=last", "", "?action=exitpresentation", "?action=retreat"][self.slide_kind.min(6)];
+        let slide_target = (self.kind == 3 && self.slide_kind == 4).then(|| self.slide_no.saturating_sub(1));
+        let url = match self.kind {
+            3 if self.slide_kind == 4 => String::new(),
+            3 => slide_url.to_string(),
+            1 => format!("mailto:{t}"),
+            2 => format!("tel:{}", t.replace(' ', "")),
+            _ if t.contains("://") => t.to_string(),
+            _ => format!("https://{t}"),
+        };
+        (Some((self.kind == 3 || !t.is_empty()).then_some(url)), slide_target)
+    }
+}
+
+/// The selected objects get `url` (None: their links removed), or a link to slide `slide_target`.
+pub(crate) fn apply_link(app: &mut App, url: Option<String>, slide_target: Option<usize>) {
+    app.link_dialog.open = false;
+    let ids = app.sel.clone();
+    let slide = app.current_slide().map(|s| s.slide);
+    if let Some(doc) = app.doc.as_mut() {
+        doc.begin(&mut app.hist, if url.is_some() { "Add Link" } else { "Remove Link" });
+        for id in ids {
+            match (slide_target, slide) {
+                // a particular slide: Keynote's ?slideid=<UUID> with the back-index
+                (Some(t), Some(s)) if url.is_some() => {
+                    doc.set_slide_link(&mut app.hist, id, s, t);
                 }
+                _ => doc.set_hyperlink(&mut app.hist, id, url.as_deref()),
             }
-            doc.end(&mut app.hist);
         }
-        if let Some(s) = slide {
-            app.bump(s);
-        }
+        doc.end(&mut app.hist);
+    }
+    if let Some(s) = slide {
+        app.bump(s);
     }
 }

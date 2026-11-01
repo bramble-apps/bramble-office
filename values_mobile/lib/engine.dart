@@ -196,7 +196,28 @@ class Engine {
   List<dynamic> menus() => (_json(_menus()) as List?) ?? [];
   void run(String command) => _str(command, _run);
   void toolbar(String id) => _str(id, _toolbar);
-  Map<String, dynamic> status() => _map(_status());
+  /// The status. Links to open and text to speak come once (the engine hands them over when
+  /// read), so they're kept here until the app takes them ([takeUrls], [takeSpeech]): any
+  /// reader of the status may be first.
+  Map<String, dynamic> status() {
+    final st = _map(_status());
+    _urls.addAll([for (final u in (st['openUrls'] as List? ?? const [])) u as String]);
+    _speech.addAll([for (final t in (st['speak'] as List? ?? const [])) t as String]);
+    return st;
+  }
+
+  final _urls = <String>[], _speech = <String>[];
+  List<String> takeUrls() {
+    final out = [..._urls];
+    _urls.clear();
+    return out;
+  }
+
+  List<String> takeSpeech() {
+    final out = [..._speech];
+    _speech.clear();
+    return out;
+  }
   Map<String, dynamic> chrome() => _map(_chrome());
 
   final _thumbs = <int, ui.Image?>{};

@@ -18,8 +18,8 @@ pub type Want = (u32, String, u32, Option<i64>);
 pub struct StockQuote {
     /// The dialog is open.
     pub open: bool,
-    symbol: String,
-    attr: usize,
+    pub(crate) symbol: String,
+    pub(crate) attr: usize,
     /// Put the keyboard in the symbol field (just opened).
     focus: bool,
     /// Quotes being fetched.
@@ -47,7 +47,7 @@ pub fn open(app: &mut App) {
 }
 
 /// Refresh every quote the document holds.
-pub fn refresh(app: &mut App, ctx: &egui::Context) {
+pub fn refresh(app: &mut App, ctx: Option<&egui::Context>) {
     let Some(d) = app.doc() else { return };
     let mut wants: Vec<Want> = d.remote_values().into_keys().map(|(f, s, a, date)| (f, s, a, date.map(|k| k / 86_400 + 11_323))).collect();
     if wants.is_empty() {
@@ -58,22 +58,21 @@ pub fn refresh(app: &mut App, ctx: &egui::Context) {
     fetch(app, ctx, wants);
 }
 
-fn fetch(app: &mut App, ctx: &egui::Context, wants: Vec<Want>) {
+fn fetch(app: &mut App, ctx: Option<&egui::Context>, wants: Vec<Want>) {
     let (tx, rx) = channel();
-    let ctx = ctx.clone();
+    let ctx = ctx.cloned();
     std::thread::spawn(move || {
         let _ = tx.send(fetch_all(&wants));
-        ctx.request_repaint();
+        if let Some(ctx) = ctx {
+            ctx.request_repaint();
+        }
     });
     app.stocks.busy = Some(rx);
 }
 
 /// The dialog, and quotes arriving (call every frame).
 pub fn window(app: &mut App, ctx: &egui::Context) {
-    if let Some(got) = app.stocks.busy.as_ref().and_then(|rx| rx.try_recv().ok()) {
-        app.stocks.busy = None;
-        apply(app, got);
-    }
+    poll(app);
     if !app.stocks.open {
         return;
     }
@@ -130,15 +129,23 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         app.stocks.open = false;
     }
     if refresh_all {
-        refresh(app, ctx);
+        refresh(app, Some(ctx));
     }
     if insert && !app.stocks.symbol.trim().is_empty() {
-        insert_quote(app, ctx);
+        insert_quote(app, Some(ctx));
+    }
+}
+
+/// Quotes that arrived go in (call often while `busy`).
+pub fn poll(app: &mut App) {
+    if let Some(got) = app.stocks.busy.as_ref().and_then(|rx| rx.try_recv().ok()) {
+        app.stocks.busy = None;
+        apply(app, got);
     }
 }
 
 /// Put =STOCK("SYM","attribute") in the selected cell and fetch its quote.
-fn insert_quote(app: &mut App, ctx: &egui::Context) {
+pub fn insert_quote(app: &mut App, ctx: Option<&egui::Context>) {
     let Some(sel) = app.sel else { return };
     crate::canvas::commit(app);
     let symbol = app.stocks.symbol.trim().to_uppercase();
@@ -214,18 +221,35 @@ fn get(symbol: &str, day: Option<i64>) -> Result<String, String> {
         None => "range=5d&interval=1d".into(),
     };
     let url = format!("https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?{q}");
+    let body = download(&url, symbol)?;
+    if !body.contains("\"meta\"") {
+        return Err(format!("Yahoo doesn't know “{symbol}”"));
+    }
+    Ok(body)
+}
+
+/// The response's text (curl, as the desktop has it).
+#[cfg(not(target_os = "android"))]
+fn download(url: &str, symbol: &str) -> Result<String, String> {
     let out = std::process::Command::new("curl")
-        .args(["-s", "-f", "--max-time", "8", "-A", "Mozilla/5.0", &url])
+        .args(["-s", "-f", "--max-time", "8", "-A", "Mozilla/5.0", url])
         .output()
         .map_err(|_| "curl isn't installed".to_string())?;
     if !out.status.success() {
         return Err(if out.status.code() == Some(22) { format!("Yahoo doesn't know “{symbol}”") } else { "couldn't reach Yahoo Finance".into() });
     }
-    let body = String::from_utf8_lossy(&out.stdout).to_string();
-    if !body.contains("\"meta\"") {
-        return Err(format!("Yahoo doesn't know “{symbol}”"));
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// The response's text (Android has no curl: ureq, as kn-ui's Content Hub).
+#[cfg(target_os = "android")]
+fn download(url: &str, symbol: &str) -> Result<String, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(8))).user_agent("Mozilla/5.0").build().into();
+    match agent.get(url).call() {
+        Ok(mut r) => r.body_mut().read_to_string().map_err(|_| "couldn't reach Yahoo Finance".to_string()),
+        Err(ureq::Error::StatusCode(_)) => Err(format!("Yahoo doesn't know “{symbol}”")),
+        Err(_) => Err("couldn't reach Yahoo Finance".into()),
     }
-    Ok(body)
 }
 
 /// A number field of the response ("key":123.4).

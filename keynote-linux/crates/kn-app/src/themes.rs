@@ -137,32 +137,46 @@ pub fn chooser(app: &mut App, ctx: &egui::Context) {
         app.show_theme_chooser = false;
         let file = self::open(&path);
         if std::mem::take(&mut app.changing_theme) {
-            // File > Change Theme: the presentation rebuilt on the new theme (same tab, same file)
-            crate::textedit::commit(app);
-            app.commit_notes();
-            let res = match (file, app.doc.as_ref()) {
-                (Ok(f), Some(doc)) => doc.with_theme(f),
-                (Err(e), _) => Err(e),
-                (_, None) => return,
-            };
-            match res {
-                Ok((nd, problems)) => {
-                    // one undoable step (Edit > Undo Change Theme brings the old theme back)
-                    let cur = app.cur;
-                    if let Some(doc) = app.doc.as_mut() {
-                        doc.begin(&mut app.hist, "Change Theme");
-                        doc.replace_contents(&mut app.hist, nd);
-                        doc.end(&mut app.hist);
-                    }
-                    app.refresh_after_structural_change();
-                    app.go_to(cur.min(app.slides.len().saturating_sub(1)));
-                    app.notify(if problems.is_empty() { format!("Changed the theme to {name}") } else { format!("Changed the theme to {name}; {} object(s) couldn't be carried over", problems.len()) });
-                }
-                Err(e) => app.notify(format!("Couldn't change the theme: {e}")),
-            }
+            change_to(app, &name, file);
             return;
         }
         create(app, ctx, &name, file);
+    }
+}
+
+/// File > Change Theme: the presentation rebuilt on the new theme (same tab, same file).
+pub(crate) fn change_to(app: &mut App, name: &str, file: Result<kn_format::KeyFile, kn_format::Error>) {
+    crate::textedit::commit(app);
+    app.commit_notes();
+    let res = match (file, app.doc.as_ref()) {
+        (Ok(f), Some(doc)) => doc.with_theme(f),
+        (Err(e), _) => Err(e),
+        (_, None) => return,
+    };
+    match res {
+        Ok((nd, problems)) => {
+            // one undoable step (Edit > Undo Change Theme brings the old theme back)
+            let cur = app.cur;
+            if let Some(doc) = app.doc.as_mut() {
+                doc.begin(&mut app.hist, "Change Theme");
+                doc.replace_contents(&mut app.hist, nd);
+                doc.end(&mut app.hist);
+            }
+            app.refresh_after_structural_change();
+            app.go_to(cur.min(app.slides.len().saturating_sub(1)));
+            app.notify(if problems.is_empty() { format!("Changed the theme to {name}") } else { format!("Changed the theme to {name}; {} object(s) couldn't be carried over", problems.len()) });
+        }
+        Err(e) => app.notify(format!("Couldn't change the theme: {e}")),
+    }
+}
+
+/// The theme chooser's pick for an open presentation (Change Theme), by its index in `available`.
+pub(crate) fn change_to_index(app: &mut App, i: usize) {
+    app.show_theme_chooser = false;
+    app.changing_theme = false;
+    if let Some((name, path)) = available().get(i).cloned() {
+        let file = open(&path);
+        change_to(app, &name, file);
     }
 }
 

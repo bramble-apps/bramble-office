@@ -2406,7 +2406,8 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
           final h = _h.value;
           if (h <= 0.5) return const SizedBox.shrink();
           return Stack(children: [
-            Positioned(left: 0, right: 0, bottom: 0, height: h, child: child!),
+            // (laid out at least 120 tall and clipped, so its first frames opening don't overflow)
+            Positioned(left: 0, right: 0, bottom: 0, height: h, child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: 0, maxHeight: math.max(h, 120), child: child!))),
           ]);
         },
         child: Container(
@@ -2477,17 +2478,24 @@ class _SheetPaneState extends State<SheetPane> {
       child: EguiColumn(children: [
         DSegmented(labels: const ['Sheet'], cur: 0, radius: 16, onPick: (_) {}),
         ...dSection('Sheet Name'),
+        // (a row of the card, the name typed in place: the touch inspector's text fields, as
+        // the image Description's, not a box sunk in the card)
         SizedBox(
           height: 44,
-          child: TextField(
-            controller: _name,
-            style: Look.font(16, look.text),
-            decoration: InputDecoration(isDense: true, filled: true, fillColor: look.field, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)),
-            onSubmitted: (v) => put('name', v),
-            onTapOutside: (_) {
-              if (_name.text.trim().isNotEmpty && _name.text != widget.s['name']) put('name', _name.text);
-              FocusManager.instance.primaryFocus?.unfocus();
-            },
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextField(
+              controller: _name,
+              style: Look.font(16, look.text),
+              cursorColor: look.accent,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.zero, hintText: 'Sheet Name', hintStyle: Look.font(16, look.textDim)),
+              onSubmitted: (v) => put('name', v),
+              onTapOutside: (_) {
+                if (_name.text.trim().isNotEmpty && _name.text != widget.s['name']) put('name', _name.text);
+                FocusManager.instance.primaryFocus?.unfocus();
+              },
+            ),
           ),
         ),
         ...dSection('Tab Color'),
@@ -2953,8 +2961,8 @@ class PivotPane extends StatelessWidget {
       Row(children: [const Expanded(child: DSectionTitle('Values')), menu([('Clear Value Fields', 'clearValues')])]),
       for (final (i, v) in values.indexed) ...[
         Row(children: [Expanded(child: DLabel('${v['field']} (${v['summary']})')), DButton(width: 28, height: 22, onTap: () => put('removeValue', i), child: const Text('✕'))]),
-        DRow('Summarize by', DCombo<int>(text: v['summary'] as String, items: () => [for (final (k, n) in summaries.indexed) DChoice(n, k, on: n == v['summary'])], onPick: (k) => put('summary', {'i': i, 'k': k}))),
-        DRow('Show as', DCombo<int>(text: v['showAs'] as String, items: () => [for (final (k, n) in showAs.indexed) DChoice(n, k, on: n == v['showAs'])], onPick: (k) => put('showAs', {'i': i, 'k': k}))),
+        DRow('Summarize by', DCombo<int>(width: 150, text: v['summary'] as String, items: () => [for (final (k, n) in summaries.indexed) DChoice(n, k, on: n == v['summary'])], onPick: (k) => put('summary', {'i': i, 'k': k}))),
+        DRow('Show as', DCombo<int>(width: 150, text: v['showAs'] as String, items: () => [for (final (k, n) in showAs.indexed) DChoice(n, k, on: n == v['showAs'])], onPick: (k) => put('showAs', {'i': i, 'k': k}))),
       ],
       addField('addValue'),
       const DSpace(6),
@@ -3004,7 +3012,7 @@ class _ObjTextPaneState extends State<ObjTextPane> {
     final style = <Widget>[
       ...dSection('Font'),
       DCombo<String>(listWidth: 260, text: family, search: true, typed: (t) => t, items: () => [for (final f in fonts) DChoice(f, f, on: f == family)], onPick: (f) => put('family', f)),
-      DRow('Typeface', DCombo<int>(text: typefaces[tf], items: () => [for (final (i, t) in typefaces.indexed) DChoice(t, i, on: i == tf)], onPick: (i) => put('typeface', i))),
+      DRow('Typeface', DCombo<int>(width: 150, text: typefaces[tf], items: () => [for (final (i, t) in typefaces.indexed) DChoice(t, i, on: i == tf)], onPick: (i) => put('typeface', i))),
       DRow('Size', DStepper(value: n('size', 13), min: 1, max: 1000, suffix: ' pt', onChanged: (v) => put('size', v))),
       SizedBox(
         height: 40,
@@ -3024,9 +3032,9 @@ class _ObjTextPaneState extends State<ObjTextPane> {
         ]),
       ),
       DRow('Character Spacing', DStepper(value: n('tracking'), min: -50, max: 200, suffix: ' %', onChanged: (v) => put('tracking', v))),
-      DRow('Baseline', DCombo<int>(text: switch (s['script']) { 1 => 'Superscript', -1 => 'Subscript', _ => 'Default' }, items: () => [DChoice('Default', 0), DChoice('Superscript', 1), DChoice('Subscript', -1)], onPick: (v) => put('script', v))),
-      DRow('Capitalization', DCombo<String>(text: capName, items: () => [for (final c in caps) DChoice(c.$2, c.$1, on: c.$2 == capName)], onPick: (v) => put('caps', v))),
-      DRow('Character Styles', DCombo<int>(text: 'None', items: () => [DChoice('None', -1), for (final c in chars) DChoice(c['name'] as String, c['id'] as int)], onPick: (id) => put('charStyle', id < 0 ? null : id))),
+      DRow('Baseline', DCombo<int>(width: 150, text: switch (s['script']) { 1 => 'Superscript', -1 => 'Subscript', _ => 'Default' }, items: () => [DChoice('Default', 0), DChoice('Superscript', 1), DChoice('Subscript', -1)], onPick: (v) => put('script', v))),
+      DRow('Capitalization', DCombo<String>(width: 150, text: capName, items: () => [for (final c in caps) DChoice(c.$2, c.$1, on: c.$2 == capName)], onPick: (v) => put('caps', v))),
+      DRow('Character Styles', DCombo<int>(width: 150, text: 'None', items: () => [DChoice('None', -1), for (final c in chars) DChoice(c['name'] as String, c['id'] as int)], onPick: (id) => put('charStyle', id < 0 ? null : id))),
       DRow('Text Color', DColorWell(color: s['color'] == null ? Colors.black : colorOf(s['color']), onChanged: (c) => put('color', [c.r, c.g, c.b, c.a]))),
       ...dSection('Alignment'),
       DIconSegments(n: 4, selected: s['align'] as int?, onPick: (i) => put('align', i), draw: (c, r, i, col) => TextPane._alignIcon(c, r, i, col)),

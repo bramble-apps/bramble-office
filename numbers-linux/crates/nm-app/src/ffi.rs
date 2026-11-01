@@ -84,12 +84,21 @@ pub extern "C" fn vl_home(path: *const c_char) {
     #[cfg(target_os = "android")]
     kn_ui::android::init_logging("Values");
     let home = PathBuf::from(arg(path));
+    // (the user's own home, for the media browser's ~/Pictures and ~/Music)
+    if let Some(h) = std::env::var_os("HOME").filter(|_| std::env::var_os("VALUES_USER_HOME").is_none()) {
+        unsafe { std::env::set_var("VALUES_USER_HOME", h) };
+    }
     for (k, sub) in [("HOME", ""), ("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"), ("XDG_CACHE_HOME", "cache")] {
         let d = if sub.is_empty() { home.clone() } else { home.join(sub) };
         let _ = std::fs::create_dir_all(&d);
         // (before the app starts any thread)
         unsafe { std::env::set_var(k, d) };
     }
+}
+
+thread_local! {
+    /// The media browser was listed since it opened.
+    static BROWSER_LISTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Web pages to open: the front end opens them (None: no front end, the desktop's way).
@@ -478,6 +487,14 @@ pub extern "C" fn vl_status() -> *mut c_char {
     json_out(with(|h| {
         let a = &mut h.app;
         let cell_bar = crate::api::cell_bar(a);
+        // background work coming back (movies, web videos, stock quotes); the media browser's list
+        let busy = crate::media::jobs(a) | a.stocks.busy() | a.media.recorder.is_some();
+        crate::stocks::poll(a);
+        if a.media.open.is_some() && !BROWSER_LISTED.with(|b| b.replace(true)) {
+            crate::dlgapi::list_browser(a);
+        } else if a.media.open.is_none() {
+            BROWSER_LISTED.with(|b| b.set(false));
+        }
         let a = &h.app;
         Some(json!({
             "title": a.title(),
@@ -497,7 +514,9 @@ pub extern "C" fn vl_status() -> *mut c_char {
             "windows": crate::dlgapi::state(a),
             "savedColors": a.settings.saved_colors,
             "openUrls": URLS.lock().ok().and_then(|mut q| q.as_mut().map(std::mem::take)).unwrap_or_default(),
-            "busy": false,
+            "busy": busy,
+            // what to say ("" stops speaking)
+            "speak": SPEECH.lock().ok().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default(),
         }))
     }))
 }
@@ -588,6 +607,21 @@ pub extern "C" fn vl_chrome() -> *mut c_char {
 }
 
 /// A web page asked for (Values Help, Support Development…): the front end opens it.
+/// Text to speak (Edit > Speech; None: Stop Speaking), for the front end's speech.
+static SPEECH: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Start Speaking (`Some`) / Stop Speaking (`None`) for a front end that speaks.
+pub fn speak(text: Option<&str>) {
+    if let Ok(mut q) = SPEECH.lock() {
+        q.push(text.unwrap_or_default().to_string());
+    }
+}
+
+/// Whether the front end opens the links (it asked for them in vl_init).
+pub fn front_end_opens_urls() -> bool {
+    URLS.lock().ok().is_some_and(|q| q.is_some())
+}
+
 pub fn open_url(url: &str) {
     match URLS.lock().ok().as_mut().and_then(|q| q.as_mut()) {
         Some(q) => q.push(url.to_string()),
@@ -666,5 +700,372 @@ mod tests {
         let st = json(vl_status());
         assert_eq!(st["excel"], true, "{st}");
     }
+
+    #[test]
+    fn canvas_controls_and_windows() {
+        let home = std::env::temp_dir().join("values-ffi-test-2");
+        let _ = std::fs::remove_dir_all(&home);
+        vl_home(s(home.to_string_lossy().as_ref()).as_ptr());
+        vl_init(800.0, 1000.0);
+        let ov = |k: &str| json(vl_overlays())["controls"][k].clone();
+        // a shape's points
+        vl_run(s("Shape > Rectangle").as_ptr());
+        vl_run(s("Shapes and Lines > Make Editable").as_ptr());
+        let p = ov("points");
+        assert!(p["nodes"].as_array().is_some_and(|n| n.len() >= 4), "points: {p}");
+        vl_action(s("ctl:points:move:0:0:0:5:5").as_ptr());
+        assert!(json(vl_status())["canUndo"] == true);
+        // a guide out of the top ruler, then removed
+        vl_run(s("Show Rulers").as_ptr());
+        vl_action(s("ctl:guide::h:120").as_ptr());
+        assert_eq!(ov("guides")["lines"].as_array().map(|l| l.len()), Some(1), "{}", ov("guides"));
+        vl_action(s("ctl:guide:0:h:x").as_ptr());
+        assert_eq!(ov("guides")["lines"].as_array().map(|l| l.len()), Some(0));
+        // the pen: a stroke becomes a shape
+        vl_run(s("Line > Draw With Pen").as_ptr());
+        assert!(ov("pen").is_object());
+        let before = json(vl_overlays())["version"].clone();
+        vl_action(s("ctl:pen:line:10,10;40,30;80,20").as_ptr());
+        assert_ne!(json(vl_overlays())["version"], before);
+        vl_action(s("ctl:pen:done").as_ptr());
+        assert!(ov("pen").is_null());
+        // Values Help and speech go to the front end
+        vl_run(s("Values Help").as_ptr());
+        let st = json(vl_status());
+        assert!(st["openUrls"].as_array().is_some_and(|a| a.iter().any(|u| u.as_str().is_some_and(|u| u.ends_with("help.html")))), "{}", st["openUrls"]);
+        // windows: Stock Quote, Language & Region, Show Warnings
+        for (cmd, id) in [("Show Warnings", "warnings"), ("Save as Template…", "saveTemplate"), ("Web Video…", "webVideo"), ("Record Audio", "record")] {
+            vl_run(s(cmd).as_ptr());
+            let w = json(vl_status())["windows"].clone();
+            assert!(w.as_array().is_some_and(|a| a.iter().any(|x| x["id"] == id)), "{cmd}: {w}");
+        }
+    }
+
+
+    /// Every inspector control changes the document: the undo history grows (one edit made) and,
+    /// where the inspector shows the value, it reads back as set. Failures are listed together.
+    #[test]
+    fn every_control_changes_the_document() {
+        let home = std::env::temp_dir().join("values-ffi-test-3");
+        let _ = std::fs::remove_dir_all(&home);
+        vl_home(s(home.to_string_lossy().as_ref()).as_ptr());
+        vl_init(800.0, 1000.0);
+        let undos = || with(|h| h.app.hist.undo_len());
+        let insp = || json(vl_inspector());
+        let set = |k: &str, v: Value| vl_inspector_set(s(k).as_ptr(), s(&v.to_string()).as_ptr());
+        let failed: std::cell::RefCell<Vec<String>> = Default::default();
+        // set `k` to `v`: an edit is made, and `path` in the pane's data (if given) reads `want`
+        let check = |k: &str, v: Value, path: &str, want: Value| {
+            let before = undos();
+            set(k, v.clone());
+            let after = undos();
+            // (an edit with the same name as the one before merges into it: the value read back
+            // decides then)
+            if after <= before && path.is_empty() {
+                failed.borrow_mut().push(format!("{k} = {v}: no edit"));
+                return;
+            }
+            if !path.is_empty() {
+                let st = insp();
+                let mut got = &st["data"];
+                for part in path.split('.') {
+                    got = match part.parse::<usize>() {
+                        Ok(i) => &got[i],
+                        Err(_) => &got[part],
+                    };
+                }
+                let ok = match (got.as_f64(), want.as_f64()) {
+                    (Some(a), Some(b)) => (a - b).abs() < 0.01,
+                    _ => *got == want,
+                };
+                if !ok {
+                    failed.borrow_mut().push(format!("{k} = {v}: {path} reads {got}, not {want}"));
+                }
+            }
+        };
+        // ---- the blank spreadsheet's table, cell B2 (tapped)
+        let g = json(vl_geometry());
+        let (zoom, sx, sy) = (g["zoom"].as_f64().unwrap() as f32, g["scroll"][0].as_f64().unwrap() as f32, g["scroll"][1].as_f64().unwrap() as f32);
+        let c = g["content"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect::<Vec<_>>();
+        let t = ((c[0] + 140.0 - sx) * zoom, (c[1] + 30.0 - sy) * zoom);
+        vl_pointer(1, t.0, t.1, 0, false, false);
+        vl_pointer(2, t.0, t.1, 0, false, false);
+        assert!(json(vl_table())["sel"].is_array());
+        set("obj.cellTab", json!(0));
+        check("table.headerRows", json!(2), "headerRows", json!(2));
+        check("table.headerCols", json!(0), "headerCols", json!(0));
+        check("table.footerRows", json!(1), "footerRows", json!(1));
+        check("table.title", json!(false), "title", json!(false));
+        check("table.caption", json!(true), "caption", json!(true));
+        check("table.rows", json!(25), "rows", json!(25));
+        check("table.cols", json!(6), "cols", json!(6));
+        check("table.banded", json!(true), "banded", json!(true));
+        check("table.bandColor", json!([1.0, 0.0, 0.0, 1.0]), "", Value::Null);
+        let fs = insp()["data"]["fontSize"].as_f64().unwrap_or(0.0);
+        check("table.fontBigger", json!(true), "fontSize", json!(fs + 1.0));
+        check("table.outline", json!({"color": [1.0, 0.0, 0.0, 1.0], "width": 2.0}), "outline.width", json!(2.0));
+        let g0 = insp()["data"]["gridlines"][0].as_bool().unwrap_or(false);
+        check("table.gridline", json!(0), "gridlines.0", json!(!g0));
+        check("table.height", json!(40), "height", json!(40));
+        check("table.width", json!(90), "width", json!(90));
+        let preset = insp()["data"]["presets"][2]["id"].clone();
+        check("table.preset", preset, "", Value::Null);
+        set("obj.cellTab", json!(1));
+        check("cell.format", json!({"kind": 3, "decimals": 1}), "format.kind", json!(3));
+        check("cell.fill", json!({"kind": 1, "color": [0.0, 1.0, 0.0, 1.0]}), "fill.kind", json!(1));
+        set("cell.edges", json!(0));
+        check("cell.line", json!({"color": [0.0, 0.0, 1.0, 1.0], "width": 2.0}), "", Value::Null);
+        check("cell.condAdd", json!({"cmp": 2, "value": "1", "look": 0}), "cond.rules.0.look", insp()["data"]["cond"]["looks"][0]["name"].clone());
+        check("cell.condRemove", json!(0), "cond.rules.0", Value::Null);
+        set("obj.cellTab", json!(2));
+        check("celltext.size", json!(18), "size", json!(18));
+        check("celltext.bold", json!(true), "bold", json!(true));
+        check("celltext.italic", json!(true), "italic", json!(true));
+        check("celltext.underline", json!(true), "underline", json!(true));
+        check("celltext.strike", json!(true), "strike", json!(true));
+        check("celltext.color", json!([1.0, 0.0, 0.0, 1.0]), "color.0", json!(1.0));
+        check("celltext.align", json!(1), "align", json!(1));
+        check("celltext.valign", json!(1), "valign", json!(1));
+        check("celltext.wrap", json!(false), "wrap", json!(false));
+        check("celltext.inset", json!(6), "inset", json!(6));
+        check("celltext.first", json!(5), "first", json!(5));
+        check("celltext.left", json!(4), "left", json!(4));
+        check("celltext.right", json!(3), "right", json!(3));
+        check("celltext.lines", json!(1.5), "lines", json!(1.5));
+        check("celltext.before", json!(2), "before", json!(2));
+        check("celltext.after", json!(2), "after", json!(2));
+        // ---- the sheet
+        vl_run(s("Deselect All").as_ptr());
+        with(|h| {
+            h.app.sel = None;
+            h.app.canvas.obj = None;
+        });
+        check("sheet.name", json!("Budget"), "", Value::Null);
+        let sheet_st = insp();
+        if sheet_st["name"] != "Budget" {
+            failed.borrow_mut().push(format!("sheet.name: reads {}", sheet_st["name"]));
+        }
+        // (the sheet pane's values are at its top level)
+        check("sheet.tabColor", json!([1.0, 0.0, 0.0, 1.0]), "", Value::Null);
+        if insp()["tabColor"].is_null() {
+            failed.borrow_mut().push("sheet.tabColor: reads null".into());
+        }
+        // ---- a text box: Style, Text, Arrange
+        vl_run(s("Text").as_ptr());
+        with(|h| h.app.canvas.editing = None);
+        set("obj.tab", json!(0));
+        check("style.fill", json!({"kind": 1, "color": [1.0, 0.0, 0.0, 1.0]}), "fill.kind", json!(1));
+        check("style.stroke", json!({"color": [0.0, 0.0, 1.0, 1.0], "width": 3.0}), "stroke.width", json!(3.0));
+        check("style.shadowKind", json!(1), "shadow.kind", json!(0));
+        check("style.opacity", json!(50), "opacity", json!(0.5));
+        check("style.reflection", json!(true), "reflection", json!(0.5));
+        check("style.title", json!(true), "title", json!(true));
+        check("style.caption", json!(true), "caption", json!(true));
+        set("obj.tab", json!(1));
+        let tab = insp()["kind"].clone();
+        if tab != "Text" {
+            failed.borrow_mut().push(format!("text box tab 1 is {tab}"));
+        }
+        check("objtext.size", json!(20), "size", json!(20));
+        check("objtext.typeface", json!(3), "bold", json!(true));
+        check("objtext.underline", json!(true), "underline", json!(true));
+        check("objtext.color", json!([0.0, 0.5, 0.0, 1.0]), "color.1", json!(0.5));
+        check("objtext.tracking", json!(10), "tracking", json!(10));
+        check("objtext.script", json!(1), "script", json!(1));
+        check("objtext.caps", json!("All"), "caps", json!("All"));
+        check("objtext.align", json!(2), "align", json!(2));
+        check("objtext.valign", json!(2), "valign", json!(2));
+        check("objtext.lines", json!(1.5), "lines", json!(1.5));
+        check("objtext.before", json!(4), "before", json!(4));
+        check("objtext.after", json!(4), "after", json!(4));
+        check("objtext.bullets", json!(true), "bullets", json!(true));
+        check("objtext.inset", json!(8), "inset", json!(8));
+        check("objtext.shrink", json!(true), "shrink", json!(true));
+        check("objtext.columns", json!(2), "columns", json!(2));
+        check("objtext.gutter", json!(20), "gutter", json!(20));
+        let para = insp()["data"]["paraStyles"].as_array().and_then(|a| a.iter().find(|p| p["name"] != insp()["data"]["paraStyle"]).cloned());
+        if let Some(p) = para {
+            check("objtext.paraStyle", p["id"].clone(), "paraStyle", p["name"].clone());
+        } else {
+            failed.borrow_mut().push("objtext: no other paragraph style".into());
+        }
+        set("obj.tab", json!(2));
+        check("arrange.geometry", json!({"w": 150.0}), "", Value::Null);
+        check("arrange.geometry", json!({"angle": 30.0}), "", Value::Null);
+        check("arrange.command", json!("Flip Horizontally"), "", Value::Null);
+        check("arrange.command", json!("Lock"), "", Value::Null);
+        check("arrange.command", json!("Unlock"), "", Value::Null);
+        // ---- a chart
+        vl_run(s("Chart > 2D Column").as_ptr());
+        set("obj.tab", json!(0));
+        check("chart.legend", json!(false), "legend", json!(false));
+        check("chart.title", json!(true), "title", json!("Title"));
+        check("chart.border", json!(true), "border", json!(true));
+        check("chart.barGap", json!(30), "barGap", json!(30));
+        let types = insp()["data"]["types"].clone();
+        let other = types.as_array().and_then(|a| a.iter().map(|t| t[0].clone()).find(|t| *t != insp()["data"]["type"])).unwrap_or(Value::Null);
+        check("chart.type", other.clone(), "type", other);
+        let tabs = insp()["tabs"].clone();
+        if let Some(i) = tabs.as_array().and_then(|a| a.iter().position(|t| t == "Series")) {
+            set("obj.tab", json!(i));
+            check("chart.valueLabels", json!(true), "valueLabels", json!(true));
+        }
+        if let Some(i) = tabs.as_array().and_then(|a| a.iter().position(|t| t == "Axis")) {
+            set("obj.tab", json!(i));
+            check("chart.gridlines", json!(false), "gridlines", json!(false));
+            check("chart.min", json!(5), "min", json!(5));
+        }
+        let failed = failed.into_inner();
+        assert!(failed.is_empty(), "controls that don't change the document:\n{}", failed.join("\n"));
+    }
+
+
+    /// The windows' controls and the menu commands that edit change the document (the undo
+    /// history grows, or the value reads back). Failures are listed together.
+    #[test]
+    fn windows_and_menus_change_the_document() {
+        let home = std::env::temp_dir().join("values-ffi-test-4");
+        let _ = std::fs::remove_dir_all(&home);
+        vl_home(s(home.to_string_lossy().as_ref()).as_ptr());
+        vl_init(800.0, 1000.0);
+        let undos = || with(|h| h.app.hist.undo_len());
+        let set = |k: &str, v: Value| vl_inspector_set(s(k).as_ptr(), s(&v.to_string()).as_ptr());
+        let failed: std::cell::RefCell<Vec<String>> = Default::default();
+        let tap_b2 = || {
+            let g = json(vl_geometry());
+            let (zoom, sx, sy) = (g["zoom"].as_f64().unwrap() as f32, g["scroll"][0].as_f64().unwrap() as f32, g["scroll"][1].as_f64().unwrap() as f32);
+            let c = g["content"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect::<Vec<_>>();
+            let t = ((c[0] + 140.0 - sx) * zoom, (c[1] + 30.0 - sy) * zoom);
+            vl_pointer(1, t.0, t.1, 0, false, false);
+            vl_pointer(2, t.0, t.1, 0, false, false);
+        };
+        tap_b2();
+        // values in B2:B4 (the formats need values; sorting and summing them)
+        for v in ["7", "3", "5"] {
+            vl_text(s(v).as_ptr());
+            vl_action(s("tbl:commitDown").as_ptr());
+        }
+        tap_b2();
+        vl_action(s("tbl:cancel").as_ptr());
+        // menu commands on the selected cell, each a new edit
+        for cmd in [
+            "Table > Add Row Above", "Table > Add Column After", "Table > Insert Current Date", "Font > Bold", "Text > Align Center",
+            "Sort Ascending", "Sort Descending", "Table > Freeze Header Rows", "Table > Hide Column", "Table > Unhide All Columns", "Header Rows > 2",
+            "Table > Delete Row", "Clear All",
+        ] {
+            let b = undos();
+            vl_run(s(cmd).as_ptr());
+            vl_action(s("tbl:commit").as_ptr());
+            if undos() <= b {
+                failed.borrow_mut().push(format!("menu {cmd}: no edit"));
+            }
+            tap_b2();
+            vl_action(s("tbl:cancel").as_ptr());
+        }
+        // Formula > Sum: the formula started in the cell, finished by typing
+        vl_run(s("Formula > Sum").as_ptr());
+        if !json(vl_table())["editing"]["text"].as_str().is_some_and(|t| t.starts_with("=SUM(")) {
+            failed.borrow_mut().push("menu Formula > Sum: no =SUM( started".into());
+        }
+        vl_action(s("tbl:cancel").as_ptr());
+        vl_text(s("8").as_ptr());
+        vl_action(s("tbl:commit").as_ptr());
+        // windows: Fonts (size), Colors (Fill Selection), Language & Region, Print Setup (paper)
+        vl_run(s("Font > Show Fonts").as_ptr());
+        let w = |name: &str, k: &str, v: Value| {
+            let b = undos();
+            set(k, v);
+            if undos() <= b {
+                failed.borrow_mut().push(format!("{name}: {k} made no edit"));
+            }
+        };
+        w("Fonts", "dlg.fonts.size", json!(23));
+        w("Fonts", "dlg.fonts.family", json!("DejaVu Sans"));
+        w("Fonts", "dlg.fonts.color", json!([0.2, 0.4, 0.6, 1.0]));
+        vl_run(s("Show Colors").as_ptr());
+        w("Colors", "dlg.colors.apply", json!([255, 0, 0, 255]));
+        vl_run(s("Advanced > Language & Region…").as_ptr());
+        w("Language", "dlg.language.ok", json!({"lang": "fr", "region": "FR"}));
+        vl_run(s("Print…").as_ptr());
+        w("Print Setup", "dlg.printSetup.portrait", json!(false));
+        let pn = json(vl_status())["windows"].as_array().and_then(|a| a.iter().find(|x| x["id"] == "printSetup").map(|x| x["pageNumbers"].as_bool().unwrap_or(false))).unwrap_or(false);
+        set("dlg.printSetup.pageNumbers", json!(!pn));
+        let pn2 = json(vl_status())["windows"].as_array().and_then(|a| a.iter().find(|x| x["id"] == "printSetup").map(|x| x["pageNumbers"].as_bool().unwrap_or(false))).unwrap_or(false);
+        if pn2 == pn {
+            failed.borrow_mut().push("Print Setup: pageNumbers didn't change".into());
+        }
+        // the sheet tabs' and sheet pane's buttons
+        let n = || json(vl_status())["sheets"]["sheets"].as_array().map(|a| a.len()).unwrap_or(0);
+        let before = n();
+        vl_action(s("sheet:add").as_ptr());
+        if n() != before + 1 {
+            failed.borrow_mut().push("sheet:add made no sheet".into());
+        }
+        // an object's link (the link popover) and its badge
+        vl_run(s("Shape > Rectangle").as_ptr());
+        vl_run(s("Add Link > Webpage").as_ptr());
+        set("dlg.valuesLink.done", json!({"addr": "example.com"}));
+        if json(vl_overlays())["controls"]["links"].as_array().is_none_or(|a| a.is_empty()) {
+            failed.borrow_mut().push("link popover: no link on the shape".into());
+        }
+        // a chart's data window
+        vl_run(s("Chart > 2D Column").as_ptr());
+        vl_run(s("Chart > Edit Chart Data…").as_ptr());
+        let st = json(vl_status());
+        if st["windows"].as_array().is_some_and(|a| a.iter().any(|x| x["id"] == "chartData")) {
+            w("Chart Data", "dlg.chartData.cell", json!({"r": 0, "c": 0, "text": "99"}));
+            w("Chart Data", "dlg.chartData.addSeries", json!(null));
+        }
+        let failed = failed.into_inner();
+        assert!(failed.is_empty(), "controls that don't change the document:\n{}", failed.join("\n"));
+    }
+
+
+    /// Every "cmd:" a front-end menu or popover sends (the cells', an object's and text's context
+    /// menus, a row's and a column's menu, the toolbar popovers) is a command the engine runs:
+    /// one of the menu bar's (implemented), or one menus::run handles itself.
+    #[test]
+    fn front_end_menus_send_known_commands() {
+        let home = std::env::temp_dir().join("values-ffi-test-5");
+        let _ = std::fs::remove_dir_all(&home);
+        vl_home(s(home.to_string_lossy().as_ref()).as_ptr());
+        vl_init(800.0, 1000.0);
+        let mut cmds: Vec<String> = Vec::new();
+        fn walk(v: &Value, out: &mut Vec<String>) {
+            match v {
+                Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+                Value::Object(o) => {
+                    if let Some(c) = o.get("action").and_then(Value::as_str).and_then(|a| a.strip_prefix("cmd:")) {
+                        out.push(c.to_string());
+                    }
+                    o.values().for_each(|x| walk(x, out));
+                }
+                _ => {}
+            }
+        }
+        let g = json(vl_geometry());
+        let (zoom, sx, sy) = (g["zoom"].as_f64().unwrap() as f32, g["scroll"][0].as_f64().unwrap() as f32, g["scroll"][1].as_f64().unwrap() as f32);
+        let c = g["content"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect::<Vec<_>>();
+        let t = ((c[0] + 140.0 - sx) * zoom, (c[1] + 30.0 - sy) * zoom);
+        vl_pointer(1, t.0, t.1, 0, false, false);
+        vl_pointer(2, t.0, t.1, 0, false, false);
+        walk(&json(vl_context_menu()), &mut cmds);
+        walk(&json(vl_table_tab_menu(true, 1)), &mut cmds);
+        walk(&json(vl_table_tab_menu(false, 1)), &mut cmds);
+        for p in ["View", "Insert", "Media", "Table", "Shape", "Chart"] {
+            walk(&json(vl_popover(s(p).as_ptr())), &mut cmds);
+        }
+        vl_run(s("Shape > Rectangle").as_ptr());
+        walk(&json(vl_context_menu()), &mut cmds);
+        vl_run(s("Text").as_ptr());
+        walk(&json(vl_context_menu()), &mut cmds);
+        cmds.sort();
+        cmds.dedup();
+        // (handled by menus::run before the menu bar's own: not items of the menu bar)
+        let own = ["Sort Ascending", "Sort Descending", "Comment", "Text", "Sheet", "Image Gallery", "Choose File"];
+        let unknown: Vec<&String> = cmds.iter().filter(|c| !(crate::menus::is_command(c) || own.contains(&c.as_str()))).collect();
+        assert!(unknown.is_empty(), "commands the menu bar doesn't have: {unknown:?}");
+    }
+
 }
 

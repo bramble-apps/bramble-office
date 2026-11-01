@@ -267,7 +267,11 @@ fn help_page() {
     let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))).unwrap_or_else(std::env::temp_dir).join("numdeck");
     let _ = std::fs::create_dir_all(&dir);
     let page = dir.join("help.html");
-    if std::fs::write(&page, html).is_ok() && std::env::var_os("NM_SCRIPT").is_none() {
+    let written = std::fs::write(&page, html).is_ok();
+    // (a front end that opens pages itself: Android's)
+    if written && crate::ffi::front_end_opens_urls() {
+        crate::ffi::open_url(&page.to_string_lossy());
+    } else if written && std::env::var_os("NM_SCRIPT").is_none() {
         let _ = kn_ui::open_command(&page).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }
 }
@@ -1527,12 +1531,23 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
                 text = app.doc().map(|d| d.storage_text(st)).unwrap_or_default();
             }
             let text = text.replace(['\u{2028}', '\u{fffc}'], " ");
+            // (a front end that speaks itself: Android's text to speech)
+            if crate::ffi::front_end_opens_urls() {
+                if !text.trim().is_empty() {
+                    crate::ffi::speak(Some(&text));
+                }
+                return;
+            }
             if !text.trim().is_empty() && std::process::Command::new("spd-say").arg("--").arg(&text).stdin(std::process::Stdio::null()).spawn().is_err() {
                 app.notify("Speech needs speech-dispatcher (spd-say)");
             }
             return;
         }
         "Stop Speaking" => {
+            if crate::ffi::front_end_opens_urls() {
+                crate::ffi::speak(None);
+                return;
+            }
             let _ = std::process::Command::new("spd-say").arg("--cancel").spawn();
             return;
         }
@@ -2332,6 +2347,16 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
             };
             if let Some(Err(e)) = app.edit("Remove Background", |d, h| d.set_background_removed(h, id, png)) {
                 app.notify(format!("{e}"));
+            }
+        }
+        // the cells' context menu and a column's menu (canvas.rs table_menu): the table's rows
+        // sorted by the cursor's column
+        "Sort Ascending" | "Sort Descending" => {
+            let Some(sel) = app.sel.filter(|s| !app.categorized(s.table)) else { return };
+            commit(app);
+            let (t, col, up) = (sel.table, sel.cursor.1, name == "Sort Ascending");
+            if let Some(Err(e)) = app.edit("Sort", |d, h| d.sort_table_rows(h, t, col, up)) {
+                app.notify(format!("Sort: {e}"));
             }
         }
         "Copy Style" => crate::editing::copy_style(app),

@@ -97,19 +97,42 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             });
         });
         if go {
-            let (tx, rx) = channel();
-            let u = url.trim().to_string();
-            std::thread::spawn(move || {
-                let _ = tx.send(fetch(u));
-            });
-            app.webmedia.fetching = Some(rx);
-            app.notify("Getting the video's details…");
+            start_fetch(app, &url);
         } else if keep {
             app.webmedia.url_sheet = Some(url);
         } else {
             app.webmedia.replacing = None;
         }
     }
+    poll(app, ctx);
+}
+
+/// The Web Video sheet's Insert: the video's details fetched in the background (`poll` puts it in).
+pub fn start_fetch(app: &mut App, url: &str) {
+    let (tx, rx) = channel();
+    let u = url.trim().to_string();
+    std::thread::spawn(move || {
+        let _ = tx.send(fetch(u));
+    });
+    app.webmedia.fetching = Some(rx);
+    app.notify("Getting the video's details…");
+}
+
+/// Pictures picked by the front end for a new gallery (or the gallery Format > Gallery > + named).
+pub fn gallery_from(app: &mut App, paths: &[std::path::PathBuf]) {
+    let pics: Vec<(String, Vec<u8>)> = paths.iter().filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?))).collect();
+    let (tx, rx) = channel();
+    let _ = tx.send(pics);
+    app.webmedia.picking = Some(rx);
+}
+
+/// Whether a fetch or a pick is still on its way.
+pub fn busy(app: &App) -> bool {
+    app.webmedia.fetching.is_some() || app.webmedia.picking.is_some()
+}
+
+/// Fetched videos and picked pictures that came back go on the slide.
+pub fn poll(app: &mut App, ctx: &egui::Context) {
     if let Some(rx) = app.webmedia.fetching.take() {
         match rx.try_recv() {
             Ok(Ok((url, title, author, poster))) => match app.webmedia.replacing.take() {

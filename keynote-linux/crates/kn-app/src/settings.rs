@@ -435,7 +435,7 @@ pub fn settings_window(app: &mut App, ctx: &egui::Context) {
     }
 }
 
-const SHORTCUTS: &[(&str, &str)] = &[
+pub(crate) const SHORTCUTS: &[(&str, &str)] = &[
     ("Play slideshow", "Ctrl+Alt+P"),
     ("Next / previous slide (slideshow)", "Space, →  /  ←"),
     ("Exit slideshow", "Esc"),

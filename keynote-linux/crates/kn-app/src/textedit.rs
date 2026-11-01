@@ -72,8 +72,10 @@ fn local(g: &Geometry, p: Point) -> Point {
 pub fn begin(app: &mut App, scene: &SlideScene, id: ObjId, at: Option<Point>) -> bool {
     let Some(d) = scene.drawables.iter().find(|d| d.id == id) else { return false };
     let DrawableKind::Shape(s) = &d.kind else { return false };
-    let Some(tb) = &s.text else { return false };
-    let storage = tb.storage;
+    // a shape whose text is empty has none in the scene: its own storage (Keynote types into
+    // any shape)
+    let own = || app.doc.as_ref()?.file.obj(id)?.find_super("TSWP.ShapeInfoArchive")?.ref_id("owned_storage");
+    let Some(storage) = s.text.as_ref().map(|tb| tb.storage).or_else(own) else { return false };
     let Some(doc) = app.doc.as_mut() else { return false };
     let raw = doc.storage_text(storage);
     doc.begin(&mut app.hist, "Typing");

@@ -1,6 +1,7 @@
 // Automated checks. On Waydroid (its own screenshots come out black): when the app's external
 // files folder has a file `test-snapshots`, the app saves what it shows as snap.png there
-// whenever a file `snap-now` appears. On Linux: KEYDECK_SNAP names that folder, and
+// whenever a file `snap-now` appears, and runs the key hook lines of a file `keys-now`.
+// On Linux: KEYDECK_SNAP names that folder, and
 // KEYDECK_SCRIPT runs a script of touches and typing (taps and drags as real pointer events),
 // `;`-separated: tap x y | drag x1 y1 x2 y2 [ms] | pinch x y scale | type text | key name |
 // hold x1 y1 x2 y2 (stays down) | release | wait ms | snap name | quit.
@@ -116,6 +117,19 @@ Future<void> startTestSnapshots(GlobalKey boundary, {void Function(String text)?
   }
   if (!File('$folder/test-snapshots').existsSync()) return;
   Timer.periodic(const Duration(milliseconds: 500), (_) async {
+    // `keys-now`: lines for the key hook ("menu:<command>", "action:<engine action>",
+    // "set:<key>=<json>", "menu:open:<file>"), run in order
+    final keys = File('$folder/keys-now');
+    if (keys.existsSync()) {
+      final lines = keys.readAsLinesSync();
+      try {
+        keys.deleteSync();
+      } catch (_) {}
+      for (final l in lines.where((l) => l.trim().isNotEmpty)) {
+        key?.call(l.trim());
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
+    }
     final trigger = File('$folder/snap-now');
     if (!trigger.existsSync()) return;
     try {

@@ -11,7 +11,7 @@ use crate::theme;
 pub struct EquationDialog {
     pub open: bool,
     pub source: String,
-    error: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 /// PNG of a LaTeX formula (math mode), or a readable error.
@@ -65,6 +65,13 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
     });
     app.equation.open = open;
     if insert {
+        insert_equation(app);
+    }
+}
+
+/// Insert: the equation typeset and put on the slide (an error shown when it can't be).
+pub(crate) fn insert_equation(app: &mut App) {
+    {
         let src = app.equation.source.trim().to_string();
         match typeset(&src) {
             Ok(png) => {

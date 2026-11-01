@@ -138,6 +138,10 @@ pub struct Play {
     pub replay: Option<Replay>,
     /// Background preparation of slide states and builds (started on the first frame).
     prep: Option<PrepWorker>,
+    /// A front end draws the show (showapi.rs): no HUD, video controls or presenter display here.
+    pub external: bool,
+    /// Movies the front end plays (its own player): (object, how to play it).
+    pub ext_movies: Vec<(ObjId, media::Spec)>,
 }
 
 /// What the preparation worker makes: slide states (with or without background) and build groups.
@@ -374,6 +378,8 @@ impl Play {
             narration: None,
             replay: None,
             prep: None,
+            external: false,
+            ext_movies: Vec::new(),
         }
     }
 
@@ -381,6 +387,21 @@ impl Play {
     fn anim_time(&self, start: Instant) -> f32 {
         let t = since(start).as_secs_f32();
         self.anim_cap.map(|c| t.min(c)).unwrap_or(t)
+    }
+
+    /// For a front end drawing the show: rehearsing, seconds on the presenter timer, animating.
+    /// Movies the front end plays now (Play::external): (object, how).
+    pub fn movies(&self) -> &[(ObjId, media::Spec)] {
+        &self.ext_movies
+    }
+
+    /// Record Slideshow is recording this show.
+    pub fn narrating(&self) -> bool {
+        self.narration.is_some()
+    }
+
+    pub fn info(&self) -> (bool, f64, bool) {
+        (self.rehearse, since(self.presenter.timer).as_secs_f64(), self.anim.is_some())
     }
 
     fn begin(&mut self, a: Anim) {
@@ -639,6 +660,12 @@ fn start_movie(app: &App, play: &mut Play, ctx: &egui::Context, scene: &SlideSce
     let Some((path, len)) = media::cache_file(doc, data) else { return };
     let px = movie_px(map, ctx.pixels_per_point(), d.geom.w, d.geom.h);
     let spec = media::Spec::new(path, len, m, Some(px));
+    if play.external {
+        // the front end's own player (Android has no ffmpeg)
+        play.ext_movies.retain(|(d, _)| *d != id);
+        play.ext_movies.push((id, spec));
+        return;
+    }
     play.players.push(media::Player::start(ctx, id, data, spec));
 }
 
@@ -685,7 +712,10 @@ fn group_media(app: &App, play: &mut Play, ctx: &egui::Context, scene: &SlideSce
         let is_movie = scene.drawables.iter().any(|d| d.id == id && matches!(d.kind, DrawableKind::Movie(_)));
         match tr.kind {
             Kind::Media(true) => start_movie(app, play, ctx, scene, id, map),
-            Kind::Media(false) | Kind::Out if is_movie => play.players.retain(|p| p.drawable != id),
+            Kind::Media(false) | Kind::Out if is_movie => {
+                play.players.retain(|p| p.drawable != id);
+                play.ext_movies.retain(|(d, _)| *d != id);
+            }
             Kind::In if is_movie && !scene.builds.iter().any(|b| b.drawable == id && matches!(builds::kind_of(b), Kind::Media(true))) => {
                 start_movie(app, play, ctx, scene, id, map)
             }
@@ -709,6 +739,13 @@ fn hand_over_movies(play: &mut Play, next: Option<&SlideScene>) {
                 .collect()
         })
         .unwrap_or_default();
+    play.ext_movies.retain_mut(|(d, _)| match next.and_then(|sc| sc.drawables.iter().find(|x| matches!(&x.kind, DrawableKind::Movie(m) if m.plays_across_slides) )) {
+        Some(x) => {
+            *d = x.id;
+            true
+        }
+        None => false,
+    });
     play.players.retain_mut(|p| match keep.iter().find(|(data, _)| *data == p.data_id) {
         Some((_, id)) if !p.finished() => {
             p.drawable = *id;
@@ -1275,6 +1312,10 @@ fn draw_slides(app: &mut App, play: &mut Play, ctx: &egui::Context, painter: &eg
 pub fn ui(app: &mut App, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
     let Some(mut play) = app.play.take() else { return };
+    EXTERNAL.with(|e| e.set(play.external));
+    if play.external {
+        (play.in_window, play.presenter.window, play.presenter.swapped) = (true, false, false);
+    }
     if !play.started_fullscreen {
         if std::env::var_os("KN_NOFS").is_none() && !play.in_window {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
@@ -1596,8 +1637,9 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
             let next_motion = scene_rc(app, &mut play, n).and_then(|sc| sc.motion.clone());
             // a dynamic background plays under the transition: the next slide's (or this one's);
             // slides with one are drawn without it
+            let backdrop = tr.as_ref().is_some_and(|t| transitions::paints_backdrop(&t.effect));
             let live = match (&scene.motion, &next_motion) {
-                (Some(a), Some(b)) if same_motion(a, b) => Some(a.clone()),
+                (Some(a), Some(b)) if same_motion(a, b) && !backdrop => Some(a.clone()),
                 _ => None,
             };
             let to_live = next_motion.clone().filter(|_| live.is_none());
@@ -1644,6 +1686,8 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
                 play.index = first;
                 play.step = 0;
                 play.players.clear();
+        play.ext_movies.clear();
+                play.ext_movies.clear();
                 play.autoplay_pending = true;
                 if let Some(sc) = scene_rc(app, &mut play, first) {
                     scene = sc;
@@ -1660,6 +1704,7 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         // short; the previous slide is shown fully built (its automatic builds don't replay)
         play.anim = None;
         play.players.clear();
+        play.ext_movies.clear();
         if play.step > 0 {
             play.step = 0;
             play.autoplay_pending = true;
@@ -1679,6 +1724,7 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         play.step = 0;
         play.anim = None;
         play.players.clear();
+        play.ext_movies.clear();
         play.autoplay_pending = true;
         if let Some(sc) = { let i = play.index; scene_rc(app, &mut play, i) } {
             scene = sc;
@@ -1707,7 +1753,9 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         draw_slides(app, &mut play, &ctx, &ui.painter_at(rect), rect, &scene, &frames);
         // a remote's laser pointer and highlights over the slide
         crate::remote::draw_overlay(&ui.painter_at(rect), rect);
-        video_controls(&mut play, ui, &map, &scene);
+        if !play.external {
+            video_controls(&mut play, ui, &map, &scene);
+        }
     } else {
         let view = presenter_view(app, &play, &scene, &frames);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(screen));
@@ -1743,7 +1791,7 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         ctx.request_repaint_after(Duration::from_millis(30));
     }
     if let Some(h) = play.show_hud {
-        if since(h) < Duration::from_secs(2) && slides_here && play.recording.is_none() {
+        if since(h) < Duration::from_secs(2) && slides_here && play.recording.is_none() && !play.external {
             let n = app.slides.len();
             let hint = if play.presenter.window { "" } else { "   X presenter display" };
             ui.painter_at(screen).text(
@@ -1797,6 +1845,21 @@ fn log_navigation(app: &App, n: &mut Narration, index: usize, step: usize, anim:
     }
 }
 
+thread_local! {
+    /// The show running now is drawn by a front end (Play::external).
+    static EXTERNAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Record Slideshow in a front end's show: its recording of the narration (an AAC .m4a, or
+/// None when there's no sound), kept with the show's timing.
+pub fn narration_done(app: &mut App, audio: Option<std::path::PathBuf>) {
+    let Some(mut n) = app.narration_waiting.take() else { return };
+    if let Some(a) = audio {
+        n.wav = a;
+    }
+    finish_narration(app, n);
+}
+
 /// Start Play > Record Slideshow from slide `from`: the microphone is recorded (PipeWire's
 /// pw-record, else ALSA's arecord) while the show runs.
 pub fn start_narration(app: &mut App, from: usize) {
@@ -1806,7 +1869,8 @@ pub fn start_narration(app: &mut App, from: usize) {
     let _ = std::fs::remove_file(&wav);
     let null = || std::process::Stdio::null();
     // KN_NO_MIC (automated checks): timing only, silent narration
-    let mic = if std::env::var_os("KN_NO_MIC").is_some() { None } else { std::process::Command::new("pw-record")
+    // (Android: the front end records the sound itself)
+    let mic = if std::env::var_os("KN_NO_MIC").is_some() || cfg!(target_os = "android") { None } else { std::process::Command::new("pw-record")
         .args(["--rate", "48000", "--channels", "2"])
         .arg(&wav)
         .stdin(null())
@@ -1815,7 +1879,7 @@ pub fn start_narration(app: &mut App, from: usize) {
         .spawn()
         .or_else(|_| std::process::Command::new("arecord").args(["-f", "dat"]).arg(&wav).stdin(null()).stdout(null()).stderr(null()).spawn())
         .ok() };
-    if mic.is_none() && std::env::var_os("KN_NO_MIC").is_none() {
+    if mic.is_none() && std::env::var_os("KN_NO_MIC").is_none() && !cfg!(target_os = "android") {
         app.notify("No microphone recorder found (pw-record or arecord): recording the timing only");
     }
     app.start_play(from, false);
@@ -1888,6 +1952,24 @@ fn finish_narration(app: &mut App, mut n: Narration) {
         app.notify("The recording was too short to keep");
         return;
     }
+    // the front end's own recording (AAC in an MP4 file): kept as it is
+    if n.wav.extension().is_some_and(|e| e == "m4a") {
+        let bytes = std::fs::read(&n.wav).ok();
+        let _ = std::fs::remove_file(&n.wav);
+        let Some(bytes) = bytes else {
+            app.notify("Couldn't read the recording");
+            return;
+        };
+        let Some(doc) = app.doc.as_mut() else { return };
+        doc.begin(&mut app.hist, "Record Slideshow");
+        let r = doc.set_recording(&mut app.hist, &n.events, bytes, duration);
+        doc.end(&mut app.hist);
+        match r {
+            Ok(()) => app.notify(format!("Recorded {:.0} s; Play > Play Recorded Slideshow plays it back", duration)),
+            Err(e) => app.notify(format!("Couldn't save the recording: {e}")),
+        }
+        return;
+    }
     let mov = n.wav.with_extension("mov");
     let _ = std::fs::remove_file(&mov);
     let mut c = std::process::Command::new("ffmpeg");
@@ -1925,7 +2007,12 @@ fn finish_narration(app: &mut App, mut n: Narration) {
 
 fn exit(app: &mut App, ctx: &egui::Context, in_window: bool, rec: Option<Recording>, narration: Option<Narration>) {
     if let Some(n) = narration {
-        finish_narration(app, n);
+        if app.play.as_ref().is_some_and(|p| p.external) || EXTERNAL.with(|e| e.get()) {
+            // the front end recorded the sound: it hands it over (narration_done)
+            app.narration_waiting = Some(n);
+        } else {
+            finish_narration(app, n);
+        }
     }
     if !in_window {
         ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));

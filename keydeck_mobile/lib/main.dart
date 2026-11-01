@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'desktop/chooser.dart';
 import 'desktop/colors.dart' show appShot;
 import 'desktop/inspector.dart';
 import 'desktop/inspector_parts.dart';
+import 'desktop/layout_grid.dart';
 import 'desktop/look.dart';
 import 'desktop/menubar.dart';
 import 'desktop/navigator.dart';
@@ -24,6 +26,7 @@ import 'desktop/show.dart';
 import 'desktop/slide.dart';
 import 'desktop/slide_view.dart';
 import 'desktop/tabbar.dart';
+import 'desktop/views.dart';
 import 'desktop/toolbar.dart';
 import 'desktop/touch_menu.dart';
 import 'desktop/widgets.dart';
@@ -108,7 +111,9 @@ bool isCompact(BuildContext context, Map<String, dynamic> chrome) {
   final layout = (chrome['uiLayout'] as num?)?.toInt() ?? 0;
   if (layout == 1) return true;
   if (layout != 0) return false;
-  if (Platform.environment['KEYDECK_PHONE'] != null) return MediaQuery.of(context).size.shortestSide < 600;
+  // (the test screen's own size, as a device's before Settings > Scaling)
+  final test = RegExp(r'^(\d+)x(\d+)$').firstMatch(Platform.environment['KEYDECK_PHONE'] ?? '');
+  if (test != null) return math.min(double.parse(test[1]!), double.parse(test[2]!)) < 600;
   final view = View.of(context);
   return chrome['android'] == true && (view.physicalSize / view.devicePixelRatio).shortestSide < 600;
 }
@@ -133,7 +138,7 @@ class _DocScreenState extends State<DocScreen> {
 
   /// The message pill's text (the engine's message, shown for its 4 seconds).
   String? _message;
-  Timer? _messageTimer;
+  Timer? _messageTimer, _busyTimer;
 
   /// The phone layout last frame (null before the first); the first frame.
   bool? _wasCompact;
@@ -209,7 +214,7 @@ class _DocScreenState extends State<DocScreen> {
     }
     _nav = e.navigator();
     _geo = e.geometry();
-    if (_status['open'] != true) {
+    if (_status['open'] != true || _status['changingTheme'] == true) {
       _themes ??= e.themes();
     } else {
       _themes = null;
@@ -226,6 +231,18 @@ class _DocScreenState extends State<DocScreen> {
       _read();
       _rev++;
     });
+    // background work (opening, a web video's details, pictures for a gallery): polled until done
+    if (_status['busy'] == true && _busyTimer == null) {
+      _busyTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
+        if (e.tick() != 0) _refreshAll();
+        if (e.status()['busy'] != true) {
+          _busyTimer?.cancel();
+          _busyTimer = null;
+          _refreshAll();
+        }
+      });
+    }
+    _openUrls();
     final msg = _status['message'] as String?;
     if (msg != null && msg != before) {
       _message = msg;
@@ -234,6 +251,14 @@ class _DocScreenState extends State<DocScreen> {
         e.action('msg:');
         if (mounted) setState(() => _message = null);
       });
+    }
+  }
+
+  /// Web pages and mail links the engine opened (a link in the show, Support Development…):
+  /// the system's browser or mail app (MainActivity "open").
+  void _openUrls() {
+    for (final u in e.urls()) {
+      const MethodChannel('app.bramble.keydeck/open').invokeMethod('url', u).catchError((_) => null);
     }
   }
 
@@ -347,6 +372,27 @@ class _DocScreenState extends State<DocScreen> {
       case 'HTML…' || 'Export To > HTML…':
         await _saveAs('html', export: true);
         return;
+      // the slides as pictures: PNGs in a .zip (one file for Android's save picker)
+      case 'Images…' || 'Export To > Images…':
+        await _saveAs('zip', export: true);
+        return;
+      // (Android has no printing of its own here: the PDF, to print from a PDF viewer)
+      case 'Print…':
+        await _saveAs('pdf', export: true);
+        return;
+      case 'Movie…' || 'Animated GIF…' || 'Export To > Movie…' || 'Export To > Animated GIF…':
+        return _toast('Movies and GIFs are made with ffmpeg, which Android doesn\u2019t have: export a PDF or images instead');
+      case 'Image Gallery':
+        final paths = [for (final f in await FilePicker.pickFiles(type: FileType.image)) if (f.path != null) f.path!];
+        if (paths.isNotEmpty) e.action('gallery:${paths.join('\n')}');
+        return _refreshAll();
+      // the desktop's media browsers: Android's own pickers
+      case 'Show Photo and Video Browser':
+        return _popAction('media:Choose Photo or Video…');
+      case 'Show Music Browser':
+        return _popAction('media:Choose Music…');
+      case 'Choose File' || 'Choose…':
+        return _popAction('media:Choose Photo or Video…');
       // a new presentation in a tab of its own: the theme chooser shows there
       case 'New…':
         e.action('tab:new');
@@ -458,37 +504,9 @@ class _DocScreenState extends State<DocScreen> {
     if (data == null) return;
     final names = [for (final n in (data['layouts'] as List? ?? const [])) n as String];
     final aspect = (data['aspect'] as num?)?.toDouble() ?? 9 / 16;
-    final look = Look(_chrome);
-    final pics = [for (var i = 0; i < names.length; i++) e.renderLayout(i, 212, (212 * aspect).round())];
     final ctx0 = _popCtx.currentContext;
     if (ctx0 == null) return;
-    final pick = await showDesktopPopover<int>(ctx0, at, width: 392, centered: true, fit: true, child: (ctx) {
-      return LookScope(
-        look: look,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Wrap(spacing: 12, runSpacing: 12, alignment: WrapAlignment.center, children: [
-            for (final (i, n) in names.indexed)
-              GestureDetector(
-                onTap: () => Navigator.of(ctx).pop(i),
-                child: SizedBox(
-                  width: 112,
-                  child: Column(children: [
-                    Container(
-                      width: 112,
-                      height: 112 * aspect,
-                      decoration: BoxDecoration(border: Border.all(color: look.gray(90))),
-                      child: FutureBuilder(future: pics[i], builder: (c, snap) => snap.data == null ? const SizedBox() : RawImage(image: snap.data, fit: BoxFit.fill)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(n, maxLines: 1, overflow: TextOverflow.ellipsis, style: Look.font(11, look.textDim)),
-                  ]),
-                ),
-              ),
-          ]),
-        ),
-      );
-    });
+    final pick = await showLayoutGrid(ctx0, at, e, names: names, aspect: aspect);
     if (pick != null) {
       e.action('layout:$pick');
       _refreshAll();
@@ -578,6 +596,12 @@ class _DocScreenState extends State<DocScreen> {
     final slideSize = size == null ? const Size(1920, 1080) : Size((size[0] as num).toDouble(), (size[1] as num).toDouble());
     final showNav = open && _status['navigator'] == true;
     final playing = _status['playing'] == true;
+    // the slide list: narrower on Android (Letters' sidebarWidth); the inspector a sheet from
+    // the foot whenever the slide would be left less than 420 points beside the panels (an
+    // unfolded phone at Android's 1.25 scale: about 570 points across)
+    final navW = Platform.isAndroid ? 124.0 : 160.0;
+    final roomW = MediaQuery.of(context).size.width - (showNav && !compact ? navW : 0) - 300;
+    final sheetInsp = compact || roomW < 420;
     final navigator = Navigator2(engine: e, look: look, s: _nav, slide: slideSize, onChanged: _refreshAll, onAction: _popAction, horizontal: compact, topInset: compact ? 0 : floatH);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: look.light ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
@@ -597,7 +621,7 @@ class _DocScreenState extends State<DocScreen> {
                     child: Stack(children: [
                       Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                         // the navigator: down the left under the toolbar's band (a tablet), along the foot (a phone)
-                        if (!compact) SlidePane(open: showNav, width: 160, fromLeft: true, child: navigator),
+                        if (!compact) SlidePane(open: showNav, width: navW, fromLeft: true, child: navigator),
                         Expanded(
                           child: Column(children: [
                             // the presentations' tabs (two or more): under the toolbar's room
@@ -609,19 +633,37 @@ class _DocScreenState extends State<DocScreen> {
                               }),
                             ],
                             Expanded(
-                              child: open
+                              child: open && _status['view'] == 'LightTable'
+                                  ? LightTable(engine: e, look: look, s: _nav, slide: slideSize, onChanged: _refreshAll, topInset: _status['tabs'] != null ? 0 : floatH)
+                                  : open && _status['view'] == 'Outline'
+                                  ? OutlineView(engine: e, look: look, revision: _rev, current: (_geo['current'] as num?)?.toInt() ?? 0, onChanged: _refreshAll, topInset: _status['tabs'] != null ? 0 : floatH)
+                                  : open
                                   ? LayoutBuilder(
                                       // (the phone's sheet rests at half the room, over the filmstrip: the slide fits above it)
-                                      builder: (ctx, box) => SlideView(key: _doc, engine: e, look: look, topInset: _status['tabs'] != null ? 0 : floatH, bottomInset: compact && showInspector ? (box.maxHeight + (showNav ? 96 : 0)) * 0.5 - (showNav ? 96 : 0) : 0, message: _message, onChanged: _changed, onMenuAction: _popAction),
+                                      builder: (ctx, box) => SlideView(key: _doc, engine: e, look: look, topInset: _status['tabs'] != null ? 0 : floatH, bottomInset: sheetInsp && showInspector ? (box.maxHeight + (compact && showNav ? 96 : 0)) * 0.5 - (compact && showNav ? 96 : 0) : 0, message: _message, onChanged: _changed, onMenuAction: _popAction),
                                     )
                                   : ColoredBox(color: look.canvas),
                             ),
+                            if (open && _status['notes'] == true && (_status['view'] == 'Navigator' || _status['view'] == 'SlideOnly')) NotesPanel(engine: e, look: look, current: (_geo['current'] as num?)?.toInt() ?? 0, revision: _rev),
+                            if (open && _status['editingLayouts'] == true)
+                              Container(
+                                height: 44,
+                                color: look.header,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Row(children: [
+                                  Expanded(child: Text('Editing slide layouts — changes apply to every slide that uses the layout', maxLines: 2, style: Look.font(13, look.textDim))),
+                                  TextButton(onPressed: () {
+                                    e.action('layouts:done');
+                                    _refreshAll();
+                                  }, child: Text('Done', style: Look.font(15, look.accent, bold: true))),
+                                ]),
+                              ),
                             if (compact && showNav) Container(height: 96, decoration: BoxDecoration(border: Border(top: BorderSide(color: look.separator))), child: navigator),
                           ]),
                         ),
-                        if (!compact) SlidePane(open: showInspector, width: 300, child: Inspector(engine: e, look: look, topInset: floatH, revision: _rev, onChanged: _refreshAll)),
+                        if (!sheetInsp) SlidePane(open: showInspector, width: 300, child: Inspector(engine: e, look: look, topInset: floatH, revision: _rev, onChanged: _refreshAll)),
                       ]),
-                      if (compact)
+                      if (sheetInsp)
                         Positioned.fill(
                           child: InspectorSheet(
                             open: showInspector,
@@ -630,6 +672,31 @@ class _DocScreenState extends State<DocScreen> {
                               _refreshAll();
                             },
                             child: Inspector(engine: e, look: look, topInset: 0, revision: _rev, onChanged: _refreshAll, sheet: true),
+                          ),
+                        ),
+                      // File > Change Theme: the chooser over the open presentation
+                      if (open && _status['changingTheme'] == true && _themes != null)
+                        Positioned.fill(
+                          top: floatH,
+                          child: Chooser(
+                            w: {
+                              'title': 'Choose a new theme for this presentation',
+                              'app': 'Keydeck',
+                              'section': 'Themes',
+                              'all': 'All Themes',
+                              'templates': [for (final t in _themes!['themes'] as List) t['name']],
+                              'previews': [for (final t in _themes!['themes'] as List) t['preview']],
+                              'default': _themes!['default'],
+                              'tile': const [176.0, 99.0],
+                              'cancel': true,
+                              'recent': const [],
+                              'backdrop': look.canvas.toARGB32(),
+                            },
+                            press: (b, v) {
+                              e.action(b == 'create' ? 'theme:$v' : 'theme:cancel');
+                              _refreshAll();
+                            },
+                            onBrowse: () {},
                           ),
                         ),
                       // the theme chooser when nothing's open (welcome.rs), below the toolbar

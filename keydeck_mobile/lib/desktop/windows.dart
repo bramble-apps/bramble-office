@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -21,6 +22,7 @@ import 'inspector_parts.dart' show InspectorSheet;
 import 'look.dart';
 import 'scale.dart';
 import 'toolbar.dart' show TbPayload, TbDragImage;
+import 'form_window.dart';
 import 'widgets.dart';
 
 /// egui's Window frame. (Content is at least 326 wide, as the desktop's windows come out.)
@@ -100,6 +102,83 @@ class _DWindowState extends State<DWindow> {
         ),
       ),
     );
+  }
+}
+
+/// Lays its window out as wide as it wants (and no taller than the room) and reports, once, a
+/// window wider or taller than the screen less 16 points; it isn't drawn then (it's about to
+/// become a sheet).
+class _FitOrSheet extends SingleChildRenderObjectWidget {
+  const _FitOrSheet({required this.onTooBig, required super.child});
+  final VoidCallback onTooBig;
+  @override
+  _RenderFitOrSheet createRenderObject(BuildContext context) => _RenderFitOrSheet(onTooBig, MediaQuery.sizeOf(context));
+  @override
+  void updateRenderObject(BuildContext context, _RenderFitOrSheet r) => r
+    ..onTooBig = onTooBig
+    ..screen = MediaQuery.sizeOf(context);
+}
+
+class _RenderFitOrSheet extends RenderProxyBox {
+  _RenderFitOrSheet(this.onTooBig, this.screen);
+  VoidCallback onTooBig;
+  Size screen;
+  bool _over = false, _told = false;
+
+  @override
+  void performLayout() {
+    final room = Size(math.min(constraints.maxWidth, screen.width), math.min(constraints.maxHeight, screen.height));
+    child!.layout(BoxConstraints(maxHeight: room.height), parentUsesSize: true);
+    _over = child!.size.width > room.width - 16 || child!.size.height > room.height - 16;
+    size = constraints.constrain(child!.size);
+    if (_over && !_told) {
+      _told = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => onTooBig());
+    }
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (!_over) super.paint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) => !_over && super.hitTestChildren(result, position: position);
+}
+
+/// A window's content in a sheet: its title and a close button over it, the content scrolling
+/// both ways when it's bigger than the sheet.
+class _SheetWindow extends StatelessWidget {
+  const _SheetWindow({required this.title, required this.onClose, required this.child});
+  final String title;
+  final VoidCallback onClose;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final look = LookScope.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SizedBox(
+        height: 44,
+        child: Row(children: [
+          Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Look.font(20, look.text, bold: true))),
+          GestureDetector(
+            onTap: onClose,
+            child: Container(width: 36, height: 36, decoration: BoxDecoration(color: touchFill(look), shape: BoxShape.circle), child: Icon(Icons.close_rounded, size: 22, color: look.text)),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 8),
+      Expanded(
+        child: LayoutBuilder(
+          builder: (ctx, box) => SingleChildScrollView(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(constraints: BoxConstraints(minWidth: box.maxWidth), child: IntrinsicWidth(child: child)),
+            ),
+          ),
+        ),
+      ),
+    ]);
   }
 }
 
@@ -262,6 +341,7 @@ class _WindowsState extends State<Windows> {
 
   @override
   Widget build(BuildContext context) {
+    _tooBig.retainWhere((id) => widget.windows.any((w) => w['id'] == id));
     if (widget.savedColors != _savedSeen) {
       _savedSeen = widget.savedColors;
       ColorPanelState.shared.savedFrom(widget.savedColors);
@@ -327,19 +407,22 @@ class _WindowsState extends State<Windows> {
                   ),
                 )
               : w['id'] == 'hub' || w['id'] == 'allTabs'
-              ? Positioned.fill(child: Align(child: _window(w as Map<String, dynamic>)))
-              : Positioned.fill(
-                  key: ValueKey('glide-${w['id']}'),
-                  child: Glide(
-                    initial: w['id'] == 'fonts' ? (area, _) => Offset(area.width / 2 - 260, area.height / 2 - 160) : (area, me) => Offset((area.width - me.width) / 2, (area.height - me.height) / 2),
-                    child: _window(w as Map<String, dynamic>),
+              ? _windowOrSheet(w as Map<String, dynamic>, (win) => Positioned.fill(child: Align(child: win)))
+              : _windowOrSheet(
+                  w as Map<String, dynamic>,
+                  (win) => Positioned.fill(
+                    key: ValueKey('glide-${w['id']}'),
+                    child: Glide(
+                      initial: w['id'] == 'fonts' ? (area, _) => Offset(area.width / 2 - 260, area.height / 2 - 160) : (area, me) => Offset((area.width - me.width) / 2, (area.height - me.height) / 2),
+                      child: win,
+                    ),
                   ),
                 ),
       ]),
     );
   }
 
-  Widget _window(Map<String, dynamic> w) {
+  Widget _window(Map<String, dynamic> w, {bool asSheet = false}) {
     final id = w['id'] as String;
     if (id == 'allTabs') return _AllTabs(w: w, set: (k, [v]) => _press(id, k, v));
     if (id == 'hub') return ContentHub(w: w, set: (k, [v]) => _press(id, k, v));
@@ -373,29 +456,50 @@ class _WindowsState extends State<Windows> {
             ]),
           ),
         ]),
+      _ when w['form'] != null => FormBody(key: ValueKey('form-$id'), w: w, set: (k, [v]) => _press(id, k, v)),
       _ => DLabel(id),
     };
+    final keyed = Focus(
+      onKeyEvent: (n, e) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+          _press(id, 'cancel');
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: body,
+    );
+    if (asSheet) return _SheetWindow(title: w['title'] as String? ?? '', onClose: _closer(id, w) ?? () => _press(id, 'cancel'), child: keyed);
     return DWindow(
       title: w['title'] as String? ?? '',
-      onClose: switch (id) {
+      onClose: _closer(id, w),
+      minWidth: switch (id) { 'settings' => 486, 'replaceFonts' => 506, 'versions' => 340, 'shortcuts' => 446, 'chartData' => 546, 'fonts' => 0, _ => 326 },
+      collapsible: id == 'shortcuts',
+      child: keyed,
+    );
+  }
+
+  VoidCallback? _closer(String id, [Map<String, dynamic>? w]) => switch (id) {
         'about' => () => _press(id, 'cancel'),
         'settings' || 'spelling' || 'versions' || 'fonts' || 'replaceFonts' || 'webVideo' || 'shortcuts' || 'condHighlight' || 'chartData' => () => _press(id, 'close'),
         'record' => () => _record.currentState?.close(),
+        _ when w?['form'] != null && w?['closable'] != false => () => _press(id, 'close'),
         _ => null,
-      },
-      minWidth: switch (id) { 'settings' => 486, 'replaceFonts' => 506, 'versions' => 340, 'shortcuts' => 446, 'chartData' => 546, 'fonts' => 0, _ => 326 },
-      collapsible: id == 'shortcuts',
-      child: Focus(
-        onKeyEvent: (n, e) {
-          if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
-            _press(id, 'cancel');
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: body,
-      ),
-    );
+      };
+
+  /// Windows found too big for the screen (by [_FitOrSheet]): shown as sheets until closed.
+  final _tooBig = <String>{};
+
+  /// A window, or, when it doesn't fit the screen, the same content in a sheet from the bottom.
+  Widget _windowOrSheet(Map<String, dynamic> w, Widget Function(Widget window) place) {
+    final id = w['id'] as String;
+    if (_tooBig.contains(id) && id != 'allTabs') {
+      return Positioned.fill(
+        key: ValueKey('sheet-$id'),
+        child: InspectorSheet(open: true, onClose: _closer(id, w) ?? () => _press(id, 'cancel'), child: id == 'hub' ? ContentHub(w: w, sheet: true, set: (k, [v]) => _press('hub', k, v)) : _window(w, asSheet: true)),
+      );
+    }
+    return place(_FitOrSheet(onTooBig: () => setState(() => _tooBig.add(id)), child: _window(w)));
   }
 }
 

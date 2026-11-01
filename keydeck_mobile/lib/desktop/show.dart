@@ -5,12 +5,15 @@
 // Escape) ends it; a long press shows the controls. Rehearse Slideshow shows the presenter
 // display: the slide, the next one, the notes and the timer.
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../engine.dart';
 import 'look.dart';
@@ -55,6 +58,96 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
   ui.Image? _next;
   int? _nextOf;
 
+  /// Movies and sounds playing (the engine's object id -> the player's texture id, or a
+  /// negative id for a sound), on Android's MediaPlayer (MainActivity "video").
+  static const _video = MethodChannel('app.bramble.keydeck/video');
+  final _players = <int, int>{};
+  final _starting = <int>{};
+
+  /// Record Slideshow: the microphone, recorded here while the engine keeps the timing.
+  AudioRecorder? _rec;
+  bool _recStarting = false;
+
+  Future<void> _narration(bool on) async {
+    if (!on || _rec != null || _recStarting || !Platform.isAndroid) return;
+    _recStarting = true;
+    try {
+      final r = AudioRecorder();
+      if (!await r.hasPermission()) return;
+      final dir = await getTemporaryDirectory();
+      await r.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000), path: '${dir.path}/narration.m4a');
+      _rec = r;
+    } catch (_) {
+    } finally {
+      _recStarting = false;
+    }
+  }
+
+  /// The show ended: the sound recorded goes to the engine with the show's timing.
+  Future<void> _narrationDone() async {
+    final r = _rec;
+    _rec = null;
+    String? path;
+    try {
+      path = await r?.stop();
+      await r?.dispose();
+    } catch (_) {}
+    if (path != null || e.status()['narrationWaiting'] == true) {
+      e.action('narration:${path ?? ''}');
+      widget.onEnd();
+    }
+  }
+
+  /// The show's movies as the engine has them now: new ones start, gone ones stop.
+  Future<void> _syncMovies(List movies) async {
+    final want = {for (final m in movies.cast<Map<String, dynamic>>()) (m['id'] as num).toInt(): m};
+    for (final id in _players.keys.where((k) => !want.containsKey(k)).toList()) {
+      final t = _players.remove(id);
+      try {
+        await _video.invokeMethod('stop', t);
+      } catch (_) {}
+    }
+    for (final MapEntry(key: id, value: m) in want.entries) {
+      if (_players.containsKey(id) || !_starting.add(id)) continue;
+      try {
+        final t = await _video.invokeMethod<int>('play', {'path': m['path'], 'start': (m['start'] as num).toDouble(), 'end': (m['end'] as num).toDouble(), 'volume': (m['volume'] as num).toDouble(), 'loop': m['loop'] == true, 'video': m['video'] == true});
+        if (t != null && mounted) setState(() => _players[id] = t);
+      } catch (_) {
+        // (no player here: the Linux build shows the poster)
+      } finally {
+        _starting.remove(id);
+      }
+    }
+  }
+
+  void _stopMovies() {
+    for (final t in _players.values) {
+      _video.invokeMethod('stop', t).catchError((_) => null);
+    }
+    _players.clear();
+  }
+
+  /// The playing movies' pictures over the slide (the show fits the slide in the screen).
+  List<Widget> _movieViews(Size screen) {
+    final s = _s;
+    final size = s?['size'] as List?;
+    if (s == null || size == null || _players.isEmpty) return const [];
+    final sw = (size[0] as num).toDouble(), sh = (size[1] as num).toDouble();
+    final k = (screen.width / sw < screen.height / sh) ? screen.width / sw : screen.height / sh;
+    final o = Offset((screen.width - sw * k) / 2, (screen.height - sh * k) / 2);
+    return [
+      for (final m in (s['movies'] as List? ?? const []).cast<Map<String, dynamic>>())
+        if (m['video'] == true && (_players[(m['id'] as num).toInt()] ?? -1) >= 0)
+          Positioned(
+            left: o.dx + (m['rect'][0] as num) * k,
+            top: o.dy + (m['rect'][1] as num) * k,
+            width: (m['rect'][2] as num) * k,
+            height: (m['rect'][3] as num) * k,
+            child: IgnorePointer(child: Transform.rotate(angle: (m['angle'] as num).toDouble() * 3.14159265 / 180, child: Texture(textureId: _players[(m['id'] as num).toInt()]!))),
+          ),
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +163,7 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     HardwareKeyboard.instance.removeHandler(_key);
+    _stopMovies();
     _ticker.dispose();
     _hudTimer?.cancel();
     _clock?.cancel();
@@ -110,8 +204,10 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
   void _end() {
     if (_ended) return;
     _ended = true;
+    _stopMovies();
     e.playStop();
     widget.onEnd();
+    _narrationDone();
   }
 
   void _tick(Duration _) {
@@ -124,6 +220,12 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
     final s = e.playStatus();
     if (bytes == null || s == null) return _end();
     _s = s;
+    _syncMovies(s['movies'] as List? ?? const []);
+    _narration(s['narrating'] == true);
+    // a hyperlink to a web page clicked in the show: the browser
+    for (final u in e.urls()) {
+      const MethodChannel('app.bramble.keydeck/open').invokeMethod('url', u).catchError((_) => null);
+    }
     final ms = (s['repaint'] as num?)?.toInt();
     _due = ms == null ? null : DateTime.now().add(Duration(milliseconds: ms));
     _apply(bytes);
@@ -253,7 +355,7 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
         if (v < -200) _send({'t': 'key', 'k': 'ArrowRight'});
         if (v > 200) _send({'t': 'key', 'k': 'ArrowLeft'});
       },
-      child: CustomPaint(size: size, painter: _MeshPainter(_meshes, _shader)),
+      child: Stack(children: [CustomPaint(size: size, painter: _MeshPainter(_meshes, _shader)), ..._movieViews(size)]),
     );
   }
 
@@ -267,6 +369,9 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
   /// side, the timer and clock above, the notes below.
   Widget _presenter() {
     final s = _s ?? const {};
+    // Play > Customize Presenter Display… (what shows)
+    final pd = (s['pd'] as Map?) ?? const {};
+    bool on(String k) => pd[k] != false;
     final now = TimeOfDay.now();
     final white = Look.font(15, Colors.white);
     return SafeArea(
@@ -274,11 +379,11 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Text('${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}', style: Look.font(22, Colors.white)),
+            if (on('clock')) Text('${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}', style: Look.font(22, Colors.white)),
             const Spacer(),
             Text('Slide ${((s['slide'] as num?) ?? 0) + 1} of ${s['count'] ?? 0}', style: white),
             const Spacer(),
-            GestureDetector(onTap: () => _send({'t': 'key', 'k': 'R'}), child: Text(_hms((s['timer'] as num?)?.toDouble() ?? 0), style: Look.font(22, const Color(0xFFFF9F0A)))),
+            if (on('timer')) GestureDetector(onTap: () => _send({'t': 'key', 'k': 'R'}), child: Text(_hms((s['timer'] as num?)?.toDouble() ?? 0), style: Look.font(22, const Color(0xFFFF9F0A)))),
             const SizedBox(width: 16),
             TextButton(onPressed: _end, child: Text('End', style: white)),
           ]),
@@ -288,7 +393,7 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Current', style: Look.font(13, Colors.white70)), const SizedBox(height: 4), Expanded(child: LayoutBuilder(builder: (ctx, box) => _slides(box)))])),
               const SizedBox(width: 12),
-              Expanded(
+              if (on('next')) Expanded(
                 flex: 2,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Next', style: Look.font(13, Colors.white70)),
@@ -299,7 +404,7 @@ class _SlideShowState extends State<SlideShow> with SingleTickerProviderStateMix
             ]),
           ),
           const SizedBox(height: 8),
-          Expanded(flex: 2, child: SingleChildScrollView(child: Text((s['notes'] as String?)?.trim().isNotEmpty == true ? s['notes'] as String : 'No notes', style: Look.font(18, Colors.white)))),
+          if (on('notes')) Expanded(flex: 2, child: SingleChildScrollView(child: Text((s['notes'] as String?)?.trim().isNotEmpty == true ? s['notes'] as String : 'No notes', style: Look.font(18, Colors.white)))),
         ]),
       ),
     );

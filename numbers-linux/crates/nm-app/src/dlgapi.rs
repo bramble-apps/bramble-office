@@ -71,7 +71,119 @@ pub fn state(app: &App) -> Value {
     if app.show_shortcuts {
         out.push(json!({"id": "shortcuts", "title": "Keyboard Shortcuts", "sections": shortcut_sections()}));
     }
+    if let Some(le) = &app.link_edit {
+        // Format > Add Link (links.rs window): Numbers' link popover
+        let sheets: Vec<String> = app.sheets().iter().map(|s| s.name.clone()).collect();
+        out.push(json!({
+            "id": "valuesLink", "title": "", "kinds": crate::links::KINDS, "kind": le.kind, "addr": le.addr, "subject": le.subject,
+            "display": le.display, "hasText": le.text.is_some(), "sheet": le.sheet, "sheets": sheets, "existing": le.existing,
+        }));
+    }
+    if app.stocks.open {
+        use nm_core::kn_model::formula::STOCK_ARGS;
+        let attrs: Vec<Value> = STOCK_ARGS.iter().map(|(_, n, id)| json!([n, id.is_some()])).collect();
+        out.push(json!({"id": "stock", "title": "Stock Quote", "symbol": app.stocks.symbol, "attr": app.stocks.attr, "attrs": attrs, "busy": app.stocks.busy()}));
+    }
+    if let Some(sp) = &app.spelling {
+        let no_dicts = kn_ui::spell::dicts().is_some_and(|d| d.is_empty());
+        out.push(json!({"id": "spelling", "title": "Spelling and Grammar", "done": sp.done, "noDicts": no_dicts, "word": sp.word, "guesses": sp.guesses, "pick": sp.pick, "doneText": "No more misspelled words in this sheet."}));
+    }
+    if app.show_versions {
+        let all = app.doc().and_then(|d| d.path.clone()).map(|p| crate::fileops::list(&p)).unwrap_or_default();
+        let rows: Vec<Value> = all.iter().map(|(p, secs)| json!([crate::fileops::when(*secs), p.to_string_lossy()])).collect();
+        out.push(json!({"id": "versions", "title": "All Versions", "versions": rows, "empty": "No earlier versions yet: a version is kept each time the spreadsheet is saved over."}));
+    }
+    if app.show_fonts {
+        let cur = crate::fonts::current(app);
+        let st = cur.clone().unwrap_or_default();
+        let family = kn_render::fonts::parse_ps_name(&st.font_name).0;
+        let c = st.color;
+        out.push(json!({
+            "id": "fonts", "title": "Fonts", "can": cur.is_some(), "query": app.font_query,
+            "names": app.font_names.clone().unwrap_or_else(|| crate::editing::font_names(app)), "family": family,
+            "bold": st.bold, "italic": st.italic, "underline": st.underline, "strike": st.strike, "size": st.size,
+            "color": [c.r, c.g, c.b, 1.0], "hint": "Select cells or a text box to change its font.",
+        }));
+    }
+    if let Some(r) = &app.replace_fonts {
+        let rows: Vec<Value> = r.rows.iter().map(|(n, inst, to)| json!([n, inst, to])).collect();
+        out.push(json!({"id": "replaceFonts", "title": "Replace Fonts", "rows": rows, "families": app.canvas.tiles.font_families()}));
+    }
+    if let Some(list) = &app.warnings {
+        out.push(json!({"id": "warnings", "title": "Document Warnings", "list": list, "missingFonts": list.iter().any(|w| w.starts_with("The font"))}));
+    }
+    if let Some(name) = &app.templates.saving {
+        out.push(json!({"id": "saveTemplate", "title": "Save as Template", "text": name}));
+    }
+    if let Some((lang, region)) = &app.language_edit {
+        use crate::templates::{LANGUAGES, REGIONS};
+        out.push(json!({
+            "id": "language", "title": "Language & Region", "lang": lang, "region": region,
+            "langs": LANGUAGES.iter().map(|(c, n)| json!([c, n])).collect::<Vec<_>>(), "regions": REGIONS.iter().map(|(c, n)| json!([c, n])).collect::<Vec<_>>(),
+            "sample": crate::templates::language_sample(region),
+        }));
+    }
+    if app.equation.open {
+        out.push(json!({
+            "id": "equation", "title": "Equation", "text": app.equation.source, "preview": crate::equation::latex_to_text(&app.equation.source),
+            "error": app.equation.error, "done": if app.equation.editing.is_some() { "Update" } else { "Insert" },
+        }));
+    }
+    if app.media.record_open {
+        out.push(json!({"id": "record", "title": "Record Audio", "seconds": crate::media::recording_secs(app)}));
+    }
+    if let Some(url) = &app.media.url_sheet {
+        out.push(json!({"id": "webVideo", "title": "Add Web Video", "text": url, "ok": kn_ui::media::web::video_link(url.trim())}));
+    }
+    if let Some(music) = app.media.open {
+        let files = BROWSER.with(|b| b.borrow().clone());
+        out.push(json!({
+            "id": "mediaBrowser", "title": if music { "Music" } else { "Photos and Videos" }, "music": music, "query": app.media.query,
+            "files": files.iter().map(|p| json!([p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), p.to_string_lossy()])).collect::<Vec<_>>(),
+            "empty": if music { "No songs in ~/Music" } else { "No pictures or movies in ~/Pictures or ~/Videos" },
+        }));
+    }
+    if let Some((name, dir)) = &app.doc_title {
+        // the title popover (chrome.rs title_bar): the name, where it is, its format
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+        let mut places: Vec<std::path::PathBuf> = dir.iter().cloned().collect();
+        for sub in ["Documents", "Desktop", ""] {
+            if let Some(h) = &home {
+                let p = if sub.is_empty() { h.clone() } else { h.join(sub) };
+                if p.is_dir() && !places.contains(&p) {
+                    places.push(p);
+                }
+            }
+        }
+        let show = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| p.display().to_string());
+        let f = DOC_FORMAT.with(|f| f.get());
+        let note = match f {
+            0 => "Saves as an Excel workbook. Only what Excel can hold can be added.",
+            1 => "Saves as an Excel workbook that also keeps every Values feature for Values (other apps see the Excel part).",
+            _ => "Saves as a Numbers spreadsheet.",
+        };
+        out.push(json!({
+            "id": "docTitle", "title": "", "name": name, "dir": dir.as_ref().map(|d| d.to_string_lossy().into_owned()),
+            "dirName": dir.as_deref().map(show), "places": places.iter().map(|p| json!([show(p), p.to_string_lossy()])).collect::<Vec<_>>(),
+            "format": f, "formats": ["Excel workbook", "Excel + Values features", "Numbers spreadsheet"], "was": crate::chrome::doc_format(app), "note": note,
+        }));
+    }
     Value::Array(out)
+}
+
+thread_local! {
+    /// The title popover's format pick (chrome.rs keeps it in egui's memory).
+    static DOC_FORMAT: std::cell::Cell<u8> = const { std::cell::Cell::new(2) };
+    /// The media browser's files (listed when it opens or its search changes).
+    static BROWSER: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The media browser's list, again (after it opens or its search changes).
+pub fn list_browser(app: &mut App) {
+    if let Some(music) = app.media.open {
+        let files = crate::media::browser_files(app, music);
+        BROWSER.with(|b| *b.borrow_mut() = files);
+    }
 }
 
 /// The menus' shortcuts by menu, then the sheet's own keys.
@@ -230,6 +342,229 @@ pub fn set(app: &mut App, ctx: &egui::Context, key: &str, v: &Value) {
         "shortcuts" => app.show_shortcuts = false,
         "settings" => set_setting(app, ctx, button, v),
         // the toolbar's items as dragged into place ({"items": [ids]}), the default set, the mode
+        "valuesLink" => {
+            let Some(mut le) = app.link_edit.clone() else { return };
+            let st = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_string);
+            if let Some(k) = st("kind") {
+                le.kind = k;
+            }
+            if let Some(a) = st("addr") {
+                le.addr = a;
+            }
+            if let Some(a) = st("subject") {
+                le.subject = a;
+            }
+            if let Some(a) = st("display") {
+                le.display = a;
+            }
+            if let Some(i) = v.get("sheet").and_then(Value::as_u64) {
+                le.sheet = i as usize;
+            }
+            match button {
+                "remove" => crate::links::finish(app, le, true, false),
+                // Add Link / Open Link / Compose Email / Call / Go to Sheet
+                "go" => {
+                    let follow = le.existing || le.kind != "Webpage";
+                    crate::links::finish(app, le, false, follow);
+                }
+                "done" => crate::links::finish(app, le, false, false),
+                "cancel" => app.link_edit = None,
+                _ => app.link_edit = Some(le),
+            }
+        }
+        "stock" => match button {
+            "edit" => {
+                if let Some(t) = v.get("symbol").and_then(Value::as_str) {
+                    app.stocks.symbol = t.to_string();
+                }
+                if let Some(i) = v.get("attr").and_then(Value::as_u64) {
+                    app.stocks.attr = (i as usize).min(nm_core::kn_model::formula::STOCK_ARGS.len() - 1);
+                }
+            }
+            "insert" => crate::stocks::insert_quote(app, None),
+            "refresh" => crate::stocks::refresh(app, None),
+            _ => app.stocks.open = false,
+        },
+        "spelling" => {
+            let word = app.spelling.as_ref().map(|s| s.word.clone()).unwrap_or_default();
+            match button {
+                "pick" => {
+                    if let Some(s) = app.spelling.as_mut() {
+                        s.pick = v.as_u64().unwrap_or(0) as usize;
+                    }
+                }
+                "change" => crate::spelling::change(app),
+                "next" => crate::spelling::find_next(app),
+                "ignore" => {
+                    kn_ui::spell::ignore(&word);
+                    crate::spelling::find_next(app);
+                }
+                "learn" => {
+                    kn_ui::spell::learn(&word);
+                    crate::spelling::find_next(app);
+                }
+                _ => app.spelling = None,
+            }
+        }
+        "versions" => match button {
+            "restore" => {
+                if let Some(path) = app.doc().and_then(|d| d.path.clone()) {
+                    let v = std::path::PathBuf::from(v.as_str().unwrap_or_default());
+                    crate::fileops::restore_version(app, &path, &v);
+                }
+            }
+            _ => app.show_versions = false,
+        },
+        "fonts" => {
+            use nm_core::kn_model::format::TextProp;
+            let b = v.as_bool().unwrap_or(false);
+            let n = v.as_f64().unwrap_or(0.0) as f32;
+            match button {
+                "query" => app.font_query = v.as_str().unwrap_or_default().to_string(),
+                "family" => {
+                    let f = v.as_str().unwrap_or_default();
+                    let ps = app.canvas.tiles.ps_name_for_family(f).unwrap_or_else(|| f.replace(' ', ""));
+                    crate::editing::set_text(app, "Font", TextProp::Font(ps));
+                }
+                "bold" => crate::editing::set_text(app, "Bold", TextProp::Bold(b)),
+                "italic" => crate::editing::set_text(app, "Italic", TextProp::Italic(b)),
+                "underline" => crate::editing::set_text(app, "Underline", TextProp::Underline(b)),
+                "strike" => crate::editing::set_text(app, "Strikethrough", TextProp::Strike(b)),
+                "size" => crate::editing::set_text(app, "Font Size", TextProp::Size(n.clamp(1.0, 1638.0))),
+                "color" => {
+                    let a = v.as_array().cloned().unwrap_or_default();
+                    let f = |i: usize| a.get(i).and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                    crate::editing::set_text(app, "Text Color", TextProp::Color(nm_core::kn_model::Color { r: f(0), g: f(1), b: f(2), a: 1.0 }));
+                }
+                _ => app.show_fonts = false,
+            }
+        }
+        "replaceFonts" => match button {
+            "pick" => {
+                let i = v.get("i").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let to = v.get("to").and_then(Value::as_str).map(str::to_string);
+                if let Some(row) = app.replace_fonts.as_mut().and_then(|r| r.rows.get_mut(i)) {
+                    row.2 = to;
+                }
+            }
+            "replace" => {
+                if let Some(st) = app.replace_fonts.take() {
+                    crate::fonts::replace(app, &st);
+                }
+            }
+            _ => app.replace_fonts = None,
+        },
+        "warnings" => match button {
+            "replace" => {
+                app.warnings = None;
+                crate::fonts::open_replace(app);
+            }
+            _ => app.warnings = None,
+        },
+        "saveTemplate" => match button {
+            "edit" => app.templates.saving = Some(text(v)),
+            "add" => {
+                app.templates.saving = None;
+                crate::templates::add_to_chooser(app, &text(v));
+            }
+            // Save…: the template's bytes to the file the front end picked ({"path": …})
+            "save" => {
+                app.templates.saving = None;
+                let path = v.get("path").and_then(Value::as_str).unwrap_or_default();
+                match crate::templates::template_bytes(app) {
+                    Some(b) if !path.is_empty() => {
+                        if let Err(e) = std::fs::write(path, b) {
+                            app.notify(format!("Couldn't save the template: {e}"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => app.templates.saving = None,
+        },
+        "language" => {
+            let Some((mut l, mut r)) = app.language_edit.clone() else { return };
+            if let Some(x) = v.get("lang").and_then(Value::as_str) {
+                l = x.to_string();
+            }
+            if let Some(x) = v.get("region").and_then(Value::as_str) {
+                r = x.to_string();
+            }
+            match button {
+                "ok" => {
+                    app.language_edit = None;
+                    crate::templates::set_language(app, &l, &r);
+                }
+                "cancel" | "close" => app.language_edit = None,
+                _ => app.language_edit = Some((l, r)),
+            }
+        }
+        "equation" => match button {
+            "edit" => {
+                app.equation.source = text(v);
+                app.equation.error = None;
+            }
+            "done" => {
+                app.equation.source = text(v);
+                crate::equation::insert_now(app);
+            }
+            _ => app.equation = Default::default(),
+        },
+        "record" => match button {
+            "start" => crate::media::record_start(app),
+            "stop" => {
+                crate::media::record_stop(app, true);
+                app.media.record_open = false;
+            }
+            _ => {
+                crate::media::record_stop(app, false);
+                app.media.record_open = false;
+            }
+        },
+        "webVideo" => match button {
+            "edit" => app.media.url_sheet = Some(text(v)),
+            "done" => crate::media::web_go(app, &text(v)),
+            _ => app.media.url_sheet = None,
+        },
+        "mediaBrowser" => match button {
+            "query" => {
+                crate::media::set_query(app, v.as_str().unwrap_or_default());
+                list_browser(app);
+            }
+            "pick" => crate::media::insert_path(app, std::path::PathBuf::from(v.as_str().unwrap_or_default())),
+            _ => app.media.open = None,
+        },
+        "docTitle" => {
+            let name = v.get("name").and_then(Value::as_str).map(str::to_string);
+            let dir = v.get("dir").and_then(Value::as_str).map(std::path::PathBuf::from);
+            match button {
+                "open" => {
+                    if app.doc_title.is_some() {
+                        app.doc_title = None;
+                    } else if app.wb.is_some() {
+                        let f = crate::chrome::title_open(app);
+                        DOC_FORMAT.with(|c| c.set(f));
+                    }
+                }
+                "edit" => {
+                    if let Some((n, d)) = app.doc_title.as_mut() {
+                        if let Some(name) = name {
+                            *n = name;
+                        }
+                        if dir.is_some() {
+                            *d = dir;
+                        }
+                    }
+                }
+                "format" => DOC_FORMAT.with(|c| c.set(v.get("pick").and_then(Value::as_u64).unwrap_or(2).min(2) as u8)),
+                "apply" => {
+                    if let Some((n, Some(d))) = app.doc_title.take() {
+                        crate::chrome::title_apply(app, &n, &d, DOC_FORMAT.with(|c| c.get()));
+                    }
+                }
+                _ => app.doc_title = None,
+            }
+        }
         "customize" => match button {
             "items" => {
                 let list: Vec<String> = v["items"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();

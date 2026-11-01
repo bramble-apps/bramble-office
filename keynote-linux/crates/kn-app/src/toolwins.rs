@@ -10,10 +10,10 @@ use crate::theme;
 pub struct ToolWindows {
     pub arrange: bool,
     pub colors: bool,
-    color: Option<Color32>,
+    pub(crate) color: Option<Color32>,
     /// Format > Font > Show Fonts: the Fonts window, and what its search box holds.
     pub fonts: bool,
-    font_query: String,
+    pub(crate) font_query: String,
     /// The shared Apple-style colour panel (kn-ui): its mode and saved colours.
     pub color_panel: kn_ui::colors::ColorPanelState,
     color_panel_loaded: bool,

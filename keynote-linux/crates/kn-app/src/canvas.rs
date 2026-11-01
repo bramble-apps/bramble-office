@@ -14,7 +14,7 @@ use crate::theme;
 pub mod api;
 
 #[derive(Clone, Debug)]
-enum Drag {
+pub(crate) enum Drag {
     /// Moving the selection; `delta` in slide points.
     Move { start: Point, delta: (f32, f32) },
     /// Resizing one object by handle `handle` (0..8, clockwise from top-left).
@@ -36,7 +36,7 @@ pub struct PointEdit {
     pub id: ObjId,
     pub nodes: kn_model::points::Editable,
     pub selected: Option<(usize, usize)>,
-    drag: Option<(usize, usize, u8)>,
+    pub(crate) drag: Option<(usize, usize, u8)>,
 }
 
 impl PointEdit {
@@ -63,7 +63,7 @@ fn line_ends(d: &kn_model::Drawable) -> Option<(Point, Point)> {
 
 #[derive(Default)]
 pub struct CanvasState {
-    drag: Option<Drag>,
+    pub(crate) drag: Option<Drag>,
     /// Text being edited in place.
     pub editing: Option<crate::textedit::Editing>,
     /// Table cell being edited: (table, row, col, text, first frame).
@@ -74,7 +74,7 @@ pub struct CanvasState {
     /// on it while its table stays selected.
     pub table_cursor: Option<(ObjId, u32, u32)>,
     /// Alignment guides of the current move/resize.
-    guides: Vec<crate::snap::Guide>,
+    pub(crate) guides: Vec<crate::snap::Guide>,
     /// The drag that just ended had Alt held (duplicate instead of move).
     alt_drop: bool,
     /// Selected cell range (Format > Table > Select / Extend…).
@@ -232,6 +232,21 @@ fn mask_bar(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &View) {
         });
     });
     if release {
+        mask_size(app, scene, pct);
+    }
+    if done {
+        app.mask_edit = None;
+    }
+}
+
+/// Edit Mask: the picture's size as a share of the mask's (100–500 %), about the mask's centre.
+pub(crate) fn mask_size(app: &mut App, scene: &SlideScene, pct: f32) {
+    let Some(id) = app.mask_edit else { return };
+    let Some(d) = scene.drawables.iter().find(|d| d.id == id) else { return };
+    let Some(m) = mask_box(d) else { return };
+    let g = d.geom;
+    let pct = pct.clamp(100.0, 500.0);
+    {
         // the picture scales about the mask's centre; the mask keeps its place on the slide
         let k = (m.w * pct / 100.0) / g.w.max(0.01);
         let (cx, cy) = (m.x + m.w / 2.0, m.y + m.h / 2.0);
@@ -243,9 +258,6 @@ fn mask_bar(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &View) {
             doc.end(&mut app.hist);
         }
         app.bump(scene.slide);
-    }
-    if done {
-        app.mask_edit = None;
     }
 }
 
@@ -284,7 +296,7 @@ fn scale_path(p: &mut kn_model::Path, sx: f32, sy: f32) {
 }
 
 /// The mask of a picture as a box on the slide (unrotated pictures).
-fn mask_box(d: &kn_model::Drawable) -> Option<Geometry> {
+pub(crate) fn mask_box(d: &kn_model::Drawable) -> Option<Geometry> {
     let DrawableKind::Image(i) = &d.kind else { return None };
     if d.geom.angle.rem_euclid(360.0) != 0.0 {
         return None;
@@ -1535,7 +1547,7 @@ fn snap_opts(s: &crate::settings::Settings, view: &View, off: bool) -> crate::sn
     }
 }
 
-fn slide_box(scene: &SlideScene) -> crate::snap::Bx {
+pub(crate) fn slide_box(scene: &SlideScene) -> crate::snap::Bx {
     crate::snap::Bx { x0: 0.0, y0: 0.0, x1: scene.size.w, y1: scene.size.h }
 }
 
@@ -1606,7 +1618,7 @@ fn draw_user_guides(app: &App, painter: &egui::Painter, view: &View, scene: &Sli
 }
 
 /// Bounds of the slide's objects other than `skip` (the snapping targets).
-fn other_boxes(r: &mut kn_render::Renderer, scene: &SlideScene, skip: &[ObjId]) -> Vec<crate::snap::Bx> {
+pub(crate) fn other_boxes(r: &mut kn_render::Renderer, scene: &SlideScene, skip: &[ObjId]) -> Vec<crate::snap::Bx> {
     scene
         .drawables
         .iter()
@@ -1619,7 +1631,7 @@ fn other_boxes(r: &mut kn_render::Renderer, scene: &SlideScene, skip: &[ObjId]) 
 }
 
 /// Which edges a resize handle moves: (left, top, right, bottom).
-fn handle_edges(handle: usize) -> (bool, bool, bool, bool) {
+pub(crate) fn handle_edges(handle: usize) -> (bool, bool, bool, bool) {
     match handle {
         0 => (true, true, false, false),
         1 => (false, true, false, false),
@@ -2871,7 +2883,7 @@ fn media_controls(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &V
 }
 
 /// Cell of a table under a slide point: (row, col, current text).
-fn table_cell_at(app: &mut App, scene: &SlideScene, id: ObjId, p: Point) -> Option<(u32, u32, String)> {
+pub(crate) fn table_cell_at(app: &mut App, scene: &SlideScene, id: ObjId, p: Point) -> Option<(u32, u32, String)> {
     let d = scene.drawables.iter().find(|d| d.id == id)?;
     let DrawableKind::Table(t) = &d.kind else { return None };
     let l = t.frame(&d.geom).to_local(p);
@@ -2893,7 +2905,7 @@ fn cell_index(sizes: &[f32], v: f32) -> Option<u32> {
     None
 }
 
-fn cell_rect(sizes_r: &[f32], sizes_c: &[f32], r: u32, c: u32) -> (f32, f32, f32, f32) {
+pub(crate) fn cell_rect(sizes_r: &[f32], sizes_c: &[f32], r: u32, c: u32) -> (f32, f32, f32, f32) {
     let y: f32 = sizes_r.iter().take(r as usize).sum();
     let x: f32 = sizes_c.iter().take(c as usize).sum();
     (x, y, sizes_c.get(c as usize).copied().unwrap_or(100.0), sizes_r.get(r as usize).copied().unwrap_or(40.0))

@@ -22,10 +22,10 @@ pub struct Dialogs {
 
 /// "This presentation is password protected": the file, its hint, what is typed.
 pub struct PasswordPrompt {
-    path: PathBuf,
-    hint: String,
-    typed: String,
-    show_hint: bool,
+    pub(crate) path: PathBuf,
+    pub(crate) hint: String,
+    pub(crate) typed: String,
+    pub(crate) show_hint: bool,
 }
 
 impl PasswordPrompt {
@@ -62,7 +62,7 @@ pub fn keep_version(path: &Path) {
 }
 
 /// Saved versions, newest first: (file, seconds since 1970).
-fn list(path: &Path) -> Vec<(PathBuf, u64)> {
+pub(crate) fn list(path: &Path) -> Vec<(PathBuf, u64)> {
     let Some(dir) = versions_dir(path) else { return Vec::new() };
     let mut v: Vec<(PathBuf, u64)> = std::fs::read_dir(dir)
         .map(|rd| rd.flatten().filter_map(|e| Some((e.path(), e.path().file_stem()?.to_str()?.parse().ok()?))).collect())
@@ -71,7 +71,7 @@ fn list(path: &Path) -> Vec<(PathBuf, u64)> {
     v
 }
 
-fn when(secs: u64) -> String {
+pub(crate) fn when(secs: u64) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let ago = now.saturating_sub(secs);
     match ago {
@@ -105,19 +105,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             });
         });
         if ok {
-            let layout = app.current_slide().map(|s| s.slide);
-            let mut res = None;
-            if let (Some(l), Some(doc)) = (layout, app.doc.as_mut()) {
-                doc.begin(&mut app.hist, "Define Placeholder");
-                res = Some(doc.define_placeholder(&mut app.hist, l, id, tag.trim(), display.trim()));
-                doc.end(&mut app.hist);
-            }
-            match res {
-                Some(Ok(n)) => app.notify(format!("Placeholder defined; {n} slide(s) use this layout")),
-                Some(Err(e)) => app.notify(format!("{e}")),
-                None => {}
-            }
-            app.bump_all();
+            define_placeholder(app, id, &tag, &display);
         } else if !cancel {
             app.dialogs.define_placeholder = Some((id, tag, display, media));
         }
@@ -186,11 +174,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             });
         });
         if done {
-            if let Some(doc) = app.doc.as_mut() {
-                doc.password = (!pw.is_empty()).then(|| (pw.clone(), hint.clone()));
-                doc.dirty = true;
-            }
-            app.notify(if pw.is_empty() { "The password is removed when you save" } else { "The password is set when you save" });
+            set_password(app, &pw, &hint);
         } else if !cancel {
             app.dialogs.set_password = Some((pw, verify, hint));
         }
@@ -222,18 +206,8 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             });
         });
         app.dialogs.versions = open;
-        if let (Some(f), Some(p)) = (restore, path) {
-            match kn_model::Document::open(&f) {
-                Ok(mut d) => {
-                    // the restored version replaces this one (saved over the file when you save)
-                    d.path = Some(p);
-                    d.dirty = true;
-                    app.replace_document(d);
-                    app.dialogs.versions = false;
-                    app.notify("Restored an earlier version");
-                }
-                Err(e) => app.notify(format!("Couldn't open that version: {e}")),
-            }
+        if let Some(f) = restore {
+            restore_version(app, &f);
         }
     }
     if let Some(mut name) = app.dialogs.save_theme.take() {
@@ -258,11 +232,11 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
     }
     if app.dialogs.language {
         let mut open = true;
-        let cur = app.doc.as_ref().and_then(|d| d.file.first_of("KN.DocumentArchive")).and_then(|(_, m)| m.find_super("TSA.DocumentArchive").and_then(|t| t.str("document_language")).map(str::to_string)).unwrap_or_else(|| "en".into());
+        let cur = language(app);
         let mut pick = None;
         egui::Window::new("Language & Region").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
             ui.label("Language of this presentation (spelling, quotes, number and date formats):");
-            for (code, name) in [("en", "English"), ("fr", "French"), ("es", "Spanish"), ("de", "German"), ("it", "Italian"), ("pt", "Portuguese"), ("nl", "Dutch"), ("ko", "Korean"), ("ja", "Japanese"), ("zh-Hans", "Chinese (Simplified)")] {
+            for (code, name) in LANGUAGES {
                 if ui.radio(cur == code, name).clicked() && cur != code {
                     pick = Some(code);
                 }
@@ -270,22 +244,75 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         });
         app.dialogs.language = open;
         if let Some(code) = pick {
-            if let Some(doc) = app.doc.as_mut() {
-                if let Some((id, _)) = doc.file.first_of("KN.DocumentArchive") {
-                    doc.begin(&mut app.hist, "Language & Region");
-                    doc.touch(&mut app.hist, id);
-                    if let Some(t) = doc.file.obj_mut(id).and_then(|m| m.find_super_mut("TSA.DocumentArchive")) {
-                        t.set_str("document_language", code);
-                    }
-                    doc.end(&mut app.hist);
-                }
-            }
+            set_language(app, code);
         }
     }
 }
 
 /// File > Save Theme…: the presentation becomes a theme in the theme chooser (with a preview).
-fn save_theme(app: &mut App, name: &str) {
+/// File > Advanced > Language & Region's choices.
+pub(crate) const LANGUAGES: [(&str, &str); 10] = [("en", "English"), ("fr", "French"), ("es", "Spanish"), ("de", "German"), ("it", "Italian"), ("pt", "Portuguese"), ("nl", "Dutch"), ("ko", "Korean"), ("ja", "Japanese"), ("zh-Hans", "Chinese (Simplified)")];
+
+/// The presentation's language code.
+pub(crate) fn language(app: &App) -> String {
+    app.doc.as_ref().and_then(|d| d.file.first_of("KN.DocumentArchive")).and_then(|(_, m)| m.find_super("TSA.DocumentArchive").and_then(|t| t.str("document_language")).map(str::to_string)).unwrap_or_else(|| "en".into())
+}
+
+pub(crate) fn set_language(app: &mut App, code: &str) {
+    if let Some(doc) = app.doc.as_mut() {
+        if let Some((id, _)) = doc.file.first_of("KN.DocumentArchive") {
+            doc.begin(&mut app.hist, "Language & Region");
+            doc.touch(&mut app.hist, id);
+            if let Some(t) = doc.file.obj_mut(id).and_then(|m| m.find_super_mut("TSA.DocumentArchive")) {
+                t.set_str("document_language", code);
+            }
+            doc.end(&mut app.hist);
+        }
+    }
+}
+
+/// Versions: an earlier version in place of the presentation (saved over its file when saved).
+pub(crate) fn restore_version(app: &mut App, f: &Path) {
+    let Some(p) = app.doc.as_ref().and_then(|d| d.path.clone()) else { return };
+    match kn_model::Document::open(f) {
+        Ok(mut d) => {
+            d.path = Some(p);
+            d.dirty = true;
+            app.replace_document(d);
+            app.dialogs.versions = false;
+            app.notify("Restored an earlier version");
+        }
+        Err(e) => app.notify(format!("Couldn't open that version: {e}")),
+    }
+}
+
+/// Set Password: an empty `pw` removes it (either on the next save).
+pub(crate) fn set_password(app: &mut App, pw: &str, hint: &str) {
+    if let Some(doc) = app.doc.as_mut() {
+        doc.password = (!pw.is_empty()).then(|| (pw.to_string(), hint.to_string()));
+        doc.dirty = true;
+    }
+    app.notify(if pw.is_empty() { "The password is removed when you save" } else { "The password is set when you save" });
+}
+
+/// Define as Text / Media Placeholder on the layout being edited.
+pub(crate) fn define_placeholder(app: &mut App, id: kn_format::ObjId, tag: &str, display: &str) {
+    let layout = app.current_slide().map(|s| s.slide);
+    let mut res = None;
+    if let (Some(l), Some(doc)) = (layout, app.doc.as_mut()) {
+        doc.begin(&mut app.hist, "Define Placeholder");
+        res = Some(doc.define_placeholder(&mut app.hist, l, id, tag.trim(), display.trim()));
+        doc.end(&mut app.hist);
+    }
+    match res {
+        Some(Ok(n)) => app.notify(format!("Placeholder defined; {n} slide(s) use this layout")),
+        Some(Err(e)) => app.notify(format!("{e}")),
+        None => {}
+    }
+    app.bump_all();
+}
+
+pub(crate) fn save_theme(app: &mut App, name: &str) {
     let Some(dir) = crate::themes::theme_dir() else { return };
     let _ = std::fs::create_dir_all(&dir);
     let clean: String = name.chars().map(|c| if "/\\\0".contains(c) { '_' } else { c }).collect();

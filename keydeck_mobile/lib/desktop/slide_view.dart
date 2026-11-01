@@ -176,6 +176,8 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
     _blink?.cancel();
     _settle?.cancel();
     _motionTicker.dispose();
+    _cell.dispose();
+    _cellFocus.dispose();
     _motionImg?.dispose();
     _focus.dispose();
     _input.dispose();
@@ -404,7 +406,211 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
     return [(true, at - const Offset(0, 7), Offset(at.dx, (at.dy + ab.dy) / 2)), (false, bb + const Offset(0, 7), Offset(bt.dx, (bt.dy + bb.dy) / 2))];
   }
 
+  /// View > Show Rulers: a ruler along the top and the left of the view, in Settings' units,
+  /// following the slide's zoom; pulling from one brings out a guide (kd_drag moves it).
+  List<Widget> _rulers() {
+    final gd = _ov['guides'] as Map?;
+    if (gd?['rulers'] != true) return const [];
+    final units = (gd?['units'] as num?)?.toInt() ?? 0;
+    const t = 20.0;
+    final top = widget.topInset;
+    Widget ruler(bool horiz) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (d) {
+            final p = toSlide(d.localPosition + (horiz ? Offset(t, top) : Offset(0, top + t)));
+            e.action(horiz ? 'guide:h:${p.dy}' : 'guide:v:${p.dx}');
+            refresh();
+          },
+          onPanUpdate: (d) {
+            final p = toSlide(d.localPosition + (horiz ? Offset(t, top) : Offset(0, top + t)));
+            e.drag(0, p.dx, p.dy, _tol);
+            _ov = e.overlays();
+            _paint();
+          },
+          onPanEnd: (_) {
+            e.drag(2, 0, 0, _tol);
+            refresh();
+          },
+          child: CustomPaint(painter: _RulerPainter(this, horiz, units)),
+        );
+    return [
+      Positioned(left: t, right: 0, top: top, height: t, child: ruler(true)),
+      Positioned(left: 0, width: t, top: top + t, bottom: 0, child: ruler(false)),
+    ];
+  }
+
+  /// The bars of the canvas's modes: Draw With Pen (colours, width, Done), Edit Mask (the
+  /// picture's size, Done) and point editing (Done).
+  List<Widget> _modeBars() {
+    final look = widget.look;
+    Widget bar(List<Widget> kids) => Positioned(
+          left: 0,
+          right: 0,
+          bottom: 20,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: look.panel, borderRadius: BorderRadius.circular(14), boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 10)]),
+              child: Row(mainAxisSize: MainAxisSize.min, children: kids),
+            ),
+          ),
+        );
+    Widget done(String action) => TextButton(onPressed: () {
+          e.action(action);
+          refresh();
+        }, child: Text('Done', style: Look.font(15, look.accent, bold: true)));
+    final out = <Widget>[];
+    final pen = _ov['pen'] as Map?;
+    if (pen != null) {
+      final cur = (pen['color'] as List).cast<int>();
+      out.add(bar([
+        for (final c in const [[0x0a, 0x84, 0xff], [0xff, 0x45, 0x3a], [0x30, 0xd1, 0x58], [0xff, 0xd6, 0x0a], [0, 0, 0], [255, 255, 255]])
+          GestureDetector(
+            onTap: () {
+              e.action('pen:color:${c[0]}:${c[1]}:${c[2]}');
+              refresh();
+            },
+            child: Container(
+              width: 30,
+              height: 30,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(color: Color.fromARGB(255, c[0], c[1], c[2]), shape: BoxShape.circle, border: Border.all(color: cur[0] == c[0] && cur[1] == c[1] && cur[2] == c[2] ? look.accent : look.gray(0x60), width: 2.5)),
+            ),
+          ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 140,
+          child: Slider(value: (pen['width'] as num).toDouble().clamp(1, 24), min: 1, max: 24, onChanged: (v) {
+            e.action('pen:width:${v.toStringAsFixed(1)}');
+            refresh();
+          }),
+        ),
+        done('pen:done'),
+      ]));
+    }
+    final mask = _ov['mask'] as Map?;
+    if (mask != null) {
+      out.add(bar([
+        Text('Size', style: Look.font(14, look.text)),
+        SizedBox(
+          width: 180,
+          child: Slider(value: (mask['size'] as num).toDouble().clamp(100, 500), min: 100, max: 500, onChangeEnd: (v) {
+            e.action('mask:size:${v.round()}');
+            refresh();
+          }, onChanged: (_) {}),
+        ),
+        done('mask:done'),
+      ]));
+    }
+    final gal = _ov['gallery'] as Map?;
+    if (gal != null) {
+      final c = [for (final p in gal['corners'] as List) _pt(p)];
+      final r = Rect.fromPoints(c[0], c[2]);
+      final n = (gal['count'] as num).toInt(), k = (gal['shown'] as num).toInt();
+      Widget arrow(bool next) => Positioned(
+            left: next ? r.right - 44 : r.left + 8,
+            top: r.center.dy - 18,
+            child: GestureDetector(
+              onTap: () {
+                e.action('gallery:${gal['id']}:${((k + (next ? 1 : -1)) % n + n) % n}');
+                refresh();
+              },
+              child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: Color(0x99000000), shape: BoxShape.circle), child: Icon(next ? Icons.chevron_right : Icons.chevron_left, color: Colors.white)),
+            ),
+          );
+      out.add(arrow(false));
+      out.add(arrow(true));
+      out.add(Positioned(
+        left: r.left,
+        width: r.width,
+        top: r.bottom + 6,
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          for (var i = 0; i < n; i++) Container(width: 7, height: 7, margin: const EdgeInsets.all(3), decoration: BoxDecoration(shape: BoxShape.circle, color: i == k ? widget.look.accent : widget.look.gray(0x80))),
+        ]),
+      ));
+    }
+    if (_ov['points'] != null) out.add(bar([Text('Drag the points', style: Look.font(14, look.textDim)), const SizedBox(width: 8), done('points:done')]));
+    return out;
+  }
+
+  final _cell = TextEditingController();
+  final _cellFocus = FocusNode();
+  String? _cellKey;
+
+  /// The cell editor (canvas.rs cell_editor): Return enters the cell, Tab moves right, a tap
+  /// elsewhere enters it too; the text goes to the engine as typed.
+  Widget _cellEditor(Map<String, dynamic>? ed) {
+    if (ed == null) return const SizedBox.shrink();
+    final q = [for (final p in ed['quad'] as List) _pt(p)];
+    final r = Rect.fromPoints(q[0], q[2]);
+    final key = '${(_ov['table'] as Map)['id']}:${ed['row']}:${ed['col']}';
+    if (key != _cellKey) {
+      _cellKey = key;
+      _cell.text = ed['text'] as String? ?? '';
+      _cell.selection = TextSelection.collapsed(offset: _cell.text.length);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _cellFocus.requestFocus());
+    }
+    final pad = (ed['padding'] as List?)?.map((v) => (v as num).toDouble() * zoom).toList() ?? [4.0, 4.0, 4.0, 4.0];
+    final align = const [TextAlign.left, TextAlign.center, TextAlign.right][((ed['align'] as num?)?.toInt() ?? 0).clamp(0, 2)];
+    void done(String how) {
+      e.action('cell:text:${_cell.text}');
+      e.action('cell:$how');
+      _cellKey = null;
+      refresh();
+    }
+
+    return Positioned.fromRect(
+      rect: r,
+      child: Container(
+        decoration: BoxDecoration(color: colorOfList(ed['fill']), border: Border.all(color: widget.look.accent, width: 2)),
+        padding: EdgeInsets.fromLTRB(pad[0], pad[1], pad[2], pad[3]),
+        alignment: Alignment.center,
+        child: Focus(
+          onKeyEvent: (n, k) {
+            if (k is KeyDownEvent && k.logicalKey == LogicalKeyboardKey.tab) {
+              done(HardwareKeyboard.instance.isShiftPressed ? 'backtab' : 'tab');
+              return KeyEventResult.handled;
+            }
+            if (k is KeyDownEvent && k.logicalKey == LogicalKeyboardKey.escape) {
+              e.action('cell:cancel');
+              _cellKey = null;
+              refresh();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            controller: _cell,
+            focusNode: _cellFocus,
+            textAlign: align,
+            style: TextStyle(fontSize: ((ed['size'] as num?)?.toDouble() ?? 20) * zoom, color: colorOfList(ed['color'])),
+            cursorColor: widget.look.accent,
+            decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none),
+            textInputAction: TextInputAction.done,
+            onChanged: (t) => e.action('cell:text:$t'),
+            onSubmitted: (_) => done('enter'),
+            onTapOutside: (_) => done('enter'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Color colorOfList(dynamic v) => v is List && v.length >= 3 ? Color.from(alpha: v.length > 3 ? (v[3] as num).toDouble() : 1, red: (v[0] as num).toDouble(), green: (v[1] as num).toDouble(), blue: (v[2] as num).toDouble()) : const Color(0xFFFFFFFF);
+
+  /// A comment's sticky note on the screen (22 points, up and left of its object's corner).
+  Rect _commentRect(Map<String, dynamic> c) {
+    final at = c['at'] as List;
+    return Rect.fromLTWH(0, 0, 22, 22).shift(toLocal((at[0] as num).toDouble(), (at[1] as num).toDouble()) - const Offset(10, 10));
+  }
+
   void _tapUp(TapUpDetails d) {
+    for (final c in (_ov['comments'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+      if (_commentRect(c).inflate(8).contains(d.localPosition)) {
+        e.action('comment:${c['id']}');
+        return refresh();
+      }
+    }
     if (_count == 0) return;
     final now = DateTime.now();
     final near = (d.localPosition - _lastTapAt).distance < 30;
@@ -459,6 +665,13 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
       }
     }
     final p = toSlide(at);
+    // Draw With Pen and point editing take every drag (the engine draws / moves the node)
+    if (_ov['pen'] != null || _ov['points'] != null) {
+      _gesture = 'object';
+      e.drag(1, p.dx, p.dy, _tol);
+      refresh();
+      return;
+    }
     final h = e.hit(p.dx, p.dy, _tol);
     final what = h['what'] as String? ?? 'none';
     if (what == 'handle' || what == 'lineEnd' || what == 'selected' || what == 'object') {
@@ -734,6 +947,14 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
               ),
             ),
             ..._toolbarBand(),
+            // a table cell being edited: a field over it in the cell's own size and look
+            if ((_ov['table'] as Map?)?['editing'] is Map)
+              ValueListenableBuilder<int>(
+                valueListenable: _repaint,
+                builder: (ctx, _, _) => _cellEditor(((_ov['table'] as Map?)?['editing'] as Map?)?.cast<String, dynamic>()),
+              ),
+            ..._modeBars(),
+            ..._rulers(),
             if (widget.message != null)
               Positioned(
                 left: 0,
@@ -793,6 +1014,61 @@ class SlideViewState extends State<SlideView> with TickerProviderStateMixin {
       );
     });
   }
+}
+
+class _RulerPainter extends CustomPainter {
+  _RulerPainter(this.s, this.horiz, this.units) : super(repaint: s._repaint);
+  final SlideViewState s;
+  final bool horiz;
+  final int units;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final look = s.widget.look;
+    canvas.drawRect(Offset.zero & size, Paint()..color = look.panel);
+    canvas.drawLine(horiz ? Offset(0, size.height - 0.5) : Offset(size.width - 0.5, 0), horiz ? Offset(size.width, size.height - 0.5) : Offset(size.width - 0.5, size.height), Paint()..color = look.separator);
+    // points per unit: cm, in, pt, mm (settings.rs ruler_units)
+    final per = const [72 / 2.54, 72.0, 1.0, 72 / 25.4][units.clamp(0, 3)];
+    final z = s.zoom, o = s.origin;
+    // a labelled tick at a step that keeps labels about 60 points apart
+    var step = per;
+    while (step * z < 50) {
+      step *= units == 2 ? 10 : (units == 3 ? 10 : 2);
+    }
+    while (step * z > 160) {
+      step /= 2;
+    }
+    final origin = horiz ? o.dx - 20 : o.dy - s.widget.topInset - 20;
+    final len = horiz ? size.width : size.height;
+    final first = (-origin / z / step).floor() - 1;
+    final tick = Paint()..color = look.textDim;
+    for (var k = first; k * step * z + origin < len + step * z; k++) {
+      final v = k * step * z + origin;
+      for (var m = 0; m < 4; m++) {
+        final w = v + m * step * z / 4;
+        final h = m == 0 ? 8.0 : 4.0;
+        if (horiz) {
+          canvas.drawLine(Offset(w, size.height - h), Offset(w, size.height), tick);
+        } else {
+          canvas.drawLine(Offset(size.width - h, w), Offset(size.width, w), tick);
+        }
+      }
+      final label = (k * step / per).toStringAsFixed(step / per < 1 ? 1 : 0);
+      final tp = TextPainter(text: TextSpan(text: label, style: TextStyle(color: look.textDim, fontSize: 9)), textDirection: TextDirection.ltr)..layout();
+      if (horiz) {
+        tp.paint(canvas, Offset(v + 3, 1));
+      } else {
+        canvas.save();
+        canvas.translate(2, v + 3 + tp.width);
+        canvas.rotate(-1.5708);
+        tp.paint(canvas, Offset.zero);
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RulerPainter o) => true;
 }
 
 class _SlidePainter extends CustomPainter {
@@ -921,6 +1197,134 @@ class _SlidePainter extends CustomPainter {
       final r = Rect.fromPoints(s.toLocal((rb[0] as num).toDouble(), (rb[1] as num).toDouble()), s.toLocal((rb[0] as num).toDouble() + (rb[2] as num).toDouble(), (rb[1] as num).toDouble() + (rb[3] as num).toDouble()));
       canvas.drawRect(r, Paint()..color = accent.withValues(alpha: 0.12));
       canvas.drawRect(r, line);
+    }
+    // guides (canvas.rs draw_user_guides / draw_guides): Keynote's yellow
+    final gd = ov['guides'] as Map?;
+    if (gd != null) {
+      const gold = Color(0xFFEECA00);
+      final size = s._slide;
+      void guide(List g, Color c) {
+        final v = g[0] == true, pos = (g[1] as num).toDouble();
+        final a = v ? s.toLocal(pos, 0) : s.toLocal(0, pos), b = v ? s.toLocal(pos, size.height) : s.toLocal(size.width, pos);
+        canvas.drawLine(a, b, Paint()..color = c);
+      }
+
+      for (final g in (gd['user'] as List? ?? const []).cast<List>()) {
+        guide(g, gold);
+      }
+      for (final g in (gd['layout'] as List? ?? const []).cast<List>()) {
+        guide(g, gold.withValues(alpha: 0.6));
+      }
+      final dr = gd['dragging'] as List?;
+      if (dr != null) {
+        guide(dr, gold);
+        final v = dr[0] == true, pos = (dr[1] as num).toDouble();
+        final at = (v ? s.toLocal(pos, 0) : s.toLocal(0, pos)) + const Offset(6, 6);
+        final tp = TextPainter(text: TextSpan(text: '${pos.round()} pt', style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12)), textDirection: TextDirection.ltr)..layout();
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(at.dx, at.dy, tp.width + 12, tp.height + 6), const Radius.circular(4)), Paint()..color = const Color(0xC8000000));
+        tp.paint(canvas, at + const Offset(6, 3));
+      }
+      final gp = Paint()
+        ..color = gold
+        ..strokeWidth = 1;
+      for (final g in (gd['snap'] as List? ?? const []).cast<List>()) {
+        switch (g[0]) {
+          case 'line':
+            canvas.drawLine(s._pt(g[1]), s._pt(g[2]), gp);
+          case 'gap':
+            final axis = g[1] as num, from = (g[2] as num).toDouble(), to = (g[3] as num).toDouble(), at = (g[4] as num).toDouble();
+            final a = axis == 0 ? s.toLocal(from, at) : s.toLocal(at, from), b = axis == 0 ? s.toLocal(to, at) : s.toLocal(at, to);
+            canvas.drawLine(a, b, gp);
+            final n = axis == 0 ? const Offset(0, 4) : const Offset(4, 0);
+            canvas.drawLine(a - n, a + n, gp);
+            canvas.drawLine(b - n, b + n, gp);
+          case 'size':
+            final bx = (g[2] as List).map((v) => (v as num).toDouble()).toList();
+            final r = Rect.fromPoints(s.toLocal(bx[0], bx[1]), s.toLocal(bx[2], bx[3]));
+            if (g[1] == 0) {
+              canvas.drawLine(r.bottomLeft + const Offset(0, 6), r.bottomRight + const Offset(0, 6), gp);
+            } else {
+              canvas.drawLine(r.topRight + const Offset(6, 0), r.bottomRight + const Offset(6, 0), gp);
+            }
+        }
+      }
+    }
+    // Draw With Pen: the stroke being drawn
+    final pen = ov['pen'] as Map?;
+    final stroke = pen?['stroke'] as List?;
+    if (pen != null && stroke != null && stroke.length > 1) {
+      final c = pen['color'] as List;
+      final path = Path()..moveTo(s._pt(stroke[0]).dx, s._pt(stroke[0]).dy);
+      for (final q in stroke.skip(1)) {
+        final o = s._pt(q);
+        path.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(path, Paint()
+        ..color = Color.fromARGB(255, c[0] as int, c[1] as int, c[2] as int)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = ((pen['width'] as num).toDouble() * s.zoom).clamp(1, 200)
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round);
+    }
+    // Make Editable: the outline as edited, the nodes and the chosen node's handles
+    final pts = ov['points'] as Map?;
+    if (pts != null) {
+      for (final l in (pts['lines'] as List).cast<List>()) {
+        if (l.length < 2) continue;
+        final path = Path()..addPolygon([for (final q in l) s._pt(q)], false);
+        canvas.drawPath(path, Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+      }
+      for (final n in (pts['nodes'] as List).cast<Map<String, dynamic>>()) {
+        final c = s._pt(n['at']);
+        final on = n['on'] == true;
+        for (final k in ['in', 'out']) {
+          if (n[k] == null) continue;
+          final h = s._pt(n[k]);
+          if ((h - c).distance < 0.5) continue;
+          canvas.drawLine(c, h, Paint()..color = accent);
+          canvas.drawCircle(h, 4, Paint()..color = on ? accent : const Color(0xFFFFFFFF));
+        }
+        final r = Rect.fromCenter(center: c, width: 10, height: 10);
+        canvas.drawRect(r, Paint()..color = on ? accent : const Color(0xFFFFFFFF));
+        canvas.drawRect(r, Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke);
+      }
+    }
+    // the selected table's cell and range (canvas.rs: the accent frame; the range tinted)
+    final tbl = ov['table'] as Map?;
+    if (tbl != null) {
+      Path quad(List q) => Path()..addPolygon([for (final p in q) s._pt(p)], true);
+      if (tbl['range'] is List) {
+        final p = quad(tbl['range'] as List);
+        canvas.drawPath(p, Paint()..color = accent.withValues(alpha: 0.15));
+        canvas.drawPath(p, Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+      } else if (tbl['editing'] == null) {
+        canvas.drawPath(quad(tbl['cell'] as List), Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5);
+      }
+    }
+    // View > Comments: sticky notes (canvas.rs comment_markers)
+    for (final c in (ov['comments'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+      final r = s._commentRect(c);
+      final col = c['color'] is List ? Color.from(alpha: 1, red: ((c['color'] as List)[0] as num).toDouble(), green: ((c['color'] as List)[1] as num).toDouble(), blue: ((c['color'] as List)[2] as num).toDouble()) : const Color(0xFFFFD60A);
+      final rr = RRect.fromRectAndRadius(r, const Radius.circular(3));
+      canvas.drawRRect(rr, Paint()..color = col);
+      canvas.drawRRect(rr, Paint()
+        ..color = const Color(0x5A000000)
+        ..style = PaintingStyle.stroke);
+      for (var k = 0; k < 3; k++) {
+        final y = r.top + 7 + k * 4;
+        canvas.drawLine(Offset(r.left + 5, y), Offset(r.right - 5, y), Paint()..color = const Color(0x6E000000));
+      }
     }
   }
 

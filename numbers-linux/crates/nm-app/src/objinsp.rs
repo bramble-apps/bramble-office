@@ -899,7 +899,7 @@ fn style(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
             let id = d.id;
             if let Some(doc) = app.wb.as_mut().map(|w| &mut w.doc) {
                 doc.begin(&mut app.hist, if title { "Title" } else { "Caption" });
-                doc.set_caption(&mut app.hist, slide, id, title, on);
+                nm_core::sheets::set_caption(doc, &mut app.hist, slide, id, title, on);
                 doc.end(&mut app.hist);
             }
             app.bump(slide);

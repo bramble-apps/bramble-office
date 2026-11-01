@@ -167,7 +167,23 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         });
     });
     app.find.open = open;
-    let Some(action) = action else { return };
+    if let Some(action) = action {
+        act(app, action);
+    }
+}
+
+/// What the panel says about the matches ("2 of 5", "Not found"), once searched.
+pub fn counter(app: &App) -> Option<String> {
+    let f = &app.find;
+    let key = format!("{}|{}|{}", f.query, f.match_case, f.whole_words);
+    (key == f.searched_for && !f.query.is_empty()).then(|| {
+        let n = f.matches.len();
+        if n == 0 { "Not found".to_string() } else { format!("{} of {n}", f.current + 1) }
+    })
+}
+
+/// A Find & Replace button: "next", "prev", "replace", "all".
+pub fn act(app: &mut App, action: &str) {
     crate::textedit::commit(app);
     let key = format!("{}|{}|{}", app.find.query, app.find.match_case, app.find.whole_words);
     if key != app.find.searched_for {

@@ -60,16 +60,8 @@ pub(crate) fn title_item(app: &mut App, ui: &mut egui::Ui, name_r: Rect, cy: f32
         if app.doc_title.is_some() {
             app.doc_title = None;
         } else {
-            let stem = path.as_ref().and_then(|p| p.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.trim_end_matches(".numbers").to_string());
-            // the format starts as the document's: 0 Excel, 1 Excel + Values, 2 Numbers
-            let f: u8 = match &app.excel {
-                Some(x) if x.compat => 1,
-                Some(_) => 0,
-                None => 2,
-            };
+            let f = title_open(app);
             ctx.data_mut(|d| d.insert_temp(egui::Id::unique("doc-format"), f));
-            let dir = path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
-            app.doc_title = Some((stem, dir));
             return;
         }
     }
@@ -149,30 +141,49 @@ pub(crate) fn title_item(app: &mut App, ui: &mut egui::Ui, name_r: Rect, cy: f32
     if apply || close {
         let f: u8 = ctx.data(|d| d.get_temp(egui::Id::unique("doc-format"))).unwrap_or(2);
         if let (true, Some((name, Some(dir)))) = (apply, app.doc_title.take()) {
-            let name = name.trim().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
-            if !name.is_empty() && !name.contains('/') {
-                let was: u8 = match &app.excel {
-                    Some(x) if x.compat => 1,
-                    Some(_) => 0,
-                    None => 2,
-                };
-                match (was, f) {
-                    // the same format: a rename or move
-                    (a, b) if a == b => crate::fileops::relocate(app, dir.join(format!("{name}.{}", if f == 2 { "numbers" } else { "xlsx" }))),
-                    // Excel <-> Excel + Values: the same workbook, saved again its new way
-                    (0 | 1, 0 | 1) => {
-                        if let Some(x) = app.excel.clone() {
-                            app.save_excel(&x.path, f == 1);
-                        }
-                    }
-                    // to Numbers: a Numbers spreadsheet beside it (the workbook stays)
-                    (_, 2) => app.save_numbers_to(&dir.join(format!("{name}.numbers"))),
-                    // to Excel: an Excel workbook beside the spreadsheet
-                    _ => app.save_excel(&dir.join(format!("{name}.xlsx")), f == 1),
-                }
-            }
+            title_apply(app, &name, &dir, f);
         }
         app.doc_title = None;
+    }
+}
+
+/// The document's format as the title popover names it: 0 Excel, 1 Excel + Values, 2 Numbers.
+pub(crate) fn doc_format(app: &App) -> u8 {
+    match &app.excel {
+        Some(x) if x.compat => 1,
+        Some(_) => 0,
+        None => 2,
+    }
+}
+
+/// The title popover opens: its name and folder as the file's (its format, returned, too).
+pub(crate) fn title_open(app: &mut App) -> u8 {
+    let path = app.excel.as_ref().map(|x| x.path.clone()).or_else(|| app.doc().and_then(|d| d.path.clone()));
+    let stem = path.as_ref().and_then(|p| p.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| app.title().trim_end_matches(".numbers").to_string());
+    let dir = path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
+    app.doc_title = Some((stem, dir));
+    doc_format(app)
+}
+
+/// The title popover closing: renamed or moved, or saved in the format `f` beside the file.
+pub(crate) fn title_apply(app: &mut App, name: &str, dir: &std::path::Path, f: u8) {
+    let name = name.trim().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+    if name.is_empty() || name.contains('/') {
+        return;
+    }
+    match (doc_format(app), f) {
+        // the same format: a rename or move
+        (a, b) if a == b => crate::fileops::relocate(app, dir.join(format!("{name}.{}", if f == 2 { "numbers" } else { "xlsx" }))),
+        // Excel <-> Excel + Values: the same workbook, saved again its new way
+        (0 | 1, 0 | 1) => {
+            if let Some(x) = app.excel.clone() {
+                app.save_excel(&x.path, f == 1);
+            }
+        }
+        // to Numbers: a Numbers spreadsheet beside it (the workbook stays)
+        (_, 2) => app.save_numbers_to(&dir.join(format!("{name}.numbers"))),
+        // to Excel: an Excel workbook beside the spreadsheet
+        _ => app.save_excel(&dir.join(format!("{name}.xlsx")), f == 1),
     }
 }
 

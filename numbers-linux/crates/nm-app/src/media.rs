@@ -21,7 +21,7 @@ pub struct MediaBrowser {
     pub open: Option<bool>,
     files: Vec<PathBuf>,
     listed: Option<bool>,
-    query: String,
+    pub(crate) query: String,
     pub recorder: Option<Recorder>,
     pub record_open: bool,
     /// Insert > Web Video: the address typed so far.
@@ -36,6 +36,8 @@ pub struct MediaBrowser {
     pub player: Option<kn_ui::media::Player>,
     /// A web video whose stream is being looked up (it plays when known).
     pub web_waiting: Option<ObjId>,
+    /// The web video the one being added replaces (its inspector's Replace).
+    pub replacing: Option<ObjId>,
 }
 
 pub struct Recorder {
@@ -71,7 +73,8 @@ fn scan(dirs: &[PathBuf], exts: &[&str]) -> Vec<PathBuf> {
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    // (the Flutter front end points HOME at the app's folder: the user's is kept apart)
+    std::env::var_os("VALUES_USER_HOME").or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_default()
 }
 
 pub fn ui(app: &mut App, ctx: &egui::Context) {
@@ -134,38 +137,86 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             }
         });
         if start {
-            let path = std::env::temp_dir().join(format!("values-recording-{}.wav", std::process::id()));
-            let child = std::process::Command::new("pw-record")
-                .arg(&path)
-                .stdin(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-                .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
-            match child {
-                Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
-                Err(e) => app.notify(format!("Couldn't start recording: {e}")),
-            }
+            record_start(app);
         }
         if stop || (!open && app.media.recorder.is_some()) {
-            if let Some(mut r) = app.media.recorder.take() {
-                // stop politely so the file is finished properly
-                let _ = std::process::Command::new("kill").args(["-INT", &r.child.id().to_string()]).status();
-                let _ = r.child.wait();
-                if stop {
-                    // a compressed copy (Keynote records AAC) when ffmpeg is there
-                    let m4a = r.path.with_extension("m4a");
-                    let ok = std::process::Command::new("ffmpeg").args(["-v", "error", "-y", "-i"]).arg(&r.path).args(["-c:a", "aac", "-b:a", "128k"]).arg(&m4a).status().is_ok_and(|s| s.success());
-                    let named = std::env::temp_dir().join(if ok { "Recording.m4a" } else { "Recording.wav" });
-                    let _ = std::fs::rename(if ok { &m4a } else { &r.path }, &named);
-                    insert_path(app, named);
-                }
-            }
+            record_stop(app, stop);
             if stop {
                 open = false;
             }
         }
         app.media.record_open = open;
     }
+}
+
+/// Record Audio's ● Record: the default microphone into a temporary file.
+pub fn record_start(app: &mut App) {
+    let path = std::env::temp_dir().join(format!("values-recording-{}.wav", std::process::id()));
+    let child = std::process::Command::new("pw-record")
+        .arg(&path)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
+    match child {
+        Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
+        Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+    }
+}
+
+/// The recording stopped: on the sheet (`insert`) or thrown away.
+pub fn record_stop(app: &mut App, insert: bool) {
+    if let Some(mut r) = app.media.recorder.take() {
+        // stop politely so the file is finished properly
+        let _ = std::process::Command::new("kill").args(["-INT", &r.child.id().to_string()]).status();
+        let _ = r.child.wait();
+        if insert {
+            // a compressed copy (Keynote records AAC) when ffmpeg is there
+            let m4a = r.path.with_extension("m4a");
+            let ok = std::process::Command::new("ffmpeg").args(["-v", "error", "-y", "-i"]).arg(&r.path).args(["-c:a", "aac", "-b:a", "128k"]).arg(&m4a).status().is_ok_and(|s| s.success());
+            let named = std::env::temp_dir().join(if ok { "Recording.m4a" } else { "Recording.wav" });
+            let _ = std::fs::rename(if ok { &m4a } else { &r.path }, &named);
+            insert_path(app, named);
+        }
+    }
+}
+
+/// Seconds recorded so far (None: not recording).
+pub fn recording_secs(app: &App) -> Option<u64> {
+    app.media.recorder.as_ref().map(|r| r.started.elapsed().as_secs())
+}
+
+/// The Photos and Videos (false) / Music (true) browser's files, listed once per kind.
+pub fn browser_files(app: &mut App, music: bool) -> Vec<PathBuf> {
+    if app.media.listed != Some(music) {
+        app.media.files = if music {
+            scan(&[home().join("Music")], AUDIO_EXT)
+        } else {
+            let mut ex: Vec<&str> = IMAGE_EXT.to_vec();
+            ex.extend(MOVIE_EXT);
+            scan(&[home().join("Pictures"), home().join("Videos")], &ex)
+        };
+        app.media.listed = Some(music);
+    }
+    let q = app.media.query.to_lowercase();
+    app.media.files.iter().filter(|p| q.is_empty() || p.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().contains(&q))).cloned().collect()
+}
+
+/// The browser's search field.
+pub fn set_query(app: &mut App, q: &str) {
+    app.media.query = q.to_string();
+}
+
+/// Web Video's Insert: the link's details are looked up in the background, then it goes in.
+pub fn web_go(app: &mut App, url: &str) {
+    let (tx, rx) = channel();
+    let u = url.trim().to_string();
+    std::thread::spawn(move || {
+        let _ = tx.send(fetch(u));
+    });
+    app.media.fetching = Some(rx);
+    app.media.url_sheet = None;
+    app.notify("Getting the video's details…");
 }
 
 /// Insert > Choose…: a picture, movie or sound file.
@@ -260,17 +311,44 @@ pub fn web_and_jobs(app: &mut App, ctx: &egui::Context) {
             });
         });
         if go {
-            let (tx, rx) = channel();
-            let u = url.trim().to_string();
-            std::thread::spawn(move || {
-                let _ = tx.send(fetch(u));
-            });
-            app.media.fetching = Some(rx);
-            app.notify("Getting the video's details…");
+            web_go(app, &url);
         } else if keep {
             app.media.url_sheet = Some(url);
         }
     }
+    if jobs(app) {
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    }
+}
+
+/// ▶ for a front end that doesn't play in place (the Flutter app): a movie or sound opens in
+/// the system's player (its file from the document), a web video in the browser.
+pub fn open_outside(app: &mut App, _ctx: &egui::Context, id: ObjId) {
+    let Some(d) = app.drawables.iter().find(|d| d.id == id) else { return };
+    let target = match &d.kind {
+        nm_core::kn_model::DrawableKind::Movie(m) => m.movie_data.and_then(|data| app.doc().and_then(|doc| kn_ui::media::cache_file(doc, data))).map(|(p, _)| p.to_string_lossy().to_string()),
+        nm_core::kn_model::DrawableKind::Image(im) => im.web_video.as_ref().map(|w| w.url.clone()),
+        _ => None,
+    };
+    match target {
+        Some(t) => crate::ffi::open_url(&t),
+        None => app.notify("The movie's file isn't in this document"),
+    }
+}
+
+/// Image Gallery with pictures a front end picked (Android's picker): as `pick_gallery`'s.
+pub fn gallery_from(app: &mut App, files: &[PathBuf]) {
+    let pics: Vec<(String, Vec<u8>)> = files.iter().filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?))).collect();
+    let (tx, rx) = channel();
+    let _ = tx.send(pics);
+    app.media.adding_to = None;
+    app.media.picking = Some(rx);
+    jobs(app);
+}
+
+/// The background work coming back (a web video's details, gallery pictures, a movie or sound
+/// read); whether some is still going.
+pub fn jobs(app: &mut App) -> bool {
     // a web video's details: its poster as a picture that is the video
     if let Some(rx) = app.media.fetching.take() {
         match rx.try_recv() {
@@ -287,6 +365,25 @@ pub fn web_and_jobs(app: &mut App, ctx: &egui::Context) {
                         d.make_web_video(h, id, &url, &title, &author);
                     });
                     app.merge_next_edit = false;
+                    // Replace: where the old one was, the old one gone
+                    if let Some(old) = app.media.replacing.take() {
+                        let g = app.drawables.iter().find(|d| d.id == old).map(|d| d.geom);
+                        let sheet = app.sheets().get(app.sheet).map(|s| s.id);
+                        if let (Some(g), Some(sheet)) = (g, sheet) {
+                            app.merge_next_edit = true;
+                            app.edit("Insert Image", |d, h| {
+                                if let Some(mut ng) = d.file.obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")).map(nm_core::kn_model::scene::geometry) {
+                                    ng.x = g.x;
+                                    ng.y = g.y;
+                                    ng.w = g.w;
+                                    ng.h = g.h;
+                                    d.set_frame(h, id, ng);
+                                }
+                                nm_core::sheets::detach_drawables(d, h, sheet, &[old]);
+                            });
+                            app.merge_next_edit = false;
+                        }
+                    }
                 }
             }
             Ok(Err(e)) => app.notify(e),
@@ -359,9 +456,7 @@ pub fn web_and_jobs(app: &mut App, ctx: &egui::Context) {
             Err(_) => {}
         }
     }
-    if app.media.fetching.is_some() || app.media.picking.is_some() || app.media.preparing.is_some() {
-        ctx.request_repaint_after(std::time::Duration::from_millis(100));
-    }
+    app.media.fetching.is_some() || app.media.picking.is_some() || app.media.preparing.is_some()
 }
 
 /// Movies, sounds and web videos play in place on the sheet (a ▶ on them; a click stops),

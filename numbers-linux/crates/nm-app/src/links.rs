@@ -212,6 +212,11 @@ pub fn follow(app: &mut App, url: &str) {
         return;
     }
     let url = if url.contains("://") || url.starts_with("mailto:") || url.starts_with("tel:") { url.to_string() } else { format!("https://{url}") };
+    // (a front end that opens links itself: Android's)
+    if crate::ffi::front_end_opens_urls() {
+        crate::ffi::open_url(&url);
+        return;
+    }
     std::thread::spawn(move || {
         let _ = kn_ui::open_command(&url).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
     });
@@ -308,34 +313,39 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             }
         });
     });
-    let url = match le.kind.as_str() {
-        "Sheet" => sheet_uuid(app, le.sheet).map(|u| format!("?sheetid={u}")),
-        k => Some(url_of(k, &le.addr, &le.subject)),
-    };
     if !open || close {
         app.link_edit = None;
         return;
     }
     match done {
         None => app.link_edit = Some(le),
-        Some(None) => {
-            app.link_edit = None;
-            match le.text {
-                Some((s, a, _)) => remove_text(app, s, a),
-                None => {
-                    let o = le.obj;
-                    app.edit("Remove Link", |d, h| d.set_hyperlink(h, o, None));
-                }
+        Some(None) => finish(app, le, true, false),
+        Some(Some(_)) => finish(app, le, false, follow_url.is_some()),
+    }
+}
+
+/// The popover's buttons: Remove (`remove`), or the link made as it says (and followed:
+/// Open Link / Compose Email / Call / Go to Sheet).
+pub fn finish(app: &mut App, le: LinkEdit, remove: bool, follow_it: bool) {
+    app.link_edit = None;
+    if remove {
+        match le.text {
+            Some((s, a, _)) => remove_text(app, s, a),
+            None => {
+                let o = le.obj;
+                app.edit("Remove Link", |d, h| d.set_hyperlink(h, o, None));
             }
         }
-        Some(Some(_)) => {
-            app.link_edit = None;
-            let Some(url) = url else { return };
-            apply(app, &le, &url);
-            if follow_url.is_some() {
-                follow(app, &url);
-            }
-        }
+        return;
+    }
+    let url = match le.kind.as_str() {
+        "Sheet" => sheet_uuid(app, le.sheet).map(|u| format!("?sheetid={u}")),
+        k => Some(url_of(k, &le.addr, &le.subject)),
+    };
+    let Some(url) = url else { return };
+    apply(app, &le, &url);
+    if follow_it {
+        follow(app, &url);
     }
 }
 

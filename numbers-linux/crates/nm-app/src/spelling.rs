@@ -58,7 +58,7 @@ pub fn find_next(app: &mut App) {
 }
 
 /// Change: the word in its cell becomes the picked suggestion.
-fn change(app: &mut App) {
+pub(crate) fn change(app: &mut App) {
     let Some(sp) = app.spelling.clone() else { return };
     let (Some((t, r, c, a, b)), Some(new)) = (sp.at, sp.guesses.get(sp.pick).cloned()) else { return };
     let Some(text) = app.table(t).and_then(|(_, td)| td.cells.get((r * td.cols + c) as usize).cloned()) else { return };

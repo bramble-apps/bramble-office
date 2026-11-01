@@ -566,7 +566,7 @@ pub fn table_panel(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
     if theme::checkbox(ui, &mut caption, "Caption").changed() {
         if let Some(slide) = app.current_slide().map(|s| s.slide) {
             cmd = Some(Box::new(move |doc, h| {
-                doc.set_caption(h, slide, id, false, caption);
+                nm_core::sheets::set_caption(doc, h, slide, id, false, caption);
             }));
         }
     }

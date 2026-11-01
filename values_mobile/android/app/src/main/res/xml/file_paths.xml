@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app hands other apps to open (Values Help's page, a movie from the spreadsheet):
+     its own files folder, where the engine's home is, and its cache. -->
+<paths>
+    <files-path name="files" path="." />
+    <cache-path name="cache" path="." />
+</paths>

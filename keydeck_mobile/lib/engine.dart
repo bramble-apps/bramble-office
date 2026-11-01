@@ -77,6 +77,11 @@ class Engine {
   late final _show = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_show');
   late final _showGo = _lib.lookupFunction<_VS, _DS>('kd_show_go');
   late final _motion = _lib.lookupFunction<Int32 Function(Uint32, Float, Pointer<Uint8>, Uint32, Uint32), int Function(int, double, Pointer<Uint8>, int, int)>('kd_motion');
+  late final _tick = _lib.lookupFunction<Int32 Function(), int Function()>('kd_tick');
+  late final _motionPreset = _lib.lookupFunction<Int32 Function(Uint32, Pointer<Uint8>, Uint32, Uint32), int Function(int, Pointer<Uint8>, int, int)>('kd_motion_preset');
+  late final _notes = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_notes');
+  late final _outline = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_outline');
+  late final _urls = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_urls');
   late final _playStart = _lib.lookupFunction<Void Function(Uint32, Bool), void Function(int, bool)>('kd_play_start');
   late final _playFrame = _lib.lookupFunction<Pointer<Uint8> Function(Float, Float, Float, Pointer<Utf8>, Pointer<Uint32>), Pointer<Uint8> Function(double, double, double, Pointer<Utf8>, Pointer<Uint32>)>('kd_play_frame');
   late final _playStatus = _lib.lookupFunction<_S, Pointer<Utf8> Function()>('kd_play_status');
@@ -152,6 +157,9 @@ class Engine {
   /// A layout's picture (the Add Slide popover's `index`), `w` × `h` pixels.
   /// Slide `index`'s dynamic background at `t` seconds, `w` × `h` pixels (null: it has none).
   Future<ui.Image?> motion(int index, double t, int w, int h) => _image(w, h, (b) => _motion(index, t, b, w, h));
+
+  /// The theme's dynamic background preset `index`, `w` × `h` pixels.
+  Future<ui.Image?> motionPreset(int index, int w, int h) => _image(w, h, (b) => _motionPreset(index, b, w, h));
 
   Future<ui.Image?> renderLayout(int index, int w, int h) => _image(w, h, (b) => _renderLayout(index, b, w, h));
 
@@ -231,6 +239,18 @@ class Engine {
 
   /// Slide `index` at build `step`, `w` × `h` pixels.
   Future<ui.Image?> showFrame(int index, int step, int w, int h) => _image(w, h, (b) => _showFrame(index, step, b, w, h));
+
+  /// The current slide's presenter notes: {text}.
+  Map<String, dynamic> notes() => _map(_notes());
+
+  /// View > Outline: [{slide, title: {storage, text}?, texts: [{storage, text}], skipped}].
+  List<dynamic> outline() => (_json(_outline()) as List?) ?? const [];
+
+  /// Web pages the engine asked to open since the last call.
+  List<String> urls() => [for (final u in (_json(_urls()) as List?) ?? const []) u as String];
+
+  /// Background work finishing (kd_status "busy"): non-zero when something was waiting.
+  int tick() => _tick();
 
   // ---- the desktop's show, drawn here from its triangles (kn-app showapi.rs) ----
 

@@ -10,7 +10,7 @@ use nm_core::kn_model::format::TextProp;
 use crate::app::App;
 
 /// The text style the Fonts window shows: the cursor cell's, else the selected text box's.
-fn current(app: &App) -> Option<nm_core::kn_model::CharStyle> {
+pub(crate) fn current(app: &App) -> Option<nm_core::kn_model::CharStyle> {
     if app.sel.is_some() {
         return crate::menus::cursor_char(app);
     }
@@ -105,7 +105,7 @@ pub fn fonts_window(app: &mut App, ctx: &egui::Context) {
 
 /// Replace Fonts…: (font name in the file, installed here, chosen replacement family).
 pub struct ReplaceFonts {
-    rows: Vec<(String, bool, Option<String>)>,
+    pub(crate) rows: Vec<(String, bool, Option<String>)>,
 }
 
 pub fn open_replace(app: &mut App) {
@@ -154,15 +154,20 @@ pub fn replace_window(app: &mut App, ctx: &egui::Context) {
         });
     });
     if apply {
-        let changes: Vec<(String, String)> = st.rows.iter().filter_map(|(from, _, to)| to.as_ref().map(|fam| (from.clone(), app.canvas.tiles.ps_name_for_family(fam).unwrap_or_else(|| fam.clone())))).collect();
-        let n = app.edit("Replace Fonts", |d, h| changes.iter().map(|(from, to)| d.replace_font(h, from, to)).sum::<usize>()).unwrap_or(0);
-        app.canvas.tiles.clear_text_caches();
-        app.notify(format!("Replaced fonts in {n} style{}", if n == 1 { "" } else { "s" }));
+        replace(app, &st);
         return;
     }
     if open {
         app.replace_fonts = Some(st);
     }
+}
+
+/// Replace: each font given a replacement becomes it, in every style.
+pub(crate) fn replace(app: &mut App, st: &ReplaceFonts) {
+    let changes: Vec<(String, String)> = st.rows.iter().filter_map(|(from, _, to)| to.as_ref().map(|fam| (from.clone(), app.canvas.tiles.ps_name_for_family(fam).unwrap_or_else(|| fam.clone())))).collect();
+    let n = app.edit("Replace Fonts", |d, h| changes.iter().map(|(from, to)| d.replace_font(h, from, to)).sum::<usize>()).unwrap_or(0);
+    app.canvas.tiles.clear_text_caches();
+    app.notify(format!("Replaced fonts in {n} style{}", if n == 1 { "" } else { "s" }));
 }
 
 /// View > Show Warnings: Numbers' Document Warnings (fonts that aren't installed, media that

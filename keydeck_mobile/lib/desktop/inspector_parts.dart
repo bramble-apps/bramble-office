@@ -137,7 +137,8 @@ class _InspectorSheetState extends State<InspectorSheet> with SingleTickerProvid
           final h = _h.value;
           if (h <= 0.5) return const SizedBox.shrink();
           return Stack(children: [
-            Positioned(left: 0, right: 0, bottom: 0, height: h, child: child!),
+            // (laid out at least 120 tall and clipped, so its first frames opening don't overflow)
+            Positioned(left: 0, right: 0, bottom: 0, height: h, child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: 0, maxHeight: math.max(h, 120), child: child!))),
           ]);
         },
         child: Container(

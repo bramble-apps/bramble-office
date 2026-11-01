@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 use crate::app::App;
 
 /// The windows open now.
-pub fn state(app: &App) -> Value {
-    let mut out = Vec::new();
+pub fn state(app: &mut App) -> Value {
+    let mut out = crate::formsapi::state(app);
     if app.hub.open {
         let shape = |s: &kn_ui::contenthub::AppShape| {
             use kn_ui::contenthub::Glyph;
@@ -158,6 +158,9 @@ fn set_setting(app: &mut App, ctx: &egui::Context, field: &str, v: &Value) {
 /// A window's button: "<window>.<button>".
 pub fn set(app: &mut App, ctx: &egui::Context, key: &str, v: &Value) {
     let (win, button) = key.split_once('.').unwrap_or((key, ""));
+    if crate::formsapi::set(app, ctx, win, button, v) {
+        return;
+    }
     match win {
         "about" => app.show_about = false,
         "settings" => set_setting(app, ctx, button, v),

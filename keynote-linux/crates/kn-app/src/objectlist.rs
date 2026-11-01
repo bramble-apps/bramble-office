@@ -6,7 +6,7 @@ use kn_model::{Drawable, DrawableKind};
 use crate::app::App;
 use crate::theme;
 
-fn label(d: &Drawable) -> String {
+pub(crate) fn label(d: &Drawable) -> String {
     match &d.kind {
         DrawableKind::Shape(s) => match s.text.as_ref().map(|t| t.text.trim()).filter(|t| !t.is_empty()) {
             Some(t) => {

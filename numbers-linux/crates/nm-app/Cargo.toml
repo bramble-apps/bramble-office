@@ -26,5 +26,9 @@ kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 tiny-skia = "0.12.0"
 
+# stock quotes on Android, which has no curl (the version kn-ui's Content Hub uses)
+[target.'cfg(target_os = "android")'.dependencies]
+ureq = "3.5.0"
+
 [build-dependencies]
 winresource = "0.1.34"

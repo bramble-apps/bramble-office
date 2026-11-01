@@ -8,7 +8,7 @@ use crate::theme;
 
 pub struct ReplaceFonts {
     /// (font name in the file, installed, chosen replacement family)
-    rows: Vec<(String, bool, Option<String>)>,
+    pub(crate) rows: Vec<(String, bool, Option<String>)>,
 }
 
 pub fn open(app: &mut App) {
@@ -56,6 +56,17 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         });
     });
     if apply {
+        replace(app, &st);
+        return;
+    }
+    if open {
+        app.replace_fonts = Some(st);
+    }
+}
+
+/// Replace: every font given a replacement, in all styles.
+pub(crate) fn replace(app: &mut App, st: &ReplaceFonts) {
+    {
         let changes: Vec<(String, String)> = st
             .rows
             .iter()
@@ -73,9 +84,5 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         app.renderer.clear_caches();
         app.bump_all();
         app.notify(format!("Replaced fonts in {n} style{}", if n == 1 { "" } else { "s" }));
-        return;
-    }
-    if open {
-        app.replace_fonts = Some(st);
     }
 }

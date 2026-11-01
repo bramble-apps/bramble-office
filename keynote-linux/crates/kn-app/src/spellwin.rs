@@ -10,12 +10,12 @@ use crate::app::App;
 pub struct SpellWindow {
     pub open: bool,
     /// The word found last and its suggestions.
-    word: Option<String>,
-    guesses: Vec<String>,
-    pick: usize,
-    change_to: String,
+    pub(crate) word: Option<String>,
+    pub(crate) guesses: Vec<String>,
+    pub(crate) pick: usize,
+    pub(crate) change_to: String,
     pub substitutions_open: bool,
-    message: Option<String>,
+    pub(crate) message: Option<String>,
 }
 
 /// Text objects of slide `i` in drawing order: (object, text storage).
@@ -180,6 +180,14 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         }
     });
     app.spell_win.open = open;
+    if let Some(a) = act {
+        spell_act(app, a);
+    }
+}
+
+/// A Spelling window button: "change", "next", "ignore", "learn".
+pub fn spell_act(app: &mut App, act: &str) {
+    let act = Some(act);
     let word = app.spell_win.word.clone();
     match act {
         Some("change") => {

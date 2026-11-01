@@ -17,7 +17,13 @@ pub fn state(app: &mut App) -> Value {
         return object_state(app, id, app.canvas.editing.is_some());
     }
     let Some(sel) = app.sel else { return sheet_state(app) };
+    if app.canvas.edit.as_ref().is_some_and(|e| e.text.trim_start().starts_with('=')) {
+        return functions_state(app);
+    }
     if app.insp_tab == InspTab::Organize {
+        if app.pivots.contains_key(&sel.table) {
+            return pivot_state(app, sel.table);
+        }
         return json!({ "pane": "organize", "data": crate::api::organize_state(app, sel.table) });
     }
     cells_state(app, sel.table)
@@ -39,6 +45,8 @@ pub fn set(app: &mut App, ctx: &egui::Context, key: &str, v: &Value) {
         "objtext" => set_obj_text(app, ctx, k, v),
         "sheet" => set_sheet(app, k, v),
         "organize" => crate::api::organize_set(app, k, v),
+        "functions" => set_functions(app, k, v),
+        "pivot" => set_pivot(app, k, v),
         _ => {}
     }
 }
@@ -135,10 +143,10 @@ fn set_cell_text(app: &mut App, k: &str, v: &Value) {
     let prop: Option<(&str, TextProp)> = match k {
         "family" => v.as_str().map(|f| ("Font", TextProp::Font(f.replace(' ', "")))),
         "size" => Some(("Font Size", TextProp::Size(n.clamp(1.0, 1000.0).round()))),
-        "bold" => Some(("Bold", TextProp::Bold(!run.bold))),
-        "italic" => Some(("Italic", TextProp::Italic(!run.italic))),
-        "underline" => Some(("Underline", TextProp::Underline(!run.underline))),
-        "strike" => Some(("Strikethrough", TextProp::Strike(!run.strike))),
+        "bold" => Some(("Bold", TextProp::Bold(v.as_bool().unwrap_or(!run.bold)))),
+        "italic" => Some(("Italic", TextProp::Italic(v.as_bool().unwrap_or(!run.italic)))),
+        "underline" => Some(("Underline", TextProp::Underline(v.as_bool().unwrap_or(!run.underline)))),
+        "strike" => Some(("Strikethrough", TextProp::Strike(v.as_bool().unwrap_or(!run.strike)))),
         "color" => to_col(v).map(|c| ("Text Color", TextProp::Color(c))),
         "first" => Some(("First Line Indent", TextProp::FirstIndent(n))),
         "left" => Some(("Left Indent", TextProp::LeftIndent(n.max(0.0)))),
@@ -329,7 +337,7 @@ fn set_table(app: &mut App, k: &str, v: &Value) {
         }
         "caption" => {
             if let Some(s) = caption_slide {
-                doc.set_caption(h, s, id, false, on);
+                nm_core::sheets::set_caption(doc, h, s, id, false, on);
             }
         }
         "headerRows" | "headerCols" | "footerRows" => {
@@ -434,6 +442,12 @@ fn web_video_state(d: &kn_model::Drawable) -> Value {
 
 fn set_media(app: &mut App, k: &str, v: &Value) {
     use kn_model::imageedit::MovieProp;
+    // Web Video's Replace: Add Web Video, the new one taking this one's place
+    if k == "replaceWebVideo" {
+        app.media.replacing = app.canvas.obj;
+        app.media.url_sheet = Some(String::new());
+        return;
+    }
     let Some(id) = app.canvas.obj else { return };
     let Some(d) = app.drawables.iter().find(|d| d.id == id).cloned() else { return };
     match (&d.kind, k) {
@@ -598,7 +612,223 @@ fn cell_state(app: &mut App, d: &kn_model::Drawable) -> Value {
         "fill": fill_json(&fill, doc),
         "edges": edges,
         "line": line.map(|s| json!({ "color": col(s.color), "width": s.width, "dash": format!("{:?}", s.dash) })),
+        "cond": cond_state(app),
     })
+}
+
+// ------------------------------------------------------------------ Conditional Highlighting
+
+const CMPS: [(kn_model::tablecond::Cmp, &str); 6] = {
+    use kn_model::tablecond::Cmp;
+    [(Cmp::Equal, "is equal to"), (Cmp::NotEqual, "is not equal to"), (Cmp::Greater, "is greater than"), (Cmp::GreaterOrEqual, "is greater than or equal to"), (Cmp::Less, "is less than"), (Cmp::LessOrEqual, "is less than or equal to")]
+};
+
+/// Conditional Highlighting (inspector.rs cond_highlight, under the Cell tab): the cursor cell's
+/// rules in order, the comparisons and looks a new rule can have.
+fn cond_state(app: &App) -> Value {
+    use kn_model::tablecond::LOOKS;
+    let Some(sel) = app.sel else { return Value::Null };
+    let t = sel.table;
+    let cur = (app.mrow(t, sel.cursor.0).unwrap_or(sel.cursor.0), sel.cursor.1);
+    let rules = app.wb.as_ref().map(|w| w.doc.highlight_rules(t, cur.0, cur.1)).unwrap_or_default();
+    let look_col = |name: &str| LOOKS.iter().find(|l| l.name == name).and_then(|l| l.fill.or(l.text)).map(|c| json!([c[0], c[1], c[2], 1.0]));
+    let rules: Vec<Value> = rules
+        .iter()
+        .map(|r| {
+            let v = if r.value.fract() == 0.0 { format!("{}", r.value as i64) } else { format!("{}", r.value) };
+            let cmp = r.cmp.and_then(|c| CMPS.iter().find(|x| x.0 == c)).map(|x| x.1).unwrap_or("a rule");
+            json!({ "text": format!("{cmp} {v}"), "look": r.look, "color": look_col(&r.look) })
+        })
+        .collect();
+    let multi = sel.block().0 != sel.block().2 || sel.block().1 != sel.block().3;
+    json!({
+        "canClear": !rules.is_empty() || multi,
+        "rules": rules,
+        "cmps": CMPS.iter().map(|c| c.1).collect::<Vec<_>>(),
+        "looks": LOOKS.iter().map(|l| json!({ "name": l.name, "color": look_col(l.name) })).collect::<Vec<_>>(),
+    })
+}
+
+/// "cell.condRemove" (a rule's index), "cell.condAdd" ({cmp, value, look}), "cell.condClear".
+fn set_cond(app: &mut App, k: &str, v: &Value) {
+    use kn_model::tablecond::LOOKS;
+    let Some(sel) = app.sel else { return };
+    let t = sel.table;
+    let blocks = app.model_blocks(t, sel.block());
+    commit(app);
+    let res = match k {
+        "condRemove" => {
+            // the cells' rules are cleared and the others put back, in order
+            let cur = (app.mrow(t, sel.cursor.0).unwrap_or(sel.cursor.0), sel.cursor.1);
+            let rules = app.wb.as_ref().map(|w| w.doc.highlight_rules(t, cur.0, cur.1)).unwrap_or_default();
+            let i = v.as_u64().unwrap_or(u64::MAX) as usize;
+            let keep: Vec<_> = rules.iter().enumerate().filter(|(k, _)| *k != i).filter_map(|(_, r)| Some((r.cmp?, r.value, LOOKS.iter().find(|l| l.name == r.look)?))).collect();
+            app.edit("Delete Rule", |d, h| -> Result<(), nm_core::kn_format::Error> {
+                for b in &blocks {
+                    d.clear_highlight_rules(h, t, *b)?;
+                    for (cmp, v, look) in &keep {
+                        d.add_highlight_rule(h, t, *b, *cmp, *v, look)?;
+                    }
+                }
+                Ok(())
+            })
+        }
+        "condAdd" => {
+            let cmp = CMPS[(v["cmp"].as_u64().unwrap_or(2) as usize).min(5)].0;
+            let Some(value) = v["value"].as_str().and_then(|x| x.trim().parse::<f64>().ok()) else { return };
+            let look = &LOOKS[(v["look"].as_u64().unwrap_or(0) as usize).min(LOOKS.len() - 1)];
+            app.edit("Conditional Highlighting", |d, h| blocks.iter().try_for_each(|b| d.add_highlight_rule(h, t, *b, cmp, value, look).map(|_| ())))
+        }
+        _ => app.edit("Clear All Rules", |d, h| blocks.iter().try_for_each(|b| d.clear_highlight_rules(h, t, *b).map(|_| ()))),
+    };
+    if let Some(Err(e)) = res {
+        app.notify(format!("Conditional Highlighting: {e}"));
+    }
+}
+
+// ------------------------------------------------------------------ the Functions browser
+
+thread_local! {
+    /// The Functions browser's search, category and the function described.
+    static FUNCTIONS: std::cell::RefCell<(String, String, String)> = const { std::cell::RefCell::new((String::new(), String::new(), String::new())) };
+}
+
+/// While a formula is typed (inspector.rs functions_browser): search, category, the functions
+/// that match, the one being typed (or picked) described.
+fn functions_state(app: &App) -> Value {
+    let catalog = nm_core::formula::catalog();
+    let (search, cat, mut picked) = FUNCTIONS.with(|f| f.borrow().clone());
+    // the function being typed (or the last one called) is the one described
+    if let Some(e) = &app.canvas.edit {
+        let up = e.text.to_ascii_uppercase();
+        let mut word = String::new();
+        for ch in up.chars().chain(std::iter::once(' ')) {
+            if ch.is_ascii_alphanumeric() || ch == '.' {
+                word.push(ch);
+            } else {
+                if catalog.iter().any(|f| f.name == word) {
+                    picked = word.clone();
+                }
+                word.clear();
+            }
+        }
+    }
+    let mut cats: Vec<&str> = catalog.iter().map(|f| f.category).collect();
+    cats.sort_unstable();
+    cats.dedup();
+    let q = search.to_ascii_uppercase();
+    let list: Vec<&str> = catalog.iter().filter(|f| (cat.is_empty() || f.category == cat) && (q.is_empty() || f.name.contains(&q))).map(|f| f.name).collect();
+    let f = catalog.iter().find(|f| f.name == picked);
+    json!({
+        "pane": "functions", "search": search, "cat": cat, "cats": cats, "list": list, "picked": picked,
+        "syntax": f.map(|f| f.syntax), "description": f.map(|f| f.description),
+    })
+}
+
+/// "functions.search", ".cat", ".pick", ".insert" (the name typed into the formula).
+fn set_functions(app: &mut App, k: &str, v: &Value) {
+    let t = v.as_str().unwrap_or_default().to_string();
+    match k {
+        "search" => FUNCTIONS.with(|f| f.borrow_mut().0 = t),
+        "cat" => FUNCTIONS.with(|f| f.borrow_mut().1 = t),
+        "pick" => FUNCTIONS.with(|f| f.borrow_mut().2 = t),
+        "insert" => {
+            let Some(e) = app.canvas.edit.as_mut() else { return };
+            // replace a partly typed name at the end, else add the call
+            let tail = e.text.len() - e.text.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '.').len();
+            if tail > 0 && t.starts_with(&e.text[e.text.len() - tail..].to_ascii_uppercase()) {
+                let n = e.text.len() - tail;
+                e.text.truncate(n);
+            }
+            e.text.push_str(&t);
+            e.text.push('(');
+            e.focus = true;
+        }
+        _ => {}
+    }
+}
+
+// ------------------------------------------------------------------ Pivot Options
+
+/// A pivot table's Pivot Options (pivotui.rs options): its source, the Columns / Rows / Values
+/// wells, each value's Summarize by and Show as.
+fn pivot_state(app: &App, t: ObjId) -> Value {
+    use nm_core::pivot::{ShowAs, Summary};
+    let Some(p) = app.pivots.get(&t) else { return Value::Null };
+    let Some(src) = crate::pivotui::source_data(app, p.source) else { return Value::Null };
+    let name = |c: u32| nm_core::pivot::field_name(&src, c);
+    let field = |c: &u32| json!([c, name(*c)]);
+    let fields: Vec<Value> = (0..src.cols).map(|c| field(&c)).collect();
+    let values: Vec<Value> = p.spec.values.iter().enumerate().map(|(i, (c, s))| json!({ "field": name(*c), "summary": s.name(), "showAs": p.spec.show_as.get(i).copied().unwrap_or(ShowAs::Base).name() })).collect();
+    json!({
+        "pane": "pivot",
+        "source": src.name, "refreshed": p.refreshed.map(crate::pivotui::when),
+        "fields": fields,
+        "cols": p.spec.cols.iter().map(field).collect::<Vec<_>>(),
+        "rows": p.spec.rows.iter().map(field).collect::<Vec<_>>(),
+        "values": values,
+        "hideTotalCol": p.spec.hide_total_column, "hideTotalRow": p.spec.hide_total_row,
+        "summaries": Summary::ALL.iter().map(|s| s.name()).collect::<Vec<_>>(),
+        "showAs": ShowAs::ALL.iter().map(|s| s.name()).collect::<Vec<_>>(),
+    })
+}
+
+/// "pivot.<what>": add / remove fields in a well, its … menu, a value's summary and Show as, Refresh.
+fn set_pivot(app: &mut App, k: &str, v: &Value) {
+    use nm_core::pivot::{ShowAs, Summary};
+    let Some(t) = app.sel.map(|s| s.table) else { return };
+    let Some(mut p) = app.pivots.get(&t).cloned() else { return };
+    let n = v.as_u64().unwrap_or(0) as usize;
+    let i = v["i"].as_u64().unwrap_or(0) as usize;
+    let k2 = v["k"].as_u64().unwrap_or(0) as usize;
+    let before = p.spec.clone();
+    match k {
+        "addCol" => p.spec.cols.push(n as u32),
+        "addRow" => p.spec.rows.push(n as u32),
+        "addValue" => {
+            p.spec.values.push((n as u32, Summary::Sum));
+            p.spec.show_as.resize(p.spec.values.len() - 1, ShowAs::Base);
+            p.spec.show_as.push(ShowAs::Base);
+        }
+        "removeCol" if n < p.spec.cols.len() => {
+            p.spec.cols.remove(n);
+        }
+        "removeRow" if n < p.spec.rows.len() => {
+            p.spec.rows.remove(n);
+        }
+        "removeValue" if n < p.spec.values.len() => {
+            p.spec.values.remove(n);
+            if n < p.spec.show_as.len() {
+                p.spec.show_as.remove(n);
+            }
+        }
+        "summary" => {
+            if let (Some(val), Some(s)) = (p.spec.values.get_mut(i), Summary::ALL.get(k2)) {
+                val.1 = *s;
+            }
+        }
+        "showAs" => {
+            p.spec.show_as.resize(p.spec.values.len(), ShowAs::Base);
+            if let (Some(val), Some(s)) = (p.spec.show_as.get_mut(i), ShowAs::ALL.get(k2)) {
+                *val = *s;
+            }
+        }
+        "hideTotalCol" => p.spec.hide_total_column = !p.spec.hide_total_column,
+        "hideTotalRow" => p.spec.hide_total_row = !p.spec.hide_total_row,
+        "swap" => std::mem::swap(&mut p.spec.rows, &mut p.spec.cols),
+        "clearCols" => p.spec.cols.clear(),
+        "clearRows" => p.spec.rows.clear(),
+        "clearValues" => {
+            p.spec.values.clear();
+            p.spec.show_as.clear();
+        }
+        "refresh" => {}
+        _ => return,
+    }
+    if p.spec != before || k == "refresh" {
+        app.pivots.insert(t, p);
+        crate::pivotui::refresh(app, t);
+    }
 }
 
 fn set_cell(app: &mut App, k: &str, v: &Value) {
@@ -616,6 +846,9 @@ fn set_cell(app: &mut App, k: &str, v: &Value) {
             doc.end(&mut app.hist);
         }
     };
+    if k.starts_with("cond") {
+        return set_cond(app, k, v);
+    }
     match k {
         "format" => {
             let f = format_from(v);
@@ -918,6 +1151,8 @@ fn set_chart(app: &mut App, k: &str, v: &Value) {
     match k {
         "axisPick" => return CHART.with(|s| s.set((v.as_u64().unwrap_or(0) as usize, series_i))),
         "seriesPick" => return CHART.with(|s| s.set((axis_i, v.as_u64().unwrap_or(0) as usize))),
+        // (a chart made from cells: Edit Data References, as objinsp.rs)
+        "editData" if crate::datarefs::linked(app, id).is_some() => return crate::datarefs::start(app, id),
         "editData" => return crate::chartedit::open(app, id),
         _ => {}
     }
@@ -1208,7 +1443,7 @@ fn set_style(app: &mut App, k: &str, v: &Value) {
             if let Some(slide) = app.current_slide().map(|s| s.slide) {
                 if let Some(doc) = app.wb.as_mut().map(|w| &mut w.doc) {
                     doc.begin(&mut app.hist, if title { "Title" } else { "Caption" });
-                    doc.set_caption(&mut app.hist, slide, id, title, on);
+                    nm_core::sheets::set_caption(doc, &mut app.hist, slide, id, title, on);
                     doc.end(&mut app.hist);
                 }
                 app.bump(slide);
@@ -1308,7 +1543,7 @@ pub(crate) fn stroke_from(v: &Value) -> Option<kn_model::format::StrokeSpec> {
 // ------------------------------------------------------------------ Document
 
 /// A gallery's shown picture (its arrows): the sheet shows it, the document doesn't change.
-fn show_image(app: &mut App, id: ObjId, k: usize) {
+pub(crate) fn show_image(app: &mut App, id: ObjId, k: usize) {
     app.gallery_pos.insert(id, k);
     app.version += 1;
 }
@@ -1319,13 +1554,52 @@ fn obj_text_state(app: &mut App) -> Value {
     if app.font_names.is_none() {
         app.font_names = Some(crate::editing::font_names(app));
     }
-    json!({
+    let mut out = json!({
         "family": kn_render::fonts::parse_ps_name(&run.font_name).0,
         "fonts": app.font_names.clone().unwrap_or_default(),
         "size": run.size, "bold": run.bold, "italic": run.italic, "underline": run.underline, "strike": run.strike,
         "color": col(run.color),
         "object": true,
-    })
+    });
+    // a text box or shape (objinsp.rs text): its paragraph style, the gear's settings, the
+    // paragraph's alignment and spacing, bullets, and the Layout tab's columns, inset, fitting
+    let id = app.canvas.editing.as_ref().map(|e| e.id).or(app.canvas.obj);
+    let Some(d) = id.and_then(|id| app.drawables.iter().find(|d| d.id == id)).cloned() else { return out };
+    let kn_model::DrawableKind::Shape(sh) = &d.kind else { return out };
+    let Some(tb) = &sh.text else { return out };
+    let doc = app.wb.as_ref().map(|w| &w.doc);
+    let pstyle = doc.and_then(|doc| doc.paragraph_style_name(tb.storage)).unwrap_or_else(|| "Body".into());
+    let pstyles: Vec<Value> = doc.map(|d| d.paragraph_styles()).unwrap_or_default().into_iter().map(|(id, n)| json!({ "id": id, "name": n })).collect();
+    let cstyles: Vec<Value> = doc.map(|d| d.character_styles()).unwrap_or_default().into_iter().map(|(id, n)| json!({ "id": id, "name": n })).collect();
+    let para = tb.paragraphs.first();
+    let align = para.map(|p| match p.align {
+        kn_model::Align::Center => 1,
+        kn_model::Align::Right => 2,
+        kn_model::Align::Justify => 3,
+        _ => 0,
+    });
+    let valign = match tb.valign {
+        kn_model::VAlign::Top => 0,
+        kn_model::VAlign::Middle => 1,
+        kn_model::VAlign::Bottom => 2,
+    };
+    let lines = para.map(|p| match p.line_spacing {
+        kn_model::LineSpacing::Relative(a) => a,
+        _ => 1.0,
+    });
+    let extra = json!({
+        "paraStyle": pstyle, "paraStyles": pstyles, "charStyles": cstyles,
+        "tracking": run.tracking * 100.0, "script": run.script, "caps": format!("{:?}", run.caps),
+        "align": align, "valign": valign,
+        "lines": lines, "before": para.map(|p| p.space_before), "after": para.map(|p| p.space_after),
+        "bullets": tb.paragraphs.iter().any(|p| p.label.is_some()),
+        "columns": tb.columns, "gutter": tb.column_gap, "inset": tb.padding[0], "shrink": tb.shrink_to_fit,
+        "full": true,
+    });
+    if let (Some(o), Value::Object(e)) = (out.as_object_mut(), extra) {
+        o.extend(e);
+    }
+    out
 }
 
 fn set_obj_text(app: &mut App, ctx: &egui::Context, k: &str, v: &Value) {
@@ -1339,10 +1613,10 @@ fn set_obj_text(app: &mut App, ctx: &egui::Context, k: &str, v: &Value) {
             }
         }
         "size" => crate::editing::set_text(app, "Font Size", TextProp::Size(n.clamp(1.0, 1000.0).round())),
-        "bold" => crate::editing::set_text(app, "Bold", TextProp::Bold(!run.bold)),
-        "italic" => crate::editing::set_text(app, "Italic", TextProp::Italic(!run.italic)),
-        "underline" => crate::editing::set_text(app, "Underline", TextProp::Underline(!run.underline)),
-        "strike" => crate::editing::set_text(app, "Strikethrough", TextProp::Strike(!run.strike)),
+        "bold" => crate::editing::set_text(app, "Bold", TextProp::Bold(v.as_bool().unwrap_or(!run.bold))),
+        "italic" => crate::editing::set_text(app, "Italic", TextProp::Italic(v.as_bool().unwrap_or(!run.italic))),
+        "underline" => crate::editing::set_text(app, "Underline", TextProp::Underline(v.as_bool().unwrap_or(!run.underline))),
+        "strike" => crate::editing::set_text(app, "Strikethrough", TextProp::Strike(v.as_bool().unwrap_or(!run.strike))),
         "color" => {
             if let Some(c) = to_col(v) {
                 crate::editing::set_text(app, "Text Color", TextProp::Color(c));
@@ -1352,6 +1626,80 @@ fn set_obj_text(app: &mut App, ctx: &egui::Context, k: &str, v: &Value) {
             let name = ["Text > Align Left", "Text > Align Center", "Text > Align Right", "Text > Justify"][(v.as_u64().unwrap_or(0) as usize).min(3)];
             crate::menus::run(app, ctx, name);
         }
+        // the typeface: Regular / Italic / Bold / Bold Italic
+        "typeface" => {
+            let (b, i) = [(false, false), (false, true), (true, false), (true, true)][(v.as_u64().unwrap_or(0) as usize).min(3)];
+            if b != run.bold {
+                crate::editing::set_text(app, "Bold", TextProp::Bold(b));
+            }
+            if i != run.italic {
+                crate::editing::set_text(app, "Italic", TextProp::Italic(i));
+            }
+        }
+        "tracking" => crate::editing::set_text(app, "Character Spacing", TextProp::Tracking(n.round() / 100.0)),
+        "script" => crate::editing::set_text(app, "Baseline", TextProp::Script(v.as_i64().unwrap_or(0).clamp(-1, 1) as i8)),
+        "caps" => {
+            use kn_model::Caps;
+            let c = match v.as_str().unwrap_or("None") {
+                "All" => Caps::All,
+                "Small" => Caps::Small,
+                "Title" => Caps::Title,
+                "Start" => Caps::Start,
+                _ => Caps::None,
+            };
+            crate::editing::set_text(app, "Capitalization", TextProp::Caps(c));
+        }
+        "indent" => crate::menus::run(app, ctx, if v.as_i64().unwrap_or(1) < 0 { "Text > Decrease Indent Level" } else { "Text > Increase Indent Level" }),
+        "valign" => crate::editing::set_text(app, "Vertical Alignment", TextProp::VAlign([kn_model::VAlign::Top, kn_model::VAlign::Middle, kn_model::VAlign::Bottom][(v.as_u64().unwrap_or(0) as usize).min(2)])),
+        "lines" => crate::editing::set_text(app, "Line Spacing", TextProp::LineSpacing(n.clamp(0.1, 10.0))),
+        "before" => crate::editing::set_text(app, "Space Before", TextProp::SpaceBefore(n.clamp(0.0, 500.0).round())),
+        "after" => crate::editing::set_text(app, "Space After", TextProp::SpaceAfter(n.clamp(0.0, 500.0).round())),
+        "bullets" => crate::editing::set_text(app, "Bullets", TextProp::Bullets(v.as_bool().unwrap_or(false))),
+        "paraStyle" | "charStyle" | "columns" | "gutter" | "inset" | "shrink" => obj_text_box(app, k, v),
         _ => {}
     }
+}
+
+/// The text box's own settings (objinsp.rs text): its paragraph style, a character style on
+/// the selected text (or all of it), Layout's columns, gutter, inset and Shrink text to fit.
+fn obj_text_box(app: &mut App, k: &str, v: &Value) {
+    use kn_model::format::TextLayoutChange;
+    let id = app.canvas.editing.as_ref().map(|e| e.id).or(app.canvas.obj);
+    let Some(d) = id.and_then(|id| app.drawables.iter().find(|d| d.id == id)).cloned() else { return };
+    let kn_model::DrawableKind::Shape(sh) = &d.kind else { return };
+    let Some(tb) = &sh.text else { return };
+    let n = num(v);
+    let change = match k {
+        "paraStyle" => {
+            let (Some(sid), storage) = (v.as_u64(), tb.storage) else { return };
+            crate::editing::apply(app, "Paragraph Style", |doc, h, oid| oid == d.id && doc.set_paragraph_style(h, storage, sid));
+            return;
+        }
+        "charStyle" => {
+            let style = v.as_u64();
+            let range = match app.canvas.editing.as_ref() {
+                Some(e) if e.cursor != e.anchor => (e.storage, e.cursor.min(e.anchor), e.cursor.max(e.anchor)),
+                _ => (tb.storage, 0, tb.text.len()),
+            };
+            if let Some(doc) = app.wb.as_mut().map(|w| &mut w.doc) {
+                doc.begin(&mut app.hist, "Character Style");
+                doc.set_character_style(&mut app.hist, range.0, range.1, range.2, style);
+                doc.end(&mut app.hist);
+                if app.canvas.editing.is_some() {
+                    doc.begin(&mut app.hist, "Typing");
+                }
+            }
+            if let Some(e) = app.canvas.editing.as_mut() {
+                e.version += 1;
+                e.scene = None;
+            }
+            app.changed();
+            return;
+        }
+        "columns" => TextLayoutChange::Columns(n.clamp(1.0, 10.0) as u32, tb.column_gap.max(if n > 1.0 { 12.0 } else { 0.0 })),
+        "gutter" => TextLayoutChange::Columns(tb.columns, n.clamp(0.0, 200.0)),
+        "inset" => TextLayoutChange::Inset(n.clamp(0.0, 200.0)),
+        _ => TextLayoutChange::ShrinkToFit(v.as_bool().unwrap_or(false)),
+    };
+    crate::editing::apply(app, "Text Layout", |doc, h, oid| oid == d.id && doc.set_text_layout(h, oid, change));
 }

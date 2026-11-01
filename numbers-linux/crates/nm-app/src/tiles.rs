@@ -81,6 +81,10 @@ pub fn frame(d: &Drawable) -> Geometry {
 }
 
 impl Tiles {
+    /// The renderer (for drawing outside the tiles: an equation's picture).
+    pub(crate) fn renderer_mut(&mut self) -> &mut Renderer {
+        &mut self.renderer
+    }
     /// For printing: Excel cell extras drawn as on the sheet, review marks not.
     pub fn for_print(extras: HashMap<ObjId, HashMap<(u32, u32), nm_core::xlstyle::Extra>>) -> Tiles {
         let mut t = Tiles::default();

@@ -218,12 +218,26 @@ class _RemoteScreenState extends State<RemoteScreen> {
   final link = RemoteLink();
   bool _intro = true, _devices = false;
 
+  /// KEYDECK_REMOTE_DEMO=<picture> (automated checks, Linux): a show playing with that picture
+  /// as the current and next slides and some notes, no computer needed.
+  final _demo = Platform.environment['KEYDECK_REMOTE_DEMO'];
+
   @override
   void initState() {
     super.initState();
     link.addListener(() {
       if (mounted) setState(() {});
     });
+    if (_demo != null) {
+      final img = File(_demo).readAsBytesSync();
+      final notes = Platform.environment['KEYDECK_REMOTE_NOTES'] ?? 'Welcome everyone. Start with the story of the first slide, then pause for questions. Remember to mention the dates and thank the team.';
+      link.state = {'playing': true, 'number': 1, 'visible': 11, 'aspect': 9 / 16, 'notes': notes};
+      link.current = img;
+      link.next = img;
+      link.showStarted = DateTime.now().subtract(const Duration(seconds: 11));
+      _intro = false;
+      return;
+    }
     link.start().then((_) {
       if (mounted) setState(() => _intro = link.links.isEmpty);
     });
@@ -240,7 +254,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
   @override
   Widget build(BuildContext context) {
     final Widget body;
-    if (_intro) {
+    if (_demo != null) {
+      body = _Controls(link: link, onDevices: () {}, onClose: () => Navigator.of(context).pop());
+    } else if (_intro) {
       body = _introPage();
     } else if (_devices || link.desk == null || !link.connected || !link.linked) {
       body = _devicesPage();
@@ -358,7 +374,7 @@ const _layouts = ['Current and Next', 'Current', 'Current and Notes', 'Next and 
 
 class _ControlsState extends State<_Controls> {
   RemoteLink get link => widget.link;
-  int _layout = 0;
+  int _layout = int.tryParse(Platform.environment['KEYDECK_REMOTE_LAYOUT'] ?? '') ?? 0;
   bool _clock = false, _draw = false, _invert = false, _laser = true;
   double _notesSize = 20;
   Color _color = const Color(0xFFFF3B30);
@@ -415,14 +431,34 @@ class _ControlsState extends State<_Controls> {
     });
   }
 
+  /// The presenter notes, as Keynote Remote shows them: plain text on the screen's own black
+  /// (or inverted), full width, scrolling; a quiet line when there are none.
   Widget _notes() {
-    final text = link.state['notes'] as String? ?? '';
-    final fg = _invert ? Colors.black : Colors.white, bg = _invert ? Colors.white : const Color(0xFF1C1C1E);
+    final text = (link.state['notes'] as String? ?? '').trim();
+    final fg = _invert ? Colors.black : Colors.white;
     return Container(
-      color: bg,
-      padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(child: Text(text.isEmpty ? 'No presenter notes' : text, style: Look.font(_notesSize, text.isEmpty ? fg.withValues(alpha: 0.5) : fg))),
+      color: _invert ? Colors.white : Colors.black,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: SingleChildScrollView(
+        child: Text(text.isEmpty ? 'No presenter notes' : text, style: Look.font(text.isEmpty ? 15 : _notesSize, text.isEmpty ? fg.withValues(alpha: 0.4) : fg)),
+      ),
     );
+  }
+
+  /// A slide's picture `w` wide (its label over it).
+  Widget _picW(Uint8List? img, double w, {String? label}) {
+    final aspect = (link.state['aspect'] as num?)?.toDouble() ?? 9 / 16;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (label != null) SizedBox(height: 22, child: Text(label, style: Look.font(13, const Color(0xFF98989F)))),
+      SizedBox(
+        width: w,
+        height: w * aspect,
+        child: img == null
+            ? Container(color: const Color(0xFF1C1C1E), alignment: Alignment.center, child: Text(label == 'Next' ? 'End of slideshow' : '', style: Look.font(15, const Color(0xFF98989F))))
+            : Image.memory(img, gaplessPlayback: true, fit: BoxFit.contain),
+      ),
+    ]);
   }
 
   /// The slide area: a tap or a swipe to the left advances, a swipe to the right goes back,
@@ -456,19 +492,42 @@ class _ControlsState extends State<_Controls> {
     );
   }
 
+  /// The layouts, laid out from the top: the slides as wide as the screen allows (or as tall,
+  /// on a wide screen), evenly spaced; notes take the rest of the room under (or beside) them.
   Widget _layoutBody(BoxConstraints box) {
-    final wide = box.maxWidth > box.maxHeight;
-    final cur = _pic(link.current), nxt = _pic(link.next, label: 'Next');
-    Widget split(Widget a, Widget b, {int fa = 3, int fb = 2}) => wide
-        ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: fa, child: a), const SizedBox(width: 16), Expanded(flex: fb, child: b)])
-        : Column(children: [Expanded(child: a), const SizedBox(height: 16), Expanded(child: b)]);
-    return switch (_layout) {
-      1 => _gestures(Center(child: cur)),
-      2 => split(_gestures(cur), _notes(), fa: 1, fb: 1),
-      3 => split(nxt, _notes(), fa: 1, fb: 1),
-      4 => _gestures(_notes()),
-      _ => wide ? split(_gestures(Align(alignment: Alignment.topCenter, child: cur)), Align(alignment: Alignment.topCenter, child: nxt)) : Column(children: [Expanded(flex: 3, child: _gestures(Center(child: cur))), const SizedBox(height: 16), Expanded(flex: 2, child: Center(child: nxt))]),
-    };
+    final aspect = (link.state['aspect'] as num?)?.toDouble() ?? 9 / 16;
+    // side by side only on a clearly wide screen (a phone on its side); an unfolded phone,
+    // nearly square, stacks them
+    final wide = box.maxWidth > box.maxHeight * 1.25;
+    const gap = 16.0, label = 22.0;
+    final W = box.maxWidth, H = box.maxHeight;
+    // a slide w wide, unless that's taller than h
+    double fit(double w, double h) => math.min(w, h / aspect);
+    Widget top(List<Widget> kids) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: kids);
+    switch (_layout) {
+      case 1:
+        // the current slide alone: as big as fits, at the top
+        return _gestures(Align(alignment: Alignment.topCenter, child: _picW(link.current, fit(W, H))));
+      case 4:
+        return _gestures(_notes());
+      case 2 || 3:
+        final cur = _layout == 2;
+        Widget pic(double w) => cur ? _gestures(_picW(link.current, w)) : _picW(link.next, w, label: 'Next');
+        if (wide) {
+          final w = fit(W * 0.55, H - (cur ? 0 : label));
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [pic(w), const SizedBox(width: gap), Expanded(child: _notes())]);
+        }
+        final w = fit(W, H * 0.45);
+        return top([pic(w), const SizedBox(height: gap), Expanded(child: _notes())]);
+      default:
+        // current over next (side by side when wide), each as big as the room shares out
+        if (wide) {
+          final w1 = fit(W * 0.6 - gap / 2, H), w2 = fit(W * 0.4 - gap / 2, H - label);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [_gestures(_picW(link.current, w1)), const SizedBox(width: gap), _picW(link.next, w2, label: 'Next')]);
+        }
+        final w1 = fit(W, (H - gap - label) * 0.58), w2 = fit(W, H - w1 * aspect - gap - label);
+        return top([_gestures(_picW(link.current, w1)), const SizedBox(height: gap), _picW(link.next, w2, label: 'Next')]);
+    }
   }
 
   Future<void> _pickSlide() async {
@@ -659,25 +718,29 @@ class _ControlsState extends State<_Controls> {
       _shownAt = at;
       _marks.clear();
     }
+    // the timer (or clock) never wraps: shrunk to fit, on a row of its own when narrow
+    final timer = GestureDetector(
+      onTap: () => setState(() => _clock = !_clock),
+      child: FittedBox(fit: BoxFit.scaleDown, child: Text(_time(), maxLines: 1, softWrap: false, style: Look.font(18, playing && !_clock ? const Color(0xFFFF9F0A) : Colors.white))),
+    );
+    final narrow = MediaQuery.of(context).size.width < 460;
     final topBar = Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-      child: Row(children: [
-        IconButton(
-          tooltip: playing ? 'End Slideshow' : 'Close',
-          onPressed: () => playing ? link.cmd('stop') : widget.onClose(),
-          icon: const Icon(Icons.close, color: Colors.white),
-        ),
-        if (s.isNotEmpty)
-          TextButton(onPressed: _pickSlide, child: Text('${s['number']} of ${s['visible']}', style: Look.font(16, Colors.white, bold: true))),
-        Expanded(
-          child: GestureDetector(
-            onTap: () => setState(() => _clock = !_clock),
-            child: Text(_time(), textAlign: TextAlign.center, style: Look.font(18, playing && !_clock ? const Color(0xFFFF9F0A) : Colors.white)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          IconButton(
+            tooltip: playing ? 'End Slideshow' : 'Close',
+            onPressed: () => playing ? link.cmd('stop') : widget.onClose(),
+            icon: const Icon(Icons.close, color: Colors.white),
           ),
-        ),
-        IconButton(tooltip: 'Devices', onPressed: widget.onDevices, icon: const Icon(Icons.devices_outlined, color: Colors.white)),
-        if (playing) IconButton(tooltip: 'Layout', onPressed: _layoutMenu, icon: const Icon(Icons.view_quilt_outlined, color: Colors.white)),
-        if (playing) IconButton(tooltip: 'Highlighter', onPressed: () => setState(() => _draw = true), icon: Icon(Icons.edit_outlined, color: _draw ? const Color(0xFF0A84FF) : Colors.white)),
+          if (s.isNotEmpty)
+            TextButton(onPressed: _pickSlide, child: Text('${s['number']} of ${s['visible']}', maxLines: 1, softWrap: false, style: Look.font(16, Colors.white, bold: true))),
+          Expanded(child: narrow ? const SizedBox() : Center(child: timer)),
+          IconButton(tooltip: 'Devices', onPressed: widget.onDevices, icon: const Icon(Icons.devices_outlined, color: Colors.white)),
+          if (playing) IconButton(tooltip: 'Layout', onPressed: _layoutMenu, icon: const Icon(Icons.view_quilt_outlined, color: Colors.white)),
+          if (playing) IconButton(tooltip: 'Highlighter', onPressed: () => setState(() => _draw = true), icon: Icon(Icons.edit_outlined, color: _draw ? const Color(0xFF0A84FF) : Colors.white)),
+        ]),
+        if (narrow) SizedBox(height: 28, child: Center(child: timer)),
       ]),
     );
     Widget body;

@@ -7,9 +7,9 @@ use crate::app::App;
 #[derive(Default)]
 pub struct CondWindow {
     pub open: bool,
-    cmp: usize,
-    value: String,
-    look: usize,
+    pub(crate) cmp: usize,
+    pub(crate) value: String,
+    pub(crate) look: usize,
 }
 
 pub fn show(app: &mut App) {
@@ -59,9 +59,14 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         }
     });
     app.cond_win.open = open;
-    if !add {
-        return;
+    if add {
+        add_rule(app);
     }
+}
+
+/// Add Rule: the rule for the selected cells.
+pub(crate) fn add_rule(app: &mut App) {
+    let range = crate::tableops::range(app);
     let (Some((id, r0, c0, r1, c1)), Some(slide)) = (range, app.current_slide().map(|s| s.slide)) else { return };
     let w = &app.cond_win;
     let (cmp, look) = (Cmp::ALL[w.cmp], LOOKS[w.look]);

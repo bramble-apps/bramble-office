@@ -26,6 +26,8 @@ struct Host {
     show: Option<(usize, usize)>,
     /// A tab with unsaved changes asked to close: the front end asks what to do.
     unsaved: Option<usize>,
+    /// The slideshow's textures as the front end has them (showapi.rs).
+    play: crate::showapi::Mirror,
 }
 
 thread_local! {
@@ -56,9 +58,9 @@ fn with<T: Default>(f: impl FnOnce(&mut Host) -> T) -> T {
                     if copied.is_some() {
                         h.copied = copied;
                     }
-                    // a slideshow started by a command (Play, Rehearse, Play from This Slide)
-                    if let Some(p) = h.app.play.take() {
-                        h.show = Some((p.index, 0));
+                    // a slideshow started by a command (Play, Rehearse, Record…): the front end draws it
+                    if let Some(p) = h.app.play.as_mut() {
+                        p.external = true;
                     }
                     r
                 }
@@ -143,6 +145,7 @@ pub extern "C" fn kd_hub(kind: *const c_char, a: *const c_char) -> *mut c_char {
 /// Starts Keydeck with no presentation open (the theme chooser shows, as the desktop's start).
 #[unsafe(no_mangle)]
 pub extern "C" fn kd_init() {
+    crate::links::FRONT_END.store(true, std::sync::atomic::Ordering::Relaxed);
     let _ = std::panic::catch_unwind(|| {
         let ctx = egui::Context::default();
         let mut app = App::with_ctx(&ctx, Vec::new());
@@ -150,7 +153,7 @@ pub extern "C" fn kd_init() {
         app.renderer.set_async_images(false);
         // (table rows grow to fit what's typed into them, as the desktop's start)
         kn_model::table::set_all_rows_fit(true);
-        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None }));
+        HOST.with(|h| *h.borrow_mut() = Some(Host { ctx, app, copied: None, show: None, unsaved: None, play: Default::default() }));
     });
 }
 
@@ -262,6 +265,30 @@ pub extern "C" fn kd_export(path: *const c_char) -> i32 {
         crate::textedit::commit(&mut h.app);
         let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         match ext.as_str() {
+            // Export To > Images: each slide shown as a PNG, in a .zip (one file to save)
+            "zip" => {
+                let Some(doc) = h.app.doc.as_ref() else { return fail("No presentation") };
+                let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Slides".into());
+                let r = (|| -> Result<(), String> {
+                    let f = std::fs::File::create(&p).map_err(|e| e.to_string())?;
+                    let mut z = zip::ZipWriter::new(f);
+                    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+                    let slides = doc.slides();
+                    for (n, i) in (0..slides.len()).filter(|i| !slides[*i].skipped).enumerate() {
+                        let Some(sc) = doc.scene(&slides, i) else { continue };
+                        let Some(pm) = h.app.renderer.render_scene(doc, &sc, 1920) else { continue };
+                        let png = pm.encode_png().map_err(|e| e.to_string())?;
+                        z.start_file(format!("{stem}/{stem}.{:03}.png", n + 1), opts).map_err(|e| e.to_string())?;
+                        std::io::Write::write_all(&mut z, &png).map_err(|e| e.to_string())?;
+                    }
+                    z.finish().map_err(|e| e.to_string())?;
+                    Ok(())
+                })();
+                match r {
+                    Ok(()) => 0,
+                    Err(e) => fail(e),
+                }
+            }
             "pptx" => {
                 let Some(doc) = h.app.doc.as_ref() else { return fail("No presentation") };
                 match crate::pptx::write(doc, &mut h.app.renderer, &p, None) {
@@ -290,7 +317,8 @@ pub extern "C" fn kd_geometry() -> *mut c_char {
         let a = &mut h.app;
         let doc = a.doc.as_ref()?;
         let size = doc.slide_size();
-        Some(json!({ "size": [size.w, size.h], "count": a.slides.len(), "current": a.cur, "selected": a.slide_sel, "key": slide_key(a, a.cur) }))
+        let motion = a.scene(a.cur).is_some_and(|s| s.motion.is_some()) && a.preview_motion;
+        Some(json!({ "size": [size.w, size.h], "count": a.slides.len(), "current": a.cur, "selected": a.slide_sel, "key": slide_key(a, a.cur), "motion": motion }))
     }))
 }
 
@@ -337,7 +365,8 @@ pub extern "C" fn kd_navigator() -> *mut c_char {
 
 /// Draws part of slide `index`: the slide points from (`x`, `y`) at `scale` pixels a point into
 /// `buf` (`w` × `h` RGBA premultiplied). `mode` 0: everything; 1: without the objects being
-/// dragged (canvasapi moving); 2: those objects alone, at their live places.
+/// dragged (canvasapi moving); 2: those objects alone, at their live places. `mode` + 4: a
+/// dynamic background left out (the front end plays it under the slide, kd_motion).
 #[unsafe(no_mangle)]
 pub extern "C" fn kd_render(index: u32, scale: f32, x: f32, y: f32, mode: u32, buf: *mut u8, w: u32, h: u32) -> i32 {
     with(|host| {
@@ -353,6 +382,8 @@ pub extern "C" fn kd_render(index: u32, scale: f32, x: f32, y: f32, mode: u32, b
         let Some(mut pm) = kn_render::tiny_skia::Pixmap::new(w.max(1), h.max(1)) else { return -1 };
         let t = kn_render::tiny_skia::Transform::from_row(scale, 0.0, 0.0, scale, -x * scale, -y * scale);
         let moving = if index == a.cur { crate::canvas::api::moving(a) } else { Vec::new() };
+        let bg = mode & 4 == 0 || sc.motion.is_none();
+        let mode = mode & 3;
         let filter = match mode {
             1 => kn_render::Filter::Except(&moving),
             _ => kn_render::Filter::All,
@@ -363,13 +394,46 @@ pub extern "C" fn kd_render(index: u32, scale: f32, x: f32, y: f32, mode: u32, b
                     a.renderer.draw_drawable(doc, d, &mut pm, t);
                 }
             } else {
-                a.renderer.draw_scene(doc, &sc, &mut pm, t, filter, true);
+                a.renderer.draw_scene(doc, &sc, &mut pm, t, filter, bg);
             }
         });
         if r.is_none() {
             return -1;
         }
         copy_out(&pm, buf, w, h)
+    })
+}
+
+/// Slide `index`'s dynamic background at `t` seconds, `w` × `h` pixels (-1: it has none).
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_motion(index: u32, t: f32, buf: *mut u8, w: u32, h: u32) -> i32 {
+    with(|host| {
+        let Some(mb) = host.app.scene(index as usize).and_then(|s| s.motion.clone()) else { return -1 };
+        if buf.is_null() {
+            return -1;
+        }
+        let px = kn_render::motion::render(&mb, t, w, h);
+        let out = unsafe { std::slice::from_raw_parts_mut(buf, (w * h * 4) as usize) };
+        let n = out.len().min(px.len());
+        out[..n].copy_from_slice(&px[..n]);
+        0
+    })
+}
+
+/// The theme's dynamic background preset `index` (the slide inspector's), `w` × `h` pixels.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_motion_preset(index: u32, buf: *mut u8, w: u32, h: u32) -> i32 {
+    with(|host| {
+        let Some(doc) = host.app.doc.as_ref() else { return -1 };
+        let Some(mb) = doc.motion_presets().get(index as usize).and_then(|(id, _)| kn_model::motionbg::read(&doc.file, *id)) else { return -1 };
+        if buf.is_null() {
+            return -1;
+        }
+        let px = kn_render::motion::render(&mb, 0.0, w, h);
+        let out = unsafe { std::slice::from_raw_parts_mut(buf, (w * h * 4) as usize) };
+        let n = out.len().min(px.len());
+        out[..n].copy_from_slice(&px[..n]);
+        0
     })
 }
 
@@ -557,6 +621,165 @@ pub extern "C" fn kd_action(action: *const c_char) {
         // the Shape popover's (Text, Line, Arrow, a basic shape), as the Content Hub inserts them
         if let Some(k) = a.strip_prefix("shape:") {
             crate::editing::insert_from_hub(app, kn_ui::contenthub::Picked::App(k.to_string()));
+            return;
+        }
+        // View > Show Presenter Notes: the current slide's notes as typed ("notes:<text>")
+        if let Some(t) = a.strip_prefix("notes:") {
+            if let Some(slide) = app.current_slide().map(|s| s.slide) {
+                app.notes_buf = Some((slide, t.to_string()));
+                app.commit_notes();
+            }
+            return;
+        }
+        // View > Outline: a text edited there ("outline:{storage, slide, text}")
+        if let Some(j) = a.strip_prefix("outline:") {
+            let v: Value = serde_json::from_str(j).unwrap_or(Value::Null);
+            let (Some(st), Some(i), Some(text)) = (v["storage"].as_u64(), v["slide"].as_u64(), v["text"].as_str()) else { return };
+            crate::textedit::commit(app);
+            let changed = app.doc.as_mut().is_some_and(|doc| {
+                doc.begin(&mut app.hist, "Typing");
+                let c = doc.set_text_by_diff(&mut app.hist, st, text);
+                doc.end(&mut app.hist);
+                c
+            });
+            if changed {
+                if let Some(s) = app.slides.get(i as usize).map(|s| s.slide) {
+                    app.bump(s);
+                }
+            }
+            return;
+        }
+        // a comment marker tapped: its comment opens ("comment:<object>")
+        if let Some(id) = a.strip_prefix("comment:").and_then(|i| i.parse::<u64>().ok()) {
+            if let Some(c) = app.doc.as_ref().and_then(|d| d.comment(id)) {
+                app.open_comment = Some((id, c.text));
+            }
+            return;
+        }
+        // a table cell (canvasapi table_overlay): "cell:edit" opens the picked cell's editor,
+        // "cell:text:<typed>" saves it, "cell:tab" / "cell:backtab" / "cell:enter" save and move,
+        // "cell:cancel" closes it unsaved, "cell:pick:<r>:<c>" picks another cell
+        if let Some(c) = a.strip_prefix("cell:") {
+            let cur = crate::canvas::table_cursor(app);
+            match c {
+                "edit" => {
+                    if let Some((id, r, c)) = cur {
+                        let text = app.scene(app.cur).and_then(|sc| sc.drawables.into_iter().find(|d| d.id == id)).and_then(|d| match d.kind {
+                            kn_model::DrawableKind::Table(t) => t.cells.get((r * t.cols + c) as usize).cloned(),
+                            _ => None,
+                        });
+                        let text = app.doc.as_ref().and_then(|doc| doc.formula_text(id, r, c)).or(text).unwrap_or_default();
+                        app.canvas.cell = Some((id, r, c, text, true));
+                    }
+                }
+                "cancel" => {
+                    app.canvas.cell = None;
+                }
+                _ if c.starts_with("text:") => {
+                    if let Some(cell) = app.canvas.cell.as_mut() {
+                        cell.3 = c[5..].to_string();
+                    }
+                }
+                "enter" | "tab" | "backtab" | "down" => {
+                    let Some((id, r, col, _, _)) = app.canvas.cell.clone() else { return };
+                    crate::canvas::commit_cell(app);
+                    let size = app.scene(app.cur).and_then(|sc| sc.drawables.into_iter().find(|d| d.id == id)).and_then(|d| match d.kind {
+                        kn_model::DrawableKind::Table(t) => Some((t.rows, t.cols)),
+                        _ => None,
+                    });
+                    let Some((rows, cols)) = size else { return };
+                    let (nr, nc) = match c {
+                        "tab" => if col + 1 < cols { (r, col + 1) } else { ((r + 1).min(rows - 1), 0) },
+                        "backtab" => if col > 0 { (r, col - 1) } else { (r.saturating_sub(1), cols - 1) },
+                        "down" => ((r + 1).min(rows - 1), col),
+                        _ => (r, col),
+                    };
+                    app.sel = vec![id];
+                    app.canvas.table_cursor = Some((id, nr, nc));
+                }
+                _ => {
+                    let n: Vec<u32> = c.strip_prefix("pick:").unwrap_or("").split(':').filter_map(|x| x.parse().ok()).collect();
+                    if let (Some((id, _, _)), [r, c]) = (cur, n.as_slice()) {
+                        crate::canvas::commit_cell(app);
+                        app.canvas.table_cursor = Some((id, *r, *c));
+                        app.canvas.table_range = None;
+                    }
+                }
+            }
+            return;
+        }
+        // Draw With Pen's bar: "pen:color:<r>:<g>:<b>", "pen:width:<pt>", "pen:done"
+        if let Some(c) = a.strip_prefix("pen:") {
+            let n: Vec<f32> = c.split(':').skip(1).filter_map(|x| x.parse().ok()).collect();
+            match (c.split(':').next().unwrap_or(""), n.as_slice()) {
+                ("color", [r, g, b]) => app.pen_color = egui::Color32::from_rgb(*r as u8, *g as u8, *b as u8),
+                ("width", [w]) => app.pen_width = w.clamp(1.0, 24.0),
+                _ => app.pen = None,
+            }
+            return;
+        }
+        // Edit Mask's bar: "mask:size:<percent>", "mask:done"
+        if let Some(c) = a.strip_prefix("mask:") {
+            match c.strip_prefix("size:").and_then(|x| x.parse::<f32>().ok()) {
+                Some(pct) => {
+                    if let Some(sc) = app.scene(app.cur) {
+                        crate::canvas::mask_size(app, &sc, pct);
+                    }
+                }
+                None => app.mask_edit = None,
+            }
+            return;
+        }
+        // a guide pulled out of a ruler: "guide:<v|h>:<pos>" starts it, kd_drag moves and drops it
+        if let Some(g) = a.strip_prefix("guide:") {
+            let mut it = g.split(':');
+            let vertical = it.next() == Some("v");
+            let pos = it.next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(0.0);
+            app.show_guides = true;
+            app.canvas.drag = Some(crate::canvas::Drag::Guide { index: None, vertical, pos });
+            return;
+        }
+        // a gallery on the canvas shows its image k ("gallery:<object>:<k>")
+        if let Some(g) = a.strip_prefix("gallery:") {
+            let n: Vec<u64> = g.split(':').filter_map(|x| x.parse().ok()).collect();
+            if let [id, k] = n.as_slice() {
+                app.gallery_pos.insert(*id, *k as usize);
+                if let Some(s) = app.current_slide().map(|s| s.slide) {
+                    app.bump(s);
+                }
+            }
+            return;
+        }
+        // Record Slideshow's sound, recorded by the front end ("narration:<file>", or empty)
+        if let Some(f) = a.strip_prefix("narration:") {
+            crate::play::narration_done(app, (!f.is_empty()).then(|| PathBuf::from(f)));
+            return;
+        }
+        if a == "points:done" {
+            app.point_edit = None;
+            return;
+        }
+        // Edit Slide Layouts: Done
+        if a == "layouts:done" {
+            if app.editing_layouts.is_some() {
+                app.toggle_layout_editing();
+            }
+            return;
+        }
+        // File > Change Theme: the chooser's pick ("theme:<i>") or "theme:cancel"
+        if let Some(t) = a.strip_prefix("theme:") {
+            match t.parse::<usize>() {
+                Ok(i) => crate::themes::change_to_index(app, i),
+                Err(_) => (app.show_theme_chooser, app.changing_theme) = (false, false),
+            }
+            return;
+        }
+        // Insert > Image Gallery: the pictures the front end's picker gave ("\n" between paths)
+        if let Some(p) = a.strip_prefix("gallery:") {
+            let paths: Vec<PathBuf> = p.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect();
+            crate::webmedia::gallery_from(app, &paths);
+            let ctx = ctx.clone();
+            crate::webmedia::poll(app, &ctx);
             return;
         }
         if let Some(p) = a.strip_prefix("insert:") {
@@ -803,6 +1026,7 @@ pub extern "C" fn kd_toolbar(id: *const c_char) {
 #[unsafe(no_mangle)]
 pub extern "C" fn kd_status() -> *mut c_char {
     json_out(with(|h| {
+        let windows = crate::dlgapi::state(&mut h.app);
         let a = &h.app;
         Some(json!({
             "open": a.doc.is_some(),
@@ -817,13 +1041,18 @@ pub extern "C" fn kd_status() -> *mut c_char {
             "objects": a.sel.len(),
             "navigator": a.view == crate::app::ViewMode::Navigator,
             "notes": a.show_notes,
-            "playing": h.show.is_some(),
+            "playing": h.show.is_some() || a.play.is_some(),
             "path": a.doc.as_ref().and_then(|d| d.path.as_ref()).map(|p| p.to_string_lossy().into_owned()),
             "pptx": a.doc.as_ref().and_then(|d| d.path.as_ref()).is_some_and(|p| crate::pptx::is_pptx(p)),
-            "windows": crate::dlgapi::state(a),
+            "windows": windows,
             "tabs": (a.tabs.len() > 1).then(|| json!({ "tabs": (0..a.tabs.len()).map(|i| json!({ "name": a.tab_name(i), "edited": a.tab_dirty(i) })).collect::<Vec<_>>(), "active": a.active_tab })),
             "unsaved": h.unsaved.map(|i| json!({ "tab": i, "name": a.tab_name(i) })),
             "savedColors": a.settings.saved_colors,
+            "view": format!("{:?}", a.view),
+            "editingLayouts": a.editing_layouts.is_some(),
+            "narrationWaiting": a.narration_waiting.is_some(),
+            "changingTheme": a.show_theme_chooser && a.changing_theme && a.doc.is_some(),
+            "busy": a.jobs_pending() || crate::webmedia::busy(a),
         }))
     }))
 }
@@ -1072,6 +1301,182 @@ mod tests {
         CString::new(s).unwrap()
     }
 
+    fn ins() -> Value {
+        json(kd_inspector())
+    }
+
+    fn set(k: &str, v: Value) {
+        kd_inspector_set(c(k).as_ptr(), c(&v.to_string()).as_ptr());
+    }
+
+    /// Changes `key` to `v` and checks the value read back at `path` (a JSON pointer into
+    /// kd_inspector) is now `want` (a control that only shows a value fails here).
+    fn changes(key: &str, v: Value, path: &str, want: Value) {
+        set(key, v.clone());
+        let got = ins().pointer(path).cloned().unwrap_or(Value::Null);
+        let near = |a: &Value, b: &Value| match (a.as_f64(), b.as_f64()) {
+            (Some(x), Some(y)) => (x - y).abs() < 0.01,
+            _ => a == b,
+        };
+        let ok = match (&got, &want) {
+            (Value::Array(a), Value::Array(b)) => a.len() == b.len() && a.iter().zip(b).all(|(x, y)| near(x, y)),
+            _ => near(&got, &want),
+        };
+        assert!(ok, "{key} = {v}: {path} is {got}, wanted {want}");
+    }
+
+    /// The inspector's main controls each change the presentation, read back from it: the
+    /// slide's background (colour, gradient, Standard / Dynamic, a preset and its options),
+    /// layout and appearance, an object's fill, border, shadow, opacity, size, position and
+    /// rotation, text, a table's rows, a chart's legend, a transition, a build and its options,
+    /// and the document's slideshow settings and size.
+    #[test]
+    fn inspector_controls_change_document() {
+        let home = std::env::temp_dir().join("keydeck-ffi-controls");
+        let _ = std::fs::remove_dir_all(&home);
+        kd_home(c(&home.to_string_lossy()).as_ptr());
+        kd_init();
+        // a theme with dynamic backgrounds (Night Tide)
+        let themes = json(kd_themes());
+        let nt = themes["themes"].as_array().unwrap().iter().position(|t| t["name"] == "Night Tide").unwrap_or(0);
+        assert_eq!(kd_new(nt as u32), 0);
+        kd_toolbar(c("Format").as_ptr());
+        assert_eq!(ins()["pane"], "slide", "{}", ins());
+        // the slide: background
+        changes("slide.bgTab", json!(0), "/bgTab", json!(0));
+        changes("slide.background", json!({"kind": 1, "color": [1.0, 0.0, 0.0, 1.0]}), "/background/color", json!([1.0, 0.0, 0.0, 1.0]));
+        changes("slide.background", json!({"kind": 2, "from": [1.0, 0.0, 0.0, 1.0], "to": [0.0, 0.0, 1.0, 1.0], "angle": 90.0}), "/background/kind", json!(2));
+        changes("slide.background", json!({"kind": 0}), "/background/kind", json!(0));
+        changes("slide.bgTab", json!(1), "/bgTab", json!(1));
+        changes("slide.preset", json!(1), "/dynamic/preset", json!(1));
+        let ctl = ins()["dynamic"]["controls"][0].clone();
+        changes("slide.num", json!({"prop": ctl["prop"], "value": ctl["min"]}), "/dynamic/controls/0/value", ctl["min"].clone());
+        changes("slide.bgTab", json!(0), "/dynamic", Value::Null);
+        // layout and appearance
+        changes("slide.layout", json!(3), "/layoutIndex", json!(3));
+        let a = ins()["appearance"][0].clone();
+        changes("slide.appearance", json!({"field": a["field"], "on": !a["on"].as_bool().unwrap()}), "/appearance/0/on", json!(!a["on"].as_bool().unwrap()));
+        // an object: style, arrange
+        kd_run(c("Shape > Rectangle").as_ptr());
+        assert_eq!(ins()["pane"], "object", "{}", ins());
+        changes("tab", json!(0), "/kind", json!("Style"));
+        changes("style.fill", json!({"kind": 1, "color": [0.0, 1.0, 0.0, 1.0]}), "/data/fill/color", json!([0.0, 1.0, 0.0, 1.0]));
+        changes("style.stroke", json!({"color": [0.0, 0.0, 0.0, 1.0], "width": 5.0, "dash": "Dashed"}), "/data/stroke/width", json!(5.0));
+        changes("style.opacity", json!(50), "/data/opacity", json!(0.5));
+        let tabs = ins()["tabs"].clone();
+        let arrange = tabs.as_array().unwrap().iter().position(|t| t == "Arrange").unwrap();
+        changes("tab", json!(arrange), "/kind", json!("Arrange"));
+        changes("arrange.geometry", json!({"w": 333.0}), "/data/w", json!(333.0));
+        changes("arrange.geometry", json!({"x": 120.0}), "/data/x", json!(120.0));
+        changes("arrange.geometry", json!({"angle": 30.0}), "/data/angle", json!(30.0));
+        // its text (typed into first)
+        kd_text(c("Shape text").as_ptr());
+        kd_key(c("Escape").as_ptr(), false, false, false);
+        let text = tabs.as_array().unwrap().iter().position(|t| t == "Text").unwrap();
+        changes("tab", json!(text), "/kind", json!("Text"));
+        changes("text.size", json!(40.0), "/data/size", json!(40.0));
+        changes("text.bold", json!(true), "/data/bold", json!(true));
+        // its builds: Animate > Build In
+        kd_toolbar(c("Animate").as_ptr());
+        changes("animate.tab", json!(0), "/tab", json!(0));
+        changes("animate.add", json!({"value": "Dissolve"}), "/builds/0/name", json!("Dissolve"));
+        let id = ins()["builds"][0]["id"].clone();
+        changes("animate.duration", json!({"id": id, "value": 2.5}), "/builds/0/duration", json!(2.5));
+        changes("animate.change", json!({"id": id, "value": "Move In"}), "/builds/0/name", json!("Move In"));
+        changes("animate.option", json!({"id": id, "option": "direction", "value": 12}), "/builds/0/direction/value", json!(12));
+        // a table and a chart
+        kd_toolbar(c("Format").as_ptr());
+        kd_run(c("Table > Basic").as_ptr());
+        changes("tab", json!(0), "/kind", json!("Table"));
+        let rows = ins()["data"]["rows"].as_u64().unwrap();
+        changes("table.rows", json!(rows + 2), "/data/rows", json!(rows + 2));
+        kd_run(c("Chart > 2D Column").as_ptr());
+        changes("tab", json!(0), "/kind", json!("Chart"));
+        let legend = ins()["data"]["legend"].as_bool().unwrap_or(false);
+        changes("chart.legend", json!(!legend), "/data/legend", json!(!legend));
+        // the slide's transition (nothing selected)
+        kd_action(c("cmd:Deselect All").as_ptr());
+        kd_toolbar(c("Animate").as_ptr());
+        assert_eq!(ins()["pane"], "transition", "{}", ins());
+        changes("animate.tr.effect", json!("Dissolve"), "/effect", json!("Dissolve"));
+        changes("animate.tr.duration", json!(2.0), "/duration", json!(2.0));
+        changes("animate.tr.automatic", json!(true), "/automatic", json!(true));
+        // the document
+        kd_toolbar(c("Document").as_ptr());
+        changes("doc.loop", json!(true), "/loop", json!(true));
+        changes("doc.mode", json!(1), "/mode", json!(1));
+        changes("doc.idle", json!(true), "/idle", json!(true));
+        changes("doc.size", json!("4:3"), "/size", json!([1024.0, 768.0]));
+    }
+
+    /// A window open now (kd_status windows), by id.
+    fn window(id: &str) -> Value {
+        json(kd_status())["windows"].as_array().and_then(|w| w.iter().find(|w| w["id"] == id).cloned()).unwrap_or(Value::Null)
+    }
+
+    /// The windows' fields and buttons change the presentation or the settings: Find & Replace,
+    /// Go To Slide, Language & Region, Substitutions, Adjust Image (reset), Customize Presenter
+    /// Display, Build Order (start), Save Theme closing, and each window closes.
+    #[test]
+    fn windows_change_document() {
+        let home = std::env::temp_dir().join("keydeck-ffi-windows");
+        let _ = std::fs::remove_dir_all(&home);
+        kd_home(c(&home.to_string_lossy()).as_ptr());
+        kd_init();
+        assert_eq!(kd_new(0), 0);
+        kd_run(c("New Slide").as_ptr());
+        kd_run(c("Text").as_ptr());
+        kd_text(c("alpha beta alpha").as_ptr());
+        kd_key(c("Escape").as_ptr(), false, false, false);
+        // Find & Replace: Replace All
+        kd_run(c("Find…").as_ptr());
+        assert!(window("find").is_object(), "Find opens");
+        set("dlg.find.query", json!("alpha"));
+        set("dlg.find.replace", json!("gamma"));
+        set("dlg.find.all", Value::Null);
+        let text = json(kd_outline()).as_array().unwrap().iter().flat_map(|s| s["texts"].as_array().cloned().unwrap_or_default()).map(|t| t["text"].as_str().unwrap_or("").to_string()).collect::<Vec<_>>().join(" ");
+        assert!(text.contains("gamma beta gamma"), "replaced: {text}");
+        set("dlg.find.close", Value::Null);
+        assert!(window("find").is_null(), "Find closes");
+        // Go To Slide
+        kd_run(c("Go To > Slide…").as_ptr());
+        set("dlg.goToSlide.text", json!("1"));
+        set("dlg.goToSlide.done", Value::Null);
+        assert_eq!(json(kd_geometry())["current"], 0, "went to slide 1");
+        // Language & Region
+        kd_run(c("Language & Region…").as_ptr());
+        set("dlg.language.pick", json!(1));
+        assert_eq!(window("language")["form"][1]["value"], 1, "French: {}", window("language"));
+        set("dlg.language.close", Value::Null);
+        // Substitutions: Smart Quotes off and on again
+        kd_run(c("Show Substitutions").as_ptr());
+        let on = window("substitutions")["form"][0]["value"].as_bool().unwrap();
+        set("dlg.substitutions.smart_quotes", json!(!on));
+        assert_eq!(window("substitutions")["form"][0]["value"], json!(!on));
+        set("dlg.substitutions.smart_quotes", json!(on));
+        set("dlg.substitutions.close", Value::Null);
+        // Customize Presenter Display
+        kd_run(c("Customize Presenter Display…").as_ptr());
+        let cur = window("pdCustom")["form"][1]["value"].as_bool().unwrap();
+        set("dlg.pdCustom.pd_next", json!(!cur));
+        assert_eq!(window("pdCustom")["form"][1]["value"], json!(!cur));
+        set("dlg.pdCustom.pd_next", json!(cur));
+        set("dlg.pdCustom.close", Value::Null);
+        // Build Order: a build's start
+        kd_action(c("slide:1").as_ptr());
+        // (a tap on the slide: Select All is the slide's objects, not the slides)
+        kd_tap(5.0, 5.0, 2.0, 1, false);
+        kd_run(c("Select All").as_ptr());
+        kd_toolbar(c("Animate").as_ptr());
+        set("animate.add", json!({"value": "Dissolve"}));
+        kd_run(c("Show Build Order").as_ptr());
+        set("dlg.buildOrder.start", json!(2));
+        let bo = window("buildOrder");
+        assert_eq!(bo["form"][2]["value"], 2, "After Transition: {bo}");
+        set("dlg.buildOrder.close", Value::Null);
+        assert!(window("buildOrder").is_null());
+    }
+
     /// A new presentation from a theme, a text box typed into, a drag, saved as Keynote and as
     /// PowerPoint and opened again, the show stepped through: all without any egui pass.
     #[test]
@@ -1130,4 +1535,135 @@ mod tests {
         let insp = json(kd_inspector());
         assert!(insp["pane"].is_string(), "{insp}");
     }
+}
+
+// ---- the slideshow, drawn by the front end from the desktop show's triangles (showapi.rs) ----
+
+/// Starts the show at slide `index` (`rehearse`: Rehearse Slideshow, the timer from zero).
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_play_start(index: u32, rehearse: bool) {
+    with(|h| {
+        crate::textedit::commit(&mut h.app);
+        h.play = Default::default();
+        h.app.start_play(index as usize, rehearse);
+    })
+}
+
+/// One frame of the show on a `w` × `h` point screen (`ppp` pixels per point) after `input`
+/// (JSON, showapi::events); the frame's bytes (showapi.rs), `*len` long, freed with kd_free_bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_play_frame(w: f32, h: f32, ppp: f32, input: *const c_char, len: *mut u32) -> *mut u8 {
+    let input: Value = serde_json::from_str(&arg(input)).unwrap_or(Value::Null);
+    let bytes = with(|host| {
+        if host.app.play.is_none() {
+            return Vec::new();
+        }
+        let ctx = host.ctx.clone();
+        crate::showapi::frame(&ctx, &mut host.app, &mut host.play, w, h, ppp, &input)
+    });
+    bytes_out(bytes, len)
+}
+
+/// The show now (showapi::status), null when it isn't playing.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_play_status() -> *mut c_char {
+    json_out(with(|h| Some(crate::showapi::status(&mut h.app, &h.play))))
+}
+
+/// Ends the show.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_play_stop() {
+    with(|h| {
+        // Record Slideshow: the timing kept until the front end hands over the sound
+        if let Some(n) = h.app.play.as_mut().and_then(|p| p.narration.take()) {
+            h.app.narration_waiting = Some(n);
+        }
+        h.app.play = None;
+        h.play = Default::default();
+        let c = h.app.cur;
+        h.app.go_to(c);
+    })
+}
+
+fn bytes_out(b: Vec<u8>, len: *mut u32) -> *mut u8 {
+    if b.is_empty() || len.is_null() {
+        return std::ptr::null_mut();
+    }
+    unsafe { *len = b.len() as u32 };
+    Box::into_raw(b.into_boxed_slice()) as *mut u8
+}
+
+/// Background work finishing (opening, fetched web videos, picked pictures, media): call while
+/// kd_status "busy" is true. 1 when something was waiting (the front end reads state again).
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_tick() -> i32 {
+    with(|h| {
+        let ctx = h.ctx.clone();
+        let busy = h.app.jobs_pending() || crate::webmedia::busy(&h.app);
+        h.app.poll_jobs(&ctx);
+        crate::webmedia::poll(&mut h.app, &ctx);
+        i32::from(busy)
+    })
+}
+
+/// The current slide's presenter notes: {text}.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_notes() -> *mut c_char {
+    json_out(with(|h| {
+        let a = &mut h.app;
+        let slide = a.current_slide()?.slide;
+        let text = match &a.notes_buf {
+            Some((s, t)) if *s == slide => t.clone(),
+            _ => a.doc.as_ref().and_then(|d| d.notes_storage(slide).map(|st| d.storage_text(st))).unwrap_or_default(),
+        };
+        Some(json!({ "text": text }))
+    }))
+}
+
+/// View > Outline: every slide's title and other texts (navigator.rs outline): [{slide, title:
+/// {storage, text} | null, texts: [{storage, text}], skipped}].
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_outline() -> *mut c_char {
+    json_out(with(|h| {
+        let a = &mut h.app;
+        let mut out = Vec::new();
+        for i in 0..a.slides.len() {
+            let Some(sc) = a.scene(i) else { continue };
+            let mut texts: Vec<(u8, u64, String)> = Vec::new();
+            for d in &sc.drawables {
+                if d.from_template {
+                    continue;
+                }
+                if let kn_model::DrawableKind::Shape(s) = &d.kind {
+                    if let Some(t) = &s.text {
+                        let rank = match d.placeholder {
+                            Some(kn_model::PlaceholderKind::Title) => 0,
+                            Some(kn_model::PlaceholderKind::Body) => 1,
+                            Some(kn_model::PlaceholderKind::SlideNumber) => continue,
+                            _ => 2,
+                        };
+                        if rank < 2 || !t.text.trim().is_empty() {
+                            texts.push((rank, t.storage, t.text.clone()));
+                        }
+                    }
+                }
+            }
+            texts.sort_by_key(|t| t.0);
+            let title = (!texts.is_empty() && texts[0].0 == 0).then(|| texts.remove(0));
+            out.push(json!({
+                "slide": i,
+                "title": title.map(|(_, st, t)| json!({ "storage": st, "text": t })),
+                "texts": texts.into_iter().map(|(_, st, t)| json!({ "storage": st, "text": t })).collect::<Vec<_>>(),
+                "skipped": a.slides[i].skipped,
+            }));
+        }
+        Some(Value::Array(out))
+    }))
+}
+
+/// Web pages and mail links the app opened since the last call (a link in the show, Support
+/// Development…): the front end opens them.
+#[unsafe(no_mangle)]
+pub extern "C" fn kd_urls() -> *mut c_char {
+    json_out(Some(json!(crate::links::take_opened())))
 }

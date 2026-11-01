@@ -12,6 +12,9 @@ mod editing;
 // the document library for other front ends (the Flutter app): its C ABI, the inspector as data
 pub mod ffi;
 mod inspapi;
+mod showapi;
+mod formsapi;
+mod objapi;
 mod dlgapi;
 // Keydeck Remote: phones and tablets control the slideshow over the local network
 mod remote;

@@ -114,6 +114,12 @@ pub fn short_name(effect: &str) -> &str {
     effect.rsplit([':', '.']).next().unwrap_or(effect)
 }
 
+/// Effects that paint a backdrop (black or a colour) behind the moving slides: a dynamic
+/// background both slides share can't play under them, each slide carries its own.
+pub fn paints_backdrop(effect: &str) -> bool {
+    matches!(short_name(effect), "BLTFadeThruColor" | "3D-cube" | "ca-cube" | "revolve" | "ca-dissolve-and-flip" | "BUKFlop" | "FlipThrough" | "KLNSwap" | "BUKTwist")
+}
+
 /// Transitions that animate the slides' objects individually (need [`ObjSet`]s).
 pub fn needs_objects(effect: &str) -> bool {
     matches!(

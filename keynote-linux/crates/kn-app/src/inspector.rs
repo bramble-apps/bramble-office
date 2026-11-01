@@ -176,7 +176,7 @@ fn gallery_panel(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
 }
 
 /// A package data file's name as Keynote shows it: "Data/gallery-1-452.png" -> "gallery-1.png".
-fn shown_file_name(stored: &str) -> String {
+pub(crate) fn shown_file_name(stored: &str) -> String {
     let base = stored.rsplit('/').next().unwrap_or(stored);
     let (stem, ext) = base.rsplit_once('.').unwrap_or((base, ""));
     let stem = match stem.rsplit_once('-') {
@@ -927,7 +927,7 @@ fn motion_thumb(app: &mut App, ctx: &egui::Context, mb: &kn_model::motionbg::Mot
 }
 
 /// Keynote's controls for each renderer: (label, property, min, max, decimals, suffix).
-fn motion_controls(family: &str) -> &'static [(&'static str, &'static str, f64, f64, usize, &'static str)] {
+pub(crate) fn motion_controls(family: &str) -> &'static [(&'static str, &'static str, f64, f64, usize, &'static str)] {
     match family {
         "KNGradientTerrainBase" => &[("Speed", "noise_speed", 0.0, 100.0, 2, ""), ("Height", "noise_amplitude", 0.0, 10.0, 2, ""), ("Peaks", "noise_scale_horizontal", 0.01, 10.0, 2, "")],
         "KNGradientTerrainFlyover" => &[("Movement", "noise_movement", -100.0, 100.0, 0, ""), ("Height", "noise_amplitude", 0.0, 10.0, 2, ""), ("Peaks", "noise_scale_horizontal", 0.01, 10.0, 2, "")],
@@ -3793,7 +3793,7 @@ pub fn build_order_window(app: &mut App, ctx: &egui::Context) {
 
 /// Direction choices of a build effect and its default, as Keynote 15.4 offers them (read back
 /// from Keynote's own inspector on the Mac, round 8): stored value, UI label.
-fn direction_options(effect: &str) -> Option<(Vec<(u32, &'static str)>, u32)> {
+pub(crate) fn direction_options(effect: &str) -> Option<(Vec<(u32, &'static str)>, u32)> {
     let ltr8 = vec![
         (11, "→  Left to Right"),
         (12, "←  Right to Left"),

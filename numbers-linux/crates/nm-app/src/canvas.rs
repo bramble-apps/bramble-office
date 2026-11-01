@@ -2617,7 +2617,6 @@ pub fn cell_insert(app: &mut App, ctx: &egui::Context, ins: &str) -> bool {
 /// Insert > Line > Draw With Pen: drag to draw a freehand line (a path shape in the pen's
 /// colour and width when let go); the pen bar picks them, Done or Escape ends it.
 fn pen_mode(app: &mut App, ui: &mut egui::Ui, view: &View, resp: &egui::Response) {
-    use nm_core::sheets::PathEl;
     let ctx = ui.ctx().clone();
     ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
     if resp.dragged() {
@@ -2639,38 +2638,50 @@ fn pen_mode(app: &mut App, ui: &mut egui::Ui, view: &View, resp: &egui::Response
     }
     if resp.drag_stopped() {
         let pts = app.pen.replace(Vec::new()).unwrap_or_default();
-        if pts.len() > 1 {
-            let (x0, y0) = pts.iter().fold((f32::INFINITY, f32::INFINITY), |a, p| (a.0.min(p.x), a.1.min(p.y)));
-            let (x1, y1) = pts.iter().fold((f32::NEG_INFINITY, f32::NEG_INFINITY), |a, p| (a.0.max(p.x), a.1.max(p.y)));
-            let (w, h) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
-            let els: Vec<PathEl> = pts.iter().enumerate().map(|(i, p)| if i == 0 { PathEl::Move(p.x - x0, p.y - y0) } else { PathEl::Line(p.x - x0, p.y - y0) }).collect();
-            let c = app.pen_color;
-            let stroke = nm_core::kn_model::format::StrokeSpec {
-                color: nm_core::kn_model::Color { r: c.r() as f32 / 255.0, g: c.g() as f32 / 255.0, b: c.b() as f32 / 255.0, a: 1.0 },
-                width: app.pen_width,
-                dash: nm_core::kn_model::format::Dash::Solid,
-            };
-            // (Numbers' square, its outline the stroke, no fill)
-            app.insert_shape_then(3, |d, hist, id| {
-                d.set_fill(hist, id, &nm_core::kn_model::format::FillSpec::None);
-                if let Some(mut g) = d.file.obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")).map(nm_core::kn_model::scene::geometry) {
-                    g.x = x0;
-                    g.y = y0;
-                    g.w = w;
-                    g.h = h;
-                    d.set_frame(hist, id, g);
-                }
-                nm_core::sheets::set_path(d, hist, id, &els, (w, h));
-                d.set_stroke(hist, id, Some(&stroke));
-            });
-            // keep drawing
-            app.pen = Some(Vec::new());
-            app.canvas.obj = None;
-        }
+        pen_stroke(app, pts);
     }
+    pen_bar(app, &ctx);
+}
+
+/// A stroke drawn with the pen (sheet points): a shape of its path, outlined in the pen's colour
+/// and width; the pen keeps drawing.
+pub(crate) fn pen_stroke(app: &mut App, pts: Vec<Pos2>) {
+    use nm_core::sheets::PathEl;
+    if pts.len() < 2 {
+        return;
+    }
+    let (x0, y0) = pts.iter().fold((f32::INFINITY, f32::INFINITY), |a, p| (a.0.min(p.x), a.1.min(p.y)));
+    let (x1, y1) = pts.iter().fold((f32::NEG_INFINITY, f32::NEG_INFINITY), |a, p| (a.0.max(p.x), a.1.max(p.y)));
+    let (w, h) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
+    let els: Vec<PathEl> = pts.iter().enumerate().map(|(i, p)| if i == 0 { PathEl::Move(p.x - x0, p.y - y0) } else { PathEl::Line(p.x - x0, p.y - y0) }).collect();
+    let c = app.pen_color;
+    let stroke = nm_core::kn_model::format::StrokeSpec {
+        color: nm_core::kn_model::Color { r: c.r() as f32 / 255.0, g: c.g() as f32 / 255.0, b: c.b() as f32 / 255.0, a: 1.0 },
+        width: app.pen_width,
+        dash: nm_core::kn_model::format::Dash::Solid,
+    };
+    // (Numbers' square, its outline the stroke, no fill)
+    app.insert_shape_then(3, |d, hist, id| {
+        d.set_fill(hist, id, &nm_core::kn_model::format::FillSpec::None);
+        if let Some(mut g) = d.file.obj(id).and_then(|m| m.find_super("TSD.DrawableArchive")).map(nm_core::kn_model::scene::geometry) {
+            g.x = x0;
+            g.y = y0;
+            g.w = w;
+            g.h = h;
+            d.set_frame(hist, id, g);
+        }
+        nm_core::sheets::set_path(d, hist, id, &els, (w, h));
+        d.set_stroke(hist, id, Some(&stroke));
+    });
+    // keep drawing
+    app.pen = Some(Vec::new());
+    app.canvas.obj = None;
+}
+
+fn pen_bar(app: &mut App, ctx: &egui::Context) {
     // the pen bar: colour, width, Done
-    let mut done = ui.input(|i| i.key_pressed(egui::Key::Escape));
-    egui::Area::new(egui::Id::unique("pen-bar")).anchor(egui::Align2::CENTER_BOTTOM, [0.0, -40.0]).show(&ctx, |ui| {
+    let mut done = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    egui::Area::new(egui::Id::unique("pen-bar")).anchor(egui::Align2::CENTER_BOTTOM, [0.0, -40.0]).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 for c in [Color32::BLACK, Color32::from_rgb(0x0a, 0x84, 0xff), Color32::from_rgb(0xff, 0x45, 0x3a), Color32::from_rgb(0x30, 0xd1, 0x58), Color32::from_rgb(0xff, 0xd6, 0x0a), Color32::WHITE] {

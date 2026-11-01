@@ -68,7 +68,7 @@ pub fn outlines(app: &App) -> Vec<(ObjId, (u32, u32, u32, u32), Color32)> {
 }
 
 /// Link the chart to the selected cells.
-fn done(app: &mut App) {
+pub(crate) fn done(app: &mut App) {
     let Some(m) = app.data_refs.take() else { return };
     let Some(sel) = app.sel else { return };
     let Some((_, t)) = app.table(sel.table) else { return };
@@ -91,7 +91,7 @@ fn done(app: &mut App) {
     select_chart(app, m.chart);
 }
 
-fn select_chart(app: &mut App, chart: ObjId) {
+pub(crate) fn select_chart(app: &mut App, chart: ObjId) {
     if let Some(i) = app.sheets().iter().position(|s| s.drawables.contains(&chart)) {
         if i != app.sheet {
             app.sheet = i;

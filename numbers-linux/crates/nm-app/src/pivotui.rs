@@ -45,7 +45,7 @@ pub fn enabled(app: &App, name: &str) -> bool {
 }
 
 /// The table's data as stored (not as categories show it).
-fn source_data(app: &App, t: ObjId) -> Option<nm_core::kn_model::TableData> {
+pub(crate) fn source_data(app: &App, t: ObjId) -> Option<nm_core::kn_model::TableData> {
     app.wb.as_ref()?.table_data(t)
 }
 
@@ -182,7 +182,7 @@ pub fn refresh(app: &mut App, t: ObjId) {
 }
 
 /// "Last refreshed" as Numbers words it: today's time, else the date.
-fn when(t: std::time::SystemTime) -> String {
+pub(crate) fn when(t: std::time::SystemTime) -> String {
     let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     let ago = now - secs;

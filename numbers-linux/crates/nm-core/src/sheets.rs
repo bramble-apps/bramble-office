@@ -312,6 +312,72 @@ pub fn set_text_box_path(doc: &mut Document, h: &mut History, id: ObjId) {
     }
 }
 
+/// Format > Title / Caption on a table, chart, shape or picture of a sheet (kn-model's
+/// Document::set_caption makes its new caption box with Keynote's slide insert, which a sheet
+/// isn't): an existing caption is shown or hidden; a new one is a text box made on the sheet,
+/// taken off it again and wrapped as the drawable's TSA.CaptionInfoArchive, as Numbers stores it.
+pub fn set_caption(doc: &mut Document, h: &mut History, sheet: ObjId, drawable: ObjId, title: bool, on: bool) -> bool {
+    let (field, hidden) = if title { ("title", "title_hidden") } else { ("caption", "caption_hidden") };
+    let Some(cur) = doc.file.obj(drawable).and_then(|m| m.find_super("TSD.DrawableArchive")).map(|d| d.ref_id(field)) else { return false };
+    if cur.is_some_and(|c| doc.file.type_name(c) == "TSA.CaptionInfoArchive") || !on {
+        return doc.set_caption(h, sheet, drawable, title, on);
+    }
+    let Some(g) = doc.file.obj(drawable).and_then(|m| m.find_super("TSD.DrawableArchive")).map(kn_model::scene::geometry) else { return false };
+    let Ok((donor, donor_id)) = text_box_donor() else { return false };
+    let Ok(id) = insert_object(doc, h, sheet, &donor, donor_id, g.x, g.y + g.h) else { return false };
+    set_text_box_path(doc, h, id);
+    if let Some(st) = doc.storage_of(id) {
+        doc.set_storage_text(h, st, if title { "Title" } else { "Caption" });
+        let name = if title { "Caption Title" } else { "Caption Text" };
+        let style = doc.paragraph_styles().into_iter().find(|(_, n)| n == name || n == "Caption").map(|(sid, _)| sid);
+        if let Some(ps) = style {
+            doc.set_paragraph_style(h, st, ps);
+        }
+    }
+    detach_drawables(doc, h, sheet, &[id]);
+    let Some(file) = doc.file.file_of(id).map(str::to_string) else { return false };
+    let ok = doc.structural(h, &[drawable, id], |k| {
+        let pid = k.alloc_ids(1)[0];
+        let mut pl = Msg::new("TSA.CaptionPlacementArchive");
+        pl.set_i64("caption_anchor_location", if title { 7 } else { 1 });
+        pl.set_i64("drawable_anchor_location", if title { 1 } else { 7 });
+        k.insert_archive(&file, Archive::new_object(pid, pl));
+        let Some(tid) = kn_format::schema::schema().type_id_of("TSA.CaptionInfoArchive") else { return false };
+        let Some(a) = k.archive_mut(id) else { return false };
+        let mut inner = a.payloads[0].clone();
+        if let Some(d) = inner.find_super_mut("TSD.DrawableArchive") {
+            d.set_ref("parent", drawable);
+            let geo = d.msg_mut_or_create("geometry");
+            let p = geo.msg_mut_or_create("position");
+            p.set_f32("x", 0.0);
+            p.set_f32("y", 0.0);
+            let sz = geo.msg_mut_or_create("size");
+            sz.set_f32("width", g.w);
+            sz.set_f32("height", 0.0);
+            geo.set_u64("flags", 1);
+        }
+        let mut cap = Msg::new("TSA.CaptionInfoArchive");
+        cap.push_msg("super", inner);
+        cap.set_ref("placement", pid);
+        cap.set_enum("childInfoKind", if title { "Title" } else { "Caption" });
+        a.payloads[0] = cap;
+        if let Some(mi) = a.info.msgs_mut("message_infos").next() {
+            mi.set_u64("type", u64::from(tid));
+        }
+        a.refresh_object_references();
+        if let Some(d) = k.obj_mut(drawable).and_then(|m| m.find_super_mut("TSD.DrawableArchive")) {
+            d.set_ref(field, id);
+            d.set_bool(hidden, false);
+        }
+        k.refresh_refs(drawable);
+        true
+    });
+    if let Some(f) = doc.file.file_of(drawable).map(str::to_string) {
+        doc.file.ensure_external_refs(&f);
+    }
+    ok
+}
+
 /// Insert -> Text Box (or any drawable of another Numbers document): a copy of `donor_id` on
 /// `sheet` at (x, y), its styles mapped onto this document's. Returns the new drawable.
 pub fn insert_object(doc: &mut Document, h: &mut History, sheet: ObjId, donor: &kn_format::KeyFile, donor_id: ObjId, x: f32, y: f32) -> Result<ObjId, kn_format::Error> {

@@ -18,10 +18,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../engine.dart';
+import 'canvas_controls.dart';
 import 'edit_menu.dart';
 import 'look.dart';
 import 'table_chrome.dart';
 import 'touch_menu.dart';
+import 'widgets.dart' show LookScope;
 
 class SheetView extends StatefulWidget {
   const SheetView({super.key, required this.engine, required this.look, required this.onChanged, required this.onMenuAction, required this.onMenu, this.message, this.compact = false});
@@ -553,6 +555,66 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
     return false;
   }
 
+  // ---------------------------------------------------------------- the canvas's controls
+
+  /// A drag on the controls (a guide, a shape's point, the pen) going on.
+  ControlDrag? _ctl;
+
+  SheetControls _controls() => SheetControls((_ov['controls'] as Map?)?.cast<String, dynamic>() ?? const {}, toLocal, _shownZoom, _view);
+
+  /// A drag starting on the controls: the pen draws, a point or a guide moves (a finger moves
+  /// guides while the rulers show; a mouse always, as on the desktop).
+  bool _controlDragStart(Offset at, bool touch) {
+    final c = _controls();
+    if (c.penOn) {
+      _ctl = ControlDrag.pen(c.toSheet(at));
+      return true;
+    }
+    final h = c.hit(at, touch: touch);
+    if (h is PointHit) {
+      e.action('ctl:points:sel:${h.s}:${h.i}');
+      _ctl = ControlDrag.point(h);
+      return true;
+    }
+    final g = c.hit(at, touch: touch, drag: true);
+    if (g is GuideHit && (g.index < 0 || c.rulers || !touch)) {
+      _ctl = ControlDrag.guide(g);
+      return true;
+    }
+    return false;
+  }
+
+  void _controlDragUpdate(Offset p) {
+    final d = _ctl!, c = _controls();
+    final sp = c.toSheet(p);
+    if (d.pen != null) {
+      if ((d.pen!.last - sp).distance * _shownZoom > 2.5) d.pen!.add(sp);
+    } else if (d.point != null) {
+      d.delta = (p - _downAt) / _shownZoom;
+    } else if (d.guide != null) {
+      final v = d.guide!.vertical;
+      // back on its ruler or off the view: it goes
+      final away = (c.rulers && (v ? p.dx < rulerBand : p.dy < rulerBand)) || !(Offset.zero & _view).contains(p);
+      d.pos = away ? null : (v ? sp.dx : sp.dy);
+    }
+    _paint();
+  }
+
+  void _controlDragEnd() {
+    final d = _ctl!;
+    _ctl = null;
+    if (d.pen != null) {
+      if (d.pen!.length > 1) e.action('ctl:pen:line:${[for (final q in d.pen!) '${q.dx.toStringAsFixed(2)},${q.dy.toStringAsFixed(2)}'].join(';')}');
+    } else if (d.point != null) {
+      final p = d.point!;
+      if (d.delta != Offset.zero) e.action('ctl:points:move:${p.s}:${p.i}:${p.part}:${d.delta.dx}:${d.delta.dy}');
+    } else if (d.guide != null) {
+      final g = d.guide!;
+      e.action('ctl:guide:${g.index < 0 ? '' : g.index}:${g.vertical ? 'v' : 'h'}:${d.pos ?? 'x'}');
+    }
+    refresh();
+  }
+
   // ---------------------------------------------------------------- gestures
 
   (DateTime, Offset)? _lastTap;
@@ -571,6 +633,19 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
       _renameTitle(_titleAt(at)!);
       return;
     }
+    // the controls: a link badge, ▶, a gallery's arrows, a shape's point
+    final ch = _controls().hit(at, touch: touch);
+    if (ch is TapHit) {
+      e.action(ch.action);
+      refresh();
+      return;
+    }
+    if (ch is PointHit) {
+      e.action('ctl:points:sel:${ch.s}:${ch.i}');
+      refresh();
+      return;
+    }
+    if (_controls().penOn) return;
     final wasSel = _selSig();
     final wasCell = _table?['sel'];
     final onSel = _onSelection(at);
@@ -636,6 +711,7 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
       _startPinch(d.localFocalPoint);
       return;
     }
+    if (_controlDragStart(_downAt, _downKind != PointerDeviceKind.mouse)) return;
     // a selected cells' dot: the other corner stays, this one follows the finger
     final dots = _cellDots();
     for (var k = 0; k < dots.length; k++) {
@@ -681,7 +757,9 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
 
   void _scaleUpdate(ScaleUpdateDetails d) {
     _focal = d.localFocalPoint;
+    if (_ctl != null && d.pointerCount < 2) return _controlDragUpdate(d.localFocalPoint);
     if (d.pointerCount >= 2) {
+      _ctl = null;
       if (_grab) {
         final v = _lastFocal + _grabOffset;
         e.pointer(2, v.dx, v.dy, shift: _shiftDrag);
@@ -737,6 +815,7 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
   Offset _focal = Offset.zero;
 
   void _scaleEnd(ScaleEndDetails d) {
+    if (_ctl != null) return _controlDragEnd();
     if (_pinchZoom != null && !_zoomAnim.isAnimating) {
       final z = _pinchZoom!;
       final sheetAt = _pinchScroll + _focal / z;
@@ -975,6 +1054,33 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  /// Draw with Pen's bar, Edit Mask's under the mask, Edit Data References' at the foot, the
+  /// cursor cell's comment by the cell.
+  Widget _controlBars() {
+    final c = (_ov['controls'] as Map?)?.cast<String, dynamic>() ?? const {};
+    void act(String a) {
+      e.action(a);
+      refresh();
+    }
+    final kids = <Widget>[];
+    final pen = c['pen'];
+    if (pen is Map) kids.add(Positioned(left: 0, right: 0, bottom: 40, child: Center(child: PenBar(pen: pen, act: act))));
+    final refs = c['dataRefs'];
+    if (refs is Map) kids.add(Positioned(left: 12, right: 12, bottom: 64, child: Center(child: DataRefsBar(rows: refs['rows'] == true, act: act))));
+    final mask = c['mask'];
+    if (mask is Map) {
+      final r = _controls().frame(mask['frame']);
+      kids.add(Positioned(left: (r.center.dx - 130).clamp(8.0, math.max(8.0, _view.width - 268)), top: math.min(r.bottom + 10, _view.height - 64), child: MaskBar(pct: (mask['pct'] as num).toDouble(), act: act)));
+    }
+    final note = c['comment'];
+    final dots = _cellDots();
+    if (note is Map && dots.length == 2 && _menu == null) {
+      kids.add(Positioned(left: math.min(dots[1].dx + 6, _view.width - 270), top: dots[0].dy, child: IgnorePointer(child: CommentNote(text: note['text'] as String? ?? '', author: note['author'] as String? ?? ''))));
+    }
+    if (kids.isEmpty) return const SizedBox.shrink();
+    return LookScope(look: widget.look, child: Stack(children: kids));
+  }
+
   // ---------------------------------------------------------------- build
 
   @override
@@ -1040,6 +1146,11 @@ class SheetViewState extends State<SheetView> with TickerProviderStateMixin {
                     valueListenable: _repaint,
                     builder: (ctx, _, _) => _table == null ? const SizedBox.shrink() : TableChrome(engine: e, t: _table!, toLocal: _chromeLocal, toView: (p) => p, zoom: _zoom, onChanged: refresh, onMenu: widget.onMenu),
                   ),
+                ),
+              // the controls' bars (pen, mask, data references) and the cursor cell's comment
+              if (_pinchZoom == null)
+                Positioned.fill(
+                  child: ValueListenableBuilder<int>(valueListenable: _repaint, builder: (ctx, _, _) => _controlBars()),
                 ),
               // a message: a pill near the bottom
               if (widget.message != null)
@@ -1300,6 +1411,7 @@ class _SheetPainter extends CustomPainter {
         tp.paint(canvas, a + const Offset(7, 4));
       }
     }
+    s._controls().paint(canvas, look, s._ctl);
   }
 
   @override
