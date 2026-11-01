@@ -24,7 +24,7 @@
 | **macOS**, Apple silicon (M1 and later), macOS 11+ | [![Download for Apple silicon](https://img.shields.io/badge/macOS-Apple_silicon-111111?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Office-macos-apple-silicon.zip) |
 | **macOS**, Intel Macs, macOS 10.15+ | [![Download for Intel Macs](https://img.shields.io/badge/macOS-Intel-555555?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Office-macos-intel.zip) |
 | **Linux** AppImages (x86_64): one file per app, nothing to install | [![Keydeck AppImage](https://img.shields.io/badge/Keydeck-AppImage-c2306a?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-x86_64.AppImage) [![Values AppImage](https://img.shields.io/badge/Values-AppImage-8e3a8a?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-x86_64.AppImage) [![Letters AppImage](https://img.shields.io/badge/Letters-AppImage-5a7f3c?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-x86_64.AppImage) |
-| **Android** 8+, tablets and phones (64-bit ARM): one app each. *Early development* | [![Keydeck for Android](https://img.shields.io/badge/Keydeck-Android-c2306a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-android.apk) [![Values for Android](https://img.shields.io/badge/Values-Android-8e3a8a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-android.apk) [![Letters for Android](https://img.shields.io/badge/Letters-Android-5a7f3c?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-android.apk) |
+| **Android** 8+, tablets and phones (64-bit ARM): one app each. *Beta* | [![Keydeck for Android](https://img.shields.io/badge/Keydeck-Android-c2306a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-android.apk) [![Values for Android](https://img.shields.io/badge/Values-Android-8e3a8a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-android.apk) [![Letters for Android](https://img.shields.io/badge/Letters-Android-5a7f3c?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-android.apk) |
 | **Linux**, all three apps in one archive (x86_64) | [![Download for Linux](https://img.shields.io/badge/Linux-.tar.gz-333333?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Office-linux-x86_64.tar.gz) |
 
 Free and open source (GPL-3.0). No account, no subscription, no tracking.
@@ -113,9 +113,9 @@ sound, install these:
 `yt-dlp` helper itself the first time you add a web video. If an AppImage doesn't start because the system
 has no FUSE, run it with `--appimage-extract-and-run`.
 
-### Android (early development)
+### Android (beta)
 
-The Android versions are new and still rough: expect bugs, and keep copies of important files.
+The Android versions are in beta: expect some bugs, and keep copies of important files.
 
 1. On the tablet or phone, download `Keydeck-android.apk`, `Values-android.apk` or `Letters-android.apk`.
 2. Open it from the notification or the Downloads app. The first time, Android asks to allow installing

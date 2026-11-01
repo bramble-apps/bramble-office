@@ -233,7 +233,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
       final notes = Platform.environment['KEYDECK_REMOTE_NOTES'] ?? 'Welcome everyone. Start with the story of the first slide, then pause for questions. Remember to mention the dates and thank the team.';
       link.state = {'playing': true, 'number': 1, 'visible': 11, 'aspect': 9 / 16, 'notes': notes};
       link.current = img;
-      link.next = img;
+      // (KEYDECK_REMOTE_NEXT: another picture as the next slide)
+      final next = Platform.environment['KEYDECK_REMOTE_NEXT'];
+      link.next = next != null ? File(next).readAsBytesSync() : img;
       link.showStarted = DateTime.now().subtract(const Duration(seconds: 11));
       _intro = false;
       return;
