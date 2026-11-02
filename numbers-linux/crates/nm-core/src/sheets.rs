@@ -412,7 +412,7 @@ pub fn duplicate_sheet(doc: &mut Document, h: &mut History, index: usize) -> Res
         if snapshot.type_name(d) == "TST.TableInfoArchive" {
             let mut touch = doc.file.table_insert_touches();
             touch.push(new);
-            let id = doc.structural(h, &touch, |k| k.paste_table_with(&snapshot, d, new, &mut families))?;
+            let id = doc.structural(h, &touch, |k| k.copy_table_within(&snapshot, d, new, &mut families))?;
             attach_drawable(doc, h, new, id);
             doc.set_frame(h, id, g);
         } else {

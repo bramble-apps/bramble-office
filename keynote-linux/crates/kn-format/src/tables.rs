@@ -275,12 +275,23 @@ impl KeyFile {
     /// rewrites them to the copies' owners).
     pub fn paste_table_with(&mut self, donor: &KeyFile, donor_info: ObjId, slide: ObjId, families: &mut HashMap<[u8; 12], [u8; 12]>) -> Result<ObjId, Error> {
         let mut uuids = UuidMap { families: std::mem::take(families) };
-        let r = self.paste_table_inner(donor, donor_info, slide, &mut uuids);
+        let r = self.paste_table_inner(donor, donor_info, slide, &mut uuids, false);
         *families = uuids.families;
         r
     }
 
-    fn paste_table_inner(&mut self, donor: &KeyFile, donor_info: ObjId, slide: ObjId, uuids: &mut UuidMap) -> Result<ObjId, Error> {
+    /// [`KeyFile::paste_table_with`] from a snapshot of this same document (Duplicate Sheet):
+    /// the styles, preset and stylesheet the table uses are this document's own, so they are
+    /// kept as they are (matching them by name would swap each cell's own look, a style
+    /// variation, for its plain parent).
+    pub fn copy_table_within(&mut self, snapshot: &KeyFile, info: ObjId, slide: ObjId, families: &mut HashMap<[u8; 12], [u8; 12]>) -> Result<ObjId, Error> {
+        let mut uuids = UuidMap { families: std::mem::take(families) };
+        let r = self.paste_table_inner(snapshot, info, slide, &mut uuids, true);
+        *families = uuids.families;
+        r
+    }
+
+    fn paste_table_inner(&mut self, donor: &KeyFile, donor_info: ObjId, slide: ObjId, uuids: &mut UuidMap, same_doc: bool) -> Result<ObjId, Error> {
         let d_ce = ce_root(donor).ok_or(bad("donor has no calculation engine"))?;
         let ce = ce_root(self).ok_or(bad("this document has no calculation engine"))?;
         let d_ce_file = donor.file_of(d_ce).unwrap().to_string();
@@ -319,9 +330,15 @@ impl KeyFile {
         if let Some(p) = d_slide {
             ext_map.insert(p, slide);
         }
-        self.map_table_styles(donor, d_model_id, &mut ext_map)?;
-        let rest: Vec<ObjId> = external.iter().copied().filter(|e| !ext_map.contains_key(e)).collect();
-        ext_map.extend(self.map_external(donor, &rest)?);
+        if same_doc {
+            for e in &external {
+                ext_map.entry(*e).or_insert(*e);
+            }
+        } else {
+            self.map_table_styles(donor, d_model_id, &mut ext_map)?;
+            let rest: Vec<ObjId> = external.iter().copied().filter(|e| !ext_map.contains_key(e)).collect();
+            ext_map.extend(self.map_external(donor, &rest)?);
+        }
 
         // 3. engine-internal owner numbers
         let t_tracker = self.obj(ce).and_then(|m| m.msg("dependency_tracker")).ok_or(bad("no dependency tracker"))?;
