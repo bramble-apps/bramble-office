@@ -362,6 +362,8 @@ pub struct Cell {
     pub vmerge: Option<bool>,
     /// The cell's own margins (w:tcMar: left, top, right, bottom), over the table's.
     pub margins: [Option<f32>; 4],
+    /// Vertical alignment (w:vAlign).
+    pub valign: Option<kn_model::VAlign>,
     /// Its preferred width (w:tcW in twips), points.
     pub width: Option<f32>,
 }
@@ -1661,7 +1663,12 @@ impl Reader<'_> {
                     }
                 }
                 let width = tcpr.and_then(|p| child(&p, "tcW")).filter(|w| attr(w, "type").is_none_or(|t| t == "dxa")).and_then(|w| twips(attr(&w, "w"))).filter(|w| *w > 0.0);
-                cells.push(Cell { paras, fill, borders, span, vmerge, margins, width });
+                let valign = tcpr.and_then(|p| child(&p, "vAlign")).and_then(|v| attr(&v, "val")).map(|v| match v {
+                    "center" => kn_model::VAlign::Middle,
+                    "bottom" => kn_model::VAlign::Bottom,
+                    _ => kn_model::VAlign::Top,
+                });
+                cells.push(Cell { paras, fill, borders, span, vmerge, margins, valign, width });
             }
             out.rows.push((height, header, cells));
         }
@@ -2415,9 +2422,13 @@ fn fill_table(p: &mut Pages, h: &mut History, id: kn_format::ObjId, t: &Table, f
             // an empty cell keeps and the layout only grows from)
             let need = r.2.iter().map(|c| c.paras.iter().map(|q| para_height_with(q, Some(&mut *fonts))).sum::<f32>()).fold(0.0f32, f32::max);
             let least = if need > 0.0 { need + around } else { 4.0 };
+            // (empty and one-line cells hold a least height too: the layout grows rows for
+            // neither an empty cell nor a short line's spacing)
+            let empty = r.2.iter().filter(|c| c.paras.len() == 1 || c.paras.iter().all(|q| q.p.runs.iter().all(|r| r.0.is_empty()))).map(|c| c.paras.iter().map(|q| para_height_with(q, Some(&mut *fonts))).sum::<f32>()).fold(0.0f32, f32::max);
+            let empty = if empty > 0.0 { empty + around } else { 4.0 };
             // (an exact height is the whole row's)
             let exact = t.exact_rows.get(i).copied().unwrap_or(false);
-            (i as u32, r.0.map(|h| if exact { h.max(1.0) } else { (h + around).max(4.0) }).unwrap_or(least).max(pics))
+            (i as u32, r.0.map(|h| if exact { h.max(1.0) } else { (h + around).max(empty) }).unwrap_or(least).max(pics))
         })
         .collect();
     p.doc.set_table_sizes(h, id, true, &heights);
@@ -2455,6 +2466,14 @@ fn fill_table(p: &mut Pages, h: &mut History, id: kn_format::ObjId, t: &Table, f
                             m.rows = r - sr + 1;
                         } else {
                             merges.push(kn_model::CellRange { row: sr, col: c, rows: r - sr + 1, cols: sp });
+                        }
+                    }
+                    // its own side and bottom borders (the merge's edges down here; its top is inside)
+                    let c1 = (c + cell.span).min(c0) - 1;
+                    for (i, edge) in [(1usize, kn_model::tablefmt::BorderEdges::Left), (2, kn_model::tablefmt::BorderEdges::Bottom), (3, kn_model::tablefmt::BorderEdges::Right)] {
+                        if let Some(Some((col_, w))) = cell.borders[i] {
+                            let stroke = kn_model::format::StrokeSpec { color: col_, width: w, dash: kn_model::format::Dash::Solid };
+                            let _ = p.doc.set_cells_border(h, id, (r, c, r, c1), edge, Some(&stroke));
                         }
                     }
                     col += cell.span;
@@ -2513,6 +2532,8 @@ fn fill_table(p: &mut Pages, h: &mut History, id: kn_format::ObjId, t: &Table, f
             if let Some(f) = cell.fill {
                 let _ = p.doc.set_cells_fill(h, id, (r, c, r, c), Some(&kn_model::format::FillSpec::Color(f)));
             }
+            // its vertical alignment (Word's default: top)
+            let _ = p.doc.set_cells_valign(h, id, (r, c, r, (c + cell.span).min(c0) - 1), cell.valign.unwrap_or(kn_model::VAlign::Top));
             // its own margins; Word lays a row out with its borders' width too (the top one, and
             // the bottom one under the last row)
             let bw = |b: &Option<Option<(Color, f32)>>| b.flatten().map(|x| x.1).unwrap_or(if t.borders && b.is_none() { t.border_line.map(|l| l.1).unwrap_or(0.5) } else { 0.0 });

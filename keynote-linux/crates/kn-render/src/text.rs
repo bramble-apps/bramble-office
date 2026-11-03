@@ -955,9 +955,11 @@ fn word_lines(fonts: &mut Fonts, tb: &TextBox, tl: &mut TextLayout, scale: f32) 
             LineSpacing::AtMost(v) => natural.min(v * scale),
             LineSpacing::Between(v) => natural + v * scale,
         };
-        // a multiple's extra space goes below the text (OnlyOffice / Word); a fixed height
-        // holds the text at its bottom
+        // a multiple's extra space goes below the text (OnlyOffice / Word); less than single comes
+        // off the top (the text rises into the line above); a fixed height holds the text at its
+        // bottom
         let base = match p.line_spacing {
+            LineSpacing::Relative(r) if r < 1.0 && h < natural => top + h - desc,
             LineSpacing::Relative(_) | LineSpacing::AtLeast(_) | LineSpacing::Between(_) => top + asc,
             _ => top + h - desc,
         };

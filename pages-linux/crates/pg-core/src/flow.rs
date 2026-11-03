@@ -785,6 +785,8 @@ pub fn layout(pages: &Pages, fonts: &mut Fonts, cache: &mut Cache, opts: &Option
                                 Some(r) => r.to_vec(),
                                 None => info.and_then(|m| kn_model::table::table(k, m)).map(|t| t.row_heights).unwrap_or_default(),
                             };
+                            // the rows' own least heights (a Word row's w:trHeight with its margins)
+                            let stored: Vec<f32> = info.and_then(|m| kn_model::table::table(k, m)).map(|t| t.row_heights).unwrap_or_default();
                             let n = heights.len();
                             let header = header.min(n);
                             // (a Word document breaks a row across pages too, a single-row table
@@ -828,7 +830,10 @@ pub fn layout(pages: &Pages, fonts: &mut Fonts, cache: &mut Cache, opts: &Option
                                         i += 1;
                                     }
                                     // the next row broken here: what fits of each cell
-                                    if break_rows && carry.is_none() && i < n && avail - h > 1.0 {
+                                    // (OnlyOffice moves a row whose own least height doesn't fit to the next
+                                    // page whole, unless it starts the page)
+                                    let least_fits = stored.get(i).is_none_or(|s| *s <= avail - h + 0.01) || (i == start && y <= top + 0.01);
+                                    if break_rows && carry.is_none() && i < n && avail - h > 1.0 && least_fits {
                                         let cells = cell_lines(k, fonts, id, i);
                                         let from = vec![0usize; cells.iter().map(|c| c.col + 1).max().unwrap_or(0)];
                                         let (ranges, used, rest) = break_row(&cells, &from, avail - h);
@@ -1811,6 +1816,9 @@ pub fn slice_rows(t: &mut kn_model::TableData, rows: &[u32]) {
         }
         rows.iter().flat_map(|r| v[r * w..(r + 1) * w].iter().cloned()).collect()
     }
+    // (a merge continued from the page before takes its look from its first cell)
+    let all_styles = t.cell_styles.clone();
+    let all_heights = t.row_heights.clone();
     t.cells = per_row(&t.cells, &rows, cols);
     t.cell_styles = per_row(&t.cell_styles, &rows, cols);
     if !t.rich.is_empty() {
@@ -1832,15 +1840,49 @@ pub fn slice_rows(t: &mut kn_model::TableData, rows: &[u32]) {
     if !t.auto_rows.is_empty() {
         t.auto_rows = rows.iter().map(|r| t.auto_rows.get(*r).copied().unwrap_or(false)).collect();
     }
-    t.merges = t
-        .merges
-        .iter()
-        .filter_map(|m| {
-            let at = rows.iter().position(|r| *r == m.row as usize)?;
-            let all = (0..m.rows as usize).all(|k| rows.get(at + k) == Some(&(m.row as usize + k)));
-            all.then(|| kn_model::CellRange { row: at as u32, ..*m })
-        })
-        .collect();
+    // merged ranges crossing the cut keep their share on each page (as OnlyOffice draws a
+    // merge continued over pages): the text where the merge starts, its look on the others
+    let mut merges = Vec::new();
+    for m in &t.merges {
+        let (m0, m1) = (m.row as usize, (m.row + m.rows) as usize);
+        let Some(at) = rows.iter().position(|r| *r >= m0 && *r < m1) else { continue };
+        let mut n = 0usize;
+        while rows.get(at + n).is_some_and(|r| *r == rows[at] + n && *r < m1) {
+            n += 1;
+        }
+        // the share's top cell: the merge's own when it starts here, else an empty one like it
+        if rows[at] != m0 {
+            let (from, to) = (m0 * cols + m.col as usize, at * cols + m.col as usize);
+            if let Some(st) = all_styles.get(from).cloned() {
+                if let Some(x) = t.cell_styles.get_mut(to) {
+                    *x = st;
+                }
+            }
+            if let Some(x) = t.cells.get_mut(to) {
+                x.clear();
+            }
+            if let Some(x) = t.rich.get_mut(to) {
+                *x = None;
+            }
+        }
+        // a merge going on to the next page: its text placed as over the whole merge (OnlyOffice
+        // centres / bottom-aligns it in all of its rows, part of them on the next page)
+        if rows[at] == m0 && n < m.rows as usize {
+            let hsum = |a: usize, b: usize| all_heights.get(a..b.min(all_heights.len())).map(|x| x.iter().sum::<f32>()).unwrap_or(0.0);
+            let extra = (hsum(m0, m1) - hsum(m0, m0 + n)).max(0.0);
+            if let Some(st) = t.cell_styles.get_mut(at * cols + m.col as usize) {
+                st.padding[1] += match st.valign {
+                    kn_model::VAlign::Middle => extra / 2.0,
+                    kn_model::VAlign::Bottom => extra,
+                    _ => 0.0,
+                };
+            }
+        }
+        if n > 1 || m.cols > 1 {
+            merges.push(kn_model::CellRange { row: at as u32, rows: n as u32, ..*m });
+        }
+    }
+    t.merges = merges;
     let header = t.header_rows as usize;
     t.header_rows = rows.iter().take_while(|r| **r < header).count() as u32;
     t.footer_rows = if rows.last() == Some(&(n - 1)) { t.footer_rows.min(rows.len() as u32) } else { 0 };

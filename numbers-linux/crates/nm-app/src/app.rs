@@ -1162,7 +1162,12 @@ impl App {
                 if let Some((n, text)) = &mut self.renaming {
                     if *n == i {
                         let fid = egui::Id::unique(("sheet-rename", *n));
-                        let r = ui.add(egui::TextEdit::singleline(text).desired_width(140.0).id(fid));
+                        // sized to the name (a desired width alone gave way to the tab row and
+                        // left a box one letter wide)
+                        let font = egui::TextStyle::Body.resolve(ui.style());
+                        let tw = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font, Color32::WHITE).size().x);
+                        let w = (tw + 28.0).clamp(140.0, 320.0);
+                        let r = ui.add_sized([w, 26.0], egui::TextEdit::singleline(text).id(fid));
                         // focus once, when the field opens (asking every frame kept Return from
                         // ever finishing the edit)
                         let opened: bool = ui.data(|d| d.get_temp(fid)).unwrap_or(false);
