@@ -133,6 +133,13 @@ sound, install these:
 | Fedora | `sudo dnf install libxkbcommon-x11 libXcursor libXrandr libXi mesa-vulkan-drivers ffmpeg` |
 | Arch, Manjaro | `sudo pacman -S libxkbcommon-x11 libxcursor libxrandr libxi vulkan-icd-loader ffmpeg` |
 
+On Ubuntu, "Unable to locate package ffmpeg" means the *universe* software source is off (common on a fresh
+install). Turn it on, then run the install command again:
+
+```sh
+sudo add-apt-repository universe && sudo apt update
+```
+
 `ffmpeg` plays and exports movies and sound; everything else works without it. Keydeck downloads the
 `yt-dlp` helper itself the first time you add a web video. If an AppImage doesn't start because the system
 has no FUSE, run it with `--appimage-extract-and-run`.
