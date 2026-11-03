@@ -16,6 +16,8 @@ for r in keynote-linux numbers-linux pages-linux letters_mobile keydeck_mobile v
   git -C "$P/$r" archive HEAD | tar -x -C "$out/$r"
 done
 cp "$here/README.md" "$out/README.md"
+cp "$here/install.sh" "$out/install.sh"
+cp "$here/install.ps1" "$out/install.ps1"
 cp "$P/keynote-linux/LICENSE" "$out/LICENSE"
 mkdir -p "$out/.github/workflows"
 cp "$here/build.yml" "$out/.github/workflows/build.yml"

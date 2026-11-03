@@ -16,6 +16,30 @@
   <a href="https://www.paypal.com/donate/?hosted_button_id=5EP8EM86U9P7Q">Support development</a>
 </p>
 
+## Install with one command
+
+Installs all three apps (Keydeck, Letters and Values) from the latest release, with app-menu or
+Start-menu shortcuts. No administrator rights needed; run the same command again to update.
+
+**Linux** (x86_64) and **macOS**, in a terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/bramble-apps/bramble-office/main/install.sh | sh
+```
+
+**Windows**, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/bramble-apps/bramble-office/main/install.ps1 | iex
+```
+
+On Linux the apps go into `~/.local/share/bramble-office` (unpacked, so they run without FUSE), with
+launchers `keydeck`, `letters` and `values` in `~/.local/bin`. On macOS they go into `~/Applications`, and
+on Windows into `%LOCALAPPDATA%\Programs\Bramble Office`, with Start-menu and desktop shortcuts.
+To remove them, run `curl -fsSL https://raw.githubusercontent.com/bramble-apps/bramble-office/main/install.sh | sh -s -- --uninstall`
+(Linux, macOS) or `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/bramble-apps/bramble-office/main/install.ps1))) -Uninstall`
+(Windows). Your documents are never touched.
+
 ## Download
 
 | System | Download |
