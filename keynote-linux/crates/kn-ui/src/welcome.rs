@@ -316,17 +316,19 @@ pub fn show(ui: &mut egui::Ui, spec: &Spec) -> Option<Action> {
 }
 
 /// The start screen over an open document (Values, Letters): a backdrop in the canvas colour
-/// below `top` (the title and toolbar stay visible), then the card.
+/// below `top` (the title and toolbar stay visible), then the card. The backdrop stays inside the
+/// window, with its rounded bottom corners (not over the window's shadow margin).
 pub fn overlay(ctx: &egui::Context, top: f32, spec: &Spec) -> Option<Action> {
-    let screen = ctx.content_rect();
+    let screen = crate::winframe::inner_rect(ctx);
     let area = Rect::from_min_max(pos2(screen.min.x, top), screen.max);
+    let corner = crate::winframe::corner() as u8;
     egui::Area::new(egui::Id::unique(("welcome-overlay", spec.id)))
         .order(egui::Order::Middle)
         .fixed_pos(area.min)
         .show(ctx, |ui| {
             ui.set_min_size(area.size());
             let (r, _) = ui.allocate_exact_size(area.size(), Sense::click_and_drag());
-            ui.painter().rect_filled(r, 0.0, theme::CANVAS_BG());
+            ui.painter().rect_filled(r, egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner }, theme::CANVAS_BG());
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             show(&mut child, spec)
         })

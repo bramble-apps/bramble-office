@@ -950,7 +950,7 @@ impl App {
         }
         let mut pick = None;
         let mut close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
-        egui::Modal::new(egui::Id::unique("all-tabs")).show(ctx, |ui| {
+        kn_ui::winframe::modal(ctx, egui::Id::unique("all-tabs"), |ui| {
             ui.set_width(560.0);
             ui.label(theme::bold("All Tabs").size(16.0));
             ui.add_space(8.0);
@@ -1026,7 +1026,7 @@ impl App {
         self.select_tab(ctx, i);
         let name = self.tab_name(i);
         let mut choice = None;
-        egui::Modal::new(egui::Id::unique("save-changes")).show(ctx, |ui| {
+        kn_ui::winframe::modal(ctx, egui::Id::unique("save-changes"), |ui| {
             ui.set_width(360.0);
             ui.label(theme::bold(&format!("Do you want to save the changes made to the document \u{201c}{name}\u{201d}?")));
             ui.add_space(4.0);

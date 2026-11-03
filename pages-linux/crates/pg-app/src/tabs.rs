@@ -578,7 +578,7 @@ pub fn all_tabs_ui(app: &mut App, ctx: &egui::Context) {
     }
     let mut pick = None;
     let mut done = ctx.input(|i| i.key_pressed(egui::Key::Escape));
-    egui::Modal::new(egui::Id::unique("all-tabs")).show(ctx, |ui| {
+    kn_ui::winframe::modal(ctx, egui::Id::unique("all-tabs"), |ui| {
         ui.set_width(560.0);
         ui.label(theme::bold("All Tabs").size(16.0));
         ui.add_space(8.0);

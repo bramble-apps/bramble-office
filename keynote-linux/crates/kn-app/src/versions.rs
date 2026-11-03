@@ -86,7 +86,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
     if let Some((id, mut tag, mut display, media)) = app.dialogs.define_placeholder.take() {
         let mut ok = false;
         let mut cancel = false;
-        egui::Modal::new(egui::Id::unique("define-placeholder")).show(ctx, |ui| {
+        kn_ui::winframe::modal(ctx, egui::Id::unique("define-placeholder"), |ui| {
             ui.set_width(340.0);
             ui.label(theme::bold(if media { "Define as Media Placeholder" } else { "Define as Text Placeholder" }));
             egui::Grid::new("ph-grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -114,7 +114,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         let mut open_it = false;
         let mut cancel = false;
         let name = p.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        egui::Modal::new(egui::Id::unique("password-prompt")).show(ctx, |ui| {
+        kn_ui::winframe::modal(ctx, egui::Id::unique("password-prompt"), |ui| {
             ui.set_width(360.0);
             ui.label(theme::bold(&format!("\u{201c}{name}\u{201d} is password protected.")));
             ui.label("Enter the password to open it.");
@@ -143,7 +143,7 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         let mut done = false;
         let mut cancel = false;
         let has = app.doc.as_ref().is_some_and(|d| d.password.is_some());
-        egui::Modal::new(egui::Id::unique("set-password")).show(ctx, |ui| {
+        kn_ui::winframe::modal(ctx, egui::Id::unique("set-password"), |ui| {
             ui.set_width(380.0);
             ui.label(theme::bold(if has { "Change the password" } else { "Require a password to open this presentation" }));
             egui::Grid::new("pw-grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {

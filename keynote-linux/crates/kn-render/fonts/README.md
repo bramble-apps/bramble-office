@@ -10,6 +10,11 @@ New Roman, Courier New, Calibri, Cambria) where those aren't installed (Android)
 | Caladea | Microsoft Cambria | SIL Open Font License 1.1 (`caladea/OFL.txt`) |
 | Liberation Sans / Serif / Mono | Arial / Times New Roman / Courier New | SIL Open Font License 1.1 (`liberation/OFL.txt`) |
 
+`matched/` holds metric-matched stand-ins for Apple fonts (Sfera for SF Pro, Helvetia Neue,
+Avelon, Futurae …): a Pages / Keynote / Numbers document naming an Apple font that isn't
+installed is laid out with them, line for line as on a Mac. Its README lists them and their
+licences; they are read in place from the program (`src/fonts_matched.rs`, generated).
+
 The files are the upstream releases (Carlito and Caladea as OnlyOffice Desktop Editors ships
 them; Liberation 2.1 as Debian's fonts-liberation ships it). The OFL allows
 bundling and redistributing them with software; they are not to be sold on their own, and the

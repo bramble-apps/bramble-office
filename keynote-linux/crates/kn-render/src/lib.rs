@@ -4,6 +4,7 @@
 pub mod motion;
 pub mod chart;
 pub mod fonts;
+mod fonts_matched;
 pub mod paint;
 pub mod table;
 pub mod text;

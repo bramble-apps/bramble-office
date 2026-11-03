@@ -25,9 +25,71 @@ pub struct Fonts {
     /// spacing. Off: as Keynote / Pages do. Set by the app for the document being laid out.
     pub word: bool,
     win: HashMap<fontdb::ID, Option<(f32, f32, f32)>>,
+    /// Installed metric-matched stand-ins (read on the first missing font).
+    stand_ins: Option<Vec<StandIn>>,
 }
 
-/// Fonts built into every suite app: (PostScript name, file).
+/// An installed font made to stand in for another (an Apple font) with the same spacing: its
+/// name table's record MATCH_NAME_ID reads "<original family>|<original PostScript name>"
+/// (made by ~/CascadeProjects/matched-fonts' build_matched.py).
+#[derive(Debug, Clone)]
+struct StandIn {
+    /// the original's family and PostScript name, as `key` makes them
+    family: String,
+    ps: String,
+    /// the style part of the original's PostScript name ("Bold" of "Futura-Bold"), as `key`
+    style: String,
+    choice: FontChoice,
+}
+
+const MATCH_NAME_ID: u16 = 32000;
+
+/// A name for comparing: lowercase, no spaces, dashes or leading dot (".SFNS-Regular").
+fn key(s: &str) -> String {
+    s.trim_start_matches('.').to_ascii_lowercase().replace([' ', '-', '_'], "")
+}
+
+/// Families documents name that stand-ins carry under another name: Apple's system font
+/// (SF Pro's text cut) and New York (its text size).
+fn stand_in_family(family: &str) -> String {
+    let k = key(family);
+    match k.as_str() {
+        "sfpro" | "sfns" | "sfnstext" | "systemfont" | "applesystemuifont" | "sfui" | "sfuitext" => "sfprotext".into(),
+        "sfnsdisplay" | "sfuidisplay" => "sfprodisplay".into(),
+        "newyork" => "newyorksmall".into(),
+        _ => k,
+    }
+}
+
+/// The MATCH_NAME_ID record of a font file's face (Windows Unicode or Mac Roman), if any.
+fn stand_in_name(data: &[u8], index: u32) -> Option<String> {
+    let be16 = |o: usize| data.get(o..o + 2).map(|b| u16::from_be_bytes([b[0], b[1]]));
+    let be32 = |o: usize| data.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
+    let dir = if data.get(0..4) == Some(b"ttcf") { be32(12 + 4 * index as usize)? as usize } else { 0 };
+    let n = be16(dir + 4)? as usize;
+    let name = (0..n).find_map(|i| {
+        let rec = dir + 12 + 16 * i;
+        (data.get(rec..rec + 4)? == b"name").then(|| be32(rec + 8).map(|o| o as usize)).flatten()
+    })?;
+    let (count, strings) = (be16(name + 2)? as usize, name + be16(name + 4)? as usize);
+    (0..count).find_map(|i| {
+        let r = name + 6 + 12 * i;
+        let (platform, id) = (be16(r)?, be16(r + 6)?);
+        if id != MATCH_NAME_ID {
+            return None;
+        }
+        let (len, off) = (be16(r + 8)? as usize, be16(r + 10)? as usize);
+        let bytes = data.get(strings + off..strings + off + len)?;
+        Some(if platform == 3 || platform == 0 {
+            String::from_utf16_lossy(&bytes.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect::<Vec<_>>())
+        } else {
+            bytes.iter().map(|&b| b as char).collect()
+        })
+    })
+}
+
+/// Fonts built into every suite app: (PostScript name, file). (The matched stand-ins for
+/// Apple fonts are in fonts_matched.rs, generated.)
 const BUNDLED: [(&str, &[u8]); 20] = [
     ("Carlito", include_bytes!("../fonts/carlito/Carlito-Regular.ttf")),
     ("Carlito-Bold", include_bytes!("../fonts/carlito/Carlito-Bold.ttf")),
@@ -214,6 +276,14 @@ impl Fonts {
                 fs.db_mut().load_font_data(data.to_vec());
             }
         }
+        // and the metric-matched stand-ins for Apple fonts (fonts/matched/README.md), read in
+        // place from the program (no copy: they are 50 MB), unless installed already
+        let installed: std::collections::HashSet<String> = fs.db().faces().map(|f| f.post_script_name.clone()).collect();
+        for (name, data) in crate::fonts_matched::MATCHED {
+            if !installed.contains(*name) {
+                fs.db_mut().load_font_source(fontdb::Source::Binary(std::sync::Arc::new(*data)));
+            }
+        }
         let mut families: Vec<String> = fs
             .db()
             .faces()
@@ -221,7 +291,7 @@ impl Fonts {
             .collect();
         families.sort();
         families.dedup();
-        Fonts { fs, cache: SwashCache::new(), families, resolved: HashMap::new(), outlines: HashMap::new(), word: false, win: HashMap::new() }
+        Fonts { fs, cache: SwashCache::new(), families, resolved: HashMap::new(), outlines: HashMap::new(), word: false, win: HashMap::new(), stand_ins: None }
     }
 
     pub fn families(&self) -> &[String] {
@@ -365,6 +435,15 @@ impl Fonts {
                 return c;
             }
         }
+        // an Apple font that isn't installed, in a Keynote / Pages document: its metric-matched
+        // stand-in when one is installed (the same spacing, so lines and pages break as on a Mac)
+        if !self.word && !self.is_installed(ps_name) {
+            if let Some(c) = self.stand_in(ps_name, &family, weight, it || italic) {
+                let c = self.snap_to_faces(c);
+                self.resolved.insert(key, c.clone());
+                return c;
+            }
+        }
         // an exact PostScript-name match wins (the user may have the real font installed)
         let exact = self
             .fs
@@ -397,6 +476,49 @@ impl Fonts {
         let chosen = self.snap_to_faces(chosen);
         self.resolved.insert(key, chosen.clone());
         chosen
+    }
+
+    /// The installed stand-in for `ps_name` (of `family`, at `weight` / `italic` as asked):
+    /// the one made from that very face, else the closest face standing in for its family
+    /// (the condensed family for a condensed style).
+    fn stand_in(&mut self, ps_name: &str, family: &str, weight: u16, italic: bool) -> Option<FontChoice> {
+        if self.stand_ins.is_none() {
+            let db = self.fs.db();
+            let list = db
+                .faces()
+                .filter_map(|f| {
+                    let name = db.with_face_data(f.id, |d, i| stand_in_name(d, i)).flatten()?;
+                    let (fam, ps) = name.split_once('|')?;
+                    Some(StandIn {
+                        family: stand_in_family(fam),
+                        ps: key(ps),
+                        style: key(ps.split_once('-').map_or("", |s| s.1)),
+                        choice: FontChoice { family: f.families.first()?.0.clone(), weight: f.weight.0, italic: f.style != fontdb::Style::Normal },
+                    })
+                })
+                .collect();
+            self.stand_ins = Some(list);
+        }
+        let list = self.stand_ins.as_ref()?;
+        // (a bold request on a lighter face looks for a bold one in the family instead)
+        let heavy_enough = |s: &StandIn| weight < 700 || s.choice.weight >= 600;
+        let ps = key(ps_name);
+        if let Some(s) = list.iter().find(|s| s.ps == ps && heavy_enough(s)) {
+            return Some(FontChoice { italic: s.choice.italic || italic, ..s.choice.clone() });
+        }
+        let style = key(ps_name.split_once('-').map_or("", |s| s.1));
+        let fam = stand_in_family(family);
+        let condensed = format!("{fam}condensed");
+        let pick = |want: &str| -> Option<&StandIn> {
+            let in_family: Vec<&StandIn> = list.iter().filter(|s| s.family == want).collect();
+            in_family
+                .iter()
+                .find(|s| !style.is_empty() && s.style == style && heavy_enough(s))
+                .or_else(|| in_family.iter().min_by_key(|s| (s.choice.italic != italic, (i32::from(s.choice.weight) - i32::from(weight)).abs())))
+                .copied()
+        };
+        let s = if style.contains("condensed") || style.starts_with("cn") { pick(&condensed).or_else(|| pick(&fam)) } else { pick(&fam) }?;
+        Some(FontChoice { family: s.choice.family.clone(), weight: s.choice.weight, italic: s.choice.italic || italic })
     }
 
     /// Clamp weight/style to what the family actually has: asking for a bold face of a
@@ -491,6 +613,59 @@ mod bundled_tests {
         }
         if !f.has_family("Times New Roman") {
             assert_eq!(f.choose("TimesNewRomanPSMT", true, false).family, "Liberation Serif");
+        }
+    }
+}
+
+#[cfg(test)]
+mod stand_in_tests {
+    use super::*;
+
+    #[test]
+    fn document_names_reach_the_stand_in_families() {
+        assert_eq!(stand_in_family(".SFNS"), "sfprotext");
+        assert_eq!(stand_in_family("System Font"), "sfprotext");
+        assert_eq!(stand_in_family("New York"), "newyorksmall");
+        assert_eq!(stand_in_family("Avenir Next Condensed"), "avenirnextcondensed");
+        assert_eq!(key("HelveticaNeue-CondensedBold"), "helveticaneuecondensedbold");
+    }
+
+    /// Apple fonts that aren't installed draw with the built-in stand-ins (skipped where the
+    /// originals are installed: a Mac).
+    #[test]
+    fn missing_apple_fonts_draw_with_built_in_stand_ins() {
+        let mut f = Fonts::new();
+        assert!(f.has_family("Futurae") && f.has_family("Sfera") && f.has_family("New Yorkshire Small"));
+        if f.is_installed("Futura-Medium") {
+            return;
+        }
+        assert_eq!(f.choose("Futura-Medium", false, false).family, "Futurae");
+        assert_eq!(f.choose("Futura-CondensedExtraBold", false, false).family, "Futurae Condensed");
+        if f.has_family("Helvetia Neue") && !f.is_installed("HelveticaNeue") {
+            let c = f.choose("HelveticaNeue-Bold", false, false);
+            assert_eq!((c.family.as_str(), c.weight), ("Helvetia Neue", 700));
+            assert!(f.choose("HelveticaNeue", false, true).italic);
+            assert_eq!(f.choose("HelveticaNeue-CondensedBold", false, false).family, "Helvetia Neue Condensed");
+        }
+        if f.has_family("Avelon") && !f.is_installed("Avenir-Book") {
+            let c = f.choose("Avenir-Book", false, false);
+            assert_eq!(c.family, "Avelon");
+            assert_eq!(c.weight, 350);
+        }
+        if !f.is_installed("Verdana") {
+            assert_eq!(f.choose("Verdana-Bold", false, false).family, "Verdun");
+        }
+        if !f.is_installed("Monaco") {
+            assert_eq!(f.choose("Monaco", false, false).family, "Monarch Mono");
+        }
+        if f.has_family("Sfera") && !f.is_installed(".SFNS-Regular") {
+            assert_eq!(f.choose(".SFNS-Regular", false, false).family, "Sfera");
+        }
+        // (a Word document keeps OnlyOffice's stand-ins; Futura there takes a family named
+        // like it, as OnlyOffice does, which can be Futurae)
+        f.word = true;
+        if !f.is_installed("HelveticaNeue") {
+            assert_eq!(f.choose("HelveticaNeue", false, false).family, "Liberation Sans");
         }
     }
 }

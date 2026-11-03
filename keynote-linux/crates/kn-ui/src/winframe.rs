@@ -39,6 +39,27 @@ pub fn margin() -> f32 {
     0.0
 }
 
+/// The window itself in the app's drawing area: without the transparent shadow margin around it
+/// (backdrops painted over the whole area would spill past the window's rounded edge).
+pub fn inner_rect(ctx: &egui::Context) -> Rect {
+    let m = if system_title_bar() { 0.0 } else { margin() };
+    ctx.content_rect().shrink(m)
+}
+
+/// The window's corner radius now: GNOME's when the app draws its frame with the shadow margin.
+pub fn corner() -> f32 {
+    if !system_title_bar() && margin() > 0.0 { RADIUS } else { 0.0 }
+}
+
+/// A modal dialog whose dimmed backdrop covers the window only, rounded like it (egui's own
+/// backdrop fills the shadow margin too).
+pub fn modal<T>(ctx: &egui::Context, id: egui::Id, content: impl FnOnce(&mut egui::Ui) -> T) -> egui::ModalResponse<T> {
+    egui::Modal::new(id).backdrop_color(Color32::TRANSPARENT).frame(egui::Frame::NONE).show(ctx, |ui| {
+        ui.painter().rect_filled(inner_rect(ui.ctx()), corner(), Color32::from_black_alpha(100));
+        egui::Frame::popup(ui.style()).show(ui, content).inner
+    })
+}
+
 /// One CSS box-shadow layer: y offset, blur radius, spread (logical px) and opacity.
 type Layer = (f32, f32, f32, f32);
 
