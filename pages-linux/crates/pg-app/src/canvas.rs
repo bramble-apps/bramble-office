@@ -1728,7 +1728,7 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
             return;
         } else if matches!(ext.as_str(), "pages" | "docx" | "rtf" | "txt" | "md") {
             app.layout = Some(l);
-            crate::tabs::open_in_tab(app, &p);
+            crate::tabs::open_later(app, &p);
             return;
         }
     }

@@ -288,6 +288,17 @@ impl Fonts {
         self.fs.db().query(&q)
     }
 
+    /// The font file the page would draw `ps_name` (bold, italic) with, for a UI text field to
+    /// type in the same face: a key naming the face, its bytes, the face index in the file, and
+    /// whether the face itself is italic.
+    pub fn face_data(&mut self, ps_name: &str, bold: bool, italic: bool) -> Option<(String, Vec<u8>, u32, bool)> {
+        let c = self.choose(ps_name, bold, italic);
+        let id = self.face_id(&c.family, c.weight, c.italic)?;
+        let face_italic = self.fs.db().face(id).is_some_and(|f| f.style != fontdb::Style::Normal);
+        let (bytes, index) = self.fs.db().with_face_data(id, |d, i| (d.to_vec(), i))?;
+        Some((format!("{}|{}|{}", c.family, c.weight, face_italic), bytes, index, face_italic))
+    }
+
     /// Whether a family has a glyph for `ch`.
     pub fn covers(&mut self, family: &str, weight: u16, italic: bool, ch: char) -> bool {
         let Some(id) = self.face_id(family, weight, italic) else { return false };

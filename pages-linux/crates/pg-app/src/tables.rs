@@ -40,6 +40,9 @@ struct TableUi {
     edit_rows: usize,
     /// The cell's text before live writes (Escape puts it back).
     edit_orig: Option<String>,
+    /// The editor was opened by a double-click's press: its release, still to come, isn't a
+    /// click outside the editor.
+    edit_hold: bool,
     popup_opened: u64,
 }
 
@@ -107,6 +110,7 @@ pub fn edit_cell_at(app: &mut App, id: ObjId, pt: egui::Pos2) {
     select_cell_at(app, id, pt);
     if let Some(s) = app.sel {
         open_editor(app, s.table, s.cursor.0, s.cursor.1, None);
+        with(|u| u.edit_hold = true);
     }
 }
 
@@ -141,6 +145,24 @@ fn open_editor(app: &mut App, id: ObjId, r: u32, c: u32, typed: Option<String>) 
     with(|u| u.cell = Some((id, r, c, text, true)));
 }
 
+/// The storage of cell (r, c) when it's a rich text cell (as Word cells mostly are).
+fn rich_storage(app: &App, t: ObjId, r: u32, c: u32) -> Option<ObjId> {
+    let (_, td) = app.table(t)?;
+    td.rich.get((r * td.cols + c) as usize)?.as_ref().map(|b| b.storage)
+}
+
+/// Write text typed in the editor into cell (r, c). A rich text cell (`rich`, its storage)
+/// changes only where the text differs, so its runs keep their fonts and sizes; any other cell
+/// takes the text as typed (a number, a date …).
+fn write_typed(d: &mut pg_core::kn_model::Document, h: &mut pg_core::kn_model::edit::History, rich: Option<ObjId>, t: ObjId, r: u32, c: u32, text: &str) -> Result<(), pg_core::kn_format::Error> {
+    let Some(st) = rich else { return d.set_cell(h, t, r, c, &CellInput::parse(text)) };
+    let old = d.storage_text(st);
+    let pre = old.char_indices().zip(text.chars()).take_while(|((_, a), b)| a == b).last().map_or(0, |((i, a), _)| i + a.len_utf8());
+    let suf = old[pre..].chars().rev().zip(text[pre..].chars().rev()).take_while(|(a, b)| a == b).map(|(a, _)| a.len_utf8()).sum::<usize>();
+    d.replace_text(h, st, pre, old.len() - suf, &text[pre..text.len() - suf]);
+    Ok(())
+}
+
 /// Write the cell being edited.
 pub fn commit(app: &mut App) {
     let Some((t, r, c, text, _)) = with(|u| u.cell.take()) else { return };
@@ -150,11 +172,12 @@ pub fn commit(app: &mut App) {
     if (text == old && formula.is_none()) || same_formula {
         return;
     }
+    let rich = rich_storage(app, t, r, c);
     let res = app.edit("Typing", |d, h| {
         if text.trim_start().starts_with('=') && text.trim().len() > 1 {
             d.set_formula_text(h, t, r, c, text.trim())
         } else {
-            let r2 = d.set_cell(h, t, r, c, &CellInput::parse(&text));
+            let r2 = write_typed(d, h, rich, t, r, c, &text);
             d.recalc_formulas(h, t);
             r2
         }
@@ -536,8 +559,9 @@ pub fn api_action(app: &mut App, a: &str) {
                 let s = app.sel;
                 if let Some(s) = s {
                     let (r, c) = s.cursor;
+                    let rich = rich_storage(app, id, r, c);
                     app.edit("Typing", |d, h| {
-                        let r2 = d.set_cell(h, id, r, c, &CellInput::parse(&orig));
+                        let r2 = write_typed(d, h, rich, id, r, c, &orig);
                         d.recalc_formulas(h, id);
                         r2
                     });
@@ -1173,6 +1197,18 @@ fn take_key(i: &mut egui::InputState, key: Key, shift: bool) -> bool {
     i.events.len() != before
 }
 
+/// The text look of a cell being edited, as the page draws it (kn-ui's cellfmt: the cell's own
+/// font face, loaded from the file the page uses, its size, colour, bold / italic, underline,
+/// strike, letter and line spacing); a formula keeps the plain formula bar look.
+fn cell_text_format(app: &mut App, ui: &egui::Ui, cs: &pg_core::kn_model::CharStyle, spacing: &pg_core::kn_model::LineSpacing, font_px: f32, zoom: f32, formula: bool) -> egui::TextFormat {
+    if formula {
+        return egui::TextFormat { font_id: egui::FontId::proportional(font_px), color: Color32::BLACK, ..Default::default() };
+    }
+    let face = if cs.font_name.is_empty() { None } else { app.canvas.tiles.renderer.fonts.face_data(&cs.font_name, cs.bold, cs.italic) };
+    let family = kn_ui::cellfmt::face_family(ui.ctx(), face);
+    kn_ui::cellfmt::cell_format(ui, family, cs, spacing, font_px, zoom)
+}
+
 /// The cell editor, in the cell's own size, colour and alignment (a formula gets Keydeck's
 /// formula bar). Return enters the cell, Shift+Return starts a new line in it, Tab moves on,
 /// Escape cancels. Returns the editor's screen rect.
@@ -1186,9 +1222,16 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
     let formula = text.trim_start().starts_with('=');
     let style = v.t.cell_styles.get((r * v.t.cols + c) as usize).cloned().unwrap_or_default();
     let c32 = |k: pg_core::kn_model::Color| Color32::from_rgba_unmultiplied((k.r * 255.0) as u8, (k.g * 255.0) as u8, (k.b * 255.0) as u8, (k.a * 255.0) as u8);
-    let font_px = if formula { 14.0 } else { (if style.text.size > 0.0 { style.text.size } else { 11.0 }) * v.zoom };
-    let line_h = font_px * 1.25;
-    let lines = text.split('\n').count().max(1) as f32;
+    // the cell's own text look (a rich text cell, as Word cells mostly are: its first run's)
+    let rich_style = v.t.rich.get((r * v.t.cols + c) as usize).and_then(|b| b.as_ref()).and_then(|b| b.paragraphs.iter().flat_map(|p| &p.runs).map(|run| run.style.clone()).find(|s| s.size > 0.0));
+    let cs = rich_style.unwrap_or_else(|| style.text.clone());
+    let font_px = if formula { 14.0 } else { (if cs.size > 0.0 { cs.size } else { 11.0 }) * v.zoom };
+    let mut format = cell_text_format(app, ui, &cs, &style.para.line_spacing, font_px, v.zoom, formula);
+    let measure = |ui: &egui::Ui, t: &str, w: f32| {
+        let mut job = egui::text::LayoutJob::single_section(t.to_string(), format.clone());
+        job.wrap.max_width = w;
+        ui.fonts_mut(|f| f.layout_job(job)).size().y
+    };
     let edit_id = egui::Id::unique(("cell-editor", id));
     let focused = ui.memory(|m| m.has_focus(edit_id));
     // Return enters the cell, Tab moves on; Shift+Return is left to the editor (a new line)
@@ -1235,15 +1278,31 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
             _ => Color32::WHITE,
         };
         let [pl, pt, pr, pb] = style.padding.map(|x| x * v.zoom);
-        let need = lines * line_h + pt + pb;
+        let text_h = measure(ui, if text.is_empty() { " " } else { &text }, (cell.width() - pl - pr).max(10.0));
+        let need = text_h + pt + pb;
         let area = Rect::from_min_size(cell.min, vec2(cell.width(), cell.height().max(need)));
         ui.painter().rect_filled(area, 0.0, back);
         let inner = Rect::from_min_max(area.min + vec2(pl, pt), area.max - vec2(pr, pb));
-        let text_h = lines * line_h;
         let top = match style.valign {
             pg_core::kn_model::VAlign::Top => inner.min.y,
             pg_core::kn_model::VAlign::Middle => inner.center().y - text_h / 2.0,
             pg_core::kn_model::VAlign::Bottom => inner.max.y - text_h,
+        };
+        // while the text fits the cell, its first line sits on the page's own baseline (the
+        // page sets it from the font's ascent and leading, lower than egui's)
+        let top = if need <= cell.height() + 0.5 {
+            let tb = kn_render::table::cell_box(&v.t, (r * v.t.cols + c) as usize, if text.is_empty() { "x" } else { &text }, &style);
+            let tl = kn_render::text::layout(&mut app.canvas.tiles.renderer.fonts, &tb, w, h, false, false);
+            // lines as far apart as the page sets them
+            if let Some(pitch) = kn_ui::cellfmt::pitch(&tl.lines.iter().map(|l| (l.baseline, l.height)).collect::<Vec<_>>()) {
+                format.line_height = Some(pitch * v.zoom);
+            }
+            match tl.lines.first() {
+                Some(l) => cell.min.y + l.baseline * v.zoom - kn_ui::cellfmt::baseline(ui, &format),
+                None => top,
+            }
+        } else {
+            top
         };
         (Rect::from_min_size(egui::pos2(inner.min.x, top.max(inner.min.y)), vec2(inner.width().max(10.0), text_h)), area)
     };
@@ -1254,12 +1313,17 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
         pg_core::kn_model::Align::Natural if text.trim().parse::<f64>().is_ok() => egui::Align::Max,
         _ => egui::Align::Min,
     };
-    let color = if formula || style.text.color.a <= 0.0 { Color32::BLACK } else { c32(style.text.color) };
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+    let fmt = format.clone();
+    let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
+        let mut job = egui::text::LayoutJob::single_section(buf.as_str().to_string(), fmt.clone());
+        job.wrap.max_width = wrap;
+        job.halign = halign;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
     let edit = egui::TextEdit::multiline(&mut text)
         .id(edit_id)
-        .font(egui::FontId::proportional(font_px))
-        .text_color(color)
+        .layouter(&mut layouter)
         .align(egui::Align2([halign, egui::Align::Min]))
         .margin(egui::Margin::ZERO)
         .frame(egui::Frame::NONE)
@@ -1267,6 +1331,14 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
         .desired_width(rect.width());
     let out = edit.show(&mut child);
     let resp = out.response.clone();
+    // the double-click that opened the editor pressed on the page, so egui takes its release
+    // (some frames later with a real mouse) for a click elsewhere and drops the focus: keep it
+    if with(|u| u.edit_hold) {
+        resp.request_focus();
+        if !ui.input(|i| i.pointer.any_down()) {
+            with(|u| u.edit_hold = false);
+        }
+    }
     let rows = out.galley.rows.len().max(1);
     if !formula {
         ui.painter().rect_stroke(area, 0.0, Stroke::new(2.0, theme::ACCENT()), StrokeKind::Outside);
@@ -1288,8 +1360,9 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
     if esc || cancel {
         // the text written while typing goes back to what the cell held
         if let Some(orig) = with(|u| u.edit_orig.take()) {
+            let rich = rich_storage(app, id, r, c);
             app.edit("Typing", |d, h| {
-                let r2 = d.set_cell(h, id, r, c, &CellInput::parse(&orig));
+                let r2 = write_typed(d, h, rich, id, r, c, &orig);
                 d.recalc_formulas(h, id);
                 r2
             });
@@ -1315,8 +1388,9 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, v: &View) -> Option<Rect> {
         with(|u| {
             u.edit_orig.get_or_insert(orig);
         });
+        let rich = rich_storage(app, tid, r, c);
         app.edit("Typing", |d, h| {
-            let r2 = d.set_cell(h, tid, r, c, &CellInput::parse(&value));
+            let r2 = write_typed(d, h, rich, tid, r, c, &value);
             d.recalc_formulas(h, tid);
             r2
         });

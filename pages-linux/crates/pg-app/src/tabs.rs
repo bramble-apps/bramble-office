@@ -211,6 +211,66 @@ pub fn open_in_tab(app: &mut App, p: &Path) {
     open_read_in_tab(app, p, None);
 }
 
+/// As `open_in_tab`, reading the file on another thread first, since it may sit on a cloud
+/// mount where reading can take a while; `poll_opening` opens it when it's read. Scripted
+/// runs open at once.
+pub fn open_later(app: &mut App, p: &Path) {
+    if app.automated {
+        open_in_tab(app, p);
+        return;
+    }
+    if app.opening.iter().any(|(q, _)| q == p) {
+        return;
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let path = p.to_path_buf();
+    std::thread::spawn(move || {
+        let _ = tx.send(crate::app::ReadFile::read(&path));
+    });
+    app.opening.push((p.to_path_buf(), rx));
+}
+
+/// Opens what `open_later` has read, and shows "Opening…" while files are still being read
+/// (the template chooser shows its own, and closes once its document is open).
+pub fn poll_opening(app: &mut App, ctx: &egui::Context) {
+    use std::sync::mpsc::TryRecvError;
+    let mut i = 0;
+    while i < app.opening.len() {
+        match app.opening[i].1.try_recv() {
+            Ok(read) => {
+                let p = app.opening.remove(i).0;
+                use crate::app::ReadFile;
+                let ok = matches!(read, ReadFile::Word(Ok(_)) | ReadFile::Doc(Ok(_)) | ReadFile::Doc(Err(pg_core::kn_format::Error::NeedsPassword(_))));
+                open_read_in_tab(app, &p, Some(read));
+                if ok {
+                    app.chooser = false;
+                }
+            }
+            Err(TryRecvError::Disconnected) => {
+                let p = app.opening.remove(i).0;
+                app.notify(format!("Couldn't open {}", p.display()));
+            }
+            Err(TryRecvError::Empty) => i += 1,
+        }
+    }
+    if app.opening.is_empty() {
+        return;
+    }
+    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    if app.chooser {
+        return;
+    }
+    let name = app.opening[0].0.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    egui::Area::new(egui::Id::unique("opening-files")).order(egui::Order::Foreground).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).interactable(false).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).inner_margin(egui::Margin::symmetric(18, 12)).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(format!("Opening “{name}”…"));
+            });
+        });
+    });
+}
+
 /// As `open_in_tab`, with the file already read (`ReadFile::read`, on another thread).
 pub fn open_read_in_tab(app: &mut App, p: &Path, read: Option<crate::app::ReadFile>) {
     let mut read = read;

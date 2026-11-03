@@ -263,7 +263,7 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         tile: vec2(124.0, 160.0),
         draw: &draw,
         cancel: true,
-        loading: false,
+        loading: !app.opening.is_empty(),
         render: Some(first_page_png),
     };
     match kn_ui::welcome::overlay(ctx, app.welcome_top, &spec) {
@@ -271,10 +271,8 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
             app.chooser = false;
             crate::menus::new_from_template(app, i);
         }
-        Some(kn_ui::welcome::Action::Open(p)) => {
-            app.chooser = false;
-            app.open(&p);
-        }
+        // (the chooser shows "Opening…" until it's read; tabs::poll_opening closes it)
+        Some(kn_ui::welcome::Action::Open(p)) => crate::tabs::open_later(app, &p),
         Some(kn_ui::welcome::Action::Browse) => {
             app.chooser = false;
             app.open_dialog();

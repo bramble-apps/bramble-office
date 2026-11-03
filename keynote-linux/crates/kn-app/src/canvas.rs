@@ -2964,6 +2964,15 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &View
     let style = t.cell_styles.get((r * t.cols + c) as usize).cloned().unwrap_or_default();
     let c32 = |k: kn_model::Color| Color32::from_rgba_unmultiplied((k.r * 255.0) as u8, (k.g * 255.0) as u8, (k.b * 255.0) as u8, (k.a * 255.0) as u8);
     let font_px = if formula { 14.0 } else { (if style.text.size > 0.0 { style.text.size } else { 20.0 }) * view.scale };
+    // the cell's own look (kn-ui cellfmt): its font face as the slide draws it, bold / italic,
+    // colour, underline, strike, letter and line spacing; a formula keeps the bar's plain look
+    let mut format = if formula {
+        egui::TextFormat { font_id: egui::FontId::proportional(font_px), color: Color32::BLACK, ..Default::default() }
+    } else {
+        let face = if style.text.font_name.is_empty() { None } else { app.renderer.fonts.face_data(&style.text.font_name, style.text.bold, style.text.italic) };
+        let family = kn_ui::cellfmt::face_family(ui.ctx(), face);
+        kn_ui::cellfmt::cell_format(ui, family, &style.text, &style.para.line_spacing, font_px, view.scale)
+    };
     let cell_rect = rect;
     if !formula {
         let back = match &style.fill {
@@ -2975,11 +2984,25 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &View
         let [pl, pt, pr, pb] = style.padding.map(|v| v * view.scale);
         let inner = Rect::from_min_max(cell_rect.min + vec2(pl, pt), cell_rect.max - vec2(pr, pb));
         // as tall as its lines (Shift+Return starts a new one)
-        let line_h = font_px * 1.25 * text.split('\n').count() as f32;
+        let mut job = egui::text::LayoutJob::single_section(if text.is_empty() { " ".into() } else { text.clone() }, format.clone());
+        job.wrap.max_width = inner.width().max(10.0);
+        let line_h = ui.fonts_mut(|f| f.layout_job(job)).size().y;
         let top = match style.valign {
             kn_model::VAlign::Top => inner.min.y,
             kn_model::VAlign::Middle => inner.center().y - line_h / 2.0,
             kn_model::VAlign::Bottom => inner.max.y - line_h,
+        };
+        // while the text fits, its first line sits on the slide's own baseline
+        let top = if line_h + pt + pb <= cell_rect.height() + 0.5 {
+            let tb = kn_render::table::cell_box(t, (r * t.cols + c) as usize, if text.is_empty() { "x" } else { &text }, &style);
+            let lay = kn_render::text::layout(&mut app.renderer.fonts, &tb, w, h, false, false);
+            // lines as far apart as the slide sets them
+            if let Some(pitch) = kn_ui::cellfmt::pitch(&lay.lines.iter().map(|l| (l.baseline, l.height)).collect::<Vec<_>>()) {
+                format.line_height = Some(pitch * view.scale);
+            }
+            lay.lines.first().map(|l| cell_rect.min.y + l.baseline * view.scale - kn_ui::cellfmt::baseline(ui, &format)).unwrap_or(top)
+        } else {
+            top
         };
         rect = Rect::from_min_size(egui::pos2(inner.min.x, top), vec2(inner.width().max(10.0), line_h));
     }
@@ -2991,13 +3014,19 @@ fn cell_editor(app: &mut App, ui: &mut egui::Ui, scene: &SlideScene, view: &View
         kn_model::Align::Natural if text.trim().parse::<f64>().is_ok() => egui::Align::Max,
         _ => egui::Align::Min,
     };
-    let color = if formula || style.text.color.a <= 0.0 { Color32::BLACK } else { c32(style.text.color) };
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
     let edit_id = egui::Id::unique(("cell-editor", id));
     // a plain cell takes several lines: Shift+Return starts a new one, Return alone enters the
     // cell (as Numbers and Keynote); a formula stays on one line
     let edit = if formula { egui::TextEdit::singleline(&mut text) } else { egui::TextEdit::multiline(&mut text).return_key(egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter)).lock_focus(false).desired_rows(1) };
-    let resp = child.add_sized(rect.size(), edit.id(edit_id).font(egui::FontId::proportional(font_px)).text_color(color).align(egui::Align2([halign, egui::Align::Center])).margin(egui::Margin::ZERO).frame(egui::Frame::NONE));
+    let fmt = format.clone();
+    let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
+        let mut job = egui::text::LayoutJob::single_section(buf.as_str().to_string(), fmt.clone());
+        job.wrap.max_width = wrap;
+        job.halign = halign;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    let resp = child.add_sized(rect.size(), edit.id(edit_id).layouter(&mut layouter).align(egui::Align2([halign, if formula { egui::Align::Center } else { egui::Align::Min }])).margin(egui::Margin::ZERO).frame(egui::Frame::NONE));
     if !formula {
         ui.painter().rect_stroke(cell_rect, 0.0, Stroke::new(2.0, theme::ACCENT()), StrokeKind::Outside);
     }

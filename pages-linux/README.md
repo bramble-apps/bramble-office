@@ -40,7 +40,7 @@ The full list, with what has been tested, is in [FEATURES.md](FEATURES.md). In s
 
       CS_SNAP=out.png [CS_PAGE=n] [CS_ZOOM=z] [CS_CMD=menu item,…] [CS_SAVE=out.pages] [CS_DUMP=1]
       [CS_LINES=1] [CS_SCRIPT="click x y; dclick x y; tclick x y; sclick x y; rclick x y;
-      drag x1 y1 x2 y2; cdrag x1 y1 x2 y2; type text; key ctrl+B; scroll x y dx dy n; pinch x y f n;
+      down x y; up x y; drag x1 y1 x2 y2; cdrag x1 y1 x2 y2; type text; key ctrl+B; scroll x y dx dy n; pinch x y f n;
       menu Insert item; image path; wait"] [CS_PERF=1] letters file.pages
 
   Script coordinates are window points (screenshot pixels / 2 on a 2× display); `\s` in `type` is a

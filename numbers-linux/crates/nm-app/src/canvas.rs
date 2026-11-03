@@ -1457,14 +1457,34 @@ fn title_editor(app: &mut App, ui: &mut egui::Ui, r: Rect, zoom: f32) {
 
 fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
     let zoom = app.canvas.zoom;
-    // the text at the cell's own size, as Numbers edits in place
-    let (fsize, pad) = app
-        .canvas
-        .edit
-        .as_ref()
-        .and_then(|e| app.table(e.table).and_then(|(_, t)| t.cell_styles.get((e.row * t.cols + e.col) as usize).map(|s| (s.text.size, s.padding))))
-        .filter(|s| s.0 > 0.0)
-        .unwrap_or((13.0, [4.0; 4]));
+    // the text in the cell's own look, as Numbers edits in place: its font face as the sheet
+    // draws it, size, colour, bold / italic, alignment, letter and line spacing (kn-ui cellfmt)
+    let style = app.canvas.edit.as_ref().and_then(|e| app.table(e.table).and_then(|(_, t)| t.cell_styles.get((e.row * t.cols + e.col) as usize).cloned())).filter(|s| s.text.size > 0.0);
+    let (fsize, pad) = style.as_ref().map(|s| (s.text.size, s.padding)).unwrap_or((13.0, [4.0; 4]));
+    let edit_formula = app.canvas.edit.as_ref().is_some_and(|e| e.text.trim_start().starts_with('='));
+    let mut format = match &style {
+        Some(st) if !edit_formula => {
+            let face = if st.text.font_name.is_empty() { None } else { app.canvas.tiles.renderer_mut().fonts.face_data(&st.text.font_name, st.text.bold, st.text.italic) };
+            let family = kn_ui::cellfmt::face_family(ui.ctx(), face);
+            kn_ui::cellfmt::cell_format(ui, family, &st.text, &st.para.line_spacing, fsize * zoom, zoom)
+        }
+        _ => egui::TextFormat { font_id: egui::FontId::proportional(fsize * zoom), color: Color32::BLACK, line_height: Some(fsize * 1.15 * zoom), ..Default::default() },
+    };
+    let back = match style.as_ref().map(|s| &s.fill) {
+        Some(nm_core::kn_model::Fill::Color(k)) if k.a > 0.99 => Color32::from_rgb((k.r * 255.0) as u8, (k.g * 255.0) as u8, (k.b * 255.0) as u8),
+        Some(nm_core::kn_model::Fill::Gradient { stops, .. }) if !stops.is_empty() => {
+            let k = stops[0].1;
+            Color32::from_rgb((k.r * 255.0) as u8, (k.g * 255.0) as u8, (k.b * 255.0) as u8)
+        }
+        _ => Color32::WHITE,
+    };
+    let halign = match style.as_ref().map(|s| s.align) {
+        _ if edit_formula => egui::Align::Min,
+        Some(nm_core::kn_model::Align::Center) => egui::Align::Center,
+        Some(nm_core::kn_model::Align::Right) => egui::Align::Max,
+        Some(nm_core::kn_model::Align::Natural) if app.canvas.edit.as_ref().is_some_and(|e| e.text.trim().parse::<f64>().is_ok()) => egui::Align::Max,
+        _ => egui::Align::Min,
+    };
     // Shift+Return (the suite's way) or Option+Return (Numbers'): a line break in the cell;
     // Return ends the edit (in a formula Shift+Return ends it too). Taken before the field sees them
     let formula = app.canvas.edit.as_ref().is_some_and(|e| e.text.trim_start().starts_with('='));
@@ -1487,7 +1507,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         }
     }
     let w = r.width().max(80.0);
-    let font = egui::FontId::proportional(fsize * zoom);
+    let font = format.font_id.clone();
     let widest = e.text.lines().map(|l| ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), Color32::BLACK).size().x)).fold(0.0f32, f32::max);
     let lines = e.text.split('\n').count().max(1) as f32;
     // lines as the cell wraps them: when that changes, lay the table out again so the row grows
@@ -1507,8 +1527,34 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         }
     }
     let Some(e) = app.canvas.edit.as_mut() else { return };
-    let area = Rect::from_min_size(r.min, Vec2::new(w.max(widest + 16.0), r.height().max(lines * fsize * 1.15 * zoom + 6.0)));
-    ui.painter().rect(area, 0.0, Color32::WHITE, Stroke::new(2.0, accent()), egui::StrokeKind::Outside);
+    let line_h = format.line_height.unwrap_or(fsize * 1.15 * zoom);
+    // a cell that wraps its text wraps it in the editor too (else the editor widens to the
+    // longest line), and grows down for the lines it wraps to
+    let wraps = style.as_ref().is_some_and(|s| s.wrap) && !edit_formula;
+    let wrapped_h = if wraps {
+        let mut job = egui::text::LayoutJob::single_section(if e.text.is_empty() { " ".into() } else { e.text.clone() }, format.clone());
+        job.wrap.max_width = (w - (pad[0] + pad[2]) * zoom).max(10.0);
+        ui.fonts_mut(|f| f.layout_job(job)).size().y
+    } else {
+        lines * line_h
+    };
+    let area = Rect::from_min_size(r.min, Vec2::new(if wraps { w } else { w.max(widest + 16.0) }, r.height().max(wrapped_h + (pad[1] + pad[3]) * zoom)));
+    ui.painter().rect(area, 0.0, back, Stroke::new(2.0, accent()), egui::StrokeKind::Outside);
+    // the first line on the sheet's own baseline (the cell's vertical alignment and the font's
+    // ascent as the sheet sets them), while the text fits the cell
+    let top_pad = match &style {
+        Some(st) if !edit_formula && wrapped_h + (pad[1] + pad[3]) * zoom <= r.height() + 0.5 => {
+            let tb = kn_render::table::cell_text_box(if e.text.is_empty() { "x" } else { &e.text }, st);
+            let lay = kn_render::text::layout(&mut app.canvas.tiles.renderer_mut().fonts, &tb, r.width() / zoom, r.height() / zoom, false, false);
+            // lines as far apart as the sheet sets them
+            if let Some(pitch) = kn_ui::cellfmt::pitch(&lay.lines.iter().map(|l| (l.baseline, l.height)).collect::<Vec<_>>()) {
+                format.line_height = Some(pitch * zoom);
+            }
+            lay.lines.first().map(|l| l.baseline * zoom - kn_ui::cellfmt::baseline(ui, &format)).unwrap_or(pad[1] * zoom)
+        }
+        _ => pad[1] * zoom,
+    };
+    let Some(e) = app.canvas.edit.as_mut() else { return };
     // Edit > Substitutions while typing (kn-ui's, as Keydeck): smart quotes and dashes, and
     // when a word ends its text replacement or spelling correction; not in formulas
     let st = &app.settings;
@@ -1555,7 +1601,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
     }
     // misspelled words underlined in red (Check Spelling While Typing)
     let (check, grammar) = (st.spell_check && !e.text.starts_with('='), st.grammar);
-    let font = egui::FontId::proportional(fsize * zoom);
+    let fmt = format.clone();
     let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let text = buf.as_str();
         let mut marks: Vec<(usize, usize)> = if check { kn_ui::spell::misspelled(text) } else { Vec::new() };
@@ -1565,7 +1611,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         marks.sort_unstable();
         let mut job = egui::text::LayoutJob::default();
         // lines as far apart as the cell's own (the row is sized by them)
-        let plain = egui::TextFormat { font_id: font.clone(), color: Color32::BLACK, line_height: Some(fsize * 1.15 * zoom), ..Default::default() };
+        let plain = fmt.clone();
         let bad = egui::TextFormat { underline: Stroke::new(1.5 * zoom.max(0.8), Color32::from_rgb(0xe0, 0x1b, 0x24)), ..plain.clone() };
         let mut at = 0;
         for (a, b) in marks {
@@ -1578,20 +1624,19 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         }
         job.append(&text[at..], 0.0, plain);
         job.wrap.max_width = wrap;
+        job.halign = halign;
         ui.fonts_mut(|f| f.layout_job(job))
     };
     let te = egui::TextEdit::multiline(&mut e.text)
         .layouter(&mut layouter)
         .desired_rows(lines as usize)
         .id(egui::Id::unique("cell-editor"))
-        .font(egui::FontId::proportional(fsize * zoom))
-        // (the cell is on the white sheet, whatever the interface's light / dark)
-        .text_color(Color32::BLACK)
+        .align(egui::Align2([halign, egui::Align::Min]))
         // where the cell puts its text (its Text Inset); with no frame drawn the field's own
         // margin is not applied, so the inset is the frame's
         .frame(egui::Frame::NONE.inner_margin({
             let m = |v: f32| (v * zoom).round().clamp(0.0, 127.0) as i8;
-            egui::Margin { left: m(pad[0]), top: m(pad[1]), right: m(pad[2]), bottom: m(pad[3]) }
+            egui::Margin { left: m(pad[0]), top: (top_pad.round().clamp(0.0, 127.0)) as i8, right: m(pad[2]), bottom: m(pad[3]) }
         }))
         .lock_focus(true)
         .desired_width(area.width() - (pad[0] + pad[2]) * zoom);
@@ -1602,7 +1647,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         e.focus = false;
         if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
             // a double-click: the character boundary nearest the click, else the end
-            let font = egui::FontId::proportional(fsize * zoom);
+            let font = format.font_id.clone();
             let at = e.click.take().map(|p| {
                 let x = p.x - (area.min.x + pad[0] * zoom);
                 let chars: Vec<char> = e.text.chars().collect();

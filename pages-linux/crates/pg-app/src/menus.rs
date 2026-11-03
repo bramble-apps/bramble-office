@@ -1075,7 +1075,7 @@ fn objects_focus(app: &App) -> bool {
 
 pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
     if let Some(p) = name.strip_prefix("open:") {
-        crate::tabs::open_in_tab(app, std::path::Path::new(p));
+        crate::tabs::open_later(app, std::path::Path::new(p));
         return;
     }
     let body_at = |app: &App| app.cursor.filter(|c| c.owner == Owner::Body).map(|c| (c.storage, c.range().0));

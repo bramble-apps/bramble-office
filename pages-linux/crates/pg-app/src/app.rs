@@ -245,6 +245,8 @@ pub struct App {
     pub go_to: Option<String>,
     /// File > New: the template chooser.
     pub chooser: bool,
+    /// Files being read on other threads (`tabs::open_later`), opened in tabs as they arrive.
+    pub opening: Vec<(PathBuf, std::sync::mpsc::Receiver<ReadFile>)>,
     /// Where the toolbar ends (the start screen goes below it).
     pub welcome_top: f32,
     /// Comment being written / edited: (highlight or None for new, text).
@@ -358,6 +360,7 @@ impl App {
             show_settings: false,
             go_to: None,
             chooser: false,
+            opening: Vec::new(),
             welcome_top: 0.0,
             comment_edit: None,
             new_style: None,
@@ -366,10 +369,18 @@ impl App {
         };
         app.canvas.zoom = app.settings.default_zoom;
         match files.split_first() {
-            Some((p, rest)) => {
+            Some((p, rest)) if app.automated => {
                 app.open(p);
                 for f in rest {
                     crate::tabs::open_in_tab(&mut app, f);
+                }
+            }
+            // read on threads (a file on a cloud mount can take a while): the window shows a
+            // blank document meanwhile, which the first file replaces
+            Some(_) => {
+                app.new_document(false);
+                for f in &files {
+                    crate::tabs::open_later(&mut app, f);
                 }
             }
             None => {
@@ -558,7 +569,7 @@ impl App {
         }) {
             // each in its own tab
             for f in p {
-                crate::tabs::open_in_tab(self, &f);
+                crate::tabs::open_later(self, &f);
             }
         }
     }
@@ -1035,7 +1046,7 @@ impl eframe::App for App {
         #[cfg(target_os = "macos")]
         {
             for path in winit::platform::macos::take_opened_files() {
-                crate::tabs::open_in_tab(self, &path);
+                crate::tabs::open_later(self, &path);
             }
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
@@ -1310,6 +1321,7 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(strip).id_salt("floating-toolbar"));
             crate::toolbar::toolbar(self, &mut child, strip);
         }
+        crate::tabs::poll_opening(self, &ctx);
         crate::dialogs::windows(self, &ctx);
         crate::toolbar::sheet(self, &ctx);
         crate::toolbar::drag_overlay(self, &ctx);
@@ -1432,6 +1444,12 @@ fn parse_script(s: &str) -> std::collections::VecDeque<Vec<egui::Event>> {
             ("move", [x, y]) => {
                 out.push_back(vec![Event::PointerMoved(Pos2::new(*x, *y))]);
                 out.push_back(vec![]);
+            }
+            // the button alone (a real click holds it down over several frames)
+            ("down", [x, y]) | ("up", [x, y]) => {
+                let p = Pos2::new(*x, *y);
+                out.push_back(vec![Event::PointerMoved(p)]);
+                out.push_back(vec![button(p, cmd == "down")]);
             }
             ("type", _) => {
                 out.push_back(vec![Event::Text(rest.replace("\\s", " "))]);
