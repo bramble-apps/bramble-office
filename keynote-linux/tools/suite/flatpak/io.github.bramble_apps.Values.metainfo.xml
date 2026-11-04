@@ -23,8 +23,12 @@
   </branding>
   <screenshots>
     <screenshot type="default">
-      <image>https://bramble-apps.github.io/screenshots/values-1.png</image>
-      <caption>Work with spreadsheets</caption>
+      <image>https://bramble-apps.github.io/screenshots/values-1.jpg</image>
+      <caption>A sheet with a table and a chart</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://bramble-apps.github.io/screenshots/values-2.jpg</image>
+      <caption>A chart beside its table, in dark mode</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>

@@ -23,8 +23,12 @@
   </branding>
   <screenshots>
     <screenshot type="default">
-      <image>https://bramble-apps.github.io/screenshots/notes-1.png</image>
-      <caption>Write notes, checklists and tables</caption>
+      <image>https://bramble-apps.github.io/screenshots/notes-1.jpg</image>
+      <caption>Folders, tags and a note with lists and checklists</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://bramble-apps.github.io/screenshots/notes-2.jpg</image>
+      <caption>A checklist in dark mode</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>

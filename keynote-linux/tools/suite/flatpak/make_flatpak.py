@@ -107,6 +107,14 @@ APPS = [
 
 SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
 
+SHOTS = {
+    "Keydeck": [("keydeck-1.jpg", "A title slide on a photo theme"), ("keydeck-2.jpg", "Slides with pictures and text, in a dark theme"), ("keydeck-3.jpg", "A bold title slide")],
+    "Letters": [("letters-1.jpg", "A newsletter laid out with pictures and columns"), ("letters-2.jpg", "Styles, pictures and pull quotes")],
+    "Values": [("values-1.jpg", "A sheet with a table and a chart"), ("values-2.jpg", "A chart beside its table, in dark mode")],
+    "Calculator": [("calculator-1.png", "The basic calculator"), ("calculator-2.png", "The scientific calculator"), ("calculator-3.png", "Converting units")],
+    "Notes": [("notes-1.jpg", "Folders, tags and a note with lists and checklists"), ("notes-2.jpg", "A checklist in dark mode")],
+}
+
 
 def manifest(a, commit):
     app_id = f"{ORG}.{a['id']}"
@@ -180,6 +188,11 @@ def desktop(a):
 def metainfo(a):
     app_id = f"{ORG}.{a['id']}"
     desc = "\n".join(f"      <p>{escape(p)}</p>" for p in a["desc"])
+    # (the store screenshots, on the website: bramble-site/screenshots)
+    shots = "\n".join(
+        f'    <screenshot{" type=\"default\"" if i == 0 else ""}>\n      <image>{SITE}/screenshots/{f}</image>\n      <caption>{escape(c)}</caption>\n    </screenshot>'
+        for i, (f, c) in enumerate(SHOTS[a["id"]])
+    )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>{app_id}</id>
@@ -203,10 +216,7 @@ def metainfo(a):
     <color type="primary" scheme_preference="dark">#3d3846</color>
   </branding>
   <screenshots>
-    <screenshot type="default">
-      <image>{SITE}/screenshots/{a['id'].lower()}-1.png</image>
-      <caption>{escape(a['summary'])}</caption>
-    </screenshot>
+{shots}
   </screenshots>
   <content_rating type="oars-1.1"/>
   <supports>

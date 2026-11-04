@@ -23,7 +23,15 @@
   <screenshots>
     <screenshot type="default">
       <image>https://bramble-apps.github.io/screenshots/calculator-1.png</image>
-      <caption>Do basic, scientific and programmer arithmetic</caption>
+      <caption>The basic calculator</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://bramble-apps.github.io/screenshots/calculator-2.png</image>
+      <caption>The scientific calculator</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://bramble-apps.github.io/screenshots/calculator-3.png</image>
+      <caption>Converting units</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>
