@@ -1,0 +1,15 @@
+[package]
+name = "nt-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+# Notes' engine for other front ends (the Flutter app for Android): a C interface with JSON in
+# and out, built as libnotes_core.so (`cargo rustc -p nt-ffi --lib --crate-type cdylib`)
+[lib]
+name = "notes_core"
+path = "src/lib.rs"
+
+[dependencies]
+nt-core = { path = "../nt-core" }
+serde_json = "1"

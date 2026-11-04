@@ -111,7 +111,7 @@ pub fn run() -> eframe::Result {
             // content view with the macOS title bar too (panes still paint opaque when it is off)
             .with_transparent(!system_title_bar || cfg!(target_os = "macos"))
             .with_title("Keydeck")
-            .with_app_id("keydeck")
+            .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "keydeck".into())) // (in a Flatpak, its app id, so the desktop finds the icon)
             .with_icon(app_icon())
             // KN_SIZE=WxH (automated checks): the window's starting size
             .with_inner_size(std::env::var("KN_SIZE").ok().and_then(|v| v.split_once('x').and_then(|(w, h)| Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?]))).unwrap_or([1440.0, 900.0]))

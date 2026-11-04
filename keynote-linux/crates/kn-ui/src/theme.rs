@@ -255,7 +255,52 @@ fn load_fallback_fonts(ctx: &egui::Context) {
             fonts.families.entry(fam).or_default().push("DejaVuSans-bundled".into());
         }
     }
+    color_emoji(&mut fonts);
     ctx.set_fonts(fonts);
+}
+
+/// Emoji in colour at every weight: the system's colour emoji font right after each family's
+/// text font, ahead of the monochrome symbol fonts further down (egui's NotoEmoji, DejaVu,
+/// Noto Sans Symbols), which would otherwise answer first on regular text while bold found the
+/// colour one. (Not first: it has glyphs for digits, '#' and '*', the keycaps' bases.)
+fn color_emoji(fonts: &mut egui::FontDefinitions) {
+    let win = std::env::var("SystemRoot").or_else(|_| std::env::var("WINDIR")).unwrap_or_else(|_| "C:\\Windows".into());
+    let paths = [
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf".to_string(),
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf".into(),
+        "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf".into(),
+        "/usr/share/fonts/noto-color-emoji/NotoColorEmoji.ttf".into(),
+        "/usr/share/fonts/TTF/NotoColorEmoji.ttf".into(),
+        format!("{win}\\Fonts\\seguiemj.ttf"),
+    ];
+    let Some(bytes) = paths.iter().find_map(|p| std::fs::read(p).ok()) else { return };
+    fonts.font_data.insert("ui-color-emoji".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+    for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace, egui::FontFamily::Name("bold".into())] {
+        let list = fonts.families.entry(fam).or_default();
+        list.retain(|f| f != "ui-color-emoji");
+        list.insert(1.min(list.len()), "ui-color-emoji".into());
+    }
+    // "emoji": the colour font first, for runs that must be emoji though the text font has the
+    // character too (❤️ ✔️: a text character with VS16), then the usual chain
+    let mut emoji = vec!["ui-color-emoji".to_string()];
+    emoji.extend(fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default().into_iter().filter(|f| f != "ui-color-emoji"));
+    fonts.families.insert(egui::FontFamily::Name("emoji".into()), emoji);
+    HAS_COLOR_EMOJI.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+static HAS_COLOR_EMOJI: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The "emoji" font family exists (a colour emoji font was found): use it for emoji runs.
+pub fn has_color_emoji() -> bool {
+    HAS_COLOR_EMOJI.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether `c` (followed by `next`) must be drawn from the "emoji" family: the emoji block's
+/// pictographs, a text character a VS16 (U+FE0F) asks to show as emoji (❤️ ✔️ 🗓️), and the
+/// joiners, keycaps, flags and tags inside sequences. Text symbols on their own (✔ ★ ☐) stay
+/// text.
+pub fn is_emoji_char(c: char, next: Option<char>) -> bool {
+    next == Some('\u{FE0F}') || matches!(c as u32, 0x1F000..=0x1FAFF | 0xFE0F | 0x200D | 0x20E3 | 0xE0020..=0xE007F)
 }
 
 pub fn apply(ctx: &egui::Context) {

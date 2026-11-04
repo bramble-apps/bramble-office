@@ -1,0 +1,51 @@
+[package]
+name = "nt-app"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+# the app itself
+[lib]
+name = "nt_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bramble-notes"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+egui = "0.37"
+# colour emoji in notes and the list (Notes' "22 Emoji")
+epaint = { version = "0.37", features = ["color_fonts"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+nt-core = { path = "../nt-core" }
+kn-render = { path = "../../../keynote-linux/crates/kn-render" }
+# (kn-render's text model: Print and Export To > PDF lay notes out with it)
+kn-model = { path = "../../../keynote-linux/crates/kn-model" }
+# the suite's look (colours and colour themes, controls, liquid glass, icons, window frame)
+kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
+tiny-skia = "0.12.0"
+# Smart Folders' query JSON (already in the build through nt-core)
+serde_json = "1"
+# Locked notes' biometric unlock: the account's notes password kept in the system's secret
+# store (Secret Service / GNOME Keyring over pure-Rust D-Bus, Windows Credential Manager, macOS
+# Keychain), released only after the biometric check
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
+# audio attachments played in the note (m4a/AAC as Notes records them, mp3, wav, flac, ogg), and
+# Record Audio's microphone: rodio over cpal (ALSA / PulseAudio / PipeWire, WASAPI, CoreAudio),
+# symphonia's pure-Rust decoders
+rodio = { version = "0.23", default-features = false, features = ["playback", "recording", "mp3", "mp4", "wav", "flac", "vorbis"] }
+
+
+# local time for the note list's dates (Today, Yesterday, weekday, 2:56 PM)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# the biometric check itself on Windows (Windows Hello) and macOS (Touch ID); Linux asks fprintd
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+robius-authentication = "0.3"
+
+[build-dependencies]
+winresource = "0.1.34"

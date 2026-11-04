@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Notes
+Comment=Notes, checklists and tables that read Apple Notes libraries
+Exec=bramble-notes %f
+Icon=bramble-notes
+Terminal=false
+Categories=Office;
+StartupWMClass=bramble-notes

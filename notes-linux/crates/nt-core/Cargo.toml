@@ -1,0 +1,30 @@
+[package]
+name = "nt-core"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[dependencies]
+# protobuf reading/writing (the suite's lossless Msg)
+kn-format = { path = "../../../keynote-linux/crates/kn-format" }
+# NoteStore.sqlite (Apple's Core Data store) and the app's own library in the same format
+rusqlite = { version = "0.37", features = ["bundled", "hooks", "backup"] }
+# note bodies and tables are gzipped protobufs
+flate2 = "1"
+# Smart Folder / collapse-state JSON
+serde_json = "1"
+# paragraph, checklist and replica ids
+uuid = { version = "1", features = ["v4"] }
+# locked notes: PBKDF2-SHA256 key, AES key wrap, AES-GCM with Apple's 16-byte IV
+pbkdf2 = "0.12"
+sha2 = "0.10"
+aes-kw = "0.2"
+aes-gcm = "0.10"
+getrandom = "0.2"
+# sync: WebDAV over HTTPS (the suite already uses it)
+ureq = { version = "3.5", features = ["platform-verifier"] }
+# .bnotes: the library folder zipped
+zip = "9"
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.bramble_apps.Notes</id>
+  <name>Bramble Notes</name>
+  <summary>Write notes, checklists and tables</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.bramble_apps">
+    <name>Bramble Office</name>
+  </developer>
+  <description>
+      <p>Bramble Notes keeps notes with formatting, checklists, tables, drawings, pictures, PDFs and audio, in folders, Smart Folders and tags, with search across them all.</p>
+      <p>It can import a library from Apple Notes on a Mac, lock notes with a password, and sync between your devices through your own WebDAV storage, such as Nextcloud or Koofr.</p>
+  </description>
+  <launchable type="desktop-id">io.github.bramble_apps.Notes.desktop</launchable>
+  <url type="homepage">https://bramble-apps.github.io</url>
+  <url type="bugtracker">https://github.com/bramble-apps/bramble-office/issues</url>
+  <url type="vcs-browser">https://github.com/bramble-apps/bramble-office</url>
+  <url type="donation">https://www.paypal.com/donate/?hosted_button_id=5EP8EM86U9P7Q</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#f6f5f4</color>
+    <color type="primary" scheme_preference="dark">#3d3846</color>
+  </branding>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://bramble-apps.github.io/screenshots/notes-1.png</image>
+      <caption>Write notes, checklists and tables</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <releases>
+    <release version="0.4.0" date="2026-11-04">
+      <description>
+        <p>First release on Flathub.</p>
+      </description>
+    </release>
+  </releases>
+</component>

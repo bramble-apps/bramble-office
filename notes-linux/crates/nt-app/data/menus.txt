@@ -1,0 +1,293 @@
+Notes > About Notes			
+Notes > ---
+Notes > Settings…	⌘,		
+Notes > Accounts…			
+Notes > ---
+Notes > Close All Locked Notes		[disabled]	
+Notes > ---
+Notes > Services			
+Notes > Services > Ask Claude			
+Notes > Services > New Claude Code Session Here			
+Notes > Services > Send to Claude			
+Notes > Services > Sort Lines			
+Notes > Services > Services Settings…			
+Notes > ---
+Notes > Hide Notes	⌘H		
+Notes > Hide Others	⌥⌘H		
+Notes > Show All		[disabled]	
+Notes > ---
+Notes > Quit Notes	⌘Q		
+Notes > Quit and Keep Windows	⌥⌘Q		
+File > New Note	⌘N		
+File > New Folder	⇧⌘N		
+File > New Smart Folder			
+File > More			
+File > More > New Smart Folder with Tag Selection		[disabled]	
+File > More > Convert Folder to Smart Folder			
+File > Close	⌘W		
+File > Close All	⌥⌘W		
+File > Share			
+File > Share > Note “01 Plain”			
+File > ---
+File > <<Import From Device - unlocalized>>			
+File > Import to Notes…			
+File > Import Markdown...			
+File > Import UpNote Library…			
+File > ---
+File > Export To			
+File > Export To > PDF			
+File > Export To > Markdown			
+File > Export…			
+File > Export Library…			
+File > Open in Pages			
+File > ---
+File > Pin Note			
+File > Lock Note			
+File > Duplicate Note	⌘D		
+File > ---
+File > Print…	⌘P		
+Edit > Undo Typing	⌘Z		
+Edit > Redo	⇧⌘Z	[disabled]	
+Edit > ---
+Edit > Cut	⌘X	[disabled]	
+Edit > Copy	⌘C	[disabled]	
+Edit > Copy as Markdown		[disabled]	
+Edit > Paste	⌘V		
+Edit > Paste and Match Style	⌥⇧⌘V		
+Edit > Paste and Retain Style			
+Edit > Paste as Markdown			
+Edit > Delete	[0x8]	[disabled]	
+Edit > Rename		[disabled]	
+Edit > Select All	⌘A		
+Edit > ---
+Edit > Attach File…	⇧⌘A		
+Edit > Add Link…	⌘K		
+Edit > Insert Divider Line	⌘L		
+Edit > Record Audio…			
+Edit > Rename Attachment…		[disabled]	
+Edit > ---
+Edit > Find			
+Edit > Find > Note List Search…	⌥⌘F		
+Edit > Find > ---
+Edit > Find > Find…	⌘F		
+Edit > Find > Find and Replace…	⇧⌘F		
+Edit > Find > Find Next	⌘G		
+Edit > Find > Find Previous	⇧⌘G		
+Edit > Find > ---
+Edit > Find > Use Selection for Find	⌘E	[disabled]	
+Edit > Find > Jump to Selection	⌘J		
+Edit > ---
+Edit > Spelling and Grammar			
+Edit > Spelling and Grammar > Show Spelling and Grammar	⌘:		
+Edit > Spelling and Grammar > Check Document Now	⌘;		
+Edit > Spelling and Grammar > ---
+Edit > Spelling and Grammar > Check Spelling While Typing			[✓]
+Edit > Spelling and Grammar > Check Grammar With Spelling			[✓]
+Edit > Spelling and Grammar > Correct Spelling Automatically			[✓]
+Edit > Substitutions			
+Edit > Substitutions > Show Substitutions			
+Edit > Substitutions > ---
+Edit > Substitutions > Smart Copy/Paste			[✓]
+Edit > Substitutions > Smart Quotes			[✓]
+Edit > Substitutions > Smart Lists			[✓]
+Edit > Substitutions > Smart Dashes			[✓]
+Edit > Substitutions > Smart Links			[✓]
+Edit > Substitutions > Smart Tags			[✓]
+Edit > Substitutions > Text Replacement			[✓]
+Edit > Transformations			
+Edit > Transformations > Make Upper Case			
+Edit > Transformations > Make Lower Case			
+Edit > Transformations > Capitalize			
+Edit > Speech			
+Edit > Speech > Start Speaking			
+Edit > Speech > Stop Speaking		[disabled]	
+Edit > ---
+Edit > AutoFill			
+Edit > AutoFill > Contact…			
+Edit > AutoFill > Passwords…			
+Edit > AutoFill > Credit Card…			
+Edit > Start Dictation	🎤		
+Edit > Emoji & Symbols	E		
+Format > Title	⇧⌘T		
+Format > Heading	⇧⌘H		
+Format > Subheading	⇧⌘J		
+Format > Body	⇧⌘B		[✓]
+Format > Monostyled	⇧⌘M		
+Format > Bulleted List	⇧⌘7		
+Format > Dashed List	⇧⌘8		
+Format > Numbered List	⇧⌘9		
+Format > Block Quote	⌘'		
+Format > Block Quote	⌥⌘'		
+Format > ---
+Format > Checklist	⇧⌘L		
+Format > Mark as Checked	⇧⌘U	[disabled]	
+Format > More			
+Format > More > Check All		[disabled]	
+Format > More > Uncheck All		[disabled]	
+Format > More > Move Checked to Bottom		[disabled]	
+Format > More > Delete Checked		[disabled]	
+Format > ---
+Format > Move Item			
+Format > Move Item > Up	⌃⌘[0xf700]	[disabled]	
+Format > Move Item > Down	⌃⌘[0xf701]	[disabled]	
+Format > ---
+Format > Table	⌥⌘T		
+Format > Convert to Text		[disabled]	
+Format > ---
+Format > ---
+Format > Font			
+Format > Font > Show Fonts	⌘T		
+Format > Font > ---
+Format > Font > Bold	⌘B		
+Format > Font > Italic	⌘I		
+Format > Font > Underline	⌘U		
+Format > Font > Strikethrough			
+Format > Font > Highlight	⇧⌘E		
+Format > Font > ---
+Format > Font > Bigger	⌘+		
+Format > Font > Smaller	⌘-		
+Format > Font > ---
+Format > Font > Baseline			
+Format > Font > Baseline > Use Default			
+Format > Font > Baseline > Superscript			
+Format > Font > Baseline > Subscript			
+Format > Font > ---
+Format > Font > Show Colors	⇧⌘C		
+Format > Font > ---
+Format > Font > Copy Style	⌥⌘C		
+Format > Font > Paste Style	⌥⌘V		
+Format > Font > Remove Style		[disabled]	
+Format > Alignment			
+Format > Alignment > Align Left	⌘{		[✓]
+Format > Alignment > Center	⌘|		
+Format > Alignment > Justify			
+Format > Alignment > Align Right	⌘}		
+Format > Alignment > ---
+Format > Alignment > Writing Direction			
+Format > Alignment > Writing Direction > Paragraph		[disabled]	
+Format > Alignment > Writing Direction > 	Default			
+Format > Alignment > Writing Direction > 	Left to Right			[✓]
+Format > Alignment > Writing Direction > 	Right to Left			
+Format > Alignment > Writing Direction > ---
+Format > Alignment > Writing Direction > Selection		[disabled]	
+Format > Alignment > Writing Direction > 	Default			[✓]
+Format > Alignment > Writing Direction > 	Left to Right			
+Format > Alignment > Writing Direction > 	Right to Left			
+Format > ---
+Format > Indentation			[✓]
+Format > Indentation > Increase	⌘]		
+Format > Indentation > Decrease	⌘[	[disabled]	
+Format > ---
+Format > Math Results			
+Format > Math Results > Insert Results			
+Format > Math Results > Suggest Results			[✓]
+Format > Math Results > Off			
+View > as List	⌘1		[✓]
+View > as Gallery	⌘2		
+View > ---
+View > Recent Notes			
+View > Recent Notes > Previous Note	⌥⌘[		
+View > Recent Notes > Next Note	⌥⌘]	[disabled]	
+View > Recent Notes > ---
+View > Recent Notes > 01 Plain			
+View > Recent Notes > 00 Blank			
+View > Recent Notes > 01 Plain			
+View > Recent Notes > <user note title>			
+View > Recent Notes > <user note title>			
+View > Recent Notes > ---
+View > Recent Notes > Clear Menu			
+View > ---
+View > Sort By			
+View > Sort By > Default (Date Edited)			[✓]
+View > Sort By > Date Edited			
+View > Sort By > Date Created			
+View > Sort By > Title			
+View > Sort By > ---
+View > Sort By > Newest First			[✓]
+View > Sort By > Oldest First			
+View > Group By Date			
+View > Group By Date > Default (On)			[✓]
+View > Group By Date > On			
+View > Group By Date > Off			
+View > ---
+View > Hide Sidebar	⌃⌘S		
+View > Hide Note Count			
+View > ---
+View > Show Attachments Browser	⌘3		
+View > Show in Note		[disabled]	
+View > ---
+View > Attachment View			
+View > Attachment View > Set All to Small			
+View > Attachment View > Set All to Large			
+View > ---
+View > Show Highlights	⌃⌘I	[disabled]	
+View > Show Note Activity	⌃⌘K	[disabled]	
+View > Show Folder Activity		[disabled]	
+View > ---
+View > Zoom In	⇧⌘.		
+View > Zoom Out	⇧⌘,		
+View > Actual Size	⇧⌘0		
+View > ---
+View > ---
+View > Expand Section	⌥⌘[0xf703]	[disabled]	
+View > Expand All Sections	⌥⇧⌘[0xf703]	[disabled]	
+View > Collapse Section	⌥⌘[0xf702]	[disabled]	
+View > Collapse All Sections	⌥⇧⌘[0xf702]	[disabled]	
+View > ---
+View > Hide Toolbar			
+View > Customize Toolbar…			
+View > Enter Full Screen	F		
+Window > Minimize	⌘M		
+Window > Minimize All	⌥⌘M		
+Window > Zoom	⌃⌘Z		
+Window > Zoom All	⌃⌥⌘Z		
+Window > Fill	⌃F		
+Window > Center	⌃C		
+Window > ---
+Window > Move & Resize			
+Window > Move & Resize > Halves		[disabled]	
+Window > Move & Resize > Left			
+Window > Move & Resize > Right			
+Window > Move & Resize > Top			
+Window > Move & Resize > Bottom			
+Window > Move & Resize > ---
+Window > Move & Resize > Quarters		[disabled]	
+Window > Move & Resize > Top Left			
+Window > Move & Resize > Top Right			
+Window > Move & Resize > Bottom Left			
+Window > Move & Resize > Bottom Right			
+Window > Move & Resize > ---
+Window > Move & Resize > Arrange		[disabled]	
+Window > Move & Resize > Left & Right			
+Window > Move & Resize > Left & Quarters			
+Window > Move & Resize > Right & Left			
+Window > Move & Resize > Right & Quarters			
+Window > Move & Resize > Top & Bottom			
+Window > Move & Resize > Top & Quarters			
+Window > Move & Resize > Bottom & Top			
+Window > Move & Resize > Bottom & Quarters			
+Window > Move & Resize > Quarters			
+Window > Move & Resize > ---
+Window > Move & Resize > Return to Previous Size	⌃R	[disabled]	
+Window > Full Screen Tile			
+Window > Full Screen Tile > Left of Screen			
+Window > Full Screen Tile > Right of Screen			
+Window > ---
+Window > Open Note in New Window			
+Window > Float on Top			
+Window > ---
+Window > Notes	⌘0		
+Window > Photo Browser			
+Window > ---
+Window > Bring All to Front			
+Window > Arrange in Front			
+Window > Remove Window from Set		[disabled]	
+Window > ---
+Window > Notes Settings			
+Help > Send Notes Feedback			
+Help > ---
+Help > Notes Help	⌘?		
+Help > ---
+Help > Using Tags			
+Help > Using Smart Folders			
+Help > Keyboard Shortcuts			

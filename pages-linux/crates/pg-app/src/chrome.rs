@@ -225,40 +225,11 @@ pub(crate) fn title_apply(app: &mut App, name: &str, dir: Option<std::path::Path
     }
 }
 
-/// The capsules behind the buttons, as Keydeck draws them.
+/// The capsules behind the buttons: the suite's (kn_ui::capsule), Numbers' dark capsules in dark
+/// mode.
 pub(crate) fn paint_capsules(ui: &egui::Ui, idx: egui::layers::ShapeIdx, caps: &[Rect]) {
-    let light = theme::is_light();
-    // liquid glass (Settings) is Keydeck's, tinted by the colour theme, in both appearances
-    if kn_ui::glass::enabled() {
-        let ctx = ui.ctx().clone();
-        let shapes: Vec<egui::Shape> = caps.iter().flat_map(|c| kn_ui::glass::shapes(&ctx, *c, c.height() / 2.0, true)).collect();
-        ui.painter().set(idx, egui::Shape::Vec(shapes));
-    } else if kn_ui::glass::classic() {
-        ui.painter().set(idx, egui::Shape::Vec(caps.iter().map(|c| egui::Shape::rect_filled(*c, c.height() / 2.0, theme::gray(0x36))).collect()));
-    } else if !light {
-        // Numbers' dark capsules: solid, a light rim brighter at the top and bottom (Mac N2)
-        let mut shapes = Vec::new();
-        for c in caps {
-            let r = c.height() / 2.0;
-            shapes.push(egui::Shape::rect_filled(*c, r, crate::look::capsule_fill()));
-            shapes.push(egui::Shape::rect_stroke(*c, r, Stroke::new(1.0, Color32::from_white_alpha(34)), egui::StrokeKind::Inside));
-            for y in [c.min.y + 0.5, c.max.y - 0.5] {
-                shapes.push(egui::Shape::line_segment([pos2(c.min.x + r, y), pos2(c.max.x - r, y)], Stroke::new(1.0, Color32::from_white_alpha(22))));
-            }
-        }
-        ui.painter().set(idx, egui::Shape::Vec(shapes));
-    } else {
-        let glass = theme::tint(if light { Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 215) } else { Color32::from_rgba_unmultiplied(0x3a, 0x3a, 0x3c, 225) });
-        let edge = if light { Color32::from_black_alpha(22) } else { Color32::from_white_alpha(22) };
-        let mut shapes = Vec::new();
-        for c in caps {
-            let r = c.height() / 2.0;
-            shapes.push(egui::Shape::rect_filled(c.expand(1.0), r + 1.0, Color32::from_black_alpha(if light { 16 } else { 60 })));
-            shapes.push(egui::Shape::rect_filled(*c, r, glass));
-            shapes.push(egui::Shape::rect_stroke(*c, r, Stroke::new(1.0, edge), egui::StrokeKind::Inside));
-        }
-        ui.painter().set(idx, egui::Shape::Vec(shapes));
-    }
+    let shapes = kn_ui::capsule::shapes(ui.ctx(), caps, &|c| kn_ui::capsule::dark_rimmed(c, crate::look::capsule_fill()));
+    ui.painter().set(idx, egui::Shape::Vec(shapes));
 }
 
 pub const ZOOMS: [f32; 9] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];

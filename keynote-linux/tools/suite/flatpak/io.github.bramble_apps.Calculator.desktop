@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Bramble Calculator
+Comment=Do basic, scientific and programmer arithmetic
+Exec=calculator
+Icon=io.github.bramble_apps.Calculator
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calculator;math;scientific;programmer;convert;currency;
+StartupWMClass=io.github.bramble_apps.Calculator

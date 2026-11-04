@@ -91,7 +91,7 @@ pub fn run() -> eframe::Result {
             .with_decorations(system_title_bar)
             .with_transparent(!system_title_bar)
             .with_title("Letters")
-            .with_app_id("letters")
+            .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "letters".into())) // (in a Flatpak, its app id, so the desktop finds the icon)
             .with_inner_size([1360.0, 900.0])
             .with_min_inner_size([700.0, 450.0])
             .with_icon(app_icon())

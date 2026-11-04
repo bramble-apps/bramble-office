@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.bramble_apps.Letters</id>
+  <name>Letters</name>
+  <summary>Write documents and lay out pages</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.bramble_apps">
+    <name>Bramble Office</name>
+  </developer>
+  <description>
+      <p>Letters is a word processor and page layout app. It opens and saves Pages files, and opens and saves Word documents, RTF and Markdown.</p>
+      <p>Write with styles, lists, tables, charts, footnotes and tracked changes, or lay out flyers, newsletters and posters from templates with text boxes, shapes and pictures.</p>
+  </description>
+  <launchable type="desktop-id">io.github.bramble_apps.Letters.desktop</launchable>
+  <url type="homepage">https://bramble-apps.github.io</url>
+  <url type="bugtracker">https://github.com/bramble-apps/bramble-office/issues</url>
+  <url type="vcs-browser">https://github.com/bramble-apps/bramble-office</url>
+  <url type="donation">https://www.paypal.com/donate/?hosted_button_id=5EP8EM86U9P7Q</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#f6f5f4</color>
+    <color type="primary" scheme_preference="dark">#3d3846</color>
+  </branding>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://bramble-apps.github.io/screenshots/letters-1.png</image>
+      <caption>Write documents and lay out pages</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <releases>
+    <release version="0.4.0" date="2026-11-04">
+      <description>
+        <p>First release on Flathub.</p>
+      </description>
+    </release>
+  </releases>
+</component>

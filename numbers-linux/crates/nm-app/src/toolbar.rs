@@ -7,7 +7,7 @@
 
 use egui::{pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke};
 use kn_ui::icons::{draw, Icon};
-use kn_ui::theme;
+use kn_ui::{capsule, theme};
 
 use crate::app::{App, InspTab};
 
@@ -167,8 +167,8 @@ fn entry_width(ui: &egui::Ui, id: &str, mode: u8, alone: bool) -> f32 {
     match (id, mode) {
         (ZOOM, _) => 76.0,
         (_, 3) => text_w(label, 13.0) + 20.0,
-        (_, 1) => (text_w(label, 11.0) + 8.0).max(if alone { 44.0 } else { 40.0 }),
-        _ if alone => 44.0,
+        (_, 1) => (text_w(label, 11.0) + 8.0).max(if alone { capsule::SOLO_W } else { 40.0 }),
+        _ if alone => capsule::SOLO_W,
         _ => 40.0,
     }
 }
@@ -200,7 +200,7 @@ pub(crate) fn pressed(app: &App, id: &str) -> bool {
 
 /// Draw one button cell; returns its response.
 #[allow(clippy::too_many_arguments)]
-fn cell(ui: &mut egui::Ui, rect: Rect, icon_rect: Rect, salt: (&str, usize), icon: Icon, text: &str, mode: u8, on: bool, enabled: bool, sense: Sense) -> egui::Response {
+fn cell(ui: &mut egui::Ui, rect: Rect, icon_rect: Rect, salt: (&str, usize), icon: Icon, text: &str, mode: u8, on: bool, enabled: bool, sense: Sense, solo: bool) -> egui::Response {
     let resp = ui.interact(rect, ui.scope_id().with(salt), sense);
     let hover = resp.hovered() && enabled;
     let bg = if on { theme::gray(0x5a) } else if hover { theme::gray(0x48) } else { Color32::TRANSPARENT };
@@ -212,7 +212,13 @@ fn cell(ui: &mut egui::Ui, rect: Rect, icon_rect: Rect, salt: (&str, usize), ico
         centered(ui.painter(), icon_rect.center(), text, FontId::proportional(13.0), col);
     } else {
         if bg != Color32::TRANSPARENT {
-            ui.painter().rect_filled(icon_rect.shrink(2.0), icon_rect.height() / 2.0, bg);
+            if solo {
+                // a button on its own (Mac): the whole circle, edge to edge, just inside the rim
+                capsule::solo_highlight(ui.painter(), icon_rect.center(), bg);
+            } else {
+                // in a group: a rounded cell inset under its glyph
+                ui.painter().rect_filled(icon_rect.shrink(2.0), icon_rect.height() / 2.0, bg);
+            }
         }
         let s = 22.0_f32.min(icon_rect.height() - 8.0);
         let ir = Rect::from_center_size(icon_rect.center(), vec2(s, s));
@@ -322,7 +328,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // the title sits after the View item (or first)
     let title_at = if list.first().is_some_and(|f| f == VIEW) { 1 } else { 0 };
     let caps_pad = |shown: &[bool]| -> f32 {
-        // 4 px either side of every capsule and 8 between neighbouring capsules
+        // 4.5 pt either side of every capsule and 8 between neighbouring capsules
         let mut n = 0;
         let mut in_cap = false;
         for (i, id) in list.iter().enumerate() {
@@ -336,7 +342,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
                 in_cap = true;
             }
         }
-        n as f32 * 16.0
+        n as f32 * (2.0 * capsule::PAD + 8.0)
     };
     let mut shown = vec![true; list.len()];
     let avail = bar.width() - title_min + 8.0;
@@ -363,15 +369,21 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // lay out and draw
     let mut x = bar.min.x;
     let cy = if mode == 1 { bar.min.y + 20.0 } else { bar.center().y };
-    let cap_h = if mode == 1 { 36.0 } else { 40.0 };
+    // (Apple's: capsules 36.5 pt tall; a lone symbol a circle as wide)
+    let cap_h = capsule::HEIGHT;
     let mut rects: Vec<(usize, Rect)> = Vec::new();
     let mut in_cap: Option<f32> = None;
     let mut caps: Vec<Rect> = Vec::new();
     let painter_idx = ui.painter().add(egui::Shape::Noop);
-    let close_cap = |x: &mut f32, in_cap: &mut Option<f32>, caps: &mut Vec<Rect>| {
+    // (a capsule holding one symbol alone: its circle, whatever the label under it takes)
+    let mut solo_at: Option<Pos2> = None;
+    let close_cap = |x: &mut f32, in_cap: &mut Option<f32>, caps: &mut Vec<Rect>, solo_at: &mut Option<Pos2>| {
         if let Some(x0) = in_cap.take() {
-            *x += 4.0;
-            caps.push(Rect::from_min_max(pos2(x0, cy - cap_h / 2.0), pos2(*x, cy + cap_h / 2.0)));
+            *x += capsule::PAD;
+            caps.push(match solo_at.take() {
+                Some(at) => capsule::solo_rect(at),
+                None => Rect::from_min_max(pos2(x0, cy - cap_h / 2.0), pos2(*x, cy + cap_h / 2.0)),
+            });
             *x += 8.0;
         }
     };
@@ -380,7 +392,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let ctrl = ui.input(|i| i.modifiers.command);
     for i in 0..=list.len() {
         if i == title_at {
-            close_cap(&mut x, &mut in_cap, &mut caps);
+            close_cap(&mut x, &mut in_cap, &mut caps, &mut solo_at);
             let tr = Rect::from_min_size(pos2(x + 8.0, bar.min.y), vec2(title_w - 16.0, bar.height()));
             let mut name = title.clone();
             let fits = |s: &str, ui: &egui::Ui| ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), font.clone(), Color32::WHITE).size().x) <= tr.width() - 28.0;
@@ -402,7 +414,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             continue;
         }
         if is_space(id) {
-            close_cap(&mut x, &mut in_cap, &mut caps);
+            close_cap(&mut x, &mut in_cap, &mut caps, &mut solo_at);
             let r = Rect::from_min_size(pos2(x - 8.0, bar.min.y), vec2(widths[i] + 8.0, bar.height()));
             rects.push((i, r));
             if customizing {
@@ -417,11 +429,16 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         }
         if in_cap.is_none() {
             in_cap = Some(x);
-            x += 4.0;
+            x += capsule::PAD;
         }
         let w = widths[i];
         let r = Rect::from_min_max(pos2(x, bar.min.y), pos2(x + w, bar.max.y));
         let icon_r = Rect::from_center_size(pos2(r.center().x, cy), vec2(w, cap_h - 4.0));
+        // (one symbol on its own: a circle)
+        let solo = alone(i) && mode != 3 && id != ZOOM;
+        if solo {
+            solo_at = Some(icon_r.center());
+        }
         rects.push((i, r));
         x += w;
         let Some(dd) = def(id) else { continue };
@@ -451,7 +468,7 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
                 resp.on_hover_text(dd.tip);
             }
         } else {
-            let resp = cell(ui, r, icon_r, (id.as_str(), i), dd.icon, dd.label, mode, pressed(app, id), on, sense);
+            let resp = cell(ui, r, icon_r, (id.as_str(), i), dd.icon, dd.label, mode, pressed(app, id), on, sense, solo);
             if resp.drag_started() {
                 drag_start = Some(i);
             } else if !customizing {
@@ -465,15 +482,19 @@ pub fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             }
         }
         if list.get(i + 1).is_none_or(|n| is_space(n)) {
-            close_cap(&mut x, &mut in_cap, &mut caps);
+            close_cap(&mut x, &mut in_cap, &mut caps, &mut solo_at);
         }
     }
-    close_cap(&mut x, &mut in_cap, &mut caps);
+    close_cap(&mut x, &mut in_cap, &mut caps, &mut solo_at);
     // » : the items that didn't fit
     if !overflow.is_empty() {
         let r = Rect::from_center_size(pos2(bar.max.x - overflow_w / 2.0, cy), vec2(40.0, cap_h - 4.0));
         let resp = ui.interact(r, ui.scope_id().with("tb-overflow"), Sense::click());
-        ui.painter().rect_filled(r, r.height() / 2.0, if resp.hovered() { theme::gray(0x48) } else { theme::gray(0x36) });
+        // (a circle of its own, as any lone button)
+        caps.push(capsule::solo_rect(r.center()));
+        if resp.hovered() {
+            capsule::solo_highlight(ui.painter(), r.center(), theme::gray(0x48));
+        }
         draw(ui.painter(), Rect::from_center_size(r.center(), vec2(18.0, 18.0)), Icon::Overflow, theme::TEXT());
         egui::Popup::menu(&resp).show(|ui| {
             for &i in &overflow {

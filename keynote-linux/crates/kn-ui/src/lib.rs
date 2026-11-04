@@ -6,6 +6,7 @@
 
 #[cfg(target_os = "android")]
 pub mod android;
+pub mod capsule;
 pub mod cellfmt;
 pub mod chartdata;
 pub mod chartpicker;

@@ -10,6 +10,8 @@ license = "GPL-3.0-only"
 spellbook = "0.4.2"
 eframe = { version = "0.37.0", default-features = false }
 egui = "0.37"
+# emoji in colour (Noto Color Emoji / Segoe UI Emoji) wherever the suite draws text
+epaint = { version = "0.37", features = ["color_fonts"] }
 kn-format = { version = "0.1.0", path = "../kn-format" }
 kn-model = { version = "0.1.0", path = "../kn-model" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
