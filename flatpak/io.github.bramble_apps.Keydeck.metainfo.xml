@@ -23,16 +23,16 @@
   </branding>
   <screenshots>
     <screenshot type="default">
+      <image>https://bramble-apps.github.io/screenshots/keydeck-3.jpg</image>
+      <caption>A bold title slide</caption>
+    </screenshot>
+    <screenshot>
       <image>https://bramble-apps.github.io/screenshots/keydeck-1.jpg</image>
       <caption>A title slide on a photo theme</caption>
     </screenshot>
     <screenshot>
       <image>https://bramble-apps.github.io/screenshots/keydeck-2.jpg</image>
       <caption>Slides with pictures and text, in a dark theme</caption>
-    </screenshot>
-    <screenshot>
-      <image>https://bramble-apps.github.io/screenshots/keydeck-3.jpg</image>
-      <caption>A bold title slide</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>

@@ -23,12 +23,12 @@
   </branding>
   <screenshots>
     <screenshot type="default">
-      <image>https://bramble-apps.github.io/screenshots/letters-1.jpg</image>
-      <caption>A newsletter laid out with pictures and columns</caption>
-    </screenshot>
-    <screenshot>
       <image>https://bramble-apps.github.io/screenshots/letters-2.jpg</image>
       <caption>Styles, pictures and pull quotes</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://bramble-apps.github.io/screenshots/letters-1.jpg</image>
+      <caption>A newsletter laid out with pictures and columns</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>

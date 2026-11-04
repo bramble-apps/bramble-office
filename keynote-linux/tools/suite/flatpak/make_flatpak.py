@@ -86,6 +86,7 @@ APPS = [
             "results and unit and currency conversion.",
         ],
         modules=[], network=True, audio=False, cups=False,
+        submit=False,  # (not on Flathub for now: the user's call)
     ),
     dict(
         id="Notes", name="Bramble Notes", bin="bramble-notes", ws="notes-linux", pkg="nt-app",
@@ -108,11 +109,11 @@ APPS = [
 SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
 
 SHOTS = {
-    "Keydeck": [("keydeck-1.jpg", "A title slide on a photo theme"), ("keydeck-2.jpg", "Slides with pictures and text, in a dark theme"), ("keydeck-3.jpg", "A bold title slide")],
-    "Letters": [("letters-1.jpg", "A newsletter laid out with pictures and columns"), ("letters-2.jpg", "Styles, pictures and pull quotes")],
-    "Values": [("values-1.jpg", "A sheet with a table and a chart"), ("values-2.jpg", "A chart beside its table, in dark mode")],
+    "Keydeck": [("keydeck-3.jpg", "A bold title slide"), ("keydeck-1.jpg", "A title slide on a photo theme"), ("keydeck-2.jpg", "Slides with pictures and text, in a dark theme")],
+    "Letters": [("letters-2.jpg", "Styles, pictures and pull quotes"), ("letters-1.jpg", "A newsletter laid out with pictures and columns")],
+    "Values": [("values-2.jpg", "A chart beside its table, in dark mode"), ("values-1.jpg", "A sheet with a table and a chart")],
     "Calculator": [("calculator-1.png", "The basic calculator"), ("calculator-2.png", "The scientific calculator"), ("calculator-3.png", "Converting units")],
-    "Notes": [("notes-1.jpg", "Folders, tags and a note with lists and checklists"), ("notes-2.jpg", "A checklist in dark mode")],
+    "Notes": [("notes-2.jpg", "A checklist in dark mode"), ("notes-1.jpg", "Folders, tags and a note with lists and checklists")],
 }
 
 
@@ -255,7 +256,7 @@ def main():
         # one folder per app, as its Flathub repo holds it: the manifest (building bramble-office at
         # the given commit), its crates and the modules it uses
         commit = sys.argv[3]
-        for a in APPS:
+        for a in [a for a in APPS if a.get("submit", True)]:
             app_id = f"{ORG}.{a['id']}"
             d = os.path.join(out, app_id)
             os.makedirs(d, exist_ok=True)
