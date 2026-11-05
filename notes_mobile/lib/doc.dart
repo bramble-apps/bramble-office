@@ -399,7 +399,32 @@ class NoteController extends TextEditingController {
     _applyEdit(old, v);
   }
 
+  /// Find and Replace > All: every [q] (any case) becomes [w], undone as one step. Returns how
+  /// many were replaced.
+  int replaceAll(String q, String w) {
+    if (q.isEmpty) return 0;
+    final low = text.toLowerCase(), lq = q.toLowerCase();
+    final at = <int>[];
+    for (var k = low.indexOf(lq); k >= 0; k = low.indexOf(lq, k + lq.length)) {
+      at.add(k);
+    }
+    if (at.isEmpty || low.length != text.length) return 0;
+    _snapshot('edit');
+    _batch = true;
+    try {
+      for (final k in at.reversed) {
+        value = TextEditingValue(text: text.replaceRange(k, k + q.length, w), selection: TextSelection.collapsed(offset: k + w.length));
+      }
+    } finally {
+      _batch = false;
+    }
+    return at.length;
+  }
+
+  bool _batch = false;
+
   void _snapshot(String kind) {
+    if (_batch) return;
     final now = DateTime.now();
     if (kind != 'type' || _lastKind != 'type' || now.difference(_lastSnap).inMilliseconds > 1200) {
       _undo.add(_Snapshot(text, [..._styles], [for (final p in _paras) p.copy()], selection));

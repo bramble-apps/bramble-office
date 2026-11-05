@@ -177,4 +177,17 @@ void main() {
     }
     expect((c.body()[2]['sp'] as List).last['t'], '7=');
   });
+
+  test('Find and Replace > All: every match, any case, styles kept, one undo', () {
+    final c = make([
+      {'st': 'title', 'sp': [{'t': 'Apples'}]},
+      {'st': 'body', 'sp': [{'t': 'apples', 'b': true}, {'t': ' and APPLES'}]},
+    ]);
+    expect(c.replaceAll('apples', 'plums'), 3);
+    expect(texts(c), ['plums', 'plums and plums']);
+    expect(styles(c), ['title', 'body']);
+    expect((c.body()[1]['sp'] as List).first, {'t': 'plums', 'b': true});
+    c.undo();
+    expect(texts(c), ['Apples', 'apples and APPLES']);
+  });
 }

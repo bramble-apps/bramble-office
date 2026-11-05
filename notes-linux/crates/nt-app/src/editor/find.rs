@@ -1,5 +1,6 @@
 //! Edit > Find: the find bar over the note (Find…, Find and Replace…, Find Next / Previous, Use
 //! Selection for Find, Jump to Selection), matches marked in yellow, the current one brighter.
+//! The bar's Replace checkbox shows the replace row (Replace, All) like Find and Replace….
 
 use egui::{Color32, CornerRadius, Rect, Stroke, pos2, vec2};
 
@@ -109,7 +110,7 @@ impl Editor {
         }
     }
 
-    fn replace_one(&mut self) {
+    pub(super) fn replace_one(&mut self) {
         let m = self.find_matches();
         let Some(&(cell, para, a, b)) = m.get(self.find.current) else { return };
         self.push_undo(Kind::Other);
@@ -126,7 +127,7 @@ impl Editor {
         }
     }
 
-    fn replace_all(&mut self) {
+    pub(super) fn replace_all(&mut self) {
         let m = self.find_matches();
         if m.is_empty() {
             return;
@@ -168,7 +169,15 @@ pub fn bar(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
     let mut step = None;
     let (mut rep, mut rep_all) = (false, false);
     ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 5.0))), |ui| {
+        // (a Replace checkbox on the left, as the Mac's find bar has, turns the replace row on;
+        // the replace field lines up under the search field)
+        let mut lead = 0.0;
         ui.horizontal(|ui| {
+            let x0 = ui.cursor().min.x;
+            if kn_ui::theme::checkbox(ui, &mut ed.find.replace, "Replace").changed() && ed.find.replace {
+                ed.find.focus = true;
+            }
+            lead = ui.cursor().min.x - x0;
             let q = ui.add(egui::TextEdit::singleline(&mut SafeText(&mut ed.find.query)).hint_text("Search").desired_width((rect.width() - 260.0).clamp(120.0, 420.0)));
             if std::mem::take(&mut ed.find.focus) {
                 q.request_focus();
@@ -196,6 +205,7 @@ pub fn bar(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
         });
         if ed.find.replace {
             ui.horizontal(|ui| {
+                ui.add_space(lead - ui.spacing().item_spacing.x);
                 ui.add(egui::TextEdit::singleline(&mut SafeText(&mut ed.find.with)).hint_text("Replace").desired_width((rect.width() - 260.0).clamp(120.0, 420.0)));
                 rep = ui.button("Replace").clicked();
                 rep_all = ui.button("All").clicked();

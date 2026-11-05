@@ -2622,3 +2622,49 @@ fn audio_cards_play_and_pause() {
     assert_eq!(super::player::clock(65.4), "1:05");
     let _ = std::fs::remove_file(&tone);
 }
+
+#[test]
+fn find_and_replace() {
+    let mut ed = ed_with(&[("Shopping", ParaStyle::Title), ("Apples, apples and pears", ParaStyle::Body)]);
+    ed.find_command("Find and Replace");
+    assert!(ed.find.open && ed.find.replace);
+    ed.find.query = "apples".into();
+    ed.find.with = "plums".into();
+    assert_eq!(ed.find_matches().len(), 2);
+    // one at a time: the first match goes
+    ed.replace_one();
+    assert_eq!(ed.doc.paras[1].text, "plums, apples and pears");
+    // the rest at once, undone in one step
+    ed.find.query = "pear".into();
+    ed.find.with = "fig".into();
+    ed.replace_all();
+    assert_eq!(ed.doc.paras[1].text, "plums, apples and figs");
+    ed.undo();
+    assert_eq!(ed.doc.paras[1].text, "plums, apples and pears");
+}
+
+#[test]
+fn backspace_takes_an_autocorrection_back() {
+    // (the dictionaries load in the background)
+    for _ in 0..200 {
+        if kn_ui::spell::dicts().is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if !kn_ui::spell::dicts().is_some_and(|d| !d.is_empty()) {
+        return;
+    }
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.settings.autocorrect = true;
+    typ(&mut ed, "teh ");
+    assert_eq!(ed.doc.paras[0].text, "the ");
+    ed.backspace(false);
+    assert_eq!(ed.doc.paras[0].text, "teh");
+    // the space now leaves it as typed, and so does the next time
+    typ(&mut ed, " cat teh ");
+    assert_eq!(ed.doc.paras[0].text, "teh cat teh ");
+    // an ordinary Backspace still deletes one character
+    ed.backspace(false);
+    assert_eq!(ed.doc.paras[0].text, "teh cat teh");
+}

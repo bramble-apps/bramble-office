@@ -716,7 +716,20 @@ fn key_press(app: &mut App, ctx: &egui::Context, key: Key, m: Modifiers) {
     let text = storage_text(app, c.storage);
     let word = m.command || m.alt;
     match key {
-        Key::Backspace => delete(app, false, word),
+        Key::Backspace => {
+            // straight after an autocorrection: the word as typed comes back
+            let undo_fix = app.cursor.filter(|c| c.is_empty() && !word).and_then(|c| {
+                let text = storage_text(app, c.storage);
+                kn_ui::typing::take_back(&text[..c.caret.min(text.len())]).map(|(n, typed)| (c, n, typed))
+            });
+            match undo_fix {
+                Some((c, n, typed)) => {
+                    app.cursor = Some(Cursor { anchor: c.caret - n, ..c });
+                    replace_selection(app, &typed, "Typing", true);
+                }
+                None => delete(app, false, word),
+            }
+        }
         Key::Delete => delete(app, true, word),
         Key::Enter if m.shift => replace_selection(app, "\u{2028}", "Typing", true),
         Key::Enter => {

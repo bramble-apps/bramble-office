@@ -1566,6 +1566,18 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
             let text = &mut e.text;
             let mut new_pos = None;
             ui.input_mut(|i| {
+                // Backspace straight after an autocorrection: the word as typed comes back
+                let bs = i.events.iter().position(|e| matches!(e, egui::Event::Key { key: egui::Key::Backspace, pressed: true, modifiers, .. } if !modifiers.command && !modifiers.alt));
+                if let Some(k) = bs {
+                    let byte = text.char_indices().nth(pos).map(|(b, _)| b).unwrap_or(text.len());
+                    if let Some((n, typed)) = kn_ui::typing::take_back(&text[..byte]) {
+                        let head = format!("{}{typed}", &text[..byte - n]);
+                        *text = format!("{head}{}", &text[byte..]);
+                        new_pos = Some(head.chars().count());
+                        i.events.remove(k);
+                        done = true;
+                    }
+                }
                 for ev in i.events.iter_mut() {
                     let egui::Event::Text(t) = ev else { continue };
                     if done {

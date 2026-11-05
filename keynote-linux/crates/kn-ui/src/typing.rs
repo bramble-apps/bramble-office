@@ -4,6 +4,9 @@
 /// What typing `t` after `before` becomes: (characters to take back, text to insert). Smart
 /// quotes curl by what comes before; "--" becomes an em dash.
 pub fn smart_text(before: Option<char>, t: &str, no_selection: bool, quotes: bool, dashes: bool) -> (usize, String) {
+    // anything typed after a correction means it was kept (word_fix, called after this for the
+    // character that ends a word, notes a new one)
+    forget_fix();
     if dashes && t == "-" && before == Some('-') && no_selection {
         return (1, "\u{2014}".into());
     }
@@ -42,12 +45,44 @@ pub const REPLACEMENTS: &[(&str, &str)] = &[
 pub fn word_fix(before: &str, text_replacement: bool, autocorrect: bool) -> Option<(usize, String)> {
     let start = before.rfind(|c: char| c.is_whitespace()).map(|i| i + before[i..].chars().next().map_or(1, |c| c.len_utf8())).unwrap_or(0);
     let word = &before[start..];
-    if word.is_empty() {
+    if word.is_empty() || KEPT.with(|k| k.borrow().contains(word)) {
         return None;
     }
+    let fix = word_fix_of(word, text_replacement, autocorrect)?;
+    LAST.with(|l| *l.borrow_mut() = Some((fix.clone(), word.to_string())));
+    Some((start, fix))
+}
+
+// The last correction made ((what the word became, what was typed)), until something else is
+// typed; and the words taken back with Backspace, never corrected again while the app runs.
+// (per thread: the typing all happens on the UI thread)
+thread_local! {
+    static LAST: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
+    static KEPT: std::cell::RefCell<std::collections::HashSet<String>> = std::cell::RefCell::new(Default::default());
+}
+
+fn forget_fix() {
+    LAST.with(|l| *l.borrow_mut() = None);
+}
+
+/// Backspace right after a correction (Apple's): the word goes back to what was typed, the
+/// character that ended it goes, and that word isn't corrected again. `before` is the text up
+/// to the caret; returns how many bytes before the caret to replace, and with what. Any other
+/// Backspace gets None (and the chance to take the correction back has passed).
+pub fn take_back(before: &str) -> Option<(usize, String)> {
+    let (fixed, typed) = LAST.with(|l| l.borrow_mut().take())?;
+    let (end, _) = before.char_indices().next_back()?;
+    if !before[..end].ends_with(&fixed) {
+        return None;
+    }
+    KEPT.with(|k| k.borrow_mut().insert(typed.clone()));
+    Some((before.len() - (end - fixed.len()), typed))
+}
+
+fn word_fix_of(word: &str, text_replacement: bool, autocorrect: bool) -> Option<String> {
     if text_replacement {
         if let Some((_, to)) = REPLACEMENTS.iter().find(|(from, _)| *from == word) {
-            return Some((start, to.to_string()));
+            return Some(to.to_string());
         }
     }
     if autocorrect && word.chars().all(|c| c.is_alphabetic() || c == '\'' || c == '\u{2019}') {
@@ -62,7 +97,7 @@ pub fn word_fix(before: &str, text_replacement: bool, autocorrect: bool) -> Opti
         } else {
             first
         };
-        return Some((start, fixed));
+        return Some(fixed);
     }
     None
 }
@@ -116,6 +151,38 @@ mod tests {
         if crate::spell::dicts().is_some_and(|d| !d.is_empty()) {
             assert_eq!(type_text("\"hello\" -- teh ", true, true, true, true), "\u{201C}hello\u{201D} \u{2014} the ");
         }
+    }
+
+    #[test]
+    fn backspace_takes_a_correction_back() {
+        // "omw " becomes "On my way! "; Backspace straight after gives "omw" back, and the next
+        // space leaves it
+        let mut text = type_text("ok omw ", true, true, true, false);
+        assert_eq!(text, "ok On my way! ");
+        let (n, with) = take_back(&text).expect("taken back");
+        let at = text.len() - n;
+        text.replace_range(at.., &with);
+        assert_eq!(text, "ok omw");
+        text = type_text_after(&text, " (tm) ");
+        assert_eq!(text, "ok omw \u{2122} ");
+        // a Backspace after something else was typed is an ordinary one
+        let text = type_text("(r) x", true, true, true, false);
+        assert_eq!(take_back(&text), None);
+    }
+
+    fn type_text_after(start: &str, typed: &str) -> String {
+        let mut text = start.to_string();
+        for ch in typed.chars() {
+            let t = ch.to_string();
+            let a = text.len();
+            let (_, ins) = smart_text(text.chars().last(), &t, true, false, false);
+            let ends_word = t.chars().all(|c| c.is_whitespace());
+            match ends_word.then(|| word_fix(&text[..a], true, false)).flatten() {
+                Some((start, fixed)) => text.replace_range(start..a, &(fixed + &ins)),
+                None => text.push_str(&ins),
+            }
+        }
+        text
     }
 
     #[test]

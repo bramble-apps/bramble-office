@@ -629,6 +629,20 @@ impl Editor {
             return;
         }
         let l = self.head;
+        // straight after an autocorrection: the word as typed comes back
+        if l.off > 0 && !word {
+            if let Some((n, typed)) = kn_ui::typing::take_back(&self.para(l).text[..l.off]) {
+                let from = l.off - n;
+                let flow = self.flow_mut(l.cell);
+                let f = flow[l.para].fmt_at(from + 1);
+                flow[l.para].remove(from..l.off);
+                flow[l.para].insert(from, &typed, &f);
+                self.head = Loc { off: from + typed.len(), ..l };
+                self.anchor = self.head;
+                self.changed = true;
+                return;
+            }
+        }
         if l.off > 0 {
             let t = &self.para(l).text;
             let from = if word { prev_word(t, l.off) } else { prev_char(t, l.off) };

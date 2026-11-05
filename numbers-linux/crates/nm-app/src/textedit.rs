@@ -213,7 +213,11 @@ pub fn handle_events(app: &mut App, ctx: &egui::Context, tl: Option<&TextLayout>
                         replace = Some((a, b, "\t".into()));
                     }
                     Key::Backspace => {
-                        if a < b {
+                        // straight after an autocorrection: the word as typed comes back
+                        let undo_fix = if a == b && !word { kn_ui::typing::take_back(&text[..a]) } else { None };
+                        if let Some((n, typed)) = undo_fix {
+                            replace = Some((a - n, a, typed));
+                        } else if a < b {
                             replace = Some((a, b, String::new()));
                         } else if a > 0 {
                             let p = if word { word_left(&text, a) } else { prev_boundary(&text, a) };

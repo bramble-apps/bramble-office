@@ -111,6 +111,8 @@ class EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   final _tables = <String, dynamic>{}, _drawings = <String, dynamic>{}, _views = <String, int>{};
   String? _findQuery;
   final _find = TextEditingController();
+  final _with = TextEditingController();
+  bool _replacing = false;
 
   bool get _deleted => _note?['deleted'] == true || (s.lib.note(widget.id)?.deleted ?? false);
 
@@ -154,6 +156,7 @@ class EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     _focus.dispose();
     _scroll.dispose();
     _find.dispose();
+    _with.dispose();
     super.dispose();
   }
 
@@ -780,6 +783,21 @@ class EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     _focus.requestFocus();
   }
 
+  /// Replace: the match selected becomes the replacement, then on to the next one.
+  void _replaceOne() {
+    final q = _find.text;
+    final sel = c.selection;
+    if (q.isNotEmpty && sel.isValid && !sel.isCollapsed && sel.textInside(c.text).toLowerCase() == q.toLowerCase()) {
+      c.value = TextEditingValue(text: c.text.replaceRange(sel.start, sel.end, _with.text), selection: TextSelection.collapsed(offset: sel.start + _with.text.length));
+    }
+    _findNext(1);
+  }
+
+  void _replaceAll() {
+    final n = c.replaceAll(_find.text, _with.text);
+    s.say(n == 0 ? 'Not found' : n == 1 ? '1 replaced' : '$n replaced');
+  }
+
   void _openFormat() {
     SystemChannels.textInput.invokeMethod('TextInput.hide');
     setState(() => _format = true);
@@ -1327,13 +1345,58 @@ class EditorViewState extends State<EditorView> with WidgetsBindingObserver {
 
   Widget _findBar(Palette p) => Glass(
     radius: 24,
-    child: SizedBox(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _findRow(p),
+        // Find and Replace (the search icon turns it on and off): the replacement, Replace, All
+        if (_replacing)
+          SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                const SizedBox(width: 14),
+                Icon(CupertinoIcons.arrow_2_squarepath, size: 18, color: p.secondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _with,
+                    style: Type.body(p.label),
+                    cursorColor: p.accent,
+                    onSubmitted: (_) => _replaceOne(),
+                    decoration: InputDecoration.collapsed(hintText: 'Replace', hintStyle: Type.body(p.secondary)),
+                  ),
+                ),
+                Pressable(
+                  onTap: _replaceOne,
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10), child: Text('Replace', style: Type.body(p.accent))),
+                ),
+                Pressable(
+                  onTap: _replaceAll,
+                  child: Padding(padding: const EdgeInsets.fromLTRB(10, 10, 16, 10), child: Text('All', style: Type.body(p.accent))),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Widget _findRow(Palette p) => SizedBox(
       height: 48,
       child: Row(
         children: [
-          const SizedBox(width: 14),
-          Icon(CupertinoIcons.search, size: 18, color: p.secondary),
-          const SizedBox(width: 8),
+          Pressable(
+            onTap: () => setState(() => _replacing = !_replacing),
+            child: SizedBox(
+              width: 40,
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(CupertinoIcons.search, size: 18, color: _replacing ? p.accent : p.secondary),
+              ),
+            ),
+          ),
           Expanded(
             child: TextField(
               controller: _find,
@@ -1359,8 +1422,7 @@ class EditorViewState extends State<EditorView> with WidgetsBindingObserver {
           ),
         ],
       ),
-    ),
-  );
+    );
 }
 
 /// Lines & Grids: ruled lines or a grid behind the text, moving with it.
