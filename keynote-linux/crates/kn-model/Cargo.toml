@@ -1,12 +1,12 @@
 [package]
 name = "kn-model"
-version = "0.1.0"
+version = "0.4.2"
 edition = "2024"
 license = "GPL-3.0-only"
 
 [dependencies]
 i_overlay = "2"
-kn-format = { version = "0.1.0", path = "../kn-format" }
+kn-format = { path = "../kn-format" }
 uuid = { version = "1.28.0", features = ["v4"] }
 
 [dev-dependencies]

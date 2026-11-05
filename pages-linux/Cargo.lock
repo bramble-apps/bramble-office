@@ -1639,7 +1639,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kn-format"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "aes 0.8.4",
  "cbc",
@@ -1655,7 +1655,7 @@ dependencies = [
 
 [[package]]
 name = "kn-model"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "i_overlay",
  "kn-format",
@@ -1664,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "kn-render"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "cosmic-text",
  "image",
@@ -1676,7 +1676,7 @@ dependencies = [
 
 [[package]]
 name = "kn-ui"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "android_logger",
  "eframe",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "pg-app"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "eframe",
  "egui",
@@ -2420,7 +2420,7 @@ dependencies = [
 
 [[package]]
 name = "pg-core"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "image",
  "kn-format",
@@ -2434,7 +2434,7 @@ dependencies = [
 
 [[package]]
 name = "pg-ffi"
-version = "0.1.0"
+version = "0.4.2"
 dependencies = [
  "pg-core",
  "serde_json",
