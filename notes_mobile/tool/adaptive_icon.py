@@ -6,5 +6,5 @@ import os
 import subprocess
 import sys
 
-script = os.path.expanduser("~/CascadeProjects/notes-linux/tools/icon.py")
+script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../notes-linux/tools/icon.py")
 sys.exit(subprocess.call([sys.executable, script, "android", sys.argv[1]]))

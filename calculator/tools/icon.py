@@ -242,7 +242,7 @@ def android_layers(n):
 
 def suite_tile(out, name):
     """Puts the drawn icon on the suite's tile (Apple's macOS icon grid, keynote-linux/tools/suite/apple_tile.py)."""
-    sys.path.insert(0, os.path.expanduser("~/CascadeProjects/keynote-linux/tools/suite"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../keynote-linux/tools/suite"))
     import apple_tile
     apple_tile.write_sizes(apple_tile.retile(f"{out}/{name}-1024.png"), out, name)
 

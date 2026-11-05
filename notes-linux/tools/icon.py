@@ -12,7 +12,7 @@ import sys
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-sys.path.insert(0, os.path.expanduser("~/CascadeProjects/keynote-linux/tools/suite"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../keynote-linux/tools/suite"))
 import apple_tile  # noqa: E402
 
 PAPER_TOP, PAPER_FOOT = (248, 228, 92), (246, 211, 45)
@@ -165,7 +165,7 @@ def main():
     elif mode == "android":
         android(out)
     elif mode == "preview":
-        home = os.path.expanduser("~/CascadeProjects")
+        home = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..")
         others = [f"{home}/pages-linux/crates/pg-app/data/icons/letters-1024.png", f"{home}/numbers-linux/crates/nm-app/data/icons/numdeck-1024.png", f"{home}/calculator/crates/calc-app/assets/icon/calculator-1024.png"]
         icons = [desktop(1024)] + [Image.open(p).convert("RGBA") for p in others]
         sheet = Image.new("RGBA", (len(icons) * 520 + 10, 640), (240, 240, 240, 255))

@@ -1,4 +1,5 @@
 target/
-/*/testdata/
-/*/testdata-private/
+# private test files and research copies: on this computer only, never published
+/*/testdata
+/*/testdata-private
 dist/

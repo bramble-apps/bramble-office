@@ -1,7 +1,7 @@
 #[test]
 #[ignore]
 fn find() {
-    for e in std::fs::read_dir(format!("{}/CascadeProjects/keynote-linux/testdata", std::env::var("HOME").unwrap())).unwrap().flatten() {
+    for e in std::fs::read_dir(format!("{}/../../../keynote-linux/testdata", env!("CARGO_MANIFEST_DIR"))).unwrap().flatten() {
         let p = e.path();
         if p.extension().is_none_or(|x| x != "key") { continue; }
         let Ok(k) = nm_core::kn_format::KeyFile::open(&p) else { continue };

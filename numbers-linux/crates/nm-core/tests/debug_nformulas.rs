@@ -2,15 +2,15 @@
 #[ignore]
 fn count() {
     let home = std::env::var("HOME").unwrap();
-    let mut files: Vec<String> = std::fs::read_dir(format!("{home}/CascadeProjects/keynote-linux/testdata")).unwrap().flatten().map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.ends_with(".key")).collect();
+    let mut files: Vec<String> = std::fs::read_dir(format!("{}/../../../keynote-linux/testdata", env!("CARGO_MANIFEST_DIR"))).unwrap().flatten().map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.ends_with(".key")).collect();
     files.sort();
     files.truncate(25);
     let _old = [
-        format!("{home}/CascadeProjects/numbers-linux/testdata/02-second-table.numbers"),
+        format!("{}/../../testdata/02-second-table.numbers", env!("CARGO_MANIFEST_DIR")),
         format!("{home}/CascadeProjects/numbers-research-src/out-N3/N13-reference-Numbers-own-table-delete.numbers"),
-        format!("{home}/CascadeProjects/numbers-linux/testdata/29-base-data.numbers"),
-        format!("{home}/CascadeProjects/numbers-linux/testdata/00-empty.numbers"),
-        format!("{home}/CascadeProjects/numbers-linux/testdata/07-formula-same-table.numbers"),
+        format!("{}/../../testdata/29-base-data.numbers", env!("CARGO_MANIFEST_DIR")),
+        format!("{}/../../testdata/00-empty.numbers", env!("CARGO_MANIFEST_DIR")),
+        format!("{}/../../testdata/07-formula-same-table.numbers", env!("CARGO_MANIFEST_DIR")),
         format!("{home}/CascadeProjects/numbers-research-src/out-N3/resaved/N15-insert-table-and-sheet-resaved-by-Numbers.numbers"),
     ];
     for f in files {

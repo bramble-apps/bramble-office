@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://bramble-apps.github.io">Website</a> ·
   <a href="https://github.com/bramble-apps/bramble-office/releases/latest">All downloads</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a> ·
+  <a href="https://github.com/bramble-apps/bramble-office/issues">Report a problem</a> ·
   <a href="https://www.paypal.com/donate/?hosted_button_id=5EP8EM86U9P7Q">Support development</a>
 </p>
 
@@ -177,6 +179,9 @@ folder. Values and Letters build against it by relative path, so keep the three 
 - `pages-linux/`: **Letters** (`crates/pg-core`, `crates/pg-app` → the `letters` app)
 - `letters_mobile/`, `keydeck_mobile/`, `values_mobile/`: the Flutter Android apps, built on the same
   engines through each app's `ffi.rs` (keep them beside the three folders above)
+- `notes-linux/`, `notes_mobile/`: **Bramble Notes** for the desktop and Android (in development)
+- `calculator/`: **Bramble Calculator** (in development)
+- `flatpak/`, `keynote-linux/tools/suite/flatpak`, `keynote-linux/tools/suite/snap`: packaging for Flatpak and the Snap Store
 
 You need a recent stable Rust (`rustup`, edition 2024). On Linux you also need the windowing libraries'
 headers (Debian or Ubuntu: `libxkbcommon-dev libwayland-dev libx11-dev libgtk-3-dev`).
@@ -185,6 +190,8 @@ headers (Debian or Ubuntu: `libxkbcommon-dev libwayland-dev libx11-dev libgtk-3-
 cd keynote-linux && cargo build --release -p kn-app     # target/release/keydeck
 cd numbers-linux && cargo build --release -p nm-app     # target/release/values
 cd pages-linux   && cargo build --release -p pg-app     # target/release/letters
+cd notes-linux   && cargo build --release -p nt-app     # target/release/bramble-notes
+cd calculator    && cargo build --release -p calc-app   # target/release/calculator
 ```
 
 The Flutter Android apps build with `tool/build_engine.sh` then `flutter build apk` in their folders (they need

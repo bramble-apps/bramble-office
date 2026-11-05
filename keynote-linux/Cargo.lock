@@ -1195,6 +1195,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "log",
  "peniko",
+ "png",
  "skrifa 0.44.0",
  "smallvec",
  "vello_common",
@@ -1701,6 +1702,7 @@ dependencies = [
  "android_logger",
  "eframe",
  "egui",
+ "epaint",
  "image",
  "jni 0.21.1",
  "kn-format",
@@ -3600,6 +3602,7 @@ dependencies = [
  "guillotiere",
  "log",
  "peniko",
+ "png",
  "smallvec",
  "thiserror 2.0.21",
 ]
@@ -3613,6 +3616,7 @@ dependencies = [
  "bytemuck",
  "glifo",
  "hashbrown 0.17.1",
+ "png",
  "vello_common",
 ]
 
