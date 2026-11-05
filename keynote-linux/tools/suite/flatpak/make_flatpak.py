@@ -21,7 +21,7 @@ SITE = "https://bramble-apps.github.io"
 ISSUES = "https://github.com/bramble-apps/bramble-office/issues"
 DONATE = "https://www.paypal.com/donate/?hosted_button_id=5EP8EM86U9P7Q"
 RUNTIME = "26.08"
-VERSION, DATE = "0.4.0", "2026-11-04"
+VERSION, DATE = "0.4.1", "2026-11-05"
 
 # (the external programs the apps call that a Flatpak has to bring: ffmpeg for audio and video,
 # poppler's pdftoppm / pdfinfo for PDF pages; curl, xdg-open, gsettings come with the runtime)

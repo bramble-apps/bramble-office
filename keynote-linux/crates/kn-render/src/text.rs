@@ -313,6 +313,14 @@ fn shape_core(fonts: &mut Fonts, tb: &TextBox, pi: usize, width: Option<f32>, sc
         let mut rs = r.style.clone();
         for (bi, ch) in tb.text[r.start..r.end].char_indices() {
             let src = r.start + bi;
+            // a symbol font's own code (Word's Symbol bullet U+F0B7): the font's character
+            // U+00xx when it has no U+F0xx of its own, as Word and OnlyOffice read it
+            let ch = match (choice.as_ref(), ch as u32) {
+                (Some(c), 0xF020..=0xF0FF) if !fonts.covers(&c.family, c.weight, c.italic, ch) => {
+                    char::from_u32(ch as u32 - 0xF000).filter(|m| fonts.covers(&c.family, c.weight, c.italic, *m)).unwrap_or(ch)
+                }
+                _ => ch,
+            };
             // Word's small caps: only lower-case letters are drawn as smaller capitals, the rest
             // at full size (OnlyOffice)
             if word && r.style.caps == Caps::Small {
