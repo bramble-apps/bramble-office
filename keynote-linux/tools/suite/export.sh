@@ -10,7 +10,7 @@ out=${1:?usage: export.sh <bramble-office dir> [message]}
 msg=${2:-"Update from the development repos"}
 mkdir -p "$out"
 [ -d "$out/.git" ] || git -C "$out" init -q -b main
-for r in keynote-linux numbers-linux pages-linux letters_mobile keydeck_mobile values_mobile calculator notes-linux; do
+for r in keynote-linux numbers-linux pages-linux letters_mobile keydeck_mobile values_mobile calculator notes-linux notes_mobile; do
   rm -rf "${out:?}/$r"
   mkdir -p "$out/$r"
   git -C "$P/$r" archive HEAD | tar -x -C "$out/$r"

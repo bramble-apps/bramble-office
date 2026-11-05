@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="quick_note" android:enabled="true" android:icon="@drawable/ic_quick_note"
+        android:shortcutShortLabel="@string/quick_note" android:shortcutLongLabel="@string/new_quick_note">
+        <intent android:action="app.bramble.notes.QUICK_NOTE" android:targetPackage="app.bramble.notes"
+            android:targetClass="app.bramble.notes.MainActivity"/>
+    </shortcut>
+    <shortcut android:shortcutId="new_note" android:enabled="true" android:icon="@drawable/ic_new_note"
+        android:shortcutShortLabel="@string/new_note" android:shortcutLongLabel="@string/new_note">
+        <intent android:action="app.bramble.notes.NEW_NOTE" android:targetPackage="app.bramble.notes"
+            android:targetClass="app.bramble.notes.MainActivity"/>
+    </shortcut>
+</shortcuts>
