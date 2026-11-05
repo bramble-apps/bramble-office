@@ -208,6 +208,8 @@ pub fn menus() -> &'static [Item] {
 
 /// Commands that work right now (menu label -> enabled check is done in `enabled`).
 const IMPLEMENTED: &[&str] = &[
+    "Browse Content Hub",
+    "Show Content Hub",
     "About Keydeck",
     "Support Development…",
     "Update Video Support…",
