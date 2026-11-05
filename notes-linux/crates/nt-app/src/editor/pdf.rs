@@ -127,6 +127,16 @@ pub fn paint(ed: &mut Editor, painter: &Painter, att: &Att, r: Rect) {
     let ws = widths(&pages, page_h);
     // the current page: the one most in view from the left
     let current = (0..pages.len()).min_by(|&a, &b| (page_x(&ws, a, PAGE_GAP * s) - v.x).abs().total_cmp(&(page_x(&ws, b, PAGE_GAP * s) - v.x).abs())).unwrap_or(0);
+    // (the pages asked for last to first, the ones in view or every one under thumbnails: the
+    // workers take the newest first, so the first page, the one read first, is drawn first)
+    if let Some(f) = path.as_deref() {
+        for (i, w) in ws.iter().enumerate().rev() {
+            let px = r.min.x - v.x + page_x(&ws, i, PAGE_GAP * s);
+            if *thumbs || (px < band.max.x && px + w > band.min.x) {
+                ed.media.page(&ctx, f, i, PAGE_PX);
+            }
+        }
+    }
     if *thumbs {
         y += THUMBS_ABOVE * s;
         for (i, p) in pages.iter().enumerate() {

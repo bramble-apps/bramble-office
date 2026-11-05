@@ -74,7 +74,7 @@ fn thumb(a: &Attachment) -> Option<Thumb> {
         AttachmentKind::Image => a.preview.clone().or(a.file.clone()).map(Thumb::File),
         AttachmentKind::Scan => a.parts.first().and_then(|p| p.display_file()).cloned().or(a.preview.clone()).map(Thumb::File),
         AttachmentKind::Drawing => a.fallback.clone().filter(|p| p.extension().is_some_and(|e| e == "png")).or(a.preview.clone()).map(Thumb::File),
-        AttachmentKind::Pdf => Some(a.preview.clone().map(Thumb::File).unwrap_or(Thumb::Pdf)),
+        AttachmentKind::Pdf => Some(a.preview.clone().or(a.file.clone()).or(a.fallback.clone()).map(Thumb::File).unwrap_or(Thumb::Pdf)),
         _ => a.preview.clone().map(Thumb::File),
     }
 }

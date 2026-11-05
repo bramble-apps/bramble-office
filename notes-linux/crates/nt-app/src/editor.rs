@@ -265,6 +265,12 @@ pub fn take_add_link() -> bool {
     ADD_LINK.replace(false)
 }
 
+/// Whether the editors still have pictures or PDF pages on the workers (scripted snapshots wait
+/// for them, so a capture never shows a page still white).
+pub fn busy() -> bool {
+    EDITOR.with(|e| e.try_borrow().is_ok_and(|ed| ed.media.busy())) || WINDOWS.with(|w| w.try_borrow().is_ok_and(|w| w.values().any(|ed| ed.media.busy())))
+}
+
 /// The selected text (the Add Link sheet's Name field).
 pub fn selected_text() -> String {
     EDITOR.with_borrow(|ed| ed.copy_frag().map(|(_, t)| t).unwrap_or_default())

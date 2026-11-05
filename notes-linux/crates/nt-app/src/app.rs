@@ -847,7 +847,8 @@ impl App {
         }
         n.attachments.iter().find_map(|a| match a.kind {
             AttachmentKind::Image | AttachmentKind::Scan => a.preview.clone().or(a.file.clone()).map(Thumb::File),
-            AttachmentKind::Pdf => Some(a.preview.clone().map(Thumb::File).unwrap_or(Thumb::Pdf)),
+            // (no preview: the PDF itself, its first page drawn)
+            AttachmentKind::Pdf => Some(a.preview.clone().or(a.file.clone()).or(a.fallback.clone()).map(Thumb::File).unwrap_or(Thumb::Pdf)),
             AttachmentKind::Drawing => Some(a.fallback.clone().filter(|p| p.extension().is_some_and(|e| e == "png")).map(Thumb::File).unwrap_or(Thumb::Drawing)),
             _ => None,
         })
@@ -1438,8 +1439,10 @@ impl App {
         for c in std::mem::take(&mut self.script_cmds) {
             crate::menus::run(self, ctx, &c);
         }
-        // (work still on a worker, an export, is waited for)
-        if n > 20 && self.script.is_empty() && self.jobs.is_empty() {
+        // (work still on a worker, an export, is waited for; the editor's pictures for 10 s at most,
+        // as a hidden editor doesn't take them in)
+        let pictures = crate::editor::busy() && self.snap_idle.is_none_or(|t| t.elapsed().as_secs() < 10);
+        if n > 20 && self.script.is_empty() && self.jobs.is_empty() && !pictures {
             if std::env::var_os("NT_DUMP").is_some() {
                 eprintln!("content: {:?} pt, zoom {}", ctx.content_rect().size(), ctx.zoom_factor());
             }
@@ -1764,11 +1767,32 @@ impl App {
 fn decode_thumb(t: &Thumb) -> Option<egui::ColorImage> {
     let img = match t {
         Thumb::Image(bytes) => image::load_from_memory(bytes).ok()?,
-        Thumb::File(p) => image::open(p).ok()?,
+        // (by what the file holds: the library's files have no extension; a PDF's first page)
+        Thumb::File(p) if is_pdf(p) => image::load_from_memory(&pdf_first_page(p)?).ok()?,
+        Thumb::File(p) => image::ImageReader::open(p).ok()?.with_guessed_format().ok()?.decode().ok()?,
         _ => return None,
     };
     let img = img.thumbnail(256, 256).into_rgba8();
     Some(egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw()))
+}
+
+fn is_pdf(p: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut b = [0u8; 5];
+    std::fs::File::open(p).and_then(|mut f| f.read_exact(&mut b)).is_ok() && &b == b"%PDF-"
+}
+
+/// A PDF's first page as a PNG, 256 pixels on its longer side (pdftoppm).
+fn pdf_first_page(p: &std::path::Path) -> Option<Vec<u8>> {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!("nt-thumb-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).ok()?;
+    let out = dir.join(format!("t{}", SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let ok = std::process::Command::new("pdftoppm").args(["-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "256"]).arg(p).arg(&out).status().ok()?.success();
+    let png = out.with_extension("png");
+    let b = ok.then(|| std::fs::read(&png).ok()).flatten();
+    let _ = std::fs::remove_file(&png);
+    b
 }
 
 /// The thumbnail worker: one thread decoding pictures as rows come into view.
@@ -2290,4 +2314,33 @@ fn opening_sheet(ctx: &egui::Context) {
             });
         });
     });
+}
+
+#[cfg(test)]
+mod thumb_tests {
+    use super::*;
+
+    /// List thumbnails read the library's extension-less files by what they hold: a photo, and a
+    /// PDF without a preview (its first page).
+    #[test]
+    fn thumbnails_of_files_without_extensions() {
+        let dir = std::env::temp_dir().join(format!("nt-thumb-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("5733621153a8");
+        image::RgbaImage::from_pixel(40, 30, image::Rgba([200, 30, 30, 255])).save_with_format(&photo, image::ImageFormat::Png).unwrap();
+        let ci = decode_thumb(&Thumb::File(photo)).expect("a photo with no extension");
+        assert_eq!(ci.size, [256, 192], "the photo, 256 pixels on its longer side");
+        // a one-page PDF, a black square on white (pdftoppm mends the missing cross-reference table)
+        let pdf = dir.join("44e9f2765b85");
+        let content = "0 0 0 rg 20 20 60 60 re f";
+        std::fs::write(&pdf, format!("%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 200] /Contents 4 0 R >> endobj\n4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n", content.len())).unwrap();
+        if std::process::Command::new("pdftoppm").arg("-v").output().is_err() {
+            return;
+        }
+        let ci = decode_thumb(&Thumb::File(pdf)).expect("a PDF's first page");
+        assert_eq!(ci.size, [128, 256], "256 pixels on the longer side");
+        assert!(ci.pixels.iter().any(|c| c.r() < 50), "the page is drawn, not blank");
+        assert!(ci.pixels.iter().any(|c| c.r() > 200));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
