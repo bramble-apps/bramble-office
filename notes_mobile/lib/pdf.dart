@@ -41,10 +41,19 @@ Future<List<Size>> pdfPages(String path) => _info.putIfAbsent(path, () async {
   }
 });
 
-/// Page `index` as a picture `width` pixels wide (drawn once, kept in the cache folder).
+/// Page `index` as a picture `width` pixels wide (drawn once, kept in the cache folder). A page
+/// that couldn't be drawn (its file still arriving with a sync, the renderer busy) isn't kept as
+/// "no picture": the next time it's shown it's asked for again, so it never stays blank.
 Future<String?> pdfPage(String path, int index, int width) {
   final w = ((width + 99) ~/ 100) * 100;
-  return _pages.putIfAbsent('$path|$index|$w', () async {
+  final key = '$path|$index|$w';
+  return _pages.putIfAbsent(key, () => _drawPage(path, index, w).then((r) {
+    if (r == null) _pages.remove(key);
+    return r;
+  }));
+}
+
+Future<String?> _drawPage(String path, int index, int w) => (() async {
     try {
       final dir = Directory('${(await getTemporaryDirectory()).path}/pdf-pages')..createSync(recursive: true);
       final out = '${dir.path}/${path.hashCode.toUnsigned(32)}-${File(path).lengthSync()}-$index-$w.png';
@@ -59,8 +68,7 @@ Future<String?> pdfPage(String path, int index, int width) {
     } catch (_) {
       return null;
     }
-  });
-}
+  })();
 
 /// One page, drawn when it's needed.
 class PdfPageImage extends StatelessWidget {
