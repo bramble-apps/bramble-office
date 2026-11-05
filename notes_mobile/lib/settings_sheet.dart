@@ -287,7 +287,7 @@ class _SettingsState extends State<_Settings> {
           ],
         ),
         Card2(
-          children: [CardRow(label: 'Notes for Android', value: '0.4.0')],
+          children: [CardRow(label: 'Notes for Android', value: '0.4.2')],
         ),
       ],
     );
