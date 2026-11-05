@@ -1,4 +1,4 @@
-# Builds Keydeck, Values and Letters for Linux, Windows, macOS (Apple silicon and Intel) and Android.
+# Builds Keydeck, Values, Letters and Bramble Notes for Linux, Windows, macOS (Apple silicon and Intel) and Android.
 # Pushing a tag such as v0.1.0 also publishes a GitHub release with every download; Run
 # workflow (the Actions tab) builds without publishing.
 name: Build
@@ -33,15 +33,17 @@ jobs:
             keynote-linux
             numbers-linux
             pages-linux
+            notes-linux
       - name: Build
         run: |
           (cd keynote-linux && cargo build --release -p kn-app)
           (cd numbers-linux && cargo build --release -p nm-app)
           (cd pages-linux && cargo build --release -p pg-app)
+          (cd notes-linux && cargo build --release -p nt-app)
       - name: Package
         run: |
           mkdir -p out/bramble-office dist
-          cp keynote-linux/target/release/keydeck numbers-linux/target/release/values pages-linux/target/release/letters out/bramble-office/
+          cp keynote-linux/target/release/keydeck numbers-linux/target/release/values pages-linux/target/release/letters notes-linux/target/release/bramble-notes out/bramble-office/
           cp LICENSE README.md out/bramble-office/
           tar -C out -czf dist/Bramble-Office-linux-x86_64.tar.gz bramble-office
       - name: AppImages
@@ -53,6 +55,7 @@ jobs:
           $S keynote-linux/target/release/keydeck keydeck Keydeck "Presentations that open and save Apple Keynote files" "Office;Presentation;" "application/x-iwork-keynote-sffkey;application/vnd.apple.keynote;application/vnd.openxmlformats-officedocument.presentationml.presentation;" keynote-linux/crates/kn-app/data/icons/keydeck-256.png dist/Keydeck-x86_64.AppImage
           $S numbers-linux/target/release/values values Values "Spreadsheets that open and save Apple Numbers files" "Office;Spreadsheet;" "application/x-iwork-numbers-sffnumbers;application/vnd.apple.numbers;text/csv;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;" numbers-linux/crates/nm-app/data/icons/numdeck-256.png dist/Values-x86_64.AppImage
           $S pages-linux/target/release/letters letters Letters "Word processing and page layout that open and save Apple Pages files" "Office;WordProcessor;" "application/x-iwork-pages-sffpages;application/vnd.apple.pages;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/rtf;text/markdown;text/plain;" pages-linux/crates/pg-app/data/icons/letters-256.png dist/Letters-x86_64.AppImage
+          $S notes-linux/target/release/bramble-notes bramble-notes "Bramble Notes" "Notes, checklists and tables, with Apple Notes import and WebDAV sync" "Office;" "" notes-linux/crates/nt-app/data/icons/notes-256.png dist/Bramble-Notes-x86_64.AppImage
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -70,6 +73,7 @@ jobs:
             keynote-linux
             numbers-linux
             pages-linux
+            notes-linux
       - name: Build
         shell: bash
         # (all three, even when one fails, so one run shows every error)
@@ -78,12 +82,13 @@ jobs:
           (cd keynote-linux && cargo build --release -p kn-app) || ok=1
           (cd numbers-linux && cargo build --release -p nm-app) || ok=1
           (cd pages-linux && cargo build --release -p pg-app) || ok=1
+          (cd notes-linux && cargo build --release -p nt-app) || ok=1
           exit $ok
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out/bramble-office, dist | Out-Null
-          Copy-Item keynote-linux/target/release/keydeck.exe, numbers-linux/target/release/values.exe, pages-linux/target/release/letters.exe, LICENSE, README.md out/bramble-office/
+          Copy-Item keynote-linux/target/release/keydeck.exe, numbers-linux/target/release/values.exe, pages-linux/target/release/letters.exe, notes-linux/target/release/bramble-notes.exe, LICENSE, README.md out/bramble-office/
           Compress-Archive -Path out/bramble-office -DestinationPath dist/Bramble-Office-windows-x86_64.zip
       - uses: actions/upload-artifact@v4
         with:
@@ -113,15 +118,17 @@ jobs:
             keynote-linux
             numbers-linux
             pages-linux
+            notes-linux
       - name: Build the app bundles
         run: |
           keynote-linux/packaging/build-macos.sh
           numbers-linux/packaging/build-macos.sh
           pages-linux/packaging/build-macos.sh
+          notes-linux/packaging/build-macos.sh
       - name: Package
         run: |
           mkdir -p out/bramble-office dist
-          cp -R keynote-linux/dist/Keydeck.app numbers-linux/dist/Values.app pages-linux/dist/Letters.app out/bramble-office/
+          cp -R keynote-linux/dist/Keydeck.app numbers-linux/dist/Values.app pages-linux/dist/Letters.app "notes-linux/dist/Bramble Notes.app" out/bramble-office/
           cp LICENSE README.md out/bramble-office/
           ditto -c -k --keepParent out/bramble-office dist/Bramble-Office-macos-${{ matrix.arch }}.zip
       - uses: actions/upload-artifact@v4
@@ -144,6 +151,7 @@ jobs:
             keynote-linux
             numbers-linux
             pages-linux
+            notes-linux
       - name: Build the APKs
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
