@@ -165,7 +165,8 @@ pub fn copy_cells(app: &mut App) -> Option<String> {
     let grid: Vec<Vec<String>> = (r0..=r1.min(t.rows.saturating_sub(1))).map(|r| (c0..=c1.min(t.cols.saturating_sub(1))).map(|c| cell(&t, r, c)).collect()).collect();
     let tsv = grid.iter().map(|row| row.join("\t")).collect::<Vec<_>>().join("\n");
     app.cell_clip = Some(grid);
-    Some(tsv)
+    // (one empty cell is a line break: the clipboard drops an empty paste)
+    Some(if tsv.is_empty() { "\n".to_string() } else { tsv })
 }
 
 /// Edit > Paste (and Paste Formula Results) into the cells from the table cursor: the copied

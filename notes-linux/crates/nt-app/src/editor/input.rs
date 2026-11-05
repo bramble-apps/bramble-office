@@ -578,21 +578,21 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
     let s = ed.settings.text_scale;
     ed.media.poll(&ctx);
     super::spelling::poll(&mut ed.view);
-    // older PDF attachments: their pages' sizes, read off the UI thread
+    // PDF attachments: their pages' sizes from the file itself, read off the UI thread (the
+    // sizes stored with a note can be wrong: Apple's scans store a 612 x 816 page for a
+    // business card)
     for (path, pages) in ed.media.pdf_pages_read() {
         for a in &mut ed.doc.atts {
             if let AttKind::Pdf { path: Some(p), pages: pg, .. } = &mut a.kind {
-                if *p == path && pg.is_empty() {
+                if *p == path && !pages.is_empty() {
                     *pg = pages.clone();
                 }
             }
         }
     }
     for a in &ed.doc.atts {
-        if let AttKind::Pdf { path: Some(p), pages, .. } = &a.kind {
-            if pages.is_empty() {
-                ed.media.want_pdf_pages(&ctx, p);
-            }
+        if let AttKind::Pdf { path: Some(p), .. } = &a.kind {
+            ed.media.want_pdf_pages(&ctx, p);
         }
     }
 

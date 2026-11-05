@@ -404,16 +404,22 @@ pub fn combo<'a>(id: impl std::hash::Hash + std::fmt::Debug) -> egui::ComboBox<'
 
 /// A font menu you can type in: the combo's list with a search field over it, focused as it
 /// opens. Typing narrows the list (names starting with the text first); Return picks the first
-/// name left, or the name typed when none is. Returns the family picked.
+/// name left, or the name typed when none is. Typing while the closed menu has keyboard focus
+/// opens it with those letters already in the search. Returns the family picked.
 pub fn font_combo(ui: &mut egui::Ui, id: &str, current: &str, fonts: &[String], width: f32) -> Option<String> {
     let qid = egui::Id::unique((id, "font-search"));
     let mut picked = None;
     let r = combo(id).selected_text(current).width(width).height(400.0).show_ui(ui, |ui| {
         let mut q: String = ui.data_mut(|d| d.get_temp::<String>(qid)).unwrap_or_default();
         let te = ui.add(egui::TextEdit::singleline(&mut q).hint_text("Search").desired_width(f32::INFINITY));
-        // (focus once, as the list opens)
+        // (focus once, as the list opens, with the caret after any letters typed to open it)
         if !ui.data(|d| d.get_temp::<bool>(qid.with("focused")).unwrap_or(false)) {
             te.request_focus();
+            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), te.id) {
+                let end = egui::text::CCursor::new(q.chars().count());
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                st.store(ui.ctx(), te.id);
+            }
             ui.data_mut(|d| d.insert_temp(qid.with("focused"), true));
         }
         let t = q.trim().to_lowercase();
@@ -437,6 +443,25 @@ pub fn font_combo(ui: &mut egui::Ui, id: &str, current: &str, fonts: &[String], 
             d.remove::<String>(qid);
             d.remove::<bool>(qid.with("focused"));
         });
+        // typing on the focused, closed menu opens it searching for what was typed
+        if r.response.has_focus() {
+            let typed: String = ui.input_mut(|i| {
+                let mut t = String::new();
+                i.events.retain(|e| match e {
+                    egui::Event::Text(s) => {
+                        t.push_str(s);
+                        false
+                    }
+                    _ => true,
+                });
+                t
+            });
+            if !typed.trim().is_empty() {
+                ui.data_mut(|d| d.insert_temp(qid, typed));
+                egui::Popup::open_id(ui.ctx(), r.response.id.with("popup"));
+                ui.ctx().request_repaint();
+            }
+        }
     }
     picked.filter(|f| f != current)
 }

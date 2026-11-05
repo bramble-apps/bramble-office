@@ -167,13 +167,8 @@ pub fn chart_tab_labeled(ui: &mut egui::Ui, doc: &mut Document, h: &mut History,
     let mut font_pick = None;
     let mut scale = 1.0;
     ui.horizontal(|ui| {
-        theme::combo("chart-font").selected_text(cur_font.clone()).width(150.0).show_ui(ui, |ui| {
-            for f in fonts {
-                if ui.selectable_label(f == cur_font, f).clicked() {
-                    font_pick = Some(f);
-                }
-            }
-        });
+        let names: Vec<String> = fonts.iter().map(|f| f.to_string()).collect();
+        font_pick = theme::font_combo(ui, "chart-font", &cur_font, &names, 150.0);
         if ui.button(RichText::new("A").size(11.0)).on_hover_text("Smaller").clicked() {
             scale = 1.0 / 1.11;
         }
@@ -182,7 +177,7 @@ pub fn chart_tab_labeled(ui: &mut egui::Ui, doc: &mut Document, h: &mut History,
         }
     });
     if font_pick.is_some() || scale != 1.0 {
-        merge(&mut act, edit(doc, h, "Chart Font", |d, h| d.set_chart_font(h, chart, font_pick, scale)));
+        merge(&mut act, edit(doc, h, "Chart Font", |d, h| d.set_chart_font(h, chart, font_pick.as_deref(), scale)));
     }
 
     section(ui, "Chart Type");

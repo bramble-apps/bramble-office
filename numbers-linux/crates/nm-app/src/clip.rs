@@ -76,7 +76,12 @@ pub fn copy(app: &mut App) -> Option<String> {
         }
         lines.push(line.join("\t"));
     }
-    let tsv = lines.join("\n");
+    // (one empty cell is a line break: the clipboard drops an empty paste, and then pasting
+    // the empty cell over another wouldn't reach us to clear it)
+    let tsv = match lines.join("\n") {
+        t if t.is_empty() => "\n".to_string(),
+        t => t,
+    };
     let merges = app
         .table(t)
         .map(|(_, d)| d.merges.iter().filter(|m| m.row >= r0 && m.row + m.rows - 1 <= r1 && m.col >= c0 && m.col + m.cols - 1 <= c1).map(|m| (m.row - r0, m.col - c0, m.rows, m.cols)).collect())
@@ -277,18 +282,26 @@ pub fn paste(app: &mut App, mode: PasteMode) -> bool {
                 _ => d.set_cell(hist, t, *r, *c, &CellInput::parse(&cc.shown))?,
             }
             let b = (*r, *c, *r, *c);
-            // the number format comes along in every kind of paste (when the copy has one)
+            // the number format comes along in every kind of paste (when the copy has one); a
+            // plain Paste also takes Automatic, so the cell ends up as the one copied
             let f = portable(&cc.format);
-            if f != CellFormat::Automatic {
+            if f != CellFormat::Automatic || mode == PasteMode::All {
                 d.set_cells_format(hist, t, b, &f)?;
             }
             // text style and fill: plain Paste only
             if mode != PasteMode::All {
                 continue;
             }
+            // a copied cell with no fill of its own: the destination goes back to the table's
+            // fill (an empty cell pasted over a filled one clears it)
+            if cc.style.as_ref().is_none_or(|st| matches!(st.fill, nm_core::kn_model::Fill::None)) {
+                d.set_cells_fill(hist, t, b, None)?;
+            }
             if let Some(st) = &cc.style {
-                let fill = crate::editing::fill_spec(&st.fill);
-                d.set_cells_fill(hist, t, b, Some(&fill))?;
+                if !matches!(st.fill, nm_core::kn_model::Fill::None) {
+                    let fill = crate::editing::fill_spec(&st.fill);
+                    d.set_cells_fill(hist, t, b, Some(&fill))?;
+                }
                 let tx = &st.text;
                 for p in [TextProp::Bold(tx.bold), TextProp::Italic(tx.italic), TextProp::Underline(tx.underline), TextProp::Strike(tx.strike), TextProp::Size(tx.size), TextProp::Color(tx.color), TextProp::Font(tx.font_name.clone())] {
                     d.set_cells_text_prop(hist, t, b, &p)?;

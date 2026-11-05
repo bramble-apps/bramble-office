@@ -197,7 +197,11 @@ pub fn copy_cells(app: &App) -> Option<String> {
     let (r0, c0, r1, c1) = s.block();
     let (_, t) = app.table(s.table)?;
     let tsv: Vec<String> = (r0..=r1).map(|r| (c0..=c1).map(|c| cell_text(t, r, c).replace('\n', " ")).collect::<Vec<_>>().join("\t")).collect();
-    Some(tsv.join("\n"))
+    // (one empty cell is a line break: the clipboard drops an empty paste)
+    Some(match tsv.join("\n") {
+        t if t.is_empty() => "\n".to_string(),
+        t => t,
+    })
 }
 
 pub fn clear_cells(app: &mut App, label: &str) {

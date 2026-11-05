@@ -1123,5 +1123,54 @@ mod tests {
         assert!(unknown.is_empty(), "commands the menu bar doesn't have: {unknown:?}");
     }
 
+
+    /// An empty cell copied and pasted over a filled one with text leaves it as the copy:
+    /// no text and no fill.
+    #[test]
+    fn pasting_an_empty_cell_clears_fill_and_text() {
+        let home = std::env::temp_dir().join("values-ffi-test-paste");
+        let _ = std::fs::remove_dir_all(&home);
+        vl_home(s(home.to_string_lossy().as_ref()).as_ptr());
+        vl_init(800.0, 1000.0);
+        let g = json(vl_geometry());
+        let (zoom, sx, sy) = (g["zoom"].as_f64().unwrap() as f32, g["scroll"][0].as_f64().unwrap() as f32, g["scroll"][1].as_f64().unwrap() as f32);
+        let c = g["content"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect::<Vec<_>>();
+        let t = ((c[0] + 140.0 - sx) * zoom, (c[1] + 30.0 - sy) * zoom);
+        vl_pointer(1, t.0, t.1, 0, false, false);
+        vl_pointer(2, t.0, t.1, 0, false, false);
+        let set = |k: &str, v: Value| vl_inspector_set(s(k).as_ptr(), s(&v.to_string()).as_ptr());
+        // B2: text and a green fill
+        vl_action(s("tbl:select:1:1:1:1").as_ptr());
+        vl_text(s("hello").as_ptr());
+        vl_action(s("tbl:commit").as_ptr());
+        vl_action(s("tbl:select:1:1:1:1").as_ptr());
+        set("obj.cellTab", json!(1));
+        set("cell.fill", json!({"kind": 1, "color": [0.0, 1.0, 0.0, 1.0]}));
+        let cell = || {
+            with(|h| {
+                let id = h.app.sel.unwrap().table;
+                h.app.table(id).map(|(_, d)| {
+                    let i = (d.cols + 1) as usize;
+                    (d.cells.get(i).cloned().unwrap_or_default(), d.cell_styles.get(i).map(|st| st.fill.clone()))
+                })
+            })
+            .unwrap()
+        };
+        let (text, fill) = cell();
+        assert_eq!(text, "hello");
+        assert!(fill.is_some_and(|f| !matches!(f, nm_core::kn_model::Fill::None)), "B2 filled first");
+        // copy an empty, unfilled cell (D5) and paste it on B2
+        vl_action(s("tbl:select:4:3:4:3").as_ptr());
+        vl_run(s("Copy").as_ptr());
+        let copied = vl_copied();
+        let text = if copied.is_null() { String::new() } else { unsafe { std::ffi::CStr::from_ptr(copied) }.to_string_lossy().into_owned() };
+        // (the system clipboard gives no paste for empty text)
+        assert!(!text.is_empty(), "an empty cell copies as something the clipboard pastes");
+        vl_action(s("tbl:select:1:1:1:1").as_ptr());
+        vl_paste(s(&text).as_ptr());
+        let (text, fill) = cell();
+        assert_eq!(text, "", "the text went");
+        assert!(fill.as_ref().is_none_or(|f| matches!(f, nm_core::kn_model::Fill::None)), "the fill went: {fill:?}");
+    }
 }
 

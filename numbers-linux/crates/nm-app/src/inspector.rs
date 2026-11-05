@@ -344,13 +344,9 @@ fn cell_text(app: &mut App, ui: &mut egui::Ui, sel: crate::app::Sel) {
             app.font_names = Some(crate::editing::font_names(app));
         }
         let fonts = app.font_names.clone().unwrap_or_default();
-        theme::combo("cell-font").selected_text(&family).width(ui.available_width()).height(400.0).show_ui(ui, |ui| {
-            for f in &fonts {
-                if ui.selectable_label(*f == family, f).clicked() && *f != family {
-                    props.push(("Font", TextProp::Font(f.replace(' ', ""))));
-                }
-            }
-        });
+        if let Some(f) = theme::font_combo(ui, "cell-font", &family, &fonts, ui.available_width()) {
+            props.push(("Font", TextProp::Font(f.replace(' ', ""))));
+        }
         ui.horizontal(|ui| {
             let typeface = match (run.bold, run.italic) {
                 (true, true) => "Bold Italic",
