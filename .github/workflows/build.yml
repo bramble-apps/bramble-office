@@ -169,6 +169,24 @@ jobs:
           $S keynote-linux kn-app kn_app app.bramble.keydeck Keydeck keynote-linux/crates/kn-app/data/icons/keydeck-256.png dist/Keydeck-android.apk "application/vnd.apple.keynote application/x-iwork-keynote-sffkey application/vnd.openxmlformats-officedocument.presentationml.presentation"
           $S numbers-linux nm-app nm_app app.bramble.values Values numbers-linux/crates/nm-app/data/icons/numdeck-256.png dist/Values-android.apk "application/vnd.apple.numbers application/x-iwork-numbers-sffnumbers application/vnd.openxmlformats-officedocument.spreadsheetml.sheet text/csv text/comma-separated-values text/tab-separated-values"
           $S pages-linux pg-app pg_app app.bramble.letters Letters pages-linux/crates/pg-app/data/icons/letters-256.png dist/Letters-android.apk "application/vnd.apple.pages application/x-iwork-pages-sffpages application/vnd.openxmlformats-officedocument.wordprocessingml.document application/rtf text/rtf text/markdown"
+      # Bramble Notes for Android: Flutter over the notes engine (nt-ffi), the same signing key
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+      - name: Build Bramble Notes for Android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "no ANDROID_KEYSTORE_B64 secret: skipping Notes"; exit 0; fi
+          export JAVA_HOME="$JAVA_HOME_17_X64" ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$ANDROID_KEYSTORE"
+          notes_mobile/tool/build_engine.sh arm64-v8a
+          cd notes_mobile
+          flutter build apk --release --target-platform android-arm64
+          mkdir -p ../dist
+          cp build/app/outputs/flutter-apk/app-release.apk ../dist/Bramble-Notes-android.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android
