@@ -2668,3 +2668,77 @@ fn backspace_takes_an_autocorrection_back() {
     ed.backspace(false);
     assert_eq!(ed.doc.paras[0].text, "teh cat teh");
 }
+
+#[test]
+fn a_note_that_starts_with_a_picture_shows_it_under_the_date() {
+    // (a scan or handwriting with no text: "No additional text")
+    let dir = std::env::temp_dir().join(format!("nt-first-att-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let pic = dir.join("tall.png");
+    image::RgbaImage::from_pixel(300, 900, image::Rgba([255, 255, 255, 255])).save(&pic).unwrap();
+    let att = doc::Att::new("public.png", AttKind::Image { path: Some(pic), width: 300.0, height: 900.0, view: nt_core::model::ViewSize::Large, name: String::new() });
+    let mut p = Para::default();
+    p.insert(0, "\u{FFFC}", &doc::Fmt { att: Some(att.id.clone()), ..Default::default() });
+    let mut ed = ed_with(&[("", ParaStyle::Title)]);
+    ed.doc.paras = vec![p];
+    ed.doc.atts.push(att);
+    let ctx = egui::Context::default();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(784.0, 700.0));
+    let mut note = model::Note { id: "n".into(), ..Default::default() };
+    for i in 0..30 {
+        let raw = egui::RawInput { screen_rect: Some(rect), time: Some(1.0 + i as f64 / 60.0), ..Default::default() };
+        ctx.run_ui(raw, |ui| {
+            let _ = super::frame(ed_ref(&mut ed), ui, rect, &mut note, &[]);
+        }).textures_delta.clear();
+    }
+    let f = ed.view.flow.as_ref().unwrap();
+    let top = ed.view.origin.y + f.boxes[0].top;
+    let date = rect.top() + super::layout::DATE_BASELINE * ed.settings.text_scale;
+    assert!(top > date, "the picture starts below the date ({top} vs {date})");
+    assert!(ed.view.scroll.offset <= 0.5, "opened at the top ({})", ed.view.scroll.offset);
+}
+
+fn ed_ref(ed: &mut Editor) -> &mut Editor {
+    ed
+}
+
+/// Looking at a handwritten note (a click opens the drawing, a click on it, Escape) changes
+/// nothing, so the note keeps its date and place in the list.
+#[test]
+fn looking_at_a_drawing_changes_nothing() {
+    use super::ink::{DrawingExt, PointExt};
+    let mut d = super::ink::Drawing::new();
+    d.width = 600.0;
+    d.height = 300.0;
+    d.strokes.push(super::ink::Stroke { id: "s".into(), ink: super::ink::InkKind::Pen, color: [0.0, 0.0, 0.0, 1.0], width: 3.0, points: (0..20).map(|i| super::ink::InkPoint::new(40.0 + i as f32 * 20.0, 120.0, i as f32 * 0.01, 3.0)).collect(), transform: super::ink::IDENTITY, mask: None });
+    let att = doc::Att::new(nt_core::model::UTI_PAPER, AttKind::Drawing { path: None, width: 600.0, height: 300.0, ink: Some(std::sync::Arc::new(d)) });
+    let mut p = Para::default();
+    p.insert(0, "\u{FFFC}", &doc::Fmt { att: Some(att.id.clone()), ..Default::default() });
+    let mut ed = ed_with(&[("", ParaStyle::Title)]);
+    ed.doc.paras = vec![p, Para::default()];
+    ed.doc.atts.push(att);
+    let mut note = model::Note { id: "n".into(), ..Default::default() };
+    let ctx = egui::Context::default();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 900.0));
+    for i in 0..120 {
+        let at = |x: f32, y: f32, down: bool| egui::Event::PointerButton { pos: egui::pos2(x, y), button: egui::PointerButton::Primary, pressed: down, modifiers: egui::Modifiers::NONE };
+        let events = match i {
+            30 => vec![egui::Event::PointerMoved(egui::pos2(500.0, 120.0)), at(500.0, 120.0, true)],
+            31 => vec![at(500.0, 120.0, false)],
+            60 => vec![egui::Event::PointerMoved(egui::pos2(500.0, 700.0)), at(500.0, 700.0, true)],
+            61 => vec![at(500.0, 700.0, false)],
+            80 => vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }],
+            _ => vec![],
+        };
+        let raw = egui::RawInput { screen_rect: Some(rect), time: Some(1.0 + i as f64 / 60.0), events, ..Default::default() };
+        let mut changed = false;
+        ctx.run_ui(raw, |ui| {
+            changed = super::frame(ed_ref(&mut ed), ui, rect, &mut note, &[]).changed;
+        }).textures_delta.clear();
+        if changed {
+            let d = ed.drawing().map(|d| (d.strokes.len(), d.shapes.len()));
+            panic!("frame {i} changed the note; drawing open: {:?}, strokes/shapes {:?}, head {:?}, paras {}", ed.draw.is_some(), d, ed.head, ed.doc.paras.len());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}

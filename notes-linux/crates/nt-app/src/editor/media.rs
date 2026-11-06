@@ -89,6 +89,8 @@ pub struct Media {
     pending: VecDeque<Read>,
     /// PDFs' page sizes (pdfinfo, off the UI thread): asked for, and those come back
     pdf_info: HashMap<PathBuf, bool>,
+    /// The PDFs' page sizes as read from the files (kept: a note loaded again gets them too).
+    pdf_sizes: HashMap<PathBuf, Vec<[f32; 2]>>,
     pdf_chan: Option<(mpsc::Sender<(PathBuf, Vec<[f32; 2]>)>, mpsc::Receiver<(PathBuf, Vec<[f32; 2]>)>)>,
     /// files' facts read on the workers: an audio file's length, a text file's first line
     facts: HashMap<PathBuf, Option<Fact>>,
@@ -186,10 +188,17 @@ impl Media {
         }));
     }
 
-    /// The PDFs' page sizes read since the last frame.
-    pub fn pdf_pages_read(&mut self) -> Vec<(PathBuf, Vec<[f32; 2]>)> {
-        let Some((_, rx)) = &self.pdf_chan else { return Vec::new() };
-        rx.try_iter().collect()
+    /// The PDFs' page sizes read from their files so far (the ones read since the last frame
+    /// added).
+    pub fn pdf_pages_read(&mut self) -> &HashMap<PathBuf, Vec<[f32; 2]>> {
+        if let Some((_, rx)) = &self.pdf_chan {
+            for (p, pages) in rx.try_iter() {
+                if !pages.is_empty() {
+                    self.pdf_sizes.insert(p, pages);
+                }
+            }
+        }
+        &self.pdf_sizes
     }
 
     pub fn sizes(&self) -> HashMap<String, Vec2> {
@@ -199,6 +208,26 @@ impl Media {
     fn get(&mut self, ctx: &egui::Context, path: &Path, pdf: bool) -> Option<(egui::TextureId, Vec2)> {
         let p = path.to_path_buf();
         self.load(ctx, path.to_path_buf(), move || if pdf { pdf_page(&p, 0, None) } else { std::fs::read(&p).ok() })
+    }
+
+    /// A drawing's picture for a dark background: black and grey ink turned light (lightness
+    /// flipped), coloured ink kept, as Notes shows handwriting in dark mode.
+    pub fn dark_ink(&mut self, ctx: &egui::Context, path: &Path) -> Option<(egui::TextureId, Vec2)> {
+        let key = PathBuf::from(format!("{}#dark-ink", path.display()));
+        let p = path.to_path_buf();
+        self.load(ctx, key, move || {
+            let mut img = image::load_from_memory(&std::fs::read(&p).ok()?).ok()?.to_rgba8();
+            for px in img.pixels_mut() {
+                let [r, g, b, a] = px.0;
+                let (hi, lo) = (r.max(g).max(b), r.min(g).min(b));
+                if a > 0 && hi - lo < 40 {
+                    px.0 = [255 - r, 255 - g, 255 - b, a];
+                }
+            }
+            let mut out = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut out, image::ImageFormat::Png).ok()?;
+            Some(out.into_inner())
+        })
     }
 
     /// A PDF's page `page` (0-based), drawn `px` pixels tall, kept for the next time.
@@ -321,7 +350,9 @@ pub fn paint(ed: &mut Editor, painter: &Painter, id: &str, r: Rect) {
             }
         }
         AttKind::Image { path, .. } | AttKind::Drawing { path, .. } => {
-            let tex = path.as_deref().and_then(|p| ed.media.get(&ctx, p, false));
+            // (a drawing's ink adapts to dark backgrounds, as Notes does)
+            let ink = matches!(att.kind, AttKind::Drawing { .. }) && layout::dark();
+            let tex = path.as_deref().and_then(|p| if ink { ed.media.dark_ink(&ctx, p) } else { ed.media.get(&ctx, p, false) });
             let under = tex.as_ref().map(|t| t.0);
             match tex {
                 Some((t, s)) => {

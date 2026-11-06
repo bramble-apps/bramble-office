@@ -581,12 +581,11 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
     // PDF attachments: their pages' sizes from the file itself, read off the UI thread (the
     // sizes stored with a note can be wrong: Apple's scans store a 612 x 816 page for a
     // business card)
-    for (path, pages) in ed.media.pdf_pages_read() {
-        for a in &mut ed.doc.atts {
-            if let AttKind::Pdf { path: Some(p), pages: pg, .. } = &mut a.kind {
-                if *p == path && !pages.is_empty() {
-                    *pg = pages.clone();
-                }
+    let sizes = ed.media.pdf_pages_read();
+    for a in &mut ed.doc.atts {
+        if let AttKind::Pdf { path: Some(p), pages: pg, .. } = &mut a.kind {
+            if let Some(pages) = sizes.get(p.as_path()).filter(|s| *s != pg) {
+                *pg = pages.clone();
             }
         }
     }
@@ -612,7 +611,7 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
             ed.view.scroll.offset += dy;
         }
     }
-    let first_base = flow.boxes.iter().find(|b| !b.hidden).map_or(0.0, |b| b.baseline() - b.top);
+    let first_base = first_baseline(&flow, s);
     let mut top_pad = (layout::DATE_BASELINE + layout::FIRST_BASELINE) * s - first_base;
     ed.view.top_pad = top_pad;
     let mut content_h = top_pad + flow.height + 60.0 * s;
@@ -637,7 +636,7 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
         let bottom = top + rect.height();
         if flow.boxes.iter().any(|b| b.bottom() > top && b.top < bottom && !b.hidden && b.galley.is_none() && b.block.is_none()) {
             flow = layout_note(ed, &ctx, &size_of, width, rect.height(), std::time::Duration::ZERO);
-            let first_base = flow.boxes.iter().find(|b| !b.hidden).map_or(0.0, |b| b.baseline() - b.top);
+            let first_base = first_baseline(&flow, s);
             top_pad = (layout::DATE_BASELINE + layout::FIRST_BASELINE) * s - first_base;
             ed.view.top_pad = top_pad;
             content_h = top_pad + flow.height + 60.0 * s;
@@ -713,7 +712,7 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
     if ed.changed || ed.view.scroll_to_caret {
         let mut flow = layout_note(ed, &ctx, &size_of, width, rect.height(), std::time::Duration::ZERO);
         slides(ed, &mut flow, ctx.input(|i| i.time));
-        let first_base = flow.boxes.iter().find(|b| !b.hidden).map_or(0.0, |b| b.baseline() - b.top);
+        let first_base = first_baseline(&flow, s);
         let top_pad = (layout::DATE_BASELINE + layout::FIRST_BASELINE) * s - first_base;
         ed.view.top_pad = top_pad;
         let content_h = top_pad + flow.height + 60.0 * s;
@@ -765,6 +764,21 @@ const LAYOUT_BUDGET: std::time::Duration = std::time::Duration::from_micros(2500
 
 /// The note's flow: paragraphs in view (a screen above and below) and the caret's laid out, the
 /// rest from last frame's layouts or estimated, `budget` spent on those.
+/// How far below its top the note's first line sits on its baseline, for the gap under the date.
+/// A note that starts with an attachment (a scan, a drawing, a photo: "No additional text") has
+/// it just under the date, as Notes does, not lined up by its bottom edge (which put a tall one
+/// up over the date and off the top, out of reach of scrolling).
+fn first_baseline(flow: &Flow, s: f32) -> f32 {
+    match flow.boxes.iter().find(|b| !b.hidden) {
+        Some(b) if b.block.is_some() => (layout::FIRST_BASELINE - ATT_BELOW_DATE) * s,
+        Some(b) => b.baseline() - b.top,
+        None => 0.0,
+    }
+}
+
+/// The gap between the date's baseline and an attachment that starts the note (points).
+const ATT_BELOW_DATE: f32 = 14.0;
+
 fn layout_note(ed: &mut Editor, ctx: &egui::Context, size_of: &dyn Fn(&str) -> Option<Vec2>, width: f32, view_h: f32, budget: std::time::Duration) -> Flow {
     let top = ed.view.scroll.offset - ed.view.top_pad;
     let must = [0, 1, ed.head.para, ed.anchor.para, ed.head.para + 1, ed.head.para.saturating_sub(1)];

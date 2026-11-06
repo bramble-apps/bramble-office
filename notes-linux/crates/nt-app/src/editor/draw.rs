@@ -658,8 +658,11 @@ impl Editor {
             self.changed = true;
             return;
         }
-        // (written again: the drawing's picture is drawn now it is closed)
-        self.changed = true;
+        // (written again when it was changed: the drawing's picture is drawn now it is closed;
+        // only looked at, the note keeps its date)
+        if st.noted {
+            self.changed = true;
+        }
         let l = Loc { cell: None, para: (st.para + 1).min(self.doc.paras.len() - 1), off: 0 };
         self.anchor = l;
         self.head = l;
@@ -1090,6 +1093,13 @@ pub fn input(ed: &mut Editor, ui: &egui::Ui, resp: &egui::Response) -> bool {
         let st = ed.draw.as_mut().unwrap();
         if let Some(b) = st.building.take() {
             let s = b.finish();
+            // a mouse click that didn't move is a click, not a dot (it opened the drawing or
+            // pointed at it); a finger's or pen's tap still makes one
+            let (lo, hi) = s.points.iter().fold((pos2(f32::MAX, f32::MAX), pos2(f32::MIN, f32::MIN)), |(lo, hi), p| (lo.min(super::ink::PointExt::pos(p)), hi.max(super::ink::PointExt::pos(p))));
+            let still = s.points.is_empty() || (hi - lo).length() < 1.0;
+            if still && force.is_none() && !kn_ui::touch::active() {
+                return true;
+            }
             ed.add_stroke(s);
             return true;
         }
