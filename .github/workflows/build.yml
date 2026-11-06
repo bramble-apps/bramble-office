@@ -160,6 +160,8 @@ jobs:
         # same key, or Android won't install it over the one before)
         run: |
           if [ -z "$KEYSTORE_B64" ]; then echo "no ANDROID_KEYSTORE_B64 secret: skipping Android"; exit 0; fi
+          # (build-apk.sh sizes the launcher icons with Pillow)
+          python3 -m pip install --quiet pillow
           export JAVA_HOME="$JAVA_HOME_17_X64" ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks"
           echo "$KEYSTORE_B64" | base64 -d > "$ANDROID_KEYSTORE"
           case "$GITHUB_REF" in refs/tags/v*) export VERSION="${GITHUB_REF_NAME#v}" ;; esac
