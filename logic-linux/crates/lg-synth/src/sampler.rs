@@ -528,7 +528,9 @@ impl Instrument for Sampler {
     }
     fn note_off(&mut self, pitch: u8) {
         self.poly.note_off(pitch, &self.sh, &self.ch.ctl);
-        if self.has_release_zones {
+        // release samples (key-up noises) play when the key really lets go of the string: with
+        // the sustain pedal down there is none (and a new voice on the key would cut the held one)
+        if self.has_release_zones && !self.ch.ctl.sustain {
             let v = self.held_vel[pitch as usize].max(1);
             self.trigger(pitch, v, Trigger::Release);
         }
@@ -570,20 +572,48 @@ impl Instrument for Sampler {
 // ---------------------------------------------------------------------------------------------
 // Loading helpers
 
-pub(crate) fn load_sample(
-    path: &Path,
-) -> std::io::Result<(Arc<SampleData>, Option<(u32, u32)>, Option<u8>)> {
+type SampleEntry = (Arc<SampleData>, Option<(u32, u32)>, Option<u8>);
+
+type SampleCache = std::collections::HashMap<
+    PathBuf,
+    (std::sync::Weak<SampleData>, Option<(u32, u32)>, Option<u8>),
+>;
+
+/// Samples already in memory, shared by every instrument that uses them (weak: a sample is freed
+/// when no instrument holds it).
+fn sample_cache() -> &'static std::sync::Mutex<SampleCache> {
+    static C: std::sync::OnceLock<std::sync::Mutex<SampleCache>> = std::sync::OnceLock::new();
+    C.get_or_init(Default::default)
+}
+
+pub(crate) fn load_sample(path: &Path) -> std::io::Result<SampleEntry> {
+    if let Ok(c) = sample_cache().lock()
+        && let Some((w, lp, root)) = c.get(path)
+        && let Some(a) = w.upgrade()
+    {
+        return Ok((a, *lp, *root));
+    }
     let bytes = std::fs::read(path)?;
-    let a = wav::decode_audio(&bytes)
-        .or_else(|| decode_caf(&bytes))
-        .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unsupported sample format: {}", path.display()),
-            )
-        })?;
+    let e = decode_sample(&bytes).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unsupported sample format: {}", path.display()),
+        )
+    })?;
+    if let Ok(mut c) = sample_cache().lock() {
+        c.insert(path.to_path_buf(), (Arc::downgrade(&e.0), e.1, e.2));
+    }
+    Ok(e)
+}
+
+fn decode_sample(bytes: &[u8]) -> Option<SampleEntry> {
+    if bytes.starts_with(b"fLaC") {
+        let (rate, ch) = decode_flac(bytes)?;
+        return Some((Arc::new(SampleData { rate: rate as f32, ch }), None, None));
+    }
+    let a = wav::decode_audio(bytes).or_else(|| decode_caf(bytes))?;
     let ch = a.channels.into_iter().take(2).map(Pcm::F32).collect();
-    Ok((
+    Some((
         Arc::new(SampleData {
             rate: a.rate as f32,
             ch,
@@ -591,6 +621,105 @@ pub(crate) fn load_sample(
         a.loop_points,
         a.root,
     ))
+}
+
+/// Loads several samples on all cores (the bundled instruments have hundreds of files).
+pub(crate) fn load_samples(paths: &[PathBuf]) -> Vec<Option<SampleEntry>> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let n = paths.len();
+    let threads = std::thread::available_parallelism()
+        .map(|t| t.get())
+        .unwrap_or(4)
+        .clamp(1, 8)
+        .min(n.max(1));
+    if threads <= 1 || n < 4 {
+        return paths.iter().map(|p| load_sample(p).ok()).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let mut out: Vec<Option<SampleEntry>> = vec![None; n];
+    let results: Vec<Vec<(usize, Option<SampleEntry>)>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (0..threads)
+            .map(|_| {
+                sc.spawn(|| {
+                    let mut got = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        if i >= n {
+                            break;
+                        }
+                        got.push((i, load_sample(&paths[i]).ok()));
+                    }
+                    got
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_default()).collect()
+    });
+    for (i, e) in results.into_iter().flatten() {
+        out[i] = e;
+    }
+    out
+}
+
+/// FLAC (any bit depth): 16-bit and below stay 16-bit in memory, deeper files become float.
+fn decode_flac(bytes: &[u8]) -> Option<(u32, Vec<Pcm>)> {
+    use symphonia::core::audio::{AudioBufferRef, Signal};
+    use symphonia::core::codecs::{Decoder, DecoderOptions};
+    use symphonia::core::formats::{FormatOptions, FormatReader};
+    use symphonia::core::io::MediaSourceStream;
+    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes.to_vec())), Default::default());
+    let mut reader = symphonia::default::formats::FlacReader::try_new(mss, &FormatOptions::default()).ok()?;
+    let track = reader.default_track()?.clone();
+    let params = &track.codec_params;
+    let rate = params.sample_rate?;
+    let nch = params.channels.map(|c| c.count()).unwrap_or(1).clamp(1, 2);
+    let bits = params.bits_per_sample.unwrap_or(16);
+    let frames = params.n_frames.unwrap_or(0) as usize;
+    let mut dec = symphonia::default::codecs::FlacDecoder::try_new(params, &DecoderOptions::default()).ok()?;
+    let mut i16s: Vec<Vec<i16>> = (0..nch).map(|_| Vec::with_capacity(frames)).collect();
+    let mut f32s: Vec<Vec<f32>> = Vec::new();
+    let wide = bits > 16;
+    if wide {
+        f32s = (0..nch).map(|_| Vec::with_capacity(frames)).collect();
+    }
+    while let Ok(packet) = reader.next_packet() {
+        let buf = match dec.decode(&packet) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        match buf {
+            AudioBufferRef::S16(b) => {
+                for c in 0..nch.min(b.spec().channels.count()) {
+                    if wide {
+                        f32s[c].extend(b.chan(c).iter().map(|&x| x as f32 / 32768.0));
+                    } else {
+                        i16s[c].extend_from_slice(b.chan(c));
+                    }
+                }
+            }
+            // symphonia's FLAC decoder gives left-justified 32-bit samples
+            AudioBufferRef::S32(b) => {
+                for c in 0..nch.min(b.spec().channels.count()) {
+                    let src = b.chan(c);
+                    if wide {
+                        f32s[c].extend(src.iter().map(|&x| x as f32 / 2_147_483_648.0));
+                    } else {
+                        i16s[c].extend(src.iter().map(|&x| (x >> 16) as i16));
+                    }
+                }
+            }
+            _ => return None,
+        }
+    }
+    let ch: Vec<Pcm> = if wide {
+        f32s.into_iter().map(Pcm::F32).collect()
+    } else {
+        i16s.into_iter().map(Pcm::I16).collect()
+    };
+    if ch.first().map(|c| c.len()).unwrap_or(0) == 0 {
+        return None;
+    }
+    Some((rate, ch))
 }
 
 /// Core Audio Format with linear PCM ('lpcm') data.
@@ -885,27 +1014,30 @@ pub fn parse_sfz(text: &str, base: &Path) -> std::io::Result<Vec<Zone>> {
         .get("note_offset")
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    let mut cache: HashMap<PathBuf, (Arc<SampleData>, Option<(u32, u32)>, Option<u8>)> =
-        HashMap::new();
+    let path_of = |r: &HashMap<String, String>| -> Option<PathBuf> {
+        let sample = r.get("sample")?;
+        if sample.starts_with('*') {
+            return None; // generated waveforms (*sine…) are not supported
+        }
+        Some(base.join(format!("{}{}", default_path, sample).replace('\\', "/")))
+    };
+    // decode every sample once, on all cores
+    let mut unique: Vec<PathBuf> = regions.iter().filter_map(path_of).collect();
+    unique.sort();
+    unique.dedup();
+    let mut cache: HashMap<PathBuf, SampleEntry> = HashMap::new();
+    for (p, e) in unique.iter().zip(load_samples(&unique)) {
+        if let Some(e) = e {
+            cache.insert(p.clone(), e);
+        }
+    }
     let mut zones = Vec::new();
     for r in regions {
-        let Some(sample) = r.get("sample") else {
+        let Some(p) = path_of(&r) else {
             continue;
         };
-        if sample.starts_with('*') {
-            continue; // generated waveforms (*sine…) are not supported
-        }
-        let rel = format!("{}{}", default_path, sample).replace('\\', "/");
-        let p = base.join(&rel);
-        let entry = match cache.get(&p) {
-            Some(e) => e.clone(),
-            None => match load_sample(&p) {
-                Ok(e) => {
-                    cache.insert(p.clone(), e.clone());
-                    e
-                }
-                Err(_) => continue,
-            },
+        let Some(entry) = cache.get(&p).cloned() else {
+            continue;
         };
         let (data, lp, root) = entry;
         let mut z = Zone::new(data);

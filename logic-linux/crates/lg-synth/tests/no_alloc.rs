@@ -68,6 +68,15 @@ fn render_is_allocation_free() {
         lg_dsp::Plugin::set(&mut a, flag, 1.0);
         insts.push((format!("alchemy source {flag}"), Box::new(a)));
     }
+    // the bundled sampled instruments (when the library is installed), synthesized fallbacks too
+    for name in ["Piano", "Drum Kit Designer", "Strings", "Guitar", "Bass", "Studio Horns"] {
+        insts.push((format!("synth {name}"), lg_synth::synthesized_by_logic_name(name, rate).unwrap()));
+    }
+    for s in lg_sounds::index() {
+        if let Some(i) = lg_synth::sampled::SampledInstrument::load(s.id, rate) {
+            insts.push((format!("sampled {}", s.id), Box::new(i)));
+        }
+    }
     let sf2 = std::path::Path::new("/usr/share/sounds/sf2/TimGM6mb.sf2");
     if sf2.exists() {
         insts.push((

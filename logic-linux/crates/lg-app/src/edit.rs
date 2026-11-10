@@ -967,6 +967,7 @@ impl App {
                     self.region_selection().first().and_then(|(t, r)| self.project.as_ref()?.tracks.get(*t)?.regions.get(*r).map(|x| x.start)).unwrap_or(pos)
                 };
                 self.scroll_x = (at as f32 / bar as f32 - 1.0).max(0.0);
+                self.catch_off = false;
             }
             "Show Tool Menu" => self.tool_menu_open = true,
             "Show/Hide Automation" | "Show Automation" | "Hide Automation" => self.show_automation = !self.show_automation,

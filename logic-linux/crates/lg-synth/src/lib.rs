@@ -5,6 +5,11 @@
 //! - `by_logic_name("Vintage Electric Piano", rate)` → the stand-in for a Logic plug-in name.
 //! - `for_patch("Deluxe Classic", rate)` → an instrument voiced for a Logic library patch.
 //! - `list()` → what is here.
+//!
+//! When the bundled sample library (lg-sounds) is installed, drums, piano, orchestral
+//! instruments, guitars, basses and mallets play sampled instruments instead (`sampled`); the
+//! synthesized ones remain the fallback, and electronic kits, synths, organ and electric pianos
+//! stay synthesized.
 
 pub mod alchemy;
 pub mod bass;
@@ -24,6 +29,7 @@ pub mod pluck;
 pub mod poly;
 pub mod quick;
 pub mod retro;
+pub mod sampled;
 pub mod sampler;
 pub mod sculpture;
 pub mod string;
@@ -209,6 +215,14 @@ fn with(engine: Engine, settings: &[(u32, f32)], rate: f32) -> Box<dyn Instrumen
 
 /// The stand-in for a Logic plug-in, by the name the project's AuCU chunk gives.
 pub fn by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>> {
+    if let Some(s) = sampled::for_plugin(plugin_name, rate) {
+        return Some(s);
+    }
+    synthesized_by_logic_name(plugin_name, rate)
+}
+
+/// The synthesized stand-in for a Logic plug-in name (never the sampled one).
+pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>> {
     let inst: Box<dyn Instrument> = match plugin_name.trim() {
         "Vintage Electric Piano" | "Electric Piano" | "E-Piano" | NAME_EP => {
             Box::new(ep::VintageKeysEp::new(rate))
@@ -284,5 +298,14 @@ pub fn build(spec: &PatchSpec, rate: f32) -> Box<dyn Instrument> {
 
 /// An instrument voiced for a Logic library patch ("Deluxe Classic", "Classic Rock Organ"…).
 pub fn for_patch(patch: &str, rate: f32) -> Option<Box<dyn Instrument>> {
+    let spec = patches::patch(patch)?;
+    if let Some(s) = sampled::for_patch(patch, &spec, rate) {
+        return Some(s);
+    }
+    Some(build(&spec, rate))
+}
+
+/// The synthesized instrument for a Logic library patch (never the sampled one).
+pub fn synthesized_for_patch(patch: &str, rate: f32) -> Option<Box<dyn Instrument>> {
     patches::patch(patch).map(|s| build(&s, rate))
 }

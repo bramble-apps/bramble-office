@@ -115,11 +115,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let (scroll, zoom, cmd, shift) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.command, i.modifiers.shift));
         if cmd && scroll.y != 0.0 {
             zoom_at(app, 1.0 + scroll.y * 0.003, ui.input(|i| i.pointer.hover_pos()).map_or(lanes.min.x, |h| h.x), lanes.min.x);
+            if app.playing() {
+                app.catch_off = true;
+            }
         } else if (zoom - 1.0).abs() > 0.001 {
             zoom_at(app, zoom, ui.input(|i| i.pointer.hover_pos()).map_or(lanes.min.x, |h| h.x), lanes.min.x);
         } else {
             let (dx, dy) = if shift { (scroll.y, 0.0) } else { (scroll.x, scroll.y) };
             app.scroll_x = (app.scroll_x - dx / app.bar_w).max(0.0);
+            // scrolling by hand while playing turns Catch off until playback stops or ` is
+            // pressed, as Logic does (otherwise the view jumps back to the playhead)
+            if dx != 0.0 && app.playing() {
+                app.catch_off = true;
+            }
             let n = app.project.as_ref().map_or(0, |p| p.tracks.len()) as f32;
             app.scroll_y = (app.scroll_y - dy).clamp(0.0, (n * ROW_H - lanes.height() + 40.0).max(0.0));
         }
@@ -547,7 +555,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         full.add(egui::Shape::convex_polygon(vec![pos2(ph - 6.0, ruler.min.y + 14.0), pos2(ph + 6.0, ruler.min.y + 14.0), pos2(ph, ruler.min.y + 22.0)], look::playhead(), Stroke::NONE));
     }
     // follow the playhead while playing (Logic's Catch)
-    if app.playing() {
+    if !app.playing() {
+        app.catch_off = false;
+    }
+    if app.playing() && !app.catch_off {
         let bar_pos = app.position() as f32 / bar_t;
         let visible_bars = lanes.width() / app.bar_w;
         if bar_pos > app.scroll_x + visible_bars * 0.92 || bar_pos < app.scroll_x {

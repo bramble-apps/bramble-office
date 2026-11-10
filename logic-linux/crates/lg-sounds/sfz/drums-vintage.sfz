@@ -1,0 +1,4230 @@
+// Vintage Kit: Virtuosity Drums 0.925 by Versilian Studios and Karoryfer Samples, CC0 1.0.
+// Drum Kit Designer note map (GM drums + hi-hat articulations below 35).
+// https://versilian-studios.com/virtuosity-drums/ (overheads, room and kick/snare close mics mixed to stereo)
+
+<global>
+loop_mode=one_shot
+ampeg_release=0.05
+
+// kick -> b1 (35), c2 (36)
+<region>
+sample=samples/drums-vintage/kick_04.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=1 hivel=24
+lorand=0.0000 hirand=0.5000
+volume=2.83 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_04.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=1 hivel=24
+lorand=0.0000 hirand=0.5000
+volume=2.83 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_01.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=1 hivel=24
+lorand=0.5000 hirand=1.0000
+volume=2.17 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_01.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=1 hivel=24
+lorand=0.5000 hirand=1.0000
+volume=2.17 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_03.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=25 hivel=36
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_03.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=25 hivel=36
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_02.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=37 hivel=55
+lorand=0.0000 hirand=0.5000
+volume=5.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_02.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=37 hivel=55
+lorand=0.0000 hirand=0.5000
+volume=5.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_08.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=37 hivel=55
+lorand=0.5000 hirand=1.0000
+volume=-0.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_08.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=37 hivel=55
+lorand=0.5000 hirand=1.0000
+volume=-0.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_06.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=56 hivel=65
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_06.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=56 hivel=65
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_05.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=66 hivel=85
+lorand=0.0000 hirand=0.5000
+volume=2.64 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_05.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=66 hivel=85
+lorand=0.0000 hirand=0.5000
+volume=2.64 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_07.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=66 hivel=85
+lorand=0.5000 hirand=1.0000
+volume=2.36 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_07.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=66 hivel=85
+lorand=0.5000 hirand=1.0000
+volume=2.36 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_09.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=86 hivel=105
+lorand=0.0000 hirand=0.5000
+volume=2.60 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_09.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=86 hivel=105
+lorand=0.0000 hirand=0.5000
+volume=2.60 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_12.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=86 hivel=105
+lorand=0.5000 hirand=1.0000
+volume=2.40 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_12.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=86 hivel=105
+lorand=0.5000 hirand=1.0000
+volume=2.40 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_10.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=106 hivel=111
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_10.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=106 hivel=111
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_11.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=112 hivel=121
+lorand=0.0000 hirand=0.5000
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_11.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=112 hivel=121
+lorand=0.0000 hirand=0.5000
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_16.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=112 hivel=121
+lorand=0.5000 hirand=1.0000
+volume=1.24 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_16.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=112 hivel=121
+lorand=0.5000 hirand=1.0000
+volume=1.24 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_13.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=122 hivel=126
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_13.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=122 hivel=126
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_14.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=127 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.55 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_14.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=127 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.55 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_15.flac
+lokey=35 hikey=35 pitch_keycenter=35
+lovel=127 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.45 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/kick_15.flac
+lokey=36 hikey=36 pitch_keycenter=36
+lovel=127 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.45 amp_veltrack=25
+// sidestick -> c#2 (37)
+<region>
+sample=samples/drums-vintage/sidestick_01.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.5000
+volume=3.99 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_02.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=1 hivel=41
+lorand=0.5000 hirand=1.0000
+volume=1.01 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_03.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=42 hivel=78
+lorand=0.0000 hirand=0.5000
+volume=4.19 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_04.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=42 hivel=78
+lorand=0.5000 hirand=1.0000
+volume=0.81 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_05.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=79 hivel=105
+lorand=0.0000 hirand=0.5000
+volume=3.48 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_06.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=79 hivel=105
+lorand=0.5000 hirand=1.0000
+volume=1.52 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_07.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=106 hivel=121
+lorand=0.0000 hirand=0.5000
+volume=3.37 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_08.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=106 hivel=121
+lorand=0.5000 hirand=1.0000
+volume=1.63 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_09.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=122 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.62 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/sidestick_10.flac
+lokey=37 hikey=37 pitch_keycenter=37
+lovel=122 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.38 amp_veltrack=25
+// snare -> d2 (38)
+<region>
+sample=samples/drums-vintage/snare_01.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=1 hivel=25
+lorand=0.0000 hirand=0.5000
+volume=3.21 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_02.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=1 hivel=25
+lorand=0.5000 hirand=1.0000
+volume=1.79 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_03.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=26 hivel=47
+lorand=0.0000 hirand=0.5000
+volume=3.32 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_04.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=26 hivel=47
+lorand=0.5000 hirand=1.0000
+volume=1.68 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_05.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=48 hivel=59
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_07.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=60 hivel=68
+lorand=0.0000 hirand=0.5000
+volume=2.53 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_06.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=60 hivel=68
+lorand=0.5000 hirand=1.0000
+volume=2.47 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_08.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=69 hivel=79
+lorand=0.0000 hirand=0.5000
+volume=3.20 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_09.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=69 hivel=79
+lorand=0.5000 hirand=1.0000
+volume=1.80 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_10.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=80 hivel=90
+lorand=0.0000 hirand=0.5000
+volume=2.77 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_11.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=80 hivel=90
+lorand=0.5000 hirand=1.0000
+volume=2.23 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_12.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=91 hivel=98
+lorand=0.0000 hirand=0.5000
+volume=2.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_13.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=91 hivel=98
+lorand=0.5000 hirand=1.0000
+volume=2.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_14.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=99 hivel=106
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_15.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=107 hivel=119
+lorand=0.0000 hirand=0.5000
+volume=2.84 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_16.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=107 hivel=119
+lorand=0.5000 hirand=1.0000
+volume=2.16 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_17.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=120 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.68 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/snare_18.flac
+lokey=38 hikey=38 pitch_keycenter=38
+lovel=120 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.32 amp_veltrack=25
+// rimshot -> e2 (40)
+<region>
+sample=samples/drums-vintage/rimshot_01.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=1 hivel=69
+lorand=0.0000 hirand=0.5000
+volume=3.78 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_02.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=1 hivel=69
+lorand=0.5000 hirand=1.0000
+volume=1.22 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_03.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=70 hivel=95
+lorand=0.0000 hirand=0.5000
+volume=3.88 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_04.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=70 hivel=95
+lorand=0.5000 hirand=1.0000
+volume=1.12 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_07.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=96 hivel=111
+lorand=0.0000 hirand=0.5000
+volume=3.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_05.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=96 hivel=111
+lorand=0.5000 hirand=1.0000
+volume=1.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_06.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=112 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=2.69 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_08.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=112 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=2.31 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_09.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/rimshot_10.flac
+lokey=40 hikey=40 pitch_keycenter=40
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.15 amp_veltrack=25
+// tom_lo -> f2 (41)
+<region>
+sample=samples/drums-vintage/tom_lo_01.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=1 hivel=48
+lorand=0.0000 hirand=0.5000
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_02.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=1 hivel=48
+lorand=0.5000 hirand=1.0000
+volume=1.24 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_03.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=49 hivel=76
+lorand=0.0000 hirand=0.5000
+volume=3.45 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_04.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=49 hivel=76
+lorand=0.5000 hirand=1.0000
+volume=1.55 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_05.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=77 hivel=98
+lorand=0.0000 hirand=0.5000
+volume=3.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_06.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=77 hivel=98
+lorand=0.5000 hirand=1.0000
+volume=1.35 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_07.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=99 hivel=112
+lorand=0.0000 hirand=0.5000
+volume=2.98 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_08.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=99 hivel=112
+lorand=0.5000 hirand=1.0000
+volume=2.02 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_09.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=113 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_10.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=113 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_11.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.56 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_12.flac
+lokey=41 hikey=41 pitch_keycenter=44
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.44 amp_veltrack=25
+// tom_lo -> g2 (43)
+<region>
+sample=samples/drums-vintage/tom_lo_01.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=1 hivel=48
+lorand=0.0000 hirand=0.5000
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_02.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=1 hivel=48
+lorand=0.5000 hirand=1.0000
+volume=1.24 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_03.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=49 hivel=76
+lorand=0.0000 hirand=0.5000
+volume=3.45 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_04.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=49 hivel=76
+lorand=0.5000 hirand=1.0000
+volume=1.55 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_05.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=77 hivel=98
+lorand=0.0000 hirand=0.5000
+volume=3.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_06.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=77 hivel=98
+lorand=0.5000 hirand=1.0000
+volume=1.35 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_07.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=99 hivel=112
+lorand=0.0000 hirand=0.5000
+volume=2.98 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_08.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=99 hivel=112
+lorand=0.5000 hirand=1.0000
+volume=2.02 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_09.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=113 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_10.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=113 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_11.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.56 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_lo_12.flac
+lokey=43 hikey=43 pitch_keycenter=43
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.44 amp_veltrack=25
+// tom_hi -> a2 (45)
+<region>
+sample=samples/drums-vintage/tom_hi_01.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.0000 hirand=0.5000
+volume=4.52 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_02.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.5000 hirand=1.0000
+volume=0.48 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_03.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.0000 hirand=0.5000
+volume=3.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_04.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.5000 hirand=1.0000
+volume=1.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_05.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_06.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_07.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.0000 hirand=0.5000
+volume=3.06 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_09.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.5000 hirand=1.0000
+volume=1.94 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_08.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=3.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_10.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=1.91 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_11.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_12.flac
+lokey=45 hikey=45 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.35 amp_veltrack=25
+// tom_hi -> b2 (47)
+<region>
+sample=samples/drums-vintage/tom_hi_01.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.0000 hirand=0.5000
+volume=4.52 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_02.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.5000 hirand=1.0000
+volume=0.48 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_03.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.0000 hirand=0.5000
+volume=3.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_04.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.5000 hirand=1.0000
+volume=1.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_05.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_06.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_07.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.0000 hirand=0.5000
+volume=3.06 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_09.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.5000 hirand=1.0000
+volume=1.94 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_08.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=3.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_10.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=1.91 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_11.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_12.flac
+lokey=47 hikey=47 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.35 amp_veltrack=25
+// tom_hi -> c3 (48)
+<region>
+sample=samples/drums-vintage/tom_hi_01.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.0000 hirand=0.5000
+volume=4.52 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_02.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.5000 hirand=1.0000
+volume=0.48 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_03.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.0000 hirand=0.5000
+volume=3.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_04.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.5000 hirand=1.0000
+volume=1.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_05.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_06.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_07.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.0000 hirand=0.5000
+volume=3.06 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_09.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.5000 hirand=1.0000
+volume=1.94 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_08.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=3.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_10.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=1.91 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_11.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_12.flac
+lokey=48 hikey=48 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.35 amp_veltrack=25
+// tom_hi -> d3 (50)
+<region>
+sample=samples/drums-vintage/tom_hi_01.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.0000 hirand=0.5000
+volume=4.52 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_02.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=1 hivel=60
+lorand=0.5000 hirand=1.0000
+volume=0.48 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_03.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.0000 hirand=0.5000
+volume=3.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_04.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=61 hivel=87
+lorand=0.5000 hirand=1.0000
+volume=1.85 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_05.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_06.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=88 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_07.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.0000 hirand=0.5000
+volume=3.06 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_09.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=104 hivel=113
+lorand=0.5000 hirand=1.0000
+volume=1.94 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_08.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=3.09 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_10.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=114 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=1.91 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_11.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.65 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/tom_hi_12.flac
+lokey=50 hikey=50 pitch_keycenter=48
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.35 amp_veltrack=25
+// hh_closed -> f#2 (42)
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=1 hivel=38
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=1 hivel=38
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=1 hivel=38
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=39 hivel=57
+lorand=0.0000 hirand=0.5000
+volume=4.49 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=39 hivel=57
+lorand=0.5000 hirand=1.0000
+volume=0.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=58 hivel=75
+lorand=0.0000 hirand=0.3333
+volume=2.94 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=58 hivel=75
+lorand=0.3333 hirand=0.6667
+volume=2.69 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=58 hivel=75
+lorand=0.6667 hirand=1.0000
+volume=1.87 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=76 hivel=95
+lorand=0.0000 hirand=0.3333
+volume=2.74 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=76 hivel=95
+lorand=0.3333 hirand=0.6667
+volume=2.58 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=76 hivel=95
+lorand=0.6667 hirand=1.0000
+volume=2.18 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=96 hivel=116
+lorand=0.0000 hirand=0.5000
+volume=5.18 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=96 hivel=116
+lorand=0.5000 hirand=1.0000
+volume=-0.18 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=117 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=117 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=42 hikey=42 pitch_keycenter=42
+lovel=117 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+// hh_pedal -> g#2 (44)
+<region>
+sample=samples/drums-vintage/hh_pedal_01.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=1 hivel=97
+lorand=0.0000 hirand=0.3333
+volume=2.87 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_02.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=1 hivel=97
+lorand=0.3333 hirand=0.6667
+volume=2.74 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_03.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=1 hivel=97
+lorand=0.6667 hirand=1.0000
+volume=1.88 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_04.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=98 hivel=118
+lorand=0.0000 hirand=0.5000
+volume=2.91 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_05.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=98 hivel=118
+lorand=0.5000 hirand=1.0000
+volume=2.09 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_07.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=119 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.68 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_08.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=119 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_pedal_06.flac
+lokey=44 hikey=44 pitch_keycenter=44
+lovel=119 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+// hh_open -> a#2 (46)
+<region>
+sample=samples/drums-vintage/hh_open_02.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=1 hivel=47
+lorand=0.0000 hirand=0.3333
+volume=2.67 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_03.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=1 hivel=47
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_01.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=1 hivel=47
+lorand=0.6667 hirand=1.0000
+volume=2.42 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_05.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=48 hivel=70
+lorand=0.0000 hirand=0.3333
+volume=2.60 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_04.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=48 hivel=70
+lorand=0.3333 hirand=0.6667
+volume=2.55 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_06.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=48 hivel=70
+lorand=0.6667 hirand=1.0000
+volume=2.35 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_07.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=71 hivel=102
+lorand=0.0000 hirand=0.3333
+volume=3.08 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_08.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=71 hivel=102
+lorand=0.3333 hirand=0.6667
+volume=2.29 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_09.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=71 hivel=102
+lorand=0.6667 hirand=1.0000
+volume=2.13 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_10.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=103 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.68 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_11.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=103 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.50 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_open_12.flac
+lokey=46 hikey=46 pitch_keycenter=46
+lovel=103 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.32 amp_veltrack=25
+group=2
+off_by=1
+// crash1 -> c#3 (49)
+<region>
+sample=samples/drums-vintage/crash1_03.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=1 hivel=95
+lorand=0.0000 hirand=0.5000
+volume=3.23 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_02.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=1 hivel=95
+lorand=0.5000 hirand=1.0000
+volume=1.77 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_01.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=96 hivel=108
+lorand=0.0000 hirand=0.5000
+volume=3.49 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_04.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=96 hivel=108
+lorand=0.5000 hirand=1.0000
+volume=1.51 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_05.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=109 hivel=120
+lorand=0.0000 hirand=0.5000
+volume=3.14 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_08.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=109 hivel=120
+lorand=0.5000 hirand=1.0000
+volume=1.86 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_07.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=121 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.84 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash1_06.flac
+lokey=49 hikey=49 pitch_keycenter=49
+lovel=121 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.16 amp_veltrack=25
+// crash2 -> a3 (57)
+<region>
+sample=samples/drums-vintage/crash2_02.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=1 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_01.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=1 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_03.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=104 hivel=118
+lorand=0.0000 hirand=0.5000
+volume=2.73 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_04.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=104 hivel=118
+lorand=0.5000 hirand=1.0000
+volume=2.27 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_06.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=119 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_05.flac
+lokey=57 hikey=57 pitch_keycenter=57
+lovel=119 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.50 amp_veltrack=25
+// crash2 -> e3 (52)
+<region>
+sample=samples/drums-vintage/crash2_02.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=1 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_01.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=1 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_03.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=104 hivel=118
+lorand=0.0000 hirand=0.5000
+volume=2.73 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_04.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=104 hivel=118
+lorand=0.5000 hirand=1.0000
+volume=2.27 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_06.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=119 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.50 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/crash2_05.flac
+lokey=52 hikey=52 pitch_keycenter=54
+lovel=119 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.50 amp_veltrack=25
+// splash -> g3 (55)
+<region>
+sample=samples/drums-vintage/splash_04.flac
+lokey=55 hikey=55 pitch_keycenter=55
+lovel=1 hivel=121
+lorand=0.0000 hirand=0.5000
+volume=2.51 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/splash_02.flac
+lokey=55 hikey=55 pitch_keycenter=55
+lovel=1 hivel=121
+lorand=0.5000 hirand=1.0000
+volume=2.49 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/splash_01.flac
+lokey=55 hikey=55 pitch_keycenter=55
+lovel=122 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=3.07 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/splash_03.flac
+lokey=55 hikey=55 pitch_keycenter=55
+lovel=122 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=1.93 amp_veltrack=25
+// ride -> d#3 (51)
+<region>
+sample=samples/drums-vintage/ride_01.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=1 hivel=69
+lorand=0.0000 hirand=0.5000
+volume=3.34 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_02.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=1 hivel=69
+lorand=0.5000 hirand=1.0000
+volume=1.66 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_04.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=70 hivel=92
+lorand=0.0000 hirand=0.3333
+volume=4.29 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_03.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=70 hivel=92
+lorand=0.3333 hirand=0.6667
+volume=4.15 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_05.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=70 hivel=92
+lorand=0.6667 hirand=1.0000
+volume=-0.93 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_08.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=93 hivel=112
+lorand=0.0000 hirand=0.5000
+volume=2.53 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_06.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=93 hivel=112
+lorand=0.5000 hirand=1.0000
+volume=2.47 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_07.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=113 hivel=122
+lorand=0.0000 hirand=0.3333
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_09.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=113 hivel=122
+lorand=0.3333 hirand=0.6667
+volume=1.92 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_11.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=113 hivel=122
+lorand=0.6667 hirand=1.0000
+volume=1.82 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_10.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.77 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_12.flac
+lokey=51 hikey=51 pitch_keycenter=51
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.23 amp_veltrack=25
+// ride2 -> b3 (59)
+<region>
+sample=samples/drums-vintage/ride2_03.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=1 hivel=84
+lorand=0.0000 hirand=0.5000
+volume=3.81 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_02.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=1 hivel=84
+lorand=0.5000 hirand=1.0000
+volume=1.19 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_01.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=85 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=3.76 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_05.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=85 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=1.24 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_04.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=104 hivel=119
+lorand=0.0000 hirand=0.5000
+volume=3.61 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_06.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=104 hivel=119
+lorand=0.5000 hirand=1.0000
+volume=1.39 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_08.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=120 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.86 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride2_07.flac
+lokey=59 hikey=59 pitch_keycenter=59
+lovel=120 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.14 amp_veltrack=25
+// ride_bell -> f3 (53)
+<region>
+sample=samples/drums-vintage/ride_bell_03.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=1 hivel=73
+lorand=0.0000 hirand=0.5000
+volume=2.51 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_01.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=1 hivel=73
+lorand=0.5000 hirand=1.0000
+volume=2.49 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_02.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=74 hivel=100
+lorand=0.0000 hirand=0.5000
+volume=5.29 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_04.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=74 hivel=100
+lorand=0.5000 hirand=1.0000
+volume=-0.29 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_05.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=101 hivel=121
+lorand=0.0000 hirand=0.5000
+volume=3.82 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_06.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=101 hivel=121
+lorand=0.5000 hirand=1.0000
+volume=1.18 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_08.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=122 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=25
+<region>
+sample=samples/drums-vintage/ride_bell_07.flac
+lokey=53 hikey=53 pitch_keycenter=53
+lovel=122 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=25
+// hh_half -> [33, 34]
+<region>
+sample=samples/drums-vintage/hh_half_01.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=1 hivel=73
+lorand=0.0000 hirand=0.3333
+volume=2.80 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_01.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=1 hivel=73
+lorand=0.0000 hirand=0.3333
+volume=2.80 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_02.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=1 hivel=73
+lorand=0.3333 hirand=0.6667
+volume=2.41 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_02.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=1 hivel=73
+lorand=0.3333 hirand=0.6667
+volume=2.41 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_03.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=1 hivel=73
+lorand=0.6667 hirand=1.0000
+volume=2.29 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_03.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=1 hivel=73
+lorand=0.6667 hirand=1.0000
+volume=2.29 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_06.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=74 hivel=96
+lorand=0.0000 hirand=0.3333
+volume=2.74 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_06.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=74 hivel=96
+lorand=0.0000 hirand=0.3333
+volume=2.74 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_04.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=74 hivel=96
+lorand=0.3333 hirand=0.6667
+volume=2.43 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_04.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=74 hivel=96
+lorand=0.3333 hirand=0.6667
+volume=2.43 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_05.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=74 hivel=96
+lorand=0.6667 hirand=1.0000
+volume=2.33 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_05.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=74 hivel=96
+lorand=0.6667 hirand=1.0000
+volume=2.33 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_08.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=97 hivel=117
+lorand=0.0000 hirand=0.3333
+volume=2.84 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_08.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=97 hivel=117
+lorand=0.0000 hirand=0.3333
+volume=2.84 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_07.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=97 hivel=117
+lorand=0.3333 hirand=0.6667
+volume=2.55 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_07.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=97 hivel=117
+lorand=0.3333 hirand=0.6667
+volume=2.55 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_09.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=97 hivel=117
+lorand=0.6667 hirand=1.0000
+volume=2.11 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_09.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=97 hivel=117
+lorand=0.6667 hirand=1.0000
+volume=2.11 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_10.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=118 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.83 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_10.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=118 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.83 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_11.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=118 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.36 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_11.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=118 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.36 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_12.flac
+lokey=33 hikey=33 pitch_keycenter=33
+lovel=118 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.31 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_half_12.flac
+lokey=34 hikey=34 pitch_keycenter=34
+lovel=118 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.31 amp_veltrack=25
+group=2
+off_by=1
+// hh_34 -> [26, 30]
+<region>
+sample=samples/drums-vintage/hh_34_02.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=1 hivel=81
+lorand=0.0000 hirand=0.3333
+volume=4.57 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_02.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=1 hivel=81
+lorand=0.0000 hirand=0.3333
+volume=4.57 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_01.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=1 hivel=81
+lorand=0.3333 hirand=0.6667
+volume=2.88 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_01.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=1 hivel=81
+lorand=0.3333 hirand=0.6667
+volume=2.88 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_03.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=1 hivel=81
+lorand=0.6667 hirand=1.0000
+volume=0.05 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_03.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=1 hivel=81
+lorand=0.6667 hirand=1.0000
+volume=0.05 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_04.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=82 hivel=109
+lorand=0.0000 hirand=0.5000
+volume=4.13 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_04.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=82 hivel=109
+lorand=0.0000 hirand=0.5000
+volume=4.13 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_06.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=82 hivel=109
+lorand=0.5000 hirand=1.0000
+volume=0.87 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_06.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=82 hivel=109
+lorand=0.5000 hirand=1.0000
+volume=0.87 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_05.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=110 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=4.18 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_05.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=110 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=4.18 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_07.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=110 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=1.78 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_07.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=110 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=1.78 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_08.flac
+lokey=26 hikey=26 pitch_keycenter=26
+lovel=110 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=1.54 amp_veltrack=25
+group=2
+off_by=1
+<region>
+sample=samples/drums-vintage/hh_34_08.flac
+lokey=30 hikey=30 pitch_keycenter=30
+lovel=110 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=1.54 amp_veltrack=25
+group=2
+off_by=1
+// hh_closed -> [21, 22, 23, 24, 25, 27, 28, 29, 31, 32]
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_01.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=1 hivel=41
+lorand=0.0000 hirand=0.3333
+volume=2.81 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_03.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=1 hivel=41
+lorand=0.3333 hirand=0.6667
+volume=2.42 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_04.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=1 hivel=41
+lorand=0.6667 hirand=1.0000
+volume=2.27 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_02.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=42 hivel=64
+lorand=0.0000 hirand=0.3333
+volume=5.24 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_06.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=42 hivel=64
+lorand=0.3333 hirand=0.6667
+volume=1.26 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_05.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=42 hivel=64
+lorand=0.6667 hirand=1.0000
+volume=1.01 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_08.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=65 hivel=87
+lorand=0.0000 hirand=0.2500
+volume=3.98 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_07.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=65 hivel=87
+lorand=0.2500 hirand=0.5000
+volume=3.15 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_09.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=65 hivel=87
+lorand=0.5000 hirand=0.7500
+volume=1.52 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_10.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=65 hivel=87
+lorand=0.7500 hirand=1.0000
+volume=1.36 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_11.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=88 hivel=113
+lorand=0.0000 hirand=0.3333
+volume=4.39 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_12.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=88 hivel=113
+lorand=0.3333 hirand=0.6667
+volume=4.23 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_15.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=88 hivel=113
+lorand=0.6667 hirand=1.0000
+volume=-1.12 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_13.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=114 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.59 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_16.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=114 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=21 hikey=21 pitch_keycenter=21
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=22 hikey=22 pitch_keycenter=22
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=23 hikey=23 pitch_keycenter=23
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=24 hikey=24 pitch_keycenter=24
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=25 hikey=25 pitch_keycenter=25
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=27 hikey=27 pitch_keycenter=27
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=28 hikey=28 pitch_keycenter=28
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=29 hikey=29 pitch_keycenter=29
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=31 hikey=31 pitch_keycenter=31
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+<region>
+sample=samples/drums-vintage/hh_closed_14.flac
+lokey=32 hikey=32 pitch_keycenter=32
+lovel=114 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.40 amp_veltrack=25
+group=1
+// tambourine -> 54
+<region>
+sample=samples/perc/tambourine_04.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=1 hivel=111
+lorand=0.0000 hirand=0.5000
+volume=2.51 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_06.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=1 hivel=111
+lorand=0.5000 hirand=1.0000
+volume=2.49 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_07.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=112 hivel=118
+lorand=0.0000 hirand=0.5000
+volume=2.62 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_01.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=112 hivel=118
+lorand=0.5000 hirand=1.0000
+volume=2.38 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_08.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=119 hivel=125
+lorand=0.0000 hirand=0.5000
+volume=2.96 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_03.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=119 hivel=125
+lorand=0.5000 hirand=1.0000
+volume=2.04 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_05.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=126 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.55 amp_veltrack=40
+<region>
+sample=samples/perc/tambourine_02.flac
+lokey=54 hikey=54 pitch_keycenter=54
+lovel=126 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.45 amp_veltrack=40
+// cowbell -> 56
+<region>
+sample=samples/perc/cowbell_03.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=1 hivel=45
+lorand=0.0000 hirand=0.5000
+volume=2.78 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_01.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=1 hivel=45
+lorand=0.5000 hirand=1.0000
+volume=2.22 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_02.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=46 hivel=84
+lorand=0.0000 hirand=0.3333
+volume=7.41 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_04.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=46 hivel=84
+lorand=0.3333 hirand=0.6667
+volume=0.89 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_05.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=46 hivel=84
+lorand=0.6667 hirand=1.0000
+volume=-0.79 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_06.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=85 hivel=114
+lorand=0.0000 hirand=0.3333
+volume=4.24 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_07.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=85 hivel=114
+lorand=0.3333 hirand=0.6667
+volume=3.48 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_09.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=85 hivel=114
+lorand=0.6667 hirand=1.0000
+volume=-0.22 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_08.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=115 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.62 amp_veltrack=40
+<region>
+sample=samples/perc/cowbell_10.flac
+lokey=56 hikey=56 pitch_keycenter=56
+lovel=115 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.38 amp_veltrack=40
+// vibraslap -> 58
+<region>
+sample=samples/perc/vibraslap_01.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=1 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=3.15 amp_veltrack=40
+<region>
+sample=samples/perc/vibraslap_03.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=1 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=1.85 amp_veltrack=40
+<region>
+sample=samples/perc/vibraslap_02.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=104 hivel=113
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/vibraslap_06.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=114 hivel=123
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/vibraslap_04.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=124 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.87 amp_veltrack=40
+<region>
+sample=samples/perc/vibraslap_05.flac
+lokey=58 hikey=58 pitch_keycenter=58
+lovel=124 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.13 amp_veltrack=40
+// bongo_hi -> 60
+<region>
+sample=samples/perc/bongo_hi_01.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=1 hivel=59
+lorand=0.0000 hirand=0.5000
+volume=2.55 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_02.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=1 hivel=59
+lorand=0.5000 hirand=1.0000
+volume=2.45 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_03.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=60 hivel=93
+lorand=0.0000 hirand=0.3333
+volume=7.33 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_04.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=60 hivel=93
+lorand=0.3333 hirand=0.6667
+volume=0.24 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_06.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=60 hivel=93
+lorand=0.6667 hirand=1.0000
+volume=-0.06 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_05.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=94 hivel=118
+lorand=0.0000 hirand=0.3333
+volume=4.23 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_07.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=94 hivel=118
+lorand=0.3333 hirand=0.6667
+volume=2.68 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_08.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=94 hivel=118
+lorand=0.6667 hirand=1.0000
+volume=0.59 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_10.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=119 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.58 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_hi_09.flac
+lokey=60 hikey=60 pitch_keycenter=60
+lovel=119 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.42 amp_veltrack=40
+// bongo_lo -> 61
+<region>
+sample=samples/perc/bongo_lo_03.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=1 hivel=57
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_02.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=1 hivel=57
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_01.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=58 hivel=87
+lorand=0.0000 hirand=0.3333
+volume=5.52 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_04.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=58 hivel=87
+lorand=0.3333 hirand=0.6667
+volume=1.60 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_05.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=58 hivel=87
+lorand=0.6667 hirand=1.0000
+volume=0.38 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_07.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=88 hivel=112
+lorand=0.0000 hirand=0.3333
+volume=3.93 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_06.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=88 hivel=112
+lorand=0.3333 hirand=0.6667
+volume=3.00 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_08.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=88 hivel=112
+lorand=0.6667 hirand=1.0000
+volume=0.57 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_10.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=113 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.90 amp_veltrack=40
+<region>
+sample=samples/perc/bongo_lo_09.flac
+lokey=61 hikey=61 pitch_keycenter=61
+lovel=113 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.10 amp_veltrack=40
+// conga_mute -> 62
+<region>
+sample=samples/perc/conga_mute_04.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=1 hivel=106
+lorand=0.0000 hirand=0.5000
+volume=3.17 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_03.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=1 hivel=106
+lorand=0.5000 hirand=1.0000
+volume=1.83 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_01.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=107 hivel=114
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_02.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=107 hivel=114
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_06.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=115 hivel=122
+lorand=0.0000 hirand=0.5000
+volume=2.67 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_05.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=115 hivel=122
+lorand=0.5000 hirand=1.0000
+volume=2.33 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_08.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.69 amp_veltrack=40
+<region>
+sample=samples/perc/conga_mute_07.flac
+lokey=62 hikey=62 pitch_keycenter=62
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.31 amp_veltrack=40
+// conga_open -> 63
+<region>
+sample=samples/perc/conga_open_01.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=1 hivel=79
+lorand=0.0000 hirand=0.3333
+volume=3.25 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_04.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=1 hivel=79
+lorand=0.3333 hirand=0.6667
+volume=3.05 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_03.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=1 hivel=79
+lorand=0.6667 hirand=1.0000
+volume=1.20 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_02.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=80 hivel=100
+lorand=0.0000 hirand=0.3333
+volume=4.85 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_07.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=80 hivel=100
+lorand=0.3333 hirand=0.6667
+volume=1.69 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_06.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=80 hivel=100
+lorand=0.6667 hirand=1.0000
+volume=0.96 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_05.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=101 hivel=114
+lorand=0.0000 hirand=0.3333
+volume=3.03 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_08.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=101 hivel=114
+lorand=0.3333 hirand=0.6667
+volume=2.54 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_10.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=101 hivel=114
+lorand=0.6667 hirand=1.0000
+volume=1.93 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_09.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=115 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=3.06 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_12.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=115 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.77 amp_veltrack=40
+<region>
+sample=samples/perc/conga_open_11.flac
+lokey=63 hikey=63 pitch_keycenter=63
+lovel=115 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=1.66 amp_veltrack=40
+// conga_low -> 64
+<region>
+sample=samples/perc/conga_low_01.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=1 hivel=50
+lorand=0.0000 hirand=0.3333
+volume=7.76 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_03.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=1 hivel=50
+lorand=0.3333 hirand=0.6667
+volume=0.07 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_02.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=1 hivel=50
+lorand=0.6667 hirand=1.0000
+volume=-0.33 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_05.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=51 hivel=87
+lorand=0.0000 hirand=0.3333
+volume=3.04 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_06.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=51 hivel=87
+lorand=0.3333 hirand=0.6667
+volume=2.28 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_08.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=51 hivel=87
+lorand=0.6667 hirand=1.0000
+volume=2.18 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_04.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=88 hivel=110
+lorand=0.0000 hirand=0.3333
+volume=3.75 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_09.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=88 hivel=110
+lorand=0.3333 hirand=0.6667
+volume=1.94 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_07.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=88 hivel=110
+lorand=0.6667 hirand=1.0000
+volume=1.81 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_12.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=111 hivel=127
+lorand=0.0000 hirand=0.3333
+volume=2.76 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_11.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=111 hivel=127
+lorand=0.3333 hirand=0.6667
+volume=2.51 amp_veltrack=40
+<region>
+sample=samples/perc/conga_low_10.flac
+lokey=64 hikey=64 pitch_keycenter=64
+lovel=111 hivel=127
+lorand=0.6667 hirand=1.0000
+volume=2.22 amp_veltrack=40
+// timbale_hi -> 65
+<region>
+sample=samples/perc/timbale_hi_02.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=1 hivel=84
+lorand=0.0000 hirand=0.5000
+volume=2.51 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_01.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=1 hivel=84
+lorand=0.5000 hirand=1.0000
+volume=2.49 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_03.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=85 hivel=102
+lorand=0.0000 hirand=0.5000
+volume=3.67 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_04.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=85 hivel=102
+lorand=0.5000 hirand=1.0000
+volume=1.33 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_05.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=103 hivel=117
+lorand=0.0000 hirand=0.5000
+volume=3.52 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_06.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=103 hivel=117
+lorand=0.5000 hirand=1.0000
+volume=1.48 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_08.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=118 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.82 amp_veltrack=40
+<region>
+sample=samples/perc/timbale_hi_07.flac
+lokey=65 hikey=65 pitch_keycenter=65
+lovel=118 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.18 amp_veltrack=40
+// agogo_hi -> 67
+<region>
+sample=samples/perc/agogo_hi_01.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=1 hivel=53
+lorand=0.0000 hirand=0.5000
+volume=2.80 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_03.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=1 hivel=53
+lorand=0.5000 hirand=1.0000
+volume=2.20 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_02.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=54 hivel=79
+lorand=0.0000 hirand=0.5000
+volume=4.04 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_05.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=54 hivel=79
+lorand=0.5000 hirand=1.0000
+volume=0.96 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_04.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=80 hivel=109
+lorand=0.0000 hirand=0.5000
+volume=3.54 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_06.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=80 hivel=109
+lorand=0.5000 hirand=1.0000
+volume=1.46 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_07.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=110 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=3.19 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_hi_08.flac
+lokey=67 hikey=67 pitch_keycenter=67
+lovel=110 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=1.81 amp_veltrack=40
+// agogo_lo -> 68
+<region>
+sample=samples/perc/agogo_lo_02.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=1 hivel=78
+lorand=0.0000 hirand=0.5000
+volume=2.67 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_04.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=1 hivel=78
+lorand=0.5000 hirand=1.0000
+volume=2.33 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_03.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=79 hivel=102
+lorand=0.0000 hirand=0.5000
+volume=2.72 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_01.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=79 hivel=102
+lorand=0.5000 hirand=1.0000
+volume=2.28 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_07.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=103 hivel=124
+lorand=0.0000 hirand=0.5000
+volume=2.55 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_08.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=103 hivel=124
+lorand=0.5000 hirand=1.0000
+volume=2.45 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_05.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=125 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.70 amp_veltrack=40
+<region>
+sample=samples/perc/agogo_lo_06.flac
+lokey=68 hikey=68 pitch_keycenter=68
+lovel=125 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.30 amp_veltrack=40
+// cabasa -> 69
+<region>
+sample=samples/perc/cabasa_01.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=1 hivel=91
+lorand=0.0000 hirand=0.5000
+volume=2.67 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_04.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=1 hivel=91
+lorand=0.5000 hirand=1.0000
+volume=2.33 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_02.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=92 hivel=109
+lorand=0.0000 hirand=0.5000
+volume=2.77 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_03.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=92 hivel=109
+lorand=0.5000 hirand=1.0000
+volume=2.23 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_08.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=110 hivel=126
+lorand=0.0000 hirand=0.5000
+volume=2.61 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_07.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=110 hivel=126
+lorand=0.5000 hirand=1.0000
+volume=2.39 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_05.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=127 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.54 amp_veltrack=40
+<region>
+sample=samples/perc/cabasa_06.flac
+lokey=69 hikey=69 pitch_keycenter=69
+lovel=127 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.46 amp_veltrack=40
+// shaker_d -> 70
+<region>
+sample=samples/perc/shaker_d_01.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=1 hivel=108
+lorand=0.0000 hirand=0.5000
+volume=3.95 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_06.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=1 hivel=108
+lorand=0.5000 hirand=1.0000
+volume=1.05 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_04.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=109 hivel=120
+lorand=0.0000 hirand=0.5000
+volume=2.59 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_07.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=109 hivel=120
+lorand=0.5000 hirand=1.0000
+volume=2.41 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_05.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=121 hivel=125
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_02.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=126 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.64 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_d_03.flac
+lokey=70 hikey=70 pitch_keycenter=70
+lovel=126 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.36 amp_veltrack=40
+// guiro_short -> 73
+<region>
+sample=samples/perc/guiro_short_06.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=1 hivel=117
+lorand=0.0000 hirand=0.5000
+volume=2.69 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_short_05.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=1 hivel=117
+lorand=0.5000 hirand=1.0000
+volume=2.31 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_short_03.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=118 hivel=123
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_short_04.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=124 hivel=125
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_short_02.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=126 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_short_01.flac
+lokey=73 hikey=73 pitch_keycenter=73
+lovel=126 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.50 amp_veltrack=40
+// guiro_long -> 74
+<region>
+sample=samples/perc/guiro_long_05.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=1 hivel=103
+lorand=0.0000 hirand=0.5000
+volume=3.19 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_long_06.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=1 hivel=103
+lorand=0.5000 hirand=1.0000
+volume=1.81 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_long_01.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=104 hivel=113
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_long_03.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=114 hivel=122
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_long_02.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=123 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.86 amp_veltrack=40
+<region>
+sample=samples/perc/guiro_long_04.flac
+lokey=74 hikey=74 pitch_keycenter=74
+lovel=123 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.14 amp_veltrack=40
+// claves -> 75
+<region>
+sample=samples/perc/claves_03.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=1 hivel=66
+lorand=0.0000 hirand=0.5000
+volume=2.90 amp_veltrack=40
+<region>
+sample=samples/perc/claves_01.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=1 hivel=66
+lorand=0.5000 hirand=1.0000
+volume=2.10 amp_veltrack=40
+<region>
+sample=samples/perc/claves_02.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=67 hivel=95
+lorand=0.0000 hirand=0.3333
+volume=6.11 amp_veltrack=40
+<region>
+sample=samples/perc/claves_05.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=67 hivel=95
+lorand=0.3333 hirand=0.6667
+volume=1.22 amp_veltrack=40
+<region>
+sample=samples/perc/claves_04.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=67 hivel=95
+lorand=0.6667 hirand=1.0000
+volume=0.18 amp_veltrack=40
+<region>
+sample=samples/perc/claves_06.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=96 hivel=117
+lorand=0.0000 hirand=0.3333
+volume=3.70 amp_veltrack=40
+<region>
+sample=samples/perc/claves_07.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=96 hivel=117
+lorand=0.3333 hirand=0.6667
+volume=3.23 amp_veltrack=40
+<region>
+sample=samples/perc/claves_10.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=96 hivel=117
+lorand=0.6667 hirand=1.0000
+volume=0.57 amp_veltrack=40
+<region>
+sample=samples/perc/claves_08.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=118 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.67 amp_veltrack=40
+<region>
+sample=samples/perc/claves_09.flac
+lokey=75 hikey=75 pitch_keycenter=75
+lovel=118 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.33 amp_veltrack=40
+// woodblock_hi -> 76
+<region>
+sample=samples/perc/woodblock_hi_01.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=1 hivel=54
+lorand=0.0000 hirand=0.5000
+volume=2.92 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_02.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=1 hivel=54
+lorand=0.5000 hirand=1.0000
+volume=2.08 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_03.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=55 hivel=85
+lorand=0.0000 hirand=0.3333
+volume=4.36 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_05.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=55 hivel=85
+lorand=0.3333 hirand=0.6667
+volume=2.22 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_04.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=55 hivel=85
+lorand=0.6667 hirand=1.0000
+volume=0.91 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_07.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=86 hivel=112
+lorand=0.0000 hirand=0.3333
+volume=3.65 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_06.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=86 hivel=112
+lorand=0.3333 hirand=0.6667
+volume=2.94 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_08.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=86 hivel=112
+lorand=0.6667 hirand=1.0000
+volume=0.91 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_09.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=113 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.54 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_hi_10.flac
+lokey=76 hikey=76 pitch_keycenter=76
+lovel=113 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.46 amp_veltrack=40
+// woodblock_lo -> 77
+<region>
+sample=samples/perc/woodblock_lo_01.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=1 hivel=74
+lorand=0.0000 hirand=0.5000
+volume=3.05 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_02.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=1 hivel=74
+lorand=0.5000 hirand=1.0000
+volume=1.95 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_03.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=75 hivel=102
+lorand=0.0000 hirand=0.3333
+volume=4.30 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_04.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=75 hivel=102
+lorand=0.3333 hirand=0.6667
+volume=2.74 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_05.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=75 hivel=102
+lorand=0.6667 hirand=1.0000
+volume=0.46 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_06.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=103 hivel=120
+lorand=0.0000 hirand=0.3333
+volume=3.27 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_07.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=103 hivel=120
+lorand=0.3333 hirand=0.6667
+volume=2.78 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_08.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=103 hivel=120
+lorand=0.6667 hirand=1.0000
+volume=1.45 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_09.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=121 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.59 amp_veltrack=40
+<region>
+sample=samples/perc/woodblock_lo_10.flac
+lokey=77 hikey=77 pitch_keycenter=77
+lovel=121 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.41 amp_veltrack=40
+// triangle_mute -> 80
+<region>
+sample=samples/perc/triangle_mute_04.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=1 hivel=111
+lorand=0.0000 hirand=0.5000
+volume=2.79 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_mute_05.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=1 hivel=111
+lorand=0.5000 hirand=1.0000
+volume=2.21 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_mute_02.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=112 hivel=113
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_mute_03.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=114 hivel=120
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_mute_06.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=121 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.69 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_mute_01.flac
+lokey=80 hikey=80 pitch_keycenter=80
+lovel=121 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.31 amp_veltrack=40
+// triangle_open -> 81
+<region>
+sample=samples/perc/triangle_open_01.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=1 hivel=58
+lorand=0.0000 hirand=0.5000
+volume=2.87 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_03.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=1 hivel=58
+lorand=0.5000 hirand=1.0000
+volume=2.13 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_02.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=59 hivel=86
+lorand=0.0000 hirand=0.5000
+volume=2.56 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_04.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=59 hivel=86
+lorand=0.5000 hirand=1.0000
+volume=2.44 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_05.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=87 hivel=119
+lorand=0.0000 hirand=0.5000
+volume=2.93 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_07.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=87 hivel=119
+lorand=0.5000 hirand=1.0000
+volume=2.07 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_08.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=120 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.80 amp_veltrack=40
+<region>
+sample=samples/perc/triangle_open_06.flac
+lokey=81 hikey=81 pitch_keycenter=81
+lovel=120 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.20 amp_veltrack=40
+// shaker_u -> 82
+<region>
+sample=samples/perc/shaker_u_03.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=1 hivel=109
+lorand=0.0000 hirand=0.5000
+volume=3.43 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_01.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=1 hivel=109
+lorand=0.5000 hirand=1.0000
+volume=1.57 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_07.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=110 hivel=114
+lorand=0.0000 hirand=0.5000
+volume=2.62 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_02.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=110 hivel=114
+lorand=0.5000 hirand=1.0000
+volume=2.38 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_06.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=115 hivel=120
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_04.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=121 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=2.72 amp_veltrack=40
+<region>
+sample=samples/perc/shaker_u_05.flac
+lokey=82 hikey=82 pitch_keycenter=82
+lovel=121 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=2.28 amp_veltrack=40
+// sleighbells -> 83
+<region>
+sample=samples/perc/sleighbells_06.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=1 hivel=112
+lorand=0.0000 hirand=0.5000
+volume=3.59 amp_veltrack=40
+<region>
+sample=samples/perc/sleighbells_04.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=1 hivel=112
+lorand=0.5000 hirand=1.0000
+volume=1.41 amp_veltrack=40
+<region>
+sample=samples/perc/sleighbells_05.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=113 hivel=116
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/sleighbells_03.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=117 hivel=119
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/sleighbells_01.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=120 hivel=127
+lorand=0.0000 hirand=0.5000
+volume=3.16 amp_veltrack=40
+<region>
+sample=samples/perc/sleighbells_02.flac
+lokey=83 hikey=83 pitch_keycenter=83
+lovel=120 hivel=127
+lorand=0.5000 hirand=1.0000
+volume=1.84 amp_veltrack=40
+// belltree -> 84
+<region>
+sample=samples/perc/belltree_01.flac
+lokey=84 hikey=84 pitch_keycenter=84
+lovel=1 hivel=101
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/belltree_04.flac
+lokey=84 hikey=84 pitch_keycenter=84
+lovel=102 hivel=111
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/belltree_03.flac
+lokey=84 hikey=84 pitch_keycenter=84
+lovel=112 hivel=125
+volume=2.50 amp_veltrack=40
+<region>
+sample=samples/perc/belltree_02.flac
+lokey=84 hikey=84 pitch_keycenter=84
+lovel=126 hivel=127
+volume=2.50 amp_veltrack=40
+// claps -> 39 (VCSL, CC0)
+<region>
+sample=samples/claps/Clap_rr5.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=1
+volume=-2.07 amp_veltrack=60
+<region>
+sample=samples/claps/Clap_rr4.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=2
+volume=0.14 amp_veltrack=60
+<region>
+sample=samples/claps/Clap_rr6.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=3
+volume=-7.93 amp_veltrack=60
+<region>
+sample=samples/claps/Clap_rr3.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=4
+volume=-2.05 amp_veltrack=60
+<region>
+sample=samples/claps/Clap_rr2.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=5
+volume=-1.73 amp_veltrack=60
+<region>
+sample=samples/claps/Clap_rr1.flac
+lokey=39 hikey=39 pitch_keycenter=39
+seq_length=6
+seq_position=6
+volume=-1.26 amp_veltrack=60
+<region>
+sample=samples/claps/SoloClap_vl1.flac
+lokey=39 hikey=39 pitch_keycenter=39
+lovel=0
+hivel=54
+volume=-12.47 amp_veltrack=60
+<region>
+sample=samples/claps/SoloClap_vl2.flac
+lokey=39 hikey=39 pitch_keycenter=39
+lovel=55
+hivel=83
+volume=-12.49 amp_veltrack=60
+<region>
+sample=samples/claps/SoloClap_vl3.flac
+lokey=39 hikey=39 pitch_keycenter=39
+lovel=84
+hivel=106
+volume=-0.61 amp_veltrack=60
+<region>
+sample=samples/claps/SoloClap_vl4.flac
+lokey=39 hikey=39 pitch_keycenter=39
+lovel=107
+hivel=127
+volume=-8.34 amp_veltrack=60
+// cajon -> 66 (VCSL, CC0)
+<region>
+sample=samples/cajon/Cajon_hit1_mp_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=1
+volume=-11.41 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit1_mp_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=2
+volume=-13.88 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit1_f_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=1
+volume=-7.84 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit1_f_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=2
+volume=-8.88 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit1_fff_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=1
+volume=-8.05 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit1_fff_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=2
+volume=-8.00 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_pp_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=1
+volume=-16.06 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_pp_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=2
+volume=-15.90 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_mp_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=1
+volume=-12.23 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_mp_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=2
+volume=-8.88 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_f_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=1
+volume=-9.96 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit2_f_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=2
+volume=-9.19 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_p_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=1
+volume=-13.19 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_p_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=0
+hivel=65
+seq_length=2
+seq_position=2
+volume=-12.88 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_mp_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=1
+volume=-10.56 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_mp_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=66
+hivel=99
+seq_length=2
+seq_position=2
+volume=-5.50 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_f_rr1.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=1
+volume=-4.27 amp_veltrack=60
+<region>
+sample=samples/cajon/Cajon_hit3_f_rr2.flac
+lokey=66 hikey=66 pitch_keycenter=66
+lovel=100
+hivel=127
+seq_length=2
+seq_position=2
+volume=-5.36 amp_veltrack=60

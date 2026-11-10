@@ -159,6 +159,8 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// Catch is off: the user scrolled while playing (back on at stop, or with `).
+    pub catch_off: bool,
     /// Live Loops: the grid, its cells, what plays and what's queued.
     pub live_loops: crate::liveloops::State,
     /// The audio editors (Track, File, Smart Tempo): their state and the regions' audio edits.
@@ -334,6 +336,7 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            catch_off: false,
             live_loops: Default::default(),
             audio_edit: Default::default(),
             show_automation: false,

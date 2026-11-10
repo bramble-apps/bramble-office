@@ -2,7 +2,11 @@
 //! release, voice stealing, sustain pedal, pitch bend, the Sampler loaders and the patch table.
 
 use lg_dsp::{Instrument, Plugin};
-use lg_synth::{Engine, by_logic_name, drums, for_patch, patch, sampler};
+// These tests exercise the synthesized engines (their parameters, models and keyswitches), so
+// they ask for the synthesized stand-ins even when the sample library is installed; the bundled
+// sampled instruments are tested in tests/sampled.rs.
+use lg_synth::synthesized_by_logic_name as by_logic_name;
+use lg_synth::{Engine, drums, for_patch, patch, sampler};
 
 const RATE: f32 = 48000.0;
 

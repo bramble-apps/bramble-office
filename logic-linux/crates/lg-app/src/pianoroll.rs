@@ -322,6 +322,9 @@ pub(crate) fn preview(app: &mut App, track: usize, pitch: u8) {
 /// The Piano Roll's inspector: what's selected, Time Quantize (value, Strength, Swing, Q),
 /// Scale Quantize (to the project's key, Q), Velocity of the selected notes.
 fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize, rg: usize) {
+    // (its rows past the pane's bottom are cut off, buttons too: nothing floats below)
+    let ui = &mut ui.new_child(egui::UiBuilder::new().max_rect(r));
+    ui.set_clip_rect(r.intersect(ui.clip_rect()));
     let p = ui.painter_at(r);
     p.rect_filled(r, 0.0, look::pane_bg());
     p.vline(r.max.x, r.y_range(), Stroke::new(1.0, look::line()));

@@ -1,0 +1,8 @@
+[package]
+name = "lg-sounds"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Bramble Studio's bundled sampled instruments: SFZ mappings, licences and the index; the sample audio ships as a release archive (see fetch.sh)."
+
+[dependencies]
