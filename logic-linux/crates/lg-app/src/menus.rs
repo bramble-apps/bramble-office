@@ -237,3 +237,31 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
     }
     right
 }
+
+/// A local menu bar as Logic draws it: "Edit ⌄ | Functions ⌄ | View ⌄" in one rounded capsule.
+pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
+    let bg = ui.painter().add(egui::Shape::Noop);
+    let start = ui.cursor().min.x;
+    let mut seps = Vec::new();
+    ui.spacing_mut().item_spacing.x = 0.0;
+    ui.scope(|ui| {
+        ui.visuals_mut().widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+        ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+        for (i, (title, name)) in menus.iter().enumerate() {
+            if i > 0 {
+                seps.push(ui.cursor().min.x);
+            }
+            ui.menu_button(format!("{title} ⌄"), |ui| show_items(app, ui, local(name)));
+        }
+    });
+    let end = ui.min_rect().max.x;
+    let h = 24.0;
+    let cy = ui.min_rect().center().y;
+    let r = egui::Rect::from_min_max(egui::pos2(start - 4.0, cy - h / 2.0), egui::pos2(end + 4.0, cy + h / 2.0));
+    let mut shapes = vec![egui::Shape::rect_filled(r, 6.0, crate::look::group_bg())];
+    for x in seps {
+        shapes.push(egui::Shape::line_segment([egui::pos2(x, cy - 7.0), egui::pos2(x, cy + 7.0)], egui::Stroke::new(1.0, crate::look::line())));
+    }
+    ui.painter().set(bg, egui::Shape::Vec(shapes));
+    ui.add_space(12.0);
+}

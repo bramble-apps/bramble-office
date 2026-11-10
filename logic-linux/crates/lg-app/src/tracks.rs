@@ -17,6 +17,7 @@ use crate::look;
 
 /// The track headers' width: Logic's minimum 265 pt, up to 547 (RESIZING.txt).
 pub const HEADER_W: f32 = 265.0;
+const GLOBAL_ROW: f32 = 28.0;
 pub const ROW_H: f32 = 52.0;
 const LOCAL_H: f32 = 32.0;
 const RULER_H: f32 = 32.0;
@@ -56,11 +57,49 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ruler = Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(area.max.x, local.max.y + RULER_H));
     p.rect_filled(head, 0.0, look::header_bg());
     p.rect_filled(ruler, 0.0, look::header_bg());
-    if ui.put(Rect::from_center_size(pos2(head.min.x + 22.0, head.center().y), vec2(26.0, 22.0)), egui::Button::new("+").corner_radius(5.0)).on_hover_text("New Software Instrument Track").clicked() {
-        new_track(app);
+    // Logic's row over the headers: + (New Tracks), Duplicate Track, S (global tracks); at the
+    // right, the region/track catch button
+    let hb = |i: f32| Rect::from_center_size(pos2(head.min.x + 22.0 + i * 34.0, head.center().y), vec2(28.0, 24.0));
+    let tips = ["New Tracks (⌥⌘N)", "New Track with Duplicate Settings (⌘D)", "Show/Hide Global Tracks (G)"];
+    for (i, tip) in tips.into_iter().enumerate() {
+        let r = hb(i as f32);
+        let resp = ui.interact(r, ui.scope_id().with(("hbtn", i)), Sense::click()).on_hover_text(tip);
+        let on = i == 2 && app.global_tracks;
+        p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
+        let c = r.center();
+        let col = if on { Color32::WHITE } else { look::text() };
+        match i {
+            0 => {
+                p.hline(c.x - 6.0..=c.x + 6.0, c.y, Stroke::new(1.6, col));
+                p.vline(c.x, c.y - 6.0..=c.y + 6.0, Stroke::new(1.6, col));
+            }
+            1 => {
+                p.rect_stroke(Rect::from_center_size(c + vec2(2.0, 2.0), vec2(10.0, 9.0)), 2.0, Stroke::new(1.3, col), egui::StrokeKind::Inside);
+                p.rect_stroke(Rect::from_center_size(c + vec2(-2.0, -2.0), vec2(10.0, 9.0)), 2.0, Stroke::new(1.3, col), egui::StrokeKind::Inside);
+            }
+            _ => {
+                p.text(c, Align2::CENTER_CENTER, "S", look::bold(13.0), col);
+            }
+        }
+        if resp.clicked() {
+            let ctx = ui.ctx().clone();
+            match i {
+                0 => new_track(app),
+                1 => {
+                    app.edit_command(&ctx, "New Track with Duplicate Settings");
+                }
+                _ => app.global_tracks = !app.global_tracks,
+            }
+        }
     }
-    let lanes = Rect::from_min_max(pos2(ruler.min.x, ruler.max.y), area.max);
-    let headers = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(head.max.x, area.max.y));
+    // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
+    let global_h = if app.global_tracks { 3.0 * GLOBAL_ROW } else { 0.0 };
+    let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
+    let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
+    let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
+    if app.global_tracks {
+        global_tracks(app, ui, global, head.max.x);
+    }
     let bar_t = app.bar_ticks() as f32;
     let bw0 = app.bar_w;
     let x_of0 = move |tick: f32, scroll: f32| lanes.min.x + (tick / bar_t - scroll) * bw0;
@@ -509,8 +548,36 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 /// The Tracks area's local menus: Logic's Edit, Functions and View (data/local-menus.txt), each
 /// item enabled when Studio runs it.
 fn local_menus(app: &mut App, ui: &mut egui::Ui) {
-    for (title, name) in [("Edit", "tracks-Edit"), ("Functions", "tracks-Functions"), ("View", "tracks-View")] {
-        ui.menu_button(format!("{title} ⌄"), |ui| crate::menus::show_items(app, ui, crate::menus::local(name)));
+    crate::menus::local_bar(app, ui, &[("Edit", "tracks-Edit"), ("Functions", "tracks-Functions"), ("View", "tracks-View")]);
+    // Logic's view buttons: Live Loops grid, Tracks (on), and Show/Hide Flex
+    for (i, tip) in ["Live Loops Grid (L)", "Tracks View", "Show/Hide Flex (F)"].into_iter().enumerate() {
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), Sense::click());
+        let on = i == 1;
+        let p = ui.painter();
+        p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
+        let c = r.center();
+        let col = if on { Color32::WHITE } else { look::text() };
+        match i {
+            0 => {
+                for dx in [-4.0f32, 0.0, 4.0] {
+                    for dy in [-3.5f32, 0.0, 3.5] {
+                        p.rect_filled(Rect::from_center_size(c + vec2(dx, dy), vec2(2.6, 2.2)), 0.5, col);
+                    }
+                }
+            }
+            1 => {
+                for dy in [-4.0f32, 0.0, 4.0] {
+                    p.hline(c.x - 7.0..=c.x + 7.0, c.y + dy, Stroke::new(2.0, col));
+                }
+            }
+            _ => {
+                p.line_segment([c + vec2(-6.0, -5.0), c + vec2(0.0, 5.0)], Stroke::new(1.4, col));
+                p.line_segment([c + vec2(6.0, -5.0), c + vec2(0.0, 5.0)], Stroke::new(1.4, col));
+                p.hline(c.x - 7.0..=c.x + 7.0, c.y, Stroke::new(1.0, col));
+            }
+        }
+        resp.on_hover_text(tip);
+        ui.add_space(4.0);
     }
 }
 
@@ -761,5 +828,118 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
     });
     if ui.input(|i| i.pointer.any_pressed()) && !ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p)) {
         app.tool_menu_open = false;
+    }
+}
+
+/// Logic's global tracks: Marker (markers as tabs; double-click the lane: a marker there; drag
+/// one to move it), Tempo (the tempo as a line; drag up or down), Signature (time and key).
+fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
+    let p = ui.painter_at(area);
+    p.rect_filled(area, 0.0, look::header_bg());
+    let bar_t = app.bar_ticks() as f32;
+    let (scroll, bw) = (app.scroll_x, app.bar_w);
+    let x_of = |tick: f32| lanes_x + (tick / bar_t - scroll) * bw;
+    let tick_of = |x: f32| ((x - lanes_x) / bw + scroll) * bar_t;
+    let names = ["Marker", "Tempo", "Signature"];
+    for (i, n) in names.iter().enumerate() {
+        let row = Rect::from_min_size(pos2(area.min.x, area.min.y + i as f32 * GLOBAL_ROW), vec2(area.width(), GLOBAL_ROW));
+        p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
+        p.text(pos2(row.min.x + 14.0, row.center().y), Align2::LEFT_CENTER, *n, look::semibold(12.0), look::text_dim());
+        let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
+        let lp = ui.painter_at(lane);
+        match i {
+            0 => {
+                let resp = ui.interact(lane, ui.scope_id().with("marker-lane"), Sense::click());
+                if resp.double_clicked() {
+                    if let Some(pp) = resp.interact_pointer_pos() {
+                        let at = ((tick_of(pp.x) / bar_t).round() * bar_t).max(0.0) as u32;
+                        if !app.markers.iter().any(|m| m.0 == at) {
+                            let k = app.markers.len() + 1;
+                            app.markers.push((at, format!("Marker {k}")));
+                            app.markers.sort_by_key(|m| m.0);
+                            app.dirty = true;
+                        }
+                    }
+                }
+                let markers = app.markers.clone();
+                for (k, (pos, name)) in markers.iter().enumerate() {
+                    let x = x_of(*pos as f32);
+                    let next = markers.get(k + 1).map_or(lane.max.x, |m| x_of(m.0 as f32));
+                    let tab = Rect::from_min_max(pos2(x, row.min.y + 3.0), pos2(next.min(x + 400.0) - 2.0, row.max.y - 3.0));
+                    lp.rect_filled(tab, 4.0, look::accent().gamma_multiply(0.7));
+                    lp.with_clip_rect(tab).text(pos2(tab.min.x + 6.0, tab.center().y), Align2::LEFT_CENTER, name, look::regular(11.5), Color32::WHITE);
+                    let mr = ui.interact(tab.intersect(lane), ui.scope_id().with(("marker-tab", k)), Sense::click_and_drag());
+                    if mr.dragged() {
+                        if let Some(pp) = mr.interact_pointer_pos() {
+                            let at = ((tick_of(pp.x) / (bar_t / 4.0)).round() * (bar_t / 4.0)).max(0.0) as u32;
+                            if let Some(m) = app.markers.get_mut(k) {
+                                m.0 = at;
+                            }
+                            app.dirty = true;
+                        }
+                    }
+                    if mr.drag_stopped() {
+                        app.markers.sort_by_key(|m| m.0);
+                    }
+                    if mr.double_clicked() {
+                        app.renaming_marker = Some((k, name.clone()));
+                    }
+                    if mr.clicked() {
+                        app.locate(*pos as f64);
+                    }
+                }
+                if let Some((k, text)) = app.renaming_marker.as_mut() {
+                    let k = *k;
+                    if let Some(pos) = app.markers.get(k).map(|m| m.0) {
+                        let er = Rect::from_min_size(pos2(x_of(pos as f32), row.min.y + 3.0), vec2(160.0, 22.0));
+                        let te = ui.put(er, egui::TextEdit::singleline(text).font(look::regular(11.5)));
+                        te.request_focus();
+                        if te.lost_focus() {
+                            let name = text.clone();
+                            if let Some(m) = app.markers.get_mut(k) {
+                                m.1 = name;
+                            }
+                            app.renaming_marker = None;
+                            app.dirty = true;
+                        }
+                    } else {
+                        app.renaming_marker = None;
+                    }
+                }
+            }
+            1 => {
+                // the tempo line: 40..240 BPM over the lane's height
+                let tempo = app.tempo();
+                let y_of = |bpm: f64| row.max.y - 4.0 - ((bpm - 40.0) / 200.0).clamp(0.0, 1.0) as f32 * (GLOBAL_ROW - 8.0);
+                let mut pts = vec![pos2(lane.min.x, y_of(app.project.as_ref().map_or(tempo, |p| p.tempo)))];
+                if let Some(pr) = &app.project {
+                    for (t, b) in pr.tempo_map.iter().filter(|e| e.0 > 0) {
+                        let x = x_of(*t as f32);
+                        if let Some(last) = pts.last().copied() {
+                            pts.push(pos2(x, last.y));
+                        }
+                        pts.push(pos2(x, y_of(*b)));
+                    }
+                }
+                if let Some(last) = pts.last().copied() {
+                    pts.push(pos2(lane.max.x, last.y));
+                }
+                lp.add(egui::Shape::line(pts, Stroke::new(1.6, Color32::from_rgb(0x4c, 0xd9, 0x64))));
+                lp.text(pos2(lane.min.x + 6.0, row.min.y + 8.0), Align2::LEFT_CENTER, format!("{tempo:.2}"), look::regular(10.5), look::text_dim());
+                let resp = ui.interact(lane, ui.scope_id().with("tempo-lane"), Sense::drag()).on_hover_text("Tempo: drag up or down");
+                if resp.drag_started() {
+                    app.checkpoint("Change Tempo");
+                }
+                if resp.dragged() {
+                    let t = app.project.as_ref().map_or(120.0, |p| p.tempo);
+                    app.set_tempo((t - resp.drag_delta().y as f64 * 0.5).clamp(5.0, 990.0).round());
+                    app.help_tag = Some(vec![("Tempo".into(), format!("{:.0}", app.tempo()))]);
+                }
+            }
+            _ => {
+                let (sig, key) = app.project.as_ref().map_or(((4, 4), "C major".to_string()), |p| (p.signature, p.key.clone()));
+                lp.text(pos2(x_of(0.0) + 6.0, row.center().y), Align2::LEFT_CENTER, format!("{}/{}   {}", sig.0, sig.1, key), look::regular(12.0), look::text());
+            }
+        }
     }
 }

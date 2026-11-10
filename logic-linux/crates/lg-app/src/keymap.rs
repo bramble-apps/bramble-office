@@ -90,9 +90,9 @@ pub fn bindings() -> &'static [Binding] {
 /// Which areas' bindings apply, most specific first.
 pub fn areas(focus: Focus) -> &'static [&'static str] {
     match focus {
-        Focus::PianoRoll => &["Piano Roll", "Various Editors", "Main Window Tracks and Various Editors", "Various Windows", "Global Commands"],
+        Focus::PianoRoll => &["Piano Roll", "Various Editors", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Various Windows", "Global Commands"],
         Focus::Mixer => &["Mixer", "Various Windows", "Global Commands"],
-        Focus::Tracks => &["Main Window Tracks", "Main Window Tracks and Various Editors", "Various Windows", "Global Commands"],
+        Focus::Tracks => &["Main Window Tracks", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Windows Showing Audio Files", "Various Windows", "Global Commands"],
     }
 }
 

@@ -124,6 +124,8 @@ pub struct App {
     pub tool: crate::edit::Tool,
     pub cmd_tool: crate::edit::Tool,
     pub snap_on: bool,
+    /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
+    pub global_tracks: bool,
     /// The Browser: linked to the selected track, replacing its patch; its category filter and
     /// sort (by name, else Logic's relevance).
     pub browser_link: bool,
@@ -265,6 +267,7 @@ impl App {
             tool: crate::edit::Tool::Pointer,
             cmd_tool: crate::edit::Tool::Marquee,
             snap_on: true,
+            global_tracks: false,
             browser_link: true,
             browser_replace: true,
             browser_filter: None,

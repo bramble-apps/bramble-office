@@ -61,9 +61,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.rect_filled(local, 0.0, look::header_bg());
     p.hline(local.x_range(), local.max.y, Stroke::new(1.0, look::line()));
     ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-        for (title, name) in [("Edit", "pianoroll-Edit"), ("Functions", "pianoroll-Functions"), ("View", "pianoroll-View")] {
-            ui.menu_button(format!("{title} ⌄"), |ui| crate::menus::show_items(app, ui, crate::menus::local(name)));
-        }
+        crate::menus::local_bar(app, ui, &[("Edit", "pianoroll-Edit"), ("Functions", "pianoroll-Functions"), ("View", "pianoroll-View")]);
         let label = if app.roll_inspector { "Hide Inspector" } else { "Show Inspector" };
         if ui.small_button("◧").on_hover_text(label).clicked() {
             app.roll_inspector = !app.roll_inspector;

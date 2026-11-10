@@ -234,8 +234,8 @@ fn patch_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     let current = app.selected_track.and_then(|t| app.instrument_choice.get(&t).cloned().or_else(|| app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone())));
     let n = items.len();
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    child.spacing_mut().item_spacing.y = 0.0;
     egui::ScrollArea::vertical().id_salt("browser-patches").auto_shrink([false, false]).show_rows(&mut child, 24.0, n, |ui, range| {
-        ui.spacing_mut().item_spacing.y = 0.0;
         for k in range {
             let (cat, _, name) = items[k];
             let mark = if cat == "Drums & Percussion" { Color32::from_rgb(0xe3, 0xb3, 0x2b) } else { Color32::from_rgb(0x52, 0xc0, 0x3c) };
@@ -261,8 +261,8 @@ fn soundfont_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     let current = app.selected_track.and_then(|t| app.programs.get(t).copied());
     let n = presets.len();
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    child.spacing_mut().item_spacing.y = 0.0;
     egui::ScrollArea::vertical().id_salt("browser-sf").auto_shrink([false, false]).show_rows(&mut child, 24.0, n, |ui, range| {
-        ui.spacing_mut().item_spacing.y = 0.0;
         for k in range {
             let (bank, prog, name) = &presets[k];
             let mark = if *bank == 128 { Color32::from_rgb(0xe3, 0xb3, 0x2b) } else { Color32::from_rgb(0x9b, 0x6c, 0xe6) };

@@ -969,6 +969,7 @@ impl App {
                 self.scroll_x = (at as f32 / bar as f32 - 1.0).max(0.0);
             }
             "Show Tool Menu" => self.tool_menu_open = true,
+            "Show/Hide Global Tracks" | "Show/Hide Marker Track" | "Show/Hide Tempo Track" | "Show/Hide Marker Track Only" | "Global Tracks" => self.global_tracks = !self.global_tracks,
             _ => return false,
         }
         true
