@@ -305,7 +305,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let mut r = r;
             if copy {
                 if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-                    if let Some(rg) = tr.regions.get(r).cloned() {
+                    if let Some(mut rg) = tr.regions.get(r).cloned() {
+                        rg.source = None;
                         tr.regions.push(rg);
                         r = tr.regions.len() - 1;
                         app.selected_region = Some((t, r));

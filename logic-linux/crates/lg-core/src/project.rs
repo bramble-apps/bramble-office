@@ -77,6 +77,18 @@ pub struct Region {
     /// An audio region's file (absolute path) and how long it is in seconds.
     pub audio: Option<AudioRef>,
     pub muted: bool,
+    /// Where the region came from in the file it was read from (None: made here), for Save.
+    pub source: Option<Source>,
+}
+
+/// A region's place in the original ProjectData: the folder whose event list places it, its
+/// position there as read (song ticks, Logic's own count), and its sequence (MSeq id).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Source {
+    pub folder: u32,
+    pub pos: u32,
+    pub seq: Option<u32>,
+    pub audio_region: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -368,7 +380,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     let audio_regions: Vec<String> = live.iter().filter(|c| c.is("AuRg")).filter_map(|c| audio_region_name(c.payload)).collect();
     let audio_files: Vec<String> = live.iter().filter(|c| c.is("AuFl")).filter_map(|c| audio_file_name(c.payload)).collect();
     // the regions, from the top folder down (folders and track stacks hold more placements)
-    let mut placed: Vec<(events::Placement, Option<u32>)> = Vec::new();
+    let mut placed: Vec<(events::Placement, Option<u32>, u32)> = Vec::new();
     let mut stack = vec![0x40000u32];
     let mut seen = std::collections::HashSet::new();
     while let Some(folder) = stack.pop() {
@@ -386,13 +398,13 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
                     continue;
                 }
             }
-            placed.push((pl, seq));
+            placed.push((pl, seq, folder));
         }
     }
     let mut by_row: BTreeMap<u32, Track> = BTreeMap::new();
-    for (pl, seq) in placed {
+    for (pl, seq, folder) in placed {
         let channel_name = channels.get(&pl.channel).cloned().unwrap_or_else(|| format!("Track {}", pl.row));
-        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted };
+        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }) };
         let mut kind = TrackKind::Instrument;
         if pl.audio {
             kind = TrackKind::Audio;

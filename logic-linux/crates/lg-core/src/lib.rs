@@ -7,5 +7,6 @@ pub mod events;
 pub mod midi;
 pub mod plugin;
 pub mod project;
+pub mod save;
 
 pub use project::{open, Project, Region, Track, TrackKind};

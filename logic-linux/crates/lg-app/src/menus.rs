@@ -104,6 +104,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "Project or Section…",
     "Undo",
     "Redo",
+    "Save",
+    "Save As…",
+    "Save A Copy As…",
     "1 Track as Audio File…",
     "All MIDI Tracks as MIDI File…",
 ];
@@ -121,6 +124,7 @@ pub fn enabled(app: &App, label: &str) -> bool {
     match label {
         "Close Project" | "Close" | "Move Locators Forward by Cycle Length" | "Project or Section…" | "All MIDI Tracks as MIDI File…" => app.project.is_some(),
         "1 Track as Audio File…" => app.selected_track.is_some(),
+        "Save" | "Save As…" | "Save A Copy As…" => app.file.is_some(),
         _ => true,
     }
 }

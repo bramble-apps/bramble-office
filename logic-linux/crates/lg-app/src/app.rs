@@ -88,6 +88,11 @@ pub struct App {
     pub editor_rect: Rect,
     /// Copied region (⌘C / ⌘X), pasted at the playhead on the selected track (⌘V).
     pub clipboard: Option<lg_core::Region>,
+    /// The Logic file the project came from (Save writes back into it): the alternative's
+    /// folder and its ProjectData as read.
+    pub file: Option<(PathBuf, Vec<u8>)>,
+    /// Edited since opened or saved.
+    pub dirty: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -165,6 +170,8 @@ impl App {
             help_tag: None,
             editor_rect: Rect::NOTHING,
             clipboard: None,
+            file: None,
+            dirty: false,
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -176,7 +183,7 @@ impl App {
     pub fn project_title(&self) -> String {
         match &self.project {
             Some(p) if self.demo => format!("{} (demo)", p.name),
-            Some(p) => format!("{}.logicx", p.name),
+            Some(p) => format!("{}.logicx{}", p.name, if self.dirty { " — Edited" } else { "" }),
             None => "Untitled".into(),
         }
     }
@@ -189,7 +196,11 @@ impl App {
         match lg_core::open(p) {
             Ok(proj) => {
                 let n = proj.tracks.len();
+                // the ProjectData Save will write back into (.logicx; GarageBand's next)
+                let pkg = lg_core::project::package_of(p);
+                self.file = lg_core::project::alternatives(&pkg).into_iter().next().and_then(|(_, alt)| std::fs::read(alt.join("ProjectData")).ok().map(|d| (alt, d)));
                 self.set_project(proj, false);
+                self.dirty = false;
                 self.tell(format!("Opened with {n} tracks"));
             }
             Err(e) => {
@@ -445,8 +456,75 @@ impl App {
         self.after_edit();
     }
 
+    /// File > Save (⌘S): the edits written into the project's own ProjectData (Logic's file,
+    /// everything else unchanged); the first save keeps the original beside it.
+    pub fn save(&mut self) {
+        let (Some(p), Some((alt, original))) = (&self.project, &self.file) else {
+            self.tell(if self.demo { "The demo song can't be saved: open a Logic project (⌘O)" } else { "Saving GarageBand projects isn't available yet" });
+            return;
+        };
+        // (checks: LG_SAVE=1 lets a scripted run save its scratch copy)
+        if self.automated && std::env::var_os("LG_SAVE").is_none() {
+            return;
+        }
+        let _ = ();
+        match lg_core::save::save(p, original) {
+            Ok(saved) => {
+                let target = alt.join("ProjectData");
+                let backup = alt.join("ProjectData.before-bramble");
+                if !backup.exists() {
+                    let _ = std::fs::copy(&target, &backup);
+                }
+                match std::fs::write(&target, &saved.data) {
+                    Ok(()) => {
+                        let alt = alt.clone();
+                        self.file = Some((alt, saved.data));
+                        self.dirty = false;
+                        if saved.unsaved.is_empty() {
+                            self.tell("Saved");
+                        } else {
+                            self.tell(format!("Saved — {} region(s) made here aren't in the Logic file yet", saved.unsaved.len()));
+                        }
+                    }
+                    Err(e) => self.tell(format!("Couldn't save: {e}")),
+                }
+            }
+            Err(e) => self.tell(format!("Couldn't save: {e}")),
+        }
+    }
+
+    /// File > Save As… / Save A Copy As…: the whole package copied to a new place, then saved there.
+    pub fn save_as(&mut self) {
+        let (Some(p), Some((alt, _))) = (&self.project, &self.file) else {
+            self.save();
+            return;
+        };
+        if self.automated {
+            return;
+        }
+        let pkg = alt.parent().and_then(|a| a.parent()).map(Path::to_path_buf);
+        let Some(pkg) = pkg else { return };
+        let Some(dest) = kn_ui::files::FileDialog::new().set_title("Save As").set_file_name(format!("{}.logicx", p.name)).save_file() else { return };
+        let dest = if dest.extension().is_some_and(|e| e == "logicx") { dest } else { dest.with_extension("logicx") };
+        if let Err(e) = copy_dir(&pkg, &dest) {
+            self.tell(format!("Couldn't save: {e}"));
+            return;
+        }
+        let rel = alt.strip_prefix(&pkg).map(Path::to_path_buf).unwrap_or_default();
+        if let Some((a, d)) = self.file.take() {
+            let _ = a;
+            self.file = Some((dest.join(rel), d));
+        }
+        if let Some(pr) = self.project.as_mut() {
+            pr.name = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            pr.path = dest.clone();
+        }
+        self.save();
+    }
+
     /// Before an edit: the song as it is goes on the undo list.
     pub fn checkpoint(&mut self, what: &str) {
+        self.dirty = true;
         let Some(p) = &self.project else { return };
         self.undo.push((what.to_string(), p.clone(), self.programs.clone()));
         if self.undo.len() > 100 {
@@ -544,6 +622,8 @@ impl App {
                 self.set_cycle((b, b + (b - a)));
             }
             "Project or Section…" => self.bounce(None),
+            "Save" => self.save(),
+            "Save As…" | "Save A Copy As…" => self.save_as(),
             c if c.starts_with("Undo ") => self.undo(),
             c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
             "1 Track as Audio File…" => {
@@ -576,6 +656,10 @@ impl App {
             }
             if m.command && key == egui::Key::O {
                 self.open_dialog();
+                continue;
+            }
+            if m.command && key == egui::Key::S {
+                if m.shift { self.save_as() } else { self.save() }
                 continue;
             }
             for c in crate::keymap::commands_for(key, m, focus) {
@@ -785,6 +869,7 @@ impl App {
                 self.checkpoint("Repeat Region");
                 if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
                     if let Some(mut copy) = tr.regions.get(r).cloned() {
+                        copy.source = None;
                         let d = copy.length;
                         copy.start += d;
                         for n in &mut copy.notes {
@@ -806,6 +891,7 @@ impl App {
             "Paste" => {
                 // at the playhead, on the selected track (Logic)
                 let (Some(t), Some(mut rg)) = (self.selected_track, self.clipboard.clone()) else { return false };
+                rg.source = None;
                 self.checkpoint("Paste");
                 let at = self.position() as u32;
                 let d = at as i64 - rg.start as i64;
@@ -835,7 +921,8 @@ impl App {
                 let t = self.selected_track;
                 self.bounce(t);
             }
-            "Save" | "Save Project as…" => self.tell("Saving Logic projects isn't available yet (Export > MIDI File, Bounce work)"),
+            "Save" => self.save(),
+            "Save Project as…" => self.save_as(),
             _ => {
                 let _ = ctx;
                 return false;
@@ -1105,4 +1192,19 @@ mod tests {
         assert_eq!(note_name(60), "C3");
         assert_eq!(note_name(61), "C#3");
     }
+}
+
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for e in std::fs::read_dir(from)? {
+        let e = e?;
+        let p = e.path();
+        let q = to.join(e.file_name());
+        if p.is_dir() {
+            copy_dir(&p, &q)?;
+        } else {
+            std::fs::copy(&p, &q)?;
+        }
+    }
+    Ok(())
 }
