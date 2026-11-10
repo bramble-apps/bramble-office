@@ -48,6 +48,14 @@ fn render_is_allocation_free() {
         "Bass",
         "Strings",
         "Guitar",
+        "ES2",
+        "Alchemy",
+        "ES P",
+        "EFM1",
+        "Sculpture",
+        "Vintage Mellotron",
+        "Drum Machine Designer",
+        "Studio Horns",
     ] {
         insts.push((name.into(), lg_synth::by_logic_name(name, rate).unwrap()));
     }
@@ -55,6 +63,11 @@ fn render_is_allocation_free() {
         "sampler".into(),
         Box::new(lg_synth::sampler::Sampler::from_sfz(&sfz, rate).unwrap()),
     ));
+    for flag in [293u32, 309, 313] {
+        let mut a = lg_synth::alchemy::Alchemy::new(rate);
+        lg_dsp::Plugin::set(&mut a, flag, 1.0);
+        insts.push((format!("alchemy source {flag}"), Box::new(a)));
+    }
     let sf2 = std::path::Path::new("/usr/share/sounds/sf2/TimGM6mb.sf2");
     if sf2.exists() {
         insts.push((

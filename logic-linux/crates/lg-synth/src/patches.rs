@@ -52,6 +52,11 @@ pub enum Engine {
     Bass,
     Ensemble,
     Plucks,
+    Alchemy,
+    Es2,
+    Sculpture,
+    Mellotron,
+    DrumMachine,
 }
 
 impl Engine {
@@ -67,6 +72,11 @@ impl Engine {
             Engine::Bass => crate::NAME_BASS,
             Engine::Ensemble => crate::NAME_ENSEMBLE,
             Engine::Plucks => crate::NAME_PLUCKS,
+            Engine::Alchemy => crate::NAME_ALCHEMY,
+            Engine::Es2 => crate::NAME_ES2,
+            Engine::Sculpture => crate::NAME_SCULPTURE,
+            Engine::Mellotron => crate::NAME_MELLOTRON,
+            Engine::DrumMachine => crate::NAME_DMD,
         }
     }
 }
@@ -559,21 +569,29 @@ fn from_cat(cat: Cat, low: &str) -> PatchSpec {
             s
         }
         Cat::Mellotron => {
-            let m = if has(low, &["choir", "vox", "voice"]) {
-                13.0
-            } else if has(low, &["flute"]) {
-                12.0
+            // the ten tape sets of Vintage Mellotron (see mellotron::SOUNDS)
+            let sound = if has(low, &["choir & flute"]) {
+                1.0
+            } else if has(low, &["boys"]) {
+                2.0
+            } else if has(low, &["gc brass", "brass choir"]) {
+                7.0
+            } else if has(low, &["brass"]) {
+                3.0
+            } else if has(low, &["cello"]) {
+                4.0
+            } else if has(low, &["flutes"]) {
+                6.0
+            } else if has(low, &["strings & flute"]) {
+                9.0
+            } else if has(low, &["flute", "lead"]) {
+                5.0
+            } else if has(low, &["choir", "vox", "voice", "airy", "cloud"]) {
+                8.0
             } else {
-                11.0
+                0.0
             };
-            let mut s = spec(Ensemble, &[(0, m)]);
-            if has(low, &["brass"]) {
-                s.settings.push((3, 0.8));
-            }
-            if has(low, &["cello"]) {
-                s.settings.push((3, 0.3));
-            }
-            s
+            spec(Mellotron, &[(0, sound)])
         }
         Cat::Bass => {
             let m = if has(low, &["upright", "monstera"]) {
@@ -611,13 +629,17 @@ fn from_cat(cat: Cat, low: &str) -> PatchSpec {
                 return spec(Ensemble, &[(0, 10.0), (4, 1.0)]);
             }
             let solo = has(low, &["trumpet", "trombone"]);
-            spec(Ensemble, &[(0, 3.0), (4, if solo { 1.0 } else { 3.0 })])
+            // Studio Horns: articulation keyswitches from C0
+            spec(
+                Ensemble,
+                &[(0, 3.0), (4, if solo { 1.0 } else { 3.0 }), (15, 1.0)],
+            )
         }
         Cat::Strings => {
             if has(low, &["violins", "violas", "cellos", "double basses"]) {
-                return spec(Ensemble, &[(0, 1.0)]);
+                return spec(Ensemble, &[(0, 1.0), (15, 1.0)]);
             }
-            spec(Ensemble, &[(0, 0.0)])
+            spec(Ensemble, &[(0, 0.0), (15, 1.0)])
         }
         Cat::Mallet => mallet(low),
         Cat::Guitar => {
@@ -828,18 +850,19 @@ fn from_cat(cat: Cat, low: &str) -> PatchSpec {
                     "808", "trap", "boom", "hip hop", "dembow", "flex", "bump", "knock",
                 ],
             ) {
-                4.0
+                1.0
             } else if has(
                 low,
                 &[
                     "909", "house", "techno", "festival", "dance", "club", "hacienda",
                 ],
             ) {
-                5.0
+                2.0
             } else {
-                6.0
+                0.0
             };
-            spec(DrumKit, &[(0, kit)])
+            // Drum Machine Designer kits: pads voiced by style (dmd::STYLES)
+            spec(DrumMachine, &[(2, kit)])
         }
         Cat::Percussion => spec(DrumKit, &[(0, 0.0)]),
         Cat::SynthBass => retro(if has(low, &["sub", "808"]) {
@@ -856,17 +879,26 @@ fn from_cat(cat: Cat, low: &str) -> PatchSpec {
         } else {
             "lead"
         }),
-        Cat::SynthPad | Cat::SynthStrings => retro(
-            if has(low, &["table", "glass", "digital", "shimmer", "crystal"]) {
-                "table pad"
-            } else if has(low, &["string"]) || cat == Cat::SynthStrings {
-                "strings"
+        Cat::SynthStrings => retro("strings"),
+        Cat::SynthPad => {
+            if has(low, &["analog", "warm", "saw", "juno", "poly"]) {
+                retro("pad")
             } else {
-                "pad"
-            },
-        ),
-        Cat::SynthSoundscape | Cat::SynthFx => retro("soundscape"),
-        Cat::SynthArp | Cat::SynthRhythmic => retro("pluck"),
+                alchemy(if has(low, &["vocal", "choir", "voice", "breath", "air"]) {
+                    "vocal pad"
+                } else {
+                    "pad"
+                })
+            }
+        }
+        Cat::SynthSoundscape | Cat::SynthFx => {
+            alchemy(if has(low, &["dark", "drone", "deep", "space"]) {
+                "drone"
+            } else {
+                "soundscape"
+            })
+        }
+        Cat::SynthArp | Cat::SynthRhythmic => alchemy("arp"),
         Cat::SynthPluck => retro(if has(low, &["fm", "glass", "bell"]) {
             "fm bells"
         } else {
@@ -885,6 +917,127 @@ fn from_cat(cat: Cat, low: &str) -> PatchSpec {
                 "keys"
             },
         ),
+    }
+}
+
+/// Alchemy voicings (ids = Alchemy Controls view indices: 19.. volumes, 35.. positions,
+/// 39.. speeds, 47.. densities, 277.. source on, 293 additive / 297 VA / 309 spectral / 313 granular
+/// on, 13–16 Perform envelope, 5 Delay+Reverb, 1 Character, 85 Filter 1 cutoff).
+pub fn alchemy(kind: &str) -> PatchSpec {
+    let s: &[(u32, f32)] = match kind {
+        "pad" => &[
+            (277, 1.0),
+            (278, 1.0),
+            (293, 1.0),
+            (297, 0.0),
+            (35, 0.62),
+            (298, 1.0),
+            (302, 2.0),
+            (221, 4.0),
+            (217, 0.5),
+            (4, 0.0),
+            (13, 0.55),
+            (14, 0.8),
+            (15, 0.9),
+            (16, 0.75),
+            (5, 0.45),
+            (85, 0.62),
+            (3, 0.3),
+            (99, 10.0),
+        ],
+        "vocal pad" => &[
+            (277, 1.0),
+            (278, 1.0),
+            (309, 1.0),
+            (35, 0.55),
+            (39, 0.3),
+            (293, 1.0),
+            (36, 0.5),
+            (4, 0.0),
+            (13, 0.5),
+            (14, 0.8),
+            (15, 0.9),
+            (16, 0.7),
+            (5, 0.5),
+            (85, 0.65),
+            (3, 0.2),
+            (99, 9.0),
+        ],
+        "soundscape" => &[
+            (277, 1.0),
+            (278, 1.0),
+            (313, 1.0),
+            (47, 0.6),
+            (39, 0.35),
+            (35, 0.2),
+            (309, 1.0),
+            (36, 0.75),
+            (40, 0.6),
+            (4, 0.0),
+            (13, 0.7),
+            (14, 0.9),
+            (15, 1.0),
+            (16, 0.85),
+            (5, 0.7),
+            (85, 0.7),
+            (99, 9.0),
+        ],
+        "drone" => &[
+            (277, 1.0),
+            (278, 1.0),
+            (313, 1.0),
+            (47, 0.8),
+            (39, 0.1),
+            (309, 1.0),
+            (36, 0.3),
+            (28, -12.0),
+            (4, 0.0),
+            (13, 0.8),
+            (14, 0.9),
+            (15, 1.0),
+            (16, 0.9),
+            (5, 0.6),
+            (85, 0.5),
+            (99, 9.0),
+        ],
+        "arp" => &[
+            (277, 1.0),
+            (278, 1.0),
+            (297, 1.0),
+            (301, 2.0),
+            (293, 1.0),
+            (298, 0.0),
+            (36, 0.15),
+            (4, 0.0),
+            (13, 0.0),
+            (14, 0.35),
+            (15, 0.0),
+            (16, 0.35),
+            (5, 0.35),
+            (85, 0.5),
+            (3, 0.6),
+            (99, 3.0),
+        ],
+        "pluck" => &[
+            (277, 1.0),
+            (278, 0.0),
+            (293, 1.0),
+            (297, 0.0),
+            (35, 0.9),
+            (13, 0.0),
+            (14, 0.45),
+            (15, 0.0),
+            (16, 0.45),
+            (5, 0.3),
+            (85, 0.7),
+            (99, 6.0),
+        ],
+        _ => &[],
+    };
+    PatchSpec {
+        engine: Engine::Alchemy,
+        settings: s.to_vec(),
+        category: None,
     }
 }
 

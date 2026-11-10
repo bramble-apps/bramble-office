@@ -139,11 +139,11 @@ const TBL_LEN: usize = 2048;
 const TBL_FRAMES: usize = 16;
 const TBL_MIPS: usize = 11;
 
-struct Tables {
+pub(crate) struct Tables {
     data: Vec<f32>,
 }
 
-fn tables() -> &'static Tables {
+pub(crate) fn tables() -> &'static Tables {
     static T: OnceLock<Tables> = OnceLock::new();
     T.get_or_init(|| {
         let mut data = vec![0.0f32; TBL_FRAMES * TBL_MIPS * TBL_LEN];
@@ -212,7 +212,7 @@ fn tables() -> &'static Tables {
 }
 
 #[inline]
-fn table_read(pos: f32, phase: f32, hz: f32) -> f32 {
+pub(crate) fn table_read(pos: f32, phase: f32, hz: f32) -> f32 {
     let t = tables();
     let mip = ((hz / 20.0).max(1.0).log2().ceil() as usize).min(TBL_MIPS - 1);
     let fp = pos.clamp(0.0, 1.0) * (TBL_FRAMES - 1) as f32;
@@ -428,7 +428,13 @@ impl Voice<RetroShared> for RetroVoice {
         let pitch =
             self.pitch + sh.transpose + sh.tune / 100.0 + self.bend_off + vib + ctl.bend + velm(6);
         let hz = lg_dsp::midi_hz(pitch);
-        let shape = (sh.lfo * sh.shape_mod + m[4] + velm(4)).clamp(-1.0, 1.0);
+        // positive = by LFO, negative = by the filter envelope (FM depth envelope for EFM1-style use)
+        let shape_src = if sh.shape_mod >= 0.0 {
+            sh.lfo * sh.shape_mod
+        } else {
+            -sh.shape_mod * self.fenv.level - 0.5 * -sh.shape_mod
+        };
+        let shape = (shape_src + m[4] + velm(4)).clamp(-1.0, 1.0);
         let mix = (sh.mix + m[5] + velm(5)).clamp(0.0, 1.0);
         let uni = sh.unison.clamp(1, 4);
         // filter
@@ -574,7 +580,7 @@ impl Voice<RetroShared> for RetroVoice {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-struct Lfo {
+pub(crate) struct Lfo {
     phase: f32,
     hold: f32,
     last: f32,
@@ -582,7 +588,7 @@ struct Lfo {
 }
 
 impl Lfo {
-    fn step(&mut self, wave: u8, inc: f32, rng: &mut Rng) -> f32 {
+    pub(crate) fn step(&mut self, wave: u8, inc: f32, rng: &mut Rng) -> f32 {
         let p = self.phase;
         let wrapped = {
             self.phase += inc;

@@ -419,6 +419,14 @@ impl Sampler {
         s.update();
         s
     }
+    /// Replaces the zones (voices are stopped first; not for the audio thread).
+    pub fn set_zones(&mut self, zones: Vec<Zone>) {
+        for v in &mut self.poly.voices {
+            v.on = false;
+        }
+        self.has_release_zones = zones.iter().any(|z| z.trigger == Trigger::Release);
+        self.sh.zones = zones;
+    }
     pub fn zones(&self) -> &[Zone] {
         &self.sh.zones
     }
@@ -562,7 +570,9 @@ impl Instrument for Sampler {
 // ---------------------------------------------------------------------------------------------
 // Loading helpers
 
-fn load_sample(path: &Path) -> std::io::Result<(Arc<SampleData>, Option<(u32, u32)>, Option<u8>)> {
+pub(crate) fn load_sample(
+    path: &Path,
+) -> std::io::Result<(Arc<SampleData>, Option<(u32, u32)>, Option<u8>)> {
     let bytes = std::fs::read(path)?;
     let a = wav::decode_audio(&bytes)
         .or_else(|| decode_caf(&bytes))

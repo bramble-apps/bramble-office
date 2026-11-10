@@ -125,6 +125,10 @@ impl NoiseGate {
 }
 
 impl lg_dsp::Effect for NoiseGate {
+    fn latency(&self) -> usize {
+        self.latency_samples()
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let monitor = self.p.on(9);

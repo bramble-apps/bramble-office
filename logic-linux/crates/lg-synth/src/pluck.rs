@@ -229,7 +229,14 @@ impl Voice<PluckShared> for PluckVoice {
             }
             self.click = 0.15 * hard;
             self.click_f = Svf::new(SvfMode::Band, (self.hz * 6.0).min(rate * 0.4), 1.0, rate);
-            self.gain = 0.11 * vv.powf(1.2);
+            // levels pass trims per model
+            let trim = match sh.model {
+                8 | 9 => 2.7,
+                10 | 11 | 12 | 13 => 2.4,
+                14 => 2.1,
+                _ => 2.2,
+            };
+            self.gain = 0.11 * trim * vv.powf(1.2);
             self.nstr = 0;
         } else {
             // (T60 s at C4, brightness, pluck shape, pluck position, strings, detune cents, gain)
@@ -262,7 +269,14 @@ impl Voice<PluckShared> for PluckVoice {
             self.nm = 0;
             self.click = if sh.model == 5 { 0.06 * v } else { 0.02 * v };
             self.click_f = Svf::new(SvfMode::Band, 3000.0, 1.0, rate);
-            self.gain = g * 0.3 * vv.powf(1.3);
+            let trim = match sh.model {
+                0 => 2.5,
+                1 => 2.0,
+                4 => 1.5,
+                5 => 3.2,
+                _ => 2.2,
+            };
+            self.gain = g * 0.3 * trim * vv.powf(1.3);
         }
         self.lp
             .lowpass_hz((2000.0 + 14000.0 * sh.bright * v).min(rate * 0.45), rate);

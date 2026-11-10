@@ -239,10 +239,10 @@ mod tests {
         let mut c = p;
         c.bands[0] = Band { freq: 200.0, gain: 2.0, q: 0.71, on: true };
         assert!(response(&c, 30.0) < -15.0);
-        // Logic's saved block (E04's default) reads back
-        let v = [20.0, 2.0, 0.71, 1.0, 75.0, 0.0, 1.0, 1.0, 100.0, 0.0, 0.6, 1.0, 250.0, 0.0, 0.3, 1.0, 1040.0, 0.0, 0.41, 1.0, 2500.0, 0.0, 0.2, 1.0, 7500.0, 0.0, 1.0, 0.0, 20000.0, 4.0, 0.71, 0.0];
+        // Logic's saved block as E05 holds it: per band [on, frequency, gain, Q]; the cuts off
+        let v = [0.0, 20.0, 2.0, 0.71, 1.0, 75.0, 0.0, 1.0, 1.0, 100.0, 0.0, 0.6, 1.0, 250.0, 0.0, 0.3, 1.0, 1040.0, 0.0, 0.41, 1.0, 2500.0, 0.0, 0.2, 1.0, 7500.0, 0.0, 1.0, 0.0, 20000.0, 4.0, 0.71];
         let l = Params::from_logic(&v).unwrap();
-        assert!(l.bands[0].on && !l.bands[7].on && l.bands[4].freq == 1040.0);
+        assert!(!l.bands[0].on && l.bands[1].on && !l.bands[7].on && l.bands[4].freq == 1040.0 && l.bands[1].freq == 75.0);
     }
 
     #[test]

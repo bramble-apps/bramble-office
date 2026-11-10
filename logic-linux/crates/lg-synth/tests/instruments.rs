@@ -75,6 +75,18 @@ fn all_instruments() -> Vec<(String, Box<dyn Instrument>)> {
         "Bass",
         "Strings",
         "Guitar",
+        "ES2",
+        "Alchemy",
+        "ES1",
+        "ES M",
+        "ES P",
+        "ES E",
+        "EFM1",
+        "Sculpture",
+        "Vintage Mellotron",
+        "Drum Machine Designer",
+        "Studio Strings",
+        "Studio Horns",
     ] {
         v.push((name.to_string(), by_logic_name(name, RATE).unwrap()));
     }
@@ -241,6 +253,15 @@ fn notes_stop_after_release() {
         ("Strings", 5.0),
         ("Guitar", 3.0),
         ("Drum Kit Designer", 4.0),
+        ("ES2", 1.5),
+        ("Alchemy", 5.0),
+        ("ES M", 1.0),
+        ("ES P", 2.0),
+        ("ES E", 3.0),
+        ("EFM1", 3.0),
+        ("Sculpture", 3.0),
+        ("Vintage Mellotron", 2.0),
+        ("Drum Machine Designer", 4.0),
     ] {
         let mut inst = by_logic_name(name, RATE).unwrap();
         for &n in &[48u8, 60, 64, 67] {
@@ -504,7 +525,7 @@ fn patch_table_maps_logic_names() {
     assert_eq!(patch("Roots Upright").unwrap().engine, Engine::Bass);
     assert_eq!(patch("Studio Violins 1").unwrap().engine, Engine::Ensemble);
     assert_eq!(patch("SoCal").unwrap().engine, Engine::DrumKit);
-    assert_eq!(patch("Mellotron Flute").unwrap().engine, Engine::Ensemble);
+    assert_eq!(patch("Mellotron Flute").unwrap().engine, Engine::Mellotron);
     assert_eq!(patch("Vibraphone").unwrap().engine, Engine::Plucks);
     assert_eq!(patch("Wurlitzer Classic").unwrap().settings[0], (0, 16.0));
     // keyword fallbacks for names not in the library list
@@ -525,4 +546,166 @@ fn patch_table_maps_logic_names() {
     }
     assert!(n > 1800);
     assert!(for_patch("Deluxe Classic", RATE).is_some());
+}
+
+#[test]
+fn new_engines_are_in_tune() {
+    let cases: &[(&str, &[(u32, f32)], u8, f32)] = &[
+        (
+            "ES2",
+            &[(119, 3.0), (26, 0.0), (27, 1.0), (14, 2.0)],
+            57,
+            8.0,
+        ),
+        ("Alchemy", &[(5, 0.0), (278, 0.0)], 57, 10.0),
+        ("Sculpture", &[], 57, 20.0),
+        ("ES1", &[(1, 0.0)], 57, 8.0),
+        ("EFM1", &[], 57, 8.0),
+        ("Vintage Mellotron", &[(0, 5.0)], 69, 12.0),
+    ];
+    for &(name, settings, note, tol) in cases {
+        let mut inst = by_logic_name(name, RATE).unwrap();
+        for &(id, v) in settings {
+            inst.set(id, v);
+        }
+        inst.note_on(note, 100);
+        let (l, _) = render(inst.as_mut(), 0.6);
+        let x = &l[(0.2 * RATE) as usize..];
+        let want = lg_dsp::midi_hz(note as f32);
+        let got = fundamental(x, want * 0.75, want * 1.3);
+        let cents = 1200.0 * (got / want).log2();
+        assert!(
+            cents.abs() < tol,
+            "{name}: expected {want:.2} Hz, measured {got:.2} Hz ({cents:+.1} cents)"
+        );
+    }
+}
+
+#[test]
+fn ensemble_keyswitches_select_articulations() {
+    let mut s = by_logic_name("Studio Strings", RATE).unwrap();
+    // C0 + 1 = staccato: the key itself is silent, the next note is short
+    s.note_on(25, 100);
+    let (l, _) = render(s.as_mut(), 0.1);
+    assert!(rms(&l) < 1e-5, "keyswitch sounded");
+    assert_eq!(s.get(13), 1.0);
+    s.note_on(60, 100);
+    let (l, _) = render(s.as_mut(), 1.0);
+    assert!(
+        rms(&l[..9600]) > 1e-3 && rms(&l[l.len() - 4800..]) < rms(&l[..9600]) * 0.05,
+        "staccato did not stop by itself"
+    );
+    // horns: fall on release bends the pitch down
+    let mut h = by_logic_name("Studio Horns", RATE).unwrap();
+    h.set(8, 0.0);
+    h.set(13, 11.0);
+    h.note_on(60, 100);
+    render(h.as_mut(), 0.4);
+    h.note_off(60);
+    let (l, _) = render(h.as_mut(), 0.5);
+    let f = fundamental(
+        &l[(0.3 * RATE) as usize..(0.45 * RATE) as usize],
+        80.0,
+        300.0,
+    );
+    assert!(
+        f < lg_dsp::midi_hz(58.0),
+        "fall did not drop the pitch ({f} Hz)"
+    );
+}
+
+#[test]
+fn quick_sampler_modes() {
+    use lg_synth::quick::QuickSampler;
+    use lg_synth::wav::Audio;
+    // four clicks of a decaying 440 Hz tone, 0.25 s apart
+    let n = 48000;
+    let mut c = vec![0.0f32; n];
+    for k in 0..4 {
+        for i in 0..6000 {
+            let t = i as f32 / 48000.0;
+            c[k * 12000 + i] = (t * 440.0 * std::f32::consts::TAU).sin() * (-t * 30.0).exp() * 0.5;
+        }
+    }
+    let a = Audio {
+        rate: 48000,
+        channels: vec![c],
+        loop_points: None,
+        root: None,
+    };
+    let mut q = QuickSampler::new(RATE);
+    q.set_audio(a);
+    assert_eq!(q.get(1), 69.0, "root detection");
+    q.note_on(69, 100);
+    let (l, _) = render(&mut q, 0.2);
+    let f = fundamental(&l[100..4000], 300.0, 600.0);
+    assert!((f - 440.0).abs() < 4.0, "classic pitch {f}");
+    q.note_off(69);
+    q.set(0, 2.0); // slice
+    assert_eq!(q.slices.len(), 4, "slices {:?}", q.slices);
+    q.note_on(38, 100);
+    let (l, _) = render(&mut q, 0.2);
+    assert!(rms(&l) > 1e-3, "slice 3 silent");
+}
+
+#[test]
+fn drum_machine_pads() {
+    use lg_synth::dmd::{DrumMachineDesigner, pad_param};
+    let mut d = DrumMachineDesigner::new(RATE);
+    for n in 36u8..84 {
+        d.note_on(n, 100);
+        let (l, r) = render(&mut d, 0.15);
+        check_finite("dmd", &l, &r, 4.0);
+    }
+    // retuning a pad changes its pitch
+    let mut a = DrumMachineDesigner::new(RATE);
+    a.set(1, 0.0);
+    let mut b = DrumMachineDesigner::new(RATE);
+    b.set(1, 0.0);
+    b.set(pad_param(5, 2), 12.0); // pad F1 (41), tom: +12
+    a.note_on(41, 100);
+    b.note_on(41, 100);
+    let (la, _) = render(&mut a, 0.3);
+    let (lb, _) = render(&mut b, 0.3);
+    let fa = fundamental(&la[2400..], 40.0, 400.0);
+    let fb = fundamental(&lb[2400..], 80.0, 800.0);
+    assert!((fb / fa - 2.0).abs() < 0.15, "pad tune: {fa} → {fb}");
+    // a sample on a pad replaces the drum
+    let tone: Vec<f32> = (0..4800).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
+    let mut c = DrumMachineDesigner::new(RATE);
+    c.set_pad_sample(
+        40,
+        &lg_synth::wav::Audio {
+            rate: 48000,
+            channels: vec![tone],
+            loop_points: None,
+            root: None,
+        },
+    );
+    c.note_on(40, 127);
+    let (l, _) = render(&mut c, 0.05);
+    assert!(rms(&l) > 0.05);
+}
+
+#[test]
+fn alchemy_reads_preset_text_and_transforms() {
+    let text = "<alchemypreset>\r\nName = Test\r\n\r\n<perform>\r\n_Contrl1 = 0.1\r\n_Contrl2 = 0.9\r\nPerVol = 0.8\r\n_Contrl1 = 0.9\r\n_Contrl2 = 0.1\r\nPerVol = 0.8\r\n";
+    let mut a = lg_synth::alchemy::Alchemy::new(RATE);
+    a.load_preset_text(&text);
+    assert_eq!(a.snapshots.len(), 2);
+    assert!((a.get(1) - 0.1).abs() < 1e-6);
+    a.set(17, 0.1);
+    a.set(18, 0.5);
+    a.note_on(60, 100);
+    let (l, r) = render(&mut a, 0.3);
+    check_finite("alchemy", &l, &r, 4.0);
+    // granular, spectral and additive sources all sound
+    for flag in [293u32, 309, 313] {
+        let mut a = lg_synth::alchemy::Alchemy::new(RATE);
+        a.set(flag, 1.0);
+        a.set(278, 0.0);
+        a.note_on(60, 100);
+        let (l, _) = render(&mut a, 0.4);
+        assert!(rms(&l) > 1e-3, "source flag {flag} silent");
+    }
 }

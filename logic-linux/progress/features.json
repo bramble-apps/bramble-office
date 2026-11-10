@@ -142,12 +142,12 @@
  {
   "area": "Audio",
   "status": "Done",
-  "feature": "Real instruments (lg-synth): Vintage Keys EP (\u22482 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble, Studio Plucks & Mallets, Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy, ES2, Sculpture, Quick Sampler, Drum Machine Designer as their own instruments; SF3 (needs an Ogg decoder)"
+  "feature": "Real instruments (lg-synth): Vintage Keys EP (\u22482 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order"
  },
  {
   "area": "Audio",
   "status": "Done",
-  "feature": "Real effects (lg-fx, 25): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, \u22640.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper. [ ] Multipressor, Amp Designer, Bass Amp, Pedalboard, Delay Designer, ChromaGlow, Phat FX, Graph EQ, Space Designer IRs, Mastering Assistant, Stem Splitter"
+  "feature": "Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, \u22640.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter"
  },
  {
   "area": "Audio",
@@ -197,7 +197,7 @@
  {
   "area": "Files",
   "status": "Done",
-  "feature": "Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio"
+  "feature": "Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check)"
  },
  {
   "area": "Files",

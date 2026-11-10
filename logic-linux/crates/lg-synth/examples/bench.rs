@@ -13,6 +13,11 @@ fn main() {
         "Bass",
         "Strings",
         "Guitar",
+        "ES2",
+        "Alchemy",
+        "Sculpture",
+        "Vintage Mellotron",
+        "Drum Machine Designer",
     ] {
         list.push((n.into(), lg_synth::by_logic_name(n, rate).unwrap()));
     }
@@ -20,6 +25,17 @@ fn main() {
     r4.set(1, 4.0);
     r4.set(19, 2.0);
     list.push(("Retro Synth (table, unison 4)".into(), r4));
+    for (flag, name) in [
+        (293u32, "Alchemy additive"),
+        (309, "Alchemy spectral"),
+        (313, "Alchemy granular"),
+    ] {
+        let mut a = lg_synth::alchemy::Alchemy::new(rate);
+        lg_dsp::Plugin::set(&mut a, flag, 1.0);
+        lg_dsp::Plugin::set(&mut a, 278, 1.0);
+        lg_dsp::Plugin::set(&mut a, 376, 32.0);
+        list.push((name.into(), Box::new(a)));
+    }
     let dir = std::env::temp_dir().join("lg-synth-bench");
     let sfz = lg_synth::sampler::write_test_instrument(&dir).unwrap();
     list.push((

@@ -33,7 +33,7 @@ fn autofilter_cuts_above_its_cutoff() {
 #[test]
 fn distortion_adds_harmonics_and_keeps_level() {
     let x = sine(220.0, 0.3, 48000);
-    for name in ["Distortion", "Overdrive"] {
+    for name in ["Distortion", "Overdrive", "Amp Designer"] {
         let y = through(name, &[(1, 20000.0)], &x);
         let g = lg_dsp::gain_to_db(rms(&y[24000..]) / rms(&x[24000..]));
         assert!(g.abs() < 8.0, "{name} level {g}");
@@ -110,4 +110,17 @@ fn noise_gate_ducks_to_reduction() {
     let y = through("Noise Gate", &[(0, -20.0), (2, -20.0)], &sine(440.0, 0.01, 24000));
     let g = lg_dsp::gain_to_db(rms(&y[12000..]) / (0.01 / 2f32.sqrt()));
     assert!((g + 20.0).abs() < 0.5, "{g}");
+}
+
+/// At default settings every effect keeps a -20 dBFS guitar-range tone within a sensible level
+/// window (amps and saturators colour it; nothing should jump or vanish).
+#[test]
+fn default_levels_are_sensible() {
+    let x = sine(220.0, 0.1, 96000);
+    for (logic, ours) in lg_fx::list() {
+        let y = through(logic, &[], &x);
+        let g = lg_dsp::gain_to_db(rms(&y[48000..]) / rms(&x[48000..]));
+        eprintln!("{ours:>20}: {g:+6.1} dB");
+        assert!(g > -16.0 && g < 14.0, "{ours} {g}");
+    }
 }

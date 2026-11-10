@@ -50,8 +50,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 ## 4. Audio
 - [x] Playback through our instruments and effects (SoundFont fallback), audio regions, bounce to WAV, metronome
-- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble, Studio Plucks & Mallets, Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy, ES2, Sculpture, Quick Sampler, Drum Machine Designer as their own instruments; SF3 (needs an Ogg decoder)
-- [x] Real effects (lg-fx, 25): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper. [ ] Multipressor, Amp Designer, Bass Amp, Pedalboard, Delay Designer, ChromaGlow, Phat FX, Graph EQ, Space Designer IRs, Mastering Assistant, Stem Splitter
+- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
+- [x] Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter
 - [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views
 - [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch
 - [ ] Sends, buses, aux strips, master chain; latency compensation
@@ -65,7 +65,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Drum Kit Designer and Drum Machine Designer kits
 
 ## 6. Files
-- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio
+- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check)
 - [x] Open GarageBand .band (iOS); [ ] macOS GarageBand sample
 - [~] Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes
 - [ ] Save .band

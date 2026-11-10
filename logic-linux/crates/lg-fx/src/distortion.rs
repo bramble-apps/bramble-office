@@ -21,13 +21,13 @@ use lg_dsp::{Param, Unit};
 /// 4x oversampling around a memoryless shaper: zero-stuffed up, two cascaded 4th-order
 /// low-passes up and down (at ~0.45 of the original rate).
 #[derive(Clone, Copy, Default)]
-struct Over4 {
+pub(crate) struct Over4 {
     up: [Biquad; 2],
     down: [Biquad; 2],
 }
 
 impl Over4 {
-    fn new(rate: f32) -> Over4 {
+    pub(crate) fn new(rate: f32) -> Over4 {
         let r4 = rate * 4.0;
         let f = rate * 0.45;
         let a = Coefs::lowpass(r4, f, 0.541);
@@ -36,7 +36,7 @@ impl Over4 {
     }
 
     #[inline]
-    fn run(&mut self, x: f32, mut f: impl FnMut(f32) -> f32) -> f32 {
+    pub(crate) fn run(&mut self, x: f32, mut f: impl FnMut(f32) -> f32) -> f32 {
         let mut out = 0.0;
         for k in 0..4 {
             let v = if k == 0 { x * 4.0 } else { 0.0 };
@@ -52,7 +52,7 @@ impl Over4 {
         out
     }
 
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         for b in self.up.iter_mut().chain(self.down.iter_mut()) {
             b.clear();
         }

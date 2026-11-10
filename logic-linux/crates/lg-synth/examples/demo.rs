@@ -375,6 +375,95 @@ fn main() {
     ] {
         add(file, lg_synth::for_patch(patch, RATE), pad_phrase(), 8.5);
     }
+    for (name, file, phrase) in [
+        ("ES2", "es2-default", 0),
+        ("ES1", "es1", 1),
+        ("ES M", "es-m", 2),
+        ("ES P", "es-p", 0),
+        ("ES E", "es-e", 3),
+        ("EFM1", "efm1", 0),
+        ("Sculpture", "sculpture", 3),
+        ("Alchemy", "alchemy-default", 0),
+        ("Drum Machine Designer", "dmd-drum-synth-kit", 4),
+    ] {
+        let seq = match phrase {
+            1 => synth_phrase(),
+            2 => bass_phrase(),
+            3 => pad_phrase(),
+            4 => drum_groove(),
+            _ => synth_phrase(),
+        };
+        add(
+            file,
+            lg_synth::by_logic_name(name, RATE),
+            seq,
+            if phrase == 4 { 12.5 } else { 8.5 },
+        );
+    }
+    for (patch, file) in [
+        ("Shimmering Pad", "alchemy-pad"),
+        ("Vocal Atmosphere Pad", "alchemy-vocal-pad"),
+        ("Cosmic Soundscape", "alchemy-soundscape"),
+        ("Pulsing Arp", "alchemy-arp"),
+    ] {
+        let spec = lg_synth::patches::alchemy(match file {
+            "alchemy-pad" => "pad",
+            "alchemy-vocal-pad" => "vocal pad",
+            "alchemy-soundscape" => "soundscape",
+            _ => "arp",
+        });
+        let _ = patch;
+        add(
+            file,
+            Some(lg_synth::build(&spec, RATE)),
+            if file == "alchemy-arp" {
+                synth_phrase()
+            } else {
+                pad_phrase()
+            },
+            8.5,
+        );
+    }
+    for (i, sound) in lg_synth::mellotron::SOUNDS.iter().enumerate() {
+        let mut m = lg_synth::mellotron::VintageMellotron::new(RATE);
+        lg_dsp::Plugin::set(&mut m, 0, i as f32);
+        add(
+            &format!(
+                "mellotron-{}",
+                sound.to_lowercase().replace([' ', '&'], "-")
+            ),
+            Some(Box::new(m)),
+            pad_phrase(),
+            8.5,
+        );
+    }
+    {
+        // Studio Strings: keyswitch through sustain, staccato, pizzicato, tremolo, trill
+        let mut s = Seq::new();
+        for (k, art) in [0u8, 1, 3, 4, 5].iter().enumerate() {
+            let t = k as f64 * 1.6;
+            s.note(t, 24 + art, 100, 0.05);
+            s.chord(t + 0.05, &[55, 62, 67], 95, 1.2);
+        }
+        add(
+            "studio-strings-articulations",
+            lg_synth::by_logic_name("Studio Strings", RATE),
+            s,
+            9.0,
+        );
+        let mut h = Seq::new();
+        for (k, art) in [0u8, 8, 10, 12, 13, 14].iter().enumerate() {
+            let t = k as f64 * 1.6;
+            h.note(t, 24 + art, 100, 0.05);
+            h.chord(t + 0.05, &[58, 62, 65], 100, 0.9);
+        }
+        add(
+            "studio-horns-articulations",
+            lg_synth::by_logic_name("Studio Horns", RATE),
+            h,
+            10.5,
+        );
+    }
     // the Sampler on content made here (a sine-based multi-sample SFZ)
     if want("sampler") {
         let dir = Path::new(OUT).join("sfz-test");

@@ -89,6 +89,39 @@ pub struct Hit {
     /// Repeats of the noise burst (claps): count, spacing s.
     pub bursts: (u8, f32),
     pub drive: f32,
+    /// Extra tuning in semitones and decay multiplier (Drum Machine Designer pads; 0 = 1).
+    pub tune: f32,
+    pub decay: f32,
+    /// Extra low-pass on the noise layer, Hz (0 = none): darkens snare wires.
+    pub noise_lp: f32,
+    /// The kit the hit came from (output trim).
+    pub kit: u8,
+}
+
+/// A Drum Machine Designer pad: which kit and source note it plays, and its own tuning.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pad {
+    pub kit: u8,
+    pub src: u8,
+    pub tune: f32,
+    pub gain: f32,
+    pub pan: f32,
+    pub decay: f32,
+    pub choke: u8,
+}
+
+impl Default for Pad {
+    fn default() -> Pad {
+        Pad {
+            kit: 6,
+            src: 0,
+            tune: 0.0,
+            gain: 1.0,
+            pan: 0.0,
+            decay: 1.0,
+            choke: 0,
+        }
+    }
 }
 
 /// The analog machine's six metal oscillator frequencies (Hz).
@@ -235,8 +268,9 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
                     push(&mut h, (f * 2.65, f * 2.65, 0.01, 0.12, 0.06 * decay));
                     // wires: broadband, longer at high velocity
                     let wires = if brush { 0.9 } else { 0.55 + 0.45 * v };
-                    h.noise = noise(wires * 1.3, 0.22 + 0.12 * v, 2, 2000.0 + 1500.0 * v, 1.1);
-                    h.noise2 = noise(0.12 * wires, 0.1, 1, 6500.0, 0.7);
+                    h.noise = noise(wires * 0.9, 0.22 + 0.12 * v, 0, 3000.0 + 2500.0 * v, 0.8);
+                    h.noise2 = noise(0.05 * wires, 0.08, 1, 6500.0, 0.7);
+                    h.noise_lp = 6000.0 + 3000.0 * v;
                     h.click = (
                         if brush {
                             0.05
@@ -539,8 +573,8 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
     Some(h)
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-struct DrumShared {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DrumShared {
     rate: f32,
     kit: u8,
     gains: [f32; 6],
@@ -553,6 +587,38 @@ struct DrumShared {
     width: f32,
     punch: f32,
     tune_all: f32,
+    use_pads: bool,
+    pads: [Pad; 128],
+}
+
+impl DrumShared {
+    fn new(rate: f32) -> DrumShared {
+        DrumShared {
+            rate,
+            kit: 0,
+            gains: [1.0; 6],
+            tunes: [0.0; 6],
+            decays: [1.0; 6],
+            wires: 1.0,
+            hat_tone: 0.0,
+            vel_sens: 0.85,
+            variation: 0.5,
+            width: 0.6,
+            punch: 0.3,
+            tune_all: 0.0,
+            use_pads: false,
+            pads: [Pad::default(); 128],
+        }
+    }
+    /// Kit, source note and pad for a played note.
+    fn route(&self, note: u8) -> (u8, u8, Option<Pad>) {
+        if self.use_pads {
+            let p = self.pads[note as usize & 127];
+            (p.kit, if p.src == 0 { note } else { p.src }, Some(p))
+        } else {
+            (self.kit, note, None)
+        }
+    }
 }
 
 fn gi(g: Group) -> usize {
@@ -578,6 +644,8 @@ pub(crate) struct DrumVoice {
     tones_gt: [f32; MAXT],
     tf: [f32; MAXT],
     natk_step: f32,
+    nlp: dsp::OnePole,
+    nlp_on: bool,
     metal_inc: [f32; 6],
     nf: Svf,
     nf2: Svf,
@@ -625,6 +693,8 @@ impl DrumVoice {
             tones_gt: [0.0; MAXT],
             tf: [0.0; MAXT],
             natk_step: 1.0,
+            nlp: dsp::OnePole::default(),
+            nlp_on: false,
             metal_inc: [0.0; 6],
             nf: Svf::default(),
             nf2: Svf::default(),
@@ -662,8 +732,8 @@ impl DrumVoice {
     fn setup(&mut self, note: u8, h: Hit, v: f32, sh: &DrumShared) {
         let rate = sh.rate;
         let g = gi(h.group);
-        let tune = dsp::semis(sh.tunes[g] + sh.tune_all);
-        let dec = sh.decays[g];
+        let tune = dsp::semis(sh.tunes[g] + sh.tune_all + h.tune);
+        let dec = sh.decays[g] * if h.decay > 0.0 { h.decay } else { 1.0 };
         self.hit = h;
         self.note = note;
         self.t = 0;
@@ -686,6 +756,11 @@ impl DrumVoice {
         } else {
             1.0
         };
+        self.nlp_on = h.noise_lp > 0.0;
+        if self.nlp_on {
+            self.nlp.lowpass_hz(h.noise_lp, rate);
+            self.nlp.z = 0.0;
+        }
         self.nf = Svf::new(mode_of(nm), (nfq * hat).min(rate * 0.45), nq, rate);
         let (n2a, n2t, n2m, n2f, n2q, _) = h.noise2;
         self.n2amp = n2a * if g == 1 { sh.wires } else { 1.0 };
@@ -736,7 +811,13 @@ impl DrumVoice {
         self.burst_next = self.burst_gap;
         self.burst_amp = self.namp;
         let vel_gain = (1.0 - sh.vel_sens) + sh.vel_sens * v.powf(1.6);
-        self.gain = h.gain * vel_gain * sh.gains[g] * 0.55;
+        // output trim per kit (levels pass: about −13 dBFS RMS on a groove, peaks under −1 dBFS)
+        let kit_trim = match h.kit {
+            4 => 1.85,
+            5 | 6 => 1.95,
+            _ => 1.33,
+        };
+        self.gain = h.gain * vel_gain * sh.gains[g] * 0.55 * kit_trim;
         let p = (h.pan * sh.width).clamp(-1.0, 1.0);
         self.pan_l = (1.0 - p).sqrt();
         self.pan_r = (1.0 + p).sqrt();
@@ -768,7 +849,19 @@ impl Voice<DrumShared> for DrumVoice {
         ];
         // round-robin also nudges the effective velocity a little
         let vv = (v * (1.0 + 0.06 * rr[3])).clamp(0.0, 1.0);
-        if let Some(h) = build_hit(sh.kit, note, vv, rr) {
+        let (kit, src, pad) = sh.route(note);
+        if let Some(mut h) = build_hit(kit, src, vv, rr) {
+            if let Some(p) = pad {
+                h.tune += p.tune;
+                h.decay = p.decay;
+                h.gain *= p.gain;
+                if p.pan != 0.0 {
+                    h.pan = p.pan / sh.width.max(0.01);
+                }
+                if p.choke != 0 {
+                    h.choke = p.choke;
+                }
+            }
             self.setup(note, h, vv, sh);
         } else {
             self.on = false;
@@ -803,7 +896,13 @@ impl Voice<DrumShared> for DrumVoice {
                 if self.natk < 1.0 {
                     self.natk = (self.natk + self.natk_step).min(1.0);
                 }
-                x += self.nf.run(self.rng.bipolar()) * self.namp * self.natk;
+                let nz = self.nf.run(self.rng.bipolar());
+                let nz = if self.nlp_on {
+                    self.nlp.lp(nz) * 1.6
+                } else {
+                    nz
+                };
+                x += nz * self.namp * self.natk;
                 self.namp *= self.ndec;
                 if self.burst_left > 0 {
                     if self.burst_next == 0 {
@@ -892,10 +991,7 @@ impl StudioDrumKit {
                 DrumVoice::new(seed)
             }),
             ch: Channel::new(rate),
-            sh: DrumShared {
-                rate,
-                ..Default::default()
-            },
+            sh: DrumShared::new(rate),
             room: Room::new(rate, 0.45),
             rate,
         };
@@ -904,6 +1000,11 @@ impl StudioDrumKit {
         k.room.damp = 0.35;
         k.update();
         k
+    }
+    /// Drum Machine Designer mode: every note plays its pad's kit/source/tuning.
+    pub fn set_pads(&mut self, pads: &[Pad; 128]) {
+        self.sh.pads = *pads;
+        self.sh.use_pads = true;
     }
     /// Selects a kit by index (see `KITS`).
     pub fn with_kit(rate: f32, kit: u8) -> StudioDrumKit {
@@ -974,8 +1075,14 @@ impl Instrument for StudioDrumKit {
             return;
         }
         let rate = self.rate;
-        let probe = build_hit(self.sh.kit, pitch, 0.5, [0.0; 4]);
-        let Some(probe) = probe else { return };
+        let (kit, src, pad) = self.sh.route(pitch);
+        let probe = build_hit(kit, src, 0.5, [0.0; 4]);
+        let Some(mut probe) = probe else { return };
+        if let Some(p) = pad {
+            if p.choke != 0 {
+                probe.choke = p.choke;
+            }
+        }
         // choke group (closed/pedal hat cuts the open hat) and at most 3 overlapping hits per note
         let mut same = 0;
         let mut oldest: Option<usize> = None;

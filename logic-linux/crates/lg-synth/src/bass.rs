@@ -90,7 +90,7 @@ impl Voice<BassShared> for BassVoice {
             sh.pluck * pos,
             &mut self.rng,
         );
-        self.gain = 0.5 * vv.powf(1.3);
+        self.gain = 0.63 * vv.powf(1.3);
         self.released = false;
         self.killing = false;
         self.silent = 0;

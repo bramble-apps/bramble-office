@@ -228,6 +228,10 @@ impl Limiter {
 }
 
 impl lg_dsp::Effect for Limiter {
+    fn latency(&self) -> usize {
+        self.latency_samples()
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let precision = self.p.idx(2) == 1;
@@ -373,6 +377,10 @@ impl AdaptiveLimiter {
 }
 
 impl lg_dsp::Effect for AdaptiveLimiter {
+    fn latency(&self) -> usize {
+        self.latency_samples()
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let remove_dc = self.p.on(5);

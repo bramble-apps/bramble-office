@@ -6,19 +6,26 @@
 //! - `for_patch("Deluxe Classic", rate)` → an instrument voiced for a Logic library patch.
 //! - `list()` → what is here.
 
+pub mod alchemy;
 pub mod bass;
 pub mod clav;
+pub mod dmd;
 pub mod drums;
 pub mod dsp;
 pub mod ensemble;
 pub mod ep;
+pub mod es2;
+pub mod es_small;
+pub mod mellotron;
 pub mod organ;
 pub mod patches;
 pub mod piano;
 pub mod pluck;
 pub mod poly;
+pub mod quick;
 pub mod retro;
 pub mod sampler;
+pub mod sculpture;
 pub mod string;
 pub mod wav;
 
@@ -37,6 +44,17 @@ pub const NAME_BASS: &str = "Studio Bass";
 pub const NAME_ENSEMBLE: &str = "Studio Ensemble";
 pub const NAME_PLUCKS: &str = "Studio Plucks & Mallets";
 pub const NAME_SAMPLER: &str = "Sampler";
+pub const NAME_ALCHEMY: &str = "Alchemist";
+pub const NAME_ES2: &str = "Trio Synth";
+pub const NAME_SCULPTURE: &str = "Sculptor";
+pub const NAME_MELLOTRON: &str = "Tape Keys";
+pub const NAME_DMD: &str = "Drum Machine";
+pub const NAME_QUICK: &str = "Quick Sampler";
+pub const NAME_ES1: &str = "Mono One";
+pub const NAME_ESM: &str = "Bass Mono";
+pub const NAME_ESP: &str = "Poly Six";
+pub const NAME_ESE: &str = "Ensemble Synth";
+pub const NAME_EFM1: &str = "FM Two";
 
 /// One of our instruments and the Logic plug-ins it stands in for.
 #[derive(Clone, Copy, Debug)]
@@ -116,6 +134,61 @@ static LIST: &[InstrumentInfo] = &[
         ],
         description: "Multi-sample player for the user's SFZ, SoundFont (native or converted) and EXS instruments.",
     },
+    InstrumentInfo {
+        name: NAME_ALCHEMY,
+        logic_names: &["Alchemy", "Sample Alchemy"],
+        description: "Four sources (virtual analog, additive, spectral, granular), master filters, Perform knobs and the Transform pad.",
+    },
+    InstrumentInfo {
+        name: NAME_ES2,
+        logic_names: &["ES2"],
+        description: "Three oscillators on a triangle mixer, two filters, three envelopes, LFOs and a ten-slot modulation router.",
+    },
+    InstrumentInfo {
+        name: NAME_ES1,
+        logic_names: &["ES1"],
+        description: "One oscillator plus sub, filter and ADSR (on the Trio Synth engine).",
+    },
+    InstrumentInfo {
+        name: NAME_ESM,
+        logic_names: &["ES M"],
+        description: "Monophonic bass synth (on the Trio Synth engine).",
+    },
+    InstrumentInfo {
+        name: NAME_ESP,
+        logic_names: &["ES P"],
+        description: "Polysynth with six waveform level sliders (on the Trio Synth engine).",
+    },
+    InstrumentInfo {
+        name: NAME_ESE,
+        logic_names: &["ES E"],
+        description: "String-ensemble synth (on the Trio Synth engine).",
+    },
+    InstrumentInfo {
+        name: NAME_EFM1,
+        logic_names: &["EFM1"],
+        description: "Two-operator FM synth with FM envelope (on the Retro engine).",
+    },
+    InstrumentInfo {
+        name: NAME_SCULPTURE,
+        logic_names: &["Sculpture"],
+        description: "Component modelling: a string excited by struck, plucked, bowed or blown objects, pickups and body.",
+    },
+    InstrumentInfo {
+        name: NAME_MELLOTRON,
+        logic_names: &["Vintage Mellotron"],
+        description: "Tape-replay keyboard with the ten factory tape sets.",
+    },
+    InstrumentInfo {
+        name: NAME_DMD,
+        logic_names: &["Drum Machine Designer"],
+        description: "48 pads, each a synthesized drum (any kit, tuned) or the user's sample.",
+    },
+    InstrumentInfo {
+        name: NAME_QUICK,
+        logic_names: &["Quick Sampler (Single Sample)", "Quick Sampler"],
+        description: "One sample: classic, one-shot, slice and recorder modes.",
+    },
 ];
 
 /// Our instruments.
@@ -149,30 +222,37 @@ pub fn by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>
             rate,
         ),
         "Vintage Clav" | "Electric Clav" | NAME_CLAV => Box::new(clav::VintageClav::new(rate)),
-        "Retro Synth" | "ES2" | "ES1" | "ES P" | "ES M" | "ES E" | "EFM1" | "Alchemy"
-        | "Sample Alchemy" | "Sculpture" | NAME_RETRO => Box::new(retro::RetroSynth::new(rate)),
+        "ES2" | NAME_ES2 => Box::new(es2::Es2::new(rate)),
+        "Alchemy" | "Sample Alchemy" | NAME_ALCHEMY => Box::new(alchemy::Alchemy::new(rate)),
+        "ES1" | NAME_ES1 => Box::new(es_small::es1(rate)),
+        "ES M" | NAME_ESM => Box::new(es_small::es_m(rate)),
+        "ES P" | NAME_ESP => Box::new(es_small::es_p(rate)),
+        "ES E" | NAME_ESE => Box::new(es_small::es_e(rate)),
+        "EFM1" | NAME_EFM1 => Box::new(es_small::efm1(rate)),
+        "Sculpture" | NAME_SCULPTURE => Box::new(sculpture::Sculpture::new(rate)),
+        "Retro Synth" | NAME_RETRO => Box::new(retro::RetroSynth::new(rate)),
         "Piano" | "Studio Piano" | NAME_PIANO => Box::new(piano::StudioPiano::new(rate)),
         "Drum Kit Designer" | "Drum Kits" | "Drum Kit" | NAME_DRUMS => {
             Box::new(drums::StudioDrumKit::new(rate))
         }
-        "Ultrabeat" | "Drum Machine Designer" | "Drum Synth" => {
-            Box::new(drums::StudioDrumKit::with_kit(rate, 4))
-        }
+        "Drum Machine Designer" | NAME_DMD => Box::new(dmd::DrumMachineDesigner::new(rate)),
+        "Ultrabeat" | "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
         "Bass" | NAME_BASS => Box::new(bass::StudioBass::new(rate)),
-        "Strings" | "Studio Strings" | NAME_ENSEMBLE => {
-            Box::new(ensemble::StudioEnsemble::new(rate))
-        }
-        "Horns" | "Studio Horns" => with(Engine::Ensemble, &[(0, 3.0)], rate),
+        "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),
+        "Studio Strings" => with(Engine::Ensemble, &[(0, 0.0), (15, 1.0)], rate),
+        "Horns" => with(Engine::Ensemble, &[(0, 3.0)], rate),
+        "Studio Horns" => with(Engine::Ensemble, &[(0, 3.0), (15, 1.0)], rate),
         "Woodwind" => with(Engine::Ensemble, &[(0, 10.0)], rate),
         "Voice" => with(Engine::Ensemble, &[(0, 7.0)], rate),
-        "Vintage Mellotron" => with(Engine::Ensemble, &[(0, 11.0)], rate),
+        "Vintage Mellotron" | NAME_MELLOTRON => Box::new(mellotron::VintageMellotron::new(rate)),
         "Guitar" | NAME_PLUCKS => Box::new(pluck::StudioPlucks::new(rate)),
         "Tuned Percussion" => with(Engine::Plucks, &[(0, 8.0)], rate),
-        "Sampler"
-        | "Sampler (Multi-Sample)"
-        | "EXS24"
-        | "Quick Sampler (Single Sample)"
-        | "Quick Sampler" => Box::new(sampler::Sampler::new(Vec::new(), rate)),
+        "Quick Sampler (Single Sample)" | "Quick Sampler" => {
+            Box::new(quick::QuickSampler::new(rate))
+        }
+        "Sampler" | "Sampler (Multi-Sample)" | "EXS24" => {
+            Box::new(sampler::Sampler::new(Vec::new(), rate))
+        }
         _ => return None,
     };
     Some(inst)
@@ -190,6 +270,11 @@ pub fn build(spec: &PatchSpec, rate: f32) -> Box<dyn Instrument> {
         Engine::Bass => Box::new(bass::StudioBass::new(rate)),
         Engine::Ensemble => Box::new(ensemble::StudioEnsemble::new(rate)),
         Engine::Plucks => Box::new(pluck::StudioPlucks::new(rate)),
+        Engine::Alchemy => Box::new(alchemy::Alchemy::new(rate)),
+        Engine::Es2 => Box::new(es2::Es2::new(rate)),
+        Engine::Sculpture => Box::new(sculpture::Sculpture::new(rate)),
+        Engine::Mellotron => Box::new(mellotron::VintageMellotron::new(rate)),
+        Engine::DrumMachine => Box::new(dmd::DrumMachineDesigner::new(rate)),
     };
     for &(id, v) in &spec.settings {
         inst.set(id, v);

@@ -216,7 +216,7 @@ impl TonewheelB3 {
         self.ch.bend_up = self.p(28);
         self.ch.bend_down = self.p(28);
         self.ch.update_bend();
-        self.gain = lg_dsp::db_to_gain(self.p(25)) * 0.025;
+        self.gain = lg_dsp::db_to_gain(self.p(25)) * 0.035;
         self.recompute_targets();
     }
 

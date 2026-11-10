@@ -100,7 +100,7 @@ impl Voice<ClavShared> for ClavVoice {
             .tune(self.hz, t60, (0.55 + 0.35 * v + 0.1 * sh.stiff).min(0.97));
         self.s
             .pluck(1.0, 0.35 + 0.6 * v * sh.stiff.max(0.3), 0.06, &mut self.rng);
-        self.gain = 0.55 * vv.powf(1.4);
+        self.gain = 0.78 * vv.powf(1.4);
         self.on = true;
         self.released = false;
         self.killing = false;

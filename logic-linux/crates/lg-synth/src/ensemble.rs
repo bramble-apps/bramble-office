@@ -25,6 +25,29 @@ pub const MODELS: &[&str] = &[
     "Tape Choir",
     "Harmonium",
     "Solo Strings",
+    "Tape Brass",
+    "Tape Cello",
+    "Tape Boys Choir",
+];
+
+/// Studio Strings / Studio Horns articulations. With keyswitches on, the keys from
+/// "Keyswitch Base" upwards (C0 = MIDI 24 by default) select them in this order; they don't sound.
+pub const ARTICULATIONS: &[&str] = &[
+    "Sustain",
+    "Staccato",
+    "Spiccato",
+    "Pizzicato",
+    "Tremolo",
+    "Trill Half",
+    "Trill Whole",
+    "Harmonics",
+    "Marcato",
+    "Expressive",
+    "Fall Short",
+    "Fall Long",
+    "Doit",
+    "Shake",
+    "Swell",
 ];
 
 pub static PARAMS: &[Param] = &[
@@ -41,6 +64,9 @@ pub static PARAMS: &[Param] = &[
     Param::new(10, "Volume", -40.0, 12.0, 0.0, Unit::Db),
     Param::new(11, "Bend Range", 0.0, 24.0, 2.0, Unit::Semitones),
     Param::new(12, "Polyphony", 1.0, 32.0, 16.0, Unit::None),
+    Param::menu(13, "Articulation", ARTICULATIONS, 0.0),
+    Param::new(14, "Keyswitch Base", 0.0, 108.0, 24.0, Unit::None),
+    Param::new(15, "Keyswitches", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -186,7 +212,7 @@ fn character(model: u8) -> Character {
             release: 0.15,
             vibrato: 0.3,
             vib_delay: 0.3,
-            level: 0.8,
+            level: 0.55,
             ..base
         },
         10 => Character {
@@ -224,7 +250,7 @@ fn character(model: u8) -> Character {
             attack: 0.07,
             release: 0.2,
             vibrato: 0.2,
-            level: 1.4,
+            level: 0.75,
             ..base
         },
         13 => Character {
@@ -265,6 +291,44 @@ fn character(model: u8) -> Character {
             level: 1.3,
             ..base
         },
+        16 => Character {
+            tape: true,
+            formants: [(1100.0, 1.5, 1.0), (1700.0, 2.0, 0.6), (3000.0, 2.5, 0.3)],
+            formant_mix: 0.6,
+            cutoff: 2500.0,
+            attack: 0.05,
+            release: 0.2,
+            vibrato: 0.05,
+            level: 1.15,
+            ..base
+        },
+        17 => Character {
+            tape: true,
+            unison: 1,
+            detune_cents: 0.0,
+            cutoff: 2200.0,
+            attack: 0.1,
+            release: 0.25,
+            vibrato: 0.3,
+            vib_delay: 0.2,
+            level: 1.4,
+            ..base
+        },
+        18 => Character {
+            tape: true,
+            wave: Wave::Triangle,
+            unison: 3,
+            detune_cents: 8.0,
+            breath: 0.03,
+            formants: [(350.0, 6.0, 1.0), (900.0, 6.0, 0.5), (2600.0, 8.0, 0.2)],
+            formant_mix: 0.95,
+            cutoff: 3000.0,
+            attack: 0.1,
+            release: 0.25,
+            vibrato: 0.1,
+            level: 2.5,
+            ..base
+        },
         _ => base,
     }
 }
@@ -282,6 +346,7 @@ pub(crate) struct EnsShared {
     vel_sens: f32,
     vib_phase: f32,
     wow: f32,
+    art: u8,
 }
 
 pub(crate) struct EnsVoice {
@@ -302,6 +367,9 @@ pub(crate) struct EnsVoice {
     gain: f32,
     level: f32,
     tape_left: u32,
+    art: u8,
+    rel_age: f32,
+    released: bool,
 }
 
 impl Voice<EnsShared> for EnsVoice {
@@ -325,13 +393,28 @@ impl Voice<EnsShared> for EnsVoice {
             let p = x * 0.7;
             self.pans[i] = ((1.0 - p).sqrt(), (1.0 + p).sqrt());
         }
-        self.env.set(
-            sh.attack * c.attack / 0.25,
-            1.0,
-            1.0,
-            sh.release * c.release / 0.6,
-            rate,
-        );
+        self.art = sh.art;
+        self.rel_age = 0.0;
+        self.released = false;
+        let atk = sh.attack * c.attack / 0.25;
+        let rel = sh.release * c.release / 0.6;
+        // articulation envelopes: (attack, decay, sustain, release)
+        let (a, d, su, r) = match self.art {
+            1 => (0.008, 0.25, 0.0, 0.12),
+            2 => (0.004, 0.12, 0.0, 0.08),
+            3 => (0.001, 0.6, 0.0, 0.3),
+            8 => (0.01, 0.4, 0.65, rel),
+            9 => (atk.max(0.35), 1.0, 1.0, rel),
+            14 => (1.6, 1.0, 1.0, rel),
+            10 | 11 | 12 => (
+                atk.min(0.05),
+                1.0,
+                1.0,
+                if self.art == 11 { 0.7 } else { 0.35 },
+            ),
+            _ => (atk, 1.0, 1.0, rel),
+        };
+        self.env.set(a, d, su, r, rate);
         self.env.trigger();
         self.fenv.set(0.005 + c.attack * 0.5, 0.4, 0.3, 0.3, rate);
         self.fenv.trigger();
@@ -346,7 +429,7 @@ impl Voice<EnsShared> for EnsVoice {
         self.age = 0.0;
         self.killing = false;
         let vv = 1.0 - sh.vel_sens + sh.vel_sens * self.vel;
-        self.gain = 0.16 * c.level * vv / (n as f32).sqrt();
+        self.gain = 0.25 * c.level * vv / (n as f32).sqrt();
         self.on = true;
         self.level = 1.0;
         // a tape frame lasts about eight seconds
@@ -357,6 +440,7 @@ impl Voice<EnsShared> for EnsVoice {
         };
     }
     fn release(&mut self, _sh: &EnsShared, _ctl: &Ctl) {
+        self.released = true;
         self.env.gate_off();
         self.fenv.gate_off();
     }
@@ -375,7 +459,34 @@ impl Voice<EnsShared> for EnsVoice {
             * (c.vibrato + sh.vibrato * 0.3)
             + ctl.mod_wheel * 0.5;
         let vib = 1.0 + 0.004 * vib_amt * dsp::sin_cycles(sh.vib_phase);
-        let base = self.hz * ctl.bend_ratio * vib * (1.0 + sh.wow);
+        if self.released {
+            self.rel_age += l.len() as f32 / rate;
+        }
+        // articulation pitch and level shapes
+        let (mut semis, mut amp_mod) = (0.0f32, 1.0f32);
+        let mut art_vib = 1.0;
+        match self.art {
+            3 => art_vib = 0.0,
+            4 => amp_mod = 1.0 - 0.55 * (0.5 + 0.5 * dsp::sin_cycles(self.age * 12.5)),
+            5 | 6 => {
+                semis = if (self.age * 7.0).fract() < 0.5 {
+                    0.0
+                } else if self.art == 5 {
+                    1.0
+                } else {
+                    2.0
+                }
+            }
+            7 => semis = 12.0,
+            8 => amp_mod = 1.0 + 0.6 * (-self.age / 0.12).exp(),
+            10 => semis = -5.0 * (self.rel_age / 0.25).min(1.0).powi(2),
+            11 => semis = -12.0 * (self.rel_age / 0.6).min(1.0).powi(2),
+            12 => semis = 7.0 * (self.rel_age / 0.3).min(1.0).powi(2),
+            13 => semis = 2.5 * dsp::sin_cycles(self.age * 6.0) * (self.age / 0.3).min(1.0),
+            _ => {}
+        }
+        let vib = 1.0 + (vib - 1.0) * art_vib;
+        let base = self.hz * ctl.bend_ratio * vib * (1.0 + sh.wow) * dsp::semis(semis);
         let open = c.env_open * self.fenv.level * (0.3 + 0.7 * self.vel);
         let fc = ((c.cutoff * (0.4 + 1.2 * sh.bright) + open)
             * (0.6 + 0.4 * self.vel)
@@ -408,7 +519,7 @@ impl Voice<EnsShared> for EnsVoice {
             let fe = self.fenv.next();
             let _ = fe;
             let a = self.env.next();
-            let mut g = a * self.gain;
+            let mut g = a * self.gain * amp_mod;
             if self.tape_left != u32::MAX {
                 if self.tape_left == 0 {
                     g = 0.0;
@@ -481,6 +592,9 @@ impl StudioEnsemble {
                     gain: 0.0,
                     level: 0.0,
                     tape_left: 0,
+                    art: 0,
+                    rel_age: 0.0,
+                    released: false,
                 }
             }),
             ch: Channel::new(rate),
@@ -496,6 +610,7 @@ impl StudioEnsemble {
                 vel_sens: 0.7,
                 vib_phase: 0.0,
                 wow: 0.0,
+                art: 0,
             },
             chorus: Chorus::new(rate),
             room: Room::new(rate, 1.0),
@@ -526,6 +641,7 @@ impl StudioEnsemble {
         self.ch.bend_down = self.p(11);
         self.ch.update_bend();
         self.poly.set_max(self.p(12) as usize);
+        self.sh.art = self.p(13).round() as u8;
     }
 }
 
@@ -559,6 +675,15 @@ impl Instrument for StudioEnsemble {
     fn note_on(&mut self, pitch: u8, velocity: u8) {
         if velocity == 0 {
             return self.note_off(pitch);
+        }
+        if self.p(15) >= 0.5 {
+            let base = self.p(14).round() as i32;
+            let k = pitch as i32 - base;
+            if (0..ARTICULATIONS.len() as i32).contains(&k) {
+                self.params.set(13, k as f32);
+                self.sh.art = k as u8;
+                return;
+            }
         }
         self.poly.note_on(pitch, velocity, &self.sh, &self.ch.ctl);
     }
@@ -600,10 +725,15 @@ impl Instrument for StudioEnsemble {
             sr[..m].fill(0.0);
             self.poly
                 .render(&mut sl[..m], &mut sr[..m], &self.sh, &self.ch.ctl);
+            let hiss = if self.poly.voices.iter().any(|v| v.on) {
+                0.0015
+            } else {
+                0.0
+            };
             if tape {
                 for i in 0..m {
-                    sl[i] = self.tape_lp[0].run(sl[i] + self.rng.bipolar() * 0.0015);
-                    sr[i] = self.tape_lp[1].run(sr[i] + self.rng.bipolar() * 0.0015);
+                    sl[i] = self.tape_lp[0].run(sl[i] + self.rng.bipolar() * hiss);
+                    sr[i] = self.tape_lp[1].run(sr[i] + self.rng.bipolar() * hiss);
                 }
             }
             if ens > 0.0 {

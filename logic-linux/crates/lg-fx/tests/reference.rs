@@ -212,3 +212,69 @@ fn delays_match_logic_defaults() {
         assert!((ours.noise - theirs.noise).abs() < 1.0, "{setting} noise");
     }
 }
+
+/// Every plug-in block in the research's sample projects that we have a stand-in for loads
+/// (floats from 16 bytes after "GAMETSPP") and plays the test signal cleanly.
+#[test]
+fn sample_project_settings_load_and_play() {
+    let Some(plugins) = plugins_dir() else { return };
+    let samples = plugins.parent().unwrap().join("sample-files");
+    let mut files = Vec::new();
+    let mut stack = vec![samples];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.file_name().is_some_and(|n| n == "ProjectData") {
+                files.push(p);
+            }
+        }
+    }
+    let x: Vec<f32> = composite()[..48000 * 12].to_vec();
+    let mut seen = std::collections::BTreeMap::<String, usize>::new();
+    let (mut boards, mut pedals) = (0, 0);
+    let mut done = std::collections::HashSet::new();
+    for f in files {
+        let b = std::fs::read(&f).unwrap();
+        let mut at = 0;
+        while let Some(i) = b[at..].windows(8).position(|w| w == b"GAMETSPP").map(|p| p + at) {
+            at = i + 8;
+            if i < 12 {
+                continue;
+            }
+            let size = u32::from_le_bytes(b[i - 12..i - 8].try_into().unwrap()) as usize;
+            // the display name: the last printable run before the block's header
+            let back = &b[i.saturating_sub(300)..i];
+            let runs: Vec<String> = back.split(|c| !(0x20..0x7f).contains(c)).filter(|r| r.len() >= 3).map(|r| String::from_utf8_lossy(r).into_owned()).collect();
+            let Some(name) = runs.iter().rev().find(|r| *r != "GAME" && lg_fx::by_logic_name(r, RATE).is_some()).cloned() else { continue };
+            if runs.last().map(|r| r.as_str()) == Some("xoBSH") {
+                continue;
+            }
+            let n = (size.saturating_sub(28) / 4).min(4096);
+            let floats: Vec<f32> = (0..n).filter_map(|k| b.get(i + 16 + 4 * k..i + 20 + 4 * k)).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+            // each distinct setting once
+            let key = (name.clone(), floats.iter().take(300).map(|v| v.to_bits()).collect::<Vec<_>>());
+            if !done.insert(key) {
+                continue;
+            }
+            let mut fx = if name == "Pedalboard" {
+                boards += 1;
+                let board = lg_fx::stomp::Pedalboard::from_aucu(&b[i..(i + 20000).min(b.len())], RATE);
+                pedals += board.pedal_names();
+                Box::new(board) as Box<dyn lg_dsp::Effect>
+            } else {
+                let mut fx = lg_fx::by_logic_name(&name, RATE).unwrap();
+                fx.load_floats(&floats);
+                fx
+            };
+            fx.set_tempo(120.0);
+            let (l, r) = run(fx.as_mut(), &x);
+            let peak = l.iter().chain(r.iter()).fold(0.0f32, |m, v| m.max(v.abs()));
+            assert!(l.iter().chain(r.iter()).all(|v| v.is_finite()) && peak < 30.0, "{name} in {}: peak {peak}", f.display());
+            *seen.entry(name).or_default() += 1;
+        }
+    }
+    eprintln!("loaded and played: {seen:?} (boards {boards}, pedals on them {pedals})");
+    assert!(boards == 0 || pedals > 0, "no pedal found on any board");
+}

@@ -13,7 +13,11 @@ fn main() {
     };
     let mut l = Vec::new();
     let mut r = Vec::new();
-    for spec in &a[3..] {
+    for spec in a[3..].iter().filter(|s| s.contains('=')) {
+        let (k, v) = spec.split_once('=').unwrap();
+        inst.set(k.parse().unwrap(), v.parse().unwrap());
+    }
+    for spec in a[3..].iter().filter(|s| !s.contains('=')) {
         let p: Vec<f32> = spec.split(':').map(|x| x.parse().unwrap()).collect();
         inst.note_on(p[0] as u8, p[1] as u8);
         let on = (p[2] * rate) as usize;

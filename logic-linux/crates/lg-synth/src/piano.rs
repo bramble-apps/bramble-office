@@ -199,7 +199,7 @@ impl Voice<PianoShared> for PianoVoice {
         self.silent = 0;
         // loudness: velocity and a gentle key curve (treble strings are quieter)
         self.gain =
-            0.19 * v.powf(1.1) * (1.0 - 0.012 * (k - 60.0).max(0.0)) / total.max(0.2).sqrt();
+            0.34 * v.powf(1.1) * (1.0 - 0.012 * (k - 60.0).max(0.0)) / total.max(0.2).sqrt();
         let p = ((k - 64.0) / 44.0).clamp(-1.0, 1.0) * sh.width;
         self.pan_l = (1.0 - p).sqrt();
         self.pan_r = (1.0 + p).sqrt();

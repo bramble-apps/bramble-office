@@ -216,6 +216,10 @@ impl Enveloper {
 }
 
 impl lg_dsp::Effect for Enveloper {
+    fn latency(&self) -> usize {
+        self.latency_samples()
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let p = &self.p;
         let (ag, rg) = (p.get(1) / 100.0, p.get(3) / 100.0);
