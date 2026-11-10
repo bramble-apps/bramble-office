@@ -82,13 +82,20 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
         app.load_engine();
     }
     y += 28.0;
+    let chain: Vec<String> = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).map(|t| t.plugins.iter().map(|u| (u.slot, u.name.clone())).collect::<Vec<_>>())).flatten().unwrap_or_default().into_iter().filter(|(s, _)| *s >= 3).map(|(_, n)| n).filter(|n| n != "Channel EQ").collect();
+    let instrument = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).and_then(|t| t.plugins.iter().find(|u| u.slot == 2)).map(|u| u.name.clone())).flatten();
     match kind {
-        Some(TrackKind::Instrument) => slot(&p, y, "Sampler", Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
-        Some(TrackKind::Drummer) => slot(&p, y, "Drum Kit", Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
+        Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
+        Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
         Some(TrackKind::Audio) => slot(&p, y, "Input 1", None),
         None => slot(&p, y, "Audio FX", None),
     }
     y += 24.0;
+    // the Audio FX (Logic's blue slots), then an empty one
+    for n in chain.iter().take(4) {
+        slot(&p, y, n, Some(Color32::from_rgb(0x1f, 0x5f, 0xc8)));
+        y += 22.0;
+    }
     slot(&p, y, "Audio FX", None);
     y += 24.0;
     slot(&p, y, "Stereo Out", None);

@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn writes_a_type_1_file() {
         let mut p = Project { name: "T".into(), tempo: 120.0, signature: (3, 4), ..Default::default() };
-        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480 }], audio: None, muted: false, source: None }], volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480 }], audio: None, muted: false, source: None }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         let b = write(&p);
         assert_eq!(&b[..4], b"MThd");
         assert_eq!(u16::from_be_bytes([b[10], b[11]]), 2, "tempo track + one track");

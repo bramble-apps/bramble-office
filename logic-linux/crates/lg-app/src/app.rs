@@ -226,6 +226,11 @@ impl App {
     /// Shows a project and hands it to the engine.
     pub fn set_project(&mut self, p: Project, demo: bool) {
         self.programs = p.tracks.iter().map(|t| program_for(&t.name, t.kind)).collect();
+        // each track's Channel EQ as saved in the project (Bramble's Channel EQ stands in)
+        self.eqs = p.tracks.iter().enumerate().filter_map(|(i, t)| t.plugins.iter().find(|u| u.name == "Channel EQ").and_then(|u| crate::eq::Params::from_logic(&u.params)).map(|e| (i, e))).collect();
+        self.drum_params.clear();
+        self.undo.clear();
+        self.redo.clear();
         self.selected_track = (!p.tracks.is_empty()).then_some(0);
         self.selected_region = p.tracks.iter().enumerate().find(|(_, t)| !t.regions.is_empty()).map(|(i, _)| (i, 0));
         let bar = lg_core::project::bar_ticks(p.signature);
@@ -542,7 +547,7 @@ impl App {
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
         let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None };
-        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
         self.selected_track = Some(t);
@@ -848,7 +853,7 @@ impl App {
                 if let Some(p) = self.project.as_mut() {
                     let row = p.tracks.len() as u32 + 1;
                     let n = p.tracks.iter().filter(|t| (t.kind == TrackKind::Audio) == audio).count() + 1;
-                    p.tracks.push(lg_core::Track { name: if audio { format!("Audio {n}") } else { "Deluxe Classic".into() }, kind: if audio { TrackKind::Audio } else { TrackKind::Instrument }, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+                    p.tracks.push(lg_core::Track { name: if audio { format!("Audio {n}") } else { "Deluxe Classic".into() }, kind: if audio { TrackKind::Audio } else { TrackKind::Instrument }, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
                     self.programs.push(if audio { 0 } else { 4 });
                     self.selected_track = Some(p.tracks.len() - 1);
                 }

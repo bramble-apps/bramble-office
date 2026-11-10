@@ -64,6 +64,9 @@ pub struct Track {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    /// The track's channel strip: its instrument and Audio FX, in slot order (read from the
+    /// project; empty for tracks made here).
+    pub plugins: Vec<Plugin>,
 }
 
 #[derive(Clone, Debug)]
@@ -432,7 +435,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             let len = end.saturating_sub(region.start).max(1);
             region.length = len.div_ceil(bar) * bar;
         }
-        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         if kind != TrackKind::Instrument {
             t.kind = kind;
         }
@@ -447,14 +450,48 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             continue;
         }
         let kind = if name.starts_with("Audio ") { TrackKind::Audio } else { TrackKind::Instrument };
-        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         next_row += 1;
     }
     p.tracks = by_row.into_values().collect();
     for t in &mut p.tracks {
         t.regions.sort_by_key(|r| r.start);
     }
-    p.plugins = live.iter().filter(|c| c.is("AuCU")).filter_map(|c| plugin::read_unit(c.payload)).collect();
+    p.plugins = live
+        .iter()
+        .filter(|c| c.is("AuCU"))
+        .filter_map(|c| {
+            let mut u = plugin::read_unit(c.payload)?;
+            u.channel = c.u32_at(12).unwrap_or(0) >> 16;
+            u.slot = c.u32_at(16).unwrap_or(0) >> 16;
+            Some(u)
+        })
+        .collect();
+    // each instrument track's strip: the channels with an instrument (slot 2; Klopfgeist is the
+    // metronome's) in channel order line up with the instrument tracks in channel-object order
+    let mut strips: BTreeMap<u32, Vec<Plugin>> = BTreeMap::new();
+    for u in &p.plugins {
+        strips.entry(u.channel).or_default().push(u.clone());
+    }
+    let instrument_strips: Vec<Vec<Plugin>> = strips
+        .into_values()
+        .filter(|v| v.iter().any(|u| u.slot == 2 && u.name != "Klopfgeist"))
+        .map(|mut v| {
+            v.sort_by_key(|u| u.slot);
+            v
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..p.tracks.len()).filter(|&i| p.tracks[i].kind != TrackKind::Audio).collect();
+    order.sort_by_key(|&i| p.tracks[i].channel);
+    order.dedup_by_key(|i| p.tracks[*i].channel);
+    for (k, i) in order.into_iter().enumerate() {
+        if let Some(strip) = instrument_strips.get(k) {
+            let ch = p.tracks[i].channel;
+            for t in p.tracks.iter_mut().filter(|t| t.channel == ch) {
+                t.plugins = strip.clone();
+            }
+        }
+    }
     if p.tempo <= 0.0 {
         p.tempo = p.tempo_map.first().map_or(120.0, |t| t.1);
     }

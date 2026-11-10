@@ -9,6 +9,10 @@ pub struct Plugin {
     pub name: String,
     pub preset: String,
     pub params: Vec<f32>,
+    /// The channel strip it's on (AuCU header u32 @12 >> 16) and its slot there (@16 >> 16: 2 the
+    /// instrument, 3 on the Audio FX in order).
+    pub channel: u32,
+    pub slot: u32,
 }
 
 fn printable_runs(b: &[u8], min: usize) -> Vec<String> {
@@ -56,21 +60,21 @@ fn find(h: &[u8], n: &[u8]) -> Option<usize> {
     h.windows(n.len()).position(|w| w == n)
 }
 
-/// A plug-in from an AuCU chunk's payload (None for units without a parameter block).
+/// A plug-in from an AuCU chunk's payload: its display name (a NUL-ended field at 0x78, Logic's
+/// short form, e.g. "Space D"), its preset and, when it has one, its parameter block (Logic's own
+/// plug-ins; instruments such as Drum Kit Designer keep their state another way). None for units
+/// that aren't plug-ins.
 pub fn read_unit(payload: &[u8]) -> Option<Plugin> {
-    let params = params_after(payload, None)?;
-    let at = find(payload, b"GAMETSPP").or_else(|| find(payload, b"EMAGPPST"))?;
-    let runs = printable_runs(&payload[..at], 3);
-    // (the preset field: "#default.pst", or a factory preset's name)
+    let field = payload.get(0x78..0x98).map(|f| f.split(|b| *b == 0).next().unwrap_or(&[]))?;
+    if field.len() < 2 || !field.iter().all(|b| (0x20..0x7f).contains(b)) {
+        return None;
+    }
+    let name = String::from_utf8_lossy(field).into_owned();
+    let at = find(payload, b"GAMETSPP").or_else(|| find(payload, b"EMAGPPST"));
+    let params = params_after(payload, None).unwrap_or_default();
+    let runs = printable_runs(&payload[..at.unwrap_or(payload.len().min(0x78))], 3);
     let preset = runs.iter().find(|r| r.ends_with(".pst")).map(|r| r.rfind('#').map_or(r.as_str(), |i| &r[i..]).to_string()).unwrap_or_default();
-    // the display name: a NUL-ended field at 0x78 (Logic's own short form, e.g. "Space D"); other
-    // units keep other data there
-    let field = payload.get(0x78..0x98).map(|f| f.split(|b| *b == 0).next().unwrap_or(&[]));
-    let name = match field {
-        Some(f) if f.len() >= 2 && f.iter().all(|b| (0x20..0x7f).contains(b)) => String::from_utf8_lossy(f).into_owned(),
-        _ => runs.iter().rev().find(|r| !r.ends_with(".pst") && r.as_str() != "GAME" && r.len() > 3 && r.chars().all(|c| c.is_ascii_alphanumeric() || " -_/.".contains(c))).cloned().unwrap_or_default(),
-    };
-    Some(Plugin { name, preset, params })
+    Some(Plugin { name, preset, params, channel: 0, slot: 0 })
 }
 
 /// A .pst preset file: u32 file size, u32 1, u32 parameter count, then the parameter block.
@@ -86,8 +90,9 @@ mod tests {
 
     #[test]
     fn reads_a_parameter_block() {
-        let mut b = Vec::new();
-        b.extend_from_slice(b"..#default.pst\0\0Channel EQ\0\0GAME\0");
+        let mut b = vec![0u8; 0x98];
+        b[0x0C..0x18].copy_from_slice(b"#default.pst");
+        b[0x78..0x82].copy_from_slice(b"Channel EQ");
         b.extend_from_slice(b"GAMETSPP");
         b.extend_from_slice(&(8u32 + 12).to_le_bytes());
         b.extend_from_slice(&[0; 8]);

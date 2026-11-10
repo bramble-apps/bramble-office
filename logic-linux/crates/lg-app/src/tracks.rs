@@ -419,7 +419,7 @@ fn new_track(app: &mut App) {
     app.checkpoint("Create New Track");
     let Some(p) = app.project.as_mut() else { return };
     let row = p.tracks.len() as u32 + 1;
-    p.tracks.push(lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+    p.tracks.push(lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
     app.programs.push(4);
     app.selected_track = Some(p.tracks.len() - 1);
     app.load_engine();
