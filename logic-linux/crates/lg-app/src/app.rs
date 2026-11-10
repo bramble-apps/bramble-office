@@ -218,7 +218,7 @@ impl App {
                 self.file = lg_core::project::alternatives(&pkg).into_iter().next().and_then(|(_, alt)| std::fs::read(alt.join("ProjectData")).ok().map(|d| (alt, d)));
                 self.set_project(proj, false);
                 self.dirty = false;
-                self.tell(format!("Opened with {n} tracks"));
+                self.tell(format!("Opened with {n} track{}", if n == 1 { "" } else { "s" }));
             }
             Err(e) => {
                 self.tell(format!("Couldn't open {}: {e}", p.display()));
