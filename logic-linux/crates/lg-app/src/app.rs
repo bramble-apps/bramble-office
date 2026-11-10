@@ -84,6 +84,10 @@ pub struct App {
     pub mixer_h: f32,
     /// The help tag beside the pointer while dragging (Logic's: "Cycle Range / Left: …").
     pub help_tag: Option<Vec<(String, String)>>,
+    /// Where the editor (Piano Roll / Mixer) is: keys go to it while the pointer is over it.
+    pub editor_rect: Rect,
+    /// Copied region (⌘C / ⌘X), pasted at the playhead on the selected track (⌘V).
+    pub clipboard: Option<lg_core::Region>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -159,6 +163,8 @@ impl App {
             editor_h: EDITOR_H,
             mixer_h: 420.0,
             help_tag: None,
+            editor_rect: Rect::NOTHING,
+            clipboard: None,
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -239,6 +245,7 @@ impl App {
             e.all_off();
             e.tempo = p.tempo;
             e.tempo_map = p.tempo_map.clone();
+            e.beats_per_bar = p.signature.0.max(1) as u32;
             e.tracks = tracks;
             e.cycle = Some(self.cycle);
             e.program_changes();
@@ -548,89 +555,295 @@ impl App {
         }
     }
 
-    /// Logic's key commands (U.S. preset) that Studio has.
+    /// Key presses: Logic's key commands for the focused area (keymap.rs); ⌘Z / ⇧⌘Z undo.
     fn keys(&mut self, ctx: &egui::Context) {
         if ctx.egui_wants_keyboard_input() {
             return;
         }
-        use egui::Key;
-        let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
-        let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
-        if pressed(Key::Space) {
-            self.play_stop();
-        }
-        if pressed(Key::Enter) {
-            self.locate(0.0);
-        }
-        if cmd && pressed(Key::O) {
-            self.open_dialog();
-        }
-        if cmd && pressed(Key::Z) {
-            if shift {
-                self.redo();
-            } else {
-                self.undo();
+        let presses: Vec<(egui::Key, egui::Modifiers)> = ctx.input(|i| i.events.iter().filter_map(|e| match e {
+            egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
+            _ => None,
+        }).collect());
+        let focus = match (self.bottom, ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.editor_rect.contains(p))) {
+            (Bottom::Mixer, true) => crate::keymap::Focus::Mixer,
+            (Bottom::PianoRoll, true) => crate::keymap::Focus::PianoRoll,
+            _ => crate::keymap::Focus::Tracks,
+        };
+        for (key, m) in presses {
+            if m.command && key == egui::Key::Z {
+                if m.shift { self.redo() } else { self.undo() }
+                continue;
             }
-        }
-        if !cmd && (pressed(Key::Delete) || pressed(Key::Backspace)) {
-            self.delete_selection();
-        }
-        if !cmd {
-            if pressed(Key::C) {
-                self.toggle_cycle();
+            if m.command && key == egui::Key::O {
+                self.open_dialog();
+                continue;
             }
-            if pressed(Key::X) {
-                self.command(ctx, "Show Mixer");
-            }
-            if pressed(Key::E) || pressed(Key::P) {
-                self.command(ctx, "Show Editor");
-            }
-            if pressed(Key::B) {
-                self.show_browser = !self.show_browser;
-            }
-            if pressed(Key::I) {
-                self.show_inspector = !self.show_inspector;
-            }
-            let bar = self.bar_ticks() as f64;
-            if pressed(Key::Comma) {
-                let p = self.position();
-                self.locate(((p / bar).ceil() - 1.0).max(0.0) * bar);
-            }
-            if pressed(Key::Period) {
-                let p = self.position();
-                self.locate(((p / bar).floor() + 1.0) * bar);
-            }
-            if let Some(t) = self.selected_track {
-                if pressed(Key::M) {
-                    if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-                        tr.mute = !tr.mute;
-                    }
-                    self.sync_mix();
+            for c in crate::keymap::commands_for(key, m, focus) {
+                if self.key_command(ctx, c) {
+                    break;
                 }
-                if pressed(Key::S) && !shift {
-                    if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-                        tr.solo = !tr.solo;
-                    }
-                    self.sync_mix();
-                }
-            }
-            let n = self.project.as_ref().map_or(0, |p| p.tracks.len());
-            if pressed(Key::ArrowUp) {
-                self.selected_track = Some(self.selected_track.unwrap_or(0).saturating_sub(1));
-            }
-            if pressed(Key::ArrowDown) && n > 0 {
-                self.selected_track = Some((self.selected_track.map_or(0, |t| t + 1)).min(n - 1));
-            }
-        } else {
-            // ⌘← / ⌘→: zoom the tracks area out / in
-            if pressed(Key::ArrowRight) {
-                self.bar_w = (self.bar_w * 1.25).min(1200.0);
-            }
-            if pressed(Key::ArrowLeft) {
-                self.bar_w = (self.bar_w / 1.25).max(8.0);
             }
         }
     }
+
+    /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
+    pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        let bar = self.bar_ticks() as f64;
+        let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
+        match name {
+            "Play or Stop" => self.play_stop(),
+            "Play" => {
+                if !self.playing() {
+                    self.play_stop();
+                }
+            }
+            "Stop" => self.stop(),
+            "Go to Beginning" => self.locate(0.0),
+            "Rewind" | "Fast Rewind" => {
+                let k = if name == "Fast Rewind" { 4.0 } else { 1.0 };
+                let p = self.position();
+                self.locate(((p / bar).ceil() - k).max(0.0) * bar);
+            }
+            "Forward" | "Fast Forward" => {
+                let k = if name == "Fast Forward" { 4.0 } else { 1.0 };
+                let p = self.position();
+                self.locate(((p / bar).floor() + k) * bar);
+            }
+            "Go to End of Last Region" => {
+                let end = self.project.as_ref().map_or(0, |p| p.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.start + r.length).max().unwrap_or(0));
+                self.locate(end as f64);
+            }
+            "Toggle Cycle Mode" => self.toggle_cycle(),
+            "Set Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop" | "Set Rounded Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop" => {
+                let Some((t, r)) = self.selected_region else { return false };
+                let Some(rg) = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)) else { return false };
+                let mut c = (rg.start, rg.start + rg.length);
+                if name.contains("Rounded") {
+                    let b = bar as u32;
+                    c = (c.0 / b * b, c.1.div_ceil(b) * b);
+                }
+                self.set_cycle(c);
+                if !self.cycle_on() {
+                    self.toggle_cycle();
+                }
+            }
+            "Move Locators Forward by Cycle Length / Loop Forward by Loop Length" => {
+                let (a, b) = self.cycle;
+                self.set_cycle((b, b + (b - a)));
+            }
+            "Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length" => {
+                let (a, b) = self.cycle;
+                let l = b - a;
+                if a >= l {
+                    self.set_cycle((a - l, a));
+                }
+            }
+            "Double Cycle/Loop Length" => {
+                let (a, b) = self.cycle;
+                self.set_cycle((a, b + (b - a)));
+            }
+            "Halve Cycle/Loop Length" => {
+                let (a, b) = self.cycle;
+                if b - a >= 2 {
+                    self.set_cycle((a, a + (b - a) / 2));
+                }
+            }
+            "Toggle Metronome Click" => {
+                let on = {
+                    let mut e = self.engine();
+                    e.metronome = !e.metronome;
+                    e.metronome
+                };
+                self.tell(if on { "Metronome on" } else { "Metronome off" });
+            }
+            "Show/Hide Mixer" | "Open Mixer…" => self.bottom = if self.bottom == Bottom::Mixer { Bottom::None } else { Bottom::Mixer },
+            "Show/Hide Piano Roll" | "Show/Hide Editor" | "Open Piano Roll…" => self.bottom = if self.bottom == Bottom::PianoRoll { Bottom::None } else { Bottom::PianoRoll },
+            "Open Main Window…" => self.bottom = Bottom::PianoRoll,
+            "Show/Hide Browser" => self.show_browser = !self.show_browser,
+            "Show/Hide Inspector" => self.show_inspector = !self.show_inspector,
+            "Open Settings…" => self.show_settings = true,
+            "Toggle Channel Strip Mute" | "Toggle Channel Strip Solo" => {
+                let Some(t) = self.selected_track else { return false };
+                if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    if name.ends_with("Mute") {
+                        tr.mute = !tr.mute;
+                    } else {
+                        tr.solo = !tr.solo;
+                    }
+                }
+                self.sync_mix();
+            }
+            "Clear/Recall Solo" => {
+                if let Some(p) = self.project.as_mut() {
+                    for t in &mut p.tracks {
+                        t.solo = false;
+                    }
+                }
+                self.sync_mix();
+            }
+            "Select Previous Track" => self.selected_track = Some(self.selected_track.unwrap_or(0).saturating_sub(1)),
+            "Select Next Track" => {
+                if n_tracks > 0 {
+                    self.selected_track = Some(self.selected_track.map_or(0, |t| t + 1).min(n_tracks - 1));
+                }
+            }
+            "Select Previous Region/Cell on Focused Track" | "Select Next Region/Cell on Focused Track" => {
+                let Some(t) = self.selected_track else { return false };
+                let count = self.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(0, |tr| tr.regions.len());
+                if count == 0 {
+                    return true;
+                }
+                let cur = self.selected_region.filter(|s| s.0 == t).map(|s| s.1);
+                let next = match (name.contains("Next"), cur) {
+                    (true, Some(r)) => (r + 1).min(count - 1),
+                    (false, Some(r)) => r.saturating_sub(1),
+                    (true, None) => 0,
+                    (false, None) => count - 1,
+                };
+                self.selected_region = Some((t, next));
+                self.center_roll(t, next);
+            }
+            "Select Previous (Left) Channel Strip" => self.selected_track = Some(self.selected_track.unwrap_or(0).saturating_sub(1)),
+            "Select Next (Right) Channel Strip" => {
+                if n_tracks > 0 {
+                    self.selected_track = Some(self.selected_track.map_or(0, |t| t + 1).min(n_tracks - 1));
+                }
+            }
+            "Delete Track" => {
+                let Some(t) = self.selected_track else { return false };
+                self.checkpoint("Delete Track");
+                if let Some(p) = self.project.as_mut() {
+                    if t < p.tracks.len() {
+                        p.tracks.remove(t);
+                        if t < self.programs.len() {
+                            self.programs.remove(t);
+                        }
+                    }
+                }
+                self.selected_region = None;
+                self.after_edit();
+            }
+            "New Software Instrument Track" | "New Audio Track" | "New Tracks…" => {
+                self.checkpoint("Create New Track");
+                let audio = name == "New Audio Track";
+                if let Some(p) = self.project.as_mut() {
+                    let row = p.tracks.len() as u32 + 1;
+                    let n = p.tracks.iter().filter(|t| (t.kind == TrackKind::Audio) == audio).count() + 1;
+                    p.tracks.push(lg_core::Track { name: if audio { format!("Audio {n}") } else { "Deluxe Classic".into() }, kind: if audio { TrackKind::Audio } else { TrackKind::Instrument }, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+                    self.programs.push(if audio { 0 } else { 4 });
+                    self.selected_track = Some(p.tracks.len() - 1);
+                }
+                self.after_edit();
+            }
+            "Nudge Region/Event/Marquee Position Left by Nudge Value" | "Nudge Region/Event/Marquee Position Right by Nudge Value" => {
+                // (Logic's default nudge value: a division, a 1/16)
+                let step = lg_core::events::PPQ as i64 / 4;
+                let d = if name.contains("Right") { step } else { -step };
+                if self.bottom == Bottom::PianoRoll && !self.selected_notes.is_empty() {
+                    let Some((t, r)) = self.selected_region else { return false };
+                    self.checkpoint("Nudge Notes");
+                    let sel = self.selected_notes.clone();
+                    if let Some(rg) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
+                        for i in sel {
+                            if let Some(n) = rg.notes.get_mut(i) {
+                                n.pos = (n.pos as i64 + d).max(0) as u32;
+                            }
+                        }
+                    }
+                } else {
+                    let Some((t, r)) = self.selected_region else { return false };
+                    self.checkpoint("Nudge Region");
+                    if let Some(rg) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
+                        let nd = (rg.start as i64 + d).max(0) - rg.start as i64;
+                        rg.start = (rg.start as i64 + nd) as u32;
+                        for n in &mut rg.notes {
+                            n.pos = (n.pos as i64 + nd).max(0) as u32;
+                        }
+                    }
+                }
+                self.after_edit();
+            }
+            n if n.starts_with("Transpose KeySignature/Chord/Region/Event") || n.starts_with("Transpose Region/Event") => {
+                let up = n.contains('+');
+                let amount: i32 = if n.contains("12 Semitone") { 12 } else { 1 };
+                let d = if up { amount } else { -amount };
+                let Some((t, r)) = self.selected_region else { return false };
+                self.checkpoint("Transpose");
+                let sel = self.selected_notes.clone();
+                let notes_only = self.bottom == Bottom::PianoRoll && !sel.is_empty();
+                if let Some(rg) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
+                    for (i, note) in rg.notes.iter_mut().enumerate() {
+                        if !notes_only || sel.contains(&i) {
+                            note.pitch = (note.pitch as i32 + d).clamp(0, 127) as u8;
+                        }
+                    }
+                }
+                self.after_edit();
+            }
+            "Repeat Regions/Cells/Events" => {
+                let Some((t, r)) = self.selected_region else { return false };
+                self.checkpoint("Repeat Region");
+                if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    if let Some(mut copy) = tr.regions.get(r).cloned() {
+                        let d = copy.length;
+                        copy.start += d;
+                        for n in &mut copy.notes {
+                            n.pos += d;
+                        }
+                        tr.regions.push(copy);
+                        self.selected_region = Some((t, tr.regions.len() - 1));
+                    }
+                }
+                self.after_edit();
+            }
+            "Copy" | "Cut" => {
+                let Some((t, r)) = self.selected_region else { return false };
+                self.clipboard = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).cloned();
+                if name == "Cut" {
+                    self.delete_selection();
+                }
+            }
+            "Paste" => {
+                // at the playhead, on the selected track (Logic)
+                let (Some(t), Some(mut rg)) = (self.selected_track, self.clipboard.clone()) else { return false };
+                self.checkpoint("Paste");
+                let at = self.position() as u32;
+                let d = at as i64 - rg.start as i64;
+                rg.start = at;
+                for n in &mut rg.notes {
+                    n.pos = (n.pos as i64 + d).max(0) as u32;
+                }
+                if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    tr.regions.push(rg);
+                    self.selected_region = Some((t, tr.regions.len() - 1));
+                }
+                self.after_edit();
+            }
+            "Select All" => {
+                if self.bottom == Bottom::PianoRoll {
+                    if let Some((t, r)) = self.selected_region {
+                        let n = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).map_or(0, |rg| rg.notes.len());
+                        self.selected_notes = (0..n).collect();
+                    }
+                } else {
+                    return false;
+                }
+            }
+            "Zoom Horizontal In" => self.bar_w = (self.bar_w * 1.25).min(1200.0),
+            "Zoom Horizontal Out" => self.bar_w = (self.bar_w / 1.25).max(8.0),
+            "Export Tracks as Audio Files…" => {
+                let t = self.selected_track;
+                self.bounce(t);
+            }
+            "Save" | "Save Project as…" => self.tell("Saving Logic projects isn't available yet (Export > MIDI File, Bounce work)"),
+            _ => {
+                let _ = ctx;
+                return false;
+            }
+        }
+        true
+    }
+
 
     fn frame(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
@@ -709,6 +922,7 @@ impl App {
         crate::tracks::show(self, ui, tracks);
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
+            self.editor_rect = ed;
             match self.bottom {
                 Bottom::PianoRoll => crate::pianoroll::show(self, ui, ed),
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),

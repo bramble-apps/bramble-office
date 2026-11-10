@@ -53,7 +53,7 @@ fn parse_script(s: &str) -> std::collections::VecDeque<(egui::Modifiers, Vec<egu
             }
             ("key", _) => {
                 let (mods, name) = match rest.rsplit_once('+') {
-                    Some((m, k)) => (if m.contains("cmd") || m.contains("ctrl") { Modifiers::COMMAND | Modifiers::CTRL } else { Modifiers::NONE } | if m.contains("shift") { Modifiers::SHIFT } else { Modifiers::NONE }, k),
+                    Some((m, k)) => (if m.contains("cmd") || m.contains("ctrl") { Modifiers::COMMAND | Modifiers::CTRL } else { Modifiers::NONE } | if m.contains("shift") { Modifiers::SHIFT } else { Modifiers::NONE } | if m.contains("alt") { Modifiers::ALT } else { Modifiers::NONE }, k),
                     None => (Modifiers::NONE, rest),
                 };
                 if let Some(key) = Key::from_name(name) {

@@ -1,0 +1,821 @@
+# Logic Pro 13 key commands (U.S. preset): area, command, key — from the Logic research
+Global Commands	Record	R
+Global Commands	Record / Record Toggle	*
+Global Commands	Discard Recording and Return to Last Play Position	⌘.
+Global Commands	Record into Cell	⌥R
+Global Commands	Flashback Capture as Recording	⇧R
+Global Commands	Play	⌅
+Global Commands	Pause	.
+Global Commands	Stop	0
+Global Commands	Play or Stop	˽
+Global Commands	Preview Selection-Based Processing	⌥⇧˽
+Global Commands	Rewind	,
+Global Commands	Forward	.
+Global Commands	Fast Rewind	⇧,
+Global Commands	Fast Forward	⇧.
+Global Commands	Rewind by Transient	⌃,
+Global Commands	Forward by Transient	⌃.
+Global Commands	Play from Left Window Edge	⇧⌅
+Global Commands	Go to Left Locator	⌃⇧,
+Global Commands	Go to Right Locator	⌃⇧.
+Global Commands	Go to Position…	/
+Global Commands	Set Punch In Locator by Playhead	⌃⌥⌘I
+Global Commands	Set Punch In Locator by Rounded Playhead	⌃⌥⇧⌘I
+Global Commands	Set Punch Out Locator by Playhead	⌃⌥⌘O
+Global Commands	Set Punch Out Locator Point by Rounded Playhead	⌃⌥⇧⌘O
+Global Commands	Set Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop	⌘U
+Global Commands	Set Rounded Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop	U
+Global Commands	Play from Selection	⇧˽
+Global Commands	Skip Cycle	=
+Global Commands	Move Locators Forward by Cycle Length / Loop Forward by Loop Length	⇧⌘.
+Global Commands	Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length	⇧⌘,
+Global Commands	Double Cycle/Loop Length	⌥⇧⌘.
+Global Commands	Halve Cycle/Loop Length	⌥⇧⌘,
+Global Commands	Go to Selection Start	⌃⤒
+Global Commands	Go to Selection End	⌃⤓
+Global Commands	Go to End of Last Region	⌥↩
+Global Commands	Go to Beginning	↩
+Global Commands	Create Marker	⌥'
+Global Commands	Create Marker without rounding	⌃⌥'
+Global Commands	Create Marker for Region/Marquee Selection	⌥⇧'
+Global Commands	Delete Marker	⌥⌫
+Global Commands	Set Locators by Marker and Enable Cycle	⌃⌥C
+Global Commands	Set Locators by Previous Marker and Enable Cycle	⌃⌥,
+Global Commands	Set Locators by Next Marker and Enable Cycle	⌃⌥.
+Global Commands	Go to Previous Marker And Set Locators	⌥,
+Global Commands	Go to Next Marker And Set Locators	⌥.
+Global Commands	Go to Marker Number…	⌥/
+Global Commands	Rename Marker	⇧'
+Global Commands	Go to Marker Number 1	1
+Global Commands	Go to Marker Number 2	2
+Global Commands	Go to Marker Number 3	3
+Global Commands	Go to Marker Number 4	4
+Global Commands	Go to Marker Number 5	5
+Global Commands	Go to Marker Number 6	6
+Global Commands	Go to Marker Number 7	7
+Global Commands	Go to Marker Number 8	8
+Global Commands	Go to Marker Number 9	9
+Global Commands	Go to Marker Number 10	⌃0
+Global Commands	Go to Marker Number 11	⌃1
+Global Commands	Go to Marker Number 12	⌃2
+Global Commands	Go to Marker Number 13	⌃3
+Global Commands	Go to Marker Number 14	⌃4
+Global Commands	Go to Marker Number 15	⌃5
+Global Commands	Go to Marker Number 16	⌃6
+Global Commands	Go to Marker Number 17	⌃7
+Global Commands	Go to Marker Number 18	⌃8
+Global Commands	Go to Marker Number 19	⌃9
+Global Commands	Toggle Cycle Mode	C
+Global Commands	Toggle Autopunch Mode	⌃⌥⌘P
+Global Commands	Toggle Replace	/
+Global Commands	Engage Solo Tracks (Channel Strips) of Selected Regions/Cells	⌃S
+Global Commands	Clear/Recall Solo	⌥S
+Global Commands	Mute off for all	⌃⇧M
+Global Commands	Toggle Cycle Preview	⌃C
+Global Commands	Toggle Metronome Click	K
+Global Commands	Toggle Count-in	⇧K
+Global Commands	Recall Screenset 1	1
+Global Commands	Recall Screenset 2	2
+Global Commands	Recall Screenset 3	3
+Global Commands	Recall Screenset 4	4
+Global Commands	Recall Screenset 5	5
+Global Commands	Recall Screenset 6	6
+Global Commands	Recall Screenset 7	7
+Global Commands	Recall Screenset 8	8
+Global Commands	Recall Screenset 9	9
+Global Commands	Recall Screenset 1x	⇧1
+Global Commands	Recall Screenset 2x	⇧2
+Global Commands	Recall Screenset 3x	⇧3
+Global Commands	Recall Screenset 4x	⇧4
+Global Commands	Recall Screenset 5x	⇧5
+Global Commands	Recall Screenset 6x	⇧6
+Global Commands	Recall Screenset 7x	⇧7
+Global Commands	Recall Screenset 8x	⇧8
+Global Commands	Recall Screenset 9x	⇧9
+Global Commands	Region Inspector Float	⌥⇧R
+Global Commands	Open Settings…	⌘,
+Global Commands	Open Automation Settings…	⌥A
+Global Commands	Open Event List…	⌘7
+Global Commands	Open Main Window…	⌘1
+Global Commands	Open Mixer…	⌘2
+Global Commands	Open Score Editor…	⌘5
+Global Commands	Open Step Sequencer…	⌘3
+Global Commands	Open Transform…	⌘9
+Global Commands	Open Piano Roll…	⌘4
+Global Commands	Open Environment…	⌘0
+Global Commands	Open Project Audio…	⌘8
+Global Commands	Note Repeat	⌃⌥↩
+Global Commands	Spot Erase	⌃⌥⌫
+Global Commands	Open Audio File Editor…	⌘6
+Global Commands	Show/Hide Play Surface	⌘K
+Global Commands	Show/Hide Event Float	⌥E
+Global Commands	Show/Hide Mixer	X
+Global Commands	Show/Hide Smart Controls	Y
+Global Commands	Show/Hide Score Editor	N
+Global Commands	Show/Hide Staff Style Window	⌃⌥⇧S
+Global Commands	Show/Hide Score Sets Window	⌃⌥⇧I
+Global Commands	Show/Hide Piano Roll	P
+Global Commands	Show/Hide Step Input Keyboard	⌥⌘K
+Global Commands	Show/Hide Browser	B
+Global Commands	Search in Browser	⌘F
+Global Commands	Show/Hide Assistant	⌥⌘/
+Global Commands	Show/Hide Audio File Editor	W
+Global Commands	Show/Hide Quick Help	⇧/
+Global Commands	Show Detailed Help	⌘/
+Global Commands	Open in External Sample Editor	⇧W
+Global Commands	Open Tempo List…	⌥⇧T
+Global Commands	Open Key Command Assignments…	⌥K
+Global Commands	Show/Hide Colors	⌥C
+Global Commands	Enter/Exit Full Screen	⌃⌘F
+Global Commands	Open Movie…	⌥⌘O
+Global Commands	Toggle Selected Tracks or Channel Strips Automation Off/Read	⌃⌘O
+Global Commands	Toggle Selected Tracks or Channel Strips Automation Latch/Read	⌃⌘A
+Global Commands	Set All Tracks to Automation Off	⌃⇧⌘O
+Global Commands	Set All Tracks to Automation Read	⌃⇧⌘R
+Global Commands	Set All Tracks to Automation Touch	⌃⇧⌘T
+Global Commands	Set All Tracks to Automation Latch	⌃⇧⌘L
+Global Commands	Track Automation Event List…	⌃⌘E
+Global Commands	Toggle Automation Quick Access	⌃⌥⌘A
+Global Commands	Enable/Disable Groups	⇧G
+Global Commands	Show/Hide Groups Window	⌥⇧G
+Global Commands	Create Group for Selected Channel Strips / Tracks	⌃⌘G
+Global Commands	Toggle Hide Group 1	⌃⇧1
+Global Commands	Toggle Hide Group 2	⌃⇧2
+Global Commands	Toggle Hide Group 3	⌃⇧3
+Global Commands	Toggle Hide Group 4	⌃⇧4
+Global Commands	Toggle Hide Group 5	⌃⇧5
+Global Commands	Toggle Hide Group 6	⌃⇧6
+Global Commands	Toggle Hide Group 7	⌃⇧7
+Global Commands	Toggle Hide Group 8	⌃⇧8
+Global Commands	Toggle Hide Group 9	⌃⇧9
+Global Commands	Close Window	⌘W
+Global Commands	Cycle Through Windows	⌥W
+Global Commands	Cycle Through Windows (counter-clockwise)	⌥⇧W
+Global Commands	Select Previous Track	↑
+Global Commands	Select Next Track	↓
+Global Commands	Hide Logic Pro	⌘H
+Global Commands	Hide Others	⌥⌘H
+Global Commands	Quit	⌘Q
+Global Commands	New Empty Project	⇧⌘N
+Global Commands	New from Template…	⌘N
+Global Commands	Open…	⌘O
+Global Commands	Project Settings…	⌥P
+Global Commands	Close Project	⌥⌘W
+Global Commands	Save	⌘S
+Global Commands	Save Project as…	⇧⌘S
+Global Commands	Print	⌘P
+Global Commands	Import…	⌘I
+Global Commands	Export Selection as MIDI File…	⌥⌘E
+Global Commands	Export Tracks as Audio Files…	⌘E
+Global Commands	Export All Tracks as Audio Files…	⇧⌘E
+Global Commands	Plug-in Undo	⌃⌘Z
+Global Commands	Plug-in Redo	⌃⇧⌘Z
+Global Commands	Cycle Through Window Views	⇥
+Global Commands	Cycle Through Window Views (counter-clockwise)	⇧⇥
+Global Commands	Minimize Window	⌘M
+Global Commands	Minimize All Windows	⌥⌘M
+Global Commands	Zoom Window	⌃⌘M
+Global Commands	Next Channel Strip Setting of focused Track	⇧]
+Global Commands	Previous Channel Strip Setting of focused Track	⇧[
+Global Commands	Copy Channel Strip Setting	⌥⌘C
+Global Commands	Paste Channel Strip Setting	⌥⌘V
+Global Commands	Next Patch, Plug-in Setting or Sampler Instrument	]
+Global Commands	Previous Patch, Plug-in Setting or Sampler Instrument	[
+Global Commands	Toggle Channel Strip Mute	M
+Global Commands	Toggle Channel Strip Solo	S
+Global Commands	Toggle Channel Strip Input Monitoring	⌃I
+Global Commands	Toggle Channel Strip Format (mono/stereo)	⌃⇧S
+Global Commands	Show/Hide All Plug-in Windows	V
+Global Commands	Free Tempo Recording	⌃⌥⌘R
+Global Commands	Set Nudge Value to Bar	⌃⌥M
+Global Commands	Set Nudge Value to Beat	⌃⌥B
+Global Commands	Set Nudge Value to Division	⌃⌥D
+Global Commands	Set Nudge Value to Tick	⌃⌥T
+Global Commands	Set Nudge Value to SMPTE Frame	⌃⌥F
+Global Commands	Set Nudge Value to 0.5 SMPTE Frame	⌃⌥H
+Global Commands	Set Nudge Value to 10 ms	⌃⌥0
+Global Commands	Set Nudge Value to 1 ms	⌃⌥1
+Global Commands	Set Nudge Value to Sample	⌃⌥S
+Global Commands	Sustain inserted notes	-
+Global Commands	Stop All Cells	⌘↩
+Global Commands	Toggle Activation of All Tracks	⌃⌥⇧A
+Global Control Surfaces Commands	Open Controller Assignments	⌥⇧K
+Global Control Surfaces Commands	Learn new Controller Assignment	⌘L
+Various Windows	Undo	⌘Z
+Various Windows	Redo	⇧⌘Z
+Various Windows	Undo History…	⌃⌥⌘Z
+Various Windows	Cut	⌘X
+Various Windows	Copy	⌘C
+Various Windows	Paste	⌘V
+Various Windows	Select All	⌘A
+Various Windows	Deselect All	⇧D
+Various Windows	Invert Selection	⇧I
+Various Windows	Show Tool Menu	T
+Various Windows	Set Next Tool or Edit Mode	⌥⇟
+Various Windows	Set Previous Tool or Edit Mode	⌥⇞
+Various Windows	Zoom Horizontal Out	⌘←
+Various Windows	Zoom Horizontal In	⌘→
+Various Windows	Zoom Vertical Out	⌘↑
+Various Windows	Zoom Vertical In	⌘↓
+Various Windows	Recall Zoom 1	⌃⌥⌘1
+Various Windows	Recall Zoom 2	⌃⌥⌘2
+Various Windows	Recall Zoom 3	⌃⌥⌘3
+Various Windows	Save as Zoom 1	⌃⌥⇧⌘1
+Various Windows	Save as Zoom 2	⌃⌥⇧⌘2
+Various Windows	Save as Zoom 3	⌃⌥⇧⌘3
+Various Windows	Zoom to fit Locators, store Navigation Snapshot	⌃⇧Z
+Various Windows	Toggle Zoom to fit Selection or All Contents	Z
+Various Windows	Store Navigation Snapshot	⇧Z
+Various Windows	Navigation: Back	⌥Z
+Various Windows	Navigation: Forward	⌥⇧Z
+Various Windows	Toggle Zoom Focused Track or Row	⌃Z
+Various Windows	Page Up	⇞
+Various Windows	Page Down	⇟
+Various Windows	Page Left	⤒
+Various Windows	Page Right	⤓
+Various Windows	Catch Playhead Position	`
+Various Windows	Show/Hide Inspector	I
+Various Windows	Show/Hide Local Inspector	⌥⇧I
+Various Windows	Toggle MIDI Out (Note Preview)	⌥O
+Various Windows	Toggle MIDI In (Step Record)	⌥I
+Various Windows	Increase Last Clicked Parameter by 1	=
+Various Windows	Decrease Last Clicked Parameter by 1	-
+Various Windows	Increase Last Clicked Parameter by 10	⇧=
+Various Windows	Decrease Last Clicked Parameter by 10	⇧-
+Various Windows	Preview	⌥˽
+Various Windows	Search and Add Plug-in…	⌃⌘P
+Windows Showing Audio Files	Show Files in Finder	⇧⌘R
+Windows Showing Audio Files	Toggle Snap Edits to Zero Crossings	⌃0
+Windows Showing Audio Files	Add to Tracks…	⌘;
+Windows Showing Audio Files	Remove Silence from Audio Region…	⌃X
+Windows Showing Audio Files	Show/Hide Selection-Based Processing	⌥⇧P
+Windows Showing Audio Files	Apply Selection-Based Processing Again	⌃⌥P
+Main Window Tracks and Various Editors	Show/Hide Automation	A
+Main Window Tracks and Various Editors	New Tracks…	⌥⌘N
+Main Window Tracks and Various Editors	New Audio Track	⌥⌘A
+Main Window Tracks and Various Editors	New Software Instrument Track	⌥⌘S
+Main Window Tracks and Various Editors	New Session Player SI Track…	⌥⌘P
+Main Window Tracks and Various Editors	New External MIDI Track	⌥⌘X
+Main Window Tracks and Various Editors	New Track with Duplicate Settings	⌘D
+Main Window Tracks and Various Editors	New Track with Duplicate Settings and Content	⌥⇧⌘D
+Main Window Tracks and Various Editors	New Track with Next Channel / Instrument	⌃↩
+Main Window Tracks and Various Editors	New Track with Same Channel Strip/Instrument	⌃⇧↩
+Main Window Tracks and Various Editors	Delete Track	⌘⌫
+Main Window Tracks and Various Editors	Delete unused Tracks	⇧⌘⌫
+Main Window Tracks and Various Editors	Search and Select Track…	⌃⌘T
+Main Window Tracks and Various Editors	Import Audio File…	⇧⌘I
+Main Window Tracks and Various Editors	Select All Following	⇧F
+Main Window Tracks and Various Editors	Select All Following of Same Track/Pitch	⌃⇧F
+Main Window Tracks and Various Editors	Select All Inside Locators	⇧L
+Main Window Tracks and Various Editors	Select Overlapped Regions/Events	⇧O
+Main Window Tracks and Various Editors	Select Equal Regions/Events	⇧E
+Main Window Tracks and Various Editors	Select Similar Regions/Events	⇧S
+Main Window Tracks and Various Editors	Select Same Subpositions	⇧P
+Main Window Tracks and Various Editors	Select Muted Regions/Cells/Events	⇧M
+Main Window Tracks and Various Editors	Select Same-Colored Regions/Cells/Events	⇧C
+Main Window Tracks and Various Editors	Select First, or Shift Marquee Selection Left	⇧⤒
+Main Window Tracks and Various Editors	Select Last, or Shift Marquee Selection Right	⇧⤓
+Main Window Tracks and Various Editors	Select Previous Region/Cell/Event or Move Marquee End (or Marquee Point) to Previous Transient	←
+Main Window Tracks and Various Editors	Select Next Region/Cell/Event or Move Marquee End (or Marquee Point) to Next Transient	→
+Main Window Tracks and Various Editors	Toggle Previous Region/Cell/Event or Move Marquee Start (or Extend Marquee Selection) to Previous Transient	⇧←
+Main Window Tracks and Various Editors	Toggle Next Region/Cell/Event or Move Marquee Start (or Extend Marquee Selection) to Next Transient	⇧→
+Main Window Tracks and Various Editors	Scroll to Selection	⇧`
+Main Window Tracks and Various Editors	Loop Regions/Cells/Folders On/Off	⌃L
+Main Window Tracks and Various Editors	Flex On/Off	⌃F
+Main Window Tracks and Various Editors	Reverse On/Off	⌃⇧R
+Main Window Tracks and Various Editors	Quantize Selected Regions/Cells/Events	Q
+Main Window Tracks and Various Editors	Dequantize	⌥⌘Q
+Main Window Tracks and Various Editors	Delete Duplicated MIDI Events	⌥D
+Main Window Tracks and Various Editors	Paste Replace	⇧⌘V
+Main Window Tracks and Various Editors	Repeat Regions/Cells/Events	⌘R
+Main Window Tracks and Various Editors	Set Optimal Region/Cell Lengths Rounded by Bar	⌃\
+Main Window Tracks and Various Editors	Convert to MIDI Region/Cell	⌃⌥⌘M
+Main Window Tracks and Various Editors	Join Regions/Notes	⌘J
+Main Window Tracks and Various Editors	Split Regions/Events at Locators or Marquee Selection	⌥⌘T
+Main Window Tracks and Various Editors	Split Regions/Events at Playhead Position	⌘T
+Main Window Tracks and Various Editors	Transpose KeySignature/Chord/Region/Event +1 Semitone, Nudge Automation Up 1 Step or Move Marquee Selection Up 1 Track	⌥↑
+Main Window Tracks and Various Editors	Transpose KeySignature/Chord/Region/Event -1 Semitone, Nudge Automation Down 1 Step or Move Marquee Selection Down 1 Track	⌥↓
+Main Window Tracks and Various Editors	Transpose Region/Event +12 Semitone, Nudge Automation Up 10 Steps or Move Marquee Bottom Up 1 Track	⌥⇧↑
+Main Window Tracks and Various Editors	Transpose Region/Event -12 Semitone, Nudge Automation Down 10 Steps or Move Marquee Bottom Down 1 Track	⌥⇧↓
+Main Window Tracks and Various Editors	Move Region/Event to Playhead Position (Pickup Clock)	;
+Main Window Tracks and Various Editors	Move Region/Event to Playhead Position and Select Next Region/Event (Pickup Clock+)	⇧;
+Main Window Tracks and Various Editors	Set Region/Event/Marquee Start to Playhead Position	⌘[
+Main Window Tracks and Various Editors	Set Region/Event/Marquee End to Playhead Position	⌘]
+Main Window Tracks and Various Editors	Nudge Region/Event/Marquee Position Right by Nudge Value	⌥→
+Main Window Tracks and Various Editors	Nudge Region/Event/Marquee Position Left by Nudge Value	⌥←
+Main Window Tracks and Various Editors	Nudge Region/Event/Marquee Length Right by Nudge Value	⌥⇧→
+Main Window Tracks and Various Editors	Nudge Region/Event/Marquee Length Left by Nudge Value	⌥⇧←
+Main Window Tracks and Various Editors	Slip Right by Nudge Value	⌃⌥→
+Main Window Tracks and Various Editors	Slip Left by Nudge Value	⌃⌥←
+Main Window Tracks and Various Editors	Rotate Right by Nudge Value	⌃⌥⌘→
+Main Window Tracks and Various Editors	Rotate Left by Nudge Value	⌃⌥⌘←
+Main Window Tracks and Various Editors	Open Track Stack	⌃⌘→
+Main Window Tracks and Various Editors	Close Track Stack	⌃⌘←
+Main Window Tracks and Various Editors	Mute Notes/Regions/Cells/Folders On/Off	⌃M
+Main Window Tracks and Various Editors	Unlock SMPTE Position	⌘⇞
+Main Window Tracks and Various Editors	Lock SMPTE Position	⌘⇟
+Main Window Tracks and Various Editors	Toggle Snap to Grid	⌘G
+Main Window Tracks and Various Editors	Shuffle Left	⌥[
+Main Window Tracks and Various Editors	Shuffle Right	⌥]
+Main Window Tracks and Various Editors	Bounce…	⌘B
+Main Window Tracks and Various Editors	Create Time Signature Change	⌃⌥⇧T
+Main Window Tracks and Various Editors	Create Key Signature Change	⌃⌥⇧K
+Various Editors	Select Same Channels	⇧H
+Various Editors	Select Same Articulation	⇧A
+Various Editors	Trim Note End to Remove Overlaps to Following Notes (8 Ticks Gap)	\
+Various Editors	Trim Note End to Following Notes (8 Ticks Gap)	⇧\
+Various Editors	Select Highest Notes	⇧↑
+Various Editors	Select Lowest Notes	⇧↓
+Various Editors	Show Event Position and Length as Time or Bars/Beats	⌃⌥R
+Views Showing Time Ruler	Secondary Ruler	⌃⌥⇧R
+Views Showing Time Ruler	Scroll in Play	⌃`
+Views Showing Time Ruler	Show/Hide Global Tracks	G
+Views Showing Time Ruler	Configure Global Tracks…	⌥G
+Views Showing Time Ruler	Show Single Global Track On/Off	⌃⌥⌘G
+Views Showing Time Ruler	Show/Hide Arrangement Track	⇧⌘A
+Views Showing Time Ruler	Show/Hide Marker Track	⇧⌘K
+Views Showing Time Ruler	Show/Hide Movie Track	⇧⌘O
+Views Showing Time Ruler	Show/Hide Tempo Track	⇧⌘T
+Views Showing Time Ruler	Show/Hide Chord Track	⇧⌘C
+Views Showing Time Ruler	Show/Hide Beat Mapping Track	⇧⌘B
+Views Showing Time Ruler	Show/Hide Marker Track Only	'
+Views Showing Time Ruler	Transpose Chords +1 Semitone	⌥⇧⌘↑
+Views Showing Time Ruler	Transpose Chords -1 Semitone	⌥⇧⌘↓
+Views Showing Automation	Automation: Cycle Through Used Parameters	⌘Y
+Views Showing Automation	Automation: Display Off	⇧⌘Y
+Main Window Tracks	Extend Track Selection Up	⇧↑
+Main Window Tracks	Extend Track Selection Down	⇧↓
+Main Window Tracks	Select Previous Region/Cell on Focused Track	←
+Main Window Tracks	Select Next Region/Cell on Focused Track	→
+Main Window Tracks	Pack Folder	⌃⌥⇧F
+Main Window Tracks	Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks	⌃⇧⌘U
+Main Window Tracks	Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks	⌃⌘U
+Main Window Tracks	Create 1 Track Automation Point at Region Borders	⌃⇧⌘1
+Main Window Tracks	Create 2 Track Automation Points at Region Borders	⌃⇧⌘2
+Main Window Tracks	Create 1 Track Automation Point at Every Region Border	⌃⌘1
+Main Window Tracks	Create 2 Track Automation Points at Every Region Border	⌃⌘2
+Main Window Tracks	Delete Redundant Automation Points	⌃⌫
+Main Window Tracks	Delete Visible Automation on Selected Tracks	⌃⌘⌫
+Main Window Tracks	Delete All Automation on Selected Tracks	⌃⇧⌘⌫
+Main Window Tracks	Delete Orphaned Automation on Selected Tracks	⌃⇧⌫
+Main Window Tracks	Move Visible Region Data to Track Automation	⌃⌘↑
+Main Window Tracks	Move Visible Track Automation to Region	⌃⌘↓
+Main Window Tracks	Move All Region Data to Track Automation	⌃⇧⌘↑
+Main Window Tracks	Move All Track Automation to Region	⌃⇧⌘↓
+Main Window Tracks	Pack Take Folder	⌃⌥⌘F
+Main Window Tracks	Un/disclose Take Folder	⌥F
+Main Window Tracks	Flatten Take Folder/Cell	⌥⇧U
+Main Window Tracks	Flatten and Merge Take Folder/Cell	⌥U
+Main Window Tracks	Rename Take or Comp	⇧T
+Main Window Tracks	Delete Take or Comp	⌥⇧⌫
+Main Window Tracks	Toggle Take Folder Quick Swipe Comping Mode	⌥Q
+Main Window Tracks	Select Previous Take or Comp	⇧⌘↑
+Main Window Tracks	Select Next Take or Comp	⇧⌘↓
+Main Window Tracks	Create Track Stack…	⇧⌘D
+Main Window Tracks	Create Folder Stack	⇧⌘H
+Main Window Tracks	Create Summing Stack	⇧⌘G
+Main Window Tracks	Flatten Stack	⇧⌘U
+Main Window Tracks	Bounce Regions/Cells in Place…	⌃B
+Main Window Tracks	Bounce Tracks in Place	⌃⌘B
+Main Window Tracks	Drum Replacement/Doubling	⌃D
+Main Window Tracks	Hide/Show Selected Tracks	⌃H
+Main Window Tracks	Unhide All Tracks	⌃⇧H
+Main Window Tracks	Toggle Hide View	H
+Main Window Tracks	Toggle Track On	⌥M
+Main Window Tracks	Toggle Track Record Enable	⌃R
+Main Window Tracks	Individual Track Zoom In	⌥⌘↓
+Main Window Tracks	Individual Track Zoom Out	⌥⌘↑
+Main Window Tracks	Toggle Individual Track Zoom	⌥⌘Z
+Main Window Tracks	Reset Individual Track Zoom	⌥⌘⌫
+Main Window Tracks	Individual Track Zoom Reset for All Tracks	⌥⇧⌘⌫
+Main Window Tracks	Convert Alias to a Region Copy	⌃A
+Main Window Tracks	Select All Aliases of Region	⌥⇧A
+Main Window Tracks	Audio Crossfade Options for Merge…	⌥X
+Main Window Tracks	Apply Default Crossfade	⌃⌥X
+Main Window Tracks	Apply Last Edited Fade Again	⌥⇧X
+Main Window Tracks	Join Regions per Tracks / Fill Cell	J
+Main Window Tracks	Cut Section Between Locators (Global)	⌃⌘X
+Main Window Tracks	Insert Silence Between Locators (Global)	⌃⌘I
+Main Window Tracks	Insert Section at Playhead (Global)	⌃⌘V
+Main Window Tracks	Repeat Section Between Locators (Global)	⌃⌘R
+Main Window Tracks	Cut Sections of Selected Arrangement Markers	⌥⌘⌦
+Main Window Tracks	Insert Scenes at Playhead	⌘⤓
+Main Window Tracks	Rename Track	⇧↩
+Main Window Tracks	Move Selected Regions to Focused Track	⌃⇧T
+Main Window Tracks	Move Region to Recorded Position	⌥⇧⌘R
+Main Window Tracks	Convert Regions to New Regions	⌥⌘R
+Main Window Tracks	Convert Regions to New Audio Files…	⌥⌘F
+Main Window Tracks	Convert Regions to New Sampler Track…	⌃E
+Main Window Tracks	Time Stretch Region Length to Locators	⌥⌘L
+Main Window Tracks	Time Stretch Region Length to Nearest Bar	⌥⌘B
+Main Window Tracks	Normalize Region/Cell Gain…	⌃⌥G
+Main Window Tracks	Apply Normalize Region/Cell Gain Again	⌃G
+Main Window Tracks	Add to Browser…	⌃⇧O
+Main Window Tracks	Apply All Region/Cell Parameters Permanently	⌃N
+Main Window Tracks	Apply Quantization Permanently	⌃Q
+Main Window Tracks	Convert Loops to Regions	⌃⌘L
+Main Window Tracks	Remove Overlaps	\
+Main Window Tracks	Trim Region End to Next Region	⇧\
+Main Window Tracks	Trim Regions to Fill within Locators	⌥\
+Main Window Tracks	Crop Regions/Cells Outside Locators/Playable Range or Marquee Selection	⌘\
+Main Window Tracks	Switch between Live Loops Grid and Tracks View	L
+Main Window Tracks	Show Both, Live Loops Grid and Tracks View	⌥L
+Main Window Tracks	Copy to Live Loops Scene	⌘⤒
+Main Window Tracks	Show/Hide Flex Pitch/Time	F
+Main Window Tracks	Trim Region Start to Previous Transient	⌃⇧[
+Main Window Tracks	Trim Region Start to Next Transient	⌃⇧]
+Main Window Tracks	Trim Region End to Previous Transient	⌃[
+Main Window Tracks	Trim Region End to Next Transient	⌃]
+Main Window Tracks	Rename Regions/Cells/Scenes	⇧N
+Main Window Tracks	Name Regions/Cells by Track Name	⌥⇧N
+Main Window Tracks	Name Tracks by Region/Cell Name	⌥⇧⌘N
+Main Window Tracks	Color Regions/Cells by Track Color	⌥⇧C
+Main Window Tracks	Color Tracks by Region/Cell Color	⌥⇧⌘C
+Main Window Tracks	Waveform Vertical Zoom Out	⌘-
+Main Window Tracks	Waveform Vertical Zoom In	⌘=
+Main Window Tracks	Show/Hide Toolbar	⌃⌥⌘T
+Main Window Tracks	Configure Track Header…	⌥T
+Main Window Tracks	Show/Hide Editor	E
+Main Window Tracks	Show/Hide Note Pad	⌃⇧P
+Main Window Tracks	Show/Hide List Editors	D
+Main Window Tracks	Show/Hide Project Files	O
+Main Window Tracks	Show/Hide Output Track	⇧⌘M
+Main Window Tracks	Toggle Alignment Guides	⌥⌘G
+Main Window Tracks	New Track Alternative	⌃⌥⌘N
+Main Window Tracks	Duplicate Track Alternative	⌃⌥⌘D
+Main Window Tracks	Delete Inactive Track Alternatives	⌃⌥⌘⌦
+Main Window Tracks	Rename Track Alternative	⌃⌥⌘↩
+Main Window Tracks	Show/Hide Inactive Track Alternatives	⌃⌥A
+Main Window Tracks	Activate Next Track Alternative	⌃⌥↑
+Main Window Tracks	Activate Previous Track Alternative	⌃⌥↓
+Live Loops Grid	Queue Cell/Scene Playback	⌥↩
+Live Loops Grid	Trigger Cells or Scene	↩
+Live Loops Grid	Trigger Focused Scene	⌥⌘↩
+Live Loops Grid	Retrigger Selected Cells or Focused Scene	⌃⌘↩
+Live Loops Grid	Insert Empty Scene	⌘⇟
+Live Loops Grid	Copy Playing Cells Here	⌘⇞
+Live Loops Grid	Select Playing Cells	⇧P
+Live Loops Grid	Select Next Lower Cell, or Next Track	↓
+Live Loops Grid	Select Next Upper Cell, or Previous Track	↑
+Live Loops Grid	Extend Cell, or Track Selection Up	⇧↑
+Live Loops Grid	Extend Cell, or Track Selection Down	⇧↓
+Live Loops Grid	Select Previous Scene	⌥←
+Live Loops Grid	Select Next Scene	⌥→
+Live Loops Grid	Enable Performance Recording On/Off	⌃P
+Live Loops Grid	Unpack Take Cell to Existing Scenes	⌃⌥⌘U
+Live Loops Grid	Unpack Take Cell to New Scenes	⌃⌥⇧⌘U
+Live Loops Grid	Toggle Grid Horizontal Zoom	⌃⌥Z
+Mixer	Cycle Through Mixer Modes (Single, Tracks, All)	⇧X
+Mixer	Select Audio Channel Strips	⇧A
+Mixer	Select Instrument Channel Strips	⇧S
+Mixer	Select Auxiliary Channel Strips	⇧F
+Mixer	Select Output Channel Strips	⇧O
+Mixer	Select MIDI Channel Strips	⇧E
+Mixer	Select Same-Colored Channel Strips	⇧C
+Mixer	Select Muted Channel Strips	⇧M
+Mixer	Select Previous (Left) Channel Strip	←
+Mixer	Select Next (Right) Channel Strip	→
+Mixer	Create New Auxiliary Channel Strip	⌃N
+Mixer	Create Tracks for Selected Channel Strips	⌃T
+Mixer	Show/Hide Long Faders	⌃⇧L
+Mixer	Show/Hide Grouping	⌃⇧G
+Mixer	Show/Hide Track Icon	⌃⇧I
+Mixer	Show/Hide VCA	⌃⇧V
+Mixer	Show/Hide Track Number	⌃⇧X
+Mixer	Show/Hide Notes	⌃⇧N
+Mixer	Configure Channel Strip Components…	⌥X
+Mixer	Apply Channel Strip Configuration User Default	⌃⇧U
+Mixer	Sends on Faders - Cycle Through Sends	⌃⌥⌘S
+MIDI Environment	Clear Cables only	⌃⌫
+MIDI Environment	Object move left	⌥←
+MIDI Environment	Object move right	⌥→
+MIDI Environment	Object move up	⌥↑
+MIDI Environment	Object move down	⌥↓
+MIDI Environment	Object Width -1 Pixel	⌥⇧←
+MIDI Environment	Object Width +1 Pixel	⌥⇧→
+MIDI Environment	Object Height -1 Pixel	⌥⇧↑
+MIDI Environment	Object Height +1 Pixel	⌥⇧↓
+MIDI Environment	Show/Hide Cables	⌃C
+MIDI Environment	Protect Cabling/Positions	⌃P
+MIDI Environment	Define Custom Bank Messages…	⇧I
+MIDI Environment	Select Unused Instruments	⇧U
+MIDI Environment	Select Cable Destination	⇧→
+MIDI Environment	Select Cable Origin	⇧←
+MIDI Environment	Select Next Object Above	↑
+MIDI Environment	Select Next Object Below	↓
+MIDI Environment	Select Next Object Left	←
+MIDI Environment	Select Next Object Right	→
+MIDI Environment	Send Selected Fader Values	⌃V
+MIDI Environment	Delete Layer	⌘⌫
+MIDI Environment	Cable serially	⌃S
+Piano Roll	Toggle Time Handles	⌃T
+Piano Roll	Define Brush Pattern and Set Brush Tool	⌃⇧B
+Piano Roll	Reset Brush Pattern	⌃⇧⌫
+Score Editor	Page View	⌃P
+Score Editor	Explode Folders	⌃F
+Score Editor	Explode Polyphony	⌃X
+Score Editor	Show/Hide Instrument Names	⌃⇧N
+Score Editor	Show/Hide Page Rulers	⌃⇧R
+Score Editor	Go to Page…	⌃/
+Score Editor	Paste Multiple	⌥⇧⌘V
+Score Editor	Next Staff	↓
+Score Editor	Previous Staff	↑
+Score Editor	Force Syncopation	⌃⇧Y
+Score Editor	Defeat Syncopation	⌃Y
+Score Editor	Force Interpretation	⌃⇧I
+Score Editor	Defeat Interpretation	⌃I
+Score Editor	Stems: up	⌃⌥↑
+Score Editor	Stems: down	⌃⌥↓
+Score Editor	Stem End: Move Up	⌥⌘↑
+Score Editor	Stem End: Move Down	⌥⌘↓
+Score Editor	Ties: up	⌃⌥⇧↑
+Score Editor	Ties: down	⌃⌥⇧↓
+Score Editor	Beam Selected Notes	⌃B
+Score Editor	Unbeam Selected Notes	⌃U
+Score Editor	Default Beams	⌃D
+Score Editor	Enharmonic Shift: #	⇧3
+Score Editor	Enharmonic Shift: b	⇧B
+Score Editor	Reset Note Attributes	⌃⇧⌫
+Score Editor	Assign MIDI Channels based on Score Split	⌃⇧C
+Score Editor	Nudge Position Up	⌃⌥⌘↑
+Score Editor	Nudge Position Down	⌃⌥⌘↓
+Score Editor	Nudge Position Left	⌃⌥⌘←
+Score Editor	Nudge Position Right	⌃⌥⌘→
+Score Editor	Settings: Global Format	⌃⌥⇧F
+Score Editor	Settings: Numbers and Names	⌃⌥⇧N
+Score Editor	Settings: Guitar Tablature	⌃⌥⇧G
+Score Editor	Settings: Chords and Grids	⌃⌥⇧C
+Score Editor	Settings: Clefs and Signatures	⌃⌥⇧L
+Score Editor	Settings: Extended Layout	⌃⌥⇧X
+Score Editor	Settings: MIDI Meaning	⌃⌥⇧M
+Score Editor	Settings: Score Colors	⌃⌥⇧O
+Score Editor	Insert: Crescendo	⌃⇧,
+Score Editor	Insert: Decrescendo	⌃⇧.
+Score Editor	Clear main finger	⌃⌥⇧⌫
+Score Editor	Set main finger 1	⌃⌥⇧1
+Score Editor	Set main finger 2	⌃⌥⇧2
+Score Editor	Set main finger 3	⌃⌥⇧3
+Score Editor	Set main finger 4	⌃⌥⇧4
+Score Editor	Set main finger 5	⌃⌥⇧5
+Event Editor	Select Previous Event	↑
+Event Editor	Select Next Event	↓
+Event Editor	Length as Absolute Position	⌃⇧A
+Event Editor	Articulation	⌃⇧D
+Event Editor	Relative Position	⌃⇧R
+Event Editor	Duplicate Event and Numerical Edit	⌘D
+Event Editor	Copy Value to All Following Events	⇧V
+Step Editor	Create Lane	⌥⌘N
+Step Editor	Delete Lane	⌘⌫
+Step Editor	Copy Lane	⌃C
+Step Editor	Paste Lane	⌃V
+Step Editor	Toggle Auto Define	⌃A
+Step Editor	Select Next Lane	↓
+Step Editor	Select Previous Lane	↑
+Step Sequencer	Show/Hide Pattern Browser	⌥⇧B
+Step Sequencer	Repeat Step	⌘R
+Step Sequencer	Copy Row	⌃C
+Step Sequencer	Paste Row	⌃V
+Step Sequencer	Paste Steps	⌥⇧V
+Step Sequencer	Paste Row Settings	⌃⌥⇧V
+Step Sequencer	Paste to New Row	⌃⇧V
+Step Sequencer	Duplicate Row with Next Assignment	⌘D
+Step Sequencer	Delete Row	⌘⌫
+Step Sequencer	Delete Unused Rows	⇧⌘⌫
+Step Sequencer	Clear Step	⌃⌫
+Step Sequencer	Clear Row	⌃⌘⌫
+Step Sequencer	Clear Pattern	⌃⇧⌘⌫
+Step Sequencer	Learn (Add)	⌥⌘L
+Step Sequencer	Store as Default Pattern Template	⌃⌥⌘D
+Step Sequencer	Revert to Default Pattern Template	⌃⌥⇧D
+Step Sequencer	Transpose +1 Semitone	⌥↑
+Step Sequencer	Transpose -1 Semitone	⌥↓
+Step Sequencer	Transpose +1 Octave	⌥⇧↑
+Step Sequencer	Transpose -1 Octave	⌥⇧↓
+Step Sequencer	Clear Current Edit Mode Values for Row	⌥⌘⌫
+Step Sequencer	Clear Current Edit Mode Values for All Rows	⌥⇧⌘⌫
+Step Sequencer	Randomize Current Edit Mode Values for Selected Rows	⇧⌘R
+Step Sequencer	Randomize Current Edit Mode Values for All Rows	⌥⌘R
+Step Sequencer	Randomize Current Edit Mode Values for Selected Steps	⌥⇧⌘R
+Step Sequencer	Select Step Above	↑
+Step Sequencer	Select Step Below	↓
+Step Sequencer	Select Previous Step	←
+Step Sequencer	Select Next Step	→
+Step Sequencer	Extend Selection Up	⇧↑
+Step Sequencer	Extend Selection Down	⇧↓
+Step Sequencer	Extend Selection Left	⇧←
+Step Sequencer	Extend Selection Right	⇧→
+Step Sequencer	Live Record	⇧R
+Step Sequencer	Mono Mode	⌃⇧⌘M
+Step Sequencer	Rename Row	⇧↩
+Step Sequencer	Select Next Pattern Page	⌥`
+Step Sequencer	Save Pattern	⇧⌘P
+Step Sequencer	Save Template	⇧⌘T
+Step Sequencer	Set Pattern Playback Mode to Forward	⌃⌥]
+Step Sequencer	Set Pattern Playback Mode to Reverse	⌃⌥[
+Step Sequencer	Set Pattern Playback Mode to Ping Pong	⌃⌥P
+Step Sequencer	Set Pattern Playback Mode to Shuffle	⌃⌥\
+Step Sequencer	Set Pattern Playback Mode to Pendulum	⌃⌥Y
+Step Sequencer	Set Pattern Playback Mode to Wander	⌃⌥U
+Step Sequencer	Set Pattern Playback Mode to Random	⌃⌥J
+Step Sequencer	Rotate Pattern Right	⌃⌥⌘→
+Step Sequencer	Rotate Pattern Left	⌃⌥⌘←
+Step Sequencer	Solo Row	⌃⇧S
+Step Sequencer	Mute Row	⌃⇧M
+Step Sequencer	Set Row Playback Mode to Forward	⌃]
+Step Sequencer	Set Row Playback Mode to Reverse	⌃[
+Step Sequencer	Set Row Playback Mode to Ping Pong	⌃P
+Step Sequencer	Set Row Playback Mode to Shuffle	⌃\
+Step Sequencer	Set Row Playback Mode to Pendulum	⌃Y
+Step Sequencer	Set Row Playback Mode to Wander	⌃U
+Step Sequencer	Set Row Playback Mode to Random	⌃J
+Step Sequencer	Rotate Row Right	⌥⌘→
+Step Sequencer	Rotate Row Left	⌥⌘←
+Step Sequencer	Rotate Values for Current Edit Mode Right	⌥⇧→
+Step Sequencer	Rotate Values for Current Edit Mode Left	⌥⇧←
+Step Sequencer	Increment Loop Start for Row	⌃⌥=
+Step Sequencer	Decrement Loop Start for Row	⌃⌥-
+Step Sequencer	Increment Loop End for Row	⌥⌘=
+Step Sequencer	Decrement Loop End for Row	⌥⌘-
+Step Sequencer	Show Subrows for Row	⌃⌘→
+Step Sequencer	Hide Subrows for Row	⌃⌘←
+Step Sequencer	Show Subrows for All Rows	⌃⇧⌘→
+Step Sequencer	Hide Subrows for All Rows	⌃⇧⌘←
+Step Sequencer	Toggle Selected Step	'
+Step Sequencer	Set Global Edit Mode to Steps On/Off	⌃⌥S
+Step Sequencer	Set Global Edit Mode to Velocity/Value	⌃⌥V
+Step Sequencer	Set Global Edit Mode to Gate	⌃⌥G
+Step Sequencer	Set Global Edit Mode to Tie	⌃⌥T
+Step Sequencer	Set Global Edit Mode to Note	⌃⌥N
+Step Sequencer	Set Global Edit Mode to Octave	⌃⌥O
+Step Sequencer	Set Global Edit Mode to Loop Start/End	⌃⌥L
+Step Sequencer	Set Global Edit Mode to Note Repeat	⌃⌥R
+Step Sequencer	Set Global Edit Mode to Chance	⌃⌥C
+Step Sequencer	Set Global Edit Mode to Start Offset	⌃⌥F
+Step Sequencer	Set Global Edit Mode to Step Rate	⌃⌥A
+Step Sequencer	Set Global Edit Mode to Skip	⌃⌥K
+Step Sequencer	Increment Pattern Step Rate	⌃⇧=
+Step Sequencer	Decrement Pattern Step Rate	⌃⇧-
+Step Sequencer	Increment Row Step Rate	⌃=
+Step Sequencer	Decrement Row Step Rate	⌃-
+Project Audio	Select Previous Audio File	↑
+Project Audio	Select Next Audio File	↓
+Project Audio	Rename…	⇧↩
+Project Audio	Add Audio File…	⌃F
+Project Audio	Add Region	⌃R
+Project Audio	Delete Files	⌘⌫
+Project Audio	Optimize Files…	⌃O
+Project Audio	Backup Files	⌃B
+Project Audio	Copy/Convert Files…	⌃K
+Project Audio	Select Unused	⇧U
+Project Audio	Show All Regions	⌥↓
+Project Audio	Hide All Regions	⌥↑
+Project Audio	Import Region Information	⌃I
+Project Audio	Export Region Information	⌃E
+Project Audio	Create Group…	⌃G
+Audio File Editor	Play/Stop All	⌃⌥⌘˽
+Audio File Editor	Play/Stop Region	⌃⇧˽
+Audio File Editor	Play/Stop Region to Anchor	⌃⇧←
+Audio File Editor	Play/Stop Region from Anchor	⌃⇧→
+Audio File Editor	Create Backup	⌃B
+Audio File Editor	Revert to Backup	⌃⌥⌘B
+Audio File Editor	Save Selection As…	⌥⌘S
+Audio File Editor	Region -> Selection	⇞
+Audio File Editor	Selection -> Region	⇟
+Audio File Editor	Go to Region Start	⌃⌥←
+Audio File Editor	Go to Region End	⌃⌥→
+Audio File Editor	Go to Region Anchor	⌃⌥↓
+Audio File Editor	Go to Previous Transient	⌥←
+Audio File Editor	Go to Next Transient	⌥→
+Audio File Editor	Set Selection Start To Previous Transient	⇧←
+Audio File Editor	Set Selection Start To Next Transients	⇧→
+Audio File Editor	Set Selection End To Previous Transient	←
+Audio File Editor	Set Selection End To Next Transient	→
+Audio File Editor	Selection Start and End to Previous Transient	⇧⌘←
+Audio File Editor	Selection Start and End to Next Transient	⇧⌘→
+Audio File Editor	Selection Start and End to Previous Transient and Play	⌥⌘←
+Audio File Editor	Selection Start and End to Next Transient and Play	⌥⌘→
+Audio File Editor	Toggle Transient Editing Mode	⌃T
+Audio File Editor	Increase Number of Transients	⌃=
+Audio File Editor	Decrease Number of Transients	⌃-
+Audio File Editor	Select All Previous Samples	⌃⌥⇧←
+Audio File Editor	Select All Following Samples	⌃⌥⇧→
+Audio File Editor	Create New Region	⌃R
+Audio File Editor	Normalize	⌃N
+Audio File Editor	Change Gain…	⌃G
+Audio File Editor	Fade-In	⌃I
+Audio File Editor	Fade-Out	⌃O
+Audio File Editor	Silence	⌃⌫
+Audio File Editor	Invert	⌃⇧I
+Audio File Editor	Reverse	⌃⇧R
+Audio File Editor	Trim	⌃⇧T
+Audio File Editor	Remove DC Offset	⌃D
+Audio File Editor	Time and Pitch Machine…	⌃P
+Audio File Editor	Search Peak	⇧P
+Audio File Editor	Search Silence	⇧S
+Audio File Editor	Lock Position in Track when moving Anchor	⌃A
+Smart Tempo Editor	Tap Tempo - Smart Tempo Editor	T
+Smart Tempo Editor	Tap Tempo (Downbeat)	D
+Smart Tempo Editor	Toggle Metronome Click - Smart Tempo Editor	M
+Smart Tempo Editor	Scroll Left	←
+Smart Tempo Editor	Scroll Right	→
+Smart Tempo Editor	Select from Start to Playhead	⇧←
+Smart Tempo Editor	Select from Playhead to End	⇧→
+Smart Tempo Editor	Zoom All	↑
+Smart Tempo Editor	Center around Playhead	↓
+Smart Tempo Editor	Half Tempo	5
+Smart Tempo Editor	Double Tempo	2
+Smart Tempo Editor	Set Average Tempo for Selection	A
+Smart Tempo Editor	Extend First Tempo in Selection to Beginning	⌥←
+Smart Tempo Editor	Extend Last Tempo in Selection to End	⌥→
+Smart Tempo Editor	Set Downbeat to Playhead Position	⌃D
+Browser	View Info	⌘I
+Browser	Play/Stop Preview	⌥˽
+Browser	Clear Applied Tags	⌘⌫
+Browser	New Track with Selected Item	↩
+Browser	Replace Patch	⌘↩
+Sampler	Load or Replace Audio File…	⌃F
+Sampler	New Zone	⌃Z
+Sampler	New Group	⌃G
+Sampler	Toggle Keyboard/Group/Zone View	⌥V
+Sampler	Shift selected Zones/Groups Left	⌥←
+Sampler	Shift selected Zones/Groups Right	⌥→
+Sampler	Shift selected Zones/Groups Left (Zones incl. Root Key)	⌥⇧←
+Sampler	Shift selected Zones/Groups Right (Zones incl. Root Key)	⌥⇧→
+Sampler	Load Multiple Audio Files…	⌃O
+Sampler	Open in Audio File Editor	⌃W
+Sampler	New Mapping	⌥⌘N
+Sampler	Duplicate Group	⌘D
+Sampler	Crop Sample	⌥⌘X
+Sampler	Crop Loop	⌥⇧⌘X
+Sampler	Toggle Snap mode	⌘G
+Sampler	Vertical Autozoom	⌃⌥⇧Z
+Sampler	Horizontal Autozoom	⌃⌥Z
+Sampler	Automap using Current Root Note	⌃⇧E
+Sampler	Preview Selected Zone	⌥˽
+Step Input Keyboard	Note “C”	A
+Step Input Keyboard	Note “C#”	W
+Step Input Keyboard	Note “D”	S
+Step Input Keyboard	Note “D#”	E
+Step Input Keyboard	Note “E”	D
+Step Input Keyboard	Note “F”	F
+Step Input Keyboard	Note “F#”	T
+Step Input Keyboard	Note “G”	G
+Step Input Keyboard	Note “G#”	Y
+Step Input Keyboard	Note “A”	H
+Step Input Keyboard	Note “A#”	U
+Step Input Keyboard	Note “B”	J
+Step Input Keyboard	Rest	˽
+Step Input Keyboard	Next note will be sharp	⇧3
+Step Input Keyboard	Next note will be flat	⇧B
+Step Input Keyboard	Chord Mode	`
+Step Input Keyboard	Delete - Step Input	⌃⌫
+Step Input Keyboard	Step Backwards	←
+Step Input Keyboard	Step Forward	→
+Step Input Keyboard	Octave - 2	⇧Z
+Step Input Keyboard	Octave - 1	Z
+Step Input Keyboard	Octave + 1	X
+Step Input Keyboard	Octave + 2	⇧X
+Step Input Keyboard	1/1 Note	1
+Step Input Keyboard	1/2 Note	2
+Step Input Keyboard	1/4 Note	3
+Step Input Keyboard	1/8 Note	4
+Step Input Keyboard	1/16 Note	5
+Step Input Keyboard	1/32 Note	6
+Step Input Keyboard	1/64 Note	7
+Step Input Keyboard	1/128 Note	8
+Step Input Keyboard	Triplets On/Off	9
+Step Input Keyboard	Dotted note values On/Off	0
+Step Input Keyboard	Velocity 16 (ppp)	C
+Step Input Keyboard	Velocity 32 (pp)	V
+Step Input Keyboard	Velocity 48 (p)	B
+Step Input Keyboard	Velocity 64 (mp)	N
+Step Input Keyboard	Velocity 80 (mf)	M
+Step Input Keyboard	Velocity 96 (f)	,
+Step Input Keyboard	Velocity 112 (ff)	.
+Step Input Keyboard	Velocity 127 (fff)	/
+Step Input Keyboard	Quantize note starts On/Off	Q
+Smart Controls	Cycle Through Subviews	⌃⇧O
+Tool Menu	Pencil Tool	P
+Tool Menu	Eraser Tool	E
+Tool Menu	Scissors Tool	I
+Tool Menu	Join Tool	J
+Tool Menu	Finger Tool	F
+Tool Menu	Text Tool	⇧T
+Tool Menu	Zoom Tool	Y
+Tool Menu	Solo Tool	S
+Tool Menu	Mute Tool	M
+Tool Menu	Quantize Tool	Q
+Tool Menu	Velocity Tool	V
+Tool Menu	Automation Select Tool	U
+Tool Menu	Automation Curve Tool	W
+Tool Menu	Fade Tool	A
+Tool Menu	Marquee Tool	R
+Tool Menu	Flex Tool	X
+Tool Menu	Brush Tool	B
+Tool Menu	Layout Tool	L
+Tool Menu	Voice Separation Tool	-
+Tool Menu	Resize Tool	Z
+Tool Menu	Camera Tool	C
+Tool Menu	Crosshair Tool	H
+Tool Menu	MIDI Thru Tool	⇧M
+Tool Menu	Gain Tool	G

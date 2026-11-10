@@ -10,6 +10,7 @@ mod controlbar;
 pub mod demo;
 mod dialogs;
 mod inspector;
+pub mod keymap;
 pub mod look;
 pub mod menus;
 mod mixer;

@@ -38,6 +38,11 @@ pub struct Engine {
     pub tracks: Vec<PlayTrack>,
     pub cycle: Option<(u32, u32)>,
     pub cycle_on: bool,
+    /// The metronome click (K): on every beat, higher on the bar's first (Logic's Klopfgeist).
+    pub metronome: bool,
+    /// Beats per bar, for the click's accent.
+    pub beats_per_bar: u32,
+    click: Option<(f32, f32)>,
     pub master: f32,
     /// Peak levels per track (for the meters), decaying.
     pub meters: Vec<f32>,
@@ -63,7 +68,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, master: 1.0, meters: Vec::new(), master_meter: 0.0, synth: None, voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, synth: None, voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -174,6 +179,16 @@ impl Engine {
                     self.sounding.push((i, ch, pitch, e));
                 }
             }
+            // the click: a beat line crossed in this block
+            if self.metronome {
+                let beat = PPQ as f64;
+                let next = (from / beat).ceil() * beat;
+                if next < to {
+                    let n = (next / beat).round() as u32;
+                    let accent = n % self.beats_per_bar.max(1) == 0;
+                    self.click = Some((if accent { 1760.0 } else { 1320.0 }, 0.0));
+                }
+            }
             self.pos = to;
             if let (true, Some((a, b))) = (self.cycle_on, self.cycle) {
                 if b > a && self.pos >= b as f64 {
@@ -212,6 +227,19 @@ impl Engine {
                 }
             }
             self.voices.retain(|v| v.env > 0.0005 || !v.releasing);
+        }
+        // the metronome's click: a short decaying sine
+        if let Some((freq, ref mut t)) = self.click {
+            for k in 0..frames {
+                let env = (-*t * 60.0).exp();
+                let y = (std::f32::consts::TAU * freq * *t).sin() * env * 0.35;
+                out[2 * k] += y;
+                out[2 * k + 1] += y;
+                *t += 1.0 / RATE as f32;
+            }
+            if *t > 0.08 {
+                self.click = None;
+            }
         }
         // audio regions
         if self.playing {
