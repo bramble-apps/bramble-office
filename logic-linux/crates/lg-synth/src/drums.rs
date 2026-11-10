@@ -64,7 +64,9 @@ pub enum Group {
 }
 
 const MAXT: usize = 4;
-const MAXM: usize = 24;
+/// Modal partials per hit, at most: cymbals need many (a real one has hundreds; fewer than about
+/// 60 rings like a gong or a bell instead of washing).
+const MAXM: usize = 96;
 
 /// A hit, fully described: built at note-on, rendered by a generic drum voice.
 #[derive(Clone, Copy, Debug, Default)]
@@ -121,6 +123,21 @@ impl Default for Pad {
             decay: 1.0,
             choke: 0,
         }
+    }
+}
+
+/// The polyBLEP correction for a step at phase 0 (`dt`: the phase increment per sample).
+fn blep(t: f32, dt: f32) -> f32 {
+    if dt <= 0.0 {
+        0.0
+    } else if t < dt {
+        let x = t / dt;
+        x + x - x * x - 1.0
+    } else if t > 1.0 - dt {
+        let x = (t - 1.0) / dt;
+        x * x + x + x + 1.0
+    } else {
+        0.0
     }
 }
 
@@ -384,10 +401,10 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
         49 | 57 | 52 | 55 => {
             h.group = Group::Cymbal;
             let (t, lo, amp) = match note {
-                55 => (1.0, 900.0, 0.8),
-                52 => (2.0, 450.0, 1.0),
-                57 => (2.6, 550.0, 1.0),
-                _ => (2.4, 500.0, 1.0),
+                55 => (1.0, 1400.0, 0.8),
+                52 => (2.0, 700.0, 1.0),
+                57 => (2.6, 900.0, 1.0),
+                _ => (2.4, 800.0, 1.0),
             };
             h.pan = if note == 57 { 0.5 } else { -0.45 };
             if elec {
@@ -398,17 +415,19 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
                 h.modes = (
                     MAXM,
                     lo,
-                    11000.0,
-                    0.22 * amp * (0.5 + 0.5 * v),
+                    14000.0,
+                    0.13 * amp * (0.5 + 0.5 * v),
                     t,
                     note as u32 * 7 + (rr[2] * 3.0) as u32,
                 );
+                // the wash: broadband noise, brighter the harder it's hit, decaying with the
+                // partials
                 h.noise = noise(
-                    0.3 * amp * (0.4 + 0.6 * v),
-                    t * 0.8,
+                    0.55 * amp * (0.4 + 0.6 * v),
+                    t * 0.85,
                     1,
-                    4500.0 - 1200.0 * (1.0 - v),
-                    0.6,
+                    6500.0 - 1800.0 * (1.0 - v),
+                    0.45,
                 );
                 h.noise2 = noise(0.5 * v, 0.05, 1, 3000.0, 0.7); // stick attack
                 if note == 52 {
@@ -437,14 +456,14 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
             } else {
                 // stick ping on the bow plus a soft wash
                 h.modes = (
-                    16,
-                    1800.0,
-                    9500.0,
-                    0.25 + 0.1 * v,
+                    48,
+                    2400.0,
+                    12000.0,
+                    0.16 + 0.07 * v,
                     2.2,
                     51 + (rr[2] * 2.0) as u32,
                 );
-                h.noise = noise(0.09 + 0.08 * v, 1.6, 1, 5500.0, 0.6);
+                h.noise = noise(0.2 + 0.12 * v, 1.6, 1, 6500.0, 0.5);
                 h.click = (0.35 * v, 0.003, 6000.0);
                 h.gain = 0.38;
             }
@@ -802,7 +821,10 @@ impl DrumVoice {
             let f = f.min(rate * 0.45);
             let t = t60 * dec * (1.0 - 0.6 * x) * (0.7 + 0.6 * r.unit());
             self.modes[k].tune(f, t, rate);
-            let a = amp * (0.5 + r.unit()) / (self.nmodes as f32).sqrt();
+            // (cymbals and hats: the partials' energy rises toward 4-8 kHz, as a real cymbal's
+            // does, instead of sitting in the low mids like a gong)
+            let tilt = if matches!(h.group, Group::Cymbal | Group::HiHat) { (f / 4000.0).clamp(0.2, 1.4).powf(0.9) } else { 1.0 };
+            let a = amp * tilt * (0.5 + r.unit()) / (self.nmodes as f32).sqrt();
             self.modes[k].strike(f, a * (if r.unit() > 0.5 { 1.0 } else { -1.0 }), rate);
         }
         let (bn, bs) = h.bursts;
@@ -815,7 +837,8 @@ impl DrumVoice {
         let kit_trim = match h.kit {
             4 => 1.85,
             5 | 6 => 1.95,
-            _ => 1.33,
+            // (acoustic kits: lowered 2.5 dB so a loud crash on a kick no longer clips the mix)
+            _ => 1.0,
         };
         self.gain = h.gain * vel_gain * sh.gains[g] * 0.55 * kit_trim;
         let p = (h.pan * sh.width).clamp(-1.0, 1.0);
@@ -927,11 +950,18 @@ impl Voice<DrumShared> for DrumVoice {
             if has_metal && self.mamp > 1e-6 {
                 let mut m = 0.0;
                 for k in 0..6 {
-                    self.mph[k] += self.metal_inc[k];
+                    let dt = self.metal_inc[k];
+                    self.mph[k] += dt;
                     if self.mph[k] >= 1.0 {
                         self.mph[k] -= 1.0;
                     }
-                    m += if self.mph[k] < 0.5 { 1.0 } else { -1.0 };
+                    // band-limited square (polyBLEP at both edges): no aliased overtones folding
+                    // back as harsh inharmonic tones
+                    let ph = self.mph[k];
+                    let mut sq = if ph < 0.5 { 1.0 } else { -1.0 };
+                    sq += blep(ph, dt);
+                    sq -= blep((ph + 0.5).fract(), dt);
+                    m += sq;
                 }
                 x += self.mhp.run(self.mbp.run(m * 0.25)) * self.mamp;
                 self.mamp *= self.mdec;
