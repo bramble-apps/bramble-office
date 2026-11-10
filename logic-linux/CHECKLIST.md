@@ -88,13 +88,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 85 | 594 | 14% |
-| Local menus | 110 | 1191 | 9% |
-| Right-click menus | 192 | 2575 | 7% |
-| Key commands | 216 | 2207 | 9% |
+| Menu bar | 114 | 594 | 19% |
+| Local menus | 186 | 1191 | 15% |
+| Right-click menus | 486 | 2575 | 18% |
+| Key commands | 259 | 2207 | 11% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 85 of 594
+## Menu bar: 114 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -150,7 +150,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 19/81</summary>
+<details><summary>File — 20/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -208,7 +208,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Create Project from ADM BWF…
   - [ ] Other…  `⌘I`
 - [ ] Export
-  - [ ] Add to Browser…  `⌃⇧O`
+  - [x] Add to Browser…  `⌃⇧O`
   - [ ] Regions as Audio Files…
   - [ ] Audio Files As…
   - [ ] Selection as Audio File…
@@ -236,7 +236,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 20/166</summary>
+<details><summary>Edit — 39/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -247,10 +247,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
+- [x] Delete
 - [ ] Delete and Move
-- [ ] Copy to Live Loops Scene  `⌘↖Home`
-- [ ] Select
+- [x] Copy to Live Loops Scene  `⌘↖Home`
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -284,7 +284,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Folder Stack
   - [ ] Folder
 - [ ] Show Flex Pitch/Time  `F`
-- [ ] Repeat
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
@@ -319,19 +319,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -389,8 +389,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Insert Section at Playhead  `⌃⌘V`
   - [ ] Insert Silence at Locators  `⌃⌘I`
   - [ ] Repeat Section Between Locators  `⌃⌘R`
-  - [ ] Copy Scene to Playhead
-  - [ ] Insert Scene at Playhead  `⌘↘End`
+  - [x] Copy Scene to Playhead
+  - [x] Insert Scene at Playhead  `⌘↘End`
 - [ ] Tempo
   - [ ] Apply Region Tempo to Project Tempo…
   - [ ] Apply Project Tempo to Region and Downbeat
@@ -522,16 +522,16 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Record — 2/56</summary>
+<details><summary>Record — 10/56</summary>
 
 - [ ] Count-in
   - [ ] None
-  - [ ] 1 Bar
-  - [ ] 2 Bars
-  - [ ] 3 Bars
-  - [ ] 4 Bars
+  - [x] 1 Bar
+  - [x] 2 Bars
+  - [x] 3 Bars
+  - [x] 4 Bars
   - [ ] 5 Bars
-  - [ ] 6 Bars
+  - [x] 6 Bars
   - [ ] 1/4
   - [ ] 2/4
   - [ ] 3/4
@@ -553,19 +553,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Overlapping MIDI Recordings
   - [ ] Cycle Off
   - [ ] Create Take Folder
-  - [ ] Merge
+  - [x] Merge
   - [ ] Overlap
   - [ ] Overlap/Merge Selected Regions
   - [ ] Create Track
   - [ ] Create Track Alternative
   - [ ] Cycle On
   - [ ] Create Take Folder
-  - [ ] Merge
+  - [x] Merge
   - [ ] Merge Current Recording Only
   - [ ] Create Tracks
   - [ ] Create Tracks and Mute
   - [ ] Create Track Alternatives
-  - [ ] Replace
+  - [x] Replace
   - [ ] Region Erase
   - [ ] Region Punch
   - [ ] Content Erase
@@ -647,7 +647,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 7/68</summary>
+<details><summary>Window — 8/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -714,7 +714,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Screenset 1 (Tracks/Browser)  `1`
 - [ ] Duplicate…
 - [ ] Rename…
-- [ ] Delete
+- [x] Delete
 - [ ] Lock
 - [ ] Revert to Saved
 
@@ -741,7 +741,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 110 of 1191
+## Local menus (Edit / Functions / View in each area): 186 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -756,14 +756,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiofile-Edit — 7/36</summary>
+<details><summary>audiofile-Edit — 8/36</summary>
 
 - [x] Undo  `⌘Z`
 - [x] Redo  `⇧⌘Z`
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
-- [ ] Delete
+- [x] Delete
 - [x] Select All  `⌘A`
 - [ ] Select All Previous Samples  `⌃⌥⇧←`
 - [ ] Select All Following Samples  `⌃⌥⇧→`
@@ -797,7 +797,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiofile-Functions — 0/14</summary>
+<details><summary>audiofile-Functions — 1/14</summary>
 
 - [ ] Normalize  `⌃N`
 - [ ] Change Gain…  `⌃G`
@@ -805,7 +805,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Fade-Out  `⌃O`
 - [ ] Silence
 - [ ] Invert  `⌃⇧I`
-- [ ] Reverse  `⌃⇧R`
+- [x] Reverse  `⌃⇧R`
 - [ ] Trim  `⌃⇧T`
 - [ ] Remove DC Offset
 - [ ] Function Settings…
@@ -831,7 +831,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 16/118</summary>
+<details><summary>audiotrack-Edit — 32/118</summary>
 
 - [ ] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -842,9 +842,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
+- [x] Delete
 - [ ] Delete and Move
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -861,7 +861,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Deselect Global Tracks
   - [ ] Deselect Outside Locators
   - [x] Invert Selection  `⇧I`
-- [ ] Repeat
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
@@ -896,19 +896,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -982,7 +982,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Edit — 12/100</summary>
+<details><summary>eventlist-Edit — 28/100</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -993,9 +993,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
+- [x] Delete
 - [ ] Delete and Move
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [ ] All Following of Same Pitch  `⌃⇧F`
@@ -1015,7 +1015,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Deselect All  `⇧D`
   - [ ] Deselect Outside Locators
   - [x] Invert Selection  `⇧I`
-- [ ] Repeat
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
@@ -1042,19 +1042,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -1142,7 +1142,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-Edit — 6/26</summary>
+<details><summary>mixer-Edit — 7/26</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1157,7 +1157,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
-- [ ] Delete
+- [x] Delete
 - [x] Select All  `⌘A`
 - [x] Deselect All  `⇧D`
 - [x] Invert Selection  `⇧I`
@@ -1263,7 +1263,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-Edit — 12/100</summary>
+<details><summary>pianoroll-Edit — 28/100</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1274,8 +1274,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
-- [ ] Select
+- [x] Delete
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [ ] All Following of Same Pitch  `⌃⇧F`
@@ -1296,7 +1296,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Deselect Global Tracks
   - [ ] Deselect Outside Locators
   - [x] Invert Selection  `⇧I`
-- [ ] Repeat
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
@@ -1323,19 +1323,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -1423,7 +1423,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Edit — 8/51</summary>
+<details><summary>score-Edit — 11/51</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1435,15 +1435,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste Multiple  `⌥⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
-- [ ] Repeat
+- [x] Delete
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
   - [ ] Double
   - [ ] Halve
   - [ ] Change…
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [ ] All Following of Same Pitch  `⌃⇧F`
@@ -1479,7 +1479,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Functions — 5/121</summary>
+<details><summary>score-Functions — 6/121</summary>
 
 - [ ] Quantization
   - [ ] Quantize Events  `Q`
@@ -1510,7 +1510,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Stems
     - [ ] Default
     - [x] Up  `⌃⌥↑`
-    - [ ] Down  `⌃⌥↓`
+    - [x] Down  `⌃⌥↓`
     - [ ] Hide
     - [ ] Stem Position: Default
     - [ ] Stem Position: Center
@@ -1668,7 +1668,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>smarttempo-Edit — 2/18</summary>
+<details><summary>smarttempo-Edit — 3/18</summary>
 
 - [ ] Undo Edit Hint Marker
 - [ ] Can’t Redo
@@ -1681,7 +1681,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Delete Hints
 - [ ] Remove Tempo Information
 - [ ] Revert to Original Recording Tempo
-- [ ] Select
+- [x] Select
   - [x] All
   - [x] All Following
   - [ ] All Previous
@@ -1699,7 +1699,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-Edit — 3/17</summary>
+<details><summary>stepseq-Edit — 4/17</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1708,7 +1708,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
-- [ ] Delete
+- [x] Delete
 - [ ] Repeat Step  `⌘R`
 - [ ] Copy Row  `⌃C`
 - [ ] Paste Row  `⌃V`
@@ -1766,7 +1766,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 20/168</summary>
+<details><summary>tracks-Edit — 38/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1777,10 +1777,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Delete
+- [x] Delete
 - [ ] Delete and Move
 - [ ] Copy Region Selection to Live Loops Scene  `⌘↖Home`
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -1814,7 +1814,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Folder Stack
   - [ ] Folder
 - [ ] Show Flex Pitch/Time  `F`
-- [ ] Repeat
+- [x] Repeat
   - [ ] Once  `⌘R`
   - [ ] Multiple…
 - [ ] Length
@@ -1849,19 +1849,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -1920,8 +1920,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Insert Section at Playhead  `⌃⌘V`
   - [ ] Insert Silence at Locators  `⌃⌘I`
   - [ ] Repeat Section Between Locators  `⌃⌘R`
-  - [ ] Copy Scene to Playhead
-  - [ ] Insert Scene at Playhead  `⌘↘End`
+  - [x] Copy Scene to Playhead
+  - [x] Insert Scene at Playhead  `⌘↘End`
 - [ ] Tempo
   - [ ] Apply Region Tempo to Project Tempo…
   - [ ] Apply Project Tempo to Region and Downbeat
@@ -1939,7 +1939,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Functions — 5/61</summary>
+<details><summary>tracks-Functions — 6/61</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -1949,7 +1949,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Name Track by Region/Cell Name  `⌥⇧⌘N`
 - [ ] Color Regions/Cells by Track Color  `⌥⇧C`
 - [ ] Color Track by Region/Cell Color  `⌥⇧⌘C`
-- [ ] Stem Splitter…
+- [x] Stem Splitter…
 - [ ] Selection-Based Processing…  `⌥⇧P`
 - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
 - [ ] Remove Silence from Audio Region…  `⌃X`
@@ -2085,7 +2085,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 192 of 2575
+## Right-click menus: 486 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2155,7 +2155,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>browser-loop-item — 0/12</summary>
+<details><summary>browser-loop-item — 2/12</summary>
 
 - [ ] New Track with Loop
 - [ ] Place Loop at Playhead
@@ -2165,8 +2165,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Drum Machine Designer
 - [ ] Find Similar
 - [ ] Add to Favorites
-- [ ] Rename
-- [ ] Delete
+- [x] Rename
+- [x] Delete
 - [ ] Show in Finder
 - [ ] View Info
 
@@ -2191,13 +2191,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-row — 9/14</summary>
+<details><summary>eventlist-row — 11/14</summary>
 
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
-- [ ] Delete
+- [x] Delete
 - [x] Select All  `⌘A`
 - [x] Deselect All  `⇧D`
 - [x] Invert Selection  `⇧I`
@@ -2205,7 +2205,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select All Inside Locators  `⇧L`
 - [ ] Lock SMPTE Position  `⌘⇟PgDn`
 - [ ] Unlock SMPTE Position  `⌘⇞PgUp`
-- [ ] Rename
+- [x] Rename
 - [ ] Show Event Position and Length as Time or Bars/Beats  `⌃⌥R`
 
 </details>
@@ -2269,65 +2269,65 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-empty-cell — 1/18</summary>
+<details><summary>liveloops-empty-cell — 17/18</summary>
 
-- [ ] Create MIDI Cell
-- [ ] Create Pattern Cell
-- [ ] Create Session Player Cell
-- [ ] Record into Cell  `⌥R`
+- [x] Create MIDI Cell
+- [x] Create Pattern Cell
+- [x] Create Session Player Cell
+- [x] Record into Cell  `⌥R`
 - [x] Paste  `⌘V`
-- [ ] Stop Playing Cell
+- [x] Stop Playing Cell
 - [ ] Recording
-  - [ ] Mode
-    - [ ] Replace
-    - [ ] Merge
-    - [ ] Takes
-  - [ ] Rec-Length
-    - [ ] Cell Length
-    - [ ] Automatic (Bars)
-    - [ ] Automatic (Beats)
-  - [ ] Rec-End Action
-    - [ ] Play Cell
-    - [ ] Continue Recording
+  - [x] Mode
+    - [x] Replace
+    - [x] Merge
+    - [x] Takes
+  - [x] Rec-Length
+    - [x] Cell Length
+    - [x] Automatic (Bars)
+    - [x] Automatic (Beats)
+  - [x] Rec-End Action
+    - [x] Play Cell
+    - [x] Continue Recording
 
 </details>
 
-<details><summary>liveloops-midi-cell — 12/151</summary>
+<details><summary>liveloops-midi-cell — 105/151</summary>
 
-- [ ] Record into Cell  `⌥R`
-- [ ] Queue Cell Playback  `⌥↩`
-- [ ] Edit
+- [x] Record into Cell  `⌥R`
+- [x] Queue Cell Playback  `⌥↩`
+- [x] Edit
   - [x] Cut  `⌘X`
   - [x] Copy  `⌘C`
   - [x] Paste  `⌘V`
-  - [ ] Delete
-  - [ ] Repeat  `⌘R`
-- [ ] Select
-  - [ ] All Cells  `⌘A`
-  - [ ] All Following Cells  `⇧F`
-  - [ ] All Following Cells of Same Track  `⌃⇧F`
-  - [ ] All Cells of Same Track
-  - [ ] All Cells of Same Scene
-  - [ ] Same-Colored Cells  `⇧C`
-  - [ ] Invert Cell Selection  `⇧I`
+  - [x] Delete
+  - [x] Repeat  `⌘R`
+- [x] Select
+  - [x] All Cells  `⌘A`
+  - [x] All Following Cells  `⇧F`
+  - [x] All Following Cells of Same Track  `⌃⇧F`
+  - [x] All Cells of Same Track
+  - [x] All Cells of Same Scene
+  - [x] Same-Colored Cells  `⇧C`
+  - [x] Invert Cell Selection  `⇧I`
   - [x] Deselect All  `⇧D`
 - [x] Quantize
   - [x] Off
-  - [ ] 1/1 Note
-  - [ ] 1/2 Note
-  - [ ] 1/4 Note
-  - [ ] 1/8 Note
-  - [ ] 1/16 Note
-  - [ ] 1/32 Note
-  - [ ] 1/64 Note
-  - [ ] 1/2 Triplet (1/3)
-  - [ ] 1/4 Triplet (1/6)
-  - [ ] 1/8 Triplet (1/12)
-  - [ ] 1/16 Triplet (1/24)
-  - [ ] 1/32 Triplet (1/48)
-  - [ ] 1/64 Triplet (1/96)
-  - [ ] 1/128 Triplet (1/192)
-  - [ ] 1/16 Swing A
+  - [x] 1/1 Note
+  - [x] 1/2 Note
+  - [x] 1/4 Note
+  - [x] 1/8 Note
+  - [x] 1/16 Note
+  - [x] 1/32 Note
+  - [x] 1/64 Note
+  - [x] 1/2 Triplet (1/3)
+  - [x] 1/4 Triplet (1/6)
+  - [x] 1/8 Triplet (1/12)
+  - [x] 1/16 Triplet (1/24)
+  - [x] 1/32 Triplet (1/48)
+  - [x] 1/64 Triplet (1/96)
+  - [x] 1/128 Triplet (1/192)
+  - [x] 1/16 Swing A
   - [ ] 1/16 Swing B
   - [ ] 1/16 Swing C
   - [ ] 1/16 Swing D
@@ -2339,13 +2339,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] 1/8 Swing D
   - [ ] 1/8 Swing E
   - [ ] 1/8 Swing F
-  - [ ] 5-Tuplet/4
-  - [ ] 5-Tuplet/8
-  - [ ] 7-Tuplet
-  - [ ] 9-Tuplet
-  - [ ] 1/16 & 1/16 Triplet
-  - [ ] 1/16 & 1/8 Triplet
-  - [ ] 1/8 & 1/8 Triplet
+  - [x] 5-Tuplet/4
+  - [x] 5-Tuplet/8
+  - [x] 7-Tuplet
+  - [x] 9-Tuplet
+  - [x] 1/16 & 1/16 Triplet
+  - [x] 1/16 & 1/8 Triplet
+  - [x] 1/8 & 1/8 Triplet
 - [x] Transpose
   - [ ] +36
   - [ ] +24
@@ -2376,129 +2376,129 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] -12
   - [ ] -24
   - [ ] -36
-- [ ] Playback
+- [x] Playback
   - [x] Mute  `⌃M`
   - [x] Loop  `⌃L`
-  - [ ] Reverse  `⌃⇧R`
-  - [ ] Speed
-    - [ ] ⅛
-    - [ ] ¼
-    - [ ] ½
-    - [ ] 1
-    - [ ] 2
-    - [ ] 4
-    - [ ] 8
-  - [ ] Quantize Start
-    - [ ] Global
-    - [ ] Cell End
-    - [ ] 8 Bars
-    - [ ] 6 Bars
-    - [ ] 4 Bars
-    - [ ] 3 Bars
-    - [ ] 2 Bars
-    - [ ] 1 Bar
-    - [ ] 1/2 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Note
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Note
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Note
+  - [x] Reverse  `⌃⇧R`
+  - [x] Speed
+    - [x] ⅛
+    - [x] ¼
+    - [x] ½
+    - [x] 1
+    - [x] 2
+    - [x] 4
+    - [x] 8
+  - [x] Quantize Start
+    - [x] Global
+    - [x] Cell End
+    - [x] 8 Bars
+    - [x] 6 Bars
+    - [x] 4 Bars
+    - [x] 3 Bars
+    - [x] 2 Bars
+    - [x] 1 Bar
+    - [x] 1/2 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Note
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Note
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Note
     - [x] Off
-  - [ ] Quantize to Loop Start
+  - [x] Quantize to Loop Start
     - [x] Off
     - [ ] On
     - [ ] On, Preserve Start
-  - [ ] Trigger Mode
-    - [ ] Start/Stop
-    - [ ] Momentary
-    - [ ] Retrigger
-  - [ ] Play From
+  - [x] Trigger Mode
+    - [x] Start/Stop
+    - [x] Momentary
+    - [x] Retrigger
+  - [x] Play From
     - [x] Start
-    - [ ] Stop Position
-    - [ ] Playing Cell Position
-    - [ ] Playhead Position
+    - [x] Stop Position
+    - [x] Playing Cell Position
+    - [x] Playhead Position
 - [ ] Recording
-  - [ ] Mode
-    - [ ] Replace
-    - [ ] Merge
-    - [ ] Takes
-  - [ ] Rec-Length
-    - [ ] Cell Length
-    - [ ] Automatic (Bars)
-    - [ ] Automatic (Beats)
-  - [ ] Rec-End Action
-    - [ ] Play Cell
-    - [ ] Continue Recording
+  - [x] Mode
+    - [x] Replace
+    - [x] Merge
+    - [x] Takes
+  - [x] Rec-Length
+    - [x] Cell Length
+    - [x] Automatic (Bars)
+    - [x] Automatic (Beats)
+  - [x] Rec-End Action
+    - [x] Play Cell
+    - [x] Continue Recording
 - [ ] Bounce or Join
-  - [ ] Bounce Cells in Place…  `⌃B`
-  - [ ] Join Regions and Fill Cell  `⌘J`
+  - [x] Bounce Cells in Place…  `⌃B`
+  - [x] Join Regions and Fill Cell  `⌘J`
 - [ ] Convert
-  - [ ] Convert to Pattern Cell
-  - [ ] Replace with Session Player Cell
-- [ ] Stem Splitter…
+  - [x] Convert to Pattern Cell
+  - [x] Replace with Session Player Cell
+- [x] Stem Splitter…
 - [ ] Export
-  - [ ] Add to Browser…  `⌃⇧O`
-  - [ ] Export as Audio File…
-- [ ] Name and Color
-  - [ ] Rename Cell  `⇧N`
-  - [ ] Name Cell by Track  `⌥⇧N`
-  - [ ] Color Cell by Track  `⌥⇧C`
-  - [ ] Show/Hide Colors  `⌥C`
+  - [x] Add to Browser…  `⌃⇧O`
+  - [x] Export as Audio File…
+- [x] Name and Color
+  - [x] Rename Cell  `⇧N`
+  - [x] Name Cell by Track  `⌥⇧N`
+  - [x] Color Cell by Track  `⌥⇧C`
+  - [x] Show/Hide Colors  `⌥C`
 
 </details>
 
-<details><summary>liveloops-scene-trigger — 2/49</summary>
+<details><summary>liveloops-scene-trigger — 48/49</summary>
 
-- [ ] Queue Scene
-- [ ] Copy Playing Cells Here
-- [ ] Duplicate
-- [ ] Insert Empty Scene
-- [ ] Rename
-- [ ] Delete
-- [ ] Copy Scene to Playhead
-- [ ] Insert Scene at Playhead
-- [ ] Quantize Start
-  - [ ] Global
-  - [ ] 8 Bars
-  - [ ] 6 Bars
-  - [ ] 4 Bars
-  - [ ] 3 Bars
-  - [ ] 2 Bars
-  - [ ] 1 Bar
-  - [ ] 1/2 Note
-  - [ ] 1/2 Triplet (1/3)
-  - [ ] 1/4 Note
-  - [ ] 1/4 Triplet (1/6)
-  - [ ] 1/8 Note
-  - [ ] 1/8 Triplet (1/12)
-  - [ ] 1/16 Note
+- [x] Queue Scene
+- [x] Copy Playing Cells Here
+- [x] Duplicate
+- [x] Insert Empty Scene
+- [x] Rename
+- [x] Delete
+- [x] Copy Scene to Playhead
+- [x] Insert Scene at Playhead
+- [x] Quantize Start
+  - [x] Global
+  - [x] 8 Bars
+  - [x] 6 Bars
+  - [x] 4 Bars
+  - [x] 3 Bars
+  - [x] 2 Bars
+  - [x] 1 Bar
+  - [x] 1/2 Note
+  - [x] 1/2 Triplet (1/3)
+  - [x] 1/4 Note
+  - [x] 1/4 Triplet (1/6)
+  - [x] 1/8 Note
+  - [x] 1/8 Triplet (1/12)
+  - [x] 1/16 Note
   - [x] Off
-- [ ] Trigger Mode
-  - [ ] Start/Stop
-  - [ ] Momentary
-  - [ ] Retrigger
+- [x] Trigger Mode
+  - [x] Start/Stop
+  - [x] Momentary
+  - [x] Retrigger
 - [ ] Set All Scene Triggers
-  - [ ] Quantize Start
-    - [ ] Global
-    - [ ] 8 Bars
-    - [ ] 6 Bars
-    - [ ] 4 Bars
-    - [ ] 3 Bars
-    - [ ] 2 Bars
-    - [ ] 1 Bar
-    - [ ] 1/2 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Note
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Note
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Note
+  - [x] Quantize Start
+    - [x] Global
+    - [x] 8 Bars
+    - [x] 6 Bars
+    - [x] 4 Bars
+    - [x] 3 Bars
+    - [x] 2 Bars
+    - [x] 1 Bar
+    - [x] 1/2 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Note
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Note
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Note
     - [x] Off
-  - [ ] Trigger Mode
-    - [ ] Start/Stop
-    - [ ] Momentary
-    - [ ] Retrigger
+  - [x] Trigger Mode
+    - [x] Start/Stop
+    - [x] Momentary
+    - [x] Retrigger
 
 </details>
 
@@ -3695,13 +3695,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-note — 11/321</summary>
+<details><summary>pianoroll-note — 29/321</summary>
 
 - [ ] Define as Default Note
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste Replace  `⇧⌘V`
-- [ ] Delete
+- [x] Delete
 - [x] Invert Selection  `⇧I`
 - [x] Select All Following  `⇧F`
 - [ ] All Following of Same Pitch  `⌃⇧F`
@@ -3712,14 +3712,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Same-Colored Notes  `⇧C`
 - [ ] Articulation
   - [ ] –
-  - [ ] 1
-  - [ ] 2
+  - [x] 1
+  - [x] 2
   - [ ] 3
-  - [ ] 4
+  - [x] 4
   - [ ] 5
   - [ ] 6
   - [ ] 7
-  - [ ] 8
+  - [x] 8
   - [ ] 9
   - [ ] 10
   - [ ] 11
@@ -3991,19 +3991,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] 10 Ticks
   - [ ] Tick  `⌃⌥T`
   - [ ] Step Input
-  - [ ] 1/1 Note
-  - [ ] 1/2 Note
-  - [ ] 1/4 Note
-  - [ ] 1/8 Note
-  - [ ] 1/16 Note
-  - [ ] 1/32 Note
-  - [ ] 1/64 Note
-  - [ ] 1/2 Triplet (1/3)
-  - [ ] 1/4 Triplet (1/6)
-  - [ ] 1/8 Triplet (1/12)
-  - [ ] 1/16 Triplet (1/24)
-  - [ ] 1/32 Triplet (1/48)
-  - [ ] 1/64 Triplet (1/96)
+  - [x] 1/1 Note
+  - [x] 1/2 Note
+  - [x] 1/4 Note
+  - [x] 1/8 Note
+  - [x] 1/16 Note
+  - [x] 1/32 Note
+  - [x] 1/64 Note
+  - [x] 1/2 Triplet (1/3)
+  - [x] 1/4 Triplet (1/6)
+  - [x] 1/8 Triplet (1/12)
+  - [x] 1/16 Triplet (1/24)
+  - [x] 1/32 Triplet (1/48)
+  - [x] 1/64 Triplet (1/96)
   - [ ] 5 Frames
   - [ ] Frame  `⌃⌥F`
   - [ ] 1/2 Frame  `⌃⌥H`
@@ -4036,17 +4036,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 26/172</summary>
+<details><summary>region-audio — 48/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
 - [ ] Bounce Regions/Cells in Place…  `⌃B`
 - [ ] Recent Item 4
 - [ ] Recent Item 5
-- [ ] Edit
+- [x] Edit
   - [x] Cut  `⌘X`
   - [x] Copy  `⌘C`
-  - [ ] Delete
+  - [x] Delete
   - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
@@ -4057,7 +4057,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] SMPTE Lock
     - [ ] Lock SMPTE Position  `⌘⇟PgDn`
     - [ ] Unlock SMPTE Position  `⌘⇞PgUp`
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -4066,10 +4066,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Invert Selection  `⇧I`
   - [ ] Deselect Outside Locators
   - [x] Deselect All  `⇧D`
-- [ ] Playback
+- [x] Playback
   - [x] Mute  `⌃M`
   - [x] Loop  `⌃L`
-  - [ ] Reverse  `⌃⇧R`
+  - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
@@ -4078,11 +4078,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Folder to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Folder to Existing Tracks  `⌃⌘U`
-- [ ] Name and Color
+- [x] Name and Color
   - [ ] Rename Regions  `⇧N`
   - [ ] Name Regions by Tracks  `⌥⇧N`
   - [ ] Color Regions by Tracks  `⌥⇧C`
-  - [ ] Show/Hide Colors  `⌥C`
+  - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
   - [ ] Move to Recorded Position  `⌥⇧⌘R`
@@ -4104,19 +4104,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -4166,7 +4166,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Copy Region Chords
   - [ ] Delete Region Chords
 - [ ] Processing
-  - [ ] Stem Splitter…
+  - [x] Stem Splitter…
   - [ ] Selection-Based Processing…  `⌥⇧P`
   - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
   - [ ] Normalize Region Gain…  `⌃⌥G`
@@ -4206,24 +4206,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Remove Tempo Information
   - [ ] Create Smart Tempo Multitrack Set
 - [ ] Export
-  - [ ] Add to Browser…  `⌃⇧O`
+  - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
   - [ ] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move File out of Project
 
 </details>
 
-<details><summary>region-midi — 30/212</summary>
+<details><summary>region-midi — 74/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
 - [ ] Bounce Regions/Cells in Place…  `⌃B`
 - [ ] Recent Item 4
 - [ ] Recent Item 5
-- [ ] Edit
+- [x] Edit
   - [x] Cut  `⌘X`
   - [x] Copy  `⌘C`
-  - [ ] Delete
+  - [x] Delete
   - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
@@ -4234,7 +4234,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] SMPTE Lock
     - [ ] Lock SMPTE Position  `⌘⇟PgDn`
     - [ ] Unlock SMPTE Position  `⌘⇞PgUp`
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -4243,32 +4243,32 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Invert Selection  `⇧I`
   - [ ] Deselect Outside Locators
   - [x] Deselect All  `⇧D`
-- [ ] Playback
+- [x] Playback
   - [x] Mute  `⌃M`
   - [x] Loop  `⌃L`
-  - [ ] Reverse  `⌃⇧R`
+  - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
 - [x] Quantize
   - [x] Off
-  - [ ] 1/1 Note
-  - [ ] 1/2 Note
-  - [ ] 1/4 Note
-  - [ ] 1/8 Note
-  - [ ] 1/16 Note
-  - [ ] 1/32 Note
-  - [ ] 1/64 Note
+  - [x] 1/1 Note
+  - [x] 1/2 Note
+  - [x] 1/4 Note
+  - [x] 1/8 Note
+  - [x] 1/16 Note
+  - [x] 1/32 Note
+  - [x] 1/64 Note
   - [ ] Triplets
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
-    - [ ] 1/128 Triplet (1/192)
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
+    - [x] 1/128 Triplet (1/192)
   - [ ] Swing Presets
-    - [ ] 1/16 Swing A
+    - [x] 1/16 Swing A
     - [ ] 1/16 Swing B
     - [ ] 1/16 Swing C
     - [ ] 1/16 Swing D
@@ -4281,24 +4281,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 1/8 Swing E
     - [ ] 1/8 Swing F
   - [ ] n-Tuplets and Mixed
-    - [ ] 5-Tuplet/4
-    - [ ] 5-Tuplet/8
-    - [ ] 7-Tuplet
-    - [ ] 9-Tuplet
-    - [ ] 1/16 & 1/16 Triplet
-    - [ ] 1/16 & 1/8 Triplet
-    - [ ] 1/8 & 1/8 Triplet
+    - [x] 5-Tuplet/4
+    - [x] 5-Tuplet/8
+    - [x] 7-Tuplet
+    - [x] 9-Tuplet
+    - [x] 1/16 & 1/16 Triplet
+    - [x] 1/16 & 1/8 Triplet
+    - [x] 1/8 & 1/8 Triplet
   - [x] Apply Quantization Permanently  `⌃Q`
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
   - [ ] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Folder to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Folder to Existing Tracks  `⌃⌘U`
-- [ ] Name and Color
+- [x] Name and Color
   - [ ] Rename Regions  `⇧N`
   - [ ] Name Regions by Tracks  `⌥⇧N`
   - [ ] Color Regions by Tracks  `⌥⇧C`
-  - [ ] Show/Hide Colors  `⌥C`
+  - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
   - [ ] Move to Recorded Position  `⌥⇧⌘R`
@@ -4320,19 +4320,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -4383,7 +4383,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Copy Region Chords
   - [ ] Delete Region Chords
 - [ ] Processing
-  - [ ] Stem Splitter…
+  - [x] Stem Splitter…
   - [ ] Selection-Based Processing…  `⌥⇧P`
   - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
   - [ ] Normalize Region Gain…  `⌃⌥G`
@@ -4423,14 +4423,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Remove Tempo Information
   - [ ] Create Smart Tempo Multitrack Set
 - [ ] Export
-  - [ ] Add to Browser…  `⌃⇧O`
+  - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
   - [ ] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move 0 Files
 
 </details>
 
-<details><summary>ruler — 5/16</summary>
+<details><summary>ruler — 6/16</summary>
 
 - [x] Move Locators Forward by Cycle Length  `⇧⌘.`
 - [ ] Move Locators Backwards by Cycle Length  `⇧⌘,`
@@ -4447,7 +4447,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Insert Section at Playhead (Global)  `⌃⌘V`
 - [ ] Repeat Section Between Locators (Global)  `⌃⌘R`
 - [ ] Delete Section Between Locators (Global)
-- [ ] Copy Cycle to Live Loops Scene
+- [x] Copy Cycle to Live Loops Scene
 
 </details>
 
@@ -4500,44 +4500,44 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-row-header — 1/10</summary>
+<details><summary>stepseq-row-header — 4/10</summary>
 
 - [x] Copy  `⌃C`
 - [ ] Paste Row  `⌃V`
 - [ ] Paste Steps  `⌥⇧V`
 - [ ] Paste Row Settings  `⌃⌥⇧V`
-- [ ] Rename
-- [ ] Duplicate  `⌘D`
+- [x] Rename
+- [x] Duplicate  `⌘D`
 - [ ] Randomize On/Off…
 - [ ] Clear On/Off
 - [ ] Clear Row  `⌃⌘⌫`
-- [ ] Delete  `⌘⌫`
+- [x] Delete  `⌘⌫`
 
 </details>
 
-<details><summary>stepseq-step-cell — 3/7</summary>
+<details><summary>stepseq-step-cell — 4/7</summary>
 
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
-- [ ] Repeat  `⌘R`
+- [x] Repeat  `⌘R`
 - [ ] Randomize On/Off
 - [ ] Clear On/Off
 - [ ] Clear Step  `⌃⌫`
 
 </details>
 
-<details><summary>take-folder-region — 30/212</summary>
+<details><summary>take-folder-region — 74/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
 - [ ] Bounce Regions/Cells in Place…  `⌃B`
 - [ ] Recent Item 4
 - [ ] Recent Item 5
-- [ ] Edit
+- [x] Edit
   - [x] Cut  `⌘X`
   - [x] Copy  `⌘C`
-  - [ ] Delete
+  - [x] Delete
   - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
@@ -4548,7 +4548,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] SMPTE Lock
     - [ ] Lock SMPTE Position  `⌘⇟PgDn`
     - [ ] Unlock SMPTE Position  `⌘⇞PgUp`
-- [ ] Select
+- [x] Select
   - [x] All  `⌘A`
   - [x] All Following  `⇧F`
   - [x] All Following of Same Track  `⌃⇧F`
@@ -4557,32 +4557,32 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Invert Selection  `⇧I`
   - [ ] Deselect Outside Locators
   - [x] Deselect All  `⇧D`
-- [ ] Playback
+- [x] Playback
   - [x] Mute  `⌃M`
   - [x] Loop  `⌃L`
-  - [ ] Reverse  `⌃⇧R`
+  - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
 - [x] Quantize
   - [x] Off
-  - [ ] 1/1 Note
-  - [ ] 1/2 Note
-  - [ ] 1/4 Note
-  - [ ] 1/8 Note
-  - [ ] 1/16 Note
-  - [ ] 1/32 Note
-  - [ ] 1/64 Note
+  - [x] 1/1 Note
+  - [x] 1/2 Note
+  - [x] 1/4 Note
+  - [x] 1/8 Note
+  - [x] 1/16 Note
+  - [x] 1/32 Note
+  - [x] 1/64 Note
   - [ ] Triplets
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
-    - [ ] 1/128 Triplet (1/192)
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
+    - [x] 1/128 Triplet (1/192)
   - [ ] Swing Presets
-    - [ ] 1/16 Swing A
+    - [x] 1/16 Swing A
     - [ ] 1/16 Swing B
     - [ ] 1/16 Swing C
     - [ ] 1/16 Swing D
@@ -4595,24 +4595,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 1/8 Swing E
     - [ ] 1/8 Swing F
   - [ ] n-Tuplets and Mixed
-    - [ ] 5-Tuplet/4
-    - [ ] 5-Tuplet/8
-    - [ ] 7-Tuplet
-    - [ ] 9-Tuplet
-    - [ ] 1/16 & 1/16 Triplet
-    - [ ] 1/16 & 1/8 Triplet
-    - [ ] 1/8 & 1/8 Triplet
+    - [x] 5-Tuplet/4
+    - [x] 5-Tuplet/8
+    - [x] 7-Tuplet
+    - [x] 9-Tuplet
+    - [x] 1/16 & 1/16 Triplet
+    - [x] 1/16 & 1/8 Triplet
+    - [x] 1/8 & 1/8 Triplet
   - [x] Apply Quantization Permanently  `⌃Q`
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
   - [ ] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  `⌃⌘U`
-- [ ] Name and Color
+- [x] Name and Color
   - [ ] Rename Regions  `⇧N`
   - [ ] Name Regions by Tracks  `⌥⇧N`
   - [ ] Color Regions by Tracks  `⌥⇧C`
-  - [ ] Show/Hide Colors  `⌥C`
+  - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
   - [ ] Move to Recorded Position  `⌥⇧⌘R`
@@ -4634,19 +4634,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
     - [ ] Step Input
-    - [ ] 1/1 Note
-    - [ ] 1/2 Note
-    - [ ] 1/4 Note
-    - [ ] 1/8 Note
-    - [ ] 1/16 Note
-    - [ ] 1/32 Note
-    - [ ] 1/64 Note
-    - [ ] 1/2 Triplet (1/3)
-    - [ ] 1/4 Triplet (1/6)
-    - [ ] 1/8 Triplet (1/12)
-    - [ ] 1/16 Triplet (1/24)
-    - [ ] 1/32 Triplet (1/48)
-    - [ ] 1/64 Triplet (1/96)
+    - [x] 1/1 Note
+    - [x] 1/2 Note
+    - [x] 1/4 Note
+    - [x] 1/8 Note
+    - [x] 1/16 Note
+    - [x] 1/32 Note
+    - [x] 1/64 Note
+    - [x] 1/2 Triplet (1/3)
+    - [x] 1/4 Triplet (1/6)
+    - [x] 1/8 Triplet (1/12)
+    - [x] 1/16 Triplet (1/24)
+    - [x] 1/32 Triplet (1/48)
+    - [x] 1/64 Triplet (1/96)
     - [ ] 5 Frames
     - [ ] Frame  `⌃⌥F`
     - [ ] 1/2 Frame  `⌃⌥H`
@@ -4697,7 +4697,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Copy Region Chords
   - [ ] Delete Region Chords
 - [ ] Processing
-  - [ ] Stem Splitter…
+  - [x] Stem Splitter…
   - [ ] Selection-Based Processing…  `⌥⇧P`
   - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
   - [ ] Normalize Region Gain…  `⌃⌥G`
@@ -4737,7 +4737,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Remove Tempo Information
   - [ ] Create Smart Tempo Multitrack Set
 - [ ] Export
-  - [ ] Add to Browser…  `⌃⇧O`
+  - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
   - [ ] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move 0 Files
@@ -4798,11 +4798,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>track-alternatives-popup — 1/7</summary>
+<details><summary>track-alternatives-popup — 3/7</summary>
 
 - [x] New  `⌃⌥⌘N`
-- [ ] Duplicate  `⌃⌥⌘D`
-- [ ] Rename  `⌃⌥⌘↩`
+- [x] Duplicate  `⌃⌥⌘D`
+- [x] Rename  `⌃⌥⌘↩`
 - [ ] Rename by Region
 - [ ] Delete Inactive  `⌃⌥⌘⌦`
 - [ ] Delete Unused
@@ -4908,7 +4908,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 216 of 2207
+## Key commands: 259 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4917,7 +4917,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 96/679</summary>
+<details><summary>Global Commands — 101/679</summary>
 
 - [x] Record  `R`
 - [ ] Record / Record Repeat
@@ -4925,7 +4925,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Record Toggle
 - [x] Record / Record Toggle  `*`
 - [x] Discard Recording and Return to Last Play Position  `⌘.`
-- [ ] Record into Cell  `⌥R`
+- [x] Record into Cell  `⌥R`
 - [ ] Flashback Capture as Recording  `⇧R`
 - [ ] Flashback Capture as Recording and Play
 - [x] Play  `⌅`
@@ -5217,7 +5217,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Tempo Operations…
 - [ ] Open Tempo Interpreter…
 - [ ] Open Key Command Assignments…  `⌥K`
-- [ ] Show/Hide Colors  `⌥C`
+- [x] Show/Hide Colors  `⌥C`
 - [x] Enter/Exit Full Screen  `⌃⌘F`
 - [ ] Show/Hide Tuner
 - [ ] Toggle MIDI Remote for Articulation Switches
@@ -5591,9 +5591,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Export Alternative as Project…
 - [ ] Mixer Undo
 - [ ] Mixer Redo
-- [ ] Play Previous Scene
-- [ ] Play Next Scene
-- [ ] Stop All Cells  `⌘↩`
+- [x] Play Previous Scene
+- [x] Play Next Scene
+- [x] Stop All Cells  `⌘↩`
 - [ ] Toggle Activation of All Tracks  `⌃⌥⇧A`
 - [ ] Live Loops: Keep Cells Squared When Zooming
 - [ ] Live Loops: Show Start Positions as Offset
@@ -5613,7 +5613,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 15/110</summary>
+<details><summary>Various Windows — 16/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5622,7 +5622,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
-- [ ] Delete
+- [x] Delete
 - [ ] Delete and Move
 - [x] Select All  `⌘A`
 - [x] Deselect All  `⇧D`
@@ -5728,7 +5728,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Windows Showing Audio Files — 0/15</summary>
+<details><summary>Windows Showing Audio Files — 1/15</summary>
 
 - [ ] Show Files in Finder  `⇧⌘R`
 - [ ] Toggle Snap Edits to Zero Crossings  `⌃0`
@@ -5736,7 +5736,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Remove Silence from Audio Region…  `⌃X`
 - [ ] Show/Hide Selection-Based Processing  `⌥⇧P`
 - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
-- [ ] Stem Splitter…
+- [x] Stem Splitter…
 - [ ] Stem Splitter Preset 1 (Acapella)
 - [ ] Stem Splitter Preset 2 (Instrumental)
 - [ ] Stem Splitter Preset 3 (Vocals + Instrumental)
@@ -6227,7 +6227,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 24/249</summary>
+<details><summary>Main Window Tracks — 34/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6359,7 +6359,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Repeat Section Between Locators (Selection)
 - [ ] Repeat Section Between Locators (Global)  `⌃⌘R`
 - [ ] Cut Sections of Selected Arrangement Markers  `⌥⌘⌦`
-- [ ] Insert Scenes at Playhead  `⌘⤓`
+- [x] Insert Scenes at Playhead  `⌘⤓`
 - [ ] Copy Scenes to Playhead
 - [ ] Separate MIDI Region by MIDI Channel
 - [ ] Separate MIDI Region by Note Pitch
@@ -6382,7 +6382,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Beat Mapping Track
 - [ ] Normalize Region/Cell Gain…  `⌃⌥G`
 - [ ] Apply Normalize Region/Cell Gain Again  `⌃G`
-- [ ] Add to Browser…  `⌃⇧O`
+- [x] Add to Browser…  `⌃⇧O`
 - [x] Apply All Region/Cell Parameters Permanently  `⌃N`
 - [ ] Apply Region/Cell Parameters except Channel Permanently
 - [ ] Apply Region/Cell Parameters except Channel and Delay Permanently
@@ -6401,14 +6401,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Remove Groove Template from List
 - [ ] Make Groove Template
 - [ ] Advanced Quantization Parameters
-- [ ] Show/Hide Live Loops Grid
-- [ ] Show/Hide Tracks area
-- [ ] Switch between Live Loops Grid and Tracks View  `L`
-- [ ] Show Live Loops Grid only
-- [ ] Show Tracks View only
-- [ ] Show Both, Live Loops Grid and Tracks View  `⌥L`
-- [ ] Copy to Live Loops Scene  `⌘⤒`
-- [ ] Copy Cycle to Live Loops Scene
+- [x] Show/Hide Live Loops Grid
+- [x] Show/Hide Tracks area
+- [x] Switch between Live Loops Grid and Tracks View  `L`
+- [x] Show Live Loops Grid only
+- [x] Show Tracks View only
+- [x] Show Both, Live Loops Grid and Tracks View  `⌥L`
+- [x] Copy to Live Loops Scene  `⌘⤒`
+- [x] Copy Cycle to Live Loops Scene
 - [ ] Show/Hide Flex Pitch/Time  `F`
 - [ ] Slice at Transient Markers
 - [ ] Slice at Flex Markers
@@ -6481,26 +6481,26 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Live Loops Grid — 0/18</summary>
+<details><summary>Live Loops Grid — 16/18</summary>
 
-- [ ] Queue Cell/Scene Playback  `⌥↩`
-- [ ] Trigger Cells or Scene  `↩`
-- [ ] Trigger Focused Scene  `⌥⌘↩`
-- [ ] Retrigger Selected Cells or Focused Scene  `⌃⌘↩`
-- [ ] Insert Empty Scene  `⌘⇟`
-- [ ] Copy Playing Cells Here  `⌘⇞`
-- [ ] Select Playing Cells  `⇧P`
-- [ ] Select All Cells of Same Scene
-- [ ] Select Next Lower Cell, or Next Track  `↓`
-- [ ] Select Next Upper Cell, or Previous Track  `↑`
-- [ ] Extend Cell, or Track Selection Up  `⇧↑`
-- [ ] Extend Cell, or Track Selection Down  `⇧↓`
-- [ ] Select Previous Scene  `⌥←`
-- [ ] Select Next Scene  `⌥→`
-- [ ] Enable Performance Recording On/Off  `⌃P`
+- [x] Queue Cell/Scene Playback  `⌥↩`
+- [x] Trigger Cells or Scene  `↩`
+- [x] Trigger Focused Scene  `⌥⌘↩`
+- [x] Retrigger Selected Cells or Focused Scene  `⌃⌘↩`
+- [x] Insert Empty Scene  `⌘⇟`
+- [x] Copy Playing Cells Here  `⌘⇞`
+- [x] Select Playing Cells  `⇧P`
+- [x] Select All Cells of Same Scene
+- [x] Select Next Lower Cell, or Next Track  `↓`
+- [x] Select Next Upper Cell, or Previous Track  `↑`
+- [x] Extend Cell, or Track Selection Up  `⇧↑`
+- [x] Extend Cell, or Track Selection Down  `⇧↓`
+- [x] Select Previous Scene  `⌥←`
+- [x] Select Next Scene  `⌥→`
+- [x] Enable Performance Recording On/Off  `⌃P`
 - [ ] Unpack Take Cell to Existing Scenes  `⌃⌥⌘U`
 - [ ] Unpack Take Cell to New Scenes  `⌃⌥⇧⌘U`
-- [ ] Toggle Grid Horizontal Zoom  `⌃⌥Z`
+- [x] Toggle Grid Horizontal Zoom  `⌃⌥Z`
 
 </details>
 
@@ -6972,7 +6972,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Audio File Editor — 0/55</summary>
+<details><summary>Audio File Editor — 1/55</summary>
 
 - [ ] Play/Stop All  `⌃⌥⌘˽`
 - [ ] Play/Stop Region  `⌃⇧˽`
@@ -7016,7 +7016,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Fade-Out  `⌃O`
 - [ ] Silence  `⌃⌫`
 - [ ] Invert  `⌃⇧I`
-- [ ] Reverse  `⌃⇧R`
+- [x] Reverse  `⌃⇧R`
 - [ ] Trim  `⌃⇧T`
 - [ ] Remove DC Offset  `⌃D`
 - [ ] Time and Pitch Machine…  `⌃P`
@@ -7069,7 +7069,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Browser — 0/16</summary>
+<details><summary>Browser — 2/16</summary>
 
 - [ ] View Info  `⌘I`
 - [ ] Play/Stop Preview  `⌥˽`
@@ -7083,8 +7083,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Replace Patch  `⌘↩`
 - [ ] Find Similar
 - [ ] Add to Favorites
-- [ ] Rename
-- [ ] Delete
+- [x] Rename
+- [x] Delete
 - [ ] Show in Finder
 - [ ] Toggle Columns View
 
@@ -7152,7 +7152,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Step Input Keyboard — 0/49</summary>
+<details><summary>Step Input Keyboard — 7/49</summary>
 
 - [ ] Note “C”  `A`
 - [ ] Note “C#”  `W`
@@ -7184,13 +7184,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Octave - 1  `Z`
 - [ ] Octave + 1  `X`
 - [ ] Octave + 2  `⇧X`
-- [ ] 1/1 Note  `1`
-- [ ] 1/2 Note  `2`
-- [ ] 1/4 Note  `3`
-- [ ] 1/8 Note  `4`
-- [ ] 1/16 Note  `5`
-- [ ] 1/32 Note  `6`
-- [ ] 1/64 Note  `7`
+- [x] 1/1 Note  `1`
+- [x] 1/2 Note  `2`
+- [x] 1/4 Note  `3`
+- [x] 1/8 Note  `4`
+- [x] 1/16 Note  `5`
+- [x] 1/32 Note  `6`
+- [x] 1/64 Note  `7`
 - [ ] 1/128 Note  `8`
 - [ ] Triplets On/Off  `9`
 - [ ] Dotted note values On/Off  `0`

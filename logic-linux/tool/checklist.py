@@ -27,7 +27,7 @@ def handled_keys():
         return set()
     j = t.find('\n    pub fn ', i + 10)
     names = set(re.findall(r'"((?:[^"\\]|\\.)*)"', t[i:j]))
-    return names | set(re.findall(r'"((?:[^"\\]|\\.)*)"', src('edit.rs')))
+    return names | set(re.findall(r'"((?:[^"\\]|\\.)*)"', src('edit.rs') + src('liveloops.rs')))
 
 def menu_tree(path):
     """[(section, [(depth, label, key, disabled)])]"""

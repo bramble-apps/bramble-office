@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 96,
+  "done": 101,
   "total": 679,
-  "percent": 14.1
+  "percent": 14.9
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,15 +19,15 @@
  },
  {
   "group": "Various Windows",
-  "done": 15,
+  "done": 16,
   "total": 110,
-  "percent": 13.6
+  "percent": 14.5
  },
  {
   "group": "Windows Showing Audio Files",
-  "done": 0,
+  "done": 1,
   "total": 15,
-  "percent": 0.0
+  "percent": 6.7
  },
  {
   "group": "Main Window Tracks and Various Editors",
@@ -55,15 +55,15 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 24,
+  "done": 34,
   "total": 249,
-  "percent": 9.6
+  "percent": 13.7
  },
  {
   "group": "Live Loops Grid",
-  "done": 0,
+  "done": 16,
   "total": 18,
-  "percent": 0.0
+  "percent": 88.9
  },
  {
   "group": "Mixer",
@@ -115,9 +115,9 @@
  },
  {
   "group": "Audio File Editor",
-  "done": 0,
+  "done": 1,
   "total": 55,
-  "percent": 0.0
+  "percent": 1.8
  },
  {
   "group": "Smart Tempo Editor",
@@ -127,9 +127,9 @@
  },
  {
   "group": "Browser",
-  "done": 0,
+  "done": 2,
   "total": 16,
-  "percent": 0.0
+  "percent": 12.5
  },
  {
   "group": "Sampler",
@@ -145,9 +145,9 @@
  },
  {
   "group": "Step Input Keyboard",
-  "done": 0,
+  "done": 7,
   "total": 49,
-  "percent": 0.0
+  "percent": 14.3
  },
  {
   "group": "Smart Controls",
