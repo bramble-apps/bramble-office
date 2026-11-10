@@ -1789,6 +1789,7 @@ dependencies = [
  "kn-ui",
  "lg-core",
  "lg-dsp",
+ "lg-players",
  "libc",
  "midir",
  "rodio",

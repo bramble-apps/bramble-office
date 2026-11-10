@@ -1,166 +1,42 @@
-//! Bramble's Session Player drummer: our own pattern generator, responding to Logic's controls the
-//! way the Logic research measured them (session-players grid: Pop Rock at complexity ×
-//! intensity 3×3, ghost notes, feel, re-rolls):
-//! - Intensity sets the velocities (about 57 soft, 80 medium, 104 loud) and, soft, the snare
-//!   becomes a side-stick (37 for 38).
-//! - Complexity adds notes (about 11.6 → 13 per bar from simple to complex): kick variations,
-//!   snare ghost notes, sixteenth hi-hats; simple grooves lean on tom fills and a crash.
-//! - Fills at the ends of phrases, swing on the off sixteenths, ghost notes, and a seed for
-//!   Regenerate.
-//! The patterns are made here, beat by beat; none are copied from Logic's.
-//!
-//! The editor (the bottom pane for a drummer region, as Logic's Session Player): the region's
-//! hits, the player and style, Regenerate, the Complexity and Intensity sliders, and the Main /
-//! Details / Manual tabs (Details: fills, swing, ghost notes; Manual: the Piano Roll).
+//! The Session Player editor for a Drummer region, as Logic's: the region's hits along the top;
+//! the drummer (pick a character by genre: their kit, style and feel); the XY pad (simple ↔
+//! complex across, soft ↔ loud up); the kit sections (Percussion, Hi-Hat / Cymbal, Kick &
+//! Snare: on or off, and a pattern variation, 0 = follow the pad); Fills and Swing knobs; and
+//! the Details tab (Feel, Ghost Notes, Hi-Hat, Humanize, Dynamics, Follow, Snare, Half / Double
+//! time). The performance itself is made by lg-players, measured against Logic's own regions.
 
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
-use lg_core::events::{Note, PPQ};
+use lg_players::character::{drummers_in, Genre};
+use lg_players::drummer::{generate, DrummerParams, KitSection, SnareMode, SwingType, TempoFeel, CYMBAL_VARIATIONS, KICK_SNARE_VARIATIONS};
+use lg_players::{Marker, RegionSpec};
 
 use crate::app::App;
 use crate::look;
+use crate::widgets;
 
-/// General MIDI drum notes (Logic's Drum Kit Designer kits follow them).
-pub const KICK: u8 = 36;
-pub const SIDE_STICK: u8 = 37;
-pub const SNARE: u8 = 38;
-pub const HAT_CLOSED: u8 = 42;
-pub const HAT_OPEN: u8 = 46;
-pub const CRASH: u8 = 49;
-pub const RIDE: u8 = 51;
-pub const TOMS: [u8; 4] = [50, 48, 47, 45];
+pub type Params = DrummerParams;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Params {
-    /// 0 simple .. 1 complex
-    pub complexity: f32,
-    /// 0 soft .. 1 loud
-    pub intensity: f32,
-    /// 0 none .. 1 many
-    pub fills: f32,
-    /// 0 straight .. 1 heavy swing (of the sixteenths)
-    pub swing: f32,
-    /// 0 .. 1
-    pub ghosts: f32,
-    pub seed: u64,
-}
+const GENRES: [Genre; 7] = [Genre::Rock, Genre::Alternative, Genre::Songwriter, Genre::RnB, Genre::Electronic, Genre::HipHop, Genre::Percussion];
 
-impl Default for Params {
-    fn default() -> Self {
-        Params { complexity: 0.45, intensity: 0.6, fills: 0.5, swing: 0.0, ghosts: 0.5, seed: 1 }
-    }
-}
-
-/// A small deterministic random source (xorshift).
-struct Rng(u64);
-
-impl Rng {
-    fn next(&mut self) -> f32 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 7;
-        self.0 ^= self.0 << 17;
-        (self.0 >> 40) as f32 / (1u64 << 24) as f32
-    }
-    fn chance(&mut self, p: f32) -> bool {
-        self.next() < p
-    }
-    fn around(&mut self, v: f32, by: f32) -> f32 {
-        v + (self.next() * 2.0 - 1.0) * by
-    }
-}
-
-/// The drummer's performance from `start` (song ticks) for `bars` bars of `beats` beats.
-pub fn generate(p: &Params, start: u32, bars: u32, beats: u32) -> Vec<Note> {
-    let mut rng = Rng(p.seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
-    let mut out = Vec::new();
-    let six = PPQ / 4;
-    let bar_t = PPQ * beats;
-    // velocity: intensity 0 → ~57, .5 → ~80, 1 → ~104 (the measured grid)
-    let base = 57.0 + p.intensity.clamp(0.0, 1.0) * 47.0;
-    let snare = if p.intensity < 0.3 { SIDE_STICK } else { SNARE };
-    let c = p.complexity.clamp(0.0, 1.0);
-    let phrase = if p.fills > 0.66 { 2 } else if p.fills > 0.25 { 4 } else { 8 };
-    let mut push = |rng: &mut Rng, pitch: u8, tick: u32, vel: f32, len: u32| {
-        // swing: the off sixteenths later
-        let off = (tick % (2 * six)) == six;
-        let t = tick + if off { (p.swing * six as f32 * 0.5) as u32 } else { 0 };
-        let v = rng.around(vel, 6.0).clamp(1.0, 127.0) as u8;
-        out.push(Note { channel: 9, pitch, velocity: v, pos: t, len });
-    };
-    for bar in 0..bars {
-        let b0 = start + bar * bar_t;
-        let fill_bar = p.fills > 0.05 && (bar + 1) % phrase == 0;
-        // how many beats at the bar's end the fill takes
-        let fill_beats = if fill_bar { (1.0 + p.fills * 2.0).round() as u32 } else { 0 };
-        let groove_beats = beats.saturating_sub(fill_beats);
-        for beat in 0..groove_beats {
-            let t = b0 + beat * PPQ;
-            let strong = beat % 2 == 0;
-            // kick: on 1 and 3; complexity adds the "and" of 3, the "a" of 2, pickups
-            if strong {
-                push(&mut rng, KICK, t, base + 8.0, 240);
-            }
-            if beat == 2 && rng.chance(0.25 + c * 0.6) {
-                push(&mut rng, KICK, t + 2 * six, base - 4.0, 240);
-            }
-            if beat == 1 && rng.chance(c * 0.45) {
-                push(&mut rng, KICK, t + 3 * six, base - 8.0, 240);
-            }
-            // snare: 2 and 4; ghost notes around it with complexity and the ghost control
-            if !strong {
-                push(&mut rng, snare, t, base + 4.0, 240);
-            }
-            for k in 1..4 {
-                if rng.chance(c * p.ghosts * 0.32) {
-                    push(&mut rng, SNARE, t + k * six, (base * 0.35).max(18.0), 120);
-                }
-            }
-            // hats: eighths, sixteenths when complex; loud and complex: the ride
-            let cymbal = if p.intensity > 0.85 && c > 0.6 { RIDE } else { HAT_CLOSED };
-            for k in 0..4 {
-                let on_eighth = k % 2 == 0;
-                if on_eighth || rng.chance((c - 0.45).max(0.0) * 1.2) {
-                    let accent = if k == 0 { 6.0 } else if on_eighth { -6.0 } else { -16.0 };
-                    push(&mut rng, cymbal, t + k * six, base - 10.0 + accent, 120);
-                }
-            }
-        }
-        // an open hat into the next bar now and then
-        if !fill_bar && groove_beats == beats && rng.chance(0.08 + c * 0.2) {
-            push(&mut rng, HAT_OPEN, b0 + bar_t - 2 * six, base - 6.0, 240);
-        }
-        // the fill: toms down the kit in sixteenths (simple grooves: in eighths), snare to start
-        if fill_beats > 0 {
-            let step = if c < 0.35 { 2 * six } else { six };
-            let from = b0 + groove_beats * PPQ;
-            let n = (fill_beats * PPQ) / step;
-            for k in 0..n {
-                let tom = if k == 0 { snare } else { TOMS[((k * TOMS.len() as u32) / n.max(1)).min(3) as usize] };
-                push(&mut rng, tom, from + k * step, base + 2.0 + (k as f32 / n as f32) * 10.0, 120);
-                if k == 0 {
-                    push(&mut rng, KICK, from, base, 240);
-                }
-            }
-        }
-        // a crash on the bar after a fill
-        if bar > 0 && (bar % phrase == 0) && p.fills > 0.05 {
-            push(&mut rng, CRASH, b0, base + 10.0, 480);
-            push(&mut rng, KICK, b0, base + 8.0, 240);
-        }
-    }
-    out.sort_by_key(|n| (n.pos, n.pitch));
-    out.dedup_by(|a, b| a.pos == b.pos && a.pitch == b.pitch);
-    out
-}
-
-/// The drummer's region: its notes made again from its parameters.
+/// Makes the region's performance from its settings (and the song's markers).
 pub fn regenerate(app: &mut App, t: usize, r: usize) {
-    let p = app.drum_params.get(&(t, r)).copied().unwrap_or_default();
-    let beats = app.project.as_ref().map_or(4, |pr| pr.signature.0 as u32);
-    let bar = app.bar_ticks();
+    let p = app.drum_params.get(&(t, r)).cloned().unwrap_or_default();
+    let sig = app.project.as_ref().map_or((4, 4), |pr| pr.signature);
+    let markers: Vec<Marker> = app.markers.iter().map(|(pos, name)| Marker { pos: *pos, name: name.clone() }).collect();
+    let last_end = app.project.as_ref().and_then(|pr| pr.tracks.get(t)).map(|tr| tr.regions.iter().map(|x| x.start + x.length).max().unwrap_or(0)).unwrap_or(0);
+    let follows = app.project.as_ref().and_then(|pr| pr.tracks.get(t)).is_some_and(|tr| tr.regions.get(r).is_some_and(|me| tr.regions.iter().any(|o| o.start + o.length == me.start)));
     if let Some(rg) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
-        let bars = (rg.length / bar).max(1);
-        rg.notes = generate(&p, rg.start, bars, beats);
+        let mut spec = RegionSpec::new(rg.start, rg.length, sig);
+        spec.markers = markers;
+        spec.ending = rg.start + rg.length == last_end;
+        spec.continues = follows;
+        rg.notes = generate(&p, &spec, None);
+        let ch = p.character();
+        rg.name = format!("{} - {}", ch.personality, ch.name);
     }
+    // the track plays the drummer's kit
+    let kit = p.character().kit.to_string();
+    app.instrument_choice.insert(t, kit);
     app.load_engine();
 }
 
@@ -169,64 +45,39 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
-    p.text(pos2(area.center().x, area.min.y + 20.0), Align2::CENTER_CENTER, "Session Player", look::semibold(13.0), look::text());
     let Some(region) = app.project.as_ref().and_then(|pr| pr.tracks.get(t)).and_then(|tr| tr.regions.get(r)).cloned() else { return };
-    let track_name = app.project.as_ref().and_then(|pr| pr.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
-    // the region strip with its hits (kick and snare low, cymbals high)
-    let strip = Rect::from_min_max(pos2(area.min.x + 12.0, area.min.y + 44.0), pos2(area.max.x - 12.0, area.min.y + 120.0));
+    let mut params = app.drum_params.get(&(t, r)).cloned().unwrap_or_default();
+    let before = params.clone();
+    let ch = params.character();
     let yellow = look::region_color(lg_core::TrackKind::Drummer);
-    p.rect_filled(strip, 4.0, yellow.gamma_multiply(0.85));
-    let head = Rect::from_min_size(strip.min, vec2(strip.width(), 18.0));
-    p.rect_filled(head, egui::CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 }, look::mix(yellow, Color32::WHITE, 0.55));
-    p.text(pos2(head.min.x + 8.0, head.center().y), Align2::LEFT_CENTER, &region.name, look::regular(11.5), Color32::from_rgb(0x30, 0x24, 0x04));
-    let span = region.length.max(1) as f32;
-    let ink = look::mix(yellow, Color32::BLACK, 0.6);
-    for n in &region.notes {
-        let x = strip.min.x + (n.pos.saturating_sub(region.start)) as f32 / span * strip.width();
-        let row = match n.pitch {
-            KICK => 0.85,
-            SNARE | SIDE_STICK => 0.6,
-            HAT_CLOSED | HAT_OPEN | RIDE | CRASH => 0.3,
-            _ => 0.45,
-        };
-        let y = head.max.y + row * (strip.max.y - head.max.y);
-        let h = 3.0 + n.velocity as f32 / 127.0 * 9.0;
-        p.add(egui::Shape::convex_polygon(vec![pos2(x, y - h), pos2(x + 4.0, y), pos2(x, y + h)], ink, Stroke::NONE));
+    // ---- the header: the drummer's name (a menu of every drummer by genre), the tabs
+    let head = Rect::from_min_size(area.min, vec2(area.width(), 34.0));
+    p.hline(head.x_range(), head.max.y, Stroke::new(1.0, look::line()));
+    let who = Rect::from_min_size(head.min + vec2(12.0, 5.0), vec2(260.0, 24.0));
+    let who_resp = ui.interact(who, ui.scope_id().with(("drummer-who", t, r)), Sense::click());
+    if who_resp.hovered() {
+        p.rect_filled(who, 5.0, look::group_bg());
     }
-    let mut params = app.drum_params.get(&(t, r)).copied().unwrap_or_default();
-    let before = params;
-    // the player, Regenerate, the two sliders
-    let mid = area.center().x;
-    let top = strip.max.y + 22.0;
-    p.text(pos2(mid - 110.0, top), Align2::CENTER_CENTER, format!("Acoustic Drummer — {track_name}"), look::regular(13.0), look::text_dim());
-    p.text(pos2(mid - 110.0, top + 20.0), Align2::CENTER_CENTER, "Pop Rock", look::regular(14.0), yellow);
-    let regen = Rect::from_center_size(pos2(mid - 110.0, top + 80.0), vec2(110.0, 26.0));
-    if ui.put(regen, egui::Button::new("Regenerate").corner_radius(6.0)).clicked() {
-        app.checkpoint("Regenerate");
-        params.seed = params.seed.wrapping_add(0x5851_F42D);
-    }
-    let tab = app.drum_tab;
-    if tab == 0 {
-        for (i, (label, v)) in [("Complexity", &mut params.complexity), ("Intensity", &mut params.intensity)].into_iter().enumerate() {
-            let x = mid + 30.0 + i as f32 * 110.0;
-            p.text(pos2(x, top), Align2::CENTER_CENTER, label, look::regular(13.0), look::text_dim());
-            if vertical_slider(app, ui, Rect::from_center_size(pos2(x, top + 62.0), vec2(28.0, 84.0)), ("drum-slider", i), v, yellow) {
-                // (each drag is one undo step)
-            }
+    p.text(pos2(who.min.x + 6.0, who.center().y), Align2::LEFT_CENTER, format!("{} — {}", ch.personality, ch.name), look::semibold(13.0), yellow);
+    p.text(pos2(who.max.x - 8.0, who.center().y), Align2::RIGHT_CENTER, "⌄", look::regular(12.0), look::text_dim());
+    egui::Popup::menu(&who_resp).show(|ui| {
+        ui.set_min_width(240.0);
+        for g in GENRES {
+            ui.menu_button(g.name(), |ui| {
+                for c in drummers_in(g) {
+                    if ui.add(egui::Button::selectable(c.id == ch.id, format!("{} — {}", c.personality, c.name)).shortcut_text(c.kit)).clicked() {
+                        params = DrummerParams { seed: params.seed, ..DrummerParams::for_character(c) };
+                        ui.close();
+                    }
+                }
+            });
         }
-    } else if tab == 1 {
-        for (i, (label, v)) in [("Fills", &mut params.fills), ("Swing", &mut params.swing), ("Ghost Notes", &mut params.ghosts)].into_iter().enumerate() {
-            let x = mid - 10.0 + i as f32 * 100.0;
-            p.text(pos2(x, top), Align2::CENTER_CENTER, label, look::regular(13.0), look::text_dim());
-            vertical_slider(app, ui, Rect::from_center_size(pos2(x, top + 62.0), vec2(28.0, 84.0)), ("drum-detail", i), v, yellow);
-        }
-    }
-    // the tabs: Main, Details, Manual (Manual: the Piano Roll)
+    });
+    p.text(pos2(who.max.x + 14.0, who.center().y), Align2::LEFT_CENTER, format!("Kit: {}", ch.kit), look::regular(12.0), look::text_dim());
     let names = ["Main", "Details", "Manual"];
-    let tw = 86.0;
-    let ty = (top + 136.0).min(area.max.y - 18.0);
+    let tw = 82.0;
     for (i, n) in names.iter().enumerate() {
-        let tr = Rect::from_center_size(pos2(mid - tw + i as f32 * tw, ty), vec2(tw - 4.0, 24.0));
+        let tr = Rect::from_center_size(pos2(head.max.x - 14.0 - tw * (2.5 - i as f32), head.center().y), vec2(tw - 4.0, 24.0));
         let on = app.drum_tab == i;
         p.rect_filled(tr, 6.0, if on { yellow } else { look::group_bg() });
         p.text(tr.center(), Align2::CENTER_CENTER, *n, look::regular(13.0), if on { Color32::BLACK } else { look::text() });
@@ -234,59 +85,152 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
             app.drum_tab = i;
         }
     }
+    // ---- the region's hits (cymbals high, kick low)
+    let strip = Rect::from_min_max(pos2(area.min.x + 12.0, head.max.y + 8.0), pos2(area.max.x - 12.0, head.max.y + 70.0));
+    p.rect_filled(strip, 4.0, yellow.gamma_multiply(0.85));
+    let span = region.length.max(1) as f32;
+    let ink = look::mix(yellow, Color32::BLACK, 0.6);
+    let kit = ch.kit_map();
+    for n in &region.notes {
+        let x = strip.min.x + (n.pos.saturating_sub(region.start)) as f32 / span * strip.width();
+        let row = match kit.piece(n.pitch).map(|pc| pc.family()) {
+            Some(lg_players::kit::Family::Kick) => 0.85,
+            Some(lg_players::kit::Family::Snare) => 0.62,
+            Some(lg_players::kit::Family::Tom) => 0.48,
+            Some(lg_players::kit::Family::HiHat) => 0.3,
+            Some(lg_players::kit::Family::Cymbal) => 0.14,
+            _ => 0.4,
+        };
+        let y = strip.min.y + row * strip.height();
+        let h = 2.0 + n.velocity as f32 / 127.0 * 6.0;
+        p.add(egui::Shape::convex_polygon(vec![pos2(x, y - h), pos2(x + 3.5, y), pos2(x, y + h)], ink, Stroke::NONE));
+    }
+    let body = Rect::from_min_max(pos2(area.min.x + 12.0, strip.max.y + 10.0), area.max - vec2(12.0, 8.0));
+    match app.drum_tab {
+        0 => main_tab(app, ui, body, &mut params, yellow, t, r),
+        1 => details_tab(ui, body, &mut params, t, r),
+        _ => {
+            p.text(body.center(), Align2::CENTER_CENTER, "Manual: the region's notes are in the Piano Roll (double-click the region)", look::regular(12.0), look::text_dim());
+        }
+    }
     if params != before {
+        app.checkpoint("Change Session Player");
         app.drum_params.insert((t, r), params);
         regenerate(app, t, r);
         app.dirty = true;
     }
 }
 
-/// A Logic-style vertical slider (yellow fill, cap); true while it changes.
-fn vertical_slider(app: &mut App, ui: &mut egui::Ui, r: Rect, id: (&str, usize), v: &mut f32, color: Color32) -> bool {
-    let resp = ui.interact(r.expand(6.0), ui.scope_id().with(id), Sense::click_and_drag());
-    let p = ui.painter();
-    let track = Rect::from_center_size(r.center(), vec2(4.0, r.height()));
-    p.rect_filled(track, 2.0, look::group_bg());
-    let y = r.max.y - *v * r.height();
-    p.rect_filled(Rect::from_min_max(pos2(track.min.x, y), track.max), 2.0, color);
-    p.rect_filled(Rect::from_center_size(pos2(r.center().x, y), vec2(24.0, 10.0)), 3.0, Color32::from_gray(0x9a));
-    p.hline(r.center().x - 6.0..=r.center().x + 6.0, y, Stroke::new(1.5, color));
-    if resp.drag_started() {
-        app.checkpoint("Change Session Player");
+fn main_tab(app: &mut App, ui: &mut egui::Ui, body: Rect, params: &mut DrummerParams, yellow: Color32, t: usize, r: usize) {
+    let p = ui.painter().clone();
+    // the XY pad (Logic: Simple → Complex across, Soft → Loud up), the puck where the settings are
+    let side = body.height().clamp(100.0, 220.0) - 30.0;
+    let pad = Rect::from_min_size(body.min, vec2(side * 1.35, side));
+    p.rect_filled(pad, 8.0, look::lcd_bg());
+    for k in 1..4 {
+        let x = pad.min.x + pad.width() * k as f32 / 4.0;
+        let y = pad.min.y + pad.height() * k as f32 / 4.0;
+        p.vline(x, pad.y_range(), Stroke::new(1.0, Color32::from_white_alpha(12)));
+        p.hline(pad.x_range(), y, Stroke::new(1.0, Color32::from_white_alpha(12)));
     }
+    let lbl = look::regular(10.5);
+    p.text(pad.left_bottom() + vec2(6.0, -6.0), Align2::LEFT_BOTTOM, "Simple · Soft", lbl.clone(), look::lcd_dim());
+    p.text(pad.right_bottom() + vec2(-6.0, -6.0), Align2::RIGHT_BOTTOM, "Complex", lbl.clone(), look::lcd_dim());
+    p.text(pad.left_top() + vec2(6.0, 6.0), Align2::LEFT_TOP, "Loud", lbl, look::lcd_dim());
+    let resp = ui.interact(pad, ui.scope_id().with(("xy", t, r)), Sense::click_and_drag());
     if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
-        let nv = ((r.max.y - pp.y) / r.height()).clamp(0.0, 1.0);
-        if (nv - *v).abs() > 0.001 {
-            *v = nv;
-            return true;
-        }
+        params.complexity = ((pp.x - pad.min.x) / pad.width()).clamp(0.0, 1.0);
+        params.intensity = ((pad.max.y - pp.y) / pad.height()).clamp(0.0, 1.0);
+        app.help_tag = Some(vec![("Complexity".into(), format!("{:.0}", params.complexity * 100.0)), ("Intensity".into(), format!("{:.0}", params.intensity * 100.0))]);
     }
-    false
+    let puck = pos2(pad.min.x + params.complexity * pad.width(), pad.max.y - params.intensity * pad.height());
+    p.circle_filled(puck, 9.0, yellow);
+    p.circle_stroke(puck, 9.0, Stroke::new(2.0, Color32::WHITE));
+    // Regenerate under the pad
+    let regen = Rect::from_min_size(pos2(pad.min.x, pad.max.y + 6.0), vec2(pad.width(), 24.0));
+    if ui.put(regen, egui::Button::new("Regenerate").corner_radius(6.0)).clicked() {
+        *params = params.regenerated();
+    }
+    // the kit sections: each a switch and a variation slider (0 = Auto, the pad decides)
+    let kx = pad.max.x + 24.0;
+    let sections: [(&str, u8); 3] = [("Percussion", 4), ("Hi-Hat / Cymbal", CYMBAL_VARIATIONS), ("Kick & Snare", KICK_SNARE_VARIATIONS)];
+    let row_h = (pad.height() / 3.0).clamp(40.0, 52.0);
+    for (i, (name, max)) in sections.into_iter().enumerate() {
+        let y = pad.min.y + i as f32 * row_h;
+        let sec: &mut KitSection = match i {
+            0 => &mut params.percussion,
+            1 => &mut params.cymbals,
+            _ => &mut params.kick_snare,
+        };
+        widgets::check_slot(ui, Rect::from_min_size(pos2(kx, y + 4.0), vec2(20.0, 20.0)), ui.scope_id().with(("sec-on", i, t, r)), &mut sec.enabled);
+        p.text(pos2(kx + 26.0, y + 14.0), Align2::LEFT_CENTER, name, look::regular(12.0), if sec.enabled { look::text() } else { look::text_dim() });
+        let slider = Rect::from_min_size(pos2(kx + 26.0, y + 26.0), vec2(170.0, 14.0));
+        let mut v = sec.variation as f32;
+        let r2 = ui.interact(slider.expand(4.0), ui.scope_id().with(("sec-var", i, t, r)), Sense::click_and_drag());
+        if let (true, Some(pp)) = (r2.dragged() || r2.clicked(), r2.interact_pointer_pos()) {
+            v = (((pp.x - slider.min.x) / slider.width()) * max as f32).round().clamp(0.0, max as f32);
+        }
+        sec.variation = v as u8;
+        p.rect_filled(Rect::from_center_size(slider.center(), vec2(slider.width(), 4.0)), 2.0, look::group_bg());
+        for k in 0..=max {
+            let x = slider.min.x + slider.width() * k as f32 / max as f32;
+            p.circle_filled(pos2(x, slider.center().y), 2.0, look::text_dim());
+        }
+        let kx2 = slider.min.x + slider.width() * v / max as f32;
+        p.circle_filled(pos2(kx2, slider.center().y), 6.0, if sec.enabled { yellow } else { look::text_dim() });
+        p.text(pos2(slider.max.x + 10.0, slider.center().y), Align2::LEFT_CENTER, if v == 0.0 { "Auto".to_string() } else { format!("{v:.0}") }, look::regular(11.0), look::text_dim());
+    }
+    // Fills and Swing knobs
+    let fx = kx + 250.0;
+    let kr = |k: f32| Rect::from_min_size(pos2(fx + k * 90.0, pad.min.y), vec2(80.0, 96.0));
+    widgets::knob(ui, kr(0.0), ui.scope_id().with(("fills", t, r)), &mut params.fills, 0.0, 1.0, 0.35, "Fills", &|v| format!("{:.0}", v * 100.0));
+    widgets::knob(ui, kr(1.0), ui.scope_id().with(("swing", t, r)), &mut params.swing, 0.0, 1.0, 0.0, "Swing", &|v| format!("{:.0}", v * 100.0));
+    let st = Rect::from_min_size(pos2(fx + 90.0, pad.min.y + 104.0), vec2(80.0, 20.0));
+    let i = if params.swing_type == SwingType::Eighths { 0 } else { 1 };
+    if let Some(k) = widgets::choice_slot(ui, st, ui.scope_id().with(("swingtype", t, r)), i, &["8th", "16th"]) {
+        params.swing_type = if k == 0 { SwingType::Eighths } else { SwingType::Sixteenths };
+    }
+}
+
+fn details_tab(ui: &mut egui::Ui, body: Rect, params: &mut DrummerParams, t: usize, r: usize) {
+    let kw = 92.0;
+    let kr = |k: f32| Rect::from_min_size(pos2(body.min.x + k * kw, body.min.y + 6.0), vec2(kw - 10.0, 100.0));
+    let base = ui.scope_id();
+    let id = move |s: &str| base.with((s, t, r));
+    widgets::knob(ui, kr(0.0), id("feel"), &mut params.feel, -1.0, 1.0, 0.0, "Feel", &|v| if v.abs() < 0.02 { "Center".into() } else if v > 0.0 { format!("Push {:.0}", v * 100.0) } else { format!("Pull {:.0}", -v * 100.0) });
+    widgets::knob(ui, kr(1.0), id("ghost"), &mut params.ghost_notes, 0.0, 1.0, 0.22, "Ghost Notes", &|v| format!("{:.0}", v * 100.0));
+    widgets::knob(ui, kr(2.0), id("hat"), &mut params.hihat, 0.0, 1.0, 0.35, "Hi-Hat", &|v| if v < 0.2 { "Closed".into() } else if v > 0.7 { "Open".into() } else { "Half".into() });
+    widgets::knob(ui, kr(3.0), id("human"), &mut params.humanize, 0.0, 1.0, 0.22, "Humanize", &|v| format!("{:.0}", v * 100.0));
+    widgets::knob(ui, kr(4.0), id("dyn"), &mut params.dynamics, 0.0, 2.0, 1.0, "Dynamics", &|v| format!("{:.0} %", v * 100.0));
+    widgets::knob(ui, kr(5.0), id("follow"), &mut params.follow, 0.0, 1.0, 0.0, "Follow", &|v| if v == 0.0 { "Off".into() } else { format!("{:.0}", v * 100.0) });
+    let y = body.min.y + 116.0;
+    let painter = ui.painter().clone();
+    let label = |x: f32, s: &str| {
+        painter.text(pos2(x, y + 10.0), Align2::LEFT_CENTER, s, look::regular(12.0), look::text_dim());
+    };
+    label(body.min.x, "Snare");
+    let snares = [SnareMode::Automatic, SnareMode::Snare, SnareMode::SideStick, SnareMode::Rimshot];
+    let cur = snares.iter().position(|s| *s == params.snare).unwrap_or(0);
+    if let Some(k) = widgets::choice_slot(ui, Rect::from_min_size(pos2(body.min.x + 50.0, y), vec2(130.0, 20.0)), id("snare"), cur, &["Automatic", "Snare", "Side Stick", "Rimshot"]) {
+        params.snare = snares[k];
+    }
+    label(body.min.x + 210.0, "Tempo");
+    let tempos = [TempoFeel::Standard, TempoFeel::Half, TempoFeel::Double];
+    let cur = tempos.iter().position(|s| *s == params.tempo).unwrap_or(0);
+    if let Some(k) = widgets::choice_slot(ui, Rect::from_min_size(pos2(body.min.x + 260.0, y), vec2(130.0, 20.0)), id("tempo"), cur, &["Standard", "Half Time", "Double Time"]) {
+        params.tempo = tempos[k];
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn stats(p: &Params) -> (f32, f32, usize) {
-        let n = generate(p, 0, 8, 4);
-        let per_bar = n.len() as f32 / 8.0;
-        let vel = n.iter().map(|x| x.velocity as f32).sum::<f32>() / n.len() as f32;
-        let side = n.iter().filter(|x| x.pitch == SIDE_STICK).count();
-        (per_bar, vel, side)
-    }
-
     #[test]
-    fn responds_like_the_research_measured() {
-        let soft = stats(&Params { intensity: 0.0, ..Default::default() });
-        let loud = stats(&Params { intensity: 1.0, ..Default::default() });
-        assert!(soft.1 < 70.0 && loud.1 > 90.0, "velocity follows intensity: {soft:?} {loud:?}");
-        assert!(soft.2 > 0 && loud.2 == 0, "soft: side-stick");
-        let simple = stats(&Params { complexity: 0.0, seed: 7, ..Default::default() });
-        let complex = stats(&Params { complexity: 1.0, seed: 7, ..Default::default() });
-        assert!(complex.0 > simple.0, "complexity adds notes: {simple:?} {complex:?}");
-        // same settings, same seed: the same performance; another seed: a variation
-        assert_eq!(generate(&Params::default(), 0, 4, 4), generate(&Params::default(), 0, 4, 4));
-        assert_ne!(generate(&Params::default(), 0, 4, 4), generate(&Params { seed: 99, ..Default::default() }, 0, 4, 4));
+    fn makes_a_performance() {
+        let p = DrummerParams::default();
+        let n = generate(&p, &RegionSpec::new(0, 8 * 3840, (4, 4)), None);
+        assert!(n.len() > 8 * 8, "a groove: {} notes", n.len());
+        assert!(n.iter().all(|x| x.pos < 8 * 3840));
     }
 }

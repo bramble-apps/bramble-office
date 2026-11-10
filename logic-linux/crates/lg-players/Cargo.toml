@@ -1,0 +1,9 @@
+[package]
+name = "lg-players"
+version.workspace = true
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Bramble Studio's Session Players: drummer, bass and keyboard generators that respond to Logic's controls"
+
+[dependencies]
+lg-core = { path = "../lg-core" }
