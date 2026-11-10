@@ -38,6 +38,7 @@ pub fn run() -> eframe::Result {
             .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "bramble-studio".into()))
             .with_inner_size([size.0 + 2.0 * m, size.1 + 2.0 * m])
             .with_min_inner_size([900.0, 560.0])
+            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../data/icons/studio-256.png")).unwrap_or_default())
             .with_drag_and_drop(true),
         ..Default::default()
     };

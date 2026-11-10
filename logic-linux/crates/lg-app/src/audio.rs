@@ -33,6 +33,8 @@ pub struct Engine {
     /// The playhead in ticks from bar 1.
     pub pos: f64,
     pub tempo: f64,
+    /// Tempo changes (ticks, BPM); empty: `tempo` throughout.
+    pub tempo_map: Vec<(u32, f64)>,
     pub tracks: Vec<PlayTrack>,
     pub cycle: Option<(u32, u32)>,
     pub cycle_on: bool,
@@ -61,7 +63,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tracks: Vec::new(), cycle: None, cycle_on: false, master: 1.0, meters: Vec::new(), master_meter: 0.0, synth: None, voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, master: 1.0, meters: Vec::new(), master_meter: 0.0, synth: None, voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -129,7 +131,8 @@ impl Engine {
         if self.meters.len() != self.tracks.len() {
             self.meters = vec![0.0; self.tracks.len()];
         }
-        let tps = self.tempo / 60.0 * PPQ as f64 / RATE as f64;
+        let bpm = self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1);
+        let tps = bpm / 60.0 * PPQ as f64 / RATE as f64;
         if self.playing {
             let from = self.pos;
             let to = from + tps * frames as f64;
@@ -269,9 +272,10 @@ impl Default for Engine {
 
 /// Bounce (File > Bounce > Project or Section…): renders `tracks` offline from `from` to `to`
 /// (ticks) plus a two-second tail, with the given SoundFont; stereo samples at RATE.
-pub fn bounce(tracks: Vec<PlayTrack>, tempo: f64, soundfont: Option<&Path>, from: u32, to: u32) -> Vec<f32> {
+pub fn bounce(tracks: Vec<PlayTrack>, tempo: f64, tempo_map: Vec<(u32, f64)>, soundfont: Option<&Path>, from: u32, to: u32) -> Vec<f32> {
     let mut e = Engine::new();
     e.tempo = tempo;
+    e.tempo_map = tempo_map;
     e.tracks = tracks;
     e.load_soundfont(soundfont);
     e.pos = from as f64;
@@ -424,7 +428,7 @@ mod tests {
             solo: false,
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
-        let out = bounce(tracks, p.tempo, Some(&sf), 0, 2 * 3840);
+        let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
         let secs = out.len() as f64 / 2.0 / RATE as f64;
         assert!((secs - (2.0 * 4.0 * 60.0 / 104.0 + 2.0)).abs() < 0.1, "{secs} s");
         let rms = (out.iter().map(|x| x * x).sum::<f32>() / out.len() as f32).sqrt();

@@ -102,11 +102,19 @@ pub const IMPLEMENTED: &[&str] = &[
     "Open Piano Roll",
     "Move Locators Forward by Cycle Length",
     "Project or Section…",
+    "Undo",
+    "Redo",
     "1 Track as Audio File…",
     "All MIDI Tracks as MIDI File…",
 ];
 
 pub fn enabled(app: &App, label: &str) -> bool {
+    if label.starts_with("Undo ") {
+        return !app.undo.is_empty();
+    }
+    if label.starts_with("Can’t Redo") || label.starts_with("Redo") {
+        return !app.redo.is_empty();
+    }
     if !IMPLEMENTED.contains(&label) {
         return false;
     }

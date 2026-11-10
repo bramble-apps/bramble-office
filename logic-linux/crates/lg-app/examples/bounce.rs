@@ -24,7 +24,7 @@ fn main() {
         })
         .collect();
     let end = p.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.start + r.length).max().unwrap_or(3840);
-    let samples = audio::bounce(tracks, p.tempo, None, 0, end);
+    let samples = audio::bounce(tracks, p.tempo, p.tempo_map.clone(), None, 0, end);
     std::fs::write(out, audio::wav_bytes(&samples)).expect("write");
     println!("{}: {} tracks, {:.1} s → {out}", p.name, p.tracks.len(), samples.len() as f64 / 2.0 / audio::RATE as f64);
 }

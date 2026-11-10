@@ -122,6 +122,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let lp = ui.painter_at(lanes);
     hp.rect_filled(headers, 0.0, look::track_header_bg());
     let mut region_pressed = None;
+    // (registered first, so regions on top of it take their own clicks)
+    let empty = ui.interact(lanes, ui.scope_id().with("lanes-bg"), Sense::click());
     for (i, t) in proj.tracks.iter().enumerate() {
         let y = headers.min.y + i as f32 * ROW_H - app.scroll_y;
         if y + ROW_H < headers.min.y || y > headers.max.y {
@@ -209,8 +211,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 region_pressed = Some((i, ri, resp.double_clicked(), resp.drag_started(), resp.interact_pointer_pos()));
             }
             if resp.dragged() {
+                // (the drag's region: with Option it is the copy, while the pointer is still over
+                // the original)
                 if let (Some(Drag::Region { track, region, from_tick, start }), Some(pp)) = (app.drag, resp.interact_pointer_pos()) {
-                    if track == i && region == ri {
+                    if track == i {
+                        let ri = region;
                         let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
                         let free = ui.input(|i| i.modifiers.shift);
                         let beat = bar_t / app.project.as_ref().map_or(4.0, |p| p.signature.0 as f32);
@@ -226,7 +231,42 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.drag = None;
                 app.load_engine();
             }
+            // the right edge: drag to change the length (snaps to beats; Shift: free)
+            let edge = Rect::from_min_max(pos2(rr.max.x - 6.0, rr.min.y + 15.0), pos2(rr.max.x + 2.0, rr.max.y)).intersect(lanes);
+            let eresp = ui.interact(edge, ui.scope_id().with(("region-end", i, ri)), Sense::drag());
+            if eresp.hovered() || eresp.dragged() {
+                ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+            }
+            if eresp.drag_started() {
+                app.checkpoint("Resize Region");
+                app.selected_region = Some((i, ri));
+                app.drag = Some(Drag::RegionEnd { track: i, region: ri, length: r.length });
+            }
+            if let (true, Some(Drag::RegionEnd { track, region, .. }), Some(pp)) = (eresp.dragged(), app.drag, eresp.interact_pointer_pos()) {
+                if track == i && region == ri {
+                    let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
+                    let beat = bar_t / app.project.as_ref().map_or(4.0, |p| p.signature.0 as f32);
+                    let free = ui.input(|i| i.modifiers.shift);
+                    let mut end = tick;
+                    if !free {
+                        end = (end / beat).round() * beat;
+                    }
+                    let len = (end - r.start as f32).max(beat) as u32;
+                    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)).and_then(|t| t.regions.get_mut(ri)) {
+                        rg.length = len;
+                    }
+                }
+            }
+            if eresp.drag_stopped() {
+                app.drag = None;
+                app.load_engine();
+            }
         }
+    }
+    // click on an empty lane: nothing selected
+    if empty.clicked() && region_pressed.is_none() {
+        app.selected_region = None;
+        app.selected_notes.clear();
     }
     if let Some((t, r, double, drag, pp)) = region_pressed {
         app.selected_track = Some(t);
@@ -236,16 +276,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         app.center_roll(t, r);
         if drag {
+            // Option-drag: a copy moves, the original stays (Logic)
+            let copy = ui.input(|i| i.modifiers.alt);
+            app.checkpoint(if copy { "Copy Region" } else { "Move Region" });
+            let mut r = r;
+            if copy {
+                if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    if let Some(rg) = tr.regions.get(r).cloned() {
+                        tr.regions.push(rg);
+                        r = tr.regions.len() - 1;
+                        app.selected_region = Some((t, r));
+                    }
+                }
+            }
             if let (Some(pp), Some(start)) = (pp, app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).map(|x| x.start)) {
                 let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
                 app.drag = Some(Drag::Region { track: t, region: r, from_tick: tick, start });
             }
         }
-    }
-    // click on an empty lane: nothing selected
-    let empty = ui.interact(lanes, ui.scope_id().with("lanes-bg"), Sense::click());
-    if empty.clicked() && region_pressed.is_none() {
-        app.selected_region = None;
     }
     // bar lines over the lanes
     for b in first..first + visible {
@@ -277,8 +325,12 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
             app.tell("Select All isn't available yet");
             ui.close();
         }
-        if ui.button("Delete Region").clicked() {
-            delete_selected(app);
+        if ui.button("Undo").clicked() {
+            app.undo();
+            ui.close();
+        }
+        if ui.button("Delete").clicked() {
+            app.delete_selection();
             ui.close();
         }
     });
@@ -331,18 +383,8 @@ fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
     }
 }
 
-fn delete_selected(app: &mut App) {
-    let Some((t, r)) = app.selected_region else { return };
-    if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-        if r < tr.regions.len() {
-            tr.regions.remove(r);
-        }
-    }
-    app.selected_region = None;
-    app.load_engine();
-}
-
 fn new_track(app: &mut App) {
+    app.checkpoint("Create New Track");
     let Some(p) = app.project.as_mut() else { return };
     let row = p.tracks.len() as u32 + 1;
     p.tracks.push(lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false });

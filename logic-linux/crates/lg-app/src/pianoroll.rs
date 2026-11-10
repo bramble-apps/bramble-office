@@ -124,21 +124,105 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let strip = Rect::from_min_max(pos2(rx0, ruler.center().y + 1.0), pos2(rx1, ruler.max.y - 1.0));
     rp.rect_filled(strip, 3.0, look::mix(base, Color32::WHITE, 0.45));
     rp.text(pos2(strip.min.x + 6.0, strip.center().y), Align2::LEFT_CENTER, &region.name, look::regular(11.0), Color32::from_rgb(0x10, 0x30, 0x10));
-    // notes
-    for n in &region.notes {
+    // notes: click selects (Shift adds), drag moves (snapped to 1/16; Shift: free; Option:
+    // copies), double-click on the grid adds a 1/16 note, Delete removes the selection
+    let bg = ui.interact(grid, ui.scope_id().with("roll-bg"), Sense::click());
+    let mut pressed_note = None;
+    let sixteenth = lg_core::events::PPQ as f32 / 4.0;
+    for (k, n) in region.notes.iter().enumerate() {
         let y = y_of(n.pitch as f32);
         let r = Rect::from_min_max(pos2(x_of(n.pos as f32), y - ROW + 1.5), pos2(x_of((n.pos + n.len) as f32).max(x_of(n.pos as f32) + 3.0), y - 1.5));
         if !r.intersects(grid) {
             continue;
         }
+        let selected = app.selected_notes.contains(&k);
         let c = velocity_color(n.velocity);
-        gp.rect_filled(r, 2.0, c);
-        gp.rect_stroke(r, 2.0, Stroke::new(1.0, look::mix(c, Color32::BLACK, 0.45)), egui::StrokeKind::Inside);
+        gp.rect_filled(r, 2.0, if selected { look::mix(c, Color32::WHITE, 0.45) } else { c });
+        gp.rect_stroke(r, 2.0, Stroke::new(if selected { 1.6 } else { 1.0 }, if selected { Color32::WHITE } else { look::mix(c, Color32::BLACK, 0.45) }), egui::StrokeKind::Inside);
         // the velocity bar inside, as Logic draws it
         if r.width() > 8.0 {
             let w = (r.width() - 4.0) * n.velocity as f32 / 127.0;
             gp.hline(r.min.x + 2.0..=r.min.x + 2.0 + w, r.center().y, Stroke::new(1.0, look::mix(c, Color32::BLACK, 0.5)));
         }
+        let resp = ui.interact(r.intersect(grid), ui.scope_id().with(("note", k)), Sense::click_and_drag());
+        if resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if resp.clicked() || resp.drag_started() {
+            pressed_note = Some((k, resp.drag_started(), resp.interact_pointer_pos()));
+        }
+        if resp.dragged() {
+            if let (Some(crate::app::Drag::Notes { from_tick, from_pitch, .. }), Some(pp)) = (app.drag, resp.interact_pointer_pos()) {
+                let tick = (pp.x - grid.min.x) / bw * bar_t + sx * bar_t;
+                let pitch = top - (pp.y - grid.min.y) / ROW + 1.0;
+                let free = ui.input(|i| i.modifiers.shift);
+                let mut dt = tick - from_tick;
+                if !free {
+                    dt = (dt / sixteenth).round() * sixteenth;
+                }
+                let dp = (pitch - from_pitch).round() as i32;
+                let orig = Some(app.drag_notes.clone());
+                let sel = app.selected_notes.clone();
+                if let (Some(orig), Some(rg)) = (orig, app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri))) {
+                    for &i in &sel {
+                        if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
+                            n.pos = (o.pos as f32 + dt).max(0.0) as u32;
+                            n.pitch = (o.pitch as i32 + dp).clamp(0, 127) as u8;
+                        }
+                    }
+                }
+            }
+        }
+        if resp.drag_stopped() {
+            app.drag = None;
+            app.load_engine();
+        }
+    }
+    if let Some((k, drag, pp)) = pressed_note {
+        let shift = ui.input(|i| i.modifiers.shift);
+        if shift && !drag {
+            if let Some(i) = app.selected_notes.iter().position(|x| *x == k) {
+                app.selected_notes.remove(i);
+            } else {
+                app.selected_notes.push(k);
+            }
+        } else if !app.selected_notes.contains(&k) {
+            app.selected_notes = vec![k];
+        }
+        if let (true, Some(pp)) = (drag, pp) {
+            let copy = ui.input(|i| i.modifiers.alt);
+            app.checkpoint(if copy { "Copy Notes" } else { "Move Notes" });
+            if copy {
+                // the copies are what moves; the originals stay where they were
+                if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
+                    let mut new_sel = Vec::new();
+                    for &i in &app.selected_notes {
+                        if let Some(n) = rg.notes.get(i).copied() {
+                            rg.notes.push(n);
+                            new_sel.push(rg.notes.len() - 1);
+                        }
+                    }
+                    app.selected_notes = new_sel;
+                }
+            }
+            app.drag_notes = app.project.as_ref().and_then(|p| p.tracks.get(ti)).and_then(|t| t.regions.get(ri)).map(|r| r.notes.clone()).unwrap_or_default();
+            let tick = (pp.x - grid.min.x) / bw * bar_t + sx * bar_t;
+            let pitch = top - (pp.y - grid.min.y) / ROW + 1.0;
+            app.drag = Some(crate::app::Drag::Notes { from_tick: tick, from_pitch: pitch, copy });
+        }
+    } else if bg.double_clicked() {
+        if let Some(pp) = bg.interact_pointer_pos() {
+            let tick = (((pp.x - grid.min.x) / bw * bar_t + sx * bar_t) / sixteenth).floor() * sixteenth;
+            let pitch = (top - (pp.y - grid.min.y) / ROW + 1.0).floor().clamp(0.0, 127.0) as u8;
+            app.checkpoint("Create Note");
+            if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
+                rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: 80, pos: tick.max(0.0) as u32, len: sixteenth as u32 });
+                app.selected_notes = vec![rg.notes.len() - 1];
+            }
+            app.load_engine();
+        }
+    } else if bg.clicked() {
+        app.selected_notes.clear();
     }
     // the playhead
     let ph = x_of(app.position() as f32);

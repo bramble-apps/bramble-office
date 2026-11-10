@@ -70,10 +70,21 @@ pub struct App {
     pub programs: Vec<u8>,
     pub drag: Option<Drag>,
     pub automated: bool,
+    /// Undo / redo: the song as it was, with what changed it ("Move Region").
+    pub undo: Vec<(String, Project, Vec<u8>)>,
+    pub redo: Vec<(String, Project, Vec<u8>)>,
+    /// Piano Roll: the selected notes (indexes in the region).
+    pub selected_notes: Vec<usize>,
+    /// The region's notes as they were when a note drag began (the drag moves from these).
+    pub drag_notes: Vec<lg_core::events::Note>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum Drag {
+    /// A region's right edge: its length.
+    RegionEnd { track: usize, region: usize, length: u32 },
+    /// Selected notes moving: where the press was (tick, pitch), copies with Option.
+    Notes { from_tick: f32, from_pitch: f32, copy: bool },
     /// A region moving: which, where the press was (ticks), its start then.
     Region { track: usize, region: usize, from_tick: f32, start: u32 },
     Playhead,
@@ -132,6 +143,10 @@ impl App {
             programs: Vec::new(),
             drag: None,
             automated,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            selected_notes: Vec::new(),
+            drag_notes: Vec::new(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -211,6 +226,7 @@ impl App {
             let mut e = self.engine.lock().unwrap_or_else(|e| e.into_inner());
             e.all_off();
             e.tempo = p.tempo;
+            e.tempo_map = p.tempo_map.clone();
             e.tracks = tracks;
             e.cycle = Some(self.cycle);
             e.program_changes();
@@ -292,8 +308,10 @@ impl App {
         self.project.as_ref().map_or(3840, |p| lg_core::project::bar_ticks(p.signature))
     }
 
+    /// The tempo at the playhead (the LCD).
     pub fn tempo(&self) -> f64 {
-        self.project.as_ref().map_or(120.0, |p| p.tempo)
+        let pos = self.position() as u32;
+        self.project.as_ref().map_or(120.0, |p| p.tempo_at(pos))
     }
 
     /// Sets a track's sound (the Browser's instruments: the SoundFont's presets).
@@ -362,10 +380,11 @@ impl App {
             }
         }
         let tempo = p.tempo;
+        let map = p.tempo_map.clone();
         let sf = self.engine().soundfont.clone();
         self.tell("Bouncing…");
         std::thread::spawn(move || {
-            let samples = audio::bounce(tracks, tempo, sf.as_deref(), from, to);
+            let samples = audio::bounce(tracks, tempo, map, sf.as_deref(), from, to);
             let _ = std::fs::write(&path, audio::wav_bytes(&samples));
         });
     }
@@ -380,6 +399,78 @@ impl App {
         }
     }
 
+    /// Delete / Backspace: the selected notes (Piano Roll), else the selected region.
+    pub fn delete_selection(&mut self) {
+        let Some((t, r)) = self.selected_region else { return };
+        if !self.selected_notes.is_empty() && self.bottom == Bottom::PianoRoll {
+            self.checkpoint("Delete Notes");
+            let mut idx = std::mem::take(&mut self.selected_notes);
+            idx.sort_unstable();
+            if let Some(rg) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
+                for i in idx.into_iter().rev() {
+                    if i < rg.notes.len() {
+                        rg.notes.remove(i);
+                    }
+                }
+            }
+        } else {
+            self.checkpoint("Delete Region");
+            if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                if r < tr.regions.len() {
+                    tr.regions.remove(r);
+                }
+            }
+            self.selected_region = None;
+        }
+        self.after_edit();
+    }
+
+    /// Before an edit: the song as it is goes on the undo list.
+    pub fn checkpoint(&mut self, what: &str) {
+        let Some(p) = &self.project else { return };
+        self.undo.push((what.to_string(), p.clone(), self.programs.clone()));
+        if self.undo.len() > 100 {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+    }
+
+    pub fn undo(&mut self) {
+        let Some((what, p, progs)) = self.undo.pop() else { return };
+        if let Some(cur) = self.project.take() {
+            self.redo.push((what.clone(), cur, self.programs.clone()));
+        }
+        self.project = Some(p);
+        self.programs = progs;
+        self.after_edit();
+        self.tell(format!("Undo {what}"));
+    }
+
+    pub fn redo(&mut self) {
+        let Some((what, p, progs)) = self.redo.pop() else { return };
+        if let Some(cur) = self.project.take() {
+            self.undo.push((what.clone(), cur, self.programs.clone()));
+        }
+        self.project = Some(p);
+        self.programs = progs;
+        self.after_edit();
+        self.tell(format!("Redo {what}"));
+    }
+
+    /// After the song changed: selections still valid, the engine follows.
+    pub fn after_edit(&mut self) {
+        if let Some(p) = &self.project {
+            if self.selected_track.is_some_and(|t| t >= p.tracks.len()) {
+                self.selected_track = None;
+            }
+            if self.selected_region.is_some_and(|(t, r)| p.tracks.get(t).is_none_or(|tr| r >= tr.regions.len())) {
+                self.selected_region = None;
+                self.selected_notes.clear();
+            }
+        }
+        self.load_engine();
+    }
+
     pub fn menu_label(&self, label: &str) -> String {
         match label {
             "Hide Browser" if !self.show_browser => "Show Browser".into(),
@@ -387,6 +478,14 @@ impl App {
             "Show Mixer" if self.bottom == Bottom::Mixer => "Hide Mixer".into(),
             "Show Editor" if self.bottom == Bottom::PianoRoll => "Hide Editor".into(),
             "Hide Control Bar" if !self.show_control_bar => "Show Control Bar".into(),
+            l if l.starts_with("Undo ") => match self.undo.last() {
+                Some((w, ..)) => format!("Undo {w}"),
+                None => "Can’t Undo".into(),
+            },
+            l if l.starts_with("Can’t Redo") || l.starts_with("Redo") => match self.redo.last() {
+                Some((w, ..)) => format!("Redo {w}"),
+                None => "Can’t Redo".into(),
+            },
             _ => label.to_string(),
         }
     }
@@ -425,6 +524,8 @@ impl App {
                 self.set_cycle((b, b + (b - a)));
             }
             "Project or Section…" => self.bounce(None),
+            c if c.starts_with("Undo ") => self.undo(),
+            c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
             "1 Track as Audio File…" => {
                 let t = self.selected_track;
                 self.bounce(t);
@@ -450,6 +551,16 @@ impl App {
         }
         if cmd && pressed(Key::O) {
             self.open_dialog();
+        }
+        if cmd && pressed(Key::Z) {
+            if shift {
+                self.redo();
+            } else {
+                self.undo();
+            }
+        }
+        if !cmd && (pressed(Key::Delete) || pressed(Key::Backspace)) {
+            self.delete_selection();
         }
         if !cmd {
             if pressed(Key::C) {

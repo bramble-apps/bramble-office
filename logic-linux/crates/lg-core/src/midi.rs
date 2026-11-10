@@ -49,14 +49,17 @@ pub fn write(p: &Project) -> Vec<u8> {
     head.extend_from_slice(&(PPQ as u16).to_be_bytes());
     chunk(b"MThd", &head, &mut out);
     // the tempo track: name, tempo, time signature
-    let mpq = (60_000_000.0 / p.tempo.max(1.0)).round() as u32;
     let mut meta = vec![(0, {
         let mut b = vec![0xFF, 0x03];
         vlq(p.name.len() as u32, &mut b);
         b.extend_from_slice(p.name.as_bytes());
         b
     })];
-    meta.push((0, vec![0xFF, 0x51, 0x03, (mpq >> 16) as u8, (mpq >> 8) as u8, mpq as u8]));
+    let map = if p.tempo_map.is_empty() { vec![(0, p.tempo)] } else { p.tempo_map.clone() };
+    for (at, bpm) in map {
+        let mpq = (60_000_000.0 / bpm.max(1.0)).round() as u32;
+        meta.push((at, vec![0xFF, 0x51, 0x03, (mpq >> 16) as u8, (mpq >> 8) as u8, mpq as u8]));
+    }
     let denom_pow = p.signature.1.max(1).trailing_zeros() as u8;
     meta.push((0, vec![0xFF, 0x58, 0x04, p.signature.0, denom_pow, 24, 8]));
     chunk(b"MTrk", &track_data(meta), &mut out);

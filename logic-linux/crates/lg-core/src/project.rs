@@ -31,6 +31,8 @@ pub struct Project {
     /// The package (or project folder) read.
     pub path: PathBuf,
     pub tempo: f64,
+    /// Tempo changes: (ticks from bar 1, BPM), first at 0 (the global tempo list's 0x60 events).
+    pub tempo_map: Vec<(u32, f64)>,
     pub signature: (u8, u8),
     pub key: String,
     pub sample_rate: u32,
@@ -230,6 +232,25 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             }
         }
     }
+    // the tempo list: the second global event list (EvSq id 0), kind 0x60, BPM × 10000 in the
+    // second unit
+    if let Some(tempos) = live.iter().filter(|c| c.is("EvSq") && c.id == 0).nth(1) {
+        for r in events::records(tempos.payload) {
+            if r.kind == 0x60 && r.units() >= 2 {
+                let bpm = r.u32_at(16) as f64 / 10000.0;
+                if (5.0..=990.0).contains(&bpm) {
+                    p.tempo_map.push((r.pos.saturating_sub(events::BAR_ONE), bpm));
+                }
+            }
+        }
+        p.tempo_map.sort_by_key(|t| t.0);
+        // (the list's first event sits a bar after the song's start in every sample, 38400: it is
+        // the song's opening tempo; where later changes fall is still being checked)
+        if let Some(first) = p.tempo_map.first_mut() {
+            first.0 = 0;
+        }
+        p.tempo_map.dedup_by(|b, a| a.1 == b.1);
+    }
     // sequences by id: name and events (the last MSeq / EvSq of an id wins: earlier ones are
     // older copies kept in some files)
     let mut names: BTreeMap<u32, String> = BTreeMap::new();
@@ -338,9 +359,21 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     }
     p.plugins = live.iter().filter(|c| c.is("AuCU")).filter_map(|c| plugin::read_unit(c.payload)).collect();
     if p.tempo <= 0.0 {
-        p.tempo = 120.0;
+        p.tempo = p.tempo_map.first().map_or(120.0, |t| t.1);
     }
+    // the map starts at the song's start with the song tempo
+    if p.tempo_map.first().is_none_or(|t| t.0 > 0) {
+        p.tempo_map.insert(0, (0, p.tempo));
+    }
+    p.tempo_map[0].0 = 0;
     Ok(p)
+}
+
+impl Project {
+    /// The tempo at a position (ticks from bar 1).
+    pub fn tempo_at(&self, tick: u32) -> f64 {
+        self.tempo_map.iter().rev().find(|t| t.0 <= tick).map_or(self.tempo, |t| t.1)
+    }
 }
 
 /// Ticks in a bar of this signature.
