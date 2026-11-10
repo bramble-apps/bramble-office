@@ -4,6 +4,7 @@
 
 pub mod chunks;
 pub mod events;
+pub mod liveloops;
 pub mod midi;
 pub mod plugin;
 pub mod project;

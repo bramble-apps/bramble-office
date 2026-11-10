@@ -16,6 +16,7 @@ pub mod eq;
 mod inspector;
 pub mod keymap;
 mod live;
+pub mod liveloops;
 pub mod look;
 pub mod menus;
 mod mixer;

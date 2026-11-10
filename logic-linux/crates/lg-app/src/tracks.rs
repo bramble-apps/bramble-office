@@ -58,7 +58,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // ---- the list header and the ruler
     let hw = app.header_w.clamp(HEADER_W, 547.0);
     let head = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(hw, RULER_H));
-    let ruler = Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(area.max.x, local.max.y + RULER_H));
+    let grid_w = crate::liveloops::grid_width(app, area.width() - hw);
+    let ruler = Rect::from_min_max(pos2(head.max.x + grid_w, local.max.y), pos2(area.max.x, local.max.y + RULER_H));
     p.rect_filled(head, 0.0, look::header_bg());
     p.rect_filled(ruler, 0.0, look::header_bg());
     // Logic's row over the headers: + (New Tracks), Duplicate Track, S (global tracks); at the
@@ -102,7 +103,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
     if app.global_tracks {
-        global_tracks(app, ui, global, head.max.x);
+        global_tracks(app, ui, global, ruler.min.x);
     }
     let bar_t = app.bar_ticks() as f32;
     let bw0 = app.bar_w;
@@ -365,7 +366,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             let rr = Rect::from_min_max(pos2(x0, y + 3.0), pos2(x1.max(x0 + 4.0), y + ROW_H - 3.0));
             let sel = app.selected_region == Some((i, ri));
-            draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted, app);
+            draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted || crate::liveloops::takes_over(app, i), app);
             if let Some((rt, rri, text)) = app.renaming_region.as_mut().filter(|x| x.0 == i && x.1 == ri) {
                 let (rt, rri) = (*rt, *rri);
                 let er = Rect::from_min_size(rr.min, vec2(rr.width().max(120.0), 18.0));
@@ -553,6 +554,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             app.scroll_x = bar_pos.floor().max(0.0);
         }
     }
+    if grid_w > 0.0 {
+        crate::liveloops::show_grid(app, ui, Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(head.max.x + grid_w, area.max.y)), headers.min.y);
+    }
     // the divider between headers and lanes: drag to widen the headers (265–547 pt)
     p.vline(head.max.x, area.min.y + LOCAL_H..=area.max.y, Stroke::new(1.0, look::line()));
     let edge = Rect::from_min_max(pos2(head.max.x - 3.0, head.max.y), pos2(head.max.x + 3.0, area.max.y));
@@ -572,7 +576,11 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
     // Logic's view buttons: Live Loops grid, Tracks (on), and Show/Hide Flex
     for (i, tip) in ["Live Loops Grid (L)", "Tracks View", "Show/Hide Flex (F)"].into_iter().enumerate() {
         let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), Sense::click());
-        let on = i == 1;
+        let (grid_on, tracks_on) = crate::liveloops::shown(app);
+        let on = (i == 0 && grid_on) || (i == 1 && tracks_on);
+        if resp.clicked() && i < 2 {
+            crate::liveloops::command(app, if i == 0 { "Show/Hide Live Loops Grid" } else { "Show/Hide Tracks area" });
+        }
         let p = ui.painter();
         p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
         let c = r.center();

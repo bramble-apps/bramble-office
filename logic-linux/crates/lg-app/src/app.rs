@@ -159,6 +159,8 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// Live Loops: the grid, its cells, what plays and what's queued.
+    pub live_loops: crate::liveloops::State,
     /// Automation shown on the tracks (A); each track's mode and the lane its header shows.
     pub show_automation: bool,
     pub auto_mode: std::collections::HashMap<usize, crate::automation::AutoMode>,
@@ -330,6 +332,7 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            live_loops: Default::default(),
             show_automation: false,
             auto_mode: Default::default(),
             auto_param: Default::default(),
@@ -958,7 +961,11 @@ impl App {
         }
         let _ = ();
         match lg_core::save::save(p, original) {
-            Ok(saved) => {
+            Ok(mut saved) => {
+                // the Live Loops grid's cells written into the same bytes
+                let (data, unsaved_cells) = crate::liveloops::save_into(self, &saved.data);
+                saved.data = data;
+                saved.unsaved.extend(unsaved_cells);
                 let target = alt.join("ProjectData");
                 let backup = alt.join("ProjectData.before-bramble");
                 if !backup.exists() {
@@ -1009,6 +1016,8 @@ impl App {
             pr.name = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
             pr.path = dest.clone();
         }
+        // (the grid stays as it is, not re-read from the new path)
+        crate::liveloops::keep_after_save_as(self);
         self.save();
     }
 
@@ -1208,6 +1217,9 @@ impl App {
             }
             if m.command && key == egui::Key::S {
                 if m.shift { self.save_as() } else { self.save() }
+                continue;
+            }
+            if crate::liveloops::key_press(self, key, m) {
                 continue;
             }
             for c in crate::keymap::commands_for(key, m, focus) {
@@ -1722,6 +1734,7 @@ impl eframe::App for App {
             self.open_path(p);
         }
         self.keys(&ctx);
+        crate::liveloops::update(self);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };

@@ -34,7 +34,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, Single / Tracks / All), strips with fader, pan, meters, scale, slots, sends to buses (level knob, pre/post, No Send) and aux strips (input bus, effects, fader) mixed by the engine. [ ] filters, groups, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA, reading sends and auxes from projects
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, Smart Tempo and audio editors (being built), Live Loops (being built)
-- [ ] Live Loops grid, scenes, cell editing, queueing, Remix FX
+- [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
 - [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
 
@@ -65,7 +65,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Drum Kit Designer and Drum Machine Designer kits
 
 ## 6. Files
-- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check)
+- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late)
 - [x] Open GarageBand .band (iOS); [ ] macOS GarageBand sample
 - [~] Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes
 - [ ] Save .band
