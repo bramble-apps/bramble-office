@@ -1741,6 +1741,7 @@ name = "kn-ui"
 version = "0.4.2"
 dependencies = [
  "android_logger",
+ "arboard",
  "eframe",
  "egui",
  "epaint",

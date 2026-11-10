@@ -33,6 +33,9 @@ pub const BLANK: &[u8] = include_bytes!("../data/Blank.numbers");
 /// Load the Numbers schema; call once before opening any file.
 pub fn init() {
     kn_format::schema::use_schema(include_str!("../data/schema.json"), include_str!("../data/registry.json"));
+    // a row grows to fit its lines (wrapped text, line breaks), its own height the least it
+    // takes, so text never runs over the row below (Numbers grows rows to their text)
+    kn_model::table::set_all_rows_fit(true);
 }
 
 /// One sheet: its name and the drawables on its canvas, back to front.

@@ -8,6 +8,7 @@
 //! note (then calls `app.note_changed()`) and reports `app.editor_state` for the menus. The Aa
 //! toolbar button's popup draws [`format_popover`].
 
+mod clip;
 pub mod doc;
 mod draw;
 mod find;
@@ -597,10 +598,15 @@ impl Editor {
                 }
             }
             Paste | PasteMatchStyle => {
-                // the clipboard arrives as a paste event next frame
                 if let Some(ctx) = ctx {
                     self.view.paste_match = cmd == PasteMatchStyle;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    // the clipboard read here (files and pictures with no text too); when it can't
+                    // be read, egui's paste event next frame
+                    let text = kn_ui::clipboard::text().filter(|t| !t.is_empty());
+                    if !self.paste_system(text.as_deref(), None) {
+                        self.view.paste_match = cmd == PasteMatchStyle;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    }
                 }
             }
             SelectAll => self.select_all(),

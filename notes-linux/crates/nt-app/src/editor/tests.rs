@@ -2742,3 +2742,138 @@ fn looking_at_a_drawing_changes_nothing() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
+
+// ---- the system clipboard and dropped files (editor/clip.rs)
+
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let rgba: Vec<u8> = (0..w * h).flat_map(|i| [(i * 7) as u8, 90, 200, 255]).collect();
+    kn_ui::clipboard::encode_png(w, h, &rgba).unwrap()
+}
+
+fn kinds(ed: &Editor) -> Vec<String> {
+    ed.doc
+        .paras
+        .iter()
+        .map(|p| match p.sole_att().and_then(|id| ed.doc.att(id)).map(|a| &a.kind) {
+            Some(AttKind::Image { name, width, .. }) => format!("image {name} {width}"),
+            Some(AttKind::File { name, .. }) => format!("file {name}"),
+            Some(AttKind::Pdf { name, .. }) => format!("pdf {name}"),
+            _ => p.text.clone(),
+        })
+        .collect()
+}
+
+#[test]
+fn paste_a_picture() {
+    // a screenshot: only image/png on the clipboard
+    let mut ed = ed_with(&[("Shot", ParaStyle::Title), ("", ParaStyle::Body)]);
+    at(&mut ed, 1, 0);
+    ed.paste_incoming(super::clip::Incoming { image: Some((png(3, 2), 1)), ..Default::default() });
+    assert_eq!(kinds(&ed), ["Shot", "image Pasted Image.png 3", ""]);
+    let Some(AttKind::Image { path: Some(p), .. }) = ed.doc.atts.last().map(|a| &a.kind) else { panic!() };
+    assert_eq!(image::image_dimensions(p).unwrap(), (3, 2));
+    // a JPEG keeps its own encoding; mid-line the line splits around it
+    let mut jpeg = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(4, 4, image::Rgb([9, 9, 9])).write_to(&mut jpeg, image::ImageFormat::Jpeg).unwrap();
+    let a = super::clip::pasted_image(jpeg.get_ref()).unwrap();
+    assert!(matches!(&a.kind, AttKind::Image { name, .. } if name == "Pasted Image.jpeg"));
+    let mut ed = ed_with(&[("abcd", ParaStyle::Body)]);
+    at(&mut ed, 0, 2);
+    ed.paste_incoming(super::clip::Incoming { image: Some((png(5, 5), 2)), ..Default::default() });
+    assert_eq!(kinds(&ed), ["ab", "image Pasted Image.png 5", "cd"]);
+    // undo takes it out again
+    ed.undo();
+    assert_eq!(texts(&ed), ["abcd"]);
+    // not a picture: nothing
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.paste_incoming(super::clip::Incoming { image: Some((b"nope".to_vec(), 3)), ..Default::default() });
+    assert_eq!(texts(&ed), [""]);
+}
+
+#[test]
+fn paste_copied_files() {
+    let dir = std::env::temp_dir().join(format!("nt-clip-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let pic = dir.join("photo.png");
+    std::fs::write(&pic, png(6, 4)).unwrap();
+    let doc = dir.join("Report.odt");
+    std::fs::write(&doc, b"x").unwrap();
+    // Files' Copy: the paths come as text too, but the files are what's pasted (one undo)
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.paste_incoming(super::clip::Incoming { files: vec![pic.clone(), doc.clone()], text: Some(format!("{}\n{}", pic.display(), doc.display())), ..Default::default() });
+    assert_eq!(kinds(&ed), ["image photo.png 6", "", "file Report.odt", ""]);
+    ed.undo();
+    assert_eq!(texts(&ed), [""]);
+    // dropped on a line of text: after it
+    let mut ed = ed_with(&[("hello", ParaStyle::Body)]);
+    at(&mut ed, 0, 5);
+    ed.paste_atts(vec![super::media::att_for_file(&pic)]);
+    assert_eq!(kinds(&ed), ["hello", "image photo.png 6", ""]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn paste_rich_text_with_pictures() {
+    let pic = png(8, 3);
+    let b64 = {
+        // (the test's own base64, to feed a data: URI)
+        const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut s = String::new();
+        for c in pic.chunks(3) {
+            let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+            for k in 0..4 {
+                if k <= c.len() { s.push(T[(n >> (18 - 6 * k) & 63) as usize] as char) } else { s.push('=') }
+            }
+        }
+        s
+    };
+    let html = format!("<meta charset=utf-8><h1>Trip</h1><p>Pack <b>light</b></p><p><img src=\"data:image/png;base64,{b64}\" width=8></p><ul><li>Socks</li></ul><img src=\"https://example.invalid/x.png\">");
+    let fetched = std::sync::Mutex::new(Vec::new());
+    let fetch = |s: &str| {
+        fetched.lock().unwrap().push(s.to_string());
+        if s.starts_with("data:") { kn_ui::clipboard::fetch_src(s) } else { None }
+    };
+    let frag = super::clip::html_frag(&html, Some("Trip\nPack light\n\nSocks"), &fetch).unwrap();
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.paste_frag(&frag);
+    assert_eq!(kinds(&ed), ["Trip", "Pack light", "image Pasted Image.png 8", "Socks"]);
+    assert_eq!(styles(&ed)[0], ParaStyle::Title);
+    assert_eq!(styles(&ed)[3], ParaStyle::Bulleted);
+    assert!(ed.doc.paras[1].runs.iter().any(|r| r.fmt.bold), "bold kept");
+    assert_eq!(fetched.lock().unwrap().len(), 2, "both pictures asked for (the web one fails here and is left out)");
+    // plain HTML (no formatting, no pictures) and code from an editor stay plain text
+    let none = |_: &str| None;
+    assert!(super::clip::html_frag("<div><span>just text</span></div>", Some("just text"), &none).is_none());
+    assert!(super::clip::html_frag("<div><b>fn</b> main() {</div><div><span>    x</span></div>", Some("fn main() {\n    x"), &none).is_none());
+    // HTML whose words aren't the plain text's: the plain text wins
+    assert!(super::clip::html_frag("<b>hidden</b> shown", Some("shown"), &none).is_none());
+    // through paste_incoming, with Paste and Match Style: plain
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.view.paste_match = true;
+    ed.paste_incoming(super::clip::Incoming { html: Some("<h1>Big</h1>".into()), text: Some("Big".into()), ..Default::default() });
+    assert_eq!(styles(&ed), [ParaStyle::Body]);
+    assert_eq!(texts(&ed), ["Big"]);
+    // a browser's Copy Image: the HTML is just the <img>; the clipboard's picture is pasted
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.paste_incoming(super::clip::Incoming { html: Some("<img src=\"https://example.invalid/a.png\">".into()), image: Some((png(2, 2), 9)), ..Default::default() });
+    assert_eq!(kinds(&ed), ["image Pasted Image.png 2", ""]);
+}
+
+#[test]
+fn copied_picture_has_a_name_and_a_file() {
+    let dir = std::env::temp_dir().join(format!("nt-clip-copy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let pic = dir.join("p.png");
+    std::fs::write(&pic, png(4, 3)).unwrap();
+    let mut ed = ed_with(&[("", ParaStyle::Body)]);
+    ed.attach_file(&pic);
+    ed.anchor = Loc { cell: None, para: 0, off: 0 };
+    ed.head = Loc { cell: None, para: 0, off: ed.doc.paras[0].len() };
+    let (frag, plain) = ed.copy_frag().unwrap();
+    assert_eq!(plain, "", "a picture has no plain text of its own");
+    assert_eq!(super::clip::sole_picture(&frag).as_deref(), Some(pic.as_path()));
+    assert_eq!(super::clip::sole_name(&frag).as_deref(), Some("p.png"));
+    let (w, h, rgba) = super::clip::picture_pixels(&pic).unwrap();
+    assert_eq!((w, h, rgba.len()), (4, 3, 48));
+    let _ = std::fs::remove_dir_all(&dir);
+}

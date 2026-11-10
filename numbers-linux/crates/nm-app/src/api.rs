@@ -1695,7 +1695,10 @@ pub fn paste(app: &mut App, ctx: &egui::Context, t: &str) {
         app.paste_here();
         return;
     }
-    let ours = app.cell_clip.as_ref().is_some_and(|c| c.tsv.replace("\r\n", "\n") == t.replace("\r\n", "\n"));
+    let ours = crate::clip::is_ours(app, t);
+    if !ours && crate::clip::paste_pictures(app, Some(t)) {
+        return;
+    }
     if app.sel.is_none() {
         if ours {
             crate::clip::paste_new_table(app);

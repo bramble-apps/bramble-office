@@ -1159,6 +1159,7 @@ impl App {
                 }
             }
         }
+        kn_ui::update::sheet(ctx);
         if self.show_about {
             egui::Window::new("About Letters").collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).open(&mut self.show_about).show(ctx, |ui| {
                 ui.label(theme::bold("Letters"));

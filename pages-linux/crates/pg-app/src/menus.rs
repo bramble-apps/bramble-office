@@ -630,6 +630,12 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                         let kids = has_icons(&m.children);
                         for c in &m.children {
                             item_ui(app, ui, &m.label, c, kids, &mut fired);
+                            if m.label == "Letters" && c.label == "About Letters" {
+                                kn_ui::update::menu_item(ui, if kids { MENU_ICON_W } else { 0.0 });
+                            }
+                        }
+                        if m.label == "Letters" {
+                            kn_ui::update::menu_footer(ui);
                         }
                     })
                 });
@@ -637,11 +643,15 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                     let b = r.response.rect;
                     kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), kn_ui::icons::Icon::Text, kn_ui::theme::TEXT());
                 }
+                if m.label == "Letters" {
+                    kn_ui::update::title_dot(ui, r.response.rect);
+                }
                 right = right.max(r.response.rect.max.x);
             }
         };
         if compact {
             let r = ui.menu_button("\u{2630}", |ui| all(ui));
+            kn_ui::update::title_dot(ui, r.response.rect);
             right = right.max(r.response.rect.max.x);
         } else {
             all(ui);

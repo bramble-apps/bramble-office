@@ -50,6 +50,7 @@ mod transitions;
 /// Starts the app: the desktop program's main, and android_main on Android.
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Keydeck", version: env!("CARGO_PKG_VERSION"), bin: "keydeck", appimage: "Keydeck-x86_64.AppImage", mac_bundle: "Keydeck.app" });
     let args: Vec<String> = std::env::args().collect();
     // headless: kn-app --export-pdf in.key out.pdf
     if args.get(1).map(String::as_str) == Some("--export-pdf") && args.len() == 4 {

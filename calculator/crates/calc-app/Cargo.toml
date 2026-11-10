@@ -13,3 +13,5 @@ path = "src/main.rs"
 calc-core = { path = "../calc-core" }
 eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
 egui = "0.37"
+# the suite's shared update notice (kn_ui::update) and donation link
+kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }

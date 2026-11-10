@@ -1200,6 +1200,12 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                         let kids = has_icons(&m.children);
                         for c in &m.children {
                             item_ui(app, ui, &m.label, c, kids, &mut fired);
+                            if m.label == "Values" && c.label == "About Values" {
+                                kn_ui::update::menu_item(ui, if kids { MENU_ICON_W } else { 0.0 });
+                            }
+                        }
+                        if m.label == "Values" {
+                            kn_ui::update::menu_footer(ui);
                         }
                     })
                 });
@@ -1207,11 +1213,15 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                     let b = r.response.rect;
                     kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), kn_ui::icons::Icon::Table, kn_ui::theme::TEXT());
                 }
+                if m.label == "Values" {
+                    kn_ui::update::title_dot(ui, r.response.rect);
+                }
                 right = right.max(r.response.rect.max.x);
             }
         };
         if compact {
             let r = ui.menu_button("\u{2630}", |ui| all(ui));
+            kn_ui::update::title_dot(ui, r.response.rect);
             right = right.max(r.response.rect.max.x);
         } else {
             all(ui);
@@ -1823,7 +1833,13 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         "Table > Add Column After" => table_edit(app, "Add Column", &|d, h, t, b| crate::clip::insert_like(d, h, t, Axis::Column, b.3 + 1, b.3)),
         "Table > Delete Row" => table_edit(app, "Delete Row", &|d, h, t, b| (b.0..=b.2).rev().try_for_each(|r| d.table_delete(h, t, Axis::Row, r))),
         "Table > Delete Column" => table_edit(app, "Delete Column", &|d, h, t, b| (b.1..=b.3).rev().try_for_each(|c| d.table_delete(h, t, Axis::Column, c))),
-        "Table > Merge Cells" => table_edit(app, "Merge Cells", &|d, h, t, b| d.merge_cells(h, t, nm_core::kn_model::CellRange { row: b.0, col: b.1, rows: b.2 - b.0 + 1, cols: b.3 - b.1 + 1 })),
+        "Table > Merge Cells" => {
+            // (the merge that keeps a lone value as it was: clip::merge_cells)
+            if let Some(sel) = app.sel {
+                commit(app);
+                crate::clip::merge_cells(app, sel.table, sel.block());
+            }
+        }
         n if n.starts_with("Autofill Cells > Autofill ") => {
             // Numbers: the selection fills from its edge in that direction's opposite (Right:
             // from its first column, Up: from its last row), or from the row / column next to it

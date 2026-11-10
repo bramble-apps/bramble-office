@@ -467,15 +467,25 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
             let r = ui.menu_button("\u{2003}\u{2002}", |ui| {
                 for m in menus() {
                     let label = if m.label == "Notes" { "Notes".to_string() } else { m.label.clone() };
-                    ui.menu_button(label, |ui| {
+                    let sub = ui.menu_button(label, |ui| {
                         for c in &m.children {
                             item_ui(app, ui, &m.label, c, &mut fired);
+                            if m.label == "Notes" && c.label == "About Notes" {
+                                kn_ui::update::menu_item(ui, 0.0);
+                            }
+                        }
+                        if m.label == "Notes" {
+                            kn_ui::update::menu_footer(ui);
                         }
                     });
+                    if m.label == "Notes" {
+                        kn_ui::update::title_dot(ui, sub.response.rect);
+                    }
                 }
             });
             let b = r.response.rect;
             kn_ui::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center(), egui::vec2(18.0, 18.0)), kn_ui::icons::Icon::Menu, kn_ui::theme::TEXT());
+            kn_ui::update::title_dot(ui, b);
             r.response.on_hover_text("Menus (Alt or F10 shows them in the title bar)");
             right = right.max(b.max.x);
             return;
@@ -487,11 +497,18 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
             let r = ui.menu_button(label, |ui| {
                 for c in &m.children {
                     item_ui(app, ui, &m.label, c, &mut fired);
+                    if app_menu && c.label == "About Notes" {
+                        kn_ui::update::menu_item(ui, 0.0);
+                    }
+                }
+                if app_menu {
+                    kn_ui::update::menu_footer(ui);
                 }
             });
             if app_menu {
                 let b = r.response.rect;
                 crate::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center(), egui::vec2(17.0, 17.0)), crate::icons::Glyph::QuickNote, kn_ui::theme::TEXT());
+                kn_ui::update::title_dot(ui, b);
             }
             right = right.max(r.response.rect.max.x);
         }

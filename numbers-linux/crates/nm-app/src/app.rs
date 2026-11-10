@@ -2421,6 +2421,7 @@ impl App {
         }
         crate::media::web_and_jobs(self, &ctx);
         crate::chartedit::ui(self, &ctx);
+        kn_ui::update::sheet(&ctx);
         if self.show_about {
             egui::Window::new("About Values").collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).open(&mut self.show_about).show(&ctx, |ui| {
                 ui.label(theme::bold("Values"));

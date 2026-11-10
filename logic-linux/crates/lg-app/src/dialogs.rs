@@ -5,6 +5,7 @@ use crate::look;
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
     crate::settings::window(app, ctx);
+    kn_ui::update::sheet(ctx);
     if app.show_about {
         let mut open = true;
         egui::Window::new("About Bramble Studio").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {

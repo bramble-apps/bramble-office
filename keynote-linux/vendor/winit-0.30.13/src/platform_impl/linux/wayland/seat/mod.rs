@@ -19,11 +19,13 @@ use crate::event::WindowEvent;
 use crate::keyboard::ModifiersState;
 use crate::platform_impl::wayland::state::WinitState;
 
+mod data_device;
 mod keyboard;
 mod pointer;
 mod text_input;
 mod touch;
 
+pub use data_device::DataDeviceState;
 pub use pointer::pointer_gestures::PointerGesturesState;
 pub use pointer::relative_pointer::RelativePointerState;
 pub use pointer::{PointerConstraintsState, WinitPointerData, WinitPointerDataExt};
@@ -52,6 +54,9 @@ pub struct WinitSeatState {
 
     /// Touchpad pinch on the seat's pointer (keynote-linux addition).
     pinch: Option<sctk::reexports::protocols::wp::pointer_gestures::zv1::client::zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1>,
+
+    /// File drag and drop onto the seat's windows (keynote-linux addition).
+    data_device: Option<sctk::data_device_manager::data_device::DataDevice>,
 
     /// The keyboard bound on the seat.
     keyboard_state: Option<KeyboardState>,
@@ -127,6 +132,10 @@ impl SeatHandler for WinitState {
                 });
 
                 seat_state.pinch = self.pointer_gestures.as_ref().map(|g| g.pinch(themed_pointer.pointer(), queue_handle));
+
+                if seat_state.data_device.is_none() {
+                    seat_state.data_device = self.data_device.as_ref().map(|d| d.device(&seat, queue_handle));
+                }
 
                 let themed_pointer = Arc::new(themed_pointer);
 

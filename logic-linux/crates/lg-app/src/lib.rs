@@ -38,6 +38,7 @@ mod widgets;
 
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Bramble Studio", version: env!("CARGO_PKG_VERSION"), bin: "bramble-studio", appimage: "Bramble-Studio-x86_64.AppImage", mac_bundle: "Bramble Studio.app" });
     let path = std::env::args().nth(1).filter(|a| !a.starts_with("--")).map(std::path::PathBuf::from);
     use_desktop_cursor_theme();
     let look = look::Look::load();

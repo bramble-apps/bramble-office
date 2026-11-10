@@ -26,7 +26,7 @@ use sctk::subcompositor::SubcompositorState;
 use crate::platform_impl::wayland::event_loop::sink::EventSink;
 use crate::platform_impl::wayland::output::MonitorHandle;
 use crate::platform_impl::wayland::seat::{
-    PointerConstraintsState, PointerGesturesState, RelativePointerState, TextInputState, WinitPointerData,
+    DataDeviceState, PointerConstraintsState, PointerGesturesState, RelativePointerState, TextInputState, WinitPointerData,
     WinitPointerDataExt, WinitSeatState,
 };
 use crate::platform_impl::wayland::types::kwin_blur::KWinBlurManager;
@@ -99,6 +99,9 @@ pub struct WinitState {
 
     /// Touchpad gestures (pinch), keynote-linux addition.
     pub pointer_gestures: Option<PointerGesturesState>,
+
+    /// File drag and drop (wl_data_device), keynote-linux addition.
+    pub data_device: Option<DataDeviceState>,
 
     /// Pointer constraints to handle pointer locking and confining.
     pub pointer_constraints: Option<Arc<PointerConstraintsState>>,
@@ -186,6 +189,7 @@ impl WinitState {
 
             relative_pointer: RelativePointerState::new(globals, queue_handle).ok(),
             pointer_gestures: PointerGesturesState::new(globals, queue_handle).ok(),
+            data_device: sctk::data_device_manager::DataDeviceManagerState::bind(globals, queue_handle).ok().map(DataDeviceState::new),
             pointer_constraints: PointerConstraintsState::new(globals, queue_handle)
                 .map(Arc::new)
                 .ok(),

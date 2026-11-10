@@ -1685,6 +1685,7 @@ impl App {
         }
         crate::windows::show(self, &ctx);
         crate::settings::show(self, &ctx);
+        kn_ui::update::sheet(&ctx);
         if self.dialog.is_none() && !self.tb.customizing {
             crate::menus::shortcuts(self, &ctx);
             crate::list::keys(self, &ctx);

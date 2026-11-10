@@ -710,6 +710,13 @@ impl App {
                 self.calc_ui(ui, live);
                 self.prof.phase[2] += tp.elapsed().as_secs_f64() * 1000.0;
             }
+            // the menu button's red dot when an update is out (kn_ui::update)
+            let a = draw::rect(self.lay.menu_anchor);
+            if kn_ui::update::available() && a.is_positive() {
+                let s = a.width().min(a.height());
+                let c = a.center() + vec2(s * 0.3, -s * 0.3);
+                kn_ui::update::paint_dot(&p, c, col(t.bg));
+            }
         });
 
         if hist_t > 0.0 || sheet_t > 0.0 || menu_t > 0.0 {
@@ -730,6 +737,7 @@ impl App {
                 }
             });
         }
+        kn_ui::update::sheet(&ctx);
         if self.ov.popup.is_some() {
             Area::new(Id::unique("popup")).order(Order::Tooltip).fixed_pos(screen.min).movable(false).constrain(false).show(&ctx, |ui| {
                 ui.expand_to_include_rect(screen);

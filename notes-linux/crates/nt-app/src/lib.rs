@@ -56,6 +56,7 @@ mod windows;
 pub fn run() -> eframe::Result {
     let _ = START.set(std::time::Instant::now());
     kn_ui::windows_folders();
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Bramble Notes", version: env!("CARGO_PKG_VERSION"), bin: "bramble-notes", appimage: "Bramble-Notes-x86_64.AppImage", mac_bundle: "Bramble Notes.app" });
     let args: Vec<String> = std::env::args().collect();
     let store = args.get(1).filter(|a| !a.starts_with("--")).map(std::path::PathBuf::from);
     use_desktop_cursor_theme();

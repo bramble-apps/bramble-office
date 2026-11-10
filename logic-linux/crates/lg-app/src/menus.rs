@@ -234,12 +234,23 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
     egui::MenuBar::new().ui(ui, |ui| {
         ui.spacing_mut().button_padding.x = 7.0;
         for m in menus() {
+            // the app menu (left of File): the update notice and the thank-you line
+            let app_menu = m.label == "Bramble Studio";
             let r = ui.menu_button(&m.label, |ui| {
                 ui.set_min_width(240.0);
                 for c in &m.children {
                     item_ui(app, ui, c, &mut fired);
+                    if app_menu && c.label == "About Bramble Studio" {
+                        kn_ui::update::menu_item(ui, 0.0);
+                    }
+                }
+                if app_menu {
+                    kn_ui::update::menu_footer(ui);
                 }
             });
+            if app_menu {
+                kn_ui::update::title_dot(ui, r.response.rect);
+            }
             right = right.max(r.response.rect.max.x);
         }
     });

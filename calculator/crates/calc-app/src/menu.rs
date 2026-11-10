@@ -16,8 +16,14 @@ enum Item {
     Mode(&'static str, &'static str, Mode),
     Convert,
     Themes,
+    /// "Update Available…" (only when there is one)
+    Update,
+    /// the thank-you line with its Support development link
+    Thanks,
     Gap,
 }
+
+const THANKS_ROW: f32 = 40.0;
 
 /// An iOS switch.
 pub fn switch(p: &egui::Painter, r: Rect, on: bool, a: f32) {
@@ -37,10 +43,19 @@ pub fn shadow(p: &egui::Painter, r: Rect, rad: f32, a: f32) {
     }
 }
 
+/// A row's icon; the update row has the suite's small red dot instead.
+fn icon_or_dot(p: &egui::Painter, icon: &str, r: Rect, c: Color32, bg: Color32) {
+    if icon.is_empty() {
+        kn_ui::update::paint_dot(p, r.center(), bg);
+    } else {
+        draw::icon(p, icon, r, c);
+    }
+}
+
 pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
     let th = app.theme();
     let ios18 = th.family == Family::Modern18;
-    let items = [
+    let mut items = vec![
         Item::Mode("Basic", "basic", Mode::Basic),
         Item::Mode("Scientific", "function", Mode::Scientific),
         Item::Mode("Math Notes", "mathnotes", Mode::Notes),
@@ -49,7 +64,17 @@ pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
         Item::Gap,
         Item::Themes,
     ];
-    let h: f32 = items.iter().map(|i| if matches!(i, Item::Gap) { GAP } else { ROW }).sum::<f32>() + 12.0;
+    if kn_ui::update::available() {
+        items.push(Item::Update);
+    }
+    items.push(Item::Gap);
+    items.push(Item::Thanks);
+    let row_h = |i: &Item| match i {
+        Item::Gap => GAP,
+        Item::Thanks => THANKS_ROW,
+        _ => ROW,
+    };
+    let h: f32 = items.iter().map(row_h).sum::<f32>() + 12.0;
     let a = app.ov.menu_anchor;
     let right = a.center().x > screen.center().x;
     let down = a.center().y < screen.center().y;
@@ -93,8 +118,27 @@ pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
             yy += GAP;
             continue;
         }
-        let row = Rect::from_min_size(pos2(full.left(), yy), vec2(W, ROW));
-        yy += ROW;
+        let row = Rect::from_min_size(pos2(full.left(), yy), vec2(W, row_h(it)));
+        yy += row_h(it);
+        if matches!(it, Item::Thanks) {
+            // small and quiet, as the other apps' menu footers
+            let weak = fade(col(th.panel_text).gamma_multiply(0.55), t);
+            let f = fonts::ui(400, 11.5 * s);
+            let tr = draw::text(&p, m(pos2(row.left() + 16.0, row.top() + 12.0)), Align2::LEFT_CENTER, "Thank you for using Bramble Office", f.clone(), weak);
+            // (the system sans may have no ♥: drawn)
+            kn_ui::update::paint_heart(&p, pos2(tr.right() + 8.0 * s, tr.center().y), 4.0 * s, weak);
+            let lr = draw::text(&p, m(pos2(row.left() + 16.0, row.top() + 28.0)), Align2::LEFT_CENTER, "Support development", f, accent);
+            if app.ov.menu {
+                let r = ui.interact(lr.expand(3.0), Id::unique("menu_thanks"), Sense::click());
+                if r.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                if r.clicked() {
+                    chosen = Some(i);
+                }
+            }
+            continue;
+        }
         if app.ov.menu {
             let r = ui.interact(mr(row), Id::unique(("menu_row", i)), Sense::click());
             if r.is_pointer_button_down_on() || r.hovered() {
@@ -109,7 +153,8 @@ pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
             Item::Mode(l, ic, md) => (*l, *ic, *md == mode),
             Item::Convert => ("Convert", "convert", conv),
             Item::Themes => ("Themes…", "paintbrush", false),
-            Item::Gap => unreachable!(),
+            Item::Update => ("Update Available…", "", false),
+            Item::Gap | Item::Thanks => unreachable!(),
         };
         let ic_r = |x: f32| mr(Rect::from_center_size(pos2(x, cy), vec2(20.0, 20.0)));
         if ios18 {
@@ -117,14 +162,14 @@ pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
             if matches!(it, Item::Convert) {
                 switch(&p, mr(Rect::from_min_size(pos2(row.left() + 16.0, cy - 13.0), vec2(46.0, 26.0))), conv, t);
             } else {
-                draw::icon(&p, icon, ic_r(row.left() + 32.0), c);
+                icon_or_dot(&p, icon, ic_r(row.left() + 32.0), c, bgc);
             }
             draw::text(&p, m(pos2(row.left() + 76.0, cy)), Align2::LEFT_CENTER, label, fonts::ui(400, fsz), c);
         } else {
             if current {
                 draw::icon(&p, "check", mr(Rect::from_center_size(pos2(row.left() + 22.0, cy), vec2(15.0, 15.0))), text_c);
             }
-            draw::icon(&p, icon, ic_r(row.left() + 50.0), text_c);
+            icon_or_dot(&p, icon, ic_r(row.left() + 50.0), text_c, bgc);
             draw::text(&p, m(pos2(row.left() + 76.0, cy)), Align2::LEFT_CENTER, label, fonts::ui(400, fsz), text_c);
         }
     }
@@ -143,6 +188,14 @@ pub fn menu(app: &mut App, ui: &mut Ui, screen: Rect, t: f32) {
             Item::Themes => {
                 app.ov.menu = false;
                 app.open_settings();
+            }
+            Item::Update => {
+                app.ov.menu = false;
+                kn_ui::update::open_sheet();
+            }
+            Item::Thanks => {
+                app.ov.menu = false;
+                let _ = kn_ui::open_command(kn_ui::DONATE_URL).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
             }
             Item::Gap => {}
         }

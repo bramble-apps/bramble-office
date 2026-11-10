@@ -6,7 +6,7 @@ use egui::{Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use nm_core::kn_format::ObjId;
 use nm_core::kn_model::tablecells::CellInput;
 use nm_core::kn_model::tablerows::{Axis, HeaderKind};
-use nm_core::kn_model::{CellRange, DrawableKind, Geometry, TableData};
+use nm_core::kn_model::{DrawableKind, Geometry, TableData};
 
 use crate::app::{accent, accent_light, App, InspTab, Sel};
 use crate::tiles::{self, Tiles};
@@ -44,8 +44,9 @@ pub(crate) enum Drag {
     /// the border of the selection until a yellow dot appears, then drag it").
     AutoFill { table: ObjId, src: (u32, u32, u32, u32), to: (u32, u32, u32, u32) },
     /// The table's "=" (rows, kind 0), "||" (columns, 1) and corner (both, 2) handles: drag to
-    /// add or remove rows (one per 20 pt) and columns (one per 98 pt), Numbers' N16.
-    Grow { table: ObjId, kind: u8, from: Pos2 },
+    /// add or remove rows (one per 20 pt) and columns (one per 98 pt), Numbers' N16. They come
+    /// and go as the pointer passes each one (Mac N21 13); `start` is the table's size before.
+    Grow { table: ObjId, kind: u8, from: Pos2, start: (u32, u32) },
     /// Dragging the selected cells by a cell inside them moves their content (Numbers, N16):
     /// the block and the cell the drag started on.
     MoveCells { table: ObjId, src: (u32, u32, u32, u32), from: (u32, u32) },
@@ -805,7 +806,8 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
                 app.canvas.drag = Some(g);
             } else if let Some((table, kind)) = on_grow {
                 commit(app);
-                app.canvas.drag = Some(Drag::Grow { table, kind, from: p });
+                let start = app.table(table).map(|(_, d)| (d.rows, d.cols)).unwrap_or((0, 0));
+                app.canvas.drag = Some(Drag::Grow { table, kind, from: p, start });
             } else if let Some((id, handle)) = on_handle {
                 commit(app);
                 app.canvas.drag = Some(if ui.input(|i| i.modifiers.command) { Drag::Rotate { id, from: p } } else { Drag::ObjSize { id, handle, from: p } });
@@ -1173,19 +1175,20 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
                 }
             }
         }
-        (Some(Drag::Grow { table, kind, from }), Some(p)) => {
+        (Some(Drag::Grow { table, kind, from, start }), Some(p)) => {
             let d = (p - from) / view.zoom;
             let dr = if kind != 1 { (d.y / 20.0).round() as i32 } else { 0 };
             let dc = if kind != 0 { (d.x / 98.0).round() as i32 } else { 0 };
-            let sign = |n: i32| if n > 0 { format!("+{n}") } else { n.to_string() };
-            let label = match kind {
-                0 => format!("{} rows", sign(dr)),
-                1 => format!("{} columns", sign(dc)),
-                _ => format!("{} rows  {} columns", sign(dr), sign(dc)),
-            };
-            tooltip(&painter, p, &label);
-            if resp.drag_stopped() && (dr != 0 || dc != 0) {
-                grow_table(app, table, dr, dc);
+            // the rows / columns are added (or empty ones taken away) as the pointer passes
+            // each, so the table shows what the drag does; the whole drag is one undo step
+            if let Some((rows, cols)) = app.table(table).map(|(_, t)| (t.rows, t.cols)) {
+                let (have_r, have_c) = (rows as i32 - start.0 as i32, cols as i32 - start.1 as i32);
+                if dr != have_r || dc != have_c {
+                    let merge = app.merge_next_edit;
+                    app.merge_next_edit = have_r != 0 || have_c != 0;
+                    grow_table(app, table, dr - have_r, dc - have_c);
+                    app.merge_next_edit = merge;
+                }
             }
         }
         (Some(Drag::Rotate { id, from }), Some(p)) => {
@@ -1510,23 +1513,6 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
     let font = format.font_id.clone();
     let widest = e.text.lines().map(|l| ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), Color32::BLACK).size().x)).fold(0.0f32, f32::max);
     let lines = e.text.split('\n').count().max(1) as f32;
-    // lines as the cell wraps them: when that changes, lay the table out again so the row grows
-    // (or shrinks back) while typing, as Numbers does
-    let wrapped: usize = e.text.split('\n').map(|l| {
-        let lw = ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), Color32::BLACK).size().x);
-        ((lw / (w - 8.0).max(1.0)).ceil() as usize).max(1)
-    }).sum();
-    let key = egui::Id::unique("cell-editor-lines");
-    let before = ui.data(|d| d.get_temp::<(ObjId, u32, u32, usize)>(key));
-    let here = (e.table, e.row, e.col, wrapped);
-    if before != Some(here) {
-        ui.data_mut(|d| d.insert_temp(key, here));
-        if before.is_some_and(|b| (b.0, b.1, b.2) == (here.0, here.1, here.2)) {
-            app.version += 1;
-            ui.ctx().request_repaint();
-        }
-    }
-    let Some(e) = app.canvas.edit.as_mut() else { return };
     let line_h = format.line_height.unwrap_or(fsize * 1.15 * zoom);
     // a cell that wraps its text wraps it in the editor too (else the editor widens to the
     // longest line), and grows down for the lines it wraps to
@@ -1538,6 +1524,20 @@ fn editor(app: &mut App, ui: &mut egui::Ui, r: Rect) {
     } else {
         lines * line_h
     };
+    // the text's height as the cell lays it out: when that changes, lay the table out again so
+    // the row grows (or shrinks back) with the editor while typing, as Numbers does (the
+    // editor's own wrapping, so the row and the field never disagree by a line)
+    let key = egui::Id::unique("cell-editor-lines");
+    let before = ui.data(|d| d.get_temp::<(ObjId, u32, u32, i32)>(key));
+    let here = (e.table, e.row, e.col, (wrapped_h / zoom).round() as i32);
+    if before != Some(here) {
+        ui.data_mut(|d| d.insert_temp(key, here));
+        if before.is_some_and(|b| (b.0, b.1, b.2) == (here.0, here.1, here.2)) {
+            app.version += 1;
+            ui.ctx().request_repaint();
+        }
+    }
+    let Some(e) = app.canvas.edit.as_mut() else { return };
     let area = Rect::from_min_size(r.min, Vec2::new(if wraps { w } else { w.max(widest + 16.0) }, r.height().max(wrapped_h + (pad[1] + pad[3]) * zoom)));
     ui.painter().rect(area, 0.0, back, Stroke::new(2.0, accent()), egui::StrokeKind::Outside);
     // the first line on the sheet's own baseline (the cell's vertical alignment and the font's
@@ -2010,6 +2010,17 @@ pub(crate) fn paste(app: &mut App, text: &str) {
     app.sel = Some(Sel { table: sel.table, anchor: (r0, c0), cursor: (rmax, cmax) });
 }
 
+/// egui's picture paste (the clipboard held a picture and no text): read again through kn-ui
+/// (straight alpha, PNG), else egui's pixels.
+pub(crate) fn paste_color_image(app: &mut App, img: &egui::ColorImage) {
+    if crate::clip::paste_pictures(app, None) {
+        return;
+    }
+    if let Some(p) = kn_ui::clipboard::color_image_png(img) {
+        crate::clip::paste_picture(app, p.png, "Pasted Image.png");
+    }
+}
+
 /// Keyboard: shortcuts always; cell navigation and typing when no text field has focus.
 pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
     use egui::{Key, KeyboardShortcut, Modifiers};
@@ -2047,6 +2058,14 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
     }
     if ctx.input_mut(|i| i.consume_shortcut(&cmd(Key::N))) {
         app.new_document();
+    }
+    // a picture pasted while a cell is being typed in: the cell's fill (the field takes text only)
+    if app.canvas.edit.is_some() {
+        for ev in ctx.input(|i| i.events.clone()) {
+            if let egui::Event::PasteImage(img) = ev {
+                paste_color_image(app, &img);
+            }
+        }
     }
     if app.canvas.edit.is_some() || app.stocks.open || ctx.memory(|m| m.focused().is_some()) {
         return;
@@ -2113,11 +2132,17 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
         return;
     }
     if app.sel.is_none() {
-        // copied cells pasted on the empty canvas make a new table (Numbers, Mac N18)
-        let ours = |t: &str| app.cell_clip.as_ref().is_some_and(|c| c.tsv.replace("\r\n", "\n") == t.replace("\r\n", "\n"));
-        let paste_here = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(t) if ours(t))));
-        if paste_here && !app.obj_clip_active {
-            crate::clip::paste_new_table(app);
+        for ev in ctx.input(|i| i.events.clone()) {
+            match ev {
+                // copied cells pasted on the empty canvas make a new table (Numbers, Mac N18)
+                egui::Event::Paste(t) if !app.obj_clip_active && crate::clip::is_ours(app, &t) => crate::clip::paste_new_table(app),
+                // a picture (or picture files) copied elsewhere: a picture on the sheet
+                egui::Event::Paste(t) if !app.obj_clip_active => {
+                    crate::clip::paste_pictures(app, Some(&t));
+                }
+                egui::Event::PasteImage(img) => paste_color_image(app, &img),
+                _ => {}
+            }
         }
         return;
     }
@@ -2128,11 +2153,17 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
             egui::Event::Copy => copy(app, ctx, false),
             egui::Event::Cut => copy(app, ctx, true),
             egui::Event::Paste(_) if app.obj_clip_active => app.paste_here(),
-            // our own copy: everything it holds; text from elsewhere: values
-            egui::Event::Paste(t) if app.cell_clip.as_ref().is_some_and(|c| c.tsv.replace("\r\n", "\n") == t.replace("\r\n", "\n")) => {
+            // our own copy: everything it holds
+            egui::Event::Paste(t) if crate::clip::is_ours(app, t) => {
                 crate::clip::paste(app, crate::clip::PasteMode::All);
             }
-            egui::Event::Paste(t) => paste(app, t),
+            // picture files or a picture: the cell's fill; text from elsewhere: values
+            egui::Event::Paste(t) => {
+                if !crate::clip::paste_pictures(app, Some(t)) {
+                    paste(app, t);
+                }
+            }
+            egui::Event::PasteImage(img) => paste_color_image(app, img),
             _ => {}
         }
     }
@@ -2238,7 +2269,7 @@ pub fn table_menu(app: &mut App, ui: &mut egui::Ui) {
     }
     ui.separator();
     if ui.add_enabled(!categorized && (r1 > r0 || c1 > c0), egui::Button::new("Merge Cells")).clicked() {
-        run(app, "Merge Cells", &|d, h| d.merge_cells(h, t, CellRange { row: r0, col: c0, rows: r1 - r0 + 1, cols: c1 - c0 + 1 }));
+        crate::clip::merge_cells(app, t, (r0, c0, r1, c1));
     }
     if ui.add_enabled(!categorized, egui::Button::new("Unmerge Cells")).clicked() {
         commit(app);
@@ -2533,6 +2564,10 @@ pub(crate) fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
     let mut del_c = 0;
     while dc < 0 && del_c < (-dc) as u32 && cols > del_c + 1 && empty_col(app, cols - 1 - del_c) {
         del_c += 1;
+    }
+    // (rows with something in them stay: nothing to do)
+    if dr <= 0 && dc <= 0 && del_r == 0 && del_c == 0 {
+        return;
     }
     let res = app.edit("Resize Table", |d, h| -> Result<(), nm_core::kn_format::Error> {
         for k in 0..dr.max(0) as u32 {

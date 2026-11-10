@@ -495,6 +495,13 @@ fn scan_glyph(painter: &egui::Painter, r: Rect, col: Color32) {
 impl Editor {
     /// Edit > Attach File…: a picture, PDF or other file as a block at the caret.
     pub fn attach_file(&mut self, path: &Path) {
+        self.insert_block(att_for_file(path));
+    }
+}
+
+/// A file as an attachment: a picture, a PDF (its pages) or a file card.
+pub fn att_for_file(path: &Path) -> Att {
+    {
         let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let (uti, kind) = match ext.as_str() {
@@ -532,7 +539,7 @@ impl Editor {
                 AttKind::File { name, kind: super::doc::kind_name(uti), size, path: Some(path.into()) }
             }
         };
-        self.insert_block(Att::new(uti, kind));
+        Att::new(uti, kind)
     }
 }
 

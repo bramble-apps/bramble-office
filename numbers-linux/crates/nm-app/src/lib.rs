@@ -44,6 +44,7 @@ mod toolbar;
 /// Starts the app: the desktop program's main, and android_main on Android.
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Values", version: env!("CARGO_PKG_VERSION"), bin: "values", appimage: "Values-x86_64.AppImage", mac_bundle: "Values.app" });
     nm_core::init();
     let args: Vec<String> = std::env::args().collect();
     // headless: numdeck --csv in.numbers out-folder   (one CSV per table)

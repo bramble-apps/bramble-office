@@ -5,7 +5,8 @@
 
 use egui::{Event, Key, Modifiers, Pos2, Rect, Sense, Vec2, pos2, vec2};
 
-use super::doc::{AttKind, OBJ};
+use super::clip;
+use super::doc::{Att, AttKind, OBJ};
 use super::layout::{self, Block, Flow, Lx, PBox};
 use super::ops::{self, Frag, Kind};
 use super::{Cell, Editor, Loc, TableSel};
@@ -92,20 +93,38 @@ pub struct Complete {
 }
 
 thread_local! {
-    static CLIP: std::cell::RefCell<Option<(Frag, String)>> = const { std::cell::RefCell::new(None) };
+    /// what this app last copied: the fragment, its plain text, and its picture's key when it
+    /// went out as a picture
+    static CLIP: std::cell::RefCell<Option<(Frag, String, Option<u64>)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Puts a fragment on the clipboard: plain text for other apps, the fragment for pasting here.
+/// A picture goes out as a picture (other apps paste the image); an attachment alone as its name.
 pub fn set_clipboard(ctx: Option<&egui::Context>, frag: Frag, plain: String) {
+    let mut plain = plain;
+    let mut key = None;
     if let Some(ctx) = ctx {
-        ctx.copy_text(plain.clone());
+        if let Some((w, h, rgba)) = super::clip::sole_picture(&frag).and_then(|p| super::clip::picture_pixels(&p)) {
+            key = kn_ui::clipboard::set_image(w, h, &rgba);
+        }
+        if key.is_none() {
+            if plain.trim().is_empty() {
+                plain = super::clip::sole_name(&frag).unwrap_or(plain);
+            }
+            ctx.copy_text(plain.clone());
+        }
     }
-    CLIP.with_borrow_mut(|c| *c = Some((frag, plain)));
+    CLIP.with_borrow_mut(|c| *c = Some((frag, plain, key)));
 }
 
 /// The fragment copied here, if the clipboard still holds its text.
 fn our_clip(text: &str) -> Option<Frag> {
-    CLIP.with_borrow(|c| c.as_ref().filter(|(_, p)| p.replace("\r\n", "\n") == text.replace("\r\n", "\n")).map(|(f, _)| f.clone()))
+    CLIP.with_borrow(|c| c.as_ref().filter(|(_, p, k)| k.is_none() && p.replace("\r\n", "\n") == text.replace("\r\n", "\n")).map(|(f, _, _)| f.clone()))
+}
+
+/// The fragment copied here as a picture, if the clipboard still holds that picture.
+fn our_picture(key: u64) -> Option<Frag> {
+    CLIP.with_borrow(|c| c.as_ref().filter(|(_, _, k)| *k == Some(key)).map(|(f, _, _)| f.clone()))
 }
 
 impl Editor {
@@ -547,18 +566,90 @@ impl Editor {
         self.view.scroll_to_caret = true;
     }
 
-    fn paste(&mut self, text: &str) {
+    /// A paste event: egui brings the clipboard's text, or its picture when there is no text;
+    /// the other formats (copied files, HTML, the picture as a file) are read here.
+    /// Returns false when the clipboard held nothing to paste (nothing was done).
+    pub(crate) fn paste_system(&mut self, text: Option<&str>, img: Option<&egui::ColorImage>) -> bool {
+        // (our own copy needs nothing more)
+        let ours = !self.view.paste_match && !self.view.paste_md && text.is_some_and(|t| our_clip(t).is_some());
+        let mut inc = clip::Incoming { text: text.map(str::to_string), ..Default::default() };
+        if !ours && !self.view.paste_md {
+            inc.files = kn_ui::clipboard::files();
+            if inc.files.is_empty() {
+                inc.html = kn_ui::clipboard::html();
+                if img.is_some() || inc.html.is_some() || text.is_none() {
+                    inc.image = kn_ui::clipboard::image().or_else(|| img.and_then(kn_ui::clipboard::color_image_png)).map(|i| (i.png, i.key));
+                }
+            }
+        }
+        if inc.text.is_none() && inc.files.is_empty() && inc.image.is_none() {
+            self.view.paste_md = false;
+            self.view.paste_match = false;
+            return false;
+        }
+        self.paste_incoming(inc);
+        true
+    }
+
+    /// Pastes what the clipboard holds, the way Notes does: this app's own copy as it was, files
+    /// as attachments, a page's rich text with its pictures, a picture as "Pasted Image", else
+    /// the text.
+    pub(crate) fn paste_incoming(&mut self, inc: clip::Incoming) {
         let match_style = std::mem::take(&mut self.view.paste_match);
+        self.view.scroll_to_caret = true;
         if std::mem::take(&mut self.view.paste_md) {
-            self.paste_frag(&super::markdown::markdown_to_frag(text));
-            self.view.scroll_to_caret = true;
+            if let Some(t) = &inc.text {
+                self.paste_frag(&super::markdown::markdown_to_frag(t));
+            }
             return;
         }
-        match our_clip(text).filter(|_| !match_style) {
-            Some(frag) => self.paste_frag(&frag),
-            None => self.paste_plain(text),
+        if let Some(frag) = inc.text.as_deref().and_then(our_clip).filter(|_| !match_style) {
+            self.paste_frag(&frag);
+            return;
         }
-        self.view.scroll_to_caret = true;
+        if let Some(frag) = inc.image.as_ref().and_then(|(_, k)| our_picture(*k)) {
+            self.paste_frag(&frag);
+            return;
+        }
+        if !inc.files.is_empty() {
+            self.paste_atts(inc.files.iter().map(|f| super::media::att_for_file(f)).collect());
+            return;
+        }
+        // a page's HTML, unless it is only the picture that came with it (a browser's Copy Image)
+        let only_picture = inc.image.is_some() && inc.text.as_deref().is_none_or(|t| t.trim().is_empty() || t.trim().starts_with("http"));
+        if let Some(html) = inc.html.as_deref().filter(|_| !match_style && !only_picture) {
+            if let Some(frag) = clip::html_frag(html, inc.text.as_deref(), &kn_ui::clipboard::fetch_src) {
+                self.paste_frag(&frag);
+                return;
+            }
+        }
+        if let Some(t) = inc.text.as_deref().filter(|t| !t.is_empty() && !only_picture) {
+            self.paste_plain(t);
+            return;
+        }
+        if let Some(a) = inc.image.as_ref().and_then(|(png, _)| clip::pasted_image(png)) {
+            self.paste_atts(vec![a]);
+        } else if let Some(t) = inc.text.as_deref().filter(|t| !t.is_empty()) {
+            self.paste_plain(t);
+        }
+    }
+
+    /// Attachments at the caret, each on its own line (one undo step).
+    pub(crate) fn paste_atts(&mut self, atts: Vec<Att>) {
+        match atts.len() {
+            0 => {}
+            1 => self.insert_block(atts.into_iter().next().unwrap()),
+            _ => {
+                let mut frag = clip::blocks_frag(atts);
+                // (on an empty line the first goes on that line)
+                let l = self.head;
+                if !self.has_sel() && l.cell.is_none() && self.doc.paras[l.para].is_empty() {
+                    frag.paras.remove(0);
+                }
+                self.paste_frag(&frag);
+            }
+        }
+        self.resp.focus = true;
     }
 }
 
@@ -656,7 +747,9 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
     if resp.has_focus() {
         ui.memory_mut(|m| m.set_focus_lock_filter(id, egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true }));
     }
-    if ui.rect_contains_pointer(rect) {
+    // (a drop with no pointer position — X11 and Wayland drags don't always move egui's
+    // pointer — goes to the note)
+    if ui.rect_contains_pointer(rect) || ctx.input(|i| i.pointer.hover_pos().is_none()) {
         ed.drop_files(&ctx);
     }
     super::table::column_drag(ed, ui, &resp);
@@ -694,7 +787,12 @@ pub fn frame(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect) {
                 }
                 Event::Copy => ed.command(Some(&ctx), super::Cmd::Copy),
                 Event::Cut => ed.command(Some(&ctx), super::Cmd::Cut),
-                Event::Paste(t) => ed.paste(&t),
+                Event::Paste(t) => {
+                    ed.paste_system(Some(&t), None);
+                }
+                Event::PasteImage(img) => {
+                    ed.paste_system(None, Some(&img));
+                }
                 _ => {}
             }
         }
@@ -1029,8 +1127,13 @@ fn mouse(ed: &mut Editor, ui: &mut egui::Ui, resp: &egui::Response) {
             if resp.drag_stopped() {
                 ed.move_selection_to(p, ctx.input(|i| i.modifiers.alt));
             } else if let Some(l) = ed.hit(p, true) {
-                // a click in the selection without dragging puts the caret there
-                ed.set_caret(l, false);
+                // a click in the selection without dragging puts the caret there (a picture or
+                // card clicked stays selected, as in Notes: to copy it, or delete it)
+                let (a, b) = ed.range();
+                let block = a.cell.is_none() && a.para == b.para && a.off == 0 && b.off == ed.doc.paras[a.para].len() && ed.block_rect(a.para).is_some_and(|r| r.contains(p));
+                if !block {
+                    ed.set_caret(l, false);
+                }
             }
         }
         ed.view.drag = None;
@@ -1094,14 +1197,12 @@ impl Editor {
         if files.is_empty() {
             return;
         }
+        ctx.input_mut(|i| i.raw.dropped_files.clear());
         let at = ctx.input(|i| i.pointer.hover_pos()).and_then(|p| self.hit(p, false));
         if let Some(l) = at {
             self.set_caret(l, false);
         }
-        for f in files {
-            self.attach_file(&f);
-        }
-        self.resp.focus = true;
+        self.paste_atts(files.iter().map(|f| super::media::att_for_file(f)).collect());
     }
 
     /// The point is over selected text (or a selected picture).

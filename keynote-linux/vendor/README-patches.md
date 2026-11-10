@@ -23,3 +23,13 @@ queuing the paths of documents the system asks the app to open (Finder Open With
 file dropped on the Dock icon); the app takes them with `winit::platform::macos::take_opened_files()`
 (`src/platform/macos.rs`). objc2-foundation gains the `NSURL` feature. Upstream winit 0.30 drops
 these Apple events, so a document opened from Finder only brought up the app.
+
+Wayland file drag and drop: winit 0.30 has none on Wayland (files dragged from Files / Nautilus
+were simply refused). Added `src/platform_impl/linux/wayland/seat/data_device.rs`: binds
+`wl_data_device_manager` (`state.rs`), a data device per seat (`seat/mod.rs`, with the pointer),
+accepts drags offering `text/uri-list` (action Copy), reports `CursorMoved` while the drag moves
+over the window (the pointer itself leaves during a drag) and, on drop, reads the list through a
+calloop source (no blocking) and sends one `WindowEvent::DroppedFile` per `file:` path, as on
+X11; a drag that leaves sends `HoveredFileCancelled`. Check with `WAYLAND_DEBUG=1`:
+`wl_data_device_manager.get_data_device` after the pointer, and `wl_data_offer.accept(…,
+"text/uri-list")` on enter.

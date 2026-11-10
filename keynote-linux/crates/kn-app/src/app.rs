@@ -2296,6 +2296,7 @@ impl App {
         let tb_m = tb_h as i8;
 
         self.notices(&ctx);
+        kn_ui::update::sheet(&ctx);
         if self.show_about {
             egui::Window::new("About Keydeck").pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).collapsible(false).resizable(false).open(&mut self.show_about).show(&ctx, |ui| {
                 ui.label("Keydeck");

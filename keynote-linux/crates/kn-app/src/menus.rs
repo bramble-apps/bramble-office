@@ -919,6 +919,12 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                 let r = ui.menu_button(label, |ui| menu_body(ui, |ui| {
                     for c in &m.children {
                         item_ui(app, ui, &m.label, c, indent, &mut fired);
+                        if m.label == "Keydeck" && c.label == "About Keydeck" {
+                            kn_ui::update::menu_item(ui, if indent { MENU_ICON_W } else { 0.0 });
+                        }
+                    }
+                    if m.label == "Keydeck" {
+                        kn_ui::update::menu_footer(ui);
                     }
                     if m.label == "Window" {
                         // the open presentations, the active one ticked
@@ -936,11 +942,15 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                     let b = r.response.rect;
                     crate::icons::draw(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), crate::icons::Icon::Projector, crate::theme::TEXT());
                 }
+                if m.label == "Keydeck" {
+                    kn_ui::update::title_dot(ui, r.response.rect);
+                }
                 right = right.max(r.response.rect.max.x);
             }
         };
         if compact {
             let r = ui.menu_button("\u{2630}", |ui| all(ui));
+            kn_ui::update::title_dot(ui, r.response.rect);
             right = right.max(r.response.rect.max.x);
         } else {
             all(ui);
@@ -2496,6 +2506,12 @@ pub fn debug_menu(app: &mut App, ctx: &egui::Context) {
         let indent = m.children.iter().any(|c| crate::icons::menu_icon(&c.label).is_some());
         for c in &m.children {
             item_ui(app, ui, &m.label, c, indent, &mut fired);
+            if m.label == "Keydeck" && c.label == "About Keydeck" {
+                kn_ui::update::menu_item(ui, if indent { MENU_ICON_W } else { 0.0 });
+            }
+        }
+        if m.label == "Keydeck" {
+            kn_ui::update::menu_footer(ui);
         }
     });
 }

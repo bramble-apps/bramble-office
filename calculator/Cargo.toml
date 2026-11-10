@@ -7,6 +7,12 @@ version = "0.4.2"
 edition = "2021"
 license = "GPL-3.0-only"
 
+# kn-ui (the suite's shared update notice) needs the suite's patched toolkit, as the other apps;
+# see keynote-linux/vendor/README-patches.md
+[patch.crates-io]
+smithay-client-toolkit = { path = "../keynote-linux/vendor/smithay-client-toolkit-0.19.2" }
+winit = { path = "../keynote-linux/vendor/winit-0.30.13" }
+
 [profile.release]
 opt-level = 3
 lto = "thin"

@@ -12,6 +12,7 @@ mod png;
 mod settings;
 
 fn main() -> eframe::Result {
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Calculator", version: env!("CARGO_PKG_VERSION"), bin: "calculator", appimage: "Calculator-x86_64.AppImage", mac_bundle: "Calculator.app" });
     let hooks = app::Hooks::from_env();
     let (w, h) = hooks.size.unwrap_or((390.0, 760.0));
     let viewport = egui::ViewportBuilder::default()

@@ -49,6 +49,7 @@ mod toolbar;
 /// Starts the app: the desktop program's main, and android_main on Android.
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
+    kn_ui::update::init(kn_ui::update::AppInfo { name: "Letters", version: env!("CARGO_PKG_VERSION"), bin: "letters", appimage: "Letters-x86_64.AppImage", mac_bundle: "Letters.app" });
     move_cardstock_folders();
     pg_core::init();
     let args: Vec<String> = std::env::args().collect();
