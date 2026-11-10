@@ -212,6 +212,11 @@ pub struct App {
     /// Each track's Channel EQ (by track), and the track whose EQ window is open.
     pub eqs: std::collections::HashMap<usize, crate::eq::Params>,
     pub eq_window: Option<usize>,
+    /// The instrument plug-in window open (by track); bypassed instruments; Copy / Compare.
+    pub plugin_window: Option<usize>,
+    pub plugin_bypass: std::collections::HashSet<usize>,
+    pub plugin_clipboard: Option<Vec<f32>>,
+    pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -350,6 +355,10 @@ impl App {
             drum_tab: 0,
             eqs: std::collections::HashMap::new(),
             eq_window: None,
+            plugin_window: None,
+            plugin_bypass: Default::default(),
+            plugin_clipboard: None,
+            plugin_compare: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -461,7 +470,7 @@ impl App {
                 }
             }
             notes.sort_by_key(|n| n.0);
-            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i) });
+            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect() });
         }
         let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
         {
@@ -1591,6 +1600,7 @@ impl App {
         }
         crate::dialogs::show(self, &ctx);
         crate::live::window(self, &ctx);
+        crate::pluginwin::window(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;

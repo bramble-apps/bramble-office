@@ -36,7 +36,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Editors pane: Piano Roll ~, Score, Step Sequencer, Step Editor, Smart Tempo, Audio Track/File Editor, Event List, Live Loops
 - [ ] Live Loops grid, scenes, cell editing, queueing, Remix FX
 - [ ] Library window, Loop Browser, Notes pad (Lists: Event, Marker, Tempo, Signature)
-- [ ] Project Settings (all tabs), Settings (27 tabs as the research lists)
+- [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
 
 ## 3. Editing
 - [x] Region move, Option-copy, resize, delete, copy/paste at the playhead, Repeat, undo/redo
@@ -50,9 +50,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 ## 4. Audio
 - [~] Playback of MIDI (via SoundFont) and audio regions; bounce to WAV; metronome
-- [ ] Real instruments (lg-synth: EP, B3, Clav, Retro Synth stand-in, piano, Drum Kit, Sampler, bass, strings, brass)
-- [ ] Real effects (lg-fx: Channel EQ, Compressor, Limiter, Gate, reverbs, delays, modulation, distortion…)
-- [ ] Plug-in windows (Controls view and the custom editor views)
+- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble, Studio Plucks & Mallets, Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy, ES2, Sculpture, Quick Sampler, Drum Machine Designer as their own instruments; SF3 (needs an Ogg decoder)
+- [x] Real effects (lg-fx, 25): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper. [ ] Multipressor, Amp Designer, Bass Amp, Pedalboard, Delay Designer, ChromaGlow, Phat FX, Graph EQ, Space Designer IRs, Mastering Assistant, Stem Splitter
+- [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views
 - [ ] Recording audio and MIDI (inputs, monitoring, count-in, takes, punch), MIDI input from devices
 - [ ] Sends, buses, aux strips, master chain; latency compensation
 - [ ] Hosting third-party CLAP/VST3/LV2 plug-ins
@@ -60,8 +60,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Matched sounds: Logic's plug-ins/patches/kits/loops swapped for ours on load
 
 ## 5. Session Players
-- [~] Drummer: our own generator with complexity, intensity, fills, swing, ghost notes; basic editor. Missing: all 46 characters/genres, the kit-piece sections, Follow, Feel, arrangement awareness, Logic-matched statistics, reading/writing the region settings
-- [ ] Bass Player, Keyboard Player, chord track
+- [x] Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM
+- [~] Bass Player and Keyboard Player generators (lg-players); [ ] their tracks and editors in the app, the chord track
 - [ ] Drum Kit Designer and Drum Machine Designer kits
 
 ## 6. Files
@@ -88,16 +88,16 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 69 | 594 | 11% |
+| Menu bar | 83 | 594 | 13% |
 | Local menus | 103 | 1191 | 8% |
 | Right-click menus | 181 | 2575 | 7% |
-| Key commands | 198 | 2207 | 8% |
+| Key commands | 202 | 2207 | 9% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 69 of 594
+## Menu bar: 83 of 594
 
 
-<details><summary>Bramble Studio — 5/48</summary>
+<details><summary>Bramble Studio — 13/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -107,15 +107,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Show Usage
 - [ ] Settings
   - [x] General…
-  - [ ] Audio…
-  - [ ] Recording…
-  - [ ] MIDI…
-  - [ ] Score…
-  - [ ] Movie…
-  - [ ] Automation…
-  - [ ] Control Surfaces…
+  - [x] Audio…
+  - [x] Recording…
+  - [x] MIDI…
+  - [x] Score…
+  - [x] Movie…
+  - [x] Automation…
+  - [x] Control Surfaces…
   - [x] View…
-  - [ ] My Info…
+  - [x] My Info…
   - [ ] Reset All Settings Except Key Command Assignments…
   - [ ] Plug-in Manager…
   - [ ] Chord Grid Library…
@@ -150,7 +150,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 14/81</summary>
+<details><summary>File — 19/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -177,12 +177,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Show in Finder…
 - [ ] Project Settings
   - [x] General…
-  - [ ] Audio…
-  - [ ] Recording…
+  - [x] Audio…
+  - [x] Recording…
   - [ ] Smart Tempo…
-  - [ ] MIDI…
-  - [ ] Score…
-  - [ ] Movie…
+  - [x] MIDI…
+  - [x] Score…
+  - [x] Movie…
   - [ ] Synchronization…
   - [ ] Metronome…
   - [ ] Tuning…
@@ -407,7 +407,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Track — 7/49</summary>
+<details><summary>Track — 8/49</summary>
 
 - [x] New Tracks…  `⌥⌘N`
 - [x] New Audio Track  `⌥⌘A`
@@ -427,7 +427,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Create Track Stack…  `⇧⌘D`
 - [ ] Flatten Stack  `⇧⌘U`
 - [ ] Convert Folder Stack to Summing Stack
-- [ ] Global Tracks
+- [x] Global Tracks
   - [ ] Show Global Tracks  `G`
   - [ ] Configure Global Tracks…  `⌥G`
   - [ ] Show Single Global Track  `⌃⌥⌘G`
@@ -4908,7 +4908,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 198 of 2207
+## Key commands: 202 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -6115,24 +6115,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Views Showing Time Ruler — 0/80</summary>
+<details><summary>Views Showing Time Ruler — 4/80</summary>
 
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show/Hide Grid Lines
 - [ ] Show/Hide Chords
 - [ ] Scroll in Play  `⌃``
-- [ ] Show/Hide Global Tracks  `G`
+- [x] Show/Hide Global Tracks  `G`
 - [ ] Configure Global Tracks…  `⌥G`
 - [ ] Show Single Global Track On/Off  `⌃⌥⌘G`
 - [ ] Show/Hide Arrangement Track  `⇧⌘A`
-- [ ] Show/Hide Marker Track  `⇧⌘K`
+- [x] Show/Hide Marker Track  `⇧⌘K`
 - [ ] Show/Hide Movie Track  `⇧⌘O`
 - [ ] Show/Hide Signature Track
-- [ ] Show/Hide Tempo Track  `⇧⌘T`
+- [x] Show/Hide Tempo Track  `⇧⌘T`
 - [ ] Show/Hide Chord Track  `⇧⌘C`
 - [ ] Show/Hide Beat Mapping Track  `⇧⌘B`
 - [ ] Show/Hide Arrangement Track Only
-- [ ] Show/Hide Marker Track Only  `'`
+- [x] Show/Hide Marker Track Only  `'`
 - [ ] Show/Hide Movie Track Only
 - [ ] Show/Hide Signature Track Only
 - [ ] Show/Hide Tempo Track Only

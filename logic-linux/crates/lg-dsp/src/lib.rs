@@ -89,6 +89,11 @@ pub trait Effect: Plugin {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]);
     /// The tempo, for tempo-synced delays and LFOs.
     fn set_tempo(&mut self, _bpm: f64) {}
+    /// Samples of delay the effect adds (look-ahead limiters and gates), for latency
+    /// compensation.
+    fn latency(&self) -> usize {
+        0
+    }
 }
 
 pub fn db_to_gain(db: f32) -> f32 {

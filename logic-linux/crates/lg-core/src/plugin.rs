@@ -35,7 +35,19 @@ fn printable_runs(b: &[u8], min: usize) -> Vec<String> {
 }
 
 /// The float parameters after a GAMETSPP / EMAGPPST tag (`count` given, or up to the block's size).
+/// A project's plug-in floats (AuCU): "GAMETSPP", a u32 block id, a zero word, then the
+/// parameters from 16 bytes after the tag (index = the parameter's id, as lg-fx and the
+/// research maps number them).
 pub fn params_after(b: &[u8], count: Option<usize>) -> Option<Vec<f32>> {
+    params_at(b, count, 16)
+}
+
+/// A preset file's (.pst): the parameters 20 bytes after the tag (size and two zero words).
+pub fn pst_params(b: &[u8], count: Option<usize>) -> Option<Vec<f32>> {
+    params_at(b, count, 20)
+}
+
+fn params_at(b: &[u8], count: Option<usize>, offset: usize) -> Option<Vec<f32>> {
     let (at, big) = if let Some(i) = find(b, b"GAMETSPP") {
         (i, false)
     } else {
@@ -45,9 +57,10 @@ pub fn params_after(b: &[u8], count: Option<usize>) -> Option<Vec<f32>> {
         let x: [u8; 4] = b.get(o..o + 4)?.try_into().ok()?;
         Some(if big { u32::from_be_bytes(x) } else { u32::from_le_bytes(x) })
     };
-    let size = rd(at + 8)? as usize;
-    let start = at + 8 + 12;
-    let n = count.unwrap_or(size.saturating_sub(8) / 4);
+    let start = at + offset;
+    // (a preset gives its size at +8; in a project that word is the plug-in's code, and the
+    // floats run on to the end of the chunk)
+    let n = count.unwrap_or(if offset == 20 { (rd(at + 8)? as usize).saturating_sub(8) / 4 } else { (b.len().saturating_sub(start) / 4).min(1024) });
     let mut out = Vec::with_capacity(n);
     for k in 0..n {
         let Some(v) = rd(start + 4 * k) else { break };
@@ -81,7 +94,7 @@ pub fn read_unit(payload: &[u8]) -> Option<Plugin> {
 pub fn read_pst(bytes: &[u8]) -> Option<Vec<f32>> {
     let count = u32::from_le_bytes(bytes.get(8..12)?.try_into().ok()?) as usize;
     let count = if count > 0 && count < 10_000 { Some(count) } else { None };
-    params_after(bytes, count)
+    pst_params(bytes, count)
 }
 
 #[cfg(test)]
@@ -94,8 +107,8 @@ mod tests {
         b[0x0C..0x18].copy_from_slice(b"#default.pst");
         b[0x78..0x82].copy_from_slice(b"Channel EQ");
         b.extend_from_slice(b"GAMETSPP");
-        b.extend_from_slice(&(8u32 + 12).to_le_bytes());
-        b.extend_from_slice(&[0; 8]);
+        b.extend_from_slice(&236u32.to_le_bytes());
+        b.extend_from_slice(&[0; 4]);
         for v in [20.0f32, 2.0, 0.71] {
             b.extend_from_slice(&v.to_le_bytes());
         }

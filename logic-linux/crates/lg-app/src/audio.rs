@@ -31,6 +31,10 @@ pub struct PlayTrack {
     /// The instrument plug-in (Logic's name, as the project or the Library gives it) played in
     /// place of the SoundFont when we have a stand-in for it; and the patch name.
     pub instrument: Option<String>,
+    /// The instrument's saved settings (Logic's float block), and the Audio FX slots in order:
+    /// Logic's plug-in name and its saved settings.
+    pub instrument_floats: Vec<f32>,
+    pub inserts: Vec<(String, Vec<f32>)>,
 }
 
 /// A track's own plug-ins as the engine runs them (built from PlayTrack::instrument).
@@ -40,6 +44,8 @@ pub struct Units {
     pub built_for: Option<String>,
     pub instrument: Option<Box<dyn lg_dsp::Instrument>>,
     pub inserts: Vec<Box<dyn lg_dsp::Effect>>,
+    /// What `inserts` were built from.
+    pub inserts_for: Vec<String>,
 }
 
 pub struct Engine {
@@ -117,7 +123,24 @@ impl Engine {
             let u = &mut self.units[i];
             if u.built_for != t.instrument {
                 u.instrument = t.instrument.as_deref().and_then(|n| crate::units::instrument(n, RATE as f32));
+                if let Some(ins) = u.instrument.as_mut() {
+                    if !t.instrument_floats.is_empty() {
+                        ins.load_floats(&t.instrument_floats);
+                    }
+                }
                 u.built_for = t.instrument.clone();
+            }
+            let names: Vec<String> = t.inserts.iter().map(|x| x.0.clone()).collect();
+            if u.inserts_for != names {
+                u.inserts = t.inserts.iter().filter_map(|(n, floats)| {
+                    let mut fx = crate::units::effect(n, RATE as f32)?;
+                    if !floats.is_empty() {
+                        fx.load_floats(floats);
+                    }
+                    fx.set_tempo(self.tempo);
+                    Some(fx)
+                }).collect();
+                u.inserts_for = names;
             }
         }
     }
@@ -585,6 +608,8 @@ mod tests {
             solo: false,
             eq: None,
             instrument: None,
+            instrument_floats: Vec::new(),
+            inserts: Vec::new(),
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
         let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
@@ -602,7 +627,7 @@ mod tests {
         let Some(sf) = system_soundfont() else { return };
         let level = |vols: [f32; 2], mute: [bool; 2]| {
             let mut e = Engine::new();
-            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None }).collect();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new() }).collect();
             e.load_soundfont(Some(&sf));
             e.playing = true;
             let mut buf = vec![0f32; 2 * BLOCK];
@@ -626,7 +651,7 @@ mod tests {
     fn plays_notes_in_time() {
         let mut e = Engine::new();
         e.tempo = 120.0;
-        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None }];
+        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new() }];
         e.playing = true;
         let mut buf = vec![0f32; 2 * BLOCK];
         // half a second at 120 BPM = one beat = 960 ticks

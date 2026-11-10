@@ -27,6 +27,7 @@ rustysynth = "1"
 lg-dsp = { path = "../lg-dsp" }
 lg-players = { path = "../lg-players" }
 lg-synth = { path = "../lg-synth" }
+lg-fx = { path = "../lg-fx" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)
 midir = "0.11"
 

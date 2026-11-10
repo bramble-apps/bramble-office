@@ -1,0 +1,467 @@
+//! The delays: Stereo Delay, Tape Delay and Echo, stand-ins for Logic's.
+//!
+//! Stereo Delay (project floats, current version): Left / Right Mix, Delay Time, Feedback,
+//! Crossfeed L->R / R->L, Beat Sync, Note and Deviation per side, Input per side, the four
+//! feedback / crossfeed phases (+1 normal, -1 inverted), Low / High Cut per side, Stereo Link.
+//! Mix is a crossfade (dry = 1 - mix), as Logic's renders show; the cuts sit in the loops.
+//! Synced times are Logic's note values (4 = 1/4, 6 = 1/4 triplet, 5.33 = dotted 1/8) plus the
+//! deviation in percent.
+//!
+//! Tape Delay: a tape echo — the delay is a moving read head with wow (LFO, slow) and flutter
+//! (fast, slightly random), a band-limited loop (Low Cut / High Cut), soft tape saturation
+//! above the Clip Threshold in the loop, Smoothing for time changes (the "tape speeds up"
+//! glide), Freeze (loop at unity, input muted), Stereo Spread (the right head offset) and the
+//! Diffuse head mode (a smearing all-pass in the loop). Dry and Wet are separate levels.
+//!
+//! Echo: a simple synced echo — Time (a note menu), Repeat (feedback), Color (tilts the repeats
+//! dark or bright), Dry and Wet.
+
+use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Smooth, Values, db, flush, note_div_beats, plugin_impl, sine01, sync_index_beats};
+use lg_dsp::{Param, Unit};
+
+const MAX_DELAY_S: f32 = 10.0;
+const INPUTS: &[&str] = &["Off", "Left", "Right", "Left + Right", "Left - Right"];
+
+static STEREO_PARAMS: [Param; 25] = [
+    Param::new(0, "Left Mix", 0.0, 100.0, 30.0, Unit::Percent),
+    Param::new(1, "Right Mix", 0.0, 100.0, 30.0, Unit::Percent),
+    Param::new(2, "Left Delay Time", 0.0, 10000.0, 500.0, Unit::Ms),
+    Param::new(3, "Right Delay Time", 0.0, 10000.0, 250.0, Unit::Ms),
+    Param::new(4, "Left Feedback", 0.0, 100.0, 35.0, Unit::Percent),
+    Param::new(5, "Right Feedback", 0.0, 100.0, 35.0, Unit::Percent),
+    Param::new(6, "Crossfeed Left to Right", 0.0, 100.0, 0.0, Unit::Percent),
+    Param::new(7, "Crossfeed Right to Left", 0.0, 100.0, 0.0, Unit::Percent),
+    Param::new(10, "Beat Sync", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(11, "Left Note", 0.25, 128.0, 4.0, Unit::None),
+    Param::new(12, "Left Deviation", -50.0, 50.0, 0.0, Unit::Percent),
+    Param::new(13, "Right Note", 0.25, 128.0, 8.0, Unit::None),
+    Param::new(14, "Right Deviation", -50.0, 50.0, 0.0, Unit::Percent),
+    Param::menu(15, "Left Input", INPUTS, 1.0),
+    Param::menu(16, "Right Input", INPUTS, 2.0),
+    Param::new(17, "Left Feedback Phase", -1.0, 1.0, 1.0, Unit::None),
+    Param::new(18, "Right Feedback Phase", -1.0, 1.0, 1.0, Unit::None),
+    Param::new(19, "Crossfeed Left to Right Phase", -1.0, 1.0, 1.0, Unit::None),
+    Param::new(20, "Crossfeed Right to Left Phase", -1.0, 1.0, 1.0, Unit::None),
+    Param::new(22, "Left High Cut", 20.0, 20000.0, 20000.0, Unit::Hz),
+    Param::new(23, "Left Low Cut", 20.0, 20000.0, 20.0, Unit::Hz),
+    Param::new(24, "Right High Cut", 20.0, 20000.0, 20000.0, Unit::Hz),
+    Param::new(25, "Right Low Cut", 20.0, 20000.0, 20.0, Unit::Hz),
+    Param::new(26, "Stereo Link", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(21, "(reserved)", 0.0, 1.0, 0.0, Unit::None),
+];
+
+pub struct StereoDelay {
+    p: Values,
+    rate: f32,
+    bpm: f64,
+    line: [Delay; 2],
+    time: [Smooth; 2],
+    hc: [Biquad; 2],
+    lc: [Biquad; 2],
+}
+
+impl StereoDelay {
+    pub fn new(rate: f32) -> StereoDelay {
+        let cap = (MAX_DELAY_S * rate) as usize + 8;
+        let mut d = StereoDelay {
+            p: Values::new(&STEREO_PARAMS),
+            rate,
+            bpm: 120.0,
+            line: [Delay::new(cap), Delay::new(cap)],
+            time: [Smooth::new(rate, 60.0, 1.0), Smooth::new(rate, 60.0, 1.0)],
+            hc: [Biquad::default(); 2],
+            lc: [Biquad::default(); 2],
+        };
+        d.update();
+        d.time[0].snap();
+        d.time[1].snap();
+        d
+    }
+
+    /// The delay of one side, in samples.
+    pub fn delay_samples(&self, side: usize) -> f32 {
+        let p = &self.p;
+        let ms = if p.on(10) {
+            let (note, dev) = if side == 0 { (p.get(11), p.get(12)) } else { (p.get(13), p.get(14)) };
+            note_div_beats(note) * 60000.0 / self.bpm as f32 * (1.0 + dev / 100.0)
+        } else {
+            p.get(2 + side as u32)
+        };
+        (ms * 0.001 * self.rate).clamp(1.0, MAX_DELAY_S * self.rate)
+    }
+
+    fn update(&mut self) {
+        for s in 0..2 {
+            self.time[s].target = self.delay_samples(s);
+            let (hc, lc) = (self.p.get(22 + 2 * s as u32), self.p.get(23 + 2 * s as u32));
+            self.hc[s].c = if hc >= 19999.0 { Coefs::THRU } else { Coefs::lowpass(self.rate, hc, 0.707) };
+            self.lc[s].c = if lc <= 20.0 { Coefs::THRU } else { Coefs::highpass(self.rate, lc, 0.707) };
+        }
+    }
+
+    fn clear(&mut self) {
+        for s in 0..2 {
+            self.line[s].clear();
+            self.hc[s].clear();
+            self.lc[s].clear();
+            self.time[s].snap();
+        }
+    }
+
+    fn tail_secs(&self) -> f32 {
+        let fb = self.p.get(4).max(self.p.get(5)).max(self.p.get(6)).max(self.p.get(7)) / 100.0;
+        let t = self.delay_samples(0).max(self.delay_samples(1)) / self.rate;
+        // repeats until -60 dB
+        if fb >= 0.999 { 60.0 } else { t * (1.0 + (-3.0 / fb.max(1e-3).log10()).min(200.0)) }
+    }
+}
+
+#[inline]
+fn input(sel: usize, l: f32, r: f32) -> f32 {
+    match sel {
+        1 => l,
+        2 => r,
+        3 => 0.5 * (l + r),
+        4 => 0.5 * (l - r),
+        _ => 0.0,
+    }
+}
+
+impl lg_dsp::Effect for StereoDelay {
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let p = &self.p;
+        let n = left.len().min(right.len());
+        let (mix_l, mix_r) = (p.get(0) / 100.0, p.get(1) / 100.0);
+        let (fb_l, fb_r) = (p.get(4) / 100.0 * p.get(17).signum(), p.get(5) / 100.0 * p.get(18).signum());
+        let (x_lr, x_rl) = (p.get(6) / 100.0 * p.get(19).signum(), p.get(7) / 100.0 * p.get(20).signum());
+        let (in_l, in_r) = (p.idx(15), p.idx(16));
+        for i in 0..n {
+            let (l, r) = (left[i], right[i]);
+            let tl = self.time[0].next();
+            let tr = self.time[1].next();
+            let dl = self.lc[0].run(self.hc[0].run(self.line[0].read(tl)));
+            let dr = self.lc[1].run(self.hc[1].run(self.line[1].read(tr)));
+            self.line[0].push(input(in_l, l, r) + dl * fb_l + dr * x_rl);
+            self.line[1].push(input(in_r, l, r) + dr * fb_r + dl * x_lr);
+            left[i] = l * (1.0 - mix_l) + dl * mix_l;
+            right[i] = r * (1.0 - mix_r) + dr * mix_r;
+        }
+    }
+
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 && (bpm - self.bpm).abs() > 1e-6 {
+            self.bpm = bpm;
+            self.update();
+        }
+    }
+}
+
+plugin_impl!(StereoDelay);
+
+// ---------------------------------------------------------------------------------------------
+
+static TAPE_PARAMS: [Param; 18] = [
+    Param::new(3, "Feedback", 0.0, 100.0, 61.0, Unit::Percent),
+    Param::new(4, "High Cut", 200.0, 20000.0, 1500.0, Unit::Hz),
+    Param::new(5, "Low Cut", 20.0, 5000.0, 520.0, Unit::Hz),
+    Param::new(6, "Tempo Sync", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(7, "Note", 0.25, 128.0, 4.0, Unit::None),
+    Param::new(8, "Deviation", -50.0, 50.0, 0.0, Unit::Percent),
+    Param::new(9, "Smoothing", 0.0, 1000.0, 40.0, Unit::Ms),
+    Param::new(10, "Flutter Rate", 0.1, 10.0, 1.6, Unit::Hz),
+    Param::new(11, "Flutter Intensity", 0.0, 100.0, 13.0, Unit::Percent),
+    Param::new(12, "LFO Rate", 0.01, 10.0, 0.38, Unit::Hz),
+    Param::new(13, "LFO Intensity", 0.0, 100.0, 50.0, Unit::Percent),
+    Param::new(14, "Freeze", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(19, "Dry", 0.0, 100.0, 90.0, Unit::Percent),
+    Param::new(20, "Wet", 0.0, 100.0, 30.0, Unit::Percent),
+    Param::new(21, "Clip Threshold", -30.0, 0.0, -5.4, Unit::Db),
+    Param::new(22, "Delay Time", 1.0, 5000.0, 666.62, Unit::Ms),
+    Param::new(23, "Stereo Spread", 0.0, 100.0, 0.0, Unit::Percent),
+    Param::menu(24, "Tape Head Mode", &["Clean", "Diffuse"], 0.0),
+];
+
+const DIFFUSE_MS: [f32; 3] = [7.3, 11.9, 17.1];
+
+pub struct TapeDelay {
+    p: Values,
+    rate: f32,
+    bpm: f64,
+    line: [Delay; 2],
+    time: Smooth,
+    hc: [Biquad; 2],
+    lc: [Biquad; 2],
+    tone: [OnePole; 2],
+    wow: Phase,
+    flutter: [Drift; 2],
+    flutter_ph: Phase,
+    diffuse: [[Delay; 3]; 2],
+    clip: f32,
+}
+
+impl TapeDelay {
+    pub fn new(rate: f32) -> TapeDelay {
+        let cap = (5.2 * rate) as usize;
+        let dcap = (0.02 * rate) as usize;
+        let mut d = TapeDelay {
+            p: Values::new(&TAPE_PARAMS),
+            rate,
+            bpm: 120.0,
+            line: [Delay::new(cap), Delay::new(cap)],
+            time: Smooth::new(rate, 40.0, 1.0),
+            hc: [Biquad::default(); 2],
+            lc: [Biquad::default(); 2],
+            tone: [OnePole::new(rate, 9000.0); 2],
+            wow: Phase::default(),
+            flutter: [Drift::new(77), Drift::new(91)],
+            flutter_ph: Phase { p: 0.3 },
+            diffuse: std::array::from_fn(|_| std::array::from_fn(|_| Delay::new(dcap))),
+            clip: 1.0,
+        };
+        d.update();
+        d.time.snap();
+        d
+    }
+
+    pub fn delay_samples(&self) -> f32 {
+        let p = &self.p;
+        let ms = if p.on(6) { note_div_beats(p.get(7)) * 60000.0 / self.bpm as f32 * (1.0 + p.get(8) / 100.0) } else { p.get(22) };
+        (ms * 0.001 * self.rate).clamp(4.0, 5.0 * self.rate)
+    }
+
+    fn update(&mut self) {
+        let p = &self.p;
+        // Smoothing: how slowly the tape changes speed to a new time
+        self.time.set_time(self.rate, p.get(9).max(1.0) * 4.0);
+        self.time.target = self.delay_samples();
+        for s in 0..2 {
+            self.hc[s].c = Coefs::lowpass(self.rate, p.get(4), 0.6);
+            self.lc[s].c = Coefs::highpass(self.rate, p.get(5), 0.6);
+        }
+        self.clip = db(p.get(21));
+    }
+
+    fn clear(&mut self) {
+        for s in 0..2 {
+            self.line[s].clear();
+            self.hc[s].clear();
+            self.lc[s].clear();
+            for d in self.diffuse[s].iter_mut() {
+                d.clear();
+            }
+        }
+        self.time.snap();
+    }
+
+    fn tail_secs(&self) -> f32 {
+        let fb = self.p.get(3) / 100.0;
+        if self.p.on(14) || fb >= 0.99 {
+            return 60.0;
+        }
+        self.delay_samples() / self.rate * (1.0 + (-3.0 / fb.max(1e-3).log10()).min(200.0))
+    }
+}
+
+/// Tape saturation: linear below the threshold, rounding off smoothly above it.
+#[inline]
+fn tape_sat(x: f32, t: f32) -> f32 {
+    let a = x.abs();
+    if a <= t {
+        x
+    } else {
+        (t + t * ((a - t) / t).tanh()).copysign(x)
+    }
+}
+
+impl lg_dsp::Effect for TapeDelay {
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let p = &self.p;
+        let n = left.len().min(right.len());
+        let rate = self.rate;
+        let freeze = p.on(14);
+        let fb = if freeze { 1.0 } else { p.get(3) / 100.0 };
+        let (dry, wet) = (p.get(19) / 100.0, p.get(20) / 100.0);
+        let wow_amt = p.get(13) / 100.0 * 0.004 * rate; // up to ~4 ms of wow
+        let wow_hz = p.get(12);
+        let fl_amt = p.get(11) / 100.0 * 0.0006 * rate; // up to ~0.6 ms of flutter
+        let fl_hz = p.get(10);
+        let spread = p.get(23) / 100.0 * 0.03 * rate;
+        let diffuse = p.idx(24) == 1;
+        for i in 0..n {
+            let (l, r) = (left[i], right[i]);
+            let base = self.time.next();
+            let w = sine01(self.wow.step(rate, wow_hz)) * wow_amt;
+            let fph = sine01(self.flutter_ph.step(rate, fl_hz));
+            let mut out = [0.0f32; 2];
+            for s in 0..2 {
+                let fl = (0.6 * fph + 0.4 * self.flutter[s].next(rate, fl_hz * 2.3)) * fl_amt;
+                let d = base + w + fl + if s == 1 { spread } else { 0.0 } + wow_amt + fl_amt + 2.0;
+                let mut y = self.line[s].read(d);
+                y = self.lc[s].run(self.hc[s].run(y));
+                if diffuse {
+                    for (k, dl) in self.diffuse[s].iter_mut().enumerate() {
+                        let len = DIFFUSE_MS[k] * 0.001 * rate * if s == 1 { 1.09 } else { 1.0 };
+                        let z = dl.read(len);
+                        let v = y + 0.5 * z;
+                        dl.push(v);
+                        y = z - 0.5 * v;
+                    }
+                }
+                out[s] = y;
+            }
+            for s in 0..2 {
+                let x = if freeze { 0.0 } else if s == 0 { l } else { r };
+                // the record head saturates; the loop is band-limited by the cuts
+                let rec = tape_sat(x + out[s] * fb, self.clip);
+                let rec = self.tone[s].lp(rec);
+                self.line[s].push(flush(rec));
+            }
+            left[i] = l * dry + out[0] * wet;
+            right[i] = r * dry + out[1] * wet;
+        }
+    }
+
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 && (bpm - self.bpm).abs() > 1e-6 {
+            self.bpm = bpm;
+            self.update();
+        }
+    }
+}
+
+plugin_impl!(TapeDelay);
+
+// ---------------------------------------------------------------------------------------------
+
+/// Echo's Time menu (index 7 = 1/8, as Logic stores its default).
+const ECHO_TIMES: &[&str] = &["1/64.", "1/32", "1/16t", "1/32.", "1/16", "1/8t", "1/16.", "1/8", "1/4t", "1/8.", "1/4", "1/2t", "1/4.", "1/2", "1/1t", "1/2.", "1/1", "2/1t", "1/1.", "2/1", "4/1t", "2/1.", "4/1"];
+
+static ECHO_PARAMS: [Param; 5] = [
+    Param::menu(16, "Time", ECHO_TIMES, 7.0),
+    Param::new(17, "Repeat", 0.0, 100.0, 64.0, Unit::Percent),
+    Param::new(18, "Color", 0.0, 100.0, 37.0, Unit::Percent),
+    Param::new(19, "Dry", 0.0, 100.0, 96.0, Unit::Percent),
+    Param::new(20, "Wet", 0.0, 100.0, 20.0, Unit::Percent),
+];
+
+pub struct Echo {
+    p: Values,
+    rate: f32,
+    bpm: f64,
+    line: [Delay; 2],
+    time: Smooth,
+    lp: [OnePole; 2],
+    hp: [OnePole; 2],
+}
+
+impl Echo {
+    pub fn new(rate: f32) -> Echo {
+        let cap = (4.2 * rate) as usize;
+        let mut e = Echo { p: Values::new(&ECHO_PARAMS), rate, bpm: 120.0, line: [Delay::new(cap), Delay::new(cap)], time: Smooth::new(rate, 50.0, 1.0), lp: [OnePole::default(); 2], hp: [OnePole::default(); 2] };
+        e.update();
+        e.time.snap();
+        e
+    }
+
+    /// The echo time in beats for a Time menu index (index 7 = 1/8; same note order as
+    /// Tremolo's sync rates, four places earlier — unconfirmed).
+    pub fn time_beats(index: f32) -> f32 {
+        sync_index_beats(index + 4.0)
+    }
+
+    fn update(&mut self) {
+        let beats = Echo::time_beats(self.p.get(16));
+        self.time.target = (beats * 60.0 / self.bpm as f32 * self.rate).clamp(1.0, 4.0 * self.rate);
+        // Color: 0 = dark repeats, 100 = bright (thin) repeats
+        let c = self.p.get(18) / 100.0;
+        let lp = 1500.0 * 12f32.powf(c);
+        let hp = 40.0 * 15f32.powf(c);
+        for s in 0..2 {
+            self.lp[s].set(self.rate, lp.min(20000.0));
+            self.hp[s].set(self.rate, hp);
+        }
+    }
+
+    fn clear(&mut self) {
+        for s in 0..2 {
+            self.line[s].clear();
+            self.lp[s].y = 0.0;
+            self.hp[s].y = 0.0;
+        }
+        self.time.snap();
+    }
+
+    fn tail_secs(&self) -> f32 {
+        let fb = self.p.get(17) / 100.0;
+        self.time.target / self.rate * (1.0 + (-3.0 / fb.max(1e-3).log10()).min(200.0))
+    }
+}
+
+impl lg_dsp::Effect for Echo {
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let n = left.len().min(right.len());
+        let fb = (self.p.get(17) / 100.0).min(0.99);
+        let (dry, wet) = (self.p.get(19) / 100.0, self.p.get(20) / 100.0);
+        for i in 0..n {
+            let t = self.time.next();
+            for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
+                let y = self.line[s].read(t);
+                let c = self.hp[s].hp(self.lp[s].lp(y));
+                self.line[s].push(*x + c * fb);
+                *x = *x * dry + y * wet;
+            }
+        }
+    }
+
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 && (bpm - self.bpm).abs() > 1e-6 {
+            self.bpm = bpm;
+            self.update();
+        }
+    }
+}
+
+plugin_impl!(Echo);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lg_dsp::{Effect, Plugin};
+
+    fn first_echo(fx: &mut dyn Effect, n: usize) -> usize {
+        let mut l = vec![0.0; n];
+        l[0] = 1.0;
+        let mut r = vec![0.0; n];
+        fx.process(&mut l, &mut r);
+        (1..n).max_by(|&a, &b| l[a].abs().partial_cmp(&l[b].abs()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn stereo_delay_time_is_a_quarter_at_120() {
+        let mut d = StereoDelay::new(48000.0);
+        d.set_tempo(120.0);
+        assert_eq!(first_echo(&mut d, 30000), 24000);
+        d.set(10, 0.0);
+        d.set(2, 123.0);
+        d.reset();
+        let at = first_echo(&mut d, 30000);
+        assert!((at as i32 - 5904).abs() <= 1, "{at}");
+    }
+
+    #[test]
+    fn tape_delay_time_close_to_note() {
+        let mut d = TapeDelay::new(48000.0);
+        d.set(13, 0.0);
+        d.set(11, 0.0);
+        d.set_tempo(120.0);
+        let at = first_echo(&mut d, 40000);
+        assert!((at as i32 - 24000).abs() < 30, "{at}");
+    }
+
+    #[test]
+    fn echo_eighth() {
+        let mut e = Echo::new(48000.0);
+        e.set_tempo(120.0);
+        assert_eq!(first_echo(&mut e, 20000), 12000);
+    }
+}

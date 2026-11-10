@@ -32,7 +32,8 @@ impl Default for Params {
 }
 
 impl Params {
-    /// From Logic's saved parameter block (the floats after GAMETSPP's header): 8 × 4 values.
+    /// From Logic's saved parameter block: 8 × [on, frequency, gain (or slope), Q], then Master
+    /// Gain at 32 (lg-fx's reading, confirmed on E05's "band 5 off").
     pub fn from_logic(v: &[f32]) -> Option<Params> {
         if v.len() < 32 {
             return None;
@@ -40,7 +41,7 @@ impl Params {
         let mut p = Params::default();
         for (i, b) in p.bands.iter_mut().enumerate() {
             let f = &v[4 * i..4 * i + 4];
-            *b = Band { freq: f[0].clamp(10.0, 22000.0), gain: f[1], q: f[2].max(0.1), on: f[3] > 0.5 };
+            *b = Band { on: f[0] > 0.5, freq: f[1].clamp(10.0, 22000.0), gain: f[2], q: f[3].max(0.1) };
         }
         Some(p)
     }

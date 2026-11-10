@@ -1,0 +1,9 @@
+[package]
+name = "lg-fx"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Bramble Studio's audio effects: from-scratch stand-ins for Logic Pro's (Channel EQ, Compressor, reverbs, delays, modulation, distortion)"
+
+[dependencies]
+lg-dsp = { path = "../lg-dsp" }

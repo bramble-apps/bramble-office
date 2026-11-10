@@ -20,6 +20,7 @@ pub mod menus;
 mod mixer;
 mod pianoroll;
 mod snap;
+mod pluginwin;
 mod rightpane;
 pub mod settings;
 mod smartcontrols;

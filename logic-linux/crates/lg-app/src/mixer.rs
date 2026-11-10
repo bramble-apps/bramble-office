@@ -103,6 +103,12 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         slot(&p, y, "MIDI FX", None);
         y += 22.0;
     }
+    if i != usize::MAX && matches!(kind, Some(TrackKind::Instrument) | Some(TrackKind::Drummer)) {
+        let ir = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
+        if ui.interact(ir, ui.scope_id().with(("instslot", i)), Sense::click()).on_hover_text("Open the instrument's window").clicked() {
+            app.plugin_window = Some(i);
+        }
+    }
     match kind {
         Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
         Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
