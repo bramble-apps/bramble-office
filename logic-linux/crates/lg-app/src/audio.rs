@@ -47,7 +47,10 @@ pub struct Engine {
     /// Peak levels per track (for the meters), decaying.
     pub meters: Vec<f32>,
     pub master_meter: f32,
-    synth: Option<rustysynth::Synthesizer>,
+    /// The SoundFont, and one synthesizer per track playing it (so each track mixes on its own:
+    /// volume, pan, mute, its meter).
+    sf: Option<Arc<rustysynth::SoundFont>>,
+    synths: Vec<Option<rustysynth::Synthesizer>>,
     voices: Vec<Voice>,
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
@@ -68,48 +71,51 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, synth: None, voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
     pub fn load_soundfont(&mut self, path: Option<&Path>) {
         let found = path.map(Path::to_path_buf).or_else(system_soundfont);
-        self.synth = None;
+        self.sf = None;
+        self.synths.clear();
         self.soundfont = None;
         let Some(p) = found else { return };
         match std::fs::File::open(&p).map_err(|e| e.to_string()).and_then(|mut f| rustysynth::SoundFont::new(&mut f).map_err(|e| format!("{e:?}"))) {
             Ok(sf) => {
-                let settings = rustysynth::SynthesizerSettings::new(RATE as i32);
-                match rustysynth::Synthesizer::new(&Arc::new(sf), &settings) {
-                    Ok(s) => {
-                        self.synth = Some(s);
-                        self.soundfont = Some(p);
-                    }
-                    Err(e) => self.error = Some(format!("SoundFont: {e:?}")),
-                }
+                self.sf = Some(Arc::new(sf));
+                self.soundfont = Some(p);
             }
             Err(e) => self.error = Some(format!("SoundFont {}: {e}", p.display())),
         }
         self.program_changes();
     }
 
-    /// Each track's sound on its channel.
+    /// Each track's synthesizer, with the track's sound on its channel.
     pub fn program_changes(&mut self) {
-        let progs: Vec<(u8, u8)> = self.tracks.iter().map(|t| (t.channel, t.program)).collect();
-        if let Some(s) = &mut self.synth {
-            for (ch, prog) in progs {
-                s.process_midi_message(ch as i32, 0xC0, prog as i32, 0);
+        let Some(sf) = self.sf.clone() else {
+            self.synths.clear();
+            return;
+        };
+        self.synths.resize_with(self.tracks.len(), || None);
+        for (i, t) in self.tracks.iter().enumerate() {
+            if self.synths[i].is_none() {
+                let settings = rustysynth::SynthesizerSettings::new(RATE as i32);
+                self.synths[i] = rustysynth::Synthesizer::new(&sf, &settings).ok();
+            }
+            if let Some(s) = &mut self.synths[i] {
+                s.process_midi_message(t.channel as i32, 0xC0, t.program as i32, 0);
             }
         }
     }
 
     pub fn has_soundfont(&self) -> bool {
-        self.synth.is_some()
+        self.sf.is_some()
     }
 
     /// Stops every sounding note (stop, jump, cycle).
     pub fn all_off(&mut self) {
-        if let Some(s) = &mut self.synth {
+        for s in self.synths.iter_mut().flatten() {
             s.note_off_all(false);
         }
         self.sounding.clear();
@@ -152,7 +158,7 @@ impl Engine {
                 }
             });
             for (t, ch, pitch) in ended {
-                if let Some(s) = &mut self.synth {
+                if let Some(Some(s)) = self.synths.get_mut(t) {
                     s.note_off(ch as i32, pitch as i32);
                 }
                 for v in self.voices.iter_mut().filter(|v| v.track == t && v.pitch == pitch) {
@@ -167,11 +173,9 @@ impl Engine {
                 let t = &self.tracks[i];
                 let (ch, drum) = (t.channel, t.channel == 9);
                 let starts: Vec<(u32, u32, u8, u8)> = t.notes.iter().filter(|n| (n.0 as f64) >= from && (n.0 as f64) < to).copied().collect();
-                let gain = t.volume;
                 for (s, e, pitch, vel) in starts {
                     let _ = s;
-                    let vel = ((vel as f32) * gain.min(1.5)).clamp(1.0, 127.0) as u8;
-                    if let Some(sy) = &mut self.synth {
+                    if let Some(Some(sy)) = self.synths.get_mut(i) {
                         sy.note_on(ch as i32, pitch as i32, vel as i32);
                     } else {
                         self.voices.push(Voice { track: i, pitch, phase: 0.0, freq: 440.0 * 2f32.powf((pitch as f32 - 69.0) / 12.0), amp: vel as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum });
@@ -197,14 +201,30 @@ impl Engine {
                 }
             }
         }
-        // instruments
-        if let Some(s) = &mut self.synth {
+        // instruments: each track's synthesizer through its volume and pan (equal power)
+        if self.sf.is_some() {
             let mut l = vec![0f32; frames];
             let mut r = vec![0f32; frames];
-            s.render(&mut l, &mut r);
-            for k in 0..frames {
-                out[2 * k] += l[k];
-                out[2 * k + 1] += r[k];
+            for i in 0..self.synths.len().min(self.tracks.len()) {
+                let audible = self.audible(i);
+                let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
+                let Some(sy) = self.synths[i].as_mut() else { continue };
+                sy.render(&mut l, &mut r);
+                if !audible {
+                    continue;
+                }
+                let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
+                let mut peak = 0f32;
+                for k in 0..frames {
+                    let (x, y) = (l[k] * gl, r[k] * gr);
+                    out[2 * k] += x;
+                    out[2 * k + 1] += y;
+                    peak = peak.max(x.abs()).max(y.abs());
+                }
+                if let Some(m) = self.meters.get_mut(i) {
+                    *m = m.max(peak);
+                }
             }
         } else {
             for v in &mut self.voices {
@@ -270,12 +290,6 @@ impl Engine {
                 if let Some(m) = self.meters.get_mut(i) {
                     *m = m.max(peak);
                 }
-            }
-        }
-        // the meters: tracks with notes sounding light up by velocity (the synth mixes them)
-        for &(t, ..) in &self.sounding {
-            if let Some(m) = self.meters.get_mut(t) {
-                *m = m.max(0.5);
             }
         }
         let mut peak = 0f32;
@@ -464,6 +478,31 @@ mod tests {
         let w = wav_bytes(&out[..2 * RATE as usize]);
         assert_eq!(&w[..4], b"RIFF");
         assert_eq!(w.len(), 44 + 2 * RATE as usize * 2);
+    }
+
+    #[test]
+    fn each_track_mixes_on_its_own() {
+        let Some(sf) = system_soundfont() else { return };
+        let level = |vols: [f32; 2], mute: [bool; 2]| {
+            let mut e = Engine::new();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false }).collect();
+            e.load_soundfont(Some(&sf));
+            e.playing = true;
+            let mut buf = vec![0f32; 2 * BLOCK];
+            let mut meters = [0f32; 2];
+            for _ in 0..(RATE as usize / 4) / BLOCK {
+                e.render(&mut buf);
+                meters[0] = meters[0].max(e.meters[0]);
+                meters[1] = meters[1].max(e.meters[1]);
+            }
+            meters
+        };
+        let both = level([1.0, 1.0], [false, false]);
+        assert!(both[0] > 0.01 && both[1] > 0.01, "both tracks sound: {both:?}");
+        let muted = level([1.0, 1.0], [true, false]);
+        assert!(muted[0] < 1e-6 && muted[1] > 0.01, "muting one leaves the other: {muted:?}");
+        let quieter = level([0.25, 1.0], [false, false]);
+        assert!(quieter[0] < both[0] * 0.4, "−12 dB is quieter: {quieter:?} vs {both:?}");
     }
 
     #[test]
