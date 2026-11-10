@@ -26,6 +26,8 @@ pub struct PlayTrack {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    /// The channel strip's Channel EQ (None: none on the strip).
+    pub eq: Option<crate::eq::Params>,
 }
 
 pub struct Engine {
@@ -51,6 +53,8 @@ pub struct Engine {
     /// volume, pan, mute, its meter).
     sf: Option<Arc<rustysynth::SoundFont>>,
     synths: Vec<Option<rustysynth::Synthesizer>>,
+    /// Each track's running EQ (rebuilt when its settings change).
+    eqs: Vec<Option<crate::eq::Eq>>,
     voices: Vec<Voice>,
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
@@ -71,7 +75,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -201,32 +205,70 @@ impl Engine {
                 }
             }
         }
-        // instruments: each track's synthesizer through its volume and pan (equal power)
-        if self.sf.is_some() {
-            let mut l = vec![0f32; frames];
-            let mut r = vec![0f32; frames];
-            for i in 0..self.synths.len().min(self.tracks.len()) {
-                let audible = self.audible(i);
-                let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
-                let Some(sy) = self.synths[i].as_mut() else { continue };
+        // each track: its synthesizer and audio regions into its own buffer, through its EQ, then
+        // its volume and pan (equal power) into the mix; its meter
+        let n_tracks = self.tracks.len();
+        self.eqs.resize_with(n_tracks, || None);
+        let start_tick = if self.playing { self.pos - tps * frames as f64 } else { self.pos };
+        let mut l = vec![0f32; frames];
+        let mut r = vec![0f32; frames];
+        for i in 0..n_tracks {
+            l.fill(0.0);
+            r.fill(0.0);
+            let mut any = false;
+            if let Some(Some(sy)) = self.synths.get_mut(i) {
                 sy.render(&mut l, &mut r);
-                if !audible {
-                    continue;
-                }
-                let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-                let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
-                let mut peak = 0f32;
-                for k in 0..frames {
-                    let (x, y) = (l[k] * gl, r[k] * gr);
-                    out[2 * k] += x;
-                    out[2 * k + 1] += y;
-                    peak = peak.max(x.abs()).max(y.abs());
-                }
-                if let Some(m) = self.meters.get_mut(i) {
-                    *m = m.max(peak);
+                any = true;
+            }
+            if self.playing {
+                for (at, samples) in &self.tracks[i].audio {
+                    for k in 0..frames {
+                        let tick = start_tick + k as f64 * tps - *at as f64;
+                        if tick < 0.0 {
+                            continue;
+                        }
+                        let frame = (tick / tps) as usize;
+                        if 2 * frame + 1 >= samples.len() {
+                            break;
+                        }
+                        l[k] += samples[2 * frame];
+                        r[k] += samples[2 * frame + 1];
+                        any = true;
+                    }
                 }
             }
-        } else {
+            if !any || !self.audible(i) {
+                continue;
+            }
+            match (&self.tracks[i].eq, &mut self.eqs[i]) {
+                (Some(p), Some(e)) => {
+                    if e.params != *p {
+                        e.set(*p);
+                    }
+                    e.process(&mut l, &mut r);
+                }
+                (Some(p), slot) => {
+                    let mut e = crate::eq::Eq::new(*p);
+                    e.process(&mut l, &mut r);
+                    *slot = Some(e);
+                }
+                (None, slot) => *slot = None,
+            }
+            let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
+            let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+            let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
+            let mut peak = 0f32;
+            for k in 0..frames {
+                let (x, y) = (l[k] * gl, r[k] * gr);
+                out[2 * k] += x;
+                out[2 * k + 1] += y;
+                peak = peak.max(x.abs()).max(y.abs());
+            }
+            if let Some(m) = self.meters.get_mut(i) {
+                *m = m.max(peak);
+            }
+        }
+        if self.sf.is_none() {
             for v in &mut self.voices {
                 for k in 0..frames {
                     v.env = if v.releasing { v.env * 0.9992 } else { (v.env + 0.01).min(1.0) };
@@ -259,37 +301,6 @@ impl Engine {
             }
             if *t > 0.08 {
                 self.click = None;
-            }
-        }
-        // audio regions
-        if self.playing {
-            let start_tick = self.pos - tps * frames as f64;
-            let ticks_per_frame = tps;
-            for i in 0..self.tracks.len() {
-                if !self.audible(i) {
-                    continue;
-                }
-                let gain = self.tracks[i].volume;
-                let mut peak = 0f32;
-                for (at, samples) in &self.tracks[i].audio {
-                    for k in 0..frames {
-                        let tick = start_tick + k as f64 * ticks_per_frame - *at as f64;
-                        if tick < 0.0 {
-                            continue;
-                        }
-                        let frame = (tick / ticks_per_frame) as usize;
-                        if 2 * frame + 1 >= samples.len() {
-                            break;
-                        }
-                        let (l, r) = (samples[2 * frame] * gain, samples[2 * frame + 1] * gain);
-                        out[2 * k] += l;
-                        out[2 * k + 1] += r;
-                        peak = peak.max(l.abs()).max(r.abs());
-                    }
-                }
-                if let Some(m) = self.meters.get_mut(i) {
-                    *m = m.max(peak);
-                }
             }
         }
         let mut peak = 0f32;
@@ -468,6 +479,7 @@ mod tests {
             pan: 0.0,
             mute: false,
             solo: false,
+            eq: None,
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
         let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
@@ -485,7 +497,7 @@ mod tests {
         let Some(sf) = system_soundfont() else { return };
         let level = |vols: [f32; 2], mute: [bool; 2]| {
             let mut e = Engine::new();
-            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false }).collect();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None }).collect();
             e.load_soundfont(Some(&sf));
             e.playing = true;
             let mut buf = vec![0f32; 2 * BLOCK];
@@ -509,7 +521,7 @@ mod tests {
     fn plays_notes_in_time() {
         let mut e = Engine::new();
         e.tempo = 120.0;
-        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false }];
+        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None }];
         e.playing = true;
         let mut buf = vec![0f32; 2 * BLOCK];
         // half a second at 120 BPM = one beat = 960 ticks

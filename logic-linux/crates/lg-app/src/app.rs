@@ -97,6 +97,9 @@ pub struct App {
     /// Manual).
     pub drum_params: std::collections::HashMap<(usize, usize), crate::drummer::Params>,
     pub drum_tab: usize,
+    /// Each track's Channel EQ (by track), and the track whose EQ window is open.
+    pub eqs: std::collections::HashMap<usize, crate::eq::Params>,
+    pub eq_window: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -178,6 +181,8 @@ impl App {
             dirty: false,
             drum_params: std::collections::HashMap::new(),
             drum_tab: 0,
+            eqs: std::collections::HashMap::new(),
+            eq_window: None,
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -254,7 +259,7 @@ impl App {
             };
             let mut notes: Vec<(u32, u32, u8, u8)> = t.regions.iter().filter(|r| !r.muted).flat_map(|r| r.notes.iter().map(|n| (n.pos, n.pos + n.len.max(1), n.pitch, n.velocity))).collect();
             notes.sort_by_key(|n| n.0);
-            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo });
+            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied() });
         }
         let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
         {
@@ -941,9 +946,31 @@ impl App {
                         let n = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).map_or(0, |rg| rg.notes.len());
                         self.selected_notes = (0..n).collect();
                     }
+                } else if let Some(t) = self.selected_track {
+                    // the tracks area: the selected track's regions (the first selected)
+                    if self.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| !tr.regions.is_empty()) {
+                        self.selected_region = Some((t, 0));
+                    }
                 } else {
                     return false;
                 }
+            }
+            "Quantize Selected Regions/Cells/Events" => {
+                // Logic's default quantize: 1/16 notes; the selected notes in the Piano Roll, else
+                // the whole selected region
+                let Some((t, r)) = self.selected_region else { return false };
+                self.checkpoint("Quantize");
+                let q = lg_core::events::PPQ / 4;
+                let sel = self.selected_notes.clone();
+                let only = self.bottom == Bottom::PianoRoll && !sel.is_empty();
+                if let Some(rg) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) {
+                    for (i, n) in rg.notes.iter_mut().enumerate() {
+                        if !only || sel.contains(&i) {
+                            n.pos = (n.pos + q / 2) / q * q;
+                        }
+                    }
+                }
+                self.after_edit();
             }
             "Zoom Horizontal In" => self.bar_w = (self.bar_w * 1.25).min(1200.0),
             "Zoom Horizontal Out" => self.bar_w = (self.bar_w / 1.25).max(8.0),
@@ -1068,6 +1095,20 @@ impl App {
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
+        if let Some(t) = self.eq_window {
+            let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
+            let mut open = true;
+            let mut p = self.eqs.get(&t).copied().unwrap_or_default();
+            if crate::eq::window(&ctx, &mut open, &name, &mut p) {
+                self.eqs.insert(t, p);
+                if let Some(tr) = self.engine().tracks.get_mut(t) {
+                    tr.eq = Some(p);
+                }
+            }
+            if !open {
+                self.eq_window = None;
+            }
+        }
         if let Some((m, _)) = &self.message {
             let at = pos2(window.center().x, window.max.y - 40.0);
             let g = p.layout_no_wrap(m.clone(), look::regular(13.0), egui::Color32::WHITE);

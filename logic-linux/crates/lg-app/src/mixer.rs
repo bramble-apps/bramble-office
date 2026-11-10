@@ -63,7 +63,24 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
     let mut y = r.min.y + 8.0;
     slot(&p, y, "Setting", None);
     y += 24.0;
-    slot(&p, y, "EQ", None);
+    // the EQ slot: a click opens the Channel EQ; with one on the strip, its curve
+    let eq_r = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
+    match (i != usize::MAX).then(|| app.eqs.get(&i).copied()).flatten() {
+        Some(e) => {
+            p.rect_filled(eq_r, 4.0, look::lcd_bg());
+            let pts: Vec<egui::Pos2> = (0..=40).map(|k| {
+                let f = 20.0 * 1000f32.powf(k as f32 / 40.0);
+                pos2(eq_r.min.x + k as f32 / 40.0 * eq_r.width(), eq_r.center().y - crate::eq::response(&e, f).clamp(-18.0, 18.0) / 18.0 * 8.0)
+            }).collect();
+            p.add(egui::Shape::line(pts, Stroke::new(1.2, Color32::from_rgb(0x9c, 0xe0, 0xff))));
+        }
+        None => slot(&p, y, "EQ", None),
+    }
+    if i != usize::MAX && ui.interact(eq_r, ui.scope_id().with(("eqslot", i)), Sense::click()).clicked() {
+        app.eqs.entry(i).or_default();
+        app.eq_window = Some(i);
+        app.load_engine();
+    }
     y += 28.0;
     match kind {
         Some(TrackKind::Instrument) => slot(&p, y, "Sampler", Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
