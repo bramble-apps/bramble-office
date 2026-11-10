@@ -569,7 +569,7 @@ impl App {
         let at = (self.position() as u32 / bar) * bar;
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
-        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None };
+        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None };
         p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
@@ -932,6 +932,7 @@ impl App {
                 self.checkpoint("Repeat Region");
                 if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
                     if let Some(mut copy) = tr.regions.get(r).cloned() {
+                        copy.origin = copy.source.or(copy.origin);
                         copy.source = None;
                         let d = copy.length;
                         copy.start += d;
@@ -954,6 +955,7 @@ impl App {
             "Paste" => {
                 // at the playhead, on the selected track (Logic)
                 let (Some(t), Some(mut rg)) = (self.selected_track, self.clipboard.clone()) else { return false };
+                rg.origin = rg.source.or(rg.origin);
                 rg.source = None;
                 self.checkpoint("Paste");
                 let at = self.position() as u32;

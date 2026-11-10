@@ -82,6 +82,9 @@ pub struct Region {
     pub muted: bool,
     /// Where the region came from in the file it was read from (None: made here), for Save.
     pub source: Option<Source>,
+    /// A region made here from one that was read (a copy, a paste, Repeat): Save writes it as a
+    /// new sequence modelled on that one.
+    pub origin: Option<Source>,
 }
 
 /// A region's place in the original ProjectData: the folder whose event list places it, its
@@ -407,7 +410,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     let mut by_row: BTreeMap<u32, Track> = BTreeMap::new();
     for (pl, seq, folder) in placed {
         let channel_name = channels.get(&pl.channel).cloned().unwrap_or_else(|| format!("Track {}", pl.row));
-        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }) };
+        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }), origin: None };
         let mut kind = TrackKind::Instrument;
         if pl.audio {
             kind = TrackKind::Audio;

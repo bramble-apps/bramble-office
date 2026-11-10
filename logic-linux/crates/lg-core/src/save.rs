@@ -99,11 +99,14 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
     let mut unsaved = Vec::new();
     // regions now, by where they came from
     let mut now: HashMap<Source, &project::Region> = HashMap::new();
+    // regions made here from a read one (copies, pastes): written as new sequences
+    let mut new_regions: Vec<(&project::Region, Source)> = Vec::new();
     for r in p.tracks.iter().flat_map(|t| t.regions.iter()) {
-        match r.source {
-            Some(s) if !now.contains_key(&s) => {
+        match (r.source, r.origin) {
+            (Some(s), _) if !now.contains_key(&s) => {
                 now.insert(s, r);
             }
+            (_, Some(o)) if o.seq.is_some() && r.audio.is_none() => new_regions.push((r, o)),
             _ => unsaved.push(r.name.clone()),
         }
     }
@@ -137,6 +140,48 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
             last.insert(c.id, i);
         }
     }
+    // new sequences: ids after the highest in use; each a copy of its model's MSeq / Trak / EvSq
+    // chunks (the last of each id), inserted after the model's EvSq; a placement record (a copy
+    // of the model's) added to the folder
+    let mut next_id = chunks.iter().filter(|c| c.is("MSeq") || c.is("Trak") || c.is("EvSq")).map(|c| c.id & 0xFFFF_0000).max().unwrap_or(0) + 0x4_0000;
+    let mut after_evsq: HashMap<usize, Vec<Vec<u8>>> = HashMap::new();
+    let mut added_placements: HashMap<u32, Vec<(u32, Vec<u8>)>> = HashMap::new();
+    for (r, o) in &new_regions {
+        let seq = o.seq.unwrap_or(0);
+        let find = |tag: &str| chunks.iter().enumerate().filter(|(_, c)| c.is(tag) && c.id == seq).last();
+        let (Some((_, m)), Some((_, t)), Some((ei, e))) = (find("MSeq"), find("Trak"), find("EvSq")) else {
+            unsaved.push(r.name.clone());
+            continue;
+        };
+        let Some(folder_ev) = chunks.iter().filter(|c| c.is("EvSq") && c.id == o.folder).last() else {
+            unsaved.push(r.name.clone());
+            continue;
+        };
+        let Some(model_pl) = events::records(folder_ev.payload).into_iter().find(|x| events::placement(x).is_some_and(|pl| pl.pos == o.pos && pl.sequence.map(|s| s << 16) == o.seq)) else {
+            unsaved.push(r.name.clone());
+            continue;
+        };
+        let id = next_id;
+        next_id += 0x4_0000;
+        let with_id = |raw: &[u8], payload: Option<Vec<u8>>| {
+            let mut h = raw[..36].to_vec();
+            h[8..12].copy_from_slice(&id.to_le_bytes());
+            let pl = payload.unwrap_or_else(|| raw[36..].to_vec());
+            h[28..36].copy_from_slice(&(pl.len() as u64).to_le_bytes());
+            h.extend(pl);
+            h
+        };
+        let list = after_evsq.entry(ei).or_default();
+        list.push(with_id(m.raw, None));
+        list.push(with_id(t.raw, None));
+        list.push(with_id(e.raw, Some(rebuild_notes(e.payload, &r.notes))));
+        let mut pl = model_pl.bytes.clone();
+        let pos = (r.start + BAR_ONE).to_le_bytes();
+        pl[4..7].copy_from_slice(&pos[..3]);
+        pl[7] = pos[3] & 0x7F;
+        pl[32..36].copy_from_slice(&(id >> 16).to_le_bytes());
+        added_placements.entry(o.folder).or_default().push((r.start + BAR_ONE, pl));
+    }
     let unchanged = |c: &Chunk| c.raw.to_vec();
     let mut body: Vec<u8> = Vec::with_capacity(original.len());
     for (i, c) in chunks.iter().enumerate() {
@@ -146,8 +191,18 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
             let want: Vec<events::Note> = notes[&c.id].clone();
             let same = old_notes.len() == want.len() && old_notes.iter().zip(&want).all(|(a, b)| a.pitch == b.pitch && a.velocity == b.velocity && a.len == b.len && a.pos == b.pos + BAR_ONE);
             (!same).then(|| rebuild_notes(c.payload, &want))
-        } else if live && (moved.contains_key(&c.id) || removed.contains_key(&c.id)) {
-            Some(rebuild_placements(c.payload, moved.get(&c.id).unwrap_or(&HashMap::new()), removed.get(&c.id).unwrap_or(&HashSet::new())))
+        } else if live && (moved.contains_key(&c.id) || removed.contains_key(&c.id) || added_placements.contains_key(&c.id)) {
+            let mut pl = rebuild_placements(c.payload, moved.get(&c.id).unwrap_or(&HashMap::new()), removed.get(&c.id).unwrap_or(&HashSet::new()));
+            if let Some(add) = added_placements.get(&c.id) {
+                // the new placements in among the others, in time order, before the end marker
+                let end = pl.split_off(pl.len().saturating_sub(16));
+                let mut recs: Vec<(u32, Vec<u8>)> = events::records(&pl).into_iter().map(|r| (r.pos, r.bytes)).collect();
+                recs.extend(add.iter().cloned());
+                recs.sort_by_key(|x| x.0);
+                pl = recs.into_iter().flat_map(|x| x.1).collect();
+                pl.extend(end);
+            }
+            Some(pl)
         } else {
             None
         };
@@ -158,6 +213,11 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
                 h[28..36].copy_from_slice(&(pl.len() as u64).to_le_bytes());
                 body.extend(h);
                 body.extend(pl);
+            }
+        }
+        if let Some(extra) = after_evsq.get(&i) {
+            for x in extra {
+                body.extend(x);
             }
         }
     }
