@@ -169,7 +169,30 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         hp.text(pos2(row.min.x + 14.0, row.center().y), Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), look::text_dim());
         let icon = Rect::from_center_size(pos2(row.min.x + 46.0, row.center().y), vec2(34.0, 34.0));
         track_icon(&hp, icon, t.kind);
-        hp.text(pos2(row.min.x + 72.0, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, 22), look::semibold(13.0), look::text());
+        // the name: double-click to rename (Return keeps it, Escape doesn't)
+        let name_r = Rect::from_min_size(pos2(row.min.x + 70.0, row.min.y + 5.0), vec2(hw - 80.0, 20.0));
+        match app.renaming.as_mut() {
+            Some((ti, text)) if *ti == i => {
+                let te = ui.put(name_r, egui::TextEdit::singleline(text).font(look::semibold(13.0)));
+                te.request_focus();
+                if te.lost_focus() {
+                    let (cancel, new) = (ui.input(|i| i.key_pressed(egui::Key::Escape)), text.trim().to_string());
+                    app.renaming = None;
+                    if !cancel && !new.is_empty() {
+                        app.checkpoint("Rename Track");
+                        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
+                            tr.name = new;
+                        }
+                    }
+                }
+            }
+            _ => {
+                hp.text(pos2(row.min.x + 72.0, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, 22), look::semibold(13.0), look::text());
+                if ui.interact(name_r, ui.scope_id().with(("trackname", i)), Sense::click()).double_clicked() {
+                    app.renaming = Some((i, t.name.clone()));
+                }
+            }
+        }
         let mut changed = false;
         let mut mute = t.mute;
         let mut solo = t.solo;

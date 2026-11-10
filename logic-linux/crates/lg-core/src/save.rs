@@ -161,10 +161,56 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
             }
         }
     }
+    // the tempo: the Song chunk's three copies and the tempo list's first event (BPM × 10000),
+    // when it changed (a single tempo; tempo changes aren't written yet)
+    let tempo_now = (p.tempo * 10000.0).round() as u32;
+    let tempo_was = (before.tempo * 10000.0).round() as u32;
     let mut data = original[..24].to_vec();
     data[0x10..0x14].copy_from_slice(&(body.len() as u32).to_le_bytes());
     data.extend(body);
+    if tempo_now != tempo_was && tempo_now > 0 {
+        set_tempo(&mut data, tempo_was, tempo_now);
+    }
     Ok(Saved { data, unsaved })
+}
+
+/// The alternative's MetaData.plist summary follows the song: its tempo (Logic and Finder read it).
+pub fn update_metadata(alt: &std::path::Path, p: &Project) {
+    let path = alt.join("MetaData.plist");
+    let Ok(plist::Value::Dictionary(mut d)) = plist::Value::from_file(&path) else { return };
+    let was = d.get("BeatsPerMinute").and_then(|v| v.as_real().or_else(|| v.as_signed_integer().map(|i| i as f64)));
+    if was.is_some_and(|w| (w - p.tempo).abs() > 1e-6) {
+        d.insert("BeatsPerMinute".into(), plist::Value::Real(p.tempo));
+        let _ = plist::Value::Dictionary(d).to_file_binary(&path);
+    }
+}
+
+/// Writes a new tempo (BPM × 10000) where the old one sits: the Song chunk's three fields (0x92,
+/// 0xEA, 0x3A6 from its start) and the tempo list's events (second EvSq id 0, kind 0x60).
+fn set_tempo(data: &mut [u8], was: u32, now: u32) {
+    let Ok(chunks) = chunks::walk(data) else { return };
+    let mut spots = Vec::new();
+    if let Some(song) = chunks.iter().find(|c| c.is("Song")) {
+        for off in [0x92usize, 0xEA, 0x3A6] {
+            if song.u32_at(off) == Some(was) {
+                spots.push(song.start + off);
+            }
+        }
+    }
+    if let Some(list) = chunks.iter().filter(|c| c.is("EvSq") && c.id == 0).nth(1) {
+        let base = list.start + 36;
+        let mut i = 0;
+        while i + 32 <= list.payload.len() {
+            let u = &list.payload[i..];
+            if u[0] == 0x60 && u32::from_le_bytes([u[16], u[17], u[18], u[19]]) == was {
+                spots.push(base + i + 16);
+            }
+            i += 16;
+        }
+    }
+    for at in spots {
+        data[at..at + 4].copy_from_slice(&now.to_le_bytes());
+    }
 }
 
 #[cfg(test)]

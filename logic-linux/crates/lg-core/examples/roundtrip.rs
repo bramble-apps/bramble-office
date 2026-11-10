@@ -27,12 +27,14 @@ fn main() {
             r.notes.pop();
             moved = Some((r.name.clone(), r.start, r.notes.len()));
         }
+        e.tempo = 97.5;
         let saved = save::save(&e, &orig).unwrap();
         let back = project::read_project_data(&saved.data).unwrap();
         let ok_walk = lg_core::chunks::walk(&saved.data).is_ok();
         let want: Vec<u8> = e.tracks.iter().flat_map(|t| t.regions.iter()).flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
         let got: Vec<u8> = back.tracks.iter().flat_map(|t| t.regions.iter()).flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
         let region_ok = moved.as_ref().is_none_or(|(name, start, n)| back.tracks.iter().flat_map(|t| t.regions.iter()).any(|r| &r.name == name && r.start == *start && r.notes.len() == *n));
-        println!("{:<40} unchanged-identical={identical} walk={ok_walk} notes-transposed={} region-moved={region_ok} ({} bytes → {})", pkg.file_name().unwrap().to_string_lossy(), want == got, orig.len(), saved.data.len());
+        let tempo_ok = (back.tempo - 97.5).abs() < 0.001;
+        println!("{:<40} unchanged-identical={identical} walk={ok_walk} tempo={tempo_ok} notes-transposed={} region-moved={region_ok} ({} bytes → {})", pkg.file_name().unwrap().to_string_lossy(), want == got, orig.len(), saved.data.len());
     }
 }

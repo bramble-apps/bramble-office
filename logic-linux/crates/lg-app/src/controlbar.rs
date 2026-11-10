@@ -139,7 +139,37 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let c2 = cell(2.0);
     let tempo = app.tempo();
     let tempo_text = if (tempo - tempo.round()).abs() < 0.005 { format!("{tempo:.0}") } else { format!("{tempo:.2}") };
-    p.text(pos2(c2.center().x, c2.min.y + 15.0), egui::Align2::CENTER_CENTER, tempo_text, look::regular(17.0), look::lcd_text());
+    // the tempo: drag up / down to change it (Shift: in hundredths), double-click to type it
+    let tr = Rect::from_center_size(pos2(c2.center().x, c2.min.y + 15.0), vec2(col_w - 8.0, 22.0));
+    if let Some(text) = app.tempo_edit.as_mut() {
+        let te = ui.put(tr, egui::TextEdit::singleline(text).align(egui::Align2::CENTER_CENTER).font(look::regular(15.0)));
+        te.request_focus();
+        if te.lost_focus() {
+            if let Ok(v) = text.trim().parse::<f64>() {
+                app.checkpoint("Change Tempo");
+                app.set_tempo(v);
+            }
+            app.tempo_edit = None;
+        }
+    } else {
+        p.text(tr.center(), egui::Align2::CENTER_CENTER, tempo_text, look::regular(17.0), look::lcd_text());
+        let resp = ui.interact(tr, ui.scope_id().with("lcd-tempo"), Sense::click_and_drag()).on_hover_text("Tempo: drag up or down, double-click to type");
+        if resp.hovered() || resp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+        }
+        if resp.drag_started() {
+            app.checkpoint("Change Tempo");
+        }
+        if resp.dragged() {
+            let fine = ui.input(|i| i.modifiers.shift);
+            let d = -resp.drag_delta().y as f64 * if fine { 0.01 } else { 0.25 };
+            let t = app.project.as_ref().map_or(120.0, |pr| pr.tempo);
+            app.set_tempo(if fine { t + d } else { (t + d).round() });
+        }
+        if resp.double_clicked() {
+            app.tempo_edit = Some(format!("{tempo:.2}").trim_end_matches('0').trim_end_matches('.').to_string());
+        }
+    }
     p.text(pos2(c2.center().x, c2.min.y + 30.0), egui::Align2::CENTER_CENTER, "KEEP", look::semibold(8.0), look::lcd_dim());
     p.text(pos2(c2.center().x, c2.max.y - 8.0), egui::Align2::CENTER_CENTER, "TEMPO", look::semibold(9.0), look::lcd_dim());
     let c3 = cell(3.0);

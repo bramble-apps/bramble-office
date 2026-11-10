@@ -93,6 +93,10 @@ pub struct App {
     pub file: Option<(PathBuf, Vec<u8>)>,
     /// Edited since opened or saved.
     pub dirty: bool,
+    /// The LCD's tempo being typed (double-click), and a track being renamed (double-click its
+    /// name): what's typed so far.
+    pub tempo_edit: Option<String>,
+    pub renaming: Option<(usize, String)>,
     /// Bramble's drummer: each drummer region's settings, and the editor's tab (Main, Details,
     /// Manual).
     pub drum_params: std::collections::HashMap<(usize, usize), crate::drummer::Params>,
@@ -179,6 +183,8 @@ impl App {
             clipboard: None,
             file: None,
             dirty: false,
+            tempo_edit: None,
+            renaming: None,
             drum_params: std::collections::HashMap::new(),
             drum_tab: 0,
             eqs: std::collections::HashMap::new(),
@@ -354,6 +360,22 @@ impl App {
         self.project.as_ref().map_or(3840, |p| lg_core::project::bar_ticks(p.signature))
     }
 
+    /// Sets the song's tempo (the LCD): one tempo for the whole song.
+    pub fn set_tempo(&mut self, bpm: f64) {
+        let bpm = (bpm * 100.0).round() / 100.0;
+        let Some(p) = self.project.as_mut() else { return };
+        if (p.tempo - bpm).abs() < 1e-6 {
+            return;
+        }
+        p.tempo = bpm.clamp(5.0, 990.0);
+        p.tempo_map = vec![(0, p.tempo)];
+        self.dirty = true;
+        let (t, m) = (p.tempo, p.tempo_map.clone());
+        let mut e = self.engine();
+        e.tempo = t;
+        e.tempo_map = m;
+    }
+
     /// The tempo at the playhead (the LCD).
     pub fn tempo(&self) -> f64 {
         let pos = self.position() as u32;
@@ -493,6 +515,7 @@ impl App {
                 }
                 match std::fs::write(&target, &saved.data) {
                     Ok(()) => {
+                        lg_core::save::update_metadata(alt, p);
                         let alt = alt.clone();
                         self.file = Some((alt, saved.data));
                         self.dirty = false;
