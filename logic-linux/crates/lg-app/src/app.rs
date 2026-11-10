@@ -130,6 +130,13 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// Bass / Keyboard Player regions' settings; the chord track (one chord per bar, "C Am F G").
+    pub players: std::collections::HashMap<(usize, usize), crate::players::Player>,
+    pub chord_text: String,
+    /// The Create New Track sheet.
+    pub new_track_open: bool,
+    pub new_track_kind: crate::newtrack::Kind,
+    pub new_track_count: u32,
     /// Arrangement markers: start, length (ticks), name.
     pub arrangement: Vec<(u32, u32, String)>,
     /// The Browser: linked to the selected track, replacing its patch; its category filter and
@@ -282,6 +289,11 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            players: Default::default(),
+            chord_text: String::new(),
+            new_track_open: false,
+            new_track_kind: Default::default(),
+            new_track_count: 1,
             arrangement: Vec::new(),
             browser_link: true,
             browser_replace: true,
@@ -1059,7 +1071,10 @@ impl App {
             "Project or Section…" => self.bounce(None),
             "Save" => self.save(),
             "Save As…" | "Save A Copy As…" => self.save_as(),
-            "New Session Player SI Track…" => self.new_drummer(),
+            "New Session Player SI Track…" => {
+                self.new_track_kind = crate::newtrack::Kind::Drummer;
+                self.new_track_open = true;
+            }
             "New Software Instrument Track" | "New Audio Track" => {
                 let _ = self.key_command(ctx, cmd);
             }
@@ -1323,18 +1338,6 @@ impl App {
                 self.after_edit();
             }
             "New Session Player SI Track…" => self.new_drummer(),
-            "New Software Instrument Track" | "New Audio Track" | "New Tracks…" => {
-                self.checkpoint("Create New Track");
-                let audio = name == "New Audio Track";
-                if let Some(p) = self.project.as_mut() {
-                    let row = p.tracks.len() as u32 + 1;
-                    let n = p.tracks.iter().filter(|t| (t.kind == TrackKind::Audio) == audio).count() + 1;
-                    p.tracks.push(lg_core::Track { name: if audio { format!("Audio {n}") } else { "Deluxe Classic".into() }, kind: if audio { TrackKind::Audio } else { TrackKind::Instrument }, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
-                    self.programs.push(if audio { 0 } else { 4 });
-                    self.selected_track = Some(p.tracks.len() - 1);
-                }
-                self.after_edit();
-            }
             "Nudge Region/Event/Marquee Position Left by Nudge Value" | "Nudge Region/Event/Marquee Position Right by Nudge Value" => {
                 // (Logic's default nudge value: a division, a 1/16)
                 let step = lg_core::events::PPQ as i64 / 4;
@@ -1570,6 +1573,10 @@ impl App {
             self.editor_rect = ed;
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
+                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) && self.drum_tab != 2 => {
+                    let (t, r) = self.selected_region.unwrap();
+                    crate::players::show(self, ui, ed, t, r);
+                }
                 Bottom::PianoRoll if drummer.is_some() && self.drum_tab != 2 => {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
@@ -1601,6 +1608,7 @@ impl App {
         crate::dialogs::show(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
+        crate::newtrack::sheet(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;
