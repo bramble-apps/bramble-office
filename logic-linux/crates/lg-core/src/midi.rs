@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn writes_a_type_1_file() {
         let mut p = Project { name: "T".into(), tempo: 120.0, signature: (3, 4), ..Default::default() };
-        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480 }], audio: None, muted: false, source: None, origin: None }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480 }], audio: None, muted: false, source: None, origin: None, props: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         let b = write(&p);
         assert_eq!(&b[..4], b"MThd");
         assert_eq!(u16::from_be_bytes([b[10], b[11]]), 2, "tempo track + one track");
@@ -112,5 +112,135 @@ mod tests {
         let mut v = Vec::new();
         vlq(480, &mut v);
         assert_eq!(v, vec![0x83, 0x60]);
+    }
+}
+
+/// A Standard MIDI File read for import (File > Import > MIDI File…, or a .mid dropped on the
+/// tracks): its tracks' notes rescaled to 960 PPQ from the file's start, the first tempo and
+/// time signature, and each track's name and channel.
+#[derive(Clone, Debug, Default)]
+pub struct Imported {
+    pub tempo: Option<f64>,
+    pub signature: Option<(u8, u8)>,
+    /// (name, channel of its first note, notes at 960 PPQ from the file's start).
+    pub tracks: Vec<(String, u8, Vec<crate::events::Note>)>,
+}
+
+fn read_vlq(d: &[u8], i: &mut usize) -> Option<u32> {
+    let mut v = 0u32;
+    for _ in 0..4 {
+        let b = *d.get(*i)?;
+        *i += 1;
+        v = (v << 7) | (b & 0x7F) as u32;
+        if b & 0x80 == 0 {
+            return Some(v);
+        }
+    }
+    Some(v)
+}
+
+pub fn read(data: &[u8]) -> Option<Imported> {
+    if data.get(..4)? != b"MThd" {
+        return None;
+    }
+    let ntrk = u16::from_be_bytes([data[10], data[11]]) as usize;
+    let division = u16::from_be_bytes([data[12], data[13]]);
+    if division & 0x8000 != 0 || division == 0 {
+        return None; // SMPTE time: not supported
+    }
+    let scale = PPQ as f64 / division as f64;
+    let mut out = Imported::default();
+    let mut at = 8 + u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+    for _ in 0..ntrk {
+        if data.get(at..at + 4)? != b"MTrk" {
+            break;
+        }
+        let len = u32::from_be_bytes(data[at + 4..at + 8].try_into().ok()?) as usize;
+        let d = data.get(at + 8..at + 8 + len)?;
+        at += 8 + len;
+        let mut i = 0;
+        let mut tick = 0u64;
+        let mut status = 0u8;
+        let mut name = String::new();
+        let mut open: std::collections::HashMap<(u8, u8), (u64, u8)> = Default::default();
+        let mut notes = Vec::new();
+        let mut first_ch = None;
+        while i < d.len() {
+            tick += read_vlq(d, &mut i)? as u64;
+            let mut b = *d.get(i)?;
+            if b & 0x80 != 0 {
+                i += 1;
+                if b < 0xF0 {
+                    status = b;
+                }
+            } else {
+                b = status;
+            }
+            match b {
+                0xFF => {
+                    let kind = *d.get(i)?;
+                    i += 1;
+                    let l = read_vlq(d, &mut i)? as usize;
+                    let body = d.get(i..i + l)?;
+                    i += l;
+                    match kind {
+                        0x03 if name.is_empty() => name = String::from_utf8_lossy(body).trim().to_string(),
+                        0x51 if l == 3 && out.tempo.is_none() => {
+                            let us = ((body[0] as u32) << 16) | ((body[1] as u32) << 8) | body[2] as u32;
+                            out.tempo = Some(60_000_000.0 / us as f64);
+                        }
+                        0x58 if l >= 2 && out.signature.is_none() => out.signature = Some((body[0], 1u8 << body[1].min(6))),
+                        0x2F => break,
+                        _ => {}
+                    }
+                }
+                0xF0 | 0xF7 => {
+                    let l = read_vlq(d, &mut i)? as usize;
+                    i += l;
+                }
+                _ => {
+                    let ch = b & 0x0F;
+                    let kind = b & 0xF0;
+                    let n = if kind == 0xC0 || kind == 0xD0 { 1 } else { 2 };
+                    let a = *d.get(i)?;
+                    let v = if n == 2 { *d.get(i + 1)? } else { 0 };
+                    i += n;
+                    let t = (tick as f64 * scale).round() as u64;
+                    match kind {
+                        0x90 if v > 0 => {
+                            first_ch.get_or_insert(ch);
+                            open.insert((ch, a), (t, v));
+                        }
+                        0x80 | 0x90 => {
+                            if let Some((s, vel)) = open.remove(&(ch, a)) {
+                                notes.push(crate::events::Note { channel: ch, pitch: a, velocity: vel, pos: s as u32, len: (t - s).max(1) as u32 });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if !notes.is_empty() {
+            notes.sort_by_key(|n| n.pos);
+            out.tracks.push((name, first_ch.unwrap_or(0), notes));
+        }
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod read_tests {
+    #[test]
+    fn reads_back_what_it_writes() {
+        let mut p = crate::project::Project { tempo: 97.0, signature: (3, 4), ..Default::default() };
+        let notes = vec![crate::events::Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 480 }, crate::events::Note { channel: 0, pitch: 64, velocity: 70, pos: 960, len: 960 }];
+        p.tracks.push(crate::project::Track { name: "Keys".into(), kind: crate::project::TrackKind::Instrument, channel: 0, row: 1, regions: vec![crate::project::Region { name: "Keys".into(), start: 0, length: 3840, notes: notes.clone(), audio: None, muted: false, source: None, origin: None, props: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+        let back = super::read(&super::write(&p)).expect("reads");
+        assert_eq!(back.tempo.map(|t| t.round()), Some(97.0));
+        assert_eq!(back.signature, Some((3, 4)));
+        let (_, _, n) = back.tracks.iter().find(|t| !t.2.is_empty()).unwrap();
+        assert_eq!(n.iter().map(|n| (n.pitch, n.velocity, n.len)).collect::<Vec<_>>(), vec![(60, 90, 480), (64, 70, 960)]);
+        assert_eq!(n[1].pos - n[0].pos, 960);
     }
 }

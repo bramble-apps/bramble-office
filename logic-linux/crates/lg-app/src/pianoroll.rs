@@ -263,7 +263,7 @@ pub fn velocity_color(v: u8) -> Color32 {
 
 /// Plays a key of the keyboard on the track's sound (a short note at the playhead, stopped
 /// again a moment later).
-fn preview(app: &mut App, track: usize, pitch: u8) {
+pub(crate) fn preview(app: &mut App, track: usize, pitch: u8) {
     let mut e = app.engine.lock().unwrap_or_else(|e| e.into_inner());
     if e.playing {
         return;

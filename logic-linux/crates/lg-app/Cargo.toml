@@ -24,6 +24,7 @@ winit = { version = "0.30.13", default-features = false, features = ["wayland-cs
 rodio = { version = "0.23", default-features = false, features = ["playback", "wav", "mp3", "flac"] }
 # SoundFont instruments played natively (pure Rust, MIT)
 rustysynth = "1"
+lg-dsp = { path = "../lg-dsp" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

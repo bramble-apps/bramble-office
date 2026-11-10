@@ -13,14 +13,45 @@ use crate::look::{self, Look};
 
 pub const CONTROL_H: f32 = 62.0;
 pub const BROWSER_W: f32 = 270.0;
-pub const INSPECTOR_W: f32 = 176.0;
+pub const INSPECTOR_W: f32 = 236.0;
+/// The panes on the right (List Editors, Notes, Loop Browser, Browsers).
+pub const RIGHT_W: f32 = 330.0;
 pub const EDITOR_H: f32 = 300.0;
+
+const PPQ_F: f64 = lg_core::events::PPQ as f64;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Bottom {
     None,
     PianoRoll,
     Mixer,
+    SmartControls,
+}
+
+/// The Track inspector's parameters (Logic's: applied as the track plays).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrackProps {
+    pub transpose: i8,
+    pub velocity: i8,
+    pub delay: i32,
+    pub key_limit: (u8, u8),
+    pub vel_limit: (u8, u8),
+    pub no_transpose: bool,
+}
+
+impl Default for TrackProps {
+    fn default() -> Self {
+        TrackProps { transpose: 0, velocity: 0, delay: 0, key_limit: (0, 127), vel_limit: (1, 127), no_transpose: false }
+    }
+}
+
+/// The panes on the window's right (Logic: List Editors, Notes, Loop Browser, Browsers).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RightPane {
+    Lists,
+    Notes,
+    Loops,
+    Files,
 }
 
 /// How a SoundFont added to a track is used (the user's choice, Settings > SoundFonts).
@@ -46,6 +77,40 @@ pub struct App {
     pub show_browser: bool,
     pub show_inspector: bool,
     pub show_control_bar: bool,
+    /// Control bar toggles: Quick Help, the Toolbar row, Replace, Low Latency, the Tuner, Solo
+    /// mode, Count-in; the LCD's display; the pane open on the right.
+    pub quick_help: bool,
+    pub show_toolbar: bool,
+    pub replace_mode: bool,
+    pub low_latency: bool,
+    pub show_tuner: bool,
+    pub solo_mode: bool,
+    pub count_in: bool,
+    pub lcd_mode: crate::controlbar::LcdMode,
+    pub right_pane: Option<RightPane>,
+    /// Recording (MIDI from the inputs and Musical Typing): where it began.
+    pub record_from: Option<f64>,
+    /// Notes played in while recording (and, for Capture as Recording, the last ones played
+    /// while not): song ticks.
+    pub recorded: Vec<lg_core::events::Note>,
+    pub played: Vec<lg_core::events::Note>,
+    /// The Inspector's Region and Track sections open; the Track parameters by track.
+    pub inspector_region_open: bool,
+    pub inspector_track_open: bool,
+    pub track_props: std::collections::HashMap<usize, TrackProps>,
+    /// The instrument picked for a track in the Library (Logic's patch or plug-in name).
+    pub instrument_choice: std::collections::HashMap<usize, String>,
+    /// List Editors and Notes panes: their tabs; the project's and tracks' notes; markers
+    /// (position, name).
+    pub list_tab: usize,
+    pub notes_tab: usize,
+    pub project_notes: String,
+    pub track_notes: std::collections::HashMap<usize, String>,
+    pub markers: Vec<(u32, String)>,
+    /// The Loop Browser and All Files: search text, the folder shown, the file selected.
+    pub files_search: String,
+    pub files_dir: Option<PathBuf>,
+    pub files_selected: Option<PathBuf>,
     pub bottom: Bottom,
     pub selected_track: Option<usize>,
     pub selected_region: Option<(usize, usize)>,
@@ -150,6 +215,30 @@ impl App {
             show_browser: true,
             show_inspector: true,
             show_control_bar: true,
+            quick_help: false,
+            show_toolbar: false,
+            replace_mode: false,
+            low_latency: false,
+            show_tuner: false,
+            solo_mode: false,
+            count_in: true,
+            lcd_mode: crate::controlbar::LcdMode::BeatsProject,
+            right_pane: None,
+            record_from: None,
+            recorded: Vec::new(),
+            played: Vec::new(),
+            inspector_region_open: true,
+            inspector_track_open: false,
+            track_props: Default::default(),
+            instrument_choice: Default::default(),
+            list_tab: 0,
+            notes_tab: 0,
+            project_notes: String::new(),
+            track_notes: Default::default(),
+            markers: Vec::new(),
+            files_search: String::new(),
+            files_dir: None,
+            files_selected: None,
             bottom: Bottom::PianoRoll,
             selected_track: Some(0),
             selected_region: None,
@@ -268,9 +357,39 @@ impl App {
                 }
                 c
             };
-            let mut notes: Vec<(u32, u32, u8, u8)> = t.regions.iter().filter(|r| !r.muted).flat_map(|r| r.notes.iter().map(|n| (n.pos, n.pos + n.len.max(1), n.pitch, n.velocity))).collect();
+            // each region as it plays: its inspector parameters applied, and looped (Loop) up to
+            // the next region on the track or the project's end
+            let song_end = p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start + r.length)).max().unwrap_or(0).max(64 * self.bar_ticks());
+            let mut notes: Vec<(u32, u32, u8, u8)> = Vec::new();
+            for r in t.regions.iter().filter(|r| !r.muted) {
+                let until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
+                let mut offset = 0u32;
+                loop {
+                    for n in &r.notes {
+                        let mut n = r.props.apply(n, r.start);
+                        let tp = self.track_props.get(&i).copied().unwrap_or_default();
+                        if !tp.no_transpose {
+                            n.pitch = (n.pitch as i16 + tp.transpose as i16).clamp(0, 127) as u8;
+                        }
+                        n.velocity = (n.velocity as i16 + tp.velocity as i16).clamp(1, 127) as u8;
+                        n.pos = (n.pos as i64 + tp.delay as i64).max(0) as u32;
+                        if n.pitch < tp.key_limit.0 || n.pitch > tp.key_limit.1 || n.velocity < tp.vel_limit.0 || n.velocity > tp.vel_limit.1 {
+                            continue;
+                        }
+                        let at = n.pos + offset;
+                        if offset > 0 && at >= until {
+                            continue;
+                        }
+                        notes.push((at, at + n.len.max(1), n.pitch, n.velocity));
+                    }
+                    offset += r.length.max(1);
+                    if !r.props.looped || r.start + offset >= until {
+                        break;
+                    }
+                }
+            }
             notes.sort_by_key(|n| n.0);
-            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied() });
+            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i) });
         }
         let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
         {
@@ -304,6 +423,157 @@ impl App {
 
     pub fn playing(&self) -> bool {
         self.engine().playing
+    }
+
+    /// What a track's instrument is: the Library's choice, else the project's instrument
+    /// plug-in, else (a drummer) Logic's drum kit, else the patch named as the track.
+    pub fn instrument_for(&self, i: usize) -> Option<String> {
+        if let Some(c) = self.instrument_choice.get(&i) {
+            return Some(c.clone());
+        }
+        let t = self.project.as_ref()?.tracks.get(i)?;
+        if t.kind == TrackKind::Audio {
+            return None;
+        }
+        if let Some(u) = t.plugins.iter().find(|u| u.slot == 2 && !u.name.is_empty()) {
+            return Some(u.name.clone());
+        }
+        Some(if t.kind == TrackKind::Drummer { "Drum Kit Designer".into() } else { t.name.clone() })
+    }
+
+    /// Plays a note on the track's sound (the List Editor and Piano Roll's click).
+    pub fn preview_note(&mut self, track: usize, pitch: u8, _velocity: u8) {
+        crate::pianoroll::preview(self, track, pitch);
+    }
+
+    /// Plays an audio file once (the Loop Browser's and All Files' click), over the song.
+    pub fn preview_file(&mut self, path: &Path) {
+        self.output.preview(path);
+    }
+
+    /// Imports a file at the playhead (Loop Browser / All Files double-click, File > Import):
+    /// a MIDI file's tracks become new software instrument tracks; an audio file a region on
+    /// the selected audio track, or on a new one.
+    pub fn import_file(&mut self, path: &Path) {
+        let bar = self.bar_ticks();
+        let at = ((self.position() as u32) / bar) * bar;
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        if ["mid", "midi", "smf", "kar"].contains(&ext.as_str()) {
+            let Some(m) = std::fs::read(path).ok().and_then(|d| lg_core::midi::read(&d)) else {
+                self.tell("Couldn't read that MIDI file");
+                return;
+            };
+            self.checkpoint("Import MIDI File");
+            let Some(p) = self.project.as_mut() else { return };
+            let n = m.tracks.len();
+            for (i, (tname, ch, notes)) in m.tracks.into_iter().enumerate() {
+                let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(bar);
+                let length = end.div_ceil(bar).max(1) * bar;
+                let notes: Vec<_> = notes.into_iter().map(|mut n| {
+                    n.pos += at;
+                    n
+                }).collect();
+                let title = if tname.is_empty() { if n > 1 { format!("{name} {}", i + 1) } else { name.clone() } } else { tname };
+                let drums = ch == 9;
+                let row = p.tracks.len() as u32 + 1;
+                let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() };
+                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                self.programs.push(if drums { 0 } else { program_for(&title, TrackKind::Instrument) });
+            }
+            if let Some(t) = m.tempo.filter(|_| p.tracks.len() == n) {
+                p.tempo = t;
+            }
+            self.selected_track = self.project.as_ref().map(|p| p.tracks.len() - 1);
+            self.after_edit();
+            self.tell(format!("Imported {n} track{}", if n == 1 { "" } else { "s" }));
+            return;
+        }
+        let Some(seconds) = lg_core::project::wav_seconds(path).or_else(|| audio::load_audio(path).map(|s| s.len() as f64 / 2.0 / audio::RATE as f64)) else {
+            self.tell("Couldn't read that audio file");
+            return;
+        };
+        self.checkpoint("Add Audio File");
+        let tempo = self.tempo();
+        let length = ((seconds * tempo / 60.0 * lg_core::events::PPQ as f64) as u32).max(1);
+        let Some(p) = self.project.as_mut() else { return };
+        let target = self.selected_track.filter(|t| p.tracks.get(*t).is_some_and(|tr| tr.kind == TrackKind::Audio));
+        let t = match target {
+            Some(t) => t,
+            None => {
+                let row = p.tracks.len() as u32 + 1;
+                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                self.programs.push(0);
+                p.tracks.len() - 1
+            }
+        };
+        p.tracks[t].regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.to_path_buf(), seconds }), muted: false, source: None, origin: None, props: Default::default() });
+        self.selected_track = Some(t);
+        self.after_edit();
+    }
+
+    /// Ends recording: the notes played become a region on the selected track (Logic: from the
+    /// bar recording began to the bar after the last note).
+    pub fn finish_recording(&mut self) {
+        let Some(from) = self.record_from.take() else { return };
+        let notes = std::mem::take(&mut self.recorded);
+        self.make_take(from as u32, notes, "Record");
+    }
+
+    /// Capture as Recording: the notes just played while not recording, as a region.
+    pub fn capture_recording(&mut self) {
+        let notes = std::mem::take(&mut self.played);
+        let from = notes.iter().map(|n| n.pos).min().unwrap_or(0);
+        self.make_take(from, notes, "Capture as Recording");
+    }
+
+    fn make_take(&mut self, from: u32, notes: Vec<lg_core::events::Note>, what: &str) {
+        if notes.is_empty() {
+            return;
+        }
+        let bar = self.bar_ticks();
+        let start = (from / bar) * bar;
+        let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(start + bar);
+        let length = (end.saturating_sub(start)).div_ceil(bar).max(1) * bar;
+        self.checkpoint(what);
+        let t = self.selected_track.unwrap_or(0);
+        let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
+        if tr.kind == TrackKind::Audio {
+            return;
+        }
+        let name = tr.name.clone();
+        let props = Default::default();
+        if self.replace_mode {
+            tr.regions.retain(|r| r.start + r.length <= start || r.start >= start + length);
+        }
+        tr.regions.push(lg_core::Region { name, start, length, notes, audio: None, muted: false, source: None, origin: None, props });
+        let r = tr.regions.len() - 1;
+        self.selected_region = Some((t, r));
+        self.after_edit();
+    }
+
+    pub fn recording(&self) -> bool {
+        self.record_from.is_some()
+    }
+
+    /// Seconds from bar 1 to `tick`, through the tempo changes.
+    pub fn seconds_at(&self, tick: f64) -> f64 {
+        let Some(p) = &self.project else { return tick / PPQ_F / 120.0 * 60.0 };
+        let mut secs = 0.0;
+        let mut at = 0.0;
+        let mut bpm = p.tempo;
+        for &(t, b) in p.tempo_map.iter() {
+            let t = t as f64;
+            if t >= tick {
+                break;
+            }
+            if t > at {
+                secs += (t - at) / PPQ_F * 60.0 / bpm;
+                at = t;
+            }
+            bpm = b;
+        }
+        secs + (tick - at).max(0.0) / PPQ_F * 60.0 / bpm
     }
 
     pub fn position(&self) -> f64 {
@@ -569,7 +839,7 @@ impl App {
         let at = (self.position() as u32 / bar) * bar;
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
-        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None };
+        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
         p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
@@ -792,6 +1062,49 @@ impl App {
                 let (a, b) = self.cycle;
                 if b - a >= 2 {
                     self.set_cycle((a, a + (b - a) / 2));
+                }
+            }
+            "Create Marker" | "Create Marker without Rounding" => {
+                let pos = self.position() as u32;
+                let at = if name == "Create Marker" { ((pos as f64 / bar).round() * bar) as u32 } else { pos };
+                if !self.markers.iter().any(|m| m.0 == at) {
+                    let n = self.markers.len() + 1;
+                    self.markers.push((at, format!("Marker {n}")));
+                    self.markers.sort_by_key(|m| m.0);
+                    self.dirty = true;
+                }
+            }
+            "Delete Marker" => {
+                let pos = self.position() as u32;
+                if let Some(i) = self.markers.iter().rposition(|m| m.0 <= pos) {
+                    self.markers.remove(i);
+                    self.dirty = true;
+                }
+            }
+            "Go to Next Marker" | "Go to Previous Marker" => {
+                let pos = self.position() as u32;
+                let to = if name == "Go to Next Marker" { self.markers.iter().map(|m| m.0).find(|&m| m > pos) } else { self.markers.iter().map(|m| m.0).filter(|&m| m < pos).last() };
+                if let Some(t) = to {
+                    self.locate(t as f64);
+                }
+            }
+            "Record" | "Record / Record Toggle" => {
+                if self.recording() {
+                    self.finish_recording();
+                } else {
+                    self.record_from = Some(self.position());
+                    self.recorded.clear();
+                    if !self.playing() {
+                        self.play_stop();
+                    }
+                }
+            }
+            "Capture as Recording" => self.capture_recording(),
+            "Discard Recording and Return to Last Play Position" => {
+                self.recorded.clear();
+                if let Some(from) = self.record_from.take() {
+                    self.stop();
+                    self.locate(from);
                 }
             }
             "Toggle Metronome Click" => {
@@ -1085,12 +1398,20 @@ impl App {
             crate::inspector::show(self, ui, r);
             left = r.max.x + 1.0;
         }
-        let main = Rect::from_min_max(pos2(left, body.min.y), body.max);
+        let mut right = body.max.x;
+        if let Some(pane) = self.right_pane {
+            let w = RIGHT_W.min(body.width() - left - 360.0).max(220.0);
+            let r = Rect::from_min_max(pos2(body.max.x - w, body.min.y), body.max);
+            crate::rightpane::show(self, ui, r, pane);
+            right = r.min.x - 1.0;
+        }
+        let main = Rect::from_min_max(pos2(left, body.min.y), pos2(right, body.max.y));
         // (the Mixer takes more of the window than an editor, as Logic's)
         let editor_h = match self.bottom {
             Bottom::None => 0.0,
             Bottom::PianoRoll => self.editor_h.clamp(120.0, main.height() - 90.0),
             Bottom::Mixer => self.mixer_h.clamp(260.0, main.height() - 90.0),
+            Bottom::SmartControls => 190.0f32.min(main.height() - 90.0),
         };
         let tracks = Rect::from_min_max(main.min, pos2(main.max.x, main.max.y - editor_h - if editor_h > 0.0 { 1.0 } else { 0.0 }));
         crate::tracks::show(self, ui, tracks);
@@ -1105,6 +1426,7 @@ impl App {
                 }
                 Bottom::PianoRoll => crate::pianoroll::show(self, ui, ed),
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),
+                Bottom::SmartControls => crate::smartcontrols::show(self, ui, ed),
                 Bottom::None => {}
             }
             // the divider between the tracks and the editor: drag up or down

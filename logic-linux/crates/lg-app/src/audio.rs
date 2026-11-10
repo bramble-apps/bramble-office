@@ -28,6 +28,18 @@ pub struct PlayTrack {
     pub solo: bool,
     /// The channel strip's Channel EQ (None: none on the strip).
     pub eq: Option<crate::eq::Params>,
+    /// The instrument plug-in (Logic's name, as the project or the Library gives it) played in
+    /// place of the SoundFont when we have a stand-in for it; and the patch name.
+    pub instrument: Option<String>,
+}
+
+/// A track's own plug-ins as the engine runs them (built from PlayTrack::instrument).
+#[derive(Default)]
+pub struct Units {
+    /// What `instrument` was built from (rebuilt when the track's choice changes).
+    pub built_for: Option<String>,
+    pub instrument: Option<Box<dyn lg_dsp::Instrument>>,
+    pub inserts: Vec<Box<dyn lg_dsp::Effect>>,
 }
 
 pub struct Engine {
@@ -56,6 +68,8 @@ pub struct Engine {
     /// Each track's running EQ (rebuilt when its settings change).
     eqs: Vec<Option<crate::eq::Eq>>,
     voices: Vec<Voice>,
+    /// Each track's instrument and effects (our stand-ins for Logic's plug-ins).
+    pub units: Vec<Units>,
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
@@ -75,7 +89,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -95,8 +109,36 @@ impl Engine {
         self.program_changes();
     }
 
+    /// Each track's instrument plug-in: built when the track's choice changes.
+    pub fn build_units(&mut self) {
+        self.units.resize_with(self.tracks.len(), Units::default);
+        self.units.truncate(self.tracks.len());
+        for (i, t) in self.tracks.iter().enumerate() {
+            let u = &mut self.units[i];
+            if u.built_for != t.instrument {
+                u.instrument = t.instrument.as_deref().and_then(|n| crate::units::instrument(n, RATE as f32));
+                u.built_for = t.instrument.clone();
+            }
+        }
+    }
+
+    /// The track's instrument parameters and values (Smart Controls, the plug-in window).
+    pub fn instrument_params(&self, t: usize) -> Option<(Vec<lg_dsp::Param>, Vec<f32>)> {
+        let ins = self.units.get(t)?.instrument.as_ref()?;
+        let params = ins.params().to_vec();
+        let values = params.iter().map(|p| ins.get(p.id)).collect();
+        Some((params, values))
+    }
+
+    pub fn set_instrument_param(&mut self, t: usize, id: u32, v: f32) {
+        if let Some(ins) = self.units.get_mut(t).and_then(|u| u.instrument.as_mut()) {
+            ins.set(id, v);
+        }
+    }
+
     /// Each track's synthesizer, with the track's sound on its channel.
     pub fn program_changes(&mut self) {
+        self.build_units();
         let Some(sf) = self.sf.clone() else {
             self.synths.clear();
             return;
@@ -121,6 +163,14 @@ impl Engine {
     pub fn all_off(&mut self) {
         for s in self.synths.iter_mut().flatten() {
             s.note_off_all(false);
+        }
+        for u in &mut self.units {
+            if let Some(ins) = u.instrument.as_mut() {
+                for p in 0..128u8 {
+                    ins.note_off(p);
+                }
+                ins.controller(64, 0);
+            }
         }
         self.sounding.clear();
         for v in &mut self.voices {
@@ -162,7 +212,9 @@ impl Engine {
                 }
             });
             for (t, ch, pitch) in ended {
-                if let Some(Some(s)) = self.synths.get_mut(t) {
+                if let Some(ins) = self.units.get_mut(t).and_then(|u| u.instrument.as_mut()) {
+                    ins.note_off(pitch);
+                } else if let Some(Some(s)) = self.synths.get_mut(t) {
                     s.note_off(ch as i32, pitch as i32);
                 }
                 for v in self.voices.iter_mut().filter(|v| v.track == t && v.pitch == pitch) {
@@ -179,7 +231,9 @@ impl Engine {
                 let starts: Vec<(u32, u32, u8, u8)> = t.notes.iter().filter(|n| (n.0 as f64) >= from && (n.0 as f64) < to).copied().collect();
                 for (s, e, pitch, vel) in starts {
                     let _ = s;
-                    if let Some(Some(sy)) = self.synths.get_mut(i) {
+                    if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                        ins.note_on(pitch, vel);
+                    } else if let Some(Some(sy)) = self.synths.get_mut(i) {
                         sy.note_on(ch as i32, pitch as i32, vel as i32);
                     } else {
                         self.voices.push(Voice { track: i, pitch, phase: 0.0, freq: 440.0 * 2f32.powf((pitch as f32 - 69.0) / 12.0), amp: vel as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum });
@@ -216,7 +270,10 @@ impl Engine {
             l.fill(0.0);
             r.fill(0.0);
             let mut any = false;
-            if let Some(Some(sy)) = self.synths.get_mut(i) {
+            if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                ins.render(&mut l, &mut r);
+                any = true;
+            } else if let Some(Some(sy)) = self.synths.get_mut(i) {
                 sy.render(&mut l, &mut r);
                 any = true;
             }
@@ -253,6 +310,11 @@ impl Engine {
                     *slot = Some(e);
                 }
                 (None, slot) => *slot = None,
+            }
+            if let Some(u) = self.units.get_mut(i) {
+                for fx in u.inserts.iter_mut() {
+                    fx.process(&mut l, &mut r);
+                }
             }
             let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
             let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
@@ -439,6 +501,15 @@ impl Output {
     }
 }
 
+impl Output {
+    /// Plays a file once over whatever is playing (previews).
+    pub fn preview(&self, path: &Path) {
+        let Some(sink) = &self._sink else { return };
+        let Some(samples) = load_audio(path) else { return };
+        sink.mixer().add(rodio::buffer::SamplesBuffer::new(std::num::NonZero::new(2).unwrap(), std::num::NonZero::new(RATE).unwrap(), samples));
+    }
+}
+
 /// A WAV / AIFF / MP3 / FLAC file as stereo samples at RATE (linear resampling).
 pub fn load_audio(path: &Path) -> Option<Vec<f32>> {
     use rodio::Source;
@@ -480,6 +551,7 @@ mod tests {
             mute: false,
             solo: false,
             eq: None,
+            instrument: None,
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
         let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
@@ -497,7 +569,7 @@ mod tests {
         let Some(sf) = system_soundfont() else { return };
         let level = |vols: [f32; 2], mute: [bool; 2]| {
             let mut e = Engine::new();
-            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None }).collect();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None }).collect();
             e.load_soundfont(Some(&sf));
             e.playing = true;
             let mut buf = vec![0f32; 2 * BLOCK];
@@ -521,7 +593,7 @@ mod tests {
     fn plays_notes_in_time() {
         let mut e = Engine::new();
         e.tempo = 120.0;
-        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None }];
+        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None }];
         e.playing = true;
         let mut buf = vec![0f32; 2 * BLOCK];
         // half a second at 120 BPM = one beat = 960 ticks

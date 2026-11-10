@@ -85,6 +85,58 @@ pub struct Region {
     /// A region made here from one that was read (a copy, a paste, Repeat): Save writes it as a
     /// new sequence modelled on that one.
     pub origin: Option<Source>,
+    /// The Region inspector's playback parameters (Logic's: applied as it plays, the notes kept).
+    pub props: RegionProps,
+}
+
+/// Logic's MIDI region parameters (Region inspector): played through, never written into the
+/// notes until "Apply All Parameters Permanently".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RegionProps {
+    /// Loop: repeat to the next region on the track (or the project end).
+    pub looped: bool,
+    /// Quantize grid in ticks (0: off); Q-Swing 0..100 (50 = straight).
+    pub quantize: u32,
+    pub swing: u8,
+    /// Semitones; Fine Tune in cents (instruments that take pitch bend).
+    pub transpose: i8,
+    pub fine_tune: i8,
+    /// Velocity offset (-99..99) and Dynamics (percent, 100 = as played; Fixed = 0).
+    pub velocity: i8,
+    pub dynamics: u16,
+    /// Gate Time percent (100 = as played; 0 = Fixed).
+    pub gate_time: u16,
+    /// Delay in ticks (negative: early).
+    pub delay: i32,
+}
+
+impl Default for RegionProps {
+    fn default() -> Self {
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0 }
+    }
+}
+
+impl RegionProps {
+    /// A note as the region plays it.
+    pub fn apply(&self, n: &crate::events::Note, region_start: u32) -> crate::events::Note {
+        let mut out = *n;
+        if self.quantize > 0 {
+            let q = self.quantize as i64;
+            let rel = n.pos as i64 - region_start as i64;
+            let mut grid = ((rel as f64 / q as f64).round() as i64) * q;
+            // Q-Swing: every other grid point later (or earlier) by up to half a step
+            if (grid / q) % 2 == 1 {
+                grid += (q as f64 * (self.swing as f64 - 50.0) / 100.0) as i64;
+            }
+            out.pos = (region_start as i64 + grid).max(0) as u32;
+        }
+        out.pos = (out.pos as i64 + self.delay as i64).max(0) as u32;
+        out.pitch = (n.pitch as i16 + self.transpose as i16).clamp(0, 127) as u8;
+        let v = if self.dynamics == 0 { 64.0 } else { 64.0 + (n.velocity as f32 - 64.0) * self.dynamics as f32 / 100.0 };
+        out.velocity = (v + self.velocity as f32).round().clamp(1.0, 127.0) as u8;
+        out.len = if self.gate_time == 0 { 120 } else { ((n.len as u64 * self.gate_time as u64) / 100).max(1) as u32 };
+        out
+    }
 }
 
 /// A region's place in the original ProjectData: the folder whose event list places it, its
@@ -410,7 +462,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     let mut by_row: BTreeMap<u32, Track> = BTreeMap::new();
     for (pl, seq, folder) in placed {
         let channel_name = channels.get(&pl.channel).cloned().unwrap_or_else(|| format!("Track {}", pl.row));
-        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }), origin: None };
+        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }), origin: None, props: Default::default() };
         let mut kind = TrackKind::Instrument;
         if pl.audio {
             kind = TrackKind::Audio;

@@ -203,3 +203,8 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     Color32::from_rgb(f(a.r(), b.r()), f(a.g(), b.g()), f(a.b(), b.b()))
 }
+
+/// A control bar capsule's fill in dark mode (the suite's dark rimmed capsules).
+pub fn capsule_fill() -> Color32 {
+    kn_ui::theme::tint(pick(0x3a3a3c, 0xf4f4f4))
+}

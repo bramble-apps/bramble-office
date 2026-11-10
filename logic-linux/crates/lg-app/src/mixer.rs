@@ -20,37 +20,51 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let meters: Vec<f32> = app.engine.lock().map(|e| e.meters.clone()).unwrap_or_default();
     let master = app.engine.lock().map(|e| e.master_meter).unwrap_or(0.0);
     let mut x = area.min.x + 8.0;
-    for (i, t) in proj.tracks.iter().enumerate() {
+    for i in 0..proj.tracks.len() {
         let r = Rect::from_min_size(pos2(x, area.min.y + 6.0), vec2(STRIP_W, area.height() - 10.0));
-        if r.min.x > area.max.x {
+        if r.min.x > area.max.x - STRIP_W - 10.0 {
             break;
         }
-        let changed = strip(app, ui, r, i, &t.name, Some(t.kind), t.volume_db, t.pan, t.mute, t.solo, meters.get(i).copied().unwrap_or(0.0), app.selected_track == Some(i));
-        if let Some((v, pan, m, s)) = changed {
-            if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
-                tr.volume_db = v;
-                tr.pan = pan;
-                tr.mute = m;
-                tr.solo = s;
-            }
-            app.sync_mix();
-        }
+        track_strip(app, ui, r, i);
         x += STRIP_W + 2.0;
     }
+    let _ = (meters, master);
     // the Stereo Out at the right
     let r = Rect::from_min_size(pos2(area.max.x - STRIP_W - 8.0, area.min.y + 6.0), vec2(STRIP_W, area.height() - 10.0));
     if r.min.x > x {
-        let master_db = 20.0 * app.engine.lock().map(|e| e.master).unwrap_or(1.0).max(1e-5).log10();
-        if let Some((v, ..)) = strip(app, ui, r, usize::MAX, "Stereo Out", None, master_db, 0.0, false, false, master, false) {
-            if let Ok(mut e) = app.engine.lock() {
-                e.master = crate::app::db_to_gain(v);
-            }
+        output_strip(app, ui, r);
+    }
+}
+
+/// A track's channel strip (the Mixer's, and the Inspector's left one).
+pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
+    let Some(t) = app.project.as_ref().and_then(|p| p.tracks.get(i)).cloned() else { return };
+    let meter = app.engine.lock().map(|e| e.meters.get(i).copied().unwrap_or(0.0)).unwrap_or(0.0);
+    if let Some((v, pan, m, s)) = strip(app, ui, r, i, &t.name, Some(t.kind), t.volume_db, t.pan, t.mute, t.solo, meter, app.selected_track == Some(i)) {
+        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
+            tr.volume_db = v;
+            tr.pan = pan;
+            tr.mute = m;
+            tr.solo = s;
+        }
+        app.dirty = true;
+        app.sync_mix();
+    }
+}
+
+/// The Stereo Out strip (the master level).
+pub fn output_strip(app: &mut App, ui: &mut egui::Ui, r: Rect) {
+    let master = app.engine.lock().map(|e| e.master_meter).unwrap_or(0.0);
+    let master_db = 20.0 * app.engine.lock().map(|e| e.master).unwrap_or(1.0).max(1e-5).log10();
+    if let Some((v, ..)) = strip(app, ui, r, usize::MAX, "Stereo Out", None, master_db, 0.0, false, false, master, false) {
+        if let Ok(mut e) = app.engine.lock() {
+            e.master = crate::app::db_to_gain(v);
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: Option<TrackKind>, vol: f32, pan: f32, mute: bool, solo: bool, meter: f32, selected: bool) -> Option<(f32, f32, bool, bool)> {
+pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: Option<TrackKind>, vol: f32, pan: f32, mute: bool, solo: bool, meter: f32, selected: bool) -> Option<(f32, f32, bool, bool)> {
     let p = ui.painter_at(r);
     p.rect_filled(r, 6.0, if selected { look::track_selected() } else { look::header_bg() });
     let mut out = None;
@@ -61,6 +75,7 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
         p.text(s.center(), Align2::CENTER_CENTER, text, look::regular(11.0), if fill.is_some() { Color32::WHITE } else { look::text_dim() });
     };
     let mut y = r.min.y + 8.0;
+    let small = r.width() < 80.0;
     slot(&p, y, "Setting", None);
     y += 24.0;
     // the EQ slot: a click opens the Channel EQ; with one on the strip, its curve
@@ -76,19 +91,29 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
         }
         None => slot(&p, y, "EQ", None),
     }
-    if i != usize::MAX && ui.interact(eq_r, ui.scope_id().with(("eqslot", i)), Sense::click()).clicked() {
+    if i != usize::MAX && ui.interact(eq_r, ui.scope_id().with(("eqslot", i)), Sense::click()).on_hover_text("Channel EQ").clicked() {
         app.eqs.entry(i).or_default();
         app.eq_window = Some(i);
         app.load_engine();
     }
-    y += 28.0;
+    y += 26.0;
     let chain: Vec<String> = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).map(|t| t.plugins.iter().map(|u| (u.slot, u.name.clone())).collect::<Vec<_>>())).flatten().unwrap_or_default().into_iter().filter(|(s, _)| *s >= 3).map(|(_, n)| n).filter(|n| n != "Channel EQ").collect();
     let instrument = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).and_then(|t| t.plugins.iter().find(|u| u.slot == 2)).map(|u| u.name.clone())).flatten();
+    if matches!(kind, Some(TrackKind::Instrument) | Some(TrackKind::Drummer)) {
+        slot(&p, y, "MIDI FX", None);
+        y += 22.0;
+    }
     match kind {
         Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
         Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
         Some(TrackKind::Audio) => slot(&p, y, "Input 1", None),
-        None => slot(&p, y, "Audio FX", None),
+        None => {
+            // (the output's stereo link)
+            let s = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
+            p.rect_filled(s, 4.0, look::group_bg());
+            p.circle_stroke(s.center() - vec2(3.0, 0.0), 4.0, Stroke::new(1.2, look::text_dim()));
+            p.circle_stroke(s.center() + vec2(3.0, 0.0), 4.0, Stroke::new(1.2, look::text_dim()));
+        }
     }
     y += 24.0;
     // the Audio FX (Logic's blue slots), then an empty one
@@ -98,8 +123,20 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
     }
     slot(&p, y, "Audio FX", None);
     y += 24.0;
-    slot(&p, y, "Stereo Out", None);
-    y += 34.0;
+    if kind.is_some() {
+        slot(&p, y, "Sends", None);
+        y += 24.0;
+        slot(&p, y, "Stereo Out", None);
+    } else {
+        slot(&p, y, "Mastering", None);
+    }
+    y += 24.0;
+    if !small || r.height() > 520.0 {
+        slot(&p, y, "Group", None);
+        y += 22.0;
+        slot(&p, y, "Read", Some(Color32::from_rgb(0x3a, 0x6e, 0x3a)));
+        y += 26.0;
+    }
     // the pan knob
     let kc = pos2(r.center().x, y + 16.0);
     let kr = Rect::from_center_size(kc, vec2(34.0, 34.0));

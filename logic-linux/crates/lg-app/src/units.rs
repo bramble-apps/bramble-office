@@ -1,0 +1,16 @@
+//! Logic's plug-ins and patches → Bramble's stand-ins (the matched-sounds table): the
+//! instruments come from lg-synth, the effects from lg-fx. A name we have no stand-in for gives
+//! None, and the track plays through the SoundFont instead.
+
+/// An instrument for a Logic plug-in name ("Vintage Electric Piano") or patch name ("Deluxe
+/// Classic").
+pub fn instrument(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Instrument>> {
+    let _ = (name, rate);
+    None
+}
+
+/// An effect for a Logic plug-in name ("Compressor", "ChromaVerb").
+pub fn effect(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Effect>> {
+    let _ = (name, rate);
+    None
+}

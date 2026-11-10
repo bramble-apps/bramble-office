@@ -18,7 +18,11 @@ pub mod menus;
 mod mixer;
 mod pianoroll;
 mod snap;
+mod rightpane;
+mod smartcontrols;
 mod tracks;
+pub mod units;
+mod widgets;
 
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();

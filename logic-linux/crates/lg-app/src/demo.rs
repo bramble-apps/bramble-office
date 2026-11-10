@@ -17,7 +17,7 @@ fn track(name: &str, kind: TrackKind, row: u32, regions: Vec<Region>) -> Track {
 }
 
 fn region(name: &str, start: u32, length: u32, notes: Vec<Note>) -> Region {
-    Region { name: name.into(), start, length, notes, audio: None, muted: false, source: None, origin: None }
+    Region { name: name.into(), start, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() }
 }
 
 pub fn song() -> Project {
