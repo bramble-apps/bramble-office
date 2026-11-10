@@ -1,0 +1,2901 @@
+# Logic Pro 13 right-click menus, by place — from the Logic research (same format as menus.txt)
+=== arrangement-marker-dropdown ===
+NO MENU FOUND near 1468.0,219.0
+
+=== arrangement-marker ===
+NO MENU FOUND near 1450.0,218.0
+
+=== arrangement-track-lane ===
+NO MENU FOUND near 1350.0,218.0
+
+=== audiotrack-editor-ruler ===
+✓ Absolute
+---
+✓ Automation Parameter ▸
+    Display off  [⇧⌘Y]
+    Cycle Through  [⌘Y]
+    ---
+    Automation  (disabled)
+    Volume
+    ✓ Main ▸
+        ✓ Volume ▸
+            ✓ Absolute
+            Relative (±)
+        Pan ▸
+            Absolute
+            Relative (±)
+        Solo
+        Mute
+---
+Never move Track Automation with Regions
+Always move Track Automation with Regions
+✓ Ask to move Track Automation with Regions
+✓ Include Track Automation Region Trails, if possible
+---
+Snap Automation
+Automation Settings…  [⌥A]
+---
+
+=== automation-lane ===
+Create MIDI Region
+Create Pattern Region
+Create Session Player Region
+---
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+---
+Select All  [⌘A]
+Select All Inside Locators  [⇧L]
+---
+Empty Regions
+Select Overlapped Regions  (disabled)  [⇧O]
+Select Muted Regions  [⇧M]
+---
+Scroll in Play  [⌃`]
+---
+
+=== automation-parameter-menu ===
+NO MENU FOUND near 1116.0,331.0
+
+=== browser-loop-item ===
+New Track with Loop
+Place Loop at Playhead
+Create Track with Loop ▸
+    Quick Sampler
+    Sample Alchemy
+    Drum Machine Designer
+---
+Find Similar
+---
+Add to Favorites
+---
+Rename  (disabled)
+Delete  (disabled)
+Show in Finder  (disabled)
+---
+View Info
+---
+
+=== browser-sidebar ===
+NO MENU FOUND near 150.0,255.0
+
+=== environment-layer-popup ===
+All Objects
+Global Objects
+Click & Ports
+MIDI Instr.
+✓ Mixer
+---
+Rename Layer…
+---
+Delete Layer  [⌘⌫]
+Create Layer
+
+=== eventlist-row ===
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Delete
+---
+Select All  [⌘A]
+Deselect All  [⇧D]
+Invert Selection  [⇧I]
+Select All Following  [⇧F]
+Select All Inside Locators  [⇧L]
+---
+Lock SMPTE Position  [⌘⇟PgDn]
+Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+---
+Rename  (disabled)
+---
+Show Event Position and Length as Time or Bars/Beats  [⌃⌥R]
+---
+
+=== flex-mode-popup ===
+Flex Pitch
+---
+✓ Flex Time - Automatic (Polyphonic)
+Flex Time - Monophonic
+Flex Time - Slicing
+Flex Time - Rhythmic
+Flex Time - Polyphonic
+Flex Time - Speed (FX)
+Flex Time - Tempophone (FX)
+
+=== global-track-header ===
+Single Global Track  [⌃⌥⌘G]
+---
+✓ Arrangement
+✓ Marker
+Movie
+✓ Tempo
+Beat Mapping
+✓ Signature
+Chord
+---
+Configure Global Tracks…  [⌥G]
+---
+
+=== inspector-channelstrip ===
+Assign Channel Strip Color…
+---
+Long Faders
+Channel Strip Components ▸
+    ✓ Audio Device Controls
+    Type and Number Label
+    ✓ Setting Menu
+    ✓ Gain Reduction Meter
+    ✓ EQ Thumbnail
+    ---
+    ✓ MIDI Effects
+    ✓ Input / Instrument
+    ✓ Audio Effects
+    ✓ Sends
+    ✓ Output
+    ---
+    ✓ Group
+    ✓ Automation
+    Icon
+    ✓ Pan Knob
+    VCA
+    ---
+    Track Color
+    ✓ Track Name
+    Track Notes
+
+=== library-instrument ===
+NO MENU FOUND near 450.0,220.0
+
+=== liveloops-empty-cell ===
+Create MIDI Cell
+Create Pattern Cell
+Create Session Player Cell
+Record into Cell  [⌥R]
+Paste  (disabled)  [⌘V]
+---
+✓ Stop Playing Cell
+Recording ▸
+    Mode ▸
+        Replace
+        ✓ Merge
+        Takes
+    Rec-Length ▸
+        Cell Length
+        ✓ Automatic (Bars)
+        Automatic (Beats)
+    Rec-End Action ▸
+        ✓ Play Cell
+        Continue Recording
+
+=== liveloops-midi-cell ===
+Record into Cell  [⌥R]
+Queue Cell Playback  [⌥↩]
+---
+Edit ▸
+    Cut  [⌘X]
+    Copy  [⌘C]
+    Paste  (disabled)  [⌘V]
+    Delete
+    ---
+    Repeat  [⌘R]
+Select ▸
+    All Cells  [⌘A]
+    All Following Cells  [⇧F]
+    All Following Cells of Same Track  [⌃⇧F]
+    All Cells of Same Track
+    All Cells of Same Scene
+    Same-Colored Cells  [⇧C]
+    Invert Cell Selection  [⇧I]
+    Deselect All  [⇧D]
+Quantize ▸
+    ✓ Off
+    ---
+    1/1 Note
+    1/2 Note
+    1/4 Note
+    1/8 Note
+    1/16 Note
+    1/32 Note
+    1/64 Note
+    ---
+    1/2 Triplet (1/3)
+    1/4 Triplet (1/6)
+    1/8 Triplet (1/12)
+    1/16 Triplet (1/24)
+    1/32 Triplet (1/48)
+    1/64 Triplet (1/96)
+    1/128 Triplet (1/192)
+    ---
+    1/16 Swing A
+    1/16 Swing B
+    1/16 Swing C
+    1/16 Swing D
+    1/16 Swing E
+    1/16 Swing F
+    ---
+    1/8 Swing A
+    1/8 Swing B
+    1/8 Swing C
+    1/8 Swing D
+    1/8 Swing E
+    1/8 Swing F
+    ---
+    5-Tuplet/4
+    5-Tuplet/8
+    7-Tuplet
+    9-Tuplet
+    ---
+    1/16 & 1/16 Triplet
+    1/16 & 1/8 Triplet
+    1/8 & 1/8 Triplet
+Transpose ▸
+    +36
+    +24
+    +12
+    +11
+    +10
+    +9
+    +8
+    +7
+    +6
+    +5
+    +4
+    +3
+    +2
+    +1
+    ✓ ±0
+    -1
+    -2
+    -3
+    -4
+    -5
+    -6
+    -7
+    -8
+    -9
+    -10
+    -11
+    -12
+    -24
+    -36
+Playback ▸
+    Mute  [⌃M]
+    ✓ Loop  [⌃L]
+    Reverse  [⌃⇧R]
+    Speed ▸
+        ⅛
+        ¼
+        ½
+        ✓ 1
+        2
+        4
+        8
+    Quantize Start ▸
+        ✓ Global
+        Cell End
+        8 Bars
+        6 Bars
+        4 Bars
+        3 Bars
+        2 Bars
+        1 Bar
+        1/2 Note
+        1/2 Triplet (1/3)
+        1/4 Note
+        1/4 Triplet (1/6)
+        1/8 Note
+        1/8 Triplet (1/12)
+        1/16 Note
+        Off
+    Quantize to Loop Start ▸
+        ✓ Off
+        On
+        On, Preserve Start
+    Trigger Mode ▸
+        ✓ Start/Stop
+        Momentary
+        Retrigger
+    Play From ▸
+        ✓ Start
+        Stop Position
+        Playing Cell Position
+        Playhead Position
+Recording ▸
+    Mode ▸
+        Replace
+        ✓ Merge
+        Takes
+    Rec-Length ▸
+        Cell Length
+        ✓ Automatic (Bars)
+        Automatic (Beats)
+    Rec-End Action ▸
+        ✓ Play Cell
+        Continue Recording
+Bounce or Join ▸
+    Bounce Cells in Place…  [⌃B]
+    Join Regions and Fill Cell  [⌘J]
+Convert ▸
+    Convert to Pattern Cell
+    Replace with Session Player Cell
+Stem Splitter…  (disabled)
+Export ▸
+    Add to Browser…  [⌃⇧O]
+    Export as Audio File…
+Name and Color ▸
+    Rename Cell  [⇧N]
+    Name Cell by Track  [⌥⇧N]
+    Color Cell by Track  [⌥⇧C]
+    Show/Hide Colors  [⌥C]
+
+=== liveloops-scene-trigger ===
+Queue Scene
+Copy Playing Cells Here
+Duplicate
+Insert Empty Scene
+Rename
+Delete
+---
+Copy Scene to Playhead
+Insert Scene at Playhead
+---
+Quantize Start ▸
+    ✓ Global
+    8 Bars
+    6 Bars
+    4 Bars
+    3 Bars
+    2 Bars
+    1 Bar
+    1/2 Note
+    1/2 Triplet (1/3)
+    1/4 Note
+    1/4 Triplet (1/6)
+    1/8 Note
+    1/8 Triplet (1/12)
+    1/16 Note
+    Off
+Trigger Mode ▸
+    Start/Stop
+    Momentary
+    ✓ Retrigger
+Set All Scene Triggers ▸
+    Quantize Start ▸
+        ✓ Global
+        8 Bars
+        6 Bars
+        4 Bars
+        3 Bars
+        2 Bars
+        1 Bar
+        1/2 Note
+        1/2 Triplet (1/3)
+        1/4 Note
+        1/4 Triplet (1/6)
+        1/8 Note
+        1/8 Triplet (1/12)
+        1/16 Note
+        Off
+    Trigger Mode ▸
+        Start/Stop
+        Momentary
+        ✓ Retrigger
+
+=== marker ===
+Create Marker  [⌥']
+Rename Marker  [⇧']
+Delete Marker  [⌥⌫]
+---
+Deselect Global Tracks
+---
+Configure Global Tracks…  [⌥G]
+---
+
+=== mixer-audiofx-slot ===
+---
+Amps and Pedals ▸
+    Amp Designer ▸
+        Stereo
+        Dual Mono
+    Bass Amp Designer ▸
+        Stereo
+        Dual Mono
+    Pedalboard ▸
+        Stereo
+        Dual Mono
+    Stompboxes ▸
+        Delay ▸
+            Blue Echo ▸
+                Stereo
+                Dual Mono
+            Spring Box ▸
+                Stereo
+                Dual Mono
+            Tie Dye Delay ▸
+                Stereo
+                Dual Mono
+            Tru-Tape Delay ▸
+                Stereo
+                Dual Mono
+        Distortion ▸
+            Candy Fuzz ▸
+                Stereo
+                Dual Mono
+            Double Dragon ▸
+                Stereo
+                Dual Mono
+            Fuzz Machine ▸
+                Stereo
+                Dual Mono
+            Grinder ▸
+                Stereo
+                Dual Mono
+            Grit ▸
+                Stereo
+                Dual Mono
+            Happy Face Fuzz ▸
+                Stereo
+                Dual Mono
+            Hi-Drive ▸
+                Stereo
+                Dual Mono
+            Monster Fuzz ▸
+                Stereo
+                Dual Mono
+            OctaFuzz ▸
+                Stereo
+                Dual Mono
+            Rawk! Distortion ▸
+                Stereo
+                Dual Mono
+            Tube Burner ▸
+                Stereo
+                Dual Mono
+            Vintage Drive ▸
+                Stereo
+                Dual Mono
+        Dynamics ▸
+            Squash Compressor ▸
+                Stereo
+                Dual Mono
+        Filter ▸
+            Auto-Funk ▸
+                Stereo
+                Dual Mono
+            Classic Wah ▸
+                Stereo
+                Dual Mono
+            Graphic EQ ▸
+                Stereo
+                Dual Mono
+            Modern Wah ▸
+                Stereo
+                Dual Mono
+        Modulation ▸
+            Flange Factory ▸
+                Stereo
+                Dual Mono
+            Heavenly Chorus ▸
+                Stereo
+                Dual Mono
+            Phase Tripper ▸
+                Stereo
+                Dual Mono
+            Phaze 2 ▸
+                Stereo
+                Dual Mono
+            Retro Chorus ▸
+                Stereo
+                Dual Mono
+            Robo Flanger ▸
+                Stereo
+                Dual Mono
+            Roswell Ringer ▸
+                Stereo
+                Dual Mono
+            Roto Phase ▸
+                Stereo
+                Dual Mono
+            Spin Box ▸
+                Stereo
+                Dual Mono
+            The Vibe ▸
+                Stereo
+                Dual Mono
+            Total Tremolo ▸
+                Stereo
+                Dual Mono
+            Trem-O-Tone ▸
+                Stereo
+                Dual Mono
+        Pitch ▸
+            Dr. Octave ▸
+                Stereo
+                Dual Mono
+            Wham ▸
+                Stereo
+                Dual Mono
+Delay ▸
+    Delay Designer ▸
+        Stereo
+        Dual Mono
+    Echo ▸
+        Stereo
+        Dual Mono
+    Sample Delay ▸
+        Stereo
+        Dual Mono
+    Stereo Delay ▸
+        Stereo
+        Dual Mono
+    Tape Delay ▸
+        Stereo
+        Dual Mono
+Distortion ▸
+    Bitcrusher ▸
+        Stereo
+        Dual Mono
+    ChromaGlow ▸
+        Stereo
+        Dual Mono
+    Clip Distortion ▸
+        Stereo
+        Dual Mono
+    Distortion ▸
+        Stereo
+        Dual Mono
+    Distortion II ▸
+        Stereo
+        Dual Mono
+    Overdrive ▸
+        Stereo
+        Dual Mono
+    Phase Distortion ▸
+        Stereo
+        Dual Mono
+Dynamics ▸
+    Adaptive Limiter ▸
+        Stereo
+        Dual Mono
+    Compressor ▸
+        Stereo
+        Dual Mono
+    DeEsser 2 ▸
+        Stereo
+        Dual Mono
+    Enveloper ▸
+        Stereo
+        Dual Mono
+    Expander ▸
+        Stereo
+        Dual Mono
+    Limiter ▸
+        Stereo
+        Dual Mono
+    Multipressor ▸
+        Stereo
+        Dual Mono
+    Noise Gate ▸
+        Stereo
+        Dual Mono
+EQ ▸
+    Channel EQ ▸
+        Stereo
+        Dual Mono
+    Linear Phase EQ ▸
+        Stereo
+        Dual Mono
+    Match EQ ▸
+        Stereo
+        Dual Mono
+    Single Band EQ ▸
+        Stereo
+        Dual Mono
+    Vintage EQ Collection ▸
+        Vintage Console EQ ▸
+            Stereo
+            Dual Mono
+        Vintage Graphic EQ ▸
+            Stereo
+            Dual Mono
+        Vintage Tube EQ ▸
+            Stereo
+            Dual Mono
+Filter ▸
+    AutoFilter ▸
+        Stereo
+        Dual Mono
+    EVOC 20 Filterbank ▸
+        Stereo
+    EVOC 20 TrackOscillator ▸
+        Stereo
+    Fuzz-Wah ▸
+        Stereo
+        Dual Mono
+    Spectral Gate ▸
+        Stereo
+        Dual Mono
+Imaging ▸
+    Binaural Post-Processing ▸
+        Stereo
+    Direction Mixer ▸
+        Stereo
+    Stereo Spread ▸
+        Stereo
+Metering ▸
+    BPM Counter ▸
+        Stereo
+    Correlation Meter ▸
+        Stereo
+    Level Meter ▸
+        Stereo
+    Loudness Meter ▸
+        Stereo
+    MultiMeter ▸
+        Stereo
+    Tuner ▸
+        Stereo
+Modulation ▸
+    Chorus ▸
+        Stereo
+        Dual Mono
+    Ensemble ▸
+        Stereo
+        Dual Mono
+    Flanger ▸
+        Stereo
+        Dual Mono
+    Microphaser ▸
+        Stereo
+        Dual Mono
+    Modulation Delay ▸
+        Stereo
+        Dual Mono
+    Phaser ▸
+        Stereo
+        Dual Mono
+    Ringshifter ▸
+        Stereo
+        Dual Mono
+    Rotor Cabinet ▸
+        Stereo
+    Scanner Vibrato ▸
+        Stereo
+        Dual Mono
+    Spreader ▸
+        Stereo
+        Dual Mono
+    Tremolo ▸
+        Stereo
+        Dual Mono
+Multi Effects ▸
+    Beat Breaker ▸
+        Stereo
+        Dual Mono
+    Phat FX ▸
+        Stereo
+        Dual Mono
+    Remix FX ▸
+        Stereo
+    Step FX ▸
+        Stereo
+        Dual Mono
+Pitch ▸
+    Pitch Correction ▸
+        Stereo
+        Dual Mono
+    Pitch Shifter ▸
+        Stereo
+        Dual Mono
+    Vocal Transformer ▸
+        Stereo
+        Dual Mono
+Reverb ▸
+    ChromaVerb ▸
+        Stereo
+        Dual Mono
+    EnVerb ▸
+        Stereo
+        Dual Mono
+    Quantec Room Simulator ▸
+        Stereo
+        Dual Mono
+    SilverVerb ▸
+        Stereo
+        Dual Mono
+    Space Designer ▸
+        Stereo
+        Dual Mono
+Specialized ▸
+    Exciter ▸
+        Stereo
+        Dual Mono
+    SubBass ▸
+        Stereo
+        Dual Mono
+Utility ▸
+    Auto Sampler ▸
+        Stereo
+    Gain ▸
+        Stereo
+        Dual Mono
+    I/O ▸
+        Stereo
+    Test Oscillator ▸
+        Stereo
+        Dual Mono
+---
+Audio Units ▸
+    Apple ▸
+        AUBandpass ▸
+            Stereo
+            Dual Mono
+        AUDelay ▸
+            Stereo
+            Dual Mono
+        AUDistortion ▸
+            Stereo
+            Dual Mono
+        AUDynamicsProcessor ▸
+            Stereo
+            Dual Mono
+        AUFilter ▸
+            Stereo
+            Dual Mono
+        AUGraphicEQ ▸
+            Stereo
+            Dual Mono
+        AUHighShelfFilter ▸
+            Stereo
+            Dual Mono
+        AUHipass ▸
+            Stereo
+            Dual Mono
+        AULowpass ▸
+            Stereo
+            Dual Mono
+        AULowShelfFilter ▸
+            Stereo
+            Dual Mono
+        AUMatrixReverb ▸
+            Stereo
+        AUMultibandCompressor ▸
+            Stereo
+            Dual Mono
+        AUNBandEQ ▸
+            Stereo
+            Dual Mono
+        AUNetSend ▸
+            Stereo
+            Dual Mono
+        AUNewPitch ▸
+            Stereo
+            Dual Mono
+        AUParametricEQ ▸
+            Stereo
+            Dual Mono
+        AUPeakLimiter ▸
+            Stereo
+            Dual Mono
+        AUPitch ▸
+            Stereo
+            Dual Mono
+        AUReverb2 ▸
+            Stereo
+            Dual Mono
+        AURogerBeep ▸
+            Stereo
+            Dual Mono
+        AURoundTripAAC ▸
+            Stereo
+            Dual Mono
+        AUSampleDelay ▸
+            Stereo
+            Dual Mono
+        AUSoundIsolation ▸
+            Stereo
+            Dual Mono
+    JustChords ▸
+        JustChords ▸
+            Stereo
+---
+
+=== mixer-fader ===
+NO MENU FOUND near 900.0,665.0
+
+=== mixer-group-slot ===
+Open Group Settings…
+---
+✓ No Group
+---
+Group 1: (new)
+---
+
+=== mixer-input-slot ===
+NO MENU FOUND near 900.0,420.0
+
+=== mixer-instrument-slot-menu ===
+---
+Vintage Electric Piano ▸
+    ✓ Stereo
+---
+No Plug-in
+---
+Drums ▸
+    Drum Kit Designer ▸
+        Stereo
+        Multi-Output
+    Drum Synth ▸
+        Mono
+        Stereo
+    Ultrabeat (Drum Machine) ▸
+        Stereo
+        Multi-Output
+Sampler ▸
+    Quick Sampler (Single Sample) ▸
+        Mono
+        Stereo
+    Sample Alchemy ▸
+        Stereo
+    Sampler (Multi-Sample) ▸
+        Mono
+        Stereo
+        Multi-Output
+        5.1
+Studio Instruments ▸
+    Studio Bass ▸
+        Stereo
+    Studio Horns ▸
+        Mono
+        Stereo
+        Multi-Output
+    Studio Piano ▸
+        Stereo
+    Studio Strings ▸
+        Mono
+        Stereo
+        Multi-Output
+Synthesizer ▸
+    Alchemy ▸
+        Stereo
+    EFM1 (FM Synth) ▸
+        Stereo
+    ES E (Ensemble Synth) ▸
+        Stereo
+    ES M (Monophonic Synth) ▸
+        Mono
+    ES P (Polyphonic Synth) ▸
+        Stereo
+    ES1 (Synthesizer 1) ▸
+        Mono
+        Stereo
+    ES2 (Synthesizer 2) ▸
+        Stereo
+        5.1
+    EVOC 20 PS (Vocoder Synth) ▸
+        Stereo
+    Retro Synth ▸
+        Stereo
+    Sculpture (Modeling Synth) ▸
+        Stereo
+        5.1
+Utility ▸
+    External Instrument ▸
+        Mono
+        Stereo
+    Klopfgeist ▸
+        Mono
+    Test Oscillator ▸
+        Mono
+        Stereo
+✓ Vintage Keys ▸
+    Vintage B3 Organ ▸
+        Mono
+        Stereo
+    Vintage Clav ▸
+        Mono
+        Stereo
+    ✓ Vintage Electric Piano ▸
+        ✓ Stereo
+    Vintage Mellotron ▸
+        Mono
+---
+Drum Machine Designer
+---
+AU Generators ▸
+    Apple ▸
+        AUAudioFilePlayer ▸
+            Mono
+            Stereo
+            5.1
+        AUNetReceive ▸
+            Mono
+            Stereo
+            5.1
+AU Instruments ▸
+    Apple ▸
+        AUMIDISynth ▸
+            Mono
+            Stereo
+            Multi-Output (16xMono)
+            Multi-Output (5xStereo, 6xMono)
+            Multi-Output (8xStereo)
+        AUSampler ▸
+            Mono
+            Stereo
+            Multi-Output (16xMono)
+            Multi-Output (5xStereo, 6xMono)
+            Multi-Output (8xStereo)
+        DLSMusicDevice ▸
+            Stereo
+            Multi-Output (2xStereo)
+    ROLI ▸
+        ROLI Studio Drums ▸
+            Mono
+            Stereo
+        ROLI Studio Player ▸
+            Mono
+            Stereo
+---
+
+=== mixer-midifx-slot ===
+---
+Arpeggiator
+Chord Trigger
+Modifier
+Modulator
+Note Repeater
+Randomizer
+Scripter
+Transposer
+Velocity Processor
+---
+Audio Units ▸
+    JustChords ▸
+        JustChords
+---
+Record MIDI to Track Here
+---
+
+=== mixer-output-slot ===
+---
+✓ Stereo Output
+---
+No Output
+---
+✓ Output ▸
+    ✓ Stereo Output
+    Surround
+Bus ▸
+    Bus 1
+    Bus 2
+    Bus 3
+    Bus 4
+    Bus 5
+    Bus 6
+    Bus 7
+    Bus 8
+    Bus 9
+    Bus 10
+    Bus 11
+    Bus 12
+    Bus 13
+    Bus 14
+    Bus 15
+    Bus 16
+    Bus 17
+    Bus 18
+    Bus 19
+    Bus 20
+    Bus 21
+    Bus 22
+    Bus 23
+    Bus 24
+    Bus 25
+    Bus 26
+    Bus 27
+    Bus 28
+    Bus 29
+    Bus 30
+    Bus 31
+    Bus 32
+    ---
+    33 - 64 ▸
+        Bus 33
+        Bus 34
+        Bus 35
+        Bus 36
+        Bus 37
+        Bus 38
+        Bus 39
+        Bus 40
+        Bus 41
+        Bus 42
+        Bus 43
+        Bus 44
+        Bus 45
+        Bus 46
+        Bus 47
+        Bus 48
+        Bus 49
+        Bus 50
+        Bus 51
+        Bus 52
+        Bus 53
+        Bus 54
+        Bus 55
+        Bus 56
+        Bus 57
+        Bus 58
+        Bus 59
+        Bus 60
+        Bus 61
+        Bus 62
+        Bus 63
+        Bus 64
+    65 - 96 ▸
+        Bus 65
+        Bus 66
+        Bus 67
+        Bus 68
+        Bus 69
+        Bus 70
+        Bus 71
+        Bus 72
+        Bus 73
+        Bus 74
+        Bus 75
+        Bus 76
+        Bus 77
+        Bus 78
+        Bus 79
+        Bus 80
+        Bus 81
+        Bus 82
+        Bus 83
+        Bus 84
+        Bus 85
+        Bus 86
+        Bus 87
+        Bus 88
+        Bus 89
+        Bus 90
+        Bus 91
+        Bus 92
+        Bus 93
+        Bus 94
+        Bus 95
+        Bus 96
+    97 - 128 ▸
+        Bus 97
+        Bus 98
+        Bus 99
+        Bus 100
+        Bus 101
+        Bus 102
+        Bus 103
+        Bus 104
+        Bus 105
+        Bus 106
+        Bus 107
+        Bus 108
+        Bus 109
+        Bus 110
+        Bus 111
+        Bus 112
+        Bus 113
+        Bus 114
+        Bus 115
+        Bus 116
+        Bus 117
+        Bus 118
+        Bus 119
+        Bus 120
+        Bus 121
+        Bus 122
+        Bus 123
+        Bus 124
+        Bus 125
+        Bus 126
+        Bus 127
+        Bus 128
+    129 - 160 ▸
+        Bus 129
+        Bus 130
+        Bus 131
+        Bus 132
+        Bus 133
+        Bus 134
+        Bus 135
+        Bus 136
+        Bus 137
+        Bus 138
+        Bus 139
+        Bus 140
+        Bus 141
+        Bus 142
+        Bus 143
+        Bus 144
+        Bus 145
+        Bus 146
+        Bus 147
+        Bus 148
+        Bus 149
+        Bus 150
+        Bus 151
+        Bus 152
+        Bus 153
+        Bus 154
+        Bus 155
+        Bus 156
+        Bus 157
+        Bus 158
+        Bus 159
+        Bus 160
+    161 - 192 ▸
+        Bus 161
+        Bus 162
+        Bus 163
+        Bus 164
+        Bus 165
+        Bus 166
+        Bus 167
+        Bus 168
+        Bus 169
+        Bus 170
+        Bus 171
+        Bus 172
+        Bus 173
+        Bus 174
+        Bus 175
+        Bus 176
+        Bus 177
+        Bus 178
+        Bus 179
+        Bus 180
+        Bus 181
+        Bus 182
+        Bus 183
+        Bus 184
+        Bus 185
+        Bus 186
+        Bus 187
+        Bus 188
+        Bus 189
+        Bus 190
+        Bus 191
+        Bus 192
+    193 - 224 ▸
+        Bus 193
+        Bus 194
+        Bus 195
+        Bus 196
+        Bus 197
+        Bus 198
+        Bus 199
+        Bus 200
+        Bus 201
+        Bus 202
+        Bus 203
+        Bus 204
+        Bus 205
+        Bus 206
+        Bus 207
+        Bus 208
+        Bus 209
+        Bus 210
+        Bus 211
+        Bus 212
+        Bus 213
+        Bus 214
+        Bus 215
+        Bus 216
+        Bus 217
+        Bus 218
+        Bus 219
+        Bus 220
+        Bus 221
+        Bus 222
+        Bus 223
+        Bus 224
+    225 - 256 ▸
+        Bus 225
+        Bus 226
+        Bus 227
+        Bus 228
+        Bus 229
+        Bus 230
+        Bus 231
+        Bus 232
+        Bus 233
+        Bus 234
+        Bus 235
+        Bus 236
+        Bus 237
+        Bus 238
+        Bus 239
+        Bus 240
+        Bus 241
+        Bus 242
+        Bus 243
+        Bus 244
+        Bus 245
+        Bus 246
+        Bus 247
+        Bus 248
+        Bus 249
+        Bus 250
+        Bus 251
+        Bus 252
+        Bus 253
+        Bus 254
+        Bus 255
+        Bus 256
+---
+Stereo Pan
+✓ Balance
+Binaural Panner
+---
+
+=== mixer-pan ===
+Stereo Pan
+✓ Balance
+Binaural Panner
+---
+
+=== mixer-sends-slot ===
+---
+Independent Pan  (disabled)
+---
+Post Pan  (disabled)
+Post Fader  (disabled)
+Pre Fader  (disabled)
+---
+✓ No Send
+---
+Bus ▸
+    Bus 1
+    Bus 2
+    Bus 3
+    Bus 4
+    Bus 5
+    Bus 6
+    Bus 7
+    Bus 8
+    Bus 9
+    Bus 10
+    Bus 11
+    Bus 12
+    Bus 13
+    Bus 14
+    Bus 15
+    Bus 16
+    Bus 17
+    Bus 18
+    Bus 19
+    Bus 20
+    Bus 21
+    Bus 22
+    Bus 23
+    Bus 24
+    Bus 25
+    Bus 26
+    Bus 27
+    Bus 28
+    Bus 29
+    Bus 30
+    Bus 31
+    Bus 32
+    ---
+    33 - 64 ▸
+        Bus 33
+        Bus 34
+        Bus 35
+        Bus 36
+        Bus 37
+        Bus 38
+        Bus 39
+        Bus 40
+        Bus 41
+        Bus 42
+        Bus 43
+        Bus 44
+        Bus 45
+        Bus 46
+        Bus 47
+        Bus 48
+        Bus 49
+        Bus 50
+        Bus 51
+        Bus 52
+        Bus 53
+        Bus 54
+        Bus 55
+        Bus 56
+        Bus 57
+        Bus 58
+        Bus 59
+        Bus 60
+        Bus 61
+        Bus 62
+        Bus 63
+        Bus 64
+    65 - 96 ▸
+        Bus 65
+        Bus 66
+        Bus 67
+        Bus 68
+        Bus 69
+        Bus 70
+        Bus 71
+        Bus 72
+        Bus 73
+        Bus 74
+        Bus 75
+        Bus 76
+        Bus 77
+        Bus 78
+        Bus 79
+        Bus 80
+        Bus 81
+        Bus 82
+        Bus 83
+        Bus 84
+        Bus 85
+        Bus 86
+        Bus 87
+        Bus 88
+        Bus 89
+        Bus 90
+        Bus 91
+        Bus 92
+        Bus 93
+        Bus 94
+        Bus 95
+        Bus 96
+    97 - 128 ▸
+        Bus 97
+        Bus 98
+        Bus 99
+        Bus 100
+        Bus 101
+        Bus 102
+        Bus 103
+        Bus 104
+        Bus 105
+        Bus 106
+        Bus 107
+        Bus 108
+        Bus 109
+        Bus 110
+        Bus 111
+        Bus 112
+        Bus 113
+        Bus 114
+        Bus 115
+        Bus 116
+        Bus 117
+        Bus 118
+        Bus 119
+        Bus 120
+        Bus 121
+        Bus 122
+        Bus 123
+        Bus 124
+        Bus 125
+        Bus 126
+        Bus 127
+        Bus 128
+    129 - 160 ▸
+        Bus 129
+        Bus 130
+        Bus 131
+        Bus 132
+        Bus 133
+        Bus 134
+        Bus 135
+        Bus 136
+        Bus 137
+        Bus 138
+        Bus 139
+        Bus 140
+        Bus 141
+        Bus 142
+        Bus 143
+        Bus 144
+        Bus 145
+        Bus 146
+        Bus 147
+        Bus 148
+        Bus 149
+        Bus 150
+        Bus 151
+        Bus 152
+        Bus 153
+        Bus 154
+        Bus 155
+        Bus 156
+        Bus 157
+        Bus 158
+        Bus 159
+        Bus 160
+    161 - 192 ▸
+        Bus 161
+        Bus 162
+        Bus 163
+        Bus 164
+        Bus 165
+        Bus 166
+        Bus 167
+        Bus 168
+        Bus 169
+        Bus 170
+        Bus 171
+        Bus 172
+        Bus 173
+        Bus 174
+        Bus 175
+        Bus 176
+        Bus 177
+        Bus 178
+        Bus 179
+        Bus 180
+        Bus 181
+        Bus 182
+        Bus 183
+        Bus 184
+        Bus 185
+        Bus 186
+        Bus 187
+        Bus 188
+        Bus 189
+        Bus 190
+        Bus 191
+        Bus 192
+    193 - 224 ▸
+        Bus 193
+        Bus 194
+        Bus 195
+        Bus 196
+        Bus 197
+        Bus 198
+        Bus 199
+        Bus 200
+        Bus 201
+        Bus 202
+        Bus 203
+        Bus 204
+        Bus 205
+        Bus 206
+        Bus 207
+        Bus 208
+        Bus 209
+        Bus 210
+        Bus 211
+        Bus 212
+        Bus 213
+        Bus 214
+        Bus 215
+        Bus 216
+        Bus 217
+        Bus 218
+        Bus 219
+        Bus 220
+        Bus 221
+        Bus 222
+        Bus 223
+        Bus 224
+    225 - 256 ▸
+        Bus 225
+        Bus 226
+        Bus 227
+        Bus 228
+        Bus 229
+        Bus 230
+        Bus 231
+        Bus 232
+        Bus 233
+        Bus 234
+        Bus 235
+        Bus 236
+        Bus 237
+        Bus 238
+        Bus 239
+        Bus 240
+        Bus 241
+        Bus 242
+        Bus 243
+        Bus 244
+        Bus 245
+        Bus 246
+        Bus 247
+        Bus 248
+        Bus 249
+        Bus 250
+        Bus 251
+        Bus 252
+        Bus 253
+        Bus 254
+        Bus 255
+        Bus 256
+---
+
+=== mixer-strip-name ===
+Create New VCA
+Assign Channel Strip Color…
+Rename Channel Strip…
+---
+Channel Strip Components ▸
+    ✓ Audio Device Controls
+    Type and Number Label
+    ✓ Setting Menu
+    ✓ Gain Reduction Meter
+    ✓ EQ Thumbnail
+    ---
+    ✓ MIDI Effects
+    ✓ Input / Instrument
+    ✓ Audio Effects
+    ✓ Sends
+    ✓ Output
+    ---
+    ✓ Group
+    ✓ Automation
+    ✓ Icon
+    ✓ Pan Knob
+    VCA
+    ---
+    ✓ Track Color
+    ✓ Track Stacks
+    ✓ Track Name
+    Track Number
+    ✓ Control Surface Bars
+    Track Notes
+Configure Channel Strip Components…  [⌥X]
+Store as User Default
+Apply User Default  [⌃⇧U]
+Revert to Default
+
+=== pianoroll-empty-grid ===
+Create Note
+---
+Paste  [⌘V]
+Paste at Original Position
+---
+Select All  [⌘A]
+Select Overlapped Notes  (disabled)  [⇧O]
+Select Muted Notes  [⇧M]
+Deselect All  [⇧D]
+---
+Region Colors
+✓ Velocity Colors
+MIDI Channel Colors
+---
+Scroll in Play  [⌃`]
+---
+
+=== pianoroll-keyboard ===
+NO MENU FOUND near 1174.0,760.0
+
+=== pianoroll-note ===
+Define as Default Note
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste Replace  [⇧⌘V]
+Delete
+---
+Invert Selection  [⇧I]
+Select All Following  [⇧F]
+All Following of Same Pitch  [⌃⇧F]
+Select Same Subpositions  [⇧P]
+Select Same Articulation  [⇧A]
+Same Note Pitch  [⇧E]
+Same Note Name  [⇧S]
+Same-Colored Notes  [⇧C]
+---
+Articulation ▸
+    ✓ –
+    ---
+    1
+    2
+    3
+    4
+    5
+    6
+    7
+    8
+    9
+    10
+    11
+    12
+    13
+    14
+    15
+    16
+    17
+    18
+    19
+    20
+    21
+    22
+    23
+    24
+    25
+    26
+    27
+    28
+    29
+    30
+    31
+    32
+    33 - 64 ▸
+        33
+        34
+        35
+        36
+        37
+        38
+        39
+        40
+        41
+        42
+        43
+        44
+        45
+        46
+        47
+        48
+        49
+        50
+        51
+        52
+        53
+        54
+        55
+        56
+        57
+        58
+        59
+        60
+        61
+        62
+        63
+        64
+    65 - 96 ▸
+        65
+        66
+        67
+        68
+        69
+        70
+        71
+        72
+        73
+        74
+        75
+        76
+        77
+        78
+        79
+        80
+        81
+        82
+        83
+        84
+        85
+        86
+        87
+        88
+        89
+        90
+        91
+        92
+        93
+        94
+        95
+        96
+    97 - 128 ▸
+        97
+        98
+        99
+        100
+        101
+        102
+        103
+        104
+        105
+        106
+        107
+        108
+        109
+        110
+        111
+        112
+        113
+        114
+        115
+        116
+        117
+        118
+        119
+        120
+        121
+        122
+        123
+        124
+        125
+        126
+        127
+        128
+    129 - 160 ▸
+        129
+        130
+        131
+        132
+        133
+        134
+        135
+        136
+        137
+        138
+        139
+        140
+        141
+        142
+        143
+        144
+        145
+        146
+        147
+        148
+        149
+        150
+        151
+        152
+        153
+        154
+        155
+        156
+        157
+        158
+        159
+        160
+    161 - 192 ▸
+        161
+        162
+        163
+        164
+        165
+        166
+        167
+        168
+        169
+        170
+        171
+        172
+        173
+        174
+        175
+        176
+        177
+        178
+        179
+        180
+        181
+        182
+        183
+        184
+        185
+        186
+        187
+        188
+        189
+        190
+        191
+        192
+    193 - 224 ▸
+        193
+        194
+        195
+        196
+        197
+        198
+        199
+        200
+        201
+        202
+        203
+        204
+        205
+        206
+        207
+        208
+        209
+        210
+        211
+        212
+        213
+        214
+        215
+        216
+        217
+        218
+        219
+        220
+        221
+        222
+        223
+        224
+    225 - 255 ▸
+        225
+        226
+        227
+        228
+        229
+        230
+        231
+        232
+        233
+        234
+        235
+        236
+        237
+        238
+        239
+        240
+        241
+        242
+        243
+        244
+        245
+        246
+        247
+        248
+        249
+        250
+        251
+        252
+        253
+        254
+        255
+Trim Note End to Remove Overlaps to Selected Notes (8 Ticks Gap)
+Trim Note End to Remove Overlaps to Following Notes (8 Ticks Gap)  [\]
+Trim Note End to Selected Notes (8 Ticks Gap)
+Trim Note End to Selected Notes (4 Ticks Overlap)
+Trim Note End to Following Notes (8 Ticks Gap)  [⇧\]
+Trim Note End to Following Notes (4 Ticks Overlap)
+---
+Nudge Region/Event/Marquee Position Left by Nudge Value  [⌥←]
+Nudge Region/Event/Marquee Position Right by Nudge Value  [⌥→]
+Nudge Region/Event/Marquee Length Left by Nudge Value  [⌥⇧←]
+Nudge Region/Event/Marquee Length Right by Nudge Value  [⌥⇧→]
+Set Nudge Value to ▸
+    Bar  [⌃⌥M]
+    Beat  [⌃⌥B]
+    Division  [⌃⌥D]
+    10 Ticks
+    ✓ Tick  [⌃⌥T]
+    Step Input
+    ---
+    1/1 Note
+    1/2 Note
+    1/4 Note
+    1/8 Note
+    1/16 Note
+    1/32 Note
+    1/64 Note
+    1/2 Triplet (1/3)
+    1/4 Triplet (1/6)
+    1/8 Triplet (1/12)
+    1/16 Triplet (1/24)
+    1/32 Triplet (1/48)
+    1/64 Triplet (1/96)
+    ---
+    5 Frames
+    Frame  [⌃⌥F]
+    1/2 Frame  [⌃⌥H]
+    SMPTE Bit
+    ---
+    10 ms  [⌃⌥0]
+    1 ms  [⌃⌥1]
+    Sample  [⌃⌥S]
+---
+Transpose Region/Event +12 Semitone, Nudge Automation Up 10 Steps or Move Marquee Bottom Up 1 Track  [⌥⇧↑]
+Transpose KeySignature/Chord/Region/Event +1 Semitone, Nudge Automation Up 1 Step or Move Marquee Selection Up 1 Track  [⌥↑]
+Transpose KeySignature/Chord/Region/Event -1 Semitone, Nudge Automation Down 1 Step or Move Marquee Selection Down 1 Track  [⌥↓]
+Transpose Region/Event -12 Semitone, Nudge Automation Down 10 Steps or Move Marquee Bottom Down 1 Track  [⌥⇧↓]
+---
+Region Colors
+✓ Velocity Colors
+MIDI Channel Colors
+---
+
+=== plugin-window-view-popup ===
+Controls
+✓ Editor
+---
+50%
+75%
+100%
+125%
+150%
+175%
+200%
+---
+✓ 100%
+
+=== region-audio ===
+Mute Regions/Cells  [⌃M]
+Loop  [⌃L]
+Bounce Regions/Cells in Place…  [⌃B]
+Recent Item 4  (disabled)
+Recent Item 5  (disabled)
+---
+Edit ▸
+    Cut  [⌘X]
+    Copy  [⌘C]
+    Delete
+    ---
+    Repeat Regions/Cells/Events  [⌘R]
+    Repeat Regions/Events Multiple Times…
+    Copy MIDI Events…  (disabled)
+    Copy Region Selection to Live Loops Scene  [⌘↖Home]
+    Copy to Focused Track  (disabled)
+    ---
+    Apply All Parameters Permanently  [⌃N]
+    Apply All except Channel and Delay
+    ---
+    SMPTE Lock ▸
+        Lock SMPTE Position  [⌘⇟PgDn]
+        Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Track  [⌃⇧F]
+    Equal Regions  [⇧E]
+    Same-Colored Regions  [⇧C]
+    Invert Selection  [⇧I]
+    ---
+    Deselect Outside Locators
+    Deselect All  [⇧D]
+Playback ▸
+    Mute  [⌃M]
+    Loop  [⌃L]
+    Reverse  [⌃⇧R]
+    ---
+    Set Locators by Selection and Enable Cycle  [⌘U]
+    Set Rounded Locators by Selection and Enable Cycle  [U]
+    Toggle Auto Set Locators
+Folder ▸
+    Pack Folder  [⌃⌥⇧F]
+    Pack Take Folder  [⌃⌥⌘F]
+    ---
+    Unpack Folder to New Tracks  (disabled)  [⌃⇧⌘U]
+    Unpack Folder to Existing Tracks  (disabled)  [⌃⌘U]
+Name and Color ▸
+    Rename Regions  [⇧N]
+    Name Regions by Tracks  [⌥⇧N]
+    Color Regions by Tracks  [⌥⇧C]
+    Show/Hide Colors  [⌥C]
+---
+Move ▸
+    Move to Playhead Position  [;]
+    Move to Recorded Position  [⌥⇧⌘R]
+    Move to Beat
+    Move Selection with First Transient to Nearest Beat
+    Move to Focused Track  (disabled)  [⌃⇧T]
+    ---
+    Shuffle Left  [⌥[]
+    Shuffle Right  [⌥]]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Remove Overlaps  (disabled)  [\]
+    Trim End to Next Region  [⇧\]
+    Trim to Fill within Locators  [⌥\]
+    Crop Regions/Cells Outside Locators/Playable Range or Marquee Selection  [⌘\]
+    ---
+    Trim Region Start to Previous Region
+    Trim Region Start to Previous Transient  [⌃⇧[]
+    Trim Region Start to Next Transient  [⌃⇧]]
+    ---
+    Trim Region End to Next Region  [⇧\]
+    Trim Region End to Previous Transient  [⌃[]
+    Trim Region End to Next Transient  [⌃]]
+    ---
+    Set Region Start to Bar  (disabled)
+    Set Optimal Region Sizes  (disabled)  [⌃\]
+    Reactivate Upbeat Event Playback  (disabled)
+Split ▸
+    Remove Silence from Audio Region…  [⌃X]
+    Split at Playhead  [⌘T]
+    Split by Locators  [⌥⌘T]
+Bounce or Join ▸
+    Bounce In Place…  [⌃B]
+    Join  (disabled)  [⌘J]
+    Join per Track  (disabled)  [J]
+Convert ▸
+    Convert to New Regions  [⌥⌘R]
+    Convert to New Audio Files…  [⌥⌘F]
+    Convert to New Sampler Track…  [⌃E]
+    ---
+    Convert Loops to Regions  (disabled)  [⌃⌘L]
+    Convert Repetitions to Loops  (disabled)
+    ---
+    Separate by MIDI Channel  (disabled)
+    Separate by Note Pitch  (disabled)
+    Separate Pattern Region by Kit Piece  (disabled)
+    Separate by Articulation  (disabled)
+    ---
+    Convert to MIDI Region  (disabled)  [⌃⌥⌘M]
+    Replace with Session Player Region  (disabled)
+---
+Chords ▸
+    Apply Region Chords to Chord Track
+    Analyze Chords
+    Analyze Key Signature  (disabled)
+    ---
+    Cut Region Chords  (disabled)
+    Copy Region Chords  (disabled)
+    Delete Region Chords  (disabled)
+Processing ▸
+    Stem Splitter…
+    ---
+    Selection-Based Processing…  [⌥⇧P]
+    Apply Selection-Based Processing Again  [⌃⌥P]
+    ---
+    Normalize Region Gain…  [⌃⌥G]
+    Apply Normalize Region Gain Again  [⌃G]
+Automation ▸
+    Create 1 Track Automation Point at Region Borders  [⌃⇧⌘1]
+    Create 2 Track Automation Points at Region Borders  [⌃⇧⌘2]
+    ---
+    Move Current Region Data to Track  [⌃⌘↑]
+    Move Current Track Data to Region  [⌃⌘↓]
+    Move All Region Data to Track  [⌃⇧⌘↑]
+    Move All Track Data to Region  [⌃⇧⌘↓]
+    Delete All Region Automation
+MIDI Transform ▸
+    Fixed Velocity  (disabled)
+    Random Pitch  (disabled)
+    Random Velocity  (disabled)
+    Random Pitch, Velocity, Length  (disabled)
+    Crescendo  (disabled)
+    Scale 14bit PitchBd  (disabled)
+    Double Speed  (disabled)
+    Half Speed  (disabled)
+    Humanize  (disabled)
+    Reverse Position  (disabled)
+    Reverse Pitch  (disabled)
+    Transposition  (disabled)
+    Exponential Velocity  (disabled)
+    Velocity Limiter  (disabled)
+    Fixed Note Length  (disabled)
+    Maximum Note Length  (disabled)
+    Minimum Note Length  (disabled)
+    Quantize Note Length  (disabled)
+Tempo ▸
+    Audio File Is a Loop
+    ---
+    Apply Region Tempo to Project Tempo…
+    Apply Project Tempo to Region and Downbeat
+    ---
+    Write Project Tempo to Audio File
+    Remove Tempo Information
+    ---
+    Create Smart Tempo Multitrack Set  (disabled)
+Export ▸
+    Add to Browser…  [⌃⇧O]
+    1 Region as Audio File…
+    Selection as MIDI File…  (disabled)  [⌥⌘E]
+    Move File out of Project
+---
+
+=== region-midi ===
+Mute Regions/Cells  [⌃M]
+Loop  [⌃L]
+Bounce Regions/Cells in Place…  [⌃B]
+Recent Item 4  (disabled)
+Recent Item 5  (disabled)
+---
+Edit ▸
+    Cut  [⌘X]
+    Copy  [⌘C]
+    Delete
+    ---
+    Repeat Regions/Cells/Events  [⌘R]
+    Repeat Regions/Events Multiple Times…
+    Copy MIDI Events…
+    Copy Region Selection to Live Loops Scene  [⌘↖Home]
+    Copy to Focused Track  (disabled)
+    ---
+    Apply All Parameters Permanently  [⌃N]
+    Apply All except Channel and Delay
+    ---
+    SMPTE Lock ▸
+        Lock SMPTE Position  [⌘⇟PgDn]
+        Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Track  [⌃⇧F]
+    Equal Regions  [⇧E]
+    Same-Colored Regions  [⇧C]
+    Invert Selection  [⇧I]
+    ---
+    Deselect Outside Locators
+    Deselect All  [⇧D]
+Playback ▸
+    Mute  [⌃M]
+    Loop  [⌃L]
+    Reverse  (disabled)  [⌃⇧R]
+    ---
+    Set Locators by Selection and Enable Cycle  [⌘U]
+    Set Rounded Locators by Selection and Enable Cycle  [U]
+    Toggle Auto Set Locators
+Quantize ▸
+    ✓ Off
+    ---
+    1/1 Note
+    1/2 Note
+    1/4 Note
+    1/8 Note
+    1/16 Note
+    1/32 Note
+    1/64 Note
+    Triplets ▸
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        1/128 Triplet (1/192)
+    Swing Presets ▸
+        1/16 Swing A
+        1/16 Swing B
+        1/16 Swing C
+        1/16 Swing D
+        1/16 Swing E
+        1/16 Swing F
+        ---
+        1/8 Swing A
+        1/8 Swing B
+        1/8 Swing C
+        1/8 Swing D
+        1/8 Swing E
+        1/8 Swing F
+    n-Tuplets and Mixed ▸
+        5-Tuplet/4
+        5-Tuplet/8
+        7-Tuplet
+        9-Tuplet
+        ---
+        1/16 & 1/16 Triplet
+        1/16 & 1/8 Triplet
+        1/8 & 1/8 Triplet
+    ---
+    Apply Quantization Permanently  [⌃Q]
+Folder ▸
+    Pack Folder  [⌃⌥⇧F]
+    Pack Take Folder  [⌃⌥⌘F]
+    ---
+    Unpack Folder to New Tracks  (disabled)  [⌃⇧⌘U]
+    Unpack Folder to Existing Tracks  (disabled)  [⌃⌘U]
+Name and Color ▸
+    Rename Regions  [⇧N]
+    Name Regions by Tracks  [⌥⇧N]
+    Color Regions by Tracks  [⌥⇧C]
+    Show/Hide Colors  [⌥C]
+---
+Move ▸
+    Move to Playhead Position  [;]
+    Move to Recorded Position  (disabled)  [⌥⇧⌘R]
+    Move to Beat
+    Move Selection with First Transient to Nearest Beat  (disabled)
+    Move to Focused Track  (disabled)  [⌃⇧T]
+    ---
+    Shuffle Left  [⌥[]
+    Shuffle Right  [⌥]]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Remove Overlaps  (disabled)  [\]
+    Trim End to Next Region  [⇧\]
+    Trim to Fill within Locators  [⌥\]
+    Crop Regions/Cells Outside Locators/Playable Range or Marquee Selection  [⌘\]
+    ---
+    Trim Region Start to Previous Region
+    Trim Region Start to Previous Transient  [⌃⇧[]
+    Trim Region Start to Next Transient  [⌃⇧]]
+    ---
+    Trim Region End to Next Region  [⇧\]
+    Trim Region End to Previous Transient  [⌃[]
+    Trim Region End to Next Transient  [⌃]]
+    ---
+    Set Region Start to Bar
+    Set Optimal Region Sizes  [⌃\]
+    Reactivate Upbeat Event Playback  (disabled)
+Split ▸
+    Remove Silence from Audio Region…  (disabled)  [⌃X]
+    Split at Playhead  [⌘T]
+    Split by Locators  [⌥⌘T]
+Bounce or Join ▸
+    Bounce In Place…  [⌃B]
+    Join  (disabled)  [⌘J]
+    Join per Track  (disabled)  [J]
+Convert ▸
+    Convert to New Regions  (disabled)  [⌥⌘R]
+    Convert to New Audio Files…  (disabled)  [⌥⌘F]
+    Convert to New Sampler Track…  (disabled)  [⌃E]
+    ---
+    Convert Loops to Regions  (disabled)  [⌃⌘L]
+    Convert Repetitions to Loops  (disabled)
+    ---
+    Separate by MIDI Channel
+    Separate by Note Pitch
+    Separate Pattern Region by Kit Piece  (disabled)
+    Separate by Articulation  (disabled)
+    ---
+    Convert to MIDI Region  (disabled)  [⌃⌥⌘M]
+    Convert to Pattern Region
+    Replace with Session Player Region
+---
+Chords ▸
+    Apply Region Chords to Chord Track
+    Analyze Chords
+    Analyze Key Signature  (disabled)
+    ---
+    Cut Region Chords  (disabled)
+    Copy Region Chords  (disabled)
+    Delete Region Chords  (disabled)
+Processing ▸
+    Stem Splitter…  (disabled)
+    ---
+    Selection-Based Processing…  (disabled)  [⌥⇧P]
+    Apply Selection-Based Processing Again  (disabled)  [⌃⌥P]
+    ---
+    Normalize Region Gain…  (disabled)  [⌃⌥G]
+    Apply Normalize Region Gain Again  (disabled)  [⌃G]
+Automation ▸
+    Create 1 Track Automation Point at Region Borders  [⌃⇧⌘1]
+    Create 2 Track Automation Points at Region Borders  [⌃⇧⌘2]
+    ---
+    Move Current Region Data to Track  [⌃⌘↑]
+    Move Current Track Data to Region  [⌃⌘↓]
+    Move All Region Data to Track  [⌃⇧⌘↑]
+    Move All Track Data to Region  [⌃⇧⌘↓]
+    Delete All Region Automation
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+Tempo ▸
+    Audio File Is a Loop  (disabled)
+    ---
+    Apply Region Tempo to Project Tempo…
+    Apply Project Tempo to Region and Downbeat
+    ---
+    Write Project Tempo to Audio File  (disabled)
+    Remove Tempo Information  (disabled)
+    ---
+    Create Smart Tempo Multitrack Set  (disabled)
+Export ▸
+    Add to Browser…  [⌃⇧O]
+    1 Region as Audio File…
+    Selection as MIDI File…  [⌥⌘E]
+    Move 0 Files  (disabled)
+---
+
+=== ruler ===
+Move Locators Forward by Cycle Length  [⇧⌘.]
+Move Locators Backwards by Cycle Length  (disabled)  [⇧⌘,]
+Skip Cycle  [=]
+---
+Set Locators by Selection and Enable Cycle  [⌘U]
+Set Rounded Locators by Selection and Enable Cycle  [U]
+Auto Set Locators
+---
+Split Regions at Playhead  [⌘T]
+Split Regions at Locators  [⌥⌘T]
+Trim Regions to Fill within Locators  [⌥\]
+---
+Cut Section Between Locators (Global)  [⌃⌘X]
+Insert Silence Between Locators (Global)  [⌃⌘I]
+Copy Section Between Locators (Global)
+Insert Section at Playhead (Global)  (disabled)  [⌃⌘V]
+Repeat Section Between Locators (Global)  [⌃⌘R]
+Delete Section Between Locators (Global)
+---
+Copy Cycle to Live Loops Scene
+---
+
+=== score-background ===
+✓ Linear View
+Wrapped View
+Page View  [⌃P]
+---
+Select All  [⌘A]
+Select All Inside Locators  [⇧L]
+---
+Paste  [⌘V]
+Paste Multiple  [⌥⇧⌘V]
+Paste at Original Position
+---
+
+=== session-player-chords-menu ===
+Chord Progressions ▸
+    ii - V - I
+    I - V - vi - IV
+    I - vi - IV - V
+    ii - I - vi - V
+    IV - I - vi - V
+    vi - IV - I - V
+Apply Region Chords to Chord Track  (disabled)
+Apply Chords from Chord Track
+Analyze Chords
+Analyze Key Signature  (disabled)
+---
+✓ Follow Global Chord Track
+Follow Region Chords
+---
+Copy All Region Chords  (disabled)
+Paste All Region Chords  (disabled)
+Delete All Region Chords  (disabled)
+---
+✓ Default Chord Progression for New Regions
+
+=== signature-track-plus-menu ===
+Create Time Signature Change  [⌃⌥⇧T]
+Create Key Signature Change  [⌃⌥⇧K]
+---
+
+=== smart-tempo-tempo-mode-popup ===
+✓ Constant
+Variable
+
+=== stepseq-row-header ===
+Copy  [⌃C]
+Paste Row  (disabled)  [⌃V]
+Paste Steps  (disabled)  [⌥⇧V]
+Paste Row Settings  (disabled)  [⌃⌥⇧V]
+Rename
+Duplicate  [⌘D]
+---
+Randomize On/Off…
+Clear On/Off  (disabled)
+---
+Clear Row  (disabled)  [⌃⌘⌫]
+Delete  [⌘⌫]
+---
+
+=== stepseq-step-cell ===
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  (disabled)  [⌘V]
+Repeat  [⌘R]
+---
+Randomize On/Off
+---
+Clear On/Off  (disabled)
+Clear Step  (disabled)  [⌃⌫]
+---
+
+=== take-folder-region ===
+Mute Regions/Cells  [⌃M]
+Loop  [⌃L]
+Bounce Regions/Cells in Place…  [⌃B]
+Recent Item 4  (disabled)
+Recent Item 5  (disabled)
+---
+Edit ▸
+    Cut  [⌘X]
+    Copy  [⌘C]
+    Delete
+    ---
+    Repeat Regions/Cells/Events  [⌘R]
+    Repeat Regions/Events Multiple Times…
+    Copy MIDI Events…
+    Copy Region Selection to Live Loops Scene  [⌘↖Home]
+    Copy to Focused Track  (disabled)
+    ---
+    Apply All Parameters Permanently  [⌃N]
+    Apply All except Channel and Delay
+    ---
+    SMPTE Lock ▸
+        Lock SMPTE Position  [⌘⇟PgDn]
+        Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Track  [⌃⇧F]
+    Equal Regions  [⇧E]
+    Same-Colored Regions  [⇧C]
+    Invert Selection  [⇧I]
+    ---
+    Deselect Outside Locators
+    Deselect All  [⇧D]
+Playback ▸
+    Mute  [⌃M]
+    Loop  [⌃L]
+    Reverse  (disabled)  [⌃⇧R]
+    ---
+    Set Locators by Selection and Enable Cycle  [⌘U]
+    Set Rounded Locators by Selection and Enable Cycle  [U]
+    Toggle Auto Set Locators
+Quantize ▸
+    ✓ Off
+    ---
+    1/1 Note
+    1/2 Note
+    1/4 Note
+    1/8 Note
+    1/16 Note
+    1/32 Note
+    1/64 Note
+    Triplets ▸
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        1/128 Triplet (1/192)
+    Swing Presets ▸
+        1/16 Swing A
+        1/16 Swing B
+        1/16 Swing C
+        1/16 Swing D
+        1/16 Swing E
+        1/16 Swing F
+        ---
+        1/8 Swing A
+        1/8 Swing B
+        1/8 Swing C
+        1/8 Swing D
+        1/8 Swing E
+        1/8 Swing F
+    n-Tuplets and Mixed ▸
+        5-Tuplet/4
+        5-Tuplet/8
+        7-Tuplet
+        9-Tuplet
+        ---
+        1/16 & 1/16 Triplet
+        1/16 & 1/8 Triplet
+        1/8 & 1/8 Triplet
+    ---
+    Apply Quantization Permanently  [⌃Q]
+Folder ▸
+    Pack Folder  [⌃⌥⇧F]
+    Pack Take Folder  (disabled)  [⌃⌥⌘F]
+    ---
+    Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  [⌃⇧⌘U]
+    Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  [⌃⌘U]
+Name and Color ▸
+    Rename Regions  [⇧N]
+    Name Regions by Tracks  [⌥⇧N]
+    Color Regions by Tracks  [⌥⇧C]
+    Show/Hide Colors  [⌥C]
+---
+Move ▸
+    Move to Playhead Position  [;]
+    Move to Recorded Position  (disabled)  [⌥⇧⌘R]
+    Move to Beat
+    Move Selection with First Transient to Nearest Beat  (disabled)
+    Move to Focused Track  (disabled)  [⌃⇧T]
+    ---
+    Shuffle Left  [⌥[]
+    Shuffle Right  [⌥]]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Remove Overlaps  (disabled)  [\]
+    Trim End to Next Region  [⇧\]
+    Trim to Fill within Locators  [⌥\]
+    Crop Regions/Cells Outside Locators/Playable Range or Marquee Selection  [⌘\]
+    ---
+    Trim Region Start to Previous Region
+    Trim Region Start to Previous Transient  [⌃⇧[]
+    Trim Region Start to Next Transient  [⌃⇧]]
+    ---
+    Trim Region End to Next Region  [⇧\]
+    Trim Region End to Previous Transient  [⌃[]
+    Trim Region End to Next Transient  [⌃]]
+    ---
+    Set Region Start to Bar
+    Set Optimal Region Sizes  [⌃\]
+    Reactivate Upbeat Event Playback  (disabled)
+Split ▸
+    Remove Silence from Audio Region…  (disabled)  [⌃X]
+    Split at Playhead  [⌘T]
+    Split by Locators  [⌥⌘T]
+Bounce or Join ▸
+    Bounce In Place…  [⌃B]
+    Join  (disabled)  [⌘J]
+    Join per Track  (disabled)  [J]
+Convert ▸
+    Convert to New Regions  (disabled)  [⌥⌘R]
+    Convert to New Audio Files…  (disabled)  [⌥⌘F]
+    Convert to New Sampler Track…  (disabled)  [⌃E]
+    ---
+    Convert Loops to Regions  (disabled)  [⌃⌘L]
+    Convert Repetitions to Loops  (disabled)
+    ---
+    Separate by MIDI Channel
+    Separate by Note Pitch
+    Separate Pattern Region by Kit Piece  (disabled)
+    Separate by Articulation  (disabled)
+    ---
+    Convert to MIDI Region  (disabled)  [⌃⌥⌘M]
+    Convert to Pattern Region  (disabled)
+    Replace with Session Player Region  (disabled)
+---
+Chords ▸
+    Apply Region Chords to Chord Track
+    Analyze Chords
+    Analyze Key Signature  (disabled)
+    ---
+    Cut Region Chords  (disabled)
+    Copy Region Chords  (disabled)
+    Delete Region Chords  (disabled)
+Processing ▸
+    Stem Splitter…  (disabled)
+    ---
+    Selection-Based Processing…  (disabled)  [⌥⇧P]
+    Apply Selection-Based Processing Again  (disabled)  [⌃⌥P]
+    ---
+    Normalize Region Gain…  (disabled)  [⌃⌥G]
+    Apply Normalize Region Gain Again  (disabled)  [⌃G]
+Automation ▸
+    Create 1 Track Automation Point at Region Borders  [⌃⇧⌘1]
+    Create 2 Track Automation Points at Region Borders  [⌃⇧⌘2]
+    ---
+    Move Current Region Data to Track  [⌃⌘↑]
+    Move Current Track Data to Region  [⌃⌘↓]
+    Move All Region Data to Track  [⌃⇧⌘↑]
+    Move All Track Data to Region  [⌃⇧⌘↓]
+    Delete All Region Automation
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+Tempo ▸
+    Audio File Is a Loop  (disabled)
+    ---
+    Apply Region Tempo to Project Tempo…  (disabled)
+    Apply Project Tempo to Region and Downbeat  (disabled)
+    ---
+    Write Project Tempo to Audio File  (disabled)
+    Remove Tempo Information  (disabled)
+    ---
+    Create Smart Tempo Multitrack Set  (disabled)
+Export ▸
+    Add to Browser…  [⌃⇧O]
+    1 Region as Audio File…
+    Selection as MIDI File…  [⌥⌘E]
+    Move 0 Files  (disabled)
+---
+
+=== tool-menu-T-key-piano-roll ===
+✓ Pointer Tool  [T]
+Pencil Tool  [P]
+Eraser Tool  [E]
+Finger Tool  [F]
+Scissors Tool  [I]
+Join Tool  [J]
+Mute Tool  [M]
+Quantize Tool  [Q]
+Velocity Tool  [V]
+Zoom Tool  [Y]
+Automation Select Tool  [U]
+Automation Curve Tool  [W]
+Brush Tool  [B]
+---
+Set Previously Set Tool
+
+=== tool-menu-T-key-tracks-area ===
+✓ Pointer Tool  [T]
+Pencil Tool  [P]
+Eraser Tool  [E]
+Text Tool  [⇧T]
+Scissors Tool  [I]
+Join Tool  [J]
+Solo Tool  [S]
+Mute Tool  [M]
+Zoom Tool  [Y]
+Fade Tool  [A]
+Automation Select Tool  [U]
+Automation Curve Tool  [W]
+Marquee Tool  [R]
+Flex Tool  [X]
+Gain Tool  [G]
+Slip Tool
+Rotate Tool
+---
+Set Previously Set Tool
+
+=== tool-menu-T-key ===
+✓ Pointer Tool  [T]
+Pencil Tool  [P]
+Eraser Tool  [E]
+Text Tool  [⇧T]
+Mute Tool  [M]
+Zoom Tool  [Y]
+---
+Set Previously Set Tool
+
+=== track-alternatives-popup ===
+New  [⌃⌥⌘N]
+Duplicate  [⌃⌥⌘D]
+Rename  [⌃⌥⌘↩]
+Rename by Region  (disabled)
+Delete Inactive  (disabled)  [⌃⌥⌘⌦]
+Delete Unused  (disabled)
+---
+Show Inactive  (disabled)  [⌃⌥A]
+---
+
+=== track-header ===
+✓ Reassign Track ▸
+    Click & Ports ▸
+        Input Notes
+    ✓ Mixer ▸
+        Others ▸
+            Master
+        Output Stereo ▸
+            Stereo Out (Output 1-2)  (Stereo Output)
+        ✓ Software Instrument ▸
+            ✓ Deluxe Classic (Inst 1)
+    ---
+    MIDI Click
+    Not Assigned
+    (Folder)
+---
+New Audio Track  [⌥⌘A]
+New Software Instrument Track  [⌥⌘S]
+New Session Player SI Track…  [⌥⌘P]
+New External MIDI Track  [⌥⌘X]
+New Track with Duplicate Settings  [⌘D]
+New Track with Duplicate Settings and Content  [⌥⇧⌘D]
+---
+Rename Track  [⇧↩]
+Delete Track  [⌘⌫]
+Delete unused Tracks  [⇧⌘⌫]
+---
+Create Track Stack…  [⇧⌘D]
+Flatten Stack  (disabled)  [⇧⌘U]
+Convert Folder Stack to Summing Stack  (disabled)
+---
+Hide Selected Track  [⌃H]
+Hide Unselected Track
+Unhide All Tracks  (disabled)  [⌃⇧H]
+Toggle Hide View  [H]
+---
+Assign Track Color…
+Assign Track Icon…
+---
+Track Header Components ▸
+    On/Off
+    ✓ Mute
+    ✓ Solo
+    Track Protect
+    Freeze
+    ✓ Record Enable
+    ✓ Input Monitoring
+    ---
+    ✓ Volume
+    ✓ Pan/Send
+    Pan/Send Knob Function ▸
+        ✓ Pan
+        Send 1  (disabled)
+        Send 2  (disabled)
+        Send 3  (disabled)
+        Send 4  (disabled)
+        Send 5  (disabled)
+        Send 6  (disabled)
+        Send 7  (disabled)
+        Send 8  (disabled)
+    ---
+    Additional Name Column
+    Additional Name Column Mode ▸
+        ✓ Automatic
+        Patch or Channel Strip Setting Name
+        Software Instrument Setting Name
+        Channel Strip Name
+        Channel Strip Type and Number
+    ---
+    ✓ Control Surface Bars
+    ✓ Track Numbers
+    Track Color Bars
+    Groove Track
+    ✓ Track Icons
+    Track Alternatives
+Configure Track Header…  [⌥T]
+Store User Configuration
+Apply User Configuration
+Revert to Defaults
+---
+Use as Default Patch for MIDI Tracks
+Save as Patch
+---
+
+=== tracks-area-empty-lane ===
+Create MIDI Region
+Create Pattern Region
+Create Session Player Region
+---
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+---
+Select All  [⌘A]
+Select All Inside Locators  [⇧L]
+---
+Empty Regions
+Select Overlapped Regions  (disabled)  [⇧O]
+Select Muted Regions  [⇧M]
+---
+Scroll in Play  [⌃`]
+---
+
+=== tracks-empty-below ===
+NO MENU FOUND near 1200.0,315.0
+

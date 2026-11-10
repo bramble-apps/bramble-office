@@ -1,0 +1,1431 @@
+# Logic Pro 13 local menus (the Edit / Functions / View bars inside each area)
+=== audiofile-AudioFile ===
+Create Backup
+Revert to Backup  [⌃⌥⌘B]
+---
+Save A Copy of Audio File As…
+Save Selection As…
+---
+Detect Transients
+Update File Information
+Refresh Overview
+
+=== audiofile-Edit ===
+Undo  (disabled)  [⌘Z]
+Redo  (disabled)  [⇧⌘Z]
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  (disabled)  [⌘V]
+Delete
+---
+Select All  [⌘A]
+Select All Previous Samples  [⌃⌥⇧←]
+Select All Following Samples  [⌃⌥⇧→]
+---
+Region -> Selection  (disabled)  [⇞PgUp]
+Selection -> Region  (disabled)  [⇟PgDn]
+---
+Create New Region  [⌃R]
+---
+Sample Loop -> Selection  (disabled)
+Selection -> Sample Loop
+Write Sample Loop to Audio File  (disabled)
+---
+Go to ▸
+    Selection Start  [⌃↖Home]
+    Selection End  [⌃↘End]
+    Region Start  [⌃⌥←]
+    Region End  [⌃⌥→]
+    Region Anchor  [⌃⌥↓]
+    Previous Transient  [⌥←]
+    Next Transient  [⌥→]
+Set ▸
+    Selection Start To Previous Transient  [⇧←]
+    Selection Start To Next Transients  [⇧→]
+    Selection End To Previous Transient  [←]
+    Selection End To Next Transient  [→]
+    Selection Start and End to Previous Transient  [⇧⌘←]
+    Selection Start and End to Next Transient  [⇧⌘→]
+    Selection Start and End to Previous Transient and Play  [⌥⌘←]
+    Selection Start and End to Next Transient and Play  [⌥⌘→]
+    Region Anchor to Previous Transient
+    Region Anchor to Next Transient
+---
+✓ Snap Edits to Zero Crossings
+✓ Lock Position in Track when moving Anchor  [⌃A]
+
+=== audiofile-Functions ===
+Normalize  [⌃N]
+Change Gain…  [⌃G]
+Fade-In  [⌃I]
+Fade-Out  [⌃O]
+Silence
+Invert  [⌃⇧I]
+Reverse  [⌃⇧R]
+Trim  [⌃⇧T]
+Remove DC Offset
+---
+Function Settings…
+---
+Time and Pitch Machine…  [⌃P]
+Adjust Tempo by Selection and Locators
+Search Peak  [⇧P]
+Search Silence  [⇧S]
+
+=== audiofile-View ===
+✓ Samples
+Min:Sec:Ms
+SMPTE Time
+Bars/Beats
+---
+Transient Editing Mode  [⌃T]
+---
+✓ Amplitude Percentage
+Amplitude Sample Value
+---
+Show as Sample & Hold  (disabled)
+---
+Scroll in Play  [⌃`]
+---
+Show File in Finder  [⇧⌘R]
+
+=== audiotrack-Edit ===
+Undo Edit Hint Marker  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+Delete
+Delete and Move
+---
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Track  [⌃⇧F]
+    All Inside Locators  [⇧L]
+    ---
+    Muted Regions  [⇧M]
+    Overlapped Regions  (disabled)  [⇧O]
+    Same-Colored Regions  [⇧C]
+    ---
+    Same Subposition  [⇧P]
+    Highest Notes  (disabled)  [⇧↑]
+    Lowest Notes  (disabled)  [⇧↓]
+    ---
+    Next Region  [→]
+    Previous Region  [←]
+    ---
+    Deselect All  [⇧D]
+    Deselect Global Tracks  (disabled)
+    Deselect Outside Locators
+    Invert Selection  [⇧I]
+Repeat ▸
+    Once  [⌘R]
+    Multiple…
+Length ▸
+    Double
+    Halve
+    Change…
+Split ▸
+    Regions at Playhead  [⌘T]
+    Regions at Locators  [⌥⌘T]
+Bounce or Join ▸
+    Bounce Regions in Place…  [⌃B]
+    Join  (disabled)  [⌘J]
+    Join per Tracks  (disabled)  [J]
+Move ▸
+    To Playhead  [;]
+    To Recorded Position  [⌥⇧⌘R]
+    To Beat
+    First Transient to Nearest Beat
+    To Focused Track  (disabled)  [⌃⇧T]
+    ---
+    Shuffle Left  [⌥[]
+    Shuffle Right  [⌥]]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Remove Overlaps  (disabled)  [\]
+    Fill within Locators  [⌥\]
+    Crop Outside Locators  [⌘\]
+    ---
+    Region Start to Previous Region
+    Region Start to Previous Transient  [⌃⇧[]
+    Region Start to Next Transient  [⌃⇧]]
+    ---
+    Region End to Next Region  [⇧\]
+    Region End to Previous Transient  [⌃[]
+    Region End to Next Transient  [⌃]]
+Convert ▸
+    Loops to Regions  (disabled)  [⌃⌘L]
+    Repetitions to Loops  (disabled)
+    ---
+    To MIDI Region  (disabled)  [⌃⌥⌘M]
+    To Session Player Region  (disabled)
+    Separate by Kit Piece  (disabled)
+    ---
+    Audio Regions to New Regions  [⌥⌘R]
+    Audio Regions to New Audio Files  [⌥⌘F]
+Time Stretch ▸
+    Time Stretch Region Length to Locators  [⌥⌘L]
+    Time Stretch Region Length to Nearest Bar  [⌥⌘B]
+    Time Stretching Algorithm ▸
+        ✓ Universal
+        Complex
+        Percussive
+        ---
+        Legacy Algorithms ▸
+            Version 5
+            Any Material
+            Monophonic
+            Pads
+            Rhythmic
+            Beats Only
+---
+Analyze Audio for Flex Editing
+Create MIDI Track from Flex Pitch Data  (disabled)
+---
+Open in External Sample Editor  [⇧W]
+
+=== audiotrack-Functions ===
+Rename Regions  [⇧N]
+---
+Selection-Based Processing…  [⌥⇧P]
+Apply Selection-Based Processing Again  [⌃⌥P]
+Remove Silence…  [⌃X]
+Normalize Region Gain…  [⌃⌥G]
+Apply Normalize Region Gain Again  [⌃G]
+Apply Default Crossfade  [⌃⌥X]
+Apply Last Edited Fade Again  [⌥⇧X]
+Show File in Finder  [⇧⌘R]
+---
+Lock SMPTE Position  [⌘⇟PgDn]
+Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+
+=== audiotrack-View ===
+Show Local Inspector  (disabled)  [⌥⇧I]
+Secondary Ruler  [⌃⌥⇧R]
+Marquee Ruler
+---
+Region Transpose  (disabled)
+✓ Grid Lines
+Marker Lines
+Scroll in Play  [⌃`]
+
+=== eventlist-Edit ===
+Undo Insert events  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+Delete
+Delete and Move  (disabled)
+---
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Pitch  [⌃⇧F]
+    All Inside Locators  [⇧L]
+    ---
+    Muted Events  [⇧M]
+    Overlapped Events  (disabled)  [⇧O]
+    Same-Colored Events  [⇧C]
+    ---
+    Similar Events  [⇧S]
+    Equal Events  [⇧E]
+    Same MIDI Channel  [⇧H]
+    Same Subposition  [⇧P]
+    Same Articulation  [⇧A]
+    Highest Notes  [⇧↑]
+    Lowest Notes  [⇧↓]
+    ---
+    Next Event  [→]
+    Previous Event  [←]
+    ---
+    Deselect All  [⇧D]
+    Deselect Outside Locators
+    Invert Selection  [⇧I]
+Repeat ▸
+    Once  [⌘R]
+    Multiple…
+Length ▸
+    Double
+    Halve
+    Change…
+Split ▸
+    Events at Playhead  [⌘T]
+    Events at Rounded Playhead
+    Events at Locators  [⌥⌘T]
+Join Notes  (disabled)  [⌘J]
+Move ▸
+    To Playhead  [;]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Note End to Remove Overlaps to Selected Notes (8 Ticks Gap)
+    Note End to Remove Overlaps to Following Notes (8 Ticks Gap)  [\]
+    Note End to Remove Overlaps to Repeated Notes (8 Ticks Gap)
+    ---
+    Event Start to Playhead  [⌘[]
+    Event End to Playhead  [⌘]]
+    ---
+    Note End to Selected Notes (8 Ticks Gap)
+    Note End to Selected Notes (4 Ticks Overlap)
+    Note End to Following Notes (8 Ticks Gap)  [⇧\]
+    Note End to Following Notes (4 Ticks Overlap)
+Transpose ▸
+    +1 Semitone  [⌥↑]
+    -1 Semitone  [⌥↓]
+    +12 Semitones  [⌥⇧↑]
+    -12 Semitones  [⌥⇧↓]
+---
+Copy MIDI Events…
+Delete MIDI Events ▸
+    Duplicates  [⌥D]
+    Inside Locators
+    Outside Locators
+    Outside Region Boundaries
+    Unselected Within Selection
+
+=== eventlist-Functions ===
+Mute Notes  [⌃M]
+Quantize Events  [Q]
+Dequantize  [⌥⌘Q]
+Note Events ▸
+    Convert Sustain Pedal to Note Length
+    Set MIDI Channel to Voice Number
+    Assign MIDI Channels based on Score Split  [⌃⇧C]
+---
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+---
+Lock SMPTE Position  [⌘⇟PgDn]
+Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+
+=== eventlist-View ===
+Link ▸
+    Off
+    Same Level
+    ✓ Content
+---
+Relative Position  [⌃⇧R]
+Event Position and Length as Time  [⌃⌥R]
+Length as Absolute Position  [⌃⇧A]
+SysEx in Hex Format
+---
+✓ Locked
+✓ Muted
+✓ Position
+✓ Status
+✓ Channel
+✓ Number
+✓ Value
+Articulation  [⌃⇧D]
+✓ Length/Info
+
+=== mixer-Edit ===
+Undo Insert  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…  [⌃⌥⌘Z]
+Delete Undo History
+---
+Mixer Undo Deluxe Classic: Solo
+Mixer Redo  (disabled)
+Undo selected Channel Strips
+Redo selected Channel Strips  (disabled)
+Delete Mixer Undo History
+Include Mixer Undo Steps in Project Undo History
+---
+Cut  (disabled)  [⌘X]
+Copy  (disabled)  [⌘C]
+Paste  (disabled)  [⌘V]
+Delete
+---
+Select All  [⌘A]
+Deselect All  [⇧D]
+Invert Selection  [⇧I]
+Select Audio Channel Strips  [⇧A]
+Select Instrument Channel Strips  (disabled)  [⇧S]
+Select Summing Stack Channel Strips
+Select Auxiliary Channel Strips  [⇧F]
+Select Output Channel Strips  [⇧O]
+Select MIDI Channel Strips  [⇧E]
+---
+Select Same-Colored Channel Strips  (disabled)  [⇧C]
+Select Muted Channel Strips  [⇧M]
+Select Channel Strips with Same Panner Type
+
+=== mixer-more ===
+---
+Sends on Faders ▸
+    ✓ Off
+---
+Single
+✓ Tracks
+All
+---
+✓ Audio
+✓ Inst
+✓ Aux
+✓ Bus
+✓ Input
+✓ Output
+✓ Master/VCA
+✓ MIDI
+---
+✓ Narrow Channel Strips
+Wide Channel Strips
+
+=== mixer-Options ===
+Create New Auxiliary Channel Strip  [⌃N]
+Create New VCA for Selected Channel Strips
+Create Tracks for Selected Channel Strips  (disabled)  [⌃T]
+Create Track Stack for Selected Channel Strips
+Flatten Stack  (disabled)
+Send All MIDI Mixer Data
+---
+✓ Enable Groups
+I/O Labels…
+
+=== mixer-View ===
+Hide Legend  [⌥⇧I]
+✓ Link Control Surfaces
+✓ Autoscroll to Selection
+Scroll To ▸
+    Audio
+    Instruments
+    Auxiliaries
+    Buses
+    Inputs
+    Outputs
+    Master/VCA
+    MIDI Instruments
+---
+✓ Signal Flow Channel Strips
+Channels with Sends only
+✓ Folder Tracks
+Other Tracks
+All Tracks with Same Channel Strip/Instrument
+✓ Follow Track Stacks
+✓ Follow Hide
+---
+Long Faders  [⌃⇧L]
+Channel Strip Components ▸
+    ✓ Audio Device Controls
+    Type and Number Label
+    ✓ Setting Menu
+    ✓ Gain Reduction Meter
+    ✓ EQ Thumbnail
+    ---
+    ✓ MIDI Effects
+    ✓ Input / Instrument
+    ✓ Audio Effects
+    ✓ Sends
+    ✓ Output
+    ---
+    ✓ Group  [⌃⇧G]
+    ✓ Automation
+    ✓ Track Icon  [⌃⇧I]
+    ✓ Pan Knob
+    VCA  [⌃⇧V]
+    ---
+    ✓ Track Color
+    ✓ Track Stacks
+    ✓ Track Name
+    Track Number  [⌃⇧X]
+    ✓ Control Surface Bars
+    Notes  [⌃⇧N]
+MIDI Channel Strip Components ▸
+    Instrument Name
+    Program
+    Bank
+    ✓ Assign 1
+    ✓ Assign 2
+    Assign 3
+    Assign 4
+    Assign 5
+Configure Channel Strip Components…  [⌥X]
+
+=== pianoroll-Edit ===
+Undo Insert  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…  [⌃⌥⌘Z]
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+Delete
+---
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Pitch  [⌃⇧F]
+    All Inside Locators  [⇧L]
+    ---
+    Muted Notes  [⇧M]
+    Overlapped Notes  (disabled)  [⇧O]
+    Same-Colored Notes  [⇧C]
+    ---
+    Same Note Name  (disabled)  [⇧S]
+    Same Note Pitch  (disabled)  [⇧E]
+    Same MIDI Channel  (disabled)  [⇧H]
+    Same Subposition  (disabled)  [⇧P]
+    Same Articulation  (disabled)  [⇧A]
+    Highest Notes  [⇧↑]
+    Lowest Notes  [⇧↓]
+    ---
+    Next Event  [→]
+    Previous Event  [←]
+    ---
+    Deselect All  [⇧D]
+    Deselect Global Tracks  (disabled)
+    Deselect Outside Locators
+    Invert Selection  [⇧I]
+Repeat ▸
+    Once  [⌘R]
+    Multiple…
+Length ▸
+    Double
+    Halve
+    Change…
+Split ▸
+    Notes at Playhead  [⌘T]
+    Notes at Rounded Playhead
+    Notes at Locators  [⌥⌘T]
+Join Notes  (disabled)  [⌘J]
+Move ▸
+    To Playhead  [;]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Note End to Remove Overlaps to Selected Notes (8 Ticks Gap)
+    Note End to Remove Overlaps to Following Notes (8 Ticks Gap)  [\]
+    Note End to Remove Overlaps to Repeated Notes (8 Ticks Gap)
+    ---
+    Note Start to Playhead  [⌘[]
+    Note End to Playhead  [⌘]]
+    ---
+    Note End to Selected Notes (8 Ticks Gap)
+    Note End to Selected Notes (4 Ticks Overlap)
+    Note End to Following Notes (8 Ticks Gap)  [⇧\]
+    Note End to Following Notes (4 Ticks Overlap)
+Transpose ▸
+    +1 Semitone  [⌥↑]
+    -1 Semitone  [⌥↓]
+    +12 Semitones  [⌥⇧↑]
+    -12 Semitones  [⌥⇧↓]
+---
+Copy MIDI Events…
+Delete MIDI Events ▸
+    Duplicates  [⌥D]
+    Inside Locators
+    Outside Locators
+    Outside Region Boundaries
+    Unselected Within Selection  (disabled)
+
+=== pianoroll-Functions ===
+Time Handles  [⌃T]
+---
+Quantize Notes  [Q]
+Dequantize
+Include Non-Note MIDI Events
+---
+Mute Notes  [⌃M]
+Convert Sustain Pedal to Note Length
+Set MIDI Channel to Voice Number
+Insert Instrument MIDI settings as Events
+---
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+---
+Lock SMPTE Position  [⌘⇟PgDn]
+Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+
+=== pianoroll-View ===
+✓ Link
+---
+One Track
+✓ Selected Regions
+---
+Hide Local Inspector  [⌥⇧I]
+Drum Names  (disabled)
+Note Labels
+---
+✓ Region Transpose
+Set Note Color ▸
+    By Region Color
+    ✓ By Velocity
+    By MIDI Channel
+Scroll in Play  [⌃`]
+---
+Secondary Ruler  [⌃⌥⇧R]
+Show Global Tracks
+Configure Global Tracks…
+Global Track Protect Buttons  (disabled)
+
+=== score-Edit ===
+Undo Insert events  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…  [⌃⌥⌘Z]
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste Multiple  [⌥⇧⌘V]
+Paste at Original Position
+Delete
+Repeat ▸
+    Once  [⌘R]
+    Multiple…
+Length ▸
+    Double
+    Halve
+    Change…
+---
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Pitch  [⌃⇧F]
+    All Inside Locators  [⇧L]
+    All Regions and Events
+    ---
+    Muted Notes  [⇧M]
+    Overlapped Events  (disabled)  [⇧O]
+    Same-Colored Notes  [⇧C]
+    ---
+    Similar Events  [⇧S]
+    Equal Events  [⇧E]
+    Same MIDI Channel  [⇧H]
+    Same Subposition  [⇧P]
+    Highest Notes  [⇧↑]
+    Lowest Notes  [⇧↓]
+    ---
+    Next Event  [→]
+    Previous Event  [←]
+    ---
+    Deselect All  [⇧D]
+    Deselect Global Tracks  (disabled)
+    Deselect Outside Locators
+    Invert Selection  [⇧I]
+---
+Trim ▸
+    Note End to Remove Overlaps to Selected Notes (8 Ticks Gap)
+    Note End to Remove Overlaps to Following Notes (8 Ticks Gap)  [\]
+    Note End to Remove Overlaps to Repeated Notes (8 Ticks Gap)
+    ---
+    Note Start to Playhead  [⌘[]
+    Note End to Playhead  [⌘]]
+    ---
+    Note End to Selected Notes (8 Ticks Gap)
+    Note End to Selected Notes (4 Ticks Overlap)
+    Note End to Following Notes (8 Ticks Gap)  [⇧\]
+    Note End to Following Notes (4 Ticks Overlap)
+Diatonic Insert
+Snap
+
+=== score-Functions ===
+Quantization ▸
+    Quantize Events  [Q]
+    Dequantize  [⌥⌘Q]
+    Fix displayed Note Positions
+    Fix displayed Note Positions and Durations
+Delete MIDI Events ▸
+    Duplicates  [⌥D]
+    Inside Locators
+    Outside Locators
+    Outside Region Boundaries
+    Unselected Within Selection  (disabled)
+Note Events ▸
+    Convert Sustain Pedal to Note Length
+    Set MIDI Channel to Voice Number
+    Assign MIDI Channels based on Score Split  [⌃⇧C]
+Copy MIDI Events…
+---
+Note Attributes ▸
+    Accidentals ▸
+        Default Accidental
+        ---
+        Enharmonic Shift: #  [⇧3]
+        Enharmonic Shift: b  [⇧B]
+        Flats to Sharps
+        Sharps to Flats
+        ---
+        Force Accidental
+        Hide Accidental
+        Guide Accidental
+    Stems ▸
+        Default
+        Up  [⌃⌥↑]
+        Down  [⌃⌥↓]
+        Hide
+        ---
+        Stem Position: Default
+        Stem Position: Center
+        Stem Position: Side
+        Stem Position: Automatic
+        ---
+        Stem End: Default Length
+        Stem End: Move Up  [⌥⌘↑]
+        Stem End: Move Down  [⌥⌘↓]
+    Beaming ▸
+        Default  [⌃D]
+        Beam Selected  [⌃B]
+        Unbeam Selected  [⌃U]
+    Automatic Slurs ▸
+        Convert to Manual Slur  (disabled)
+        Slur Auto Direction
+        Slur Above
+        Slur Below
+        Slur Last Note
+        Slurs for non-contiguous selected notes
+    Ties ▸
+        Default
+        Above  [⌃⌥⇧↑]
+        Below  [⌃⌥⇧↓]
+        Hide
+        ---
+        Regular Shape
+        Dotted Line
+    Syncopation ▸
+        Default
+        Force  [⌃⇧Y]
+        Defeat  [⌃Y]
+    Interpretation ▸
+        Default
+        Force  [⌃⇧I]
+        Defeat  [⌃I]
+    Independent ▸
+        Independent Grace
+        Independent
+        Not Independent
+    Voice/Staff Assignment ▸
+        Default Staff
+        Staff Above Voice
+        Staff Below Voice
+    Colors ▸
+        Default Color
+        Pitch Color
+        Velocity Color
+        ---
+        Color 0
+        Color 1
+        Color 2
+        Color 3
+        Color 4
+        Color 5
+        Color 6
+        Color 7
+        Color 8
+        Color 9
+        Color 10
+        Color 11
+        Color 12
+        Color 13
+        Color 14
+        Color 15
+    ---
+    Reset All Attributes  [⌃⇧⌫]
+Text Attributes ▸
+    Fonts…
+    Align ▸
+        ✓ Local Left
+        Local Centered
+        Local Right
+        Page Left  (disabled)
+        Page Centered  (disabled)
+        Page Right  (disabled)
+---
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+
+=== score-Layout ===
+Show Staff Styles  [⌃⌥⇧S]
+Show Score Sets  [⌃⌥⇧I]
+Text Styles…
+---
+Global Format…  [⌃⌥⇧F]
+Numbers and Names…  [⌃⌥⇧N]
+Tablature…  [⌃⌥⇧G]
+Chords and Grids…  [⌃⌥⇧C]
+Clefs and Signatures…  [⌃⌥⇧L]
+Extended Layout Parameters…  [⌃⌥⇧X]
+MIDI Meaning…  [⌃⌥⇧M]
+Colors…  [⌃⌥⇧O]
+---
+Chord Grid Library…
+Score Settings…
+---
+Create Score Set from Selection
+---
+Reset Line Layout  (disabled)
+
+=== score-View ===
+Link ▸
+    Off
+    Same Level
+    ✓ Content
+Colors ▸
+    ✓ Normal
+    Show Pitch
+    Show Velocity
+    Show Voice Assignment
+    Force Black&White
+---
+View Mode ▸
+    ✓ Linear View
+    Wrapped View
+    Page View  [⌃P]
+Page Display Options ▸
+    Show Margins  (disabled)
+    Show Pages in Pairs  (disabled)
+    Show Page Rulers  (disabled)  [⌃⇧R]
+---
+Show Local Inspector  [⌥⇧I]
+Show Region Headers
+---
+Go to Page…  (disabled)  [⌃/]
+Duration Bars ▸
+    ✓ Off
+    Selected Notes
+    All Notes
+Guides ▸
+    Off
+    ✓ Dragged Objects
+    Selected Objects
+    All Objects
+✓ Explode Folders  [⌃F]
+Explode Polyphony  [⌃X]
+Scroll in Play  [⌃`]
+---
+Secondary Ruler  [⌃⌥⇧R]
+Show Global Tracks
+Configure Global Tracks…
+Global Track Protect Buttons  (disabled)
+Show Instrument Names  [⌃⇧N]
+
+=== smarttempo-Edit ===
+Undo Edit Hint Marker
+Can’t Redo  (disabled)
+---
+Apply Region Tempo to Project Tempo…
+Apply Project Tempo to Region and Downbeat
+---
+Maintain Time Position of All Regions
+---
+✓ Apply Changes Automatically
+✓ Snap to Transients
+---
+Analyze Tempo
+Delete Hints  (disabled)
+Remove Tempo Information
+Revert to Original Recording Tempo  (disabled)
+---
+Select ▸
+    All
+    All Following
+    All Previous
+---
+---
+Set Downbeat to Playhead Position  [⌃D]
+Convert all Beat Hints to Downbeat Hints
+Convert all Downbeat Hints to Beat Hints
+---
+
+=== smarttempo-View ===
+Scroll in Play
+Show Tempo Curve Overlay
+Show Transients
+
+=== stepseq-Edit ===
+Undo Insert events  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  (disabled)  [⌘V]
+Delete
+Repeat Step  [⌘R]
+---
+Copy Row  [⌃C]
+Paste Row  (disabled)  [⌃V]
+Paste Steps  (disabled)  [⌥⇧V]
+Paste Row Settings  (disabled)  [⌃⌥⇧V]
+Paste to New Row  (disabled)  [⌃⇧V]
+Duplicate Row
+Delete Row
+Delete Unused Rows
+
+=== stepseq-Functions ===
+Live Record Options ▸
+    ✓ Velocity
+    ✓ Note Length
+    ✓ Quantize
+    ✓ MPE
+---
+Transpose +1 Semitone  [⌥↑]
+Transpose -1 Semitone  [⌥↓]
+Transpose +1 Octave  [⌥⇧↑]
+Transpose -1 Octave  [⌥⇧↓]
+Transpose to Project Key  (disabled)
+---
+Clear Step  (disabled)
+Clear Row  (disabled)
+Clear Pattern  (disabled)
+---
+Randomize Current Edit Mode for Selected Rows…
+Randomize Current Edit Mode for Pattern…
+---
+Store as Default Pattern Template  [⌃⌥⌘D]
+Revert to Default Pattern Template  (disabled)  [⌃⌥⇧D]
+
+=== stepseq-View ===
+Zoom Focused Row  [⌃Z]
+---
+Pattern Browser  [⌥⇧B]
+Show Local Inspector  [⌥⇧I]
+Display Edit Mode Values ▸
+    Only when Editing Values
+    ✓ Always for Selected Row
+    Always for All Rows
+---
+Show Row Colors
+Revert to Default Row Colors  (disabled)
+Set Step Color ▸
+    By Region
+    ✓ By Row
+---
+Sort Rows ▸
+    By Type
+    ✓ By Type and Note
+    By Type and Name
+    ---
+    Ascending
+    ✓ Descending
+
+=== tracks-Edit ===
+Undo Insert  [⌘Z]
+Can’t Redo  (disabled)  [⇧⌘Z]
+Undo History…
+Delete Undo History
+---
+Cut  [⌘X]
+Copy  [⌘C]
+Paste  [⌘V]
+Paste Replace  [⇧⌘V]
+Paste at Original Position
+Delete
+Delete and Move
+Copy Region Selection to Live Loops Scene  [⌘↖Home]
+Select ▸
+    All  [⌘A]
+    All Following  [⇧F]
+    All Following of Same Track  [⌃⇧F]
+    All Inside Locators  [⇧L]
+    ---
+    Muted Regions  [⇧M]
+    Overlapped Regions  (disabled)  [⇧O]
+    Same-Colored Regions  [⇧C]
+    ---
+    Empty Regions
+    SMPTE-Locked Regions
+    Similar Regions  [⇧S]
+    Equal Regions  [⇧E]
+    ---
+    Next Region  [→]
+    Previous Region  [←]
+    ---
+    Deselect All  [⇧D]
+    Deselect Global Tracks  (disabled)
+    Deselect Outside Locators
+    Invert Selection  [⇧I]
+Select Tracks ▸
+    All
+    Unused  (disabled)
+    Muted  (disabled)
+    Soloed  (disabled)
+    Frozen  (disabled)
+    Same-Colored
+    Instrument
+    MIDI  (disabled)
+    Audio  (disabled)
+    Aux  (disabled)
+    Sub/VCA  (disabled)
+    Summing Stack  (disabled)
+    Folder Stack  (disabled)
+    Folder  (disabled)
+---
+Show Flex Pitch/Time  [F]
+---
+Repeat ▸
+    Once  [⌘R]
+    Multiple…
+Length ▸
+    Double
+    Halve
+    Change…
+Split ▸
+    Regions at Playhead  [⌘T]
+    Regions at Locators  [⌥⌘T]
+Bounce or Join ▸
+    Bounce Regions in Place…  [⌃B]
+    Join  (disabled)  [⌘J]
+    Join per Tracks  (disabled)  [J]
+Move ▸
+    To Playhead  [;]
+    To Recorded Position  (disabled)  [⌥⇧⌘R]
+    To Beat
+    First Transient to Nearest Beat  (disabled)
+    To Focused Track  (disabled)  [⌃⇧T]
+    ---
+    Shuffle Left  [⌥[]
+    Shuffle Right  [⌥]]
+    ---
+    Nudge Left  [⌥←]
+    Nudge Right  [⌥→]
+    Slip Left  [⌃⌥←]
+    Slip Right  [⌃⌥→]
+    Rotate Left  [⌃⌥⌘←]
+    Rotate Right  [⌃⌥⌘→]
+    Set Nudge Value to ▸
+        Bar  [⌃⌥M]
+        Beat  [⌃⌥B]
+        Division  [⌃⌥D]
+        10 Ticks
+        ✓ Tick  [⌃⌥T]
+        Step Input
+        ---
+        1/1 Note
+        1/2 Note
+        1/4 Note
+        1/8 Note
+        1/16 Note
+        1/32 Note
+        1/64 Note
+        1/2 Triplet (1/3)
+        1/4 Triplet (1/6)
+        1/8 Triplet (1/12)
+        1/16 Triplet (1/24)
+        1/32 Triplet (1/48)
+        1/64 Triplet (1/96)
+        ---
+        5 Frames
+        Frame  [⌃⌥F]
+        1/2 Frame  [⌃⌥H]
+        SMPTE Bit
+        ---
+        10 ms  [⌃⌥0]
+        1 ms  [⌃⌥1]
+        Sample  [⌃⌥S]
+Trim ▸
+    Remove Overlaps  (disabled)  [\]
+    Fill within Locators  [⌥\]
+    Crop Outside Locators  [⌘\]
+    ---
+    Region Start to Previous Region
+    Region Start to Previous Transient  [⌃⇧[]
+    Region Start to Next Transient  [⌃⇧]]
+    ---
+    Region End to Next Region  [⇧\]
+    Region End to Previous Transient  [⌃[]
+    Region End to Next Transient  [⌃]]
+Convert ▸
+    Loops to Regions  (disabled)  [⌃⌘L]
+    MIDI Loops to Aliases  (disabled)
+    Repetitions to Loops  (disabled)
+    ---
+    To MIDI Region  (disabled)  [⌃⌥⌘M]
+    To Session Player Region
+    To Pattern Region
+    Separate by Kit Piece  (disabled)
+    ---
+    Audio Regions to New Regions  (disabled)  [⌥⌘R]
+    Audio Regions to New Audio Files  (disabled)  [⌥⌘F]
+Time Stretch ▸
+    Time Stretch Region Length to Locators  [⌥⌘L]
+    Time Stretch Region Length to Nearest Bar  (disabled)  [⌥⌘B]
+    Time Stretching Algorithm ▸
+        ✓ Universal
+        Complex
+        Percussive
+        ---
+        Legacy Algorithms ▸
+            Version 5
+            Any Material
+            Monophonic
+            Pads
+            Rhythmic
+            Beats Only
+---
+Copy MIDI Events…
+Delete MIDI Events ▸
+    Duplicates  [⌥D]
+    Inside Locators
+    Outside Locators
+    Outside Region Boundaries
+    Unselected Within Selection  (disabled)
+Separate MIDI Events ▸
+    Separate by Note Pitch
+    Separate by MIDI Channel
+    Separate by Articulation  (disabled)
+---
+Cut/Insert Time ▸
+    Cut Section Between Locators  [⌃⌘X]
+    Copy Section Between Locators
+    Insert Section at Playhead  (disabled)  [⌃⌘V]
+    Insert Silence at Locators  [⌃⌘I]
+    Repeat Section Between Locators  [⌃⌘R]
+    Copy Scene to Playhead  (disabled)
+    Insert Scene at Playhead  (disabled)  [⌘↘End]
+---
+Tempo ▸
+    Apply Region Tempo to Project Tempo…
+    Apply Project Tempo to Region and Downbeat
+    ---
+    Write Project Tempo to Audio Files  (disabled)
+    Remove Tempo Information  (disabled)
+    ---
+    Show Smart Tempo Editor
+    Create Smart Tempo Multitrack Set  (disabled)
+    ---
+    Adjust Tempo using Region Length and Locators
+    ---
+    Show Beat Mapping Track
+    Show Tempo List  [⌥⇧T]
+    Tempo Operations…
+    Tempo Interpreter…
+---
+Open in External Sample Editor  (disabled)  [⇧W]
+Open Smart Tempo Editor
+
+=== tracks-Functions ===
+Create MIDI Region
+Create Pattern Region
+Create Session Player Region
+---
+Rename Regions/Cells/Scenes  [⇧N]
+Name Regions/Cells by Track Name  [⌥⇧N]
+Name Track by Region/Cell Name  [⌥⇧⌘N]
+Color Regions/Cells by Track Color  [⌥⇧C]
+Color Track by Region/Cell Color  [⌥⇧⌘C]
+---
+Stem Splitter…  (disabled)
+Selection-Based Processing…  (disabled)  [⌥⇧P]
+Apply Selection-Based Processing Again  (disabled)  [⌃⌥P]
+Remove Silence from Audio Region…  (disabled)  [⌃X]
+Normalize Region Gain…  (disabled)  [⌃⌥G]
+Apply Normalize Region Gain Again  (disabled)  [⌃G]
+Apply Default Crossfade  (disabled)  [⌃⌥X]
+Apply Last Edited Fade Again  (disabled)  [⌥⇧X]
+Remove Fades  (disabled)
+Remove Fade-In  (disabled)
+Remove Crossfade  (disabled)
+Remove Fade-Out  (disabled)
+Show Audio File in Finder  (disabled)  [⇧⌘R]
+---
+MIDI Region Parameters ▸
+    Apply Quantization Permanently  [⌃Q]
+    Apply All Parameters Permanently  [⌃N]
+    Apply All except Channel
+    Apply All except Channel and Delay
+MIDI Transform ▸
+    Fixed Velocity
+    Random Pitch
+    Random Velocity
+    Random Pitch, Velocity, Length
+    Crescendo
+    Scale 14bit PitchBd
+    Double Speed
+    Half Speed
+    Humanize
+    Reverse Position
+    Reverse Pitch
+    Transposition
+    Exponential Velocity
+    Velocity Limiter
+    Fixed Note Length
+    Maximum Note Length
+    Minimum Note Length
+    Quantize Note Length
+Region Alias ▸
+    Make Alias
+    Re-Assign Alias
+    Convert Alias to a Copy  [⌃A]
+    ---
+    Select Original Region  (disabled)
+    Select Aliases of Region  [⌥⇧A]
+    ---
+    Select Orphan Aliases
+    Delete Orphan Aliases
+Insert Instrument MIDI settings as Events
+---
+Lock SMPTE Position  [⌘⇟PgDn]
+Unlock SMPTE Position  (disabled)  [⌘⇞PgUp]
+---
+Folder ▸
+    Pack Folder  [⌃⌥⇧F]
+    Pack Take Folder  [⌃⌥⌘F]
+    ---
+    Unpack Folder to New Tracks  (disabled)  [⌃⇧⌘U]
+    Unpack Folder to Existing Tracks  (disabled)  [⌃⌘U]
+
+=== tracks-more ===
+Snap ▸
+    ✓ Snap to Grid  [⌘G]
+    ---
+    ✓ Smart
+    Bar
+    Beat
+    Division
+    Ticks
+    Frames
+    Quarter Frames
+    Samples
+    ---
+    ✓ Snap Regions to Absolute Value
+    Snap Regions to Relative Value
+    ---
+    Snap Flexed Audio Regions by First Downbeat
+    Snap Quick Swipe Comping
+    Snap Edits to Zero Crossings  [⌃0]
+    ---
+    Snap Automation ▸
+        Active  (disabled)
+        ---
+        ✓ Automatic  (disabled)
+        Bar  (disabled)
+        1/2  (disabled)
+        1/4  (disabled)
+        1/8  (disabled)
+        1/16  (disabled)
+        1/32  (disabled)
+        1/64  (disabled)
+        ---
+        1/2 T  (disabled)
+        1/4 T  (disabled)
+        1/8 T  (disabled)
+        1/16 T  (disabled)
+        1/32 T  (disabled)
+        1/64 T  (disabled)
+    Automation Snap Offset…
+    ---
+    Alignment Guides  [⌥⌘G]
+Drag ▸
+    Overlap
+    ✓ No Overlap
+    X-Fade
+    Shuffle R
+    Shuffle L
+Waveform Zoom ▸
+    Waveform Zoom
+    ---
+Horizontal Auto Zoom
+Vertical Auto Zoom
+Vertical Zoom ▸
+    ---
+Horizontal Zoom ▸
+    ---
+
+=== tracks-View ===
+Link ▸
+    ✓ Off
+    Same Level
+    Content
+Zoom Focused Track  [⌃Z]
+Reset Individual Track Zoom  (disabled)  [⌥⌘⌫]
+---
+Live Loops  (disabled)
+✓ Try to Keep Cells Squared When Zooming
+Show Start Positions as Offset
+Show Length as Position
+Position and Length Resolution ▸
+    Bars only
+    ✓ Bars and Beats
+    Bars, Beats and Division
+    Bars, Beats, Division and Ticks
+---
+Tracks  (disabled)
+Secondary Ruler  [⌃⌥⇧R]
+Marquee Ruler
+✓ Grid Lines
+Marker Lines
+Scroll in Play  [⌃`]
+---
+Regions  (disabled)
+✓ Chords
+Show Creation Date
+Show Last Modification Date
+
