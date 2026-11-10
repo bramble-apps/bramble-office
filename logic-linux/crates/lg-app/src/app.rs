@@ -124,6 +124,14 @@ pub struct App {
     pub tool: crate::edit::Tool,
     pub cmd_tool: crate::edit::Tool,
     pub snap_on: bool,
+    /// The Piano Roll's inspector: shown, its Time Quantize value, Strength and Swing.
+    pub roll_inspector: bool,
+    pub roll_quantize: u32,
+    pub roll_strength: u8,
+    pub roll_swing: u8,
+    /// Tracks record-enabled (R) and input-monitored (I) in their headers.
+    pub armed: std::collections::HashSet<usize>,
+    pub monitoring: std::collections::HashSet<usize>,
     /// The Piano Roll's tool; Autopunch; the Quantize value (ticks) for the Q key.
     pub roll_tool: crate::edit::Tool,
     pub autopunch: bool,
@@ -251,6 +259,12 @@ impl App {
             tool: crate::edit::Tool::Pointer,
             cmd_tool: crate::edit::Tool::Marquee,
             snap_on: true,
+            roll_inspector: true,
+            roll_quantize: 240,
+            roll_strength: 100,
+            roll_swing: 50,
+            armed: Default::default(),
+            monitoring: Default::default(),
             roll_tool: crate::edit::Tool::Pointer,
             autopunch: false,
             quantize_grid: 240,
@@ -571,7 +585,7 @@ impl App {
         let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(start + bar);
         let length = (end.saturating_sub(start)).div_ceil(bar).max(1) * bar;
         self.checkpoint(what);
-        let t = self.selected_track.unwrap_or(0);
+        let t = self.armed.iter().min().copied().or(self.selected_track).unwrap_or(0);
         let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
         if tr.kind == TrackKind::Audio {
             return;

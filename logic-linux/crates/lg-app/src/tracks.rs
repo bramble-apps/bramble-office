@@ -236,9 +236,47 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             solo = !solo;
             changed = true;
         }
+        // R (record enable) and I (input monitoring), as Logic's headers show them
+        let armed = app.armed.contains(&i);
+        if ms(ui, Rect::from_min_size(pos2(row.min.x + 118.0, by), vec2(20.0, 17.0)), "R", armed, look::record_red(), ("rec", i)) {
+            if armed {
+                app.armed.remove(&i);
+            } else {
+                app.armed.insert(i);
+            }
+        }
+        let mon = app.monitoring.contains(&i);
+        if ms(ui, Rect::from_min_size(pos2(row.min.x + 141.0, by), vec2(20.0, 17.0)), "I", mon, Color32::from_rgb(0xe8, 0x9a, 0x2c), ("mon", i)) {
+            if mon {
+                app.monitoring.remove(&i);
+            } else {
+                app.monitoring.insert(i);
+            }
+        }
+        // the pan knob at the right
+        let mut pan = t.pan;
+        let kc = pos2(row.max.x - 18.0, by + 8.5);
+        let kresp = ui.interact(Rect::from_center_size(kc, vec2(20.0, 20.0)), ui.scope_id().with(("hpan", i)), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
+        hp.circle_filled(kc, 9.0, Color32::from_gray(0x55));
+        let ang = std::f32::consts::PI * (1.5 + 0.75 * pan);
+        hp.line_segment([kc, kc + vec2(ang.cos(), ang.sin()) * 7.5], Stroke::new(1.8, Color32::WHITE));
+        if kresp.dragged() {
+            pan = (pan - kresp.drag_delta().y / 100.0).clamp(-1.0, 1.0);
+            app.help_tag = Some(vec![("Pan".into(), format!("{:+.0}", pan * 64.0))]);
+        }
+        if kresp.double_clicked() || (kresp.clicked() && ui.input(|i| i.modifiers.alt)) {
+            pan = 0.0;
+        }
+        if pan != t.pan {
+            if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
+                tr.pan = pan;
+            }
+            app.dirty = true;
+            app.sync_mix();
+        }
         // volume: a small slider (dB)
         let mut vol = t.volume_db;
-        let vr = Rect::from_min_size(pos2(row.min.x + 124.0, by + 1.0), vec2(hw - 142.0, 15.0));
+        let vr = Rect::from_min_size(pos2(row.min.x + 170.0, by + 1.0), vec2((hw - 210.0).max(30.0), 15.0));
         let vresp = ui.interact(vr, ui.scope_id().with(("vol", i)), Sense::click_and_drag()).on_hover_text(format!("Volume {vol:.1} dB"));
         let frac = db_to_frac(vol);
         hp.rect_filled(Rect::from_center_size(pos2(vr.center().x, vr.center().y), vec2(vr.width(), 4.0)), 2.0, look::group_bg());

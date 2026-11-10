@@ -12,6 +12,8 @@ use crate::look;
 const TABS_H: f32 = 40.0;
 const RULER_H: f32 = 34.0;
 const KEYS_W: f32 = 56.0;
+const LOCAL_H: f32 = 28.0;
+const ROLL_INSPECTOR_W: f32 = 220.0;
 const ROW: f32 = 13.0;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
@@ -53,8 +55,29 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         p.text(area.center(), Align2::CENTER_CENTER, "An audio region: the Audio Track Editor isn't available yet", look::regular(14.0), look::text_dim());
         return;
     }
+    // the local menus (Logic's Edit / Functions / View) and, at the left, the Piano Roll's own
+    // inspector (Time Quantize, Strength, Swing, Scale Quantize, Velocity)
+    let local = Rect::from_min_size(pos2(area.min.x, tabs.max.y), vec2(area.width(), LOCAL_H));
+    p.rect_filled(local, 0.0, look::header_bg());
+    p.hline(local.x_range(), local.max.y, Stroke::new(1.0, look::line()));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+        for (title, name) in [("Edit", "pianoroll-Edit"), ("Functions", "pianoroll-Functions"), ("View", "pianoroll-View")] {
+            ui.menu_button(format!("{title} ⌄"), |ui| crate::menus::show_items(app, ui, crate::menus::local(name)));
+        }
+        let label = if app.roll_inspector { "Hide Inspector" } else { "Show Inspector" };
+        if ui.small_button("◧").on_hover_text(label).clicked() {
+            app.roll_inspector = !app.roll_inspector;
+        }
+    });
+    let mut left = area.min.x;
+    if app.roll_inspector && area.width() > 700.0 {
+        let ir = Rect::from_min_max(pos2(area.min.x, local.max.y), pos2(area.min.x + ROLL_INSPECTOR_W, area.max.y));
+        inspector(app, ui, ir, ti, ri);
+        left = ir.max.x + 1.0;
+    }
+    let tabs = Rect::from_min_max(pos2(left, tabs.min.y), pos2(tabs.max.x, tabs.max.y + LOCAL_H));
     let grid_top = tabs.max.y + RULER_H;
-    let keys = Rect::from_min_max(pos2(area.min.x, grid_top), pos2(area.min.x + KEYS_W, area.max.y));
+    let keys = Rect::from_min_max(pos2(left, grid_top), pos2(left + KEYS_W, area.max.y));
     let grid = Rect::from_min_max(pos2(keys.max.x, grid_top), area.max);
     let ruler = Rect::from_min_max(pos2(grid.min.x, tabs.max.y), pos2(grid.max.x, grid_top));
     let bar_t = app.bar_ticks() as f32;
@@ -292,4 +315,141 @@ pub(crate) fn preview(app: &mut App, track: usize, pitch: u8) {
             t.notes.retain(|n| !(n.0 == pos + 1 && n.2 == pitch && n.3 == 100));
         }
     });
+}
+
+/// The Piano Roll's inspector: what's selected, Time Quantize (value, Strength, Swing, Q),
+/// Scale Quantize (to the project's key, Q), Velocity of the selected notes.
+fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize, rg: usize) {
+    let p = ui.painter_at(r);
+    p.rect_filled(r, 0.0, look::pane_bg());
+    p.vline(r.max.x, r.y_range(), Stroke::new(1.0, look::line()));
+    let Some(region) = app.project.as_ref().and_then(|pr| pr.tracks.get(t)?.regions.get(rg)).cloned() else { return };
+    let n_sel = app.selected_notes.len();
+    let what = match n_sel {
+        0 => format!("{} notes", region.notes.len()),
+        1 => "One note selected".to_string(),
+        n => format!("{n} notes selected"),
+    };
+    let mut y = r.min.y + 10.0;
+    p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, what, look::semibold(13.0), look::text());
+    p.text(pos2(r.min.x + 12.0, y + 26.0), Align2::LEFT_CENTER, format!("in {}", region.name), look::regular(11.5), look::text_dim());
+    y += 46.0;
+    p.hline(r.x_range(), y, Stroke::new(1.0, look::line()));
+    y += 10.0;
+    p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, "Time Quantize", look::regular(12.5), look::text());
+    y += 22.0;
+    let names: Vec<&str> = crate::inspector::QUANTIZE.iter().map(|q| q.0).collect();
+    let cur = crate::inspector::QUANTIZE.iter().position(|q| q.1 == app.roll_quantize).unwrap_or(0);
+    if let Some(k) = crate::widgets::choice_slot(ui, Rect::from_min_size(pos2(r.min.x + 10.0, y), vec2(r.width() - 60.0, 22.0)), ui.scope_id().with("rq"), cur, &names) {
+        app.roll_quantize = crate::inspector::QUANTIZE[k].1;
+    }
+    let qb = Rect::from_min_size(pos2(r.max.x - 44.0, y), vec2(32.0, 22.0));
+    if ui.put(qb, egui::Button::new("Q")).on_hover_text("Quantize the selected notes (all, with none selected)").clicked() && app.roll_quantize > 0 {
+        let (grid, strength, swing) = (app.roll_quantize as f64, app.roll_strength as f64 / 100.0, app.roll_swing as f64);
+        let start = region.start as f64;
+        let sel = app.selected_notes.clone();
+        app.checkpoint("Quantize");
+        if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(rg)) {
+            for (i, n) in x.notes.iter_mut().enumerate() {
+                if !sel.is_empty() && !sel.contains(&i) {
+                    continue;
+                }
+                let rel = n.pos as f64 - start;
+                let k = (rel / grid).round();
+                let mut target = k * grid;
+                if (k as i64) % 2 == 1 {
+                    target += grid * (swing - 50.0) / 100.0;
+                }
+                n.pos = (start + rel + (target - rel) * strength).max(0.0).round() as u32;
+            }
+        }
+        app.after_edit();
+    }
+    y += 32.0;
+    for (label, v) in [("Strength", 0usize), ("Swing", 1)] {
+        let val = if v == 0 { &mut app.roll_strength } else { &mut app.roll_swing };
+        p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, label, look::regular(12.0), look::text_dim());
+        p.text(pos2(r.max.x - 12.0, y + 8.0), Align2::RIGHT_CENTER, format!("{}", *val), look::regular(12.0), look::text());
+        y += 18.0;
+        let sr = Rect::from_min_size(pos2(r.min.x + 12.0, y), vec2(r.width() - 24.0, 16.0));
+        let resp = ui.interact(sr, ui.scope_id().with(("rqs", v)), Sense::click_and_drag());
+        if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
+            *val = (((pp.x - sr.min.x) / sr.width()).clamp(0.0, 1.0) * 100.0).round() as u8;
+        }
+        let f = *val as f32 / 100.0;
+        p.rect_filled(Rect::from_center_size(sr.center(), vec2(sr.width(), 4.0)), 2.0, look::group_bg());
+        p.rect_filled(Rect::from_min_size(pos2(sr.min.x, sr.center().y - 2.0), vec2(sr.width() * f, 4.0)), 2.0, look::accent());
+        p.circle_filled(pos2(sr.min.x + sr.width() * f, sr.center().y), 7.0, Color32::from_gray(0xe8));
+        y += 26.0;
+    }
+    p.hline(r.x_range(), y, Stroke::new(1.0, look::line()));
+    y += 10.0;
+    p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, "Scale Quantize", look::regular(12.5), look::text());
+    y += 22.0;
+    let key = app.project.as_ref().map(|pr| pr.key.clone()).unwrap_or_else(|| "C major".into());
+    p.text(pos2(r.min.x + 12.0, y + 11.0), Align2::LEFT_CENTER, &key, look::regular(12.0), look::text_dim());
+    let sq = Rect::from_min_size(pos2(r.max.x - 44.0, y), vec2(32.0, 22.0));
+    if ui.put(sq, egui::Button::new("Q")).on_hover_text("Move the notes onto the key's scale").clicked() {
+        let scale = scale_of(&key);
+        let sel = app.selected_notes.clone();
+        app.checkpoint("Scale Quantize");
+        if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(rg)) {
+            for (i, n) in x.notes.iter_mut().enumerate() {
+                if (!sel.is_empty() && !sel.contains(&i)) || scale[(n.pitch % 12) as usize] {
+                    continue;
+                }
+                // the nearest scale note (down first, as Logic does)
+                n.pitch = if n.pitch > 0 && scale[((n.pitch - 1) % 12) as usize] { n.pitch - 1 } else { (n.pitch + 1).min(127) };
+            }
+        }
+        app.after_edit();
+    }
+    y += 34.0;
+    p.hline(r.x_range(), y, Stroke::new(1.0, look::line()));
+    y += 10.0;
+    // Velocity: the selected notes' (their mean shown; dragging sets them all, keeping spreads)
+    let sel: Vec<usize> = if app.selected_notes.is_empty() { (0..region.notes.len()).collect() } else { app.selected_notes.clone() };
+    let mean = if sel.is_empty() { 0.0 } else { sel.iter().filter_map(|&i| region.notes.get(i)).map(|n| n.velocity as f32).sum::<f32>() / sel.len() as f32 };
+    p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, "Velocity", look::regular(12.5), look::text());
+    p.text(pos2(r.max.x - 12.0, y + 8.0), Align2::RIGHT_CENTER, format!("{mean:.0}"), look::regular(12.0), look::text());
+    y += 20.0;
+    let sr = Rect::from_min_size(pos2(r.min.x + 12.0, y), vec2(r.width() - 24.0, 16.0));
+    let resp = ui.interact(sr, ui.scope_id().with("rvel"), Sense::click_and_drag());
+    if resp.drag_started() {
+        app.checkpoint("Change Velocity");
+    }
+    if let (true, Some(pp)) = (resp.dragged(), resp.interact_pointer_pos()) {
+        let target = (((pp.x - sr.min.x) / sr.width()).clamp(0.0, 1.0) * 126.0 + 1.0).round();
+        let d = target - mean;
+        if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(rg)) {
+            for &i in &sel {
+                if let Some(n) = x.notes.get_mut(i) {
+                    n.velocity = (n.velocity as f32 + d).round().clamp(1.0, 127.0) as u8;
+                }
+            }
+        }
+    }
+    if resp.drag_stopped() {
+        app.after_edit();
+    }
+    let f = mean / 127.0;
+    p.rect_filled(Rect::from_center_size(sr.center(), vec2(sr.width(), 4.0)), 2.0, look::group_bg());
+    p.rect_filled(Rect::from_min_size(pos2(sr.min.x, sr.center().y - 2.0), vec2(sr.width() * f, 4.0)), 2.0, velocity_color(mean as u8));
+    p.circle_filled(pos2(sr.min.x + sr.width() * f, sr.center().y), 7.0, Color32::from_gray(0xe8));
+}
+
+/// Which pitch classes are in a key ("C major", "A minor"; natural minor).
+pub fn scale_of(key: &str) -> [bool; 12] {
+    let mut it = key.split_whitespace();
+    let root = it.next().unwrap_or("C");
+    let minor = it.next().is_some_and(|q| q.starts_with("min"));
+    let names = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+    let alt = ["C", "D♭", "D", "D♯", "E", "F", "G♭", "G", "G♯", "A", "A♯", "B"];
+    let r = names.iter().position(|n| *n == root).or_else(|| alt.iter().position(|n| *n == root)).unwrap_or(0);
+    let steps: [usize; 7] = if minor { [0, 2, 3, 5, 7, 8, 10] } else { [0, 2, 4, 5, 7, 9, 11] };
+    let mut out = [false; 12];
+    for s in steps {
+        out[(r + s) % 12] = true;
+    }
+    out
 }

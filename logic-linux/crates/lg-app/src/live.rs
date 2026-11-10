@@ -102,7 +102,8 @@ const TYPING: [(egui::Key, u8); 18] = [
 
 /// A note starts (velocity > 0) or stops, from either source.
 pub fn note(app: &mut App, pitch: u8, velocity: u8) {
-    let t = app.selected_track.unwrap_or(0);
+    // (to the record-enabled track, else the selected one)
+    let t = app.armed.iter().min().copied().or(app.selected_track).unwrap_or(0);
     if let Ok(mut e) = app.engine.lock() {
         if velocity == 0 && app.live.sustain {
             // held by the sustain: recorded as released now, sounding on
