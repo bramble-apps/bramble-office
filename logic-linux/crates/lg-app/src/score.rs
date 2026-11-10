@@ -11,7 +11,7 @@
 //!
 //! Music symbols are drawn with shapes (no music font is bundled).
 
-use egui::epaint::{CubicBezierShape, PathShape, PathStroke};
+use egui::epaint::{PathShape, PathStroke};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Shape, Stroke};
 use lg_core::events::Note;
 use lg_notation as nt;
@@ -330,9 +330,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             x += 1.1 * sp;
         }
         x += 0.8 * sp;
-        let f = look::bold(sp * 2.6);
-        headp.text(pos2(x + sp, staff.bottom - 3.0 * sp), Align2::CENTER_CENTER, sig.0.to_string(), f.clone(), INK);
-        headp.text(pos2(x + sp, staff.bottom - 1.0 * sp), Align2::CENTER_CENTER, sig.1.to_string(), f, INK);
+        // SMuFL time signature digits, centred on the fourth and second lines
+        let digits = |n: u8| -> String { n.to_string().chars().map(|d| char::from_u32(0xE080 + d.to_digit(10).unwrap_or(0)).unwrap_or(' ')).collect() };
+        for (n, line) in [(sig.0, 3.0), (sig.1, 1.0)] {
+            let g = headp.layout_no_wrap(digits(n), look::music(4.0 * sp), INK);
+            let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(0.0, |gl| gl.pos.y);
+            let w = g.size().x;
+            headp.galley(pos2(x + sp - w / 2.0, staff.bottom - line * sp - base), g, INK);
+        }
         // bar lines
         for b in first..first + (music.width() / bw).ceil() as i32 + 2 {
             let x = x_of(b as f32 * bar_t);
@@ -573,19 +578,14 @@ fn ellipse(c: Pos2, rx: f32, ry: f32, angle: f32, n: usize) -> Vec<Pos2> {
 
 /// A notehead: filled (quarter and shorter), open (half), whole.
 fn notehead(p: &egui::Painter, c: Pos2, sp: f32, base: u8, col: Color32, paper: Color32) {
-    match base {
-        1 => {
-            p.add(Shape::convex_polygon(ellipse(c, 0.8 * sp, 0.5 * sp, 0.0, 28), col, Stroke::NONE));
-            p.add(Shape::convex_polygon(ellipse(c, 0.36 * sp, 0.28 * sp, 1.0, 20), paper, Stroke::NONE));
-        }
-        2 => {
-            p.add(Shape::convex_polygon(ellipse(c, 0.64 * sp, 0.45 * sp, -0.35, 28), col, Stroke::NONE));
-            p.add(Shape::convex_polygon(ellipse(c, 0.52 * sp, 0.2 * sp, -0.55, 24), paper, Stroke::NONE));
-        }
-        _ => {
-            p.add(Shape::convex_polygon(ellipse(c, 0.64 * sp, 0.45 * sp, -0.35, 28), col, Stroke::NONE));
-        }
-    }
+    let _ = paper;
+    // SMuFL noteheadWhole / noteheadHalf / noteheadBlack: centred on the baseline
+    let ch = match base {
+        1 => '\u{E0A2}',
+        2 => '\u{E0A3}',
+        _ => '\u{E0A4}',
+    };
+    smufl(p, ch, c, sp, col, true);
 }
 
 fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &dyn Fn(f32) -> f32, selected: &dyn Fn(usize) -> bool, sel_color: Color32) {
@@ -795,92 +795,49 @@ fn tie(p: &egui::Painter, a: Pos2, b: Pos2, lift: f32, sp: f32, col: Color32) {
 }
 
 fn flag(p: &egui::Painter, at: Pos2, sp: f32, up: bool, col: Color32) {
-    let d = if up { 1.0 } else { -1.0 };
-    // the front edge sweeps out from the stem and down; the back edge comes back to it thinner
-    let front = bezier([at, pos2(at.x + 0.15 * sp, at.y + d * 0.9 * sp), pos2(at.x + 1.35 * sp, at.y + d * 1.3 * sp), pos2(at.x + 0.95 * sp, at.y + d * 2.9 * sp)], 18);
-    let back = bezier([pos2(at.x, at.y + d * 0.75 * sp), pos2(at.x + 0.25 * sp, at.y + d * 1.35 * sp), pos2(at.x + 1.1 * sp, at.y + d * 1.6 * sp), pos2(at.x + 0.95 * sp, at.y + d * 2.9 * sp)], 18);
-    band(p, &front, &back, col);
+    // SMuFL flag8thUp / flag8thDown: their origin is the stem's end (the stem is 0.12 sp wide)
+    let ch = if up { '\u{E240}' } else { '\u{E241}' };
+    smufl(p, ch, pos2(at.x - 0.06 * sp, at.y), sp, col, false);
 }
 
 
 /// Rests at x (centre) on a staff whose bottom line is at `bottom`.
 fn rest(p: &egui::Painter, x: f32, bottom: f32, sp: f32, v: nt::Value, full_bar: bool, col: Color32) {
+    let _ = full_bar;
     let y = |pos: f32| bottom - pos * sp / 2.0;
-    match v.base {
-        1 => {
-            // hangs from the fourth line
-            p.rect_filled(Rect::from_min_max(pos2(x - 0.6 * sp, y(6.0)), pos2(x + 0.6 * sp, y(6.0) + 0.5 * sp)), 0.0, col);
-            let _ = full_bar;
-        }
-        2 => {
-            p.rect_filled(Rect::from_min_max(pos2(x - 0.6 * sp, y(4.0) - 0.5 * sp), pos2(x + 0.6 * sp, y(4.0))), 0.0, col);
-        }
-        4 => {
-            let m = y(4.0);
-            let pt = |a: f32, b: f32| pos2(x + a * sp, m + b * sp);
-            let w = 0.22 * sp;
-            p.line_segment([pt(-0.25, -1.5), pt(0.35, -0.75)], Stroke::new(w, col));
-            p.add(Shape::convex_polygon(vec![pt(0.35, -0.75), pt(-0.25, -0.1), pt(-0.05, 0.1), pt(0.5, -0.55)], col, Stroke::NONE));
-            p.line_segment([pt(-0.2, -0.1), pt(0.35, 0.55)], Stroke::new(w * 1.1, col));
-            let hook = CubicBezierShape::from_points_stroke([pt(0.35, 0.55), pt(-0.3, 0.3), pt(-0.45, 1.0), pt(0.1, 1.4)], false, Color32::TRANSPARENT, Stroke::new(w, col));
-            p.add(hook);
-        }
-        _ => {
-            // 8th, 16th, 32nd, 64th: hooks down a slanted stem
-            let n = v.flags() as f32;
-            let top = y(5.0) + 0.0;
-            let stem_top = pos2(x + 0.45 * sp, top - (n - 1.0).max(0.0) * 0.0);
-            let stem_bot = pos2(x - 0.1 * sp - n * 0.15 * sp, y(5.0) + (n + 1.0) * sp);
-            p.line_segment([stem_top, stem_bot], Stroke::new(0.14 * sp, col));
-            for k in 0..n as usize {
-                let t = k as f32 / (n + 1.0).max(1.0);
-                let at = pos2(stem_top.x + (stem_bot.x - stem_top.x) * t, stem_top.y + (stem_bot.y - stem_top.y) * t);
-                let dot = pos2(at.x - 0.85 * sp, at.y + 0.1 * sp);
-                p.circle_filled(dot, 0.26 * sp, col);
-                let curve = CubicBezierShape::from_points_stroke([dot, pos2(dot.x + 0.2 * sp, at.y + 0.45 * sp), pos2(at.x - 0.2 * sp, at.y + 0.3 * sp), at], false, Color32::TRANSPARENT, Stroke::new(0.16 * sp, col));
-                p.add(curve);
-            }
-        }
-    }
+    // SMuFL rests: the whole rest hangs from the fourth line, the others sit on the middle one
+    let (ch, line) = match v.base {
+        1 => ('\u{E4E3}', 6.0),
+        2 => ('\u{E4E4}', 4.0),
+        4 => ('\u{E4E5}', 4.0),
+        8 => ('\u{E4E6}', 4.0),
+        16 => ('\u{E4E7}', 4.0),
+        32 => ('\u{E4E8}', 4.0),
+        _ => ('\u{E4E9}', 4.0),
+    };
+    smufl(p, ch, pos2(x, y(line)), sp, col, true);
 }
 
 /// ♯ ♭ ♮ (and double signs as two) centred at `c`.
 fn accidental(p: &egui::Painter, c: Pos2, sp: f32, alter: i8, col: Color32) {
-    let thin = Stroke::new((0.11 * sp).max(1.0), col);
-    let thick = (0.3 * sp).max(1.5);
-    match alter {
-        1 => {
-            for dx in [-0.22, 0.22] {
-                p.line_segment([pos2(c.x + dx * sp, c.y - 1.3 * sp + dx * 0.4 * sp), pos2(c.x + dx * sp, c.y + 1.3 * sp + dx * 0.4 * sp)], thin);
-            }
-            for dy in [-0.42, 0.42] {
-                let y = c.y + dy * sp;
-                p.add(Shape::convex_polygon(vec![pos2(c.x - 0.5 * sp, y + 0.15 * sp), pos2(c.x + 0.5 * sp, y - 0.15 * sp), pos2(c.x + 0.5 * sp, y - 0.15 * sp + thick), pos2(c.x - 0.5 * sp, y + 0.15 * sp + thick)], col, Stroke::NONE));
-            }
-        }
-        2 => {
-            let d = 0.32 * sp;
-            p.line_segment([pos2(c.x - d, c.y - d), pos2(c.x + d, c.y + d)], Stroke::new(0.18 * sp, col));
-            p.line_segment([pos2(c.x - d, c.y + d), pos2(c.x + d, c.y - d)], Stroke::new(0.18 * sp, col));
-        }
-        -1 | -2 => {
-            let n = if alter == -2 { 2 } else { 1 };
-            for k in 0..n {
-                let x = c.x - 0.25 * sp - k as f32 * 0.7 * sp + if n == 2 { 0.35 * sp } else { 0.0 };
-                p.line_segment([pos2(x, c.y - 1.7 * sp), pos2(x, c.y + 0.5 * sp)], thin);
-                let bowl = CubicBezierShape::from_points_stroke([pos2(x, c.y - 0.1 * sp), pos2(x + 0.5 * sp, c.y - 0.55 * sp), pos2(x + 0.85 * sp, c.y - 0.05 * sp), pos2(x, c.y + 0.5 * sp)], false, Color32::TRANSPARENT, Stroke::new(0.2 * sp, col));
-                p.add(bowl);
-            }
-        }
-        _ => {
-            p.line_segment([pos2(c.x - 0.3 * sp, c.y - 1.2 * sp), pos2(c.x - 0.3 * sp, c.y + 0.6 * sp)], thin);
-            p.line_segment([pos2(c.x + 0.3 * sp, c.y - 0.6 * sp), pos2(c.x + 0.3 * sp, c.y + 1.2 * sp)], thin);
-            for dy in [-0.45, 0.35] {
-                let y = c.y + dy * sp;
-                p.add(Shape::convex_polygon(vec![pos2(c.x - 0.3 * sp, y + 0.1 * sp), pos2(c.x + 0.3 * sp, y - 0.1 * sp), pos2(c.x + 0.3 * sp, y - 0.1 * sp + thick * 0.8), pos2(c.x - 0.3 * sp, y + 0.1 * sp + thick * 0.8)], col, Stroke::NONE));
-            }
-        }
-    }
+    // SMuFL accidentalFlat / Natural / Sharp / DoubleSharp / DoubleFlat
+    let ch = match alter {
+        -2 => '\u{E264}',
+        -1 => '\u{E260}',
+        1 => '\u{E262}',
+        2 => '\u{E263}',
+        _ => '\u{E261}',
+    };
+    smufl(p, ch, c, sp, col, true);
+}
+
+/// A SMuFL glyph with its origin (the baseline's left end, or its centre with `centre`) at `at`.
+fn smufl(p: &egui::Painter, ch: char, at: Pos2, sp: f32, col: Color32, centre: bool) {
+    let g = p.layout_no_wrap(ch.to_string(), look::music(4.0 * sp), col);
+    let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(g.size().y * 0.8, |gl| gl.pos.y);
+    let w = g.size().x;
+    let x = if centre { at.x - w / 2.0 } else { at.x };
+    p.galley(pos2(x, at.y - base), g, col);
 }
 
 /// A smooth curve through points (Catmull-Rom), sampled.
@@ -903,42 +860,17 @@ fn spline(pts: &[(f32, f32)], per: usize) -> Vec<(f32, f32)> {
     out
 }
 
-/// A calligraphic stroke: thicker where the pen moves up and down, thin across.
-fn pen(p: &egui::Painter, pts: &[Pos2], thin: f32, thick: f32, col: Color32) {
-    for w in pts.windows(2) {
-        let d = w[1] - w[0];
-        let len = d.length().max(0.001);
-        let vertical = (d.y / len).abs();
-        let width = thin + (thick - thin) * vertical * vertical;
-        let n = vec2(-d.y, d.x) / len * width / 2.0;
-        p.add(Shape::convex_polygon(vec![w[0] + n, w[1] + n, w[1] - n, w[0] - n], col, Stroke::NONE));
-        p.circle_filled(w[1], width / 2.0, col);
-    }
-}
 
 /// The G clef, curling round the second line; `at` is the stroke's x on the bottom line.
 pub(crate) fn treble_clef(p: &egui::Painter, at: Pos2, sp: f32, col: Color32) {
-    // in spaces: x right, y up from the bottom line
-    let pts = [
-        (-0.55, -1.75), (-0.3, -2.2), (0.15, -2.25), (0.45, -1.8), (0.38, -0.8), (0.22, 1.5), (0.08, 3.5), (0.15, 4.8),
-        (0.45, 5.65), (0.62, 6.3), (0.35, 6.55), (-0.05, 6.0), (-0.42, 5.0), (-0.75, 4.0), (-1.05, 3.0), (-1.2, 2.0),
-        (-1.08, 0.9), (-0.6, 0.15), (0.1, -0.05), (0.75, 0.3), (1.0, 1.0), (0.82, 1.72), (0.2, 1.98), (-0.32, 1.62), (-0.4, 1.05), (-0.12, 0.62),
-    ];
-    let s = spline(&pts, 6);
-    let pts: Vec<Pos2> = s.iter().map(|&(x, y)| pos2(at.x + x * sp, at.y - y * sp)).collect();
-    pen(p, &pts, 0.1 * sp, 0.36 * sp, col);
-    p.circle_filled(pos2(at.x - 0.55 * sp, at.y + 1.75 * sp), 0.36 * sp, col);
+    // SMuFL gClef: its origin on the G line (the second line)
+    smufl(p, '\u{E050}', pos2(at.x - 1.3 * sp, at.y - sp), sp, col, false);
 }
 
 /// The F clef: its dot on the fourth line, two dots either side of it.
 pub(crate) fn bass_clef(p: &egui::Painter, at: Pos2, sp: f32, col: Color32) {
-    let pts = [(0.0, 3.0), (0.25, 3.55), (0.95, 3.92), (1.7, 3.6), (1.98, 2.7), (1.65, 1.6), (0.95, 0.75), (0.05, 0.05)];
-    let s = spline(&pts, 6);
-    let pts: Vec<Pos2> = s.iter().map(|&(x, y)| pos2(at.x + x * sp, at.y - y * sp)).collect();
-    pen(p, &pts, 0.12 * sp, 0.42 * sp, col);
-    p.circle_filled(pos2(at.x + 0.22 * sp, at.y - 3.0 * sp), 0.42 * sp, col);
-    p.circle_filled(pos2(at.x + 2.5 * sp, at.y - 3.5 * sp), 0.18 * sp, col);
-    p.circle_filled(pos2(at.x + 2.5 * sp, at.y - 2.5 * sp), 0.18 * sp, col);
+    // SMuFL fClef: its origin on the F line (the fourth line)
+    smufl(p, '\u{E062}', pos2(at.x - 0.3 * sp, at.y - 3.0 * sp), sp, col, false);
 }
 
 fn brace(p: &egui::Painter, x: f32, y0: f32, y1: f32, col: Color32) {

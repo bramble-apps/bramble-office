@@ -23,3 +23,7 @@ B Browser, I Inspector, M / S mute / solo the selected track, , and . a bar back
 
 `LG_SNAP=out.png` draws the window and saves it (checks); research samples go in
 `testdata-private/` (not published).
+
+## Bundled fonts
+
+- **Bravura** (crates/lg-app/fonts/Bravura.otf), the Score editor's music symbols (SMuFL), © Steinberg Media Technologies GmbH, under the SIL Open Font License 1.1 (crates/lg-app/fonts/Bravura-OFL.txt). Version 1.482 from github.com/steinbergmedia/bravura.

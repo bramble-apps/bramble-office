@@ -96,6 +96,14 @@ fn use_sfera(ctx: &egui::Context) {
     ctx.add_font(FontInsert::new(&format!("lg-sfera-{g}"), egui::FontData::from_static(REGULAR), vec![at(FontFamily::Proportional)]));
     ctx.add_font(FontInsert::new(&format!("lg-sfera-bold-{g}"), egui::FontData::from_static(BOLD), vec![at(FontFamily::Name("bold".into()))]));
     ctx.add_font(FontInsert::new(&format!("lg-sfera-semibold-{g}"), egui::FontData::from_static(SEMIBOLD), vec![at(FontFamily::Name("semibold".into()))]));
+    // Bravura (SIL OFL 1.1, Steinberg): the Score's music symbols, by their SMuFL code points
+    static BRAVURA: &[u8] = include_bytes!("../fonts/Bravura.otf");
+    ctx.add_font(FontInsert::new(&format!("lg-bravura-{g}"), egui::FontData::from_static(BRAVURA), vec![at(FontFamily::Name("bravura".into()))]));
+}
+
+/// The music font (Bravura) at `size`: SMuFL's em is the staff's height, four staff spaces.
+pub fn music(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("bravura".into()))
 }
 
 pub fn regular(size: f32) -> FontId {
