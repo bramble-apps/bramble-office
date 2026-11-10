@@ -1,0 +1,731 @@
+=== Bramble Studio ===
+  About Bramble Studio
+  Learn About Apple Creator Studio…
+  Learn About Logic Remote…
+  ---
+  Manage Subscriptions
+  Intelligence Features ▸
+      Show Usage
+  ---
+  Settings ▸
+      General…
+      Audio…
+      Recording…
+      MIDI…
+      Score…
+      Movie…
+      Automation…
+      Control Surfaces…
+      View…
+      My Info…
+      ---
+      Reset All Settings Except Key Command Assignments…
+      ---
+      Plug-in Manager…
+      Chord Grid Library…
+  Control Surfaces ▸
+      Learn Assignment for “Solo”  [⌘L]
+      Controller Assignments…  [⌥⇧K]
+      ---
+      Setup…
+      Settings…
+      ---
+      Rebuild Defaults
+      Bypass All Control Surfaces
+  Key Commands ▸
+      Presets ▸
+          Simplified Chinese
+          Spanish
+          • Pro Tools
+          German
+          French
+          Japanese
+          ✓ U.S.
+          Swedish
+          Italian
+          ---
+      Edit Assignments…  [⌥K]
+  ---
+  Sound Library…
+  ---
+  Provide Bramble Studio Feedback
+  Privacy & Analytics
+  ---
+  Services ▸
+      <per-user entries removed>
+  ---
+  Hide Bramble Studio  [⌘H]
+  Hide Others  [⌥⌘H]
+  Show All
+  ---
+  Quit Bramble Studio  [⌘Q]
+=== File ===
+  New  [⇧⌘N]
+  New from Template…  [⌘N]
+  Open…  [⌘O]
+  Open Recent ▸
+      <per-user entries removed>
+  ---
+  Close  [⌘W]
+  Close Project  [⌥⌘W]
+  Save  [⌘S]
+  Save As…  [⇧⌘S]
+  Save A Copy As…
+  Save as Template…
+  Revert to ▸
+      Saved		11/9/26, 9:02:27 PM
+  ---
+  Project Alternatives ▸
+      New Alternative…
+      Edit Alternatives…
+      Export Alternative as Project…
+      ---
+      ✓ Untitled
+  Project Management ▸
+      Clean Up…
+      Consolidate…
+      Rename…
+      Show in Finder…
+  Project Settings ▸
+      General…
+      Audio…
+      Recording…
+      Smart Tempo…
+      MIDI…
+      Score…
+      Movie…
+      Synchronization…
+      Metronome…
+      Tuning…
+      Assets…
+      ---
+      Import Project Settings…
+  ---
+  Page Setup…  (disabled)
+  Print  (disabled)  [⌘P]
+  ---
+  Movie ▸
+      ---
+      Open Movie…  [⌥⌘O]
+      Remove Movie  (disabled)
+      ---
+      Show in Finder  (disabled)
+      Move Movie Files out of Project…  (disabled)
+      ---
+      Import Audio from Movie  (disabled)
+      Export Audio to Movie…  (disabled)
+  ---
+  Import ▸
+      Logic Projects…
+      Live Loops Grid…
+      Audio File…  (disabled)  [⇧⌘I]
+      MIDI File…
+      MusicXML…
+      ---
+      Final Cut Pro XML…
+      AAF…
+      Create Project from ADM BWF…
+      Other…  [⌘I]
+  Export ▸
+      Add to Browser…  [⌃⇧O]
+      Regions as Audio Files…  (disabled)
+      Audio Files As…  (disabled)
+      ---
+      Selection as Audio File…  (disabled)
+      Selection as MIDI File…  (disabled)  [⌥⌘E]
+      Selected Track(s) as MainStage Patch…
+      Selected Track(s) as MainStage Set…
+      ---
+      1 Track as Audio File…  [⌘E]
+      All Tracks as Audio Files…  [⇧⌘E]
+      All MIDI Tracks as MIDI File…  (disabled)
+      ---
+      Project as AAF File…
+      Project to Final Cut Pro XML…
+      Project as Spatial Audio…  (disabled)
+      Score as MusicXML…  (disabled)
+  Bounce ▸
+      Regions in Place…  (disabled)  [⌃B]
+      Track in Place…  [⌃⌘B]
+      And Replace All Tracks…
+      ---
+      Project or Section…  [⌘B]
+  Share ▸
+      Song to Music…
+      Song to Voice Memos…
+      ---
+      AirDrop…
+      Mail…
+      ---
+      Project to GarageBand for iOS…
+=== Edit ===
+  Undo Create New Tracks  [⌘Z]
+  Can’t Redo  (disabled)  [⇧⌘Z]
+  Undo History…  [⌃⌥⌘Z]
+  Delete Undo History
+  ---
+  Cut  [⌘X]
+  Copy  [⌘C]
+  Paste  [⌘V]
+  Paste Replace  [⇧⌘V]
+  Paste at Original Position
+  Delete
+  Delete and Move  (disabled)
+  Copy to Live Loops Scene  (disabled)  [⌘↖Home]
+  Select ▸
+      All  [⌘A]
+      All Following  [⇧F]
+      All Following of Same Track  [⌃⇧F]
+      All Inside Locators  [⇧L]
+      ---
+      Muted Regions  [⇧M]
+      Overlapped Regions  (disabled)  [⇧O]
+      Same-Colored Regions  [⇧C]
+      ---
+      Empty Regions
+      SMPTE-Locked Regions
+      Similar Regions  (disabled)  [⇧S]
+      Equal Regions  (disabled)  [⇧E]
+      ---
+      Next Region  [→]
+      Previous Region  [←]
+      ---
+      Deselect All  [⇧D]
+      Deselect Global Tracks  (disabled)
+      Deselect Outside Locators
+      Invert Selection  [⇧I]
+  Select Tracks ▸
+      All
+      Unused
+      Muted  (disabled)
+      Soloed
+      Frozen  (disabled)
+      Same-Colored
+      Instrument
+      MIDI  (disabled)
+      Audio  (disabled)
+      Aux  (disabled)
+      Sub/VCA  (disabled)
+      Summing Stack  (disabled)
+      Folder Stack  (disabled)
+      Folder  (disabled)
+  ---
+  Show Flex Pitch/Time  [F]
+  ---
+  Repeat ▸  (disabled)
+      Once  (disabled)  [⌘R]
+      Multiple…  (disabled)
+  Length ▸  (disabled)
+      Double  (disabled)
+      Halve  (disabled)
+      Change…  (disabled)
+  Split ▸
+      Regions at Playhead  [⌘T]
+      Regions at Locators  [⌥⌘T]
+  Bounce or Join ▸  (disabled)
+      Bounce Regions in Place…  (disabled)
+      Join  (disabled)  [⌘J]
+      Join per Tracks  (disabled)  [J]
+  Move ▸
+      To Playhead  [;]
+      To Recorded Position  (disabled)  [⌥⇧⌘R]
+      To Beat  (disabled)
+      First Transient to Nearest Beat  (disabled)
+      To Focused Track  (disabled)  [⌃⇧T]
+      ---
+      Shuffle Left  (disabled)  [⌥[]
+      Shuffle Right  (disabled)  [⌥]]
+      ---
+      Nudge Left  [⌥←]
+      Nudge Right  [⌥→]
+      Slip Left  [⌃⌥←]
+      Slip Right  [⌃⌥→]
+      Rotate Left  [⌃⌥⌘←]
+      Rotate Right  [⌃⌥⌘→]
+      Set Nudge Value to ▸
+          Bar  [⌃⌥M]
+          Beat  [⌃⌥B]
+          Division  [⌃⌥D]
+          10 Ticks
+          ✓ Tick  [⌃⌥T]
+          Step Input
+          ---
+          1/1 Note
+          1/2 Note
+          1/4 Note
+          1/8 Note
+          1/16 Note
+          1/32 Note
+          1/64 Note
+          1/2 Triplet (1/3)
+          1/4 Triplet (1/6)
+          1/8 Triplet (1/12)
+          1/16 Triplet (1/24)
+          1/32 Triplet (1/48)
+          1/64 Triplet (1/96)
+          ---
+          5 Frames
+          Frame  [⌃⌥F]
+          1/2 Frame  [⌃⌥H]
+          SMPTE Bit
+          ---
+          10 ms  [⌃⌥0]
+          1 ms  [⌃⌥1]
+          Sample  [⌃⌥S]
+  Trim ▸
+      Remove Overlaps  (disabled)  [\]
+      Fill within Locators  [⌥\]
+      Crop Outside Locators  [⌘\]
+      ---
+      Region Start to Previous Region  (disabled)
+      Region Start to Previous Transient  [⌃⇧[]
+      Region Start to Next Transient  [⌃⇧]]
+      ---
+      Region End to Next Region  (disabled)  [⇧\]
+      Region End to Previous Transient  [⌃[]
+      Region End to Next Transient  [⌃]]
+  Convert ▸  (disabled)
+      Loops to Regions  (disabled)  [⌃⌘L]
+      MIDI Loops to Aliases  (disabled)
+      Repetitions to Loops  (disabled)
+      ---
+      To MIDI Region  (disabled)
+      To Session Player Region  (disabled)
+      Separate by Kit Piece  (disabled)
+      ---
+      Audio Regions to New Regions  (disabled)  [⌥⌘R]
+      Audio Regions to New Audio Files  (disabled)  [⌥⌘F]
+  Time Stretch ▸  (disabled)
+      Time Stretch Region Length to Locators  (disabled)  [⌥⌘L]
+      Time Stretch Region Length to Nearest Bar  (disabled)  [⌥⌘B]
+      Time Stretching Algorithm ▸  (disabled)
+          ✓ Universal  (disabled)
+          Complex  (disabled)
+          Percussive  (disabled)
+          ---
+          Legacy Algorithms ▸  (disabled)
+              Version 5  (disabled)
+              Any Material  (disabled)
+              Monophonic  (disabled)
+              Pads  (disabled)
+              Rhythmic  (disabled)
+              Beats Only  (disabled)
+          ---
+  ---
+  Copy MIDI Events…  (disabled)
+  Delete MIDI Events ▸
+      Duplicates  [⌥D]
+      Inside Locators  (disabled)
+      Outside Locators  (disabled)
+      Outside Region Boundaries  (disabled)
+      Unselected Within Selection  (disabled)
+  Separate MIDI Events ▸  (disabled)
+      Separate by Note Pitch  (disabled)
+      Separate by MIDI Channel  (disabled)
+      Separate by Articulation  (disabled)
+  ---
+  Cut/Insert Time ▸
+      Cut Section Between Locators  [⌃⌘X]
+      Copy Section Between Locators
+      Insert Section at Playhead  (disabled)  [⌃⌘V]
+      Insert Silence at Locators  [⌃⌘I]
+      Repeat Section Between Locators  [⌃⌘R]
+      Copy Scene to Playhead  (disabled)
+      Insert Scene at Playhead  (disabled)  [⌘↘End]
+  ---
+  Tempo ▸
+      Apply Region Tempo to Project Tempo…  (disabled)
+      Apply Project Tempo to Region and Downbeat  (disabled)
+      ---
+      Write Project Tempo to Audio Files  (disabled)
+      Remove Tempo Information  (disabled)
+      ---
+      Create Smart Tempo Multitrack Set  (disabled)
+      ---
+      Adjust Tempo using Region Length and Locators  (disabled)
+      ---
+      Show Beat Mapping Track
+      Show Tempo List  [⌥⇧T]
+      Tempo Operations…
+      Tempo Interpreter…
+  ---
+  Open in External Sample Editor  (disabled)  [⇧W]
+  Open Smart Tempo Editor  (disabled)
+=== Track ===
+  New Tracks…  [⌥⌘N]
+  New Audio Track  [⌥⌘A]
+  New Software Instrument Track  [⌥⌘S]
+  New Session Player SI Track…  [⌥⌘P]
+  New External MIDI Track  [⌥⌘X]
+  Other ▸
+      New Track With Duplicate Settings  [⌘D]
+      New Track With Duplicate Settings and Content  [⌥⇧⌘D]
+      New Track With Next Instrument  [⌃↩]
+      New Track With Same Instrument  [⌃⇧↩]
+      ---
+      New Track For Overlapped Regions  (disabled)
+      New Track For Selected Regions  (disabled)
+  Rename Track  [⇧↩]
+  ---
+  Delete Track  [⌘⌫]
+  Delete Unused Tracks  [⇧⌘⌫]
+  ---
+  Create Track Stack…  [⇧⌘D]
+  Flatten Stack  (disabled)  [⇧⌘U]
+  Convert Folder Stack to Summing Stack  (disabled)
+  ---
+  Global Tracks ▸
+      Show Global Tracks  [G]
+      Configure Global Tracks…  [⌥G]
+      Show Single Global Track  [⌃⌥⌘G]
+      ---
+      Show Arrangement Track  [⇧⌘A]
+      Show Marker Track  [⇧⌘K]
+      Show Movie Track  [⇧⌘O]
+      Show Signature Track
+      Show Chord Track  [⇧⌘C]
+      Show Tempo Track  [⇧⌘T]
+      Show Beat Mapping Track  [⇧⌘B]
+  Show Track Alternatives
+  Show Output Track  [⇧⌘M]
+  ---
+  Replace or Double Drum Track…  (disabled)  [⌃D]
+  Convert Regions to New Sampler Track…  (disabled)  [⌃E]
+  ---
+  Search and Select Track…  [⌃⌘T]
+  Hide Selected Track  [⌃H]
+  Hide Unselected Track
+  Unhide All Tracks  (disabled)  [⌃⇧H]
+  Toggle Hide View  [H]
+  ---
+  Sort Tracks by ▸
+      MIDI Channel
+      Audio Channel
+      Output Channel
+      Instrument Name
+      Track Name
+      Used, Unused
+      Creation Date
+  Assign Track Color…
+  Assign Track Icon…
+  Configure Track Header…  [⌥T]
+=== Navigate ===
+  Go To ▸
+      Position…  [/]
+      ---
+      ✓ Left Locator  [⌃⇧,]
+      Right Locator  [⌃⇧.]
+      ---
+      Selection Start  (disabled)  [⌃↖Home]
+      Selection End  (disabled)  [⌃↘End]
+      ---
+      Next Marker  (disabled)
+      Previous Marker  (disabled)
+      Marker Number…  [⌥/]
+  ---
+  Scroll to Selection  (disabled)  [⇧`]
+  Set Locators by Selection and Enable Cycle  (disabled)  [⌘U]
+  Set Rounded Locators by Selection and Enable Cycle  (disabled)  [U]
+  ---
+  Move Locators Forward by Cycle Length  [⇧⌘.]
+  Move Locators Backwards by Cycle Length  (disabled)  [⇧⌘,]
+  ---
+  Create Marker  [⌥']
+  Other ▸
+      Create Marker for Region Selection  (disabled)  [⌥⇧']
+      Create Without Rounding  [⌃⌥']
+      ---
+      Import Marker from Audio File  (disabled)
+      Export Marker to Audio File  (disabled)
+      Remove Marker from Audio File  (disabled)
+      ---
+      Create Movie Scene Cut Markers ▸  (disabled)
+          Auto Range  (disabled)
+          ---
+          Marquee Selection  (disabled)
+          Cycle Area  (disabled)
+          Selected Regions  (disabled)
+          ---
+          Entire Movie  (disabled)
+      Remove Movie Scene Cut Markers ▸  (disabled)
+          Auto Range  (disabled)
+          ---
+          Marquee Selection  (disabled)
+          Cycle Area  (disabled)
+          Selected Regions  (disabled)
+          ---
+          All Scene Markers  (disabled)
+  Rename Marker  (disabled)  [⇧']
+  Delete Marker at Playhead Position  (disabled)  [⌥⌫]
+  ---
+  Open Marker List
+  Open Marker Text
+  ---
+  Play Button Options ▸
+      ✓ Play from Marquee Selection
+      ✓ Play from Cycle Start
+      Play From Selected Region
+      Play From Last Locate Position
+  Stop Button Options ▸
+      ✓ Stop
+      Stop and Go to Left Locator
+      Stop and Go to Last Locate Position
+      ---
+      ✓ Jump between Marquee- and Project Start if stopped
+      ✓ Jump between Cycle- and Project Start if stopped
+      Jump between Selected Region- and Project Start if stopped
+      Jump between Last Locate Position and Project Start if stopped
+  ---
+  Auto Set Locators ▸
+      ✓ By Marquee Selection  (disabled)
+      ✓ By Region Selection  (disabled)
+      By Marker/Chord Selection  (disabled)
+      By Note Selection  (disabled)
+      ---
+      Enable Auto Set Locators
+=== Record ===
+  Count-in ▸
+      None
+      ✓ 1 Bar
+      2 Bars
+      3 Bars
+      4 Bars
+      5 Bars
+      6 Bars
+      ---
+      1/4
+      2/4
+      3/4
+      4/4
+      5/4
+      6/4
+      7/4
+      8/4
+      9/4
+  Metronome Settings…
+  ---
+  ✓ Use Musical Grid
+  ✓ Allow Quick Punch-In
+  ✓ Auto Input Monitoring
+  Low Latency Monitoring Mode
+  ---
+  Record Button Options ▸
+      ✓ Record
+      Record / Record Toggle
+      Record / Record Repeat
+  Overlapping MIDI Recordings ▸
+      Cycle Off  (disabled)
+      Create Take Folder
+      ✓ Merge
+      Overlap
+      Overlap/Merge Selected Regions
+      Create Track
+      Create Track Alternative
+      ---
+      Cycle On  (disabled)
+      Create Take Folder
+      ✓ Merge
+      Merge Current Recording Only
+      Create Tracks
+      Create Tracks and Mute
+      Create Track Alternatives
+      ---
+      Replace  (disabled)
+      ✓ Region Erase
+      Region Punch
+      Content Erase
+      Content Punch
+  Overlapping Audio Recordings ▸
+      Cycle Off  (disabled)
+      ✓ Create Take Folder
+      Create New Track
+      Create Track Alternative
+      ---
+      Cycle On  (disabled)
+      ✓ Create Take Folder
+      Create Tracks And Mute
+      Create Track Alternatives
+  Recording Settings…
+=== Mix ===
+  Show Automation  [A]
+  Create Track Automation ▸
+      Create 1 Automation Point at Region Borders  [⌃⇧⌘1]
+      Create 2 Automation Points at Region Borders  [⌃⇧⌘2]
+      ---
+      Create 1 Automation Point each for Volume, Pan, Sends
+      Create 2 Automation Points each for Volume, Pan, Sends
+      Create 1 Automation Point for Visible Parameter  (disabled)
+      Create 2 Automation Points for Visible Parameter  (disabled)
+      ---
+      Create Volume Fade-Out on Main Output  (disabled)
+  Convert Automation ▸  (disabled)
+      Convert Visible Track Automation to Region Automation  (disabled)  [⌃⌘↓]
+      Convert Visible Region Automation to Track Automation  (disabled)  [⌃⌘↑]
+      ---
+      Convert All Track Automation to Region Automation  (disabled)  [⌃⇧⌘↓]
+      Convert All Region Automation to Track Automation  (disabled)  [⌃⇧⌘↑]
+  Delete Automation ▸
+      Delete Visible Automation on Selected Track  [⌃⌘⌫]
+      Delete All Automation on Selected Track  [⌃⇧⌘⌫]
+      Delete Orphaned Automation on Selected Track  [⌃⇧⌫]
+      Delete Redundant Automation Points  [⌃⌫]
+      Delete All Track Automation
+  ---
+  Move Track Automation with Regions ▸
+      Never
+      Always
+      ✓ Ask
+  Enable Automation Quick Access  [⌃⌥⌘A]
+  Autoselect Automation Parameter in Read Mode
+  Automation Settings…
+  ---
+  Group Settings  [⌥⇧G]
+  ✓ Groups Active  [⇧G]
+  Create Group  [⌃⌘G]
+  I/O Labels…
+  I/O Assignments…
+  Pre-Fader Metering
+  ---
+  Search and Add Plug-in…  [⌃⌘P]
+  Mastering Assistant…
+  ---
+  Dolby Atmos…
+  ---
+=== View ===
+  Show Tab Bar  (disabled)
+  Show All Tabs  (disabled)  [⇧⌘\]
+  ---
+  Hide Browser  [B]
+  Hide Inspector  [I]
+  ---
+  Show Mixer  [X]
+  Show Smart Controls  [Y]
+  Show Editor  [E]
+  ---
+  Show List Editors  [D]
+  Show Note Pads  [⌃⇧P]
+  Show Project Files  [O]
+  ---
+  Show Assistant  [⌥⌘/]
+  ---
+  Hide Control Bar
+  Customize Control Bar and Display…
+  ---
+  Show Toolbar  [⌃⌥⌘T]
+  Customize Toolbar…
+  ---
+  Show Movie Window  (disabled)
+  Show Colors  [⌥C]
+  ---
+  Enter Full Screen  [⌃⌘F]
+=== Window ===
+  Minimize  [⌘M]
+  Minimize All  [⌥⌘M]
+  Zoom  [⌃⌘M]
+  Zoom All  [⌃⌥⌘M]
+  Fill  [⌃F]
+  Center  [⌃C]
+  ---
+  Move & Resize ▸
+      Halves  (disabled)
+      Left  [⌃vk123]
+      Right  [⌃vk124]
+      Top  [⌃vk126]
+      Bottom  [⌃vk125]
+      ---
+      Quarters  (disabled)
+      Top Left
+      Top Right
+      Bottom Left
+      Bottom Right
+      ---
+      Arrange  (disabled)
+      Left & Right  [⌃⇧vk123]
+      Left & Quarters  [⌃⌥⇧vk123]
+      Right & Left  [⌃⇧vk124]
+      Right & Quarters  [⌃⌥⇧vk124]
+      Top & Bottom  [⌃⇧vk126]
+      Top & Quarters  [⌃⌥⇧vk126]
+      Bottom & Top  [⌃⇧vk125]
+      Bottom & Quarters  [⌃⌥⇧vk125]
+      Quarters
+      ---
+      Return to Previous Size  (disabled)  [⌃R]
+  Full Screen Tile ▸
+      Left of Screen
+      Right of Screen
+  ---
+  Move to iPad Pro
+  ---
+  Cycle Through Windows  [⌘`]
+  ---
+  Show Previous Tab  (disabled)  [⌃⇧⇥]
+  Show Next Tab  (disabled)  [⌃⇥]
+  Move Tab to New Window  (disabled)
+  Merge All Windows  (disabled)
+  ---
+  ---
+  Bring All to Front
+  Arrange in Front
+  Remove Window from Set  (disabled)
+  ---
+  Open Main Window  [⌘1]
+  Open Mixer  [⌘2]
+  ---
+  Open Smart Controls
+  Open Piano Roll  [⌘4]
+  Open Score Editor  [⌘5]
+  Open Step Sequencer  [⌘3]
+  Open Step Editor  (disabled)
+  Open Audio Track Editor
+  Open Audio File Editor  (disabled)  [⌘6]
+  Open Smart Tempo Editor  (disabled)
+  ---
+  Open Event List  [⌘7]
+  Open Signature List
+  Open Project Audio  [⌘8]
+  ---
+  Open MIDI Transform  (disabled)  [⌘9]
+  ---
+  Open Transport Float
+  Show Event Float  [⌥E]
+  Show Region Inspector Float  [⌥⇧R]
+  ---
+  Show Play Surface  [⌘K]
+  Show Musical Typing
+  Show Step Input Keyboard  [⌥⌘K]
+  ---
+  Hide All Plug-in Windows  [V]
+  ---
+  ✓ Untitled.logicx - Tracks
+  ✓ Screenset 1 (Tracks/Browser)  [1]
+  ---
+  Duplicate…
+  Rename…
+  ---
+  Delete
+  ---
+  Lock
+  Revert to Saved
+=== Help ===
+  ---
+  Send Bramble Studio Feedback
+  ---
+  Quick Help
+  Quick Help appears as ▸
+      Inspector Pane
+      Floating Window
+      Bubbles at Pointer Location
+  ---
+  Bramble Studio Help
+  Bramble Studio Instruments
+  Bramble Studio Effects
+  Bramble Studio Control Surfaces Support
+  ---
+  What’s New in Bramble Studio
+  Release Notes
+  ---
+  Bramble Studio Support
+  Bramble Studio on the Web
+  Bramble Studio Discussions
+  Create Support Profile…

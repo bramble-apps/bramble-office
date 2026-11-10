@@ -63,7 +63,13 @@ pub fn read_unit(payload: &[u8]) -> Option<Plugin> {
     let runs = printable_runs(&payload[..at], 3);
     // (the preset field: "#default.pst", or a factory preset's name)
     let preset = runs.iter().find(|r| r.ends_with(".pst")).map(|r| r.rfind('#').map_or(r.as_str(), |i| &r[i..]).to_string()).unwrap_or_default();
-    let name = runs.iter().rev().find(|r| !r.ends_with(".pst") && r.as_str() != "GAME" && r.len() > 3).cloned().unwrap_or_default();
+    // the display name: a NUL-ended field at 0x78 (Logic's own short form, e.g. "Space D"); other
+    // units keep other data there
+    let field = payload.get(0x78..0x98).map(|f| f.split(|b| *b == 0).next().unwrap_or(&[]));
+    let name = match field {
+        Some(f) if f.len() >= 2 && f.iter().all(|b| (0x20..0x7f).contains(b)) => String::from_utf8_lossy(f).into_owned(),
+        _ => runs.iter().rev().find(|r| !r.ends_with(".pst") && r.as_str() != "GAME" && r.len() > 3 && r.chars().all(|c| c.is_ascii_alphanumeric() || " -_/.".contains(c))).cloned().unwrap_or_default(),
+    };
     Some(Plugin { name, preset, params })
 }
 

@@ -1,0 +1,29 @@
+[package]
+name = "lg-app"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[lib]
+name = "lg_app"
+path = "src/lib.rs"
+
+# (working name until the user picks one)
+[[bin]]
+name = "bramble-studio"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+egui = "0.37"
+lg-core = { path = "../lg-core" }
+# the suite's look (colours and colour themes, controls, liquid glass, icons, window frame)
+kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
+# sound: rodio over cpal (ALSA / PulseAudio / PipeWire, WASAPI, CoreAudio), as Bramble Notes
+rodio = { version = "0.23", default-features = false, features = ["playback", "wav", "mp3", "flac"] }
+# SoundFont instruments played natively (pure Rust, MIT)
+rustysynth = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
