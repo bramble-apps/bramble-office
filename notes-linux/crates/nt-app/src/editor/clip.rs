@@ -232,3 +232,90 @@ pub fn sole_name(frag: &Frag) -> Option<String> {
         _ => None,
     }
 }
+
+// ---- tables between the suite's apps (kn_model::tableclip: the HTML Keydeck, Letters and
+// Values write and read)
+
+/// Notes table cells (rows r0..=r1, columns c0..=c1) as the suite's clipboard table: each
+/// cell's text, and the bold, italic, underline, strike, colour and alignment the whole cell
+/// has. Notes keeps no fills, borders, formats or merges.
+pub fn table_clip(t: &doc::Table, (r0, c0, r1, c1): (usize, usize, usize, usize), whole: bool) -> kn_model::tableclip::TableClip {
+    use kn_model::tableclip::TableClip;
+    let (rows, cols) = (r1 + 1 - r0, c1 + 1 - c0);
+    let mut clip = TableClip::plain(rows as u32, cols as u32);
+    for r in r0..=r1 {
+        for c in c0..=c1 {
+            let Some(paras) = t.cells.get(r).and_then(|row| row.get(c)) else { continue };
+            let cc = &mut clip.cells[(r - r0) * cols + (c - c0)];
+            cc.shown = t.cell_text(r, c);
+            let runs: Vec<&Fmt> = paras.iter().flat_map(|p| p.runs.iter().filter(|x| x.len > 0).map(|x| &x.fmt)).collect();
+            let all = |f: &dyn Fn(&Fmt) -> bool| !runs.is_empty() && runs.iter().all(|x| f(x));
+            if let Some(st) = cc.style.as_mut() {
+                st.text.bold = all(&|f| f.bold);
+                st.text.italic = all(&|f| f.italic);
+                st.text.underline = all(&|f| f.underline);
+                st.text.strike = all(&|f| f.strike);
+                if let Some([r, g, b, a]) = runs.first().and_then(|f| f.color).filter(|c0| all(&|f| f.color == Some(*c0))) {
+                    st.text.color = kn_model::Color { r, g, b, a };
+                }
+                st.align = match paras.first().map(|p| p.align) {
+                    Some(doc::Align::Center) => kn_model::Align::Center,
+                    Some(doc::Align::Right) => kn_model::Align::Right,
+                    Some(doc::Align::Justified) => kn_model::Align::Justify,
+                    _ => kn_model::Align::Left,
+                };
+            }
+        }
+    }
+    clip.whole = whole;
+    clip.source = kn_model::tableclip::process_tag().to_string();
+    clip
+}
+
+/// A cell's text from the suite's clipboard table as Notes paragraphs: what the cell has of its
+/// own (not its table's usual look, so a header's white text on a dark fill isn't kept on
+/// Notes' paper): bold, italic, underline, strike, colour, alignment.
+pub fn cell_paras(clip: &kn_model::tableclip::TableClip, cc: &kn_model::tableclip::CellCopy) -> Vec<Para> {
+    if cc.covered || cc.shown.is_empty() {
+        return vec![Para::default()];
+    }
+    let look = clip.looks.get(cc.region as usize).cloned().flatten();
+    let st = cc.style.clone().unwrap_or_default();
+    let own = |f: &dyn Fn(&kn_model::TableCellStyle) -> bool| look.as_ref().is_none_or(|l| !f(l));
+    let fmt = Fmt {
+        bold: st.text.bold && own(&|l| l.text.bold == st.text.bold),
+        italic: st.text.italic && own(&|l| l.text.italic == st.text.italic),
+        underline: st.text.underline && own(&|l| l.text.underline == st.text.underline),
+        strike: st.text.strike && own(&|l| l.text.strike == st.text.strike),
+        color: own(&|l| l.text.color == st.text.color).then_some([st.text.color.r, st.text.color.g, st.text.color.b, st.text.color.a]),
+        ..Default::default()
+    };
+    let align = match st.align {
+        kn_model::Align::Center if own(&|l| l.align == st.align) => doc::Align::Center,
+        kn_model::Align::Right if own(&|l| l.align == st.align) => doc::Align::Right,
+        kn_model::Align::Justify if own(&|l| l.align == st.align) => doc::Align::Justified,
+        _ => doc::Align::default(),
+    };
+    cc.shown
+        .split('\n')
+        .map(|line| {
+            let mut p = Para::default();
+            p.insert(0, line, &fmt);
+            p.align = align;
+            p
+        })
+        .collect()
+}
+
+/// The suite's clipboard table (or a page's) as a Notes table.
+pub fn notes_table(clip: &kn_model::tableclip::TableClip) -> doc::Table {
+    let mut t = doc::Table::new(clip.rows as usize, clip.cols as usize);
+    for r in 0..clip.rows {
+        for c in 0..clip.cols {
+            if let Some(cc) = clip.cell(r, c) {
+                t.cells[r as usize][c as usize] = cell_paras(clip, cc);
+            }
+        }
+    }
+    t
+}

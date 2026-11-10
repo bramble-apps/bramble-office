@@ -998,6 +998,10 @@ impl App {
             Some(c) => {
                 self.clip = Some(c);
                 self.obj_clip_active = true;
+                // a table: the whole of it for the suite's other apps too
+                if self.table(id).is_some() {
+                    crate::clip::copy_table_object(self, id);
+                }
             }
             None => self.notify("This object can't be copied yet."),
         }

@@ -151,7 +151,7 @@ pub struct App {
     /// Touchpad momentum scrolling (Linux delivers none): velocity and whether coasting.
     kinetic: (egui::Vec2, bool, Option<f64>),
     /// Copied table cells (their shown values, rows of columns).
-    pub cell_clip: Option<Vec<Vec<String>>>,
+    pub cell_clip: Option<kn_model::tableclip::TableClip>,
     /// Dynamic backgrounds: the animated texture, its clock, and Preview Motion in the editor.
     pub motion_tex: crate::textures::MotionTex,
     pub motion_clock: Instant,
@@ -1649,7 +1649,8 @@ impl App {
             }
         });
         if let Some(t) = paste_text {
-            crate::editing::paste_text_as_box(self, &t);
+            // (a table copied in a suite app: into the cells, or a new table)
+            crate::tableops::paste_text(self, &t);
         }
         if let Some(img) = paste_image {
             crate::editing::paste_image(self, &img);

@@ -100,7 +100,9 @@ thread_local! {
 
 /// Puts a fragment on the clipboard: plain text for other apps, the fragment for pasting here.
 /// A picture goes out as a picture (other apps paste the image); an attachment alone as its name.
-pub fn set_clipboard(ctx: Option<&egui::Context>, frag: Frag, plain: String) {
+/// A table (`table_html`: the suite's table HTML) goes out as HTML with its text, for Keydeck,
+/// Letters, Values and other apps.
+pub fn set_clipboard(ctx: Option<&egui::Context>, frag: Frag, plain: String, table_html: Option<String>) {
     let mut plain = plain;
     let mut key = None;
     if let Some(ctx) = ctx {
@@ -111,7 +113,10 @@ pub fn set_clipboard(ctx: Option<&egui::Context>, frag: Frag, plain: String) {
             if plain.trim().is_empty() {
                 plain = super::clip::sole_name(&frag).unwrap_or(plain);
             }
-            ctx.copy_text(plain.clone());
+            // (egui would put its text over the HTML after the frame: one or the other)
+            if !table_html.is_some_and(|h| kn_ui::clipboard::set_html(&h, &plain)) {
+                ctx.copy_text(plain.clone());
+            }
         }
     }
     CLIP.with_borrow_mut(|c| *c = Some((frag, plain, key)));
@@ -617,6 +622,11 @@ impl Editor {
         }
         // a page's HTML, unless it is only the picture that came with it (a browser's Copy Image)
         let only_picture = inc.image.is_some() && inc.text.as_deref().is_none_or(|t| t.trim().is_empty() || t.trim().starts_with("http"));
+        // a table copied in Keydeck, Letters or Values (or just a table from a page): a table
+        if let Some(t) = inc.html.as_deref().filter(|_| !match_style && !only_picture).and_then(|h| kn_model::tableclip::table_paste(h, inc.text.as_deref().unwrap_or(""))) {
+            self.paste_table_clip(&t);
+            return;
+        }
         if let Some(html) = inc.html.as_deref().filter(|_| !match_style && !only_picture) {
             if let Some(frag) = clip::html_frag(html, inc.text.as_deref(), &kn_ui::clipboard::fetch_src) {
                 self.paste_frag(&frag);
@@ -632,6 +642,63 @@ impl Editor {
         } else if let Some(t) = inc.text.as_deref().filter(|t| !t.is_empty()) {
             self.paste_plain(t);
         }
+    }
+
+    /// A table from the clipboard: into the table the caret is in, from its cell (the table
+    /// grows to take it all), else a new table at the caret (one undo step).
+    pub(crate) fn paste_table_clip(&mut self, t: &kn_model::tableclip::TableClip) {
+        let cell = self.table_sel.map(|s| Cell { para: s.para, row: s.r0, col: s.c0 }).or(self.head.cell);
+        let id = cell.and_then(|c| self.doc.paras.get(c.para)?.sole_att().map(str::to_string)).filter(|id| self.doc.table(id).is_some());
+        let (Some(cell), Some(id)) = (cell, id) else {
+            self.paste_atts(vec![Att::new(nt_core::model::UTI_TABLE, AttKind::Table(clip::notes_table(t)))]);
+            return;
+        };
+        self.push_undo(Kind::Other);
+        let Some(tab) = self.doc.table_mut(&id) else { return };
+        let (rows, cols) = ((cell.row + t.rows as usize).max(tab.rows()), (cell.col + t.cols as usize).max(tab.cols()));
+        for row in tab.cells.iter_mut() {
+            row.resize(cols, vec![super::doc::Para::default()]);
+        }
+        tab.cells.resize(rows, vec![vec![super::doc::Para::default()]; cols]);
+        tab.widths.resize(cols, None);
+        for r in 0..t.rows as usize {
+            for c in 0..t.cols as usize {
+                if let Some(cc) = t.cell(r as u32, c as u32) {
+                    tab.cells[cell.row + r][cell.col + c] = clip::cell_paras(t, cc);
+                }
+            }
+        }
+        self.table_sel = Some(TableSel { para: cell.para, r0: cell.row, c0: cell.col, r1: cell.row + t.rows as usize - 1, c1: cell.col + t.cols as usize - 1 });
+        self.changed = true;
+    }
+
+    /// The selected table cells, or a selected table alone, as the suite's table HTML (for
+    /// Copy: Keydeck, Letters and Values paste it as a table).
+    pub(crate) fn table_copy_html(&self) -> Option<String> {
+        if let Some(s) = self.table_sel {
+            let t = self.doc.table(self.doc.paras.get(s.para)?.sole_att()?)?;
+            return Some(clip::table_clip(t, (s.r0, s.c0, s.r1.min(t.rows().checked_sub(1)?), s.c1.min(t.cols().checked_sub(1)?)), false).to_html());
+        }
+        if !self.has_sel() {
+            return None;
+        }
+        let (a, b) = self.range();
+        if a.cell.is_some() || b.cell.is_some() {
+            return None;
+        }
+        // one table and nothing else (empty lines around it)
+        let mut found = None;
+        for i in a.para..=b.para {
+            let p = self.doc.paras.get(i)?;
+            match p.sole_att().and_then(|id| self.doc.table(id)) {
+                Some(t) if found.is_none() => found = Some(t),
+                Some(_) => return None,
+                None if p.text.trim().is_empty() => {}
+                None => return None,
+            }
+        }
+        let t = found?;
+        Some(clip::table_clip(t, (0, 0, t.rows().checked_sub(1)?, t.cols().checked_sub(1)?), true).to_html())
     }
 
     /// Attachments at the caret, each on its own line (one undo step).

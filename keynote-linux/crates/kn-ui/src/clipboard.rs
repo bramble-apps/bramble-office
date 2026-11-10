@@ -247,7 +247,29 @@ mod system {
     }
 }
 
-pub use system::{files, html, image, set_files, set_html, set_image, text};
+pub use system::{files, image, set_files, set_image, text};
+
+static HOSTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The app runs under a front end that owns the clipboard (ffi.rs: it takes the copied text
+/// from egui and hands pastes in): rich text then goes through it as plain text, not past it.
+pub fn set_hosted(on: bool) {
+    HOSTED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The clipboard's rich text as HTML (a page or a document copied with its formatting).
+pub fn html() -> Option<String> {
+    if HOSTED.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    system::html()
+}
+
+/// Puts rich text on the clipboard: HTML, with its plain text for apps that take only text.
+/// False when it couldn't (the caller then copies the text as usual).
+pub fn set_html(html: &str, plain: &str) -> bool {
+    !HOSTED.load(std::sync::atomic::Ordering::Relaxed) && system::set_html(html, plain)
+}
 
 #[cfg(test)]
 mod tests {

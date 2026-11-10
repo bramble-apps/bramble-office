@@ -2877,3 +2877,61 @@ fn copied_picture_has_a_name_and_a_file() {
     assert_eq!((w, h, rgba.len()), (4, 3, 48));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A Notes table copied for the other suite apps (the clipboard's table HTML: cells, bold, the
+/// whole table), and tables from them pasted: a new table at the caret, or into the table the
+/// caret is in (it grows to take them).
+#[test]
+fn tables_between_suite_apps() {
+    use kn_model::tableclip::TableClip;
+    let mut ed = ed_with(&[("T", ParaStyle::Title), ("", ParaStyle::Body)]);
+    at(&mut ed, 1, 0);
+    ed.command_label(None, "Table");
+    typ(&mut ed, "A1");
+    // bold the first cell's text
+    let id = ed.doc.paras[1].sole_att().unwrap().to_string();
+    {
+        let t = ed.doc.table_mut(&id).unwrap();
+        let mut p = Para::default();
+        p.insert(0, "A1", &doc::Fmt { bold: true, ..Default::default() });
+        t.cells[0][0] = vec![p];
+        t.cells[1][1] = vec![Para::new("B2", ParaStyle::Body)];
+    }
+    // the whole table selected
+    let n = ed.doc.paras[1].len();
+    ed.anchor = Loc { cell: None, para: 1, off: 0 };
+    ed.head = Loc { cell: None, para: 1, off: n };
+    let clip = TableClip::from_html(&ed.table_copy_html().unwrap()).unwrap();
+    assert!(clip.whole);
+    assert_eq!((clip.rows, clip.cols), (2, 2));
+    assert_eq!(clip.cell(0, 0).unwrap().shown, "A1");
+    assert!(clip.cell(0, 0).unwrap().style.as_ref().unwrap().text.bold);
+    assert_eq!(clip.cell(1, 1).unwrap().shown, "B2");
+    // a table from Values (as its HTML says it) pasted on a line of its own: a new table
+    let last = ed.doc.paras.len() - 1;
+    at(&mut ed, last, 0);
+    let html = "<table><tr><td style=\"font-weight:bold;color:#ff0000\">Name</td><td>12</td><td>x</td></tr><tr><td colspan=\"2\">wide</td><td></td></tr></table>";
+    let tc = TableClip::from_html(html).unwrap();
+    ed.paste_table_clip(&tc);
+    let ids: Vec<String> = ed.doc.paras.iter().filter_map(|p| p.sole_att().map(str::to_string)).collect();
+    assert_eq!(ids.len(), 2);
+    let t2 = ed.doc.table(&ids[1]).unwrap().clone();
+    assert_eq!((t2.rows(), t2.cols()), (2, 3));
+    assert_eq!(t2.cell_text(0, 0), "Name");
+    let f = &t2.cells[0][0][0].runs[0].fmt;
+    assert!(f.bold);
+    assert_eq!(f.color, Some([1.0, 0.0, 0.0, 1.0]));
+    assert_eq!(t2.cell_text(1, 0), "wide");
+    assert_eq!(t2.cell_text(1, 1), "", "a merge keeps its text in its first cell");
+    // pasted into the first table's last cell: it grows
+    ed.head = Loc { cell: Some(Cell { para: 1, row: 1, col: 1 }), para: 0, off: 0 };
+    ed.anchor = ed.head;
+    ed.table_sel = None;
+    ed.paste_table_clip(&tc);
+    let t1 = ed.doc.table(&id).unwrap();
+    assert_eq!((t1.rows(), t1.cols()), (3, 4));
+    assert_eq!(t1.cell_text(1, 1), "Name");
+    assert_eq!(t1.cell_text(0, 0), "A1");
+    ed.undo();
+    assert_eq!(ed.doc.table(&id).unwrap().rows(), 2, "one undo step");
+}

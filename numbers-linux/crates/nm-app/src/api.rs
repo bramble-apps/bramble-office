@@ -1695,7 +1695,8 @@ pub fn paste(app: &mut App, ctx: &egui::Context, t: &str) {
         app.paste_here();
         return;
     }
-    let ours = crate::clip::is_ours(app, t);
+    // (a table copied in another app is taken whole, as Values' own copy)
+    let ours = crate::clip::is_ours(app, t) || crate::clip::adopt_html(app, t);
     if !ours && crate::clip::paste_pictures(app, Some(t)) {
         return;
     }

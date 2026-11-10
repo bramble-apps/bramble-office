@@ -166,6 +166,8 @@ pub extern "C" fn vl_init(width: f32, height: f32) {
             kn_ui::spell::set_words_file(base.join("numdeck").join("words.txt"));
         }
         let ctx = egui::Context::default();
+        // (the front end owns the clipboard: copies reach it as text)
+        kn_ui::clipboard::set_hosted(true);
         let mut app = App::with_ctx(&ctx, None);
         // the template chooser at launch, as the desktop's (not in automated checks, unless
         // VALUES_WELCOME asks for it)

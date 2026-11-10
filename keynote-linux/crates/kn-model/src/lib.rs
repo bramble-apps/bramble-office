@@ -28,6 +28,7 @@ pub mod slides;
 pub mod style;
 pub mod table;
 pub mod tablecells;
+pub mod tableclip;
 pub mod tablefill;
 pub mod tablefmt;
 pub mod tablelook;

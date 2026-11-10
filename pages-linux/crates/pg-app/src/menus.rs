@@ -1141,9 +1141,8 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         "Undo" => app.undo(),
         "Redo" => app.redo(),
         "Cut" | "Copy" if app.sel.is_some() && app.cursor.is_none() => {
-            // the selected cells, as tab-separated text
-            if let Some(tsv) = crate::tables::copy_cells(app) {
-                ctx.copy_text(tsv);
+            // the selected cells, as the suite's table and tab-separated text
+            if crate::tables::put_cells(app, ctx) {
                 if name == "Cut" {
                     crate::tables::clear_cells(app, "Cut");
                 }

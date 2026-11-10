@@ -163,6 +163,8 @@ pub extern "C" fn kd_init() {
     crate::links::FRONT_END.store(true, std::sync::atomic::Ordering::Relaxed);
     let _ = std::panic::catch_unwind(|| {
         let ctx = egui::Context::default();
+        // (the front end owns the clipboard: copies reach it as text)
+        kn_ui::clipboard::set_hosted(true);
         let mut app = App::with_ctx(&ctx, Vec::new());
         // pictures drawn when asked for (the front end draws on demand: none arrive later)
         app.renderer.set_async_images(false);

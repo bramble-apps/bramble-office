@@ -8,6 +8,8 @@ license = "GPL-3.0-only"
 i_overlay = "2"
 kn-format = { path = "../kn-format" }
 uuid = { version = "1.28.0", features = ["v4"] }
+# tableclip.rs: table cells on the clipboard between the suite's apps (already in the tree via kn-format)
+serde_json = "1.0.154"
 
 [dev-dependencies]
 zip = "9"

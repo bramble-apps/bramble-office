@@ -362,6 +362,27 @@ impl Document {
         f.map(|f| CellFormat::from_msg(&f)).unwrap_or(CellFormat::Automatic)
     }
 
+    /// Every cell's chosen data format at once (as [`Document::cell_format`]; cells not in it
+    /// are Automatic).
+    pub fn cell_formats(&self, table: ObjId) -> std::collections::HashMap<(u32, u32), CellFormat> {
+        let mut out = std::collections::HashMap::new();
+        let Ok((model_id, formats, ..)) = self.table_lists(table) else { return out };
+        let Some(model) = self.file.obj(model_id) else { return out };
+        let list = self.file.obj(formats);
+        for (rc, r) in crate::table::raw_cell_records(&self.file, model) {
+            let Some(rec) = Record::parse(&r) else { continue };
+            if rec.marker() == 0 {
+                continue;
+            }
+            let kind = rec.get(0x1000).unwrap_or(KIND_NUMBER).clamp(1, 5);
+            let key = rec.get(SLOTS[(kind - 1) as usize]);
+            if let Some(f) = key.and_then(|k| list?.msgs("entries").find(|e| e.u32("key") == Some(k))?.msg("format")) {
+                out.insert(rc, CellFormat::from_msg(f));
+            }
+        }
+        out
+    }
+
     /// Give the cells with values in block (r0, c0, r1, c1) a data format. Numbers become text
     /// for Text and durations (in days) for Duration, as Keynote converts them; text that reads
     /// as a number becomes that number for the number formats. Returns the cells changed.

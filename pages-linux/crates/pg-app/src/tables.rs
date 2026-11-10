@@ -12,6 +12,7 @@ use egui::{vec2, Color32, Event, Key, Pos2, Rect, Sense, Stroke, StrokeKind};
 use kn_ui::theme;
 use pg_core::kn_format::ObjId;
 use pg_core::kn_model::tablecells::CellInput;
+use pg_core::kn_model::tableclip::{self, PasteMode, TableClip};
 use pg_core::kn_model::tablerows::Axis;
 use pg_core::kn_model::TableData;
 
@@ -204,6 +205,69 @@ pub fn copy_cells(app: &App) -> Option<String> {
     })
 }
 
+/// Copy / Cut: the selected cells on the clipboard as the suite's table (HTML, which Values,
+/// Keydeck, Notes, LibreOffice and browsers read, with their values, formats and looks), and
+/// their tab-separated text.
+pub fn put_cells(app: &App, ctx: &egui::Context) -> bool {
+    let Some(tsv) = copy_cells(app) else { return false };
+    let clip = app.sel.and_then(|s| app.doc().and_then(|d| tableclip::read(d, s.table, s.block(), false)));
+    // (egui would put its text over the HTML after the frame: one or the other)
+    if !clip.is_some_and(|c| kn_ui::clipboard::set_html(&c.to_html(), &tsv)) {
+        ctx.copy_text(tsv);
+    }
+    true
+}
+
+/// A table selected as an object, copied: the whole table on the clipboard (pasted in Letters or
+/// another suite app it is a new table like it).
+pub fn put_table(app: &App, ctx: &egui::Context, t: ObjId) -> bool {
+    let Some(clip) = app.doc().and_then(|d| tableclip::read(d, t, (0, 0, 0, 0), true)) else { return false };
+    let tsv = clip.tsv();
+    if !kn_ui::clipboard::set_html(&clip.to_html(), &tsv) {
+        ctx.copy_text(tsv);
+    }
+    true
+}
+
+/// The table on the system clipboard (copied in a suite app, LibreOffice, a web page).
+pub fn clipboard_table() -> Option<TableClip> {
+    let html = kn_ui::clipboard::html()?;
+    if !tableclip::has_table(&html) {
+        return None;
+    }
+    TableClip::from_html(&html)
+}
+
+/// A table from the clipboard pasted into the selected cells: values, formats, looks, borders
+/// and merges, as Values pastes (from one cell the table grows to take it all).
+pub fn paste_table_cells(app: &mut App, clip: &TableClip) {
+    let Some(s) = app.sel else { return };
+    let t = s.table;
+    let res = app.edit("Paste", |d, h| tableclip::write(d, h, t, s.block(), clip, PasteMode::All));
+    match res {
+        Some(Ok((r0, c0, r1, c1))) => app.sel = Some(Sel { table: t, anchor: (r0, c0), cursor: (r1, c1) }),
+        Some(Err(e)) => app.notify(format!("Couldn't paste every cell: {e}")),
+        None => {}
+    }
+}
+
+/// A table from the clipboard as a new table: inline at the caret in a document's body, else
+/// on the page; its size, cells, column widths and row heights as copied (one undo step with
+/// the insertion).
+pub fn paste_new_table(app: &mut App, clip: &TableClip) {
+    crate::insert::insert_object(app, pg_core::objects::NewObject::Table);
+    let Some(t) = app.canvas.obj.filter(|o| app.table(*o).is_some()) else { return };
+    let Some(w) = app.wb.as_mut() else { return };
+    w.doc.begin_continue(&mut app.hist, "Insert Table");
+    let res = tableclip::write_new(&mut w.doc, &mut app.hist, t, clip);
+    w.doc.end(&mut app.hist);
+    app.changed();
+    app.refresh();
+    if let Err(e) = res {
+        app.notify(format!("Couldn't paste every cell: {e}"));
+    }
+}
+
 pub fn clear_cells(app: &mut App, label: &str) {
     let Some(s) = app.sel else { return };
     let (r0, c0, r1, c1) = s.block();
@@ -219,6 +283,11 @@ pub fn clear_cells(app: &mut App, label: &str) {
 }
 
 pub fn paste_cells(app: &mut App, text: &str) {
+    // a table copied in a suite app (or LibreOffice, a page): everything it holds
+    if let Some(clip) = clipboard_table() {
+        paste_table_cells(app, &clip);
+        return;
+    }
     let Some(s) = app.sel else { return };
     let t = s.table;
     let (r0, c0) = (s.block().0, s.block().1);
@@ -309,13 +378,10 @@ pub fn key_events(app: &mut App, ctx: &egui::Context, tab: Option<bool>, events:
                 _ => {}
             },
             Event::Copy => {
-                if let Some(tsv) = copy_cells(app) {
-                    ctx.copy_text(tsv);
-                }
+                put_cells(app, ctx);
             }
             Event::Cut => {
-                if let Some(tsv) = copy_cells(app) {
-                    ctx.copy_text(tsv);
+                if put_cells(app, ctx) {
                     clear_cells(app, "Cut");
                 }
             }
@@ -1528,4 +1594,143 @@ pub fn is_command(name: &str) -> bool {
     name.starts_with("Select > ")
         || name.starts_with("Autofill Cells > ")
         || matches!(name, "Table > Resize Row to Fit Content" | "Table > Resize Column to Fit Content" | "Table > Repeat Header Rows on Each Page" | "Formula > New Formula" | "Text > Auto-Align Table Cell")
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::*;
+    use pg_core::kn_model::format::{Dash, FillSpec, StrokeSpec, TextProp};
+    use pg_core::kn_model::tablefmt::{BorderEdges, CellFormat};
+    use pg_core::kn_model::{CellRange, Color, Fill};
+
+    /// A Letters window on a new Blank document (no window), its settings in a scratch folder.
+    fn app() -> App {
+        static ENV: std::sync::Once = std::sync::Once::new();
+        ENV.call_once(|| {
+            let dir = std::env::temp_dir().join(format!("letters-clip-tests-{}", std::process::id()));
+            let _ = std::fs::create_dir_all(&dir);
+            // SAFETY: set once, before any test reads the environment through App
+            unsafe { std::env::set_var("XDG_CONFIG_HOME", &dir) };
+            pg_core::init();
+        });
+        let mut a = App::with_ctx(&egui::Context::default(), Vec::new());
+        a.new_document(false);
+        a.refresh();
+        a
+    }
+
+    fn new_table(a: &mut App) -> ObjId {
+        let before: Vec<ObjId> = tables(a);
+        a.canvas.obj = None;
+        a.canvas.objs.clear();
+        crate::insert::insert_object(a, pg_core::objects::NewObject::Table);
+        a.refresh();
+        *tables(a).iter().find(|t| !before.contains(t)).expect("a new table")
+    }
+
+    fn tables(a: &App) -> Vec<ObjId> {
+        let mut v: Vec<ObjId> = a.drawables.iter().filter(|d| matches!(d.kind, pg_core::kn_model::DrawableKind::Table(_))).map(|d| d.id).collect();
+        v.dedup();
+        v
+    }
+
+    fn red() -> Color {
+        Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 }
+    }
+
+    /// (text, fill, bold, italic, alignment) of a cell, its value and format.
+    fn cell(a: &App, t: ObjId, r: u32, c: u32) -> String {
+        let d = a.doc().unwrap();
+        let td = pg_core::kn_model::table::table(&d.file, d.file.obj(t).unwrap()).unwrap();
+        let i = (r * td.cols + c) as usize;
+        let s = &td.cell_styles[i];
+        format!("{}|{:?}|{}{}|{:?}|{:?}|{:?}|{:?}", td.cells[i], s.fill, s.text.bold, s.text.italic, s.align, d.cell_values(t).get(&(r, c)), d.cell_format(t, r, c), tableclip::cell_edges(&td, r, c).map(|e| e.map(|e| (e.color, e.width))))
+    }
+
+    fn styled(a: &mut App, t: ObjId) {
+        a.edit("t", |d, h| {
+            d.set_cell(h, t, 0, 0, &CellInput::Text("Name".into())).unwrap();
+            d.set_cell(h, t, 1, 0, &CellInput::Number(2.5)).unwrap();
+            d.set_cells_format(h, t, (1, 0, 1, 0), &CellFormat::Currency { code: "USD".into(), decimals: Some(2), thousands: true, negative: 0, accounting: false }).unwrap();
+            d.set_cells_fill(h, t, (1, 1, 1, 1), Some(&FillSpec::Color(red()))).unwrap();
+            d.set_cell(h, t, 1, 1, &CellInput::Text("red".into())).unwrap();
+            d.set_cells_text_prop(h, t, (1, 1, 1, 1), &TextProp::Italic(true)).unwrap();
+            d.set_cells_border(h, t, (1, 0, 1, 0), BorderEdges::Bottom, Some(&StrokeSpec { color: red(), width: 2.0, dash: Dash::Solid })).unwrap();
+            d.set_cell(h, t, 2, 0, &CellInput::Text("two wide".into())).unwrap();
+            d.merge_cells(h, t, CellRange { row: 2, col: 0, rows: 1, cols: 2 }).unwrap();
+        });
+        a.refresh();
+    }
+
+    /// Letters cells through the suite's clipboard HTML into another Letters table (as another
+    /// suite app sends them): the same values, formats, fills, text styles, borders, merge.
+    #[test]
+    fn cells_through_html() {
+        let mut a = app();
+        let t = new_table(&mut a);
+        styled(&mut a, t);
+        let u = new_table(&mut a);
+        let html = tableclip::read(a.doc().unwrap(), t, (0, 0, 2, 1), false).unwrap().to_html();
+        a.sel = Some(Sel::cell(u, 0, 0));
+        let clip = TableClip::from_html(&html).unwrap();
+        paste_table_cells(&mut a, &clip);
+        a.refresh();
+        assert!(a.message.is_none(), "{:?}", a.message);
+        for r in 0..3 {
+            for c in 0..2 {
+                assert_eq!(cell(&a, t, r, c), cell(&a, u, r, c), "cell {r},{c}");
+            }
+        }
+        assert_eq!(a.sel.map(|s| s.block()), Some((0, 0, 2, 1)));
+        // one undo step
+        a.undo();
+        a.refresh();
+        assert_ne!(cell(&a, u, 1, 1), cell(&a, t, 1, 1));
+    }
+
+    static KEYDECK_TABLE: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-model/data/donors/R2-table-values.key");
+
+    /// A whole table copied in Keydeck (or Values) pasted in a document: a new table of its
+    /// size, column widths and cells.
+    #[test]
+    fn whole_table_from_keydeck() {
+        let mut k = pg_core::kn_model::Document::from_file(pg_core::kn_format::KeyFile::from_zip(KEYDECK_TABLE).unwrap());
+        let kt = k.file.objects_of("TST.TableInfoArchive").next().unwrap().0;
+        let mut h = pg_core::kn_model::edit::History::default();
+        k.begin(&mut h, "t");
+        tableclip::resize(&mut k, &mut h, kt, 3, 2).unwrap();
+        k.set_cell(&mut h, kt, 1, 1, &CellInput::Number(42.0)).unwrap();
+        k.set_cells_fill(&mut h, kt, (2, 0, 2, 0), Some(&FillSpec::Color(red()))).unwrap();
+        k.set_table_sizes(&mut h, kt, false, &[(1, 133.0)]);
+        k.end(&mut h);
+        let clip = TableClip::from_html(&tableclip::read(&k, kt, (0, 0, 0, 0), true).unwrap().to_html()).unwrap();
+        let mut a = app();
+        let before = tables(&a);
+        paste_new_table(&mut a, &clip);
+        let u = *tables(&a).iter().find(|t| !before.contains(t)).expect("a new table");
+        let d = a.doc().unwrap();
+        let td = pg_core::kn_model::table::table(&d.file, d.file.obj(u).unwrap()).unwrap();
+        assert_eq!((td.rows, td.cols), (3, 2));
+        assert!((td.col_widths[1] - 133.0).abs() < 0.5, "{:?}", td.col_widths);
+        assert_eq!(d.cell_values(u).get(&(1, 1)), Some(&pg_core::kn_model::table::CellValue::Number(42.0)));
+        assert_eq!(td.cell_styles[4].fill, Fill::Color(red()));
+        // the insertion and the paste are one step
+        a.undo();
+        a.refresh();
+        assert_eq!(tables(&a), before);
+    }
+
+    /// A table copied in LibreOffice Calc pasted over Letters cells.
+    #[test]
+    fn libreoffice_cells() {
+        let mut a = app();
+        let t = new_table(&mut a);
+        a.sel = Some(Sel::cell(t, 1, 1));
+        let clip = TableClip::from_html("<table><tr><td bgcolor=\"#FF0000\"><b>Total</b></td><td align=\"right\">12</td></tr></table>").unwrap();
+        paste_table_cells(&mut a, &clip);
+        a.refresh();
+        let s = cell(&a, t, 1, 1);
+        assert!(s.starts_with("Total|Color(Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 })|truefalse"), "{s}");
+        assert_eq!(a.doc().unwrap().cell_values(t).get(&(1, 2)), Some(&pg_core::kn_model::table::CellValue::Number(12.0)));
+    }
 }

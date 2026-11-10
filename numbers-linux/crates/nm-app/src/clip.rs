@@ -6,86 +6,18 @@
 //! values.
 
 use nm_core::kn_model::format::TextProp;
-use nm_core::kn_model::tablecells::{CellAlign, CellInput};
+use nm_core::kn_model::tablecells::CellInput;
 use nm_core::kn_model::tablefmt::CellFormat;
-use nm_core::kn_model::{Align, Stroke, TableCellStyle, TableData};
+use nm_core::kn_model::tableclip::TableClip;
+use nm_core::kn_model::{Stroke, TableCellStyle};
+
+// (the cell copy and the writing of a pasted cell are the suite's, shared with Keydeck and Letters)
+pub use nm_core::kn_model::tableclip::{cell_align, cell_edges, grid_lines, region, region_looks, write_cell, CellCopy, Job, PasteMode};
+#[cfg(test)]
+use nm_core::kn_model::tableclip::shift_formula;
 
 use crate::app::{App, Sel};
 use crate::canvas::commit;
-
-#[derive(Clone, Debug)]
-pub struct CellCopy {
-    pub formula: Option<String>,
-    pub shown: String,
-    pub format: CellFormat,
-    pub style: Option<TableCellStyle>,
-    /// A cell a merge covers (not its first): Numbers pastes the merge as its first cell
-    /// only and leaves the destination of the covered ones untouched (Mac N18 P11).
-    pub covered: bool,
-    /// The cell's own borders as they show (top, bottom, left, right): a paste brings them
-    /// along. A covered cell keeps its part of the merge's outline here, so a merge made again
-    /// gets its whole outline back.
-    pub edges: [Option<Stroke>; 4],
-    /// A merge's first cell: the merge's outline (top and left from this cell, bottom and
-    /// right from its last cells), for when it pastes as one ordinary cell.
-    pub outline: Option<[Option<Stroke>; 4]>,
-    /// Header row, footer, header column or body ([`region`]).
-    pub region: u8,
-}
-
-/// A cell's part of its table: 0 header rows, 1 footer rows, 2 header columns, 3 body.
-pub fn region(d: &TableData, r: u32, c: u32) -> u8 {
-    if r < d.header_rows {
-        0
-    } else if r >= d.rows.saturating_sub(d.footer_rows) {
-        1
-    } else if c < d.header_cols {
-        2
-    } else {
-        3
-    }
-}
-
-/// The look most of each region's cells have (the table style's, before cells' own changes);
-/// what a cell has the same as this is not its own, so it doesn't travel with a copy (Numbers:
-/// a header cell pasted in the body is body text, Mac N18 P10).
-pub fn region_looks(d: &TableData) -> [Option<TableCellStyle>; 4] {
-    let mut seen: [Vec<(TableCellStyle, usize)>; 4] = Default::default();
-    // (a sample is enough on a large table)
-    let step = ((d.rows * d.cols) / 4000).max(1) as usize;
-    for (i, st) in d.cell_styles.iter().enumerate().step_by(step) {
-        let (r, c) = (i as u32 / d.cols.max(1), i as u32 % d.cols.max(1));
-        let v = &mut seen[region(d, r, c) as usize];
-        match v.iter_mut().find(|x| x.0 == *st) {
-            Some(x) => x.1 += 1,
-            None => v.push((st.clone(), 1)),
-        }
-    }
-    seen.map(|v| v.into_iter().max_by_key(|x| x.1).map(|x| x.0))
-}
-
-/// The table's usual inner grid lines (horizontal, vertical): borders like these are the table
-/// style's, not a cell's own.
-pub fn grid_lines(d: &TableData) -> (Option<Stroke>, Option<Stroke>) {
-    let mode = |v: &mut dyn Iterator<Item = &Option<Stroke>>| {
-        let mut seen: Vec<(Option<Stroke>, usize)> = Vec::new();
-        for s in v {
-            match seen.iter_mut().find(|x| x.0 == *s) {
-                Some(x) => x.1 += 1,
-                None => seen.push((s.clone(), 1)),
-            }
-        }
-        seen.into_iter().max_by_key(|x| x.1).and_then(|x| x.0)
-    };
-    (mode(&mut d.h_strokes.iter()), mode(&mut d.v_strokes.iter()))
-}
-
-/// A cell's four borders (top, bottom, left, right) as table `d` shows them (shown rows).
-pub fn cell_edges(d: &TableData, r: u32, c: u32) -> [Option<Stroke>; 4] {
-    let h = |b: u32| d.h_strokes.get((b * d.cols + c) as usize).cloned().flatten();
-    let v = |b: u32| d.v_strokes.get((r * (d.cols + 1) + b) as usize).cloned().flatten();
-    [h(r), h(r + 1), v(c), v(c + 1)]
-}
 
 /// The system clipboard's text is the cells Values copied (line ends as other apps may change
 /// them: CR LF, or the last line break dropped).
@@ -113,16 +45,91 @@ pub struct CellClip {
     /// The source table's region looks and grid lines (see [`region_looks`], [`grid_lines`]).
     pub looks: [Option<TableCellStyle>; 4],
     pub grid: (Option<Stroke>, Option<Stroke>),
+    /// A whole table pasted from another app: its column widths and row heights (points, 0
+    /// unknown), name and header counts (rows, columns, footer), for a new table made of it.
+    pub sizes: (Vec<f32>, Vec<f32>),
+    pub name: String,
+    pub headers: Option<(u32, u32, u32)>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PasteMode {
-    /// Values, formulas, formats and styles.
-    All,
-    /// Values and formulas; the destination keeps its formats and styles.
-    MatchStyle,
-    /// The shown values only.
-    Results,
+/// The copy as the suite's clipboard table (the HTML other apps read).
+pub fn table_clip(clip: &CellClip) -> TableClip {
+    TableClip {
+        rows: clip.rows,
+        cols: clip.cols,
+        cells: clip.cells.clone(),
+        merges: clip.merges.clone(),
+        origin: clip.origin,
+        looks: clip.looks.clone(),
+        grid: clip.grid.clone(),
+        col_widths: clip.sizes.0.clone(),
+        row_heights: clip.sizes.1.clone(),
+        name: clip.name.clone(),
+        whole: clip.headers.is_some(),
+        headers: clip.headers.unwrap_or_default(),
+        source: nm_core::kn_model::tableclip::process_tag().to_string(),
+        doc: nm_core::kn_model::tableclip::identity_key(&clip.doc),
+    }
+}
+
+/// Cells from another app's clipboard table as Values' own copy (`tsv`: the clipboard's text).
+pub fn cell_clip_of(tc: &TableClip, tsv: &str) -> CellClip {
+    CellClip {
+        rows: tc.rows,
+        cols: tc.cols,
+        cells: tc.cells.clone(),
+        tsv: tsv.to_string(),
+        origin: tc.origin,
+        doc: tc.doc.clone(),
+        merges: tc.merges.clone(),
+        whole: None,
+        looks: tc.looks.clone(),
+        grid: tc.grid.clone(),
+        sizes: (tc.col_widths.clone(), tc.row_heights.clone()),
+        name: if tc.whole { tc.name.clone() } else { String::new() },
+        headers: tc.whole.then_some(tc.headers),
+    }
+}
+
+/// Puts the copy on the system clipboard: its HTML table (for the suite's other apps,
+/// LibreOffice, browsers) with the tab-separated text. False when the clipboard couldn't take
+/// it (the caller puts the text there instead).
+pub fn put_on_clipboard(clip: &TableClip, tsv: &str) -> bool {
+    kn_ui::clipboard::set_html(&clip.to_html(), tsv)
+}
+
+/// A table another app (or another Values window, or a page) put on the clipboard becomes this
+/// window's copy, so a paste takes it whole: values, formats, looks, borders, merges. False
+/// when the clipboard holds no table, or holds this window's own copy (`text`: what the paste
+/// brought, the clipboard's text).
+pub fn adopt_html(app: &mut App, text: &str) -> bool {
+    // (copied objects paste first, as they always have)
+    if app.obj_clip_active || is_ours(app, text) {
+        return false;
+    }
+    match kn_ui::clipboard::html() {
+        Some(html) => adopt_table_html(app, &html, text),
+        None => false,
+    }
+}
+
+pub fn adopt_table_html(app: &mut App, html: &str, text: &str) -> bool {
+    if !nm_core::kn_model::tableclip::has_table(html) {
+        return false;
+    }
+    let Some(tc) = TableClip::from_html(html) else { return false };
+    app.cell_clip = Some(cell_clip_of(&tc, text));
+    app.obj_clip_active = false;
+    true
+}
+
+/// A table selected as an object, copied: the whole table on the system clipboard too, for the
+/// suite's other apps (Values itself pastes its own object copy).
+pub fn copy_table_object(app: &App, t: nm_core::kn_format::ObjId) {
+    let Some(doc) = app.doc() else { return };
+    if let Some(tc) = nm_core::kn_model::tableclip::read(doc, t, (0, 0, 0, 0), true) {
+        put_on_clipboard(&tc, &tc.tsv());
+    }
 }
 
 /// Everything a copy keeps of cell (r, c) (shown row) of table `t`.
@@ -146,7 +153,7 @@ pub fn cell_copy(app: &mut App, t: nm_core::kn_format::ObjId, r: u32, c: u32) ->
         _ => None,
     });
     let region = app.table(t).map(|(_, d)| region(d, r, c)).unwrap_or(3);
-    Some(CellCopy { formula, shown, format, style, covered, edges, outline, region })
+    Some(CellCopy { formula, shown, format, style, covered, edges, outline, region, value: None })
 }
 
 /// Table > Merge Cells as Numbers merges: when only one of the cells holds something, the merged
@@ -213,82 +220,17 @@ pub fn copy(app: &mut App) -> Option<String> {
     let (rows, cols) = app.table(t).map(|(_, d)| (d.rows, d.cols)).unwrap_or((0, 0));
     let (looks, grid) = app.table(t).map(|(_, d)| (region_looks(d), grid_lines(d))).unwrap_or_default();
     let whole = if c0 == 0 && c1 + 1 == cols { Some(true) } else if r0 == 0 && r1 + 1 == rows { Some(false) } else { None };
-    app.cell_clip = Some(CellClip { rows: r1 - r0 + 1, cols: c1 - c0 + 1, cells, tsv: tsv.clone(), origin: (r0, c0), doc: app.doc().map(nm_core::kn_model::insert::doc_identity).unwrap_or_default(), merges, whole, looks, grid });
+    // the stored values (a number stays a number whatever its format shows)
+    if let Some(values) = app.doc().map(|d| d.cell_values(t)) {
+        let w = c1 - c0 + 1;
+        for (k, cc) in cells.iter_mut().enumerate() {
+            let (r, c) = (r0 + k as u32 / w, c0 + k as u32 % w);
+            cc.value = app.mrow(t, r).and_then(|mr| values.get(&(mr, c)).cloned());
+        }
+    }
+    app.cell_clip = Some(CellClip { rows: r1 - r0 + 1, cols: c1 - c0 + 1, cells, tsv: tsv.clone(), origin: (r0, c0), doc: app.doc().map(nm_core::kn_model::insert::doc_identity).unwrap_or_default(), merges, whole, looks, grid, sizes: Default::default(), name: String::new(), headers: None });
     app.obj_clip_active = false;
     Some(tsv)
-}
-
-/// Shift the relative cell references of a formula by (dr, dc); `$`-anchored parts stay.
-pub fn shift_formula(text: &str, dr: i64, dc: i64) -> String {
-    let b: Vec<char> = text.chars().collect();
-    let mut out = String::new();
-    let mut i = 0;
-    let mut in_str = false;
-    let col_name = |mut c: i64| {
-        let mut s = String::new();
-        c += 1;
-        while c > 0 {
-            let m = ((c - 1) % 26) as u8;
-            s.insert(0, (b'A' + m) as char);
-            c = (c - 1) / 26;
-        }
-        s
-    };
-    while i < b.len() {
-        let ch = b[i];
-        if ch == '"' {
-            in_str = !in_str;
-            out.push(ch);
-            i += 1;
-            continue;
-        }
-        let starts_ref = !in_str && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == '_' || b[i - 1] == '.'));
-        if starts_ref {
-            // [$]LETTERS[$]DIGITS, not followed by a letter, digit or "("
-            let mut j = i;
-            let col_abs = b.get(j) == Some(&'$');
-            if col_abs {
-                j += 1;
-            }
-            let l0 = j;
-            while j < b.len() && b[j].is_ascii_uppercase() {
-                j += 1;
-            }
-            let letters: String = b[l0..j].iter().collect();
-            let row_abs = b.get(j) == Some(&'$');
-            let mut k = if row_abs { j + 1 } else { j };
-            let d0 = k;
-            while k < b.len() && b[k].is_ascii_digit() {
-                k += 1;
-            }
-            let digits: String = b[d0..k].iter().collect();
-            let ends_ok = b.get(k).is_none_or(|c| !(c.is_ascii_alphanumeric() || *c == '(' || *c == '_'));
-            if !letters.is_empty() && letters.len() <= 3 && !digits.is_empty() && ends_ok {
-                let col = letters.bytes().fold(0i64, |a, ch| a * 26 + i64::from(ch - b'A') + 1) - 1;
-                let row: i64 = digits.parse().unwrap_or(1) - 1;
-                let (nc, nr) = (if col_abs { col } else { col + dc }, if row_abs { row } else { row + dr });
-                if nc < 0 || nr < 0 {
-                    out.push_str("#REF!");
-                } else {
-                    out.push_str(&format!("{}{}{}{}", if col_abs { "$" } else { "" }, col_name(nc), if row_abs { "$" } else { "" }, nr + 1));
-                }
-                i = k;
-                continue;
-            }
-        }
-        out.push(ch);
-        i += 1;
-    }
-    out
-}
-
-fn cell_align(a: Align) -> CellAlign {
-    match a {
-        Align::Center => CellAlign::Center,
-        Align::Right => CellAlign::Right,
-        Align::Justify => CellAlign::Justify,
-        _ => CellAlign::Left,
-    }
 }
 
 /// Paste the copied cells at the selection, as Numbers 15.4 does (Mac N18): from one selected
@@ -428,155 +370,6 @@ pub fn paste(app: &mut App, mode: PasteMode) -> bool {
     true
 }
 
-/// One pasted cell: where it goes (model row), what was copied, and the destination's look
-/// before the paste (shown row) so only what differs is written.
-struct Job {
-    r: u32,
-    c: u32,
-    cc: CellCopy,
-    /// The top-left of the copy's tile this cell is in (formulas shift by its distance).
-    top_r: i64,
-    left_c: i64,
-    dest: Option<TableCellStyle>,
-    dest_edges: [Option<Stroke>; 4],
-    /// The usual look of the copied cell's region in its table, and of the destination's
-    /// region in this one.
-    src_look: Option<TableCellStyle>,
-    dest_look: Option<TableCellStyle>,
-    src_grid: (Option<Stroke>, Option<Stroke>),
-    dest_grid: (Option<Stroke>, Option<Stroke>),
-}
-
-/// Write one copied cell over another, as Numbers' Paste does: the value or formula, the data
-/// format, and (plain Paste) the copied cell's whole look in place of the destination's: fill,
-/// text style, alignment, wrap, inset and borders, for empty cells too.
-fn write_cell(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model::edit::History, t: nm_core::kn_format::ObjId, job: &Job, mode: PasteMode, origin: (u32, u32), portable: &dyn Fn(&CellFormat) -> CellFormat) -> Result<(), nm_core::kn_format::Error> {
-    let (r, c, cc) = (job.r, job.c, &job.cc);
-    // a cell a re-made merge covers: emptied (the merge takes its first cell's content), its
-    // part of the merge's outline drawn
-    if cc.covered {
-        d.set_cell(hist, t, r, c, &CellInput::Empty)?;
-        if mode == PasteMode::All {
-            write_edges(d, hist, t, job);
-        }
-        return Ok(());
-    }
-    // values and formulas (Paste Formula Results: what the formulas show)
-    match (&cc.formula, mode) {
-        (Some(f), PasteMode::All | PasteMode::MatchStyle) => {
-            let (dr, dc) = (job.top_r - i64::from(origin.0), job.left_c - i64::from(origin.1));
-            d.set_formula_text(hist, t, r, c, &shift_formula(f, dr, dc))?;
-        }
-        _ if cc.shown.is_empty() => d.set_cell(hist, t, r, c, &CellInput::Empty)?,
-        _ => d.set_cell(hist, t, r, c, &CellInput::parse(&cc.shown))?,
-    }
-    let b = (r, c, r, c);
-    // the number format comes along in every kind of paste (when the copy has one); a plain
-    // Paste also takes Automatic, so the cell ends up as the one copied
-    let f = portable(&cc.format);
-    if f != CellFormat::Automatic || mode == PasteMode::All {
-        d.set_cells_format(hist, t, b, &f)?;
-    }
-    // the look: plain Paste only
-    if mode != PasteMode::All {
-        return Ok(());
-    }
-    let Some(src) = &cc.style else { return Ok(()) };
-    let dest = job.dest.as_ref();
-    // what the cell should look like: the copied cell's own changes, and where it has none of
-    // its own (it looks as its region does), the destination region's look
-    let own = |f: &dyn Fn(&TableCellStyle) -> bool| job.src_look.as_ref().is_none_or(|l| !f(l));
-    let base = job.dest_look.as_ref().or(dest).unwrap_or(src);
-    let pick = |is_own: bool| if is_own { src } else { base };
-    let mut st = src.clone();
-    st.fill = pick(own(&|l| l.fill == src.fill)).fill.clone();
-    st.valign = pick(own(&|l| l.valign == src.valign)).valign;
-    st.wrap = pick(own(&|l| l.wrap == src.wrap)).wrap;
-    st.padding = pick(own(&|l| l.padding == src.padding)).padding;
-    st.align = pick(own(&|l| l.align == src.align)).align;
-    st.text.bold = pick(own(&|l| l.text.bold == src.text.bold)).text.bold;
-    st.text.italic = pick(own(&|l| l.text.italic == src.text.italic)).text.italic;
-    st.text.underline = pick(own(&|l| l.text.underline == src.text.underline)).text.underline;
-    st.text.strike = pick(own(&|l| l.text.strike == src.text.strike)).text.strike;
-    st.text.size = pick(own(&|l| l.text.size == src.text.size)).text.size;
-    st.text.color = pick(own(&|l| l.text.color == src.text.color)).text.color;
-    st.text.font_name = pick(own(&|l| l.text.font_name == src.text.font_name)).text.font_name.clone();
-    let differs = |f: &dyn Fn(&TableCellStyle) -> bool| dest.is_none_or(|x| !f(x));
-    // cell properties first: they give an empty cell a record its text style can hang on
-    if differs(&|x| x.fill == st.fill) {
-        // the region's own fill: the table style's again
-        if job.dest_look.as_ref().is_some_and(|l| l.fill == st.fill) || matches!(st.fill, nm_core::kn_model::Fill::None) {
-            d.set_cells_fill(hist, t, b, None)?;
-        } else {
-            d.set_cells_fill(hist, t, b, Some(&crate::editing::fill_spec(&st.fill)))?;
-        }
-    }
-    if differs(&|x| x.valign == st.valign) {
-        d.set_cells_valign(hist, t, b, st.valign)?;
-    }
-    if differs(&|x| x.wrap == st.wrap) {
-        d.set_cells_wrap(hist, t, b, st.wrap)?;
-    }
-    if differs(&|x| x.padding == st.padding) {
-        d.set_cells_padding(hist, t, b, st.padding)?;
-    }
-    // the text style (Keynote's model keeps one only on a cell with a record: an empty cell
-    // with nothing else of its own can't hold it, and needs none to look the same)
-    let tx = &st.text;
-    let props = [
-        (differs(&|x| x.text.bold == tx.bold), TextProp::Bold(tx.bold)),
-        (differs(&|x| x.text.italic == tx.italic), TextProp::Italic(tx.italic)),
-        (differs(&|x| x.text.underline == tx.underline), TextProp::Underline(tx.underline)),
-        (differs(&|x| x.text.strike == tx.strike), TextProp::Strike(tx.strike)),
-        (differs(&|x| x.text.size == tx.size), TextProp::Size(tx.size)),
-        (differs(&|x| x.text.color == tx.color), TextProp::Color(tx.color)),
-        (differs(&|x| x.text.font_name == tx.font_name), TextProp::Font(tx.font_name.clone())),
-    ];
-    let empty = cc.shown.is_empty() && cc.formula.is_none();
-    for (_, p) in props.iter().filter(|(on, _)| *on) {
-        match d.set_cells_text_prop(hist, t, b, p) {
-            Err(_) if empty => break,
-            r => {
-                r?;
-            }
-        }
-    }
-    if differs(&|x| x.align == st.align) {
-        match d.set_cells_alignment(hist, t, b, cell_align(st.align)) {
-            Err(_) if empty => {}
-            r => {
-                r?;
-            }
-        }
-    }
-    write_edges(d, hist, t, job);
-    Ok(())
-}
-
-/// A pasted cell's borders: the copied cell's own (lines like its table's usual grid are the
-/// destination's grid), where the destination shows something else.
-fn write_edges(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model::edit::History, t: nm_core::kn_format::ObjId, job: &Job) {
-    use nm_core::kn_model::format::{Dash, StrokeSpec};
-    use nm_core::kn_model::tablefmt::BorderEdges;
-    let (r, c, cc) = (job.r, job.c, &job.cc);
-    let b = (r, c, r, c);
-    let spec = |s: &Stroke| StrokeSpec { color: s.color, width: s.width, dash: if s.dash.is_empty() { Dash::Solid } else if s.dash[0] < 0.5 { Dash::Dotted } else { Dash::Dashed } };
-    let same = |a: &Option<Stroke>, h: &Option<Stroke>| match (a, h) {
-        (Some(a), Some(h)) => a.color == h.color && (a.width - h.width).abs() < 0.01 && a.dash.is_empty() == h.dash.is_empty(),
-        (None, None) => true,
-        _ => false,
-    };
-    for (k, edge) in [BorderEdges::Top, BorderEdges::Bottom, BorderEdges::Left, BorderEdges::Right].into_iter().enumerate() {
-        let (sg, dg) = if k < 2 { (&job.src_grid.0, &job.dest_grid.0) } else { (&job.src_grid.1, &job.dest_grid.1) };
-        let copied = &cc.edges[k];
-        let want = if same(copied, sg) { dg } else { copied };
-        if !same(want, &job.dest_edges[k]) {
-            // (a table with no stroke sidecar can't take borders: the rest still pastes)
-            let _ = d.set_cells_border(hist, t, b, edge, want.as_ref().map(spec).as_ref());
-        }
-    }
-}
-
 fn table_model(d: &nm_core::kn_model::Document, t: nm_core::kn_format::ObjId) -> Option<nm_core::kn_format::ObjId> {
     d.file.obj(t).and_then(|m| m.ref_id("tableModel"))
 }
@@ -621,12 +414,19 @@ pub fn paste_new_table(app: &mut App) {
     let Some(clip) = app.cell_clip.clone() else { return };
     let Some(sheet) = app.sheets().get(app.sheet).map(|s| s.id) else { return };
     let Ok((donor, dinfo)) = nm_core::sheets::table_style_donor(2) else { return };
-    let name = format!("{}-1", app.drawables.iter().find_map(|d| match &d.kind { nm_core::kn_model::DrawableKind::Table(t) => Some(t.name.clone()), _ => None }).unwrap_or_else(|| "Table 1".into()));
+    let names: Vec<String> = app.drawables.iter().filter_map(|d| match &d.kind { nm_core::kn_model::DrawableKind::Table(t) => Some(t.name.clone()), _ => None }).collect();
+    let name = format!("{}-1", names.first().cloned().unwrap_or_else(|| "Table 1".into()));
+    // a whole table from another app keeps its name (when the sheet has none like it)
+    let name = if !clip.name.trim().is_empty() && !names.iter().any(|n| n == clip.name.trim()) { clip.name.trim().to_string() } else { name };
+    let (hr, hc, fr) = clip.headers.unwrap_or_default();
     let made = app.edit("Paste", |d, h| -> Result<nm_core::kn_format::ObjId, nm_core::kn_format::Error> {
         use nm_core::kn_model::tablerows::{Axis, HeaderKind};
         let t = nm_core::sheets::insert_table(d, h, sheet, &donor, dinfo, 2.0, 550.0)?;
-        for k in [HeaderKind::Rows, HeaderKind::Columns, HeaderKind::Footer] {
+        for (k, n) in [(HeaderKind::Rows, hr), (HeaderKind::Columns, hc), (HeaderKind::Footer, fr)] {
             d.set_table_header_count(h, t, k, 0)?;
+            if n > 0 {
+                let _ = d.set_table_header_count(h, t, k, n);
+            }
         }
         // the copy's size
         let (rows, cols) = table_size(d, t);
@@ -651,6 +451,19 @@ pub fn paste_new_table(app: &mut App) {
             app.sel = Some(Sel::cell(t, 0, 0));
             app.refresh();
             paste(app, PasteMode::All);
+            // the column widths and row heights of a whole table from another app (the same step)
+            let size = |v: &[f32]| -> Vec<(u32, f32)> { v.iter().enumerate().filter(|(_, s)| **s > 0.5).map(|(i, s)| (i as u32, *s)).collect() };
+            let (w, ht) = (size(&clip.sizes.0), size(&clip.sizes.1));
+            if !w.is_empty() || !ht.is_empty() {
+                let before = app.continue_edit;
+                app.continue_edit = true;
+                app.edit("Paste", |d, h| {
+                    d.set_table_sizes(h, t, false, &w);
+                    d.set_table_sizes(h, t, true, &ht);
+                });
+                app.continue_edit = before;
+                app.refresh();
+            }
         }
         Some(Err(e)) => app.notify(format!("Couldn't paste: {e}")),
         None => {}
@@ -818,6 +631,98 @@ mod tests {
         let mr = a.mrow(u, 3).unwrap();
         assert_eq!(a.formula_of(u, mr, 0).map(|f| f.replace('×', "*")).as_deref(), Some("=A3*2"), "the formula follows its new place");
         assert_eq!(cell(&a, u, 3, 0).0, "24");
+    }
+
+    /// Cells as another Values window or Keydeck / Letters would send them: through the
+    /// clipboard's HTML. Pasted, they give what Values' own copy gives: values, formats, fills,
+    /// formula, merges and every border.
+    #[test]
+    fn html_paste_matches_own_paste() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        put(&mut a, t, 3, 1, "1234.5");
+        a.edit("t", |d, h| d.set_cells_format(h, t, (3, 1, 3, 1), &CellFormat::Currency { code: "EUR".into(), decimals: Some(2), thousands: true, negative: 0, accounting: false })).unwrap().unwrap();
+        put(&mut a, t, 3, 3, "=B4*2");
+        a.refresh();
+        // our own paste
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((6, 1), (6, 1)));
+        // the same copy as another app's HTML
+        sel(&mut a, t, (1, 1), (3, 3));
+        let tsv = copy(&mut a).unwrap();
+        let html = table_clip(a.cell_clip.as_ref().unwrap()).to_html();
+        a.cell_clip = None;
+        assert!(adopt_table_html(&mut a, &html, &tsv));
+        assert!(is_ours(&a, &tsv), "the adopted copy is the paste's");
+        sel(&mut a, t, (11, 1), (11, 1));
+        assert!(paste(&mut a, PasteMode::All));
+        a.refresh();
+        assert!(a.message.is_none(), "{:?}", a.message);
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(cell(&a, t, 6 + i, 1 + j), cell(&a, t, 11 + i, 1 + j), "cell +{i},+{j}");
+            }
+        }
+        assert_edges_match(&a, t, (6, 1), t, (11, 1), (3, 3));
+        let (_, d) = a.table(t).unwrap();
+        assert_eq!(d.merge_at(11, 1).map(|m| (m.rows, m.cols)), Some((2, 3)));
+        assert_eq!(cell(&a, t, 13, 1).0, cell(&a, t, 3, 1).0, "the currency format came along");
+        let mr = a.mrow(t, 13).unwrap();
+        assert_eq!(a.formula_of(t, mr, 3).map(|f| f.replace('×', "*")).as_deref(), Some("=B14*2"));
+    }
+
+    static KEYDECK_TABLE: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-model/data/donors/R2-table-values.key");
+
+    /// A table made in Keydeck / Letters (the same engine): its cells, copied as the suite's
+    /// HTML, pasted into Values cells and onto the empty sheet as a whole new table.
+    #[test]
+    fn keydeck_table_into_values() {
+        use nm_core::kn_model::tableclip;
+        use nm_core::kn_model::tablecells::CellAlign;
+        let mut k = nm_core::kn_model::Document::from_file(nm_core::kn_format::KeyFile::from_zip(KEYDECK_TABLE).unwrap());
+        let kt = k.file.objects_of("TST.TableInfoArchive").next().unwrap().0;
+        let mut h = nm_core::kn_model::edit::History::default();
+        k.begin(&mut h, "t");
+        tableclip::resize(&mut k, &mut h, kt, 3, 3).unwrap();
+        k.set_cell(&mut h, kt, 1, 0, &CellInput::Text("Total".into())).unwrap();
+        k.set_cell(&mut h, kt, 1, 1, &CellInput::Number(0.5)).unwrap();
+        k.set_cells_format(&mut h, kt, (1, 1, 1, 1), &CellFormat::Percent { decimals: Some(0), thousands: false, negative: 0 }).unwrap();
+        k.set_cells_fill(&mut h, kt, (1, 0, 1, 0), Some(&FillSpec::Color(red()))).unwrap();
+        k.set_cells_text_prop(&mut h, kt, (1, 0, 1, 0), &TextProp::Italic(true)).unwrap();
+        // (Keydeck's tables centre their text: a cell set apart is right-aligned)
+        k.set_cells_alignment(&mut h, kt, (1, 0, 1, 0), CellAlign::Right).unwrap();
+        k.set_cell(&mut h, kt, 2, 0, &CellInput::Text("wide".into())).unwrap();
+        k.merge_cells(&mut h, kt, CellRange { row: 2, col: 0, rows: 1, cols: 2 }).unwrap();
+        k.set_table_sizes(&mut h, kt, false, &[(2, 140.0)]);
+        k.end(&mut h);
+        // cells into cells
+        let cells = tableclip::read(&k, kt, (1, 0, 2, 1), false).unwrap();
+        let mut a = app();
+        let t = tables(&a)[0];
+        sel(&mut a, t, (4, 1), (4, 1));
+        assert!(adopt_table_html(&mut a, &cells.to_html(), &cells.tsv()));
+        assert!(paste(&mut a, PasteMode::All));
+        a.refresh();
+        assert_eq!(cell(&a, t, 4, 1).0, "Total");
+        assert!(cell(&a, t, 4, 1).1.text.italic);
+        assert_eq!(cell(&a, t, 4, 1).1.fill, Fill::Color(red()));
+        assert_eq!(cell(&a, t, 4, 2).0, "50%");
+        assert_eq!(cell(&a, t, 4, 1).1.align, nm_core::kn_model::Align::Right);
+        assert_eq!(a.doc().unwrap().cell_values(t).get(&(4, 2)), Some(&nm_core::kn_model::table::CellValue::Number(0.5)));
+        assert_eq!(a.table(t).unwrap().1.merge_at(5, 1).map(|m| (m.row, m.col, m.cols)), Some((5, 1, 2)));
+        // the whole table onto the empty sheet: a new table of its size, widths and name
+        let whole = tableclip::read(&k, kt, (0, 0, 0, 0), true).unwrap();
+        a.sel = None;
+        assert!(adopt_table_html(&mut a, &whole.to_html(), &whole.tsv()));
+        let before = tables(&a);
+        paste_new_table(&mut a);
+        a.refresh();
+        let u = *tables(&a).iter().find(|x| !before.contains(x)).expect("a new table");
+        let (_, d) = a.table(u).unwrap();
+        assert_eq!((d.rows, d.cols), (3, 3));
+        assert!((d.col_widths[2] - 140.0).abs() < 0.5, "{:?}", d.col_widths);
+        assert_eq!(d.header_rows, whole.headers.0);
+        assert_eq!(cell(&a, u, 1, 1).0, "50%");
     }
 
     /// The clipboard's text is recognised as the copied cells even when another app changed

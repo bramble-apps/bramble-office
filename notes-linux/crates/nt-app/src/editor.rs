@@ -586,7 +586,8 @@ impl Editor {
             Redo => self.redo(),
             Cut | Copy => {
                 if let Some((frag, plain)) = self.copy_frag() {
-                    input::set_clipboard(ctx, frag, plain);
+                    let table = self.table_copy_html();
+                    input::set_clipboard(ctx, frag, plain, table);
                     if cmd == Cut {
                         if self.table_sel.is_some() {
                             self.clear_table_sel();

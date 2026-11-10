@@ -1986,7 +1986,10 @@ pub fn clear_cells(app: &mut App) {
 pub fn copy(app: &mut App, ctx: &egui::Context, cut: bool) {
     // the cells with their formulas, formats and styles (Numbers), and as text for other apps
     let Some(text) = crate::clip::copy(app) else { return };
-    ctx.copy_text(text);
+    // as an HTML table too, for the suite's other apps (and LibreOffice, browsers)
+    if !app.cell_clip.as_ref().is_some_and(|c| crate::clip::put_on_clipboard(&crate::clip::table_clip(c), &text)) {
+        ctx.copy_text(text);
+    }
     if cut {
         // Numbers empties the cut cells, their style too
         clear_cells(app);
@@ -2107,6 +2110,8 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
                     app.delete_objects();
                 }
                 egui::Event::Paste(_) if app.obj_clip_active => app.paste_here(),
+                // a table copied in another app: a new table
+                egui::Event::Paste(t) if crate::clip::adopt_html(app, &t) => crate::clip::paste_new_table(app),
                 _ => {}
             }
         }
@@ -2155,7 +2160,8 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
         for ev in ctx.input(|i| i.events.clone()) {
             match ev {
                 // copied cells pasted on the empty canvas make a new table (Numbers, Mac N18)
-                egui::Event::Paste(t) if !app.obj_clip_active && crate::clip::is_ours(app, &t) => crate::clip::paste_new_table(app),
+                // (and a table copied in another app)
+                egui::Event::Paste(t) if !app.obj_clip_active && (crate::clip::is_ours(app, &t) || crate::clip::adopt_html(app, &t)) => crate::clip::paste_new_table(app),
                 // a picture (or picture files) copied elsewhere: a picture on the sheet
                 egui::Event::Paste(t) if !app.obj_clip_active => {
                     crate::clip::paste_pictures(app, Some(&t));
@@ -2173,8 +2179,8 @@ pub fn shortcuts(app: &mut App, ctx: &egui::Context) {
             egui::Event::Copy => copy(app, ctx, false),
             egui::Event::Cut => copy(app, ctx, true),
             egui::Event::Paste(_) if app.obj_clip_active => app.paste_here(),
-            // our own copy: everything it holds
-            egui::Event::Paste(t) if crate::clip::is_ours(app, t) => {
+            // our own copy, or a table copied in another app: everything it holds
+            egui::Event::Paste(t) if crate::clip::is_ours(app, t) || crate::clip::adopt_html(app, t) => {
                 crate::clip::paste(app, crate::clip::PasteMode::All);
             }
             // picture files or a picture: the cell's fill; text from elsewhere: values

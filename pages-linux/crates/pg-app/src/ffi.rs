@@ -138,6 +138,8 @@ pub extern "C" fn lt_init(width: f32, height: f32) {
     let _ = std::panic::catch_unwind(|| {
         pg_core::init();
         let ctx = egui::Context::default();
+        // (the front end owns the clipboard: copies reach it as text)
+        kn_ui::clipboard::set_hosted(true);
         let mut app = App::with_ctx(&ctx, Vec::new());
         // (the template chooser at launch as the desktop's, but not in automated checks, as CS_SNAP)
         if std::env::var_os("LETTERS_SNAP").is_some() && std::env::var_os("CS_WELCOME").is_none() {

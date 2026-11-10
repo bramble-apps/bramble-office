@@ -184,6 +184,14 @@ pub fn object_keys(app: &mut App, ctx: &egui::Context, events: &[Event]) {
                 delete_selected(app);
                 return;
             }
+            // a table copied as a table (here or in another suite app): a new table
+            Event::Paste(t) if !app.obj_clip_active => {
+                if let Some(clip) = kn_ui::clipboard::html().and_then(|h| pg_core::kn_model::tableclip::table_paste(&h, t)) {
+                    crate::tables::paste_new_table(app, &clip);
+                    return;
+                }
+                paste_objects(app, 20.0);
+            }
             Event::Paste(_) => paste_objects(app, 20.0),
             Event::Text(t) if !t.is_empty() => {
                 // typing on a selected text box starts editing it (Pages)
@@ -215,6 +223,14 @@ thread_local! {
 
 pub fn copy_objects(app: &mut App, ctx: &egui::Context) {
     PASTES.with(|p| p.set(0));
+    // a table alone: the whole table on the clipboard, as the suite's apps paste it
+    if let [t] = app.selected_objs()[..] {
+        if app.wb.as_ref().is_some_and(|w| w.file().type_name(t) == "TST.TableInfoArchive") && crate::tables::put_table(app, ctx, t) {
+            app.obj_clip = None;
+            app.obj_clip_active = false;
+            return;
+        }
+    }
     let ids: Vec<ObjId> = app.selected_objs().into_iter().filter(|i| app.wb.as_ref().is_some_and(|w| w.file().type_name(*i) != "TST.TableInfoArchive")).collect();
     if let Some(d) = app.doc() {
         app.obj_clip = d.copy_objects(&ids);

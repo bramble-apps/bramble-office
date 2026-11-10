@@ -599,6 +599,11 @@ pub fn paste(app: &mut App, text: &str, match_style: bool) {
             app.changed();
         }
         None => {
+            // a table copied in a suite app (or just a table from LibreOffice, a page): a table
+            if let Some(clip) = kn_ui::clipboard::html().filter(|_| !match_style).and_then(|h| pg_core::kn_model::tableclip::table_paste(&h, text)) {
+                crate::tables::paste_new_table(app, &clip);
+                return;
+            }
             let t = text.replace("\r\n", "\n").replace('\r', "\n");
             // a single-line field (header) keeps paragraphs; tables of text paste as is
             replace_selection(app, &t, "Paste", false);

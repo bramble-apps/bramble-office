@@ -1507,11 +1507,15 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         "Cut" if app.canvas.editing.is_some() => ctx.send_viewport_cmd(egui::ViewportCommand::RequestCut),
         "Copy" if app.canvas.editing.is_some() => ctx.send_viewport_cmd(egui::ViewportCommand::RequestCopy),
         "Copy" | "Cut" if crate::tableops::cells_active(app) => {
-            if let Some(tsv) = crate::tableops::copy_cells(app) {
-                ctx.copy_text(tsv);
-                if name == "Cut" {
-                    crate::tableops::run(app, "Clear All");
-                }
+            if crate::tableops::put_cells(app, ctx) && name == "Cut" {
+                crate::tableops::run(app, "Clear All");
+            }
+        }
+        // a table selected as an object: the whole table, for pasting here or in another app
+        "Copy" | "Cut" if crate::tableops::table_object(app).is_some() => {
+            let id = crate::tableops::table_object(app).unwrap();
+            if crate::tableops::put_table(app, ctx, id) && name == "Cut" {
+                run(app, ctx, "Delete");
             }
         }
         "Cut" => {
@@ -1530,6 +1534,13 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         }
         // while typing, the menu pastes the clipboard's text into the text (in the text's own style)
         "Paste" | "Paste and Match Style" | "Paste and Preserve Style" if app.canvas.editing.is_some() => ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste),
+        // Keydeck's copied objects; else the system clipboard (a table copied in a suite app:
+        // into the cells or a new table; text: into the cells or a text box)
+        "Paste" | "Paste and Match Style" | "Paste and Preserve Style" if app.clip.is_none() => {
+            if let Some(t) = kn_ui::clipboard::text() {
+                crate::tableops::paste_text(app, &t);
+            }
+        }
         "Paste" | "Paste and Match Style" | "Paste and Preserve Style" => crate::editing::paste(app, "Paste"),
         "Show Spelling and Grammar" => crate::spellwin::show(app),
         "Show Warnings" => crate::warnings::show(app),

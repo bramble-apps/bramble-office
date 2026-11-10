@@ -48,24 +48,7 @@ pub fn set_text(app: &mut App, label: &str, prop: TextProp) {
 }
 
 pub fn fill_spec(f: &Fill) -> FillSpec {
-    match f {
-        Fill::None => FillSpec::None,
-        Fill::Color(c) => FillSpec::Color(*c),
-        Fill::Gradient { stops, kind, inflections, advanced, .. } => {
-            let angle = match kind {
-                nm_core::kn_model::GradientKind::Linear { angle } => *angle,
-                _ => 270.0,
-            };
-            if *advanced || stops.len() > 2 || matches!(kind, nm_core::kn_model::GradientKind::Radial) {
-                let stops = stops.iter().enumerate().map(|(i, s)| (s.0, s.1, inflections.get(i).copied().unwrap_or(0.5))).collect();
-                return FillSpec::Advanced { stops, radial: matches!(kind, nm_core::kn_model::GradientKind::Radial), angle };
-            }
-            let from = stops.first().map(|s| s.1).unwrap_or(nm_core::kn_model::Color::WHITE);
-            let to = stops.last().map(|s| s.1).unwrap_or(nm_core::kn_model::Color::BLACK);
-            FillSpec::Gradient { from, to, angle }
-        }
-        Fill::Image { data_id, technique, reference, size, tint } => FillSpec::Image { data_id: *data_id, technique: *technique, size: *size, reference: *reference, tint: *tint },
-    }
+    nm_core::kn_model::tableclip::fill_spec(f)
 }
 
 /// Font names for the font menu: the document's fonts first, then installed families.
