@@ -12,6 +12,7 @@ use egui::{pos2, vec2, Align2, Color32, CursorIcon, Rect, Sense, Stroke};
 use lg_core::TrackKind;
 
 use crate::app::{App, Drag};
+use crate::edit::Tool;
 use crate::look;
 
 /// The track headers' width: Logic's minimum 265 pt, up to 547 (RESIZING.txt).
@@ -29,6 +30,25 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.hline(local.x_range(), local.max.y, Stroke::new(1.0, look::line()));
     ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
         local_menus(app, ui);
+    });
+    // on the right: the left-click and Command-click tools, and Logic's "…" menu (Snap, Drag)
+    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
+        ui.menu_button("…", |ui| crate::menus::show_items(app, ui, crate::menus::local("tracks-more")));
+        for (cmd, label) in [(true, "⌘"), (false, "")] {
+            let cur = if cmd { app.cmd_tool } else { app.tool };
+            ui.menu_button(format!("{label}{} ⌄", tool_glyph(cur)), |ui| {
+                for t in crate::edit::Tool::TRACKS {
+                    if ui.add(egui::Button::selectable(cur == t, t.name()).shortcut_text(t.key())).clicked() {
+                        if cmd {
+                            app.cmd_tool = t;
+                        } else {
+                            app.tool = t;
+                        }
+                        ui.close();
+                    }
+                }
+            }).response.on_hover_text(if cmd { "Command-click Tool" } else { "Left-click Tool" });
+        }
     });
     // ---- the list header and the ruler
     let hw = app.header_w.clamp(HEADER_W, 547.0);
@@ -87,6 +107,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // Cycle on (dragging inside the area moves it; a click toggles Cycle); the lower strip
     // moves the playhead
     let r_resp = ui.interact(ruler, ui.scope_id().with("ruler"), Sense::click_and_drag());
+    crate::menus::context_menu(app, &r_resp, "ruler");
     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
     if let Some(pp) = r_resp.interact_pointer_pos() {
         let tick = ((pp.x - lanes.min.x) / bw + scroll) * bar_t;
@@ -145,6 +166,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut region_pressed = None;
     // (registered first, so regions on top of it take their own clicks)
     let empty = ui.interact(lanes, ui.scope_id().with("lanes-bg"), Sense::click());
+    let below_tracks = empty.interact_pointer_pos().or(ui.ctx().pointer_hover_pos()).is_some_and(|pp| pp.y > headers.min.y + proj.tracks.len() as f32 * ROW_H - app.scroll_y);
+    crate::menus::context_menu(app, &empty, if below_tracks { "tracks-empty-below" } else { "tracks-area-empty-lane" });
     for (i, t) in proj.tracks.iter().enumerate() {
         let y = headers.min.y + i as f32 * ROW_H - app.scroll_y;
         if y + ROW_H < headers.min.y || y > headers.max.y {
@@ -163,9 +186,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         lp.hline(lane.x_range(), lane.max.y, Stroke::new(1.0, look::grid_line()));
         // the header: number, icon, name, M S, volume
         let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click());
-        if row_resp.clicked() {
+        if row_resp.clicked() || row_resp.secondary_clicked() {
             app.selected_track = Some(i);
         }
+        crate::menus::context_menu(app, &row_resp, "track-header");
         hp.text(pos2(row.min.x + 14.0, row.center().y), Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), look::text_dim());
         let icon = Rect::from_center_size(pos2(row.min.x + 46.0, row.center().y), vec2(34.0, 34.0));
         track_icon(&hp, icon, t.kind);
@@ -247,6 +271,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let rr = Rect::from_min_max(pos2(x0, y + 3.0), pos2(x1.max(x0 + 4.0), y + ROW_H - 3.0));
             let sel = app.selected_region == Some((i, ri));
             draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted, app);
+            if let Some((rt, rri, text)) = app.renaming_region.as_mut().filter(|x| x.0 == i && x.1 == ri) {
+                let (rt, rri) = (*rt, *rri);
+                let er = Rect::from_min_size(rr.min, vec2(rr.width().max(120.0), 18.0));
+                let te = ui.put(er, egui::TextEdit::singleline(text).font(look::regular(11.0)));
+                te.request_focus();
+                if te.lost_focus() {
+                    let name = text.clone();
+                    app.renaming_region = None;
+                    app.checkpoint("Rename Region");
+                    if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(rt)?.regions.get_mut(rri)) {
+                        x.name = name;
+                    }
+                    app.after_edit();
+                }
+            }
             let resp = ui.interact(rr.intersect(lanes), ui.scope_id().with(("region", i, ri)), Sense::click_and_drag());
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
@@ -254,6 +293,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if resp.drag_started() || resp.clicked() || resp.double_clicked() {
                 region_pressed = Some((i, ri, resp.double_clicked(), resp.drag_started(), resp.interact_pointer_pos()));
             }
+            // right-click: selects it, then Logic's region menu
+            if resp.secondary_clicked() {
+                app.selected_region = Some((i, ri));
+                app.selected_track = Some(i);
+            }
+            crate::menus::context_menu(app, &resp, if r.audio.is_some() { "region-audio" } else { "region-midi" });
             if resp.dragged() {
                 // (the drag's region: with Option it is the copy, while the pointer is still over
                 // the original)
@@ -309,13 +354,57 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     }
-    // click on an empty lane: nothing selected
+    // click on an empty lane: nothing selected; with the Pencil, a new empty region of a bar
     if empty.clicked() && region_pressed.is_none() {
-        app.selected_region = None;
-        app.selected_notes.clear();
+        let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
+        let pp = empty.interact_pointer_pos();
+        let row = pp.map(|pp| ((pp.y - headers.min.y + app.scroll_y) / ROW_H).floor() as i64);
+        let n = proj.tracks.len() as i64;
+        if let (Tool::Pencil, Some(pp), Some(row)) = (tool, pp, row.filter(|r| *r >= 0 && *r < n)) {
+            let t = row as usize;
+            if proj.tracks[t].kind != TrackKind::Audio {
+                let tick = ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32;
+                let bar = bar_t as u32;
+                let start = (tick / bar) * bar;
+                app.checkpoint("Create Region");
+                if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    let name = tr.name.clone();
+                    tr.regions.push(lg_core::Region { name, start, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() });
+                    let r = tr.regions.len() - 1;
+                    app.selected_track = Some(t);
+                    app.selected_region = Some((t, r));
+                }
+                app.after_edit();
+            }
+        } else {
+            app.selected_region = None;
+            app.selected_notes.clear();
+        }
     }
+    tool_menu(app, ui);
     if let Some((t, r, double, drag, pp)) = region_pressed {
         app.selected_track = Some(t);
+        // Shift-click adds or removes a region from the selection (Logic)
+        if ui.input(|i| i.modifiers.shift) && !drag {
+            if let Some(k) = app.selected_regions.iter().position(|x| *x == (t, r)) {
+                app.selected_regions.remove(k);
+            } else {
+                app.selected_regions.push((t, r));
+            }
+            app.selected_region = app.selected_regions.last().copied();
+            return;
+        }
+        // the tool in hand (Command held: the Command-click tool)
+        let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
+        let click_tick = pp.map(|pp| ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32);
+        if !drag && tool != Tool::Pointer {
+            if region_tool(app, ui, tool, t, r, click_tick, pp) {
+                return;
+            }
+        }
+        if !app.selected_regions.contains(&(t, r)) {
+            app.selected_regions = vec![(t, r)];
+        }
         app.selected_region = Some((t, r));
         if double {
             app.bottom = crate::app::Bottom::PianoRoll;
@@ -375,50 +464,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
 }
 
+/// The Tracks area's local menus: Logic's Edit, Functions and View (data/local-menus.txt), each
+/// item enabled when Studio runs it.
 fn local_menus(app: &mut App, ui: &mut egui::Ui) {
-    ui.menu_button("Edit ⌄", |ui| {
-        if ui.button("Select All").clicked() {
-            app.tell("Select All isn't available yet");
-            ui.close();
-        }
-        if ui.button("Undo").clicked() {
-            app.undo();
-            ui.close();
-        }
-        if ui.button("Delete").clicked() {
-            app.delete_selection();
-            ui.close();
-        }
-    });
-    ui.menu_button("Functions ⌄", |ui| {
-        if ui.button("Set Locators by Selection and Enable Cycle").clicked() {
-            if let Some((t, r)) = app.selected_region {
-                if let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)) {
-                    let c = (rg.start, rg.start + rg.length);
-                    app.set_cycle(c);
-                    if !app.cycle_on() {
-                        app.toggle_cycle();
-                    }
-                }
-            }
-            ui.close();
-        }
-    });
-    ui.menu_button("View ⌄", |ui| {
-        if ui.button("Zoom In").clicked() {
-            app.bar_w = (app.bar_w * 1.25).min(1200.0);
-            ui.close();
-        }
-        if ui.button("Zoom Out").clicked() {
-            app.bar_w = (app.bar_w / 1.25).max(8.0);
-            ui.close();
-        }
-        if ui.button("Zoom to Fit").clicked() {
-            app.bar_w = 70.0;
-            app.scroll_x = 0.0;
-            ui.close();
-        }
-    });
+    for (title, name) in [("Edit", "tracks-Edit"), ("Functions", "tracks-Functions"), ("View", "tracks-View")] {
+        ui.menu_button(format!("{title} ⌄"), |ui| crate::menus::show_items(app, ui, crate::menus::local(name)));
+    }
 }
 
 fn zoom_at(app: &mut App, factor: f32, at_x: f32, lanes_x: f32) {
@@ -543,4 +594,130 @@ pub fn db_to_frac(db: f32) -> f32 {
 
 pub fn frac_to_db(f: f32) -> f32 {
     if f <= 0.001 { -96.0 } else { f.powf(1.0 / 1.6) * 66.0 - 60.0 }
+}
+
+fn tool_glyph(t: Tool) -> &'static str {
+    match t {
+        Tool::Pointer => "↖",
+        Tool::Pencil => "✎",
+        Tool::Eraser => "⌫",
+        Tool::Text => "T",
+        Tool::Scissors => "✂",
+        Tool::Glue => "⊃",
+        Tool::Solo => "S",
+        Tool::Mute => "M",
+        Tool::Zoom => "🔍",
+        Tool::Fade => "◢",
+        Tool::Automation => "⌇",
+        Tool::Marquee => "⌖",
+        Tool::Flex => "⋈",
+        Tool::Velocity => "V",
+        Tool::Quantize => "Q",
+        Tool::Brush => "⌁",
+    }
+}
+
+/// A click on a region with a tool other than the Pointer (Logic's Tracks-area tools). Returns
+/// true when the tool used the click.
+fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tick: Option<u32>, pp: Option<egui::Pos2>) -> bool {
+    let bar = app.bar_ticks();
+    let beat = bar / app.project.as_ref().map_or(4, |p| p.signature.0.max(1) as u32);
+    let div = (beat / 4).max(1);
+    match tool {
+        Tool::Eraser => {
+            app.selected_region = Some((t, r));
+            app.selected_regions = vec![(t, r)];
+            app.delete_selection();
+        }
+        Tool::Scissors => {
+            let Some(tick) = tick else { return true };
+            // (snapped to the division; Option: cuts it into equal pieces of that length)
+            let cut = if ui.input(|i| i.modifiers.shift) { tick } else { ((tick as f64 / div as f64).round() as u32) * div };
+            app.selected_region = Some((t, r));
+            app.selected_regions = vec![(t, r)];
+            if ui.input(|i| i.modifiers.alt) {
+                if let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)) {
+                    let step = cut.saturating_sub(rg.start).max(div);
+                    let cuts: Vec<u32> = (1..).map(|k| rg.start + k * step).take_while(|c| *c < rg.start + rg.length).collect();
+                    app.split_at(&cuts);
+                }
+            } else {
+                app.split_at(&[cut]);
+            }
+        }
+        Tool::Glue => {
+            let mut v = app.region_selection();
+            if !v.contains(&(t, r)) {
+                v.push((t, r));
+            }
+            app.selected_regions = v;
+            let ctx = ui.ctx().clone();
+            app.edit_command(&ctx, "Join Regions/Notes");
+        }
+        Tool::Mute => {
+            app.checkpoint("Mute Region");
+            if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+                rg.muted = !rg.muted;
+            }
+            app.after_edit();
+        }
+        Tool::Solo => {
+            // the region's track alone, from the click (Logic plays while held; here a toggle)
+            let solo = app.project.as_ref().is_some_and(|p| p.tracks[t].solo);
+            if let Some(p) = app.project.as_mut() {
+                p.tracks[t].solo = !solo;
+            }
+            app.sync_mix();
+            if !solo {
+                if let Some(tick) = tick {
+                    app.locate(tick as f64);
+                }
+                if !app.playing() {
+                    app.play_stop();
+                }
+            }
+        }
+        Tool::Zoom => {
+            if let Some(pp) = pp {
+                let f = if ui.input(|i| i.modifiers.alt) { 0.5 } else { 2.0 };
+                let lanes_x = pp.x - (tick.unwrap_or(0) as f32 / bar as f32 - app.scroll_x) * app.bar_w;
+                zoom_at(app, f, pp.x, lanes_x);
+            }
+        }
+        Tool::Text => {
+            let cur = app.project.as_ref().map(|p| p.tracks[t].regions[r].name.clone()).unwrap_or_default();
+            app.renaming_region = Some((t, r, cur));
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// The T menu at the pointer: the tools with their letters (Logic's Tool Menu).
+fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
+    if !app.tool_menu_open {
+        return;
+    }
+    let at = app.pointer;
+    let roll = app.bottom == crate::app::Bottom::PianoRoll && app.editor_rect.contains(at);
+    let tools: &[Tool] = if roll { &Tool::PIANO_ROLL } else { &Tool::TRACKS };
+    let cur = if roll { app.roll_tool } else { app.tool };
+    let area = egui::Area::new(egui::Id::unique("tool-menu")).fixed_pos(at + vec2(8.0, 8.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
+        egui::Frame::popup(ui.style()).show(ui, |ui| {
+            ui.set_min_width(200.0);
+            for t in tools {
+                if ui.add(egui::Button::selectable(cur == *t, format!("{}  {}", tool_glyph(*t), t.name())).shortcut_text(t.key())).clicked() {
+                    if roll {
+                        app.roll_tool = *t;
+                    } else {
+                        app.tool = *t;
+                    }
+                    app.tool_menu_open = false;
+                }
+            }
+        });
+    });
+    if ui.input(|i| i.pointer.any_pressed()) && !ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p)) {
+        app.tool_menu_open = false;
+    }
 }

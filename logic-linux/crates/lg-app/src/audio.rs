@@ -122,6 +122,39 @@ impl Engine {
         }
     }
 
+    /// A note played live (Musical Typing, a MIDI keyboard) on a track's sound; velocity 0 stops it.
+    pub fn live(&mut self, track: usize, pitch: u8, velocity: u8) {
+        if track >= self.tracks.len() {
+            return;
+        }
+        let ch = self.tracks[track].channel;
+        if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
+            if velocity > 0 { ins.note_on(pitch, velocity) } else { ins.note_off(pitch) }
+        } else if let Some(Some(s)) = self.synths.get_mut(track) {
+            if velocity > 0 { s.note_on(ch as i32, pitch as i32, velocity as i32) } else { s.note_off(ch as i32, pitch as i32) }
+        } else if velocity > 0 {
+            self.voices.push(Voice { track, pitch, phase: 0.0, freq: 440.0 * 2f32.powf((pitch as f32 - 69.0) / 12.0), amp: velocity as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum: ch == 9 });
+        } else {
+            for v in self.voices.iter_mut().filter(|v| v.track == track && v.pitch == pitch) {
+                v.releasing = true;
+            }
+        }
+    }
+
+    /// A controller played live (sustain pedal, mod wheel, pitch bend as cc 128).
+    pub fn live_control(&mut self, track: usize, cc: u8, value: u16) {
+        let ch = self.tracks.get(track).map_or(0, |t| t.channel);
+        if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
+            if cc == 128 { ins.pitch_bend(value as i16 - 8192) } else { ins.controller(cc, value as u8) }
+        } else if let Some(Some(s)) = self.synths.get_mut(track) {
+            if cc == 128 {
+                s.process_midi_message(ch as i32, 0xE0, (value & 0x7F) as i32, (value >> 7) as i32);
+            } else {
+                s.process_midi_message(ch as i32, 0xB0, cc as i32, value as i32);
+            }
+        }
+    }
+
     /// The track's instrument parameters and values (Smart Controls, the plug-in window).
     pub fn instrument_params(&self, t: usize) -> Option<(Vec<lg_dsp::Param>, Vec<f32>)> {
         let ins = self.units.get(t)?.instrument.as_ref()?;

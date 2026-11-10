@@ -3,8 +3,9 @@
 //! Mixer or the tracks), then the window-wide groups. Commands Studio has are run by their
 //! Logic names (App::key_command); the others do nothing yet, as unassigned keys do.
 //!
-//! On Linux and Windows ⌘ is Ctrl; Logic's ⌃ bindings would collide with the ⌘ ones there, so
-//! they're left out (as other ports do) until a key command editor lets people choose.
+//! On Linux and Windows ⌘ is Ctrl, and so is Logic's ⌃: a Ctrl press first tries the ⌘
+//! bindings, then the ⌃ ones (the first command Studio runs wins). The Tool Menu's letters
+//! apply only while the T menu is open.
 
 use std::sync::OnceLock;
 
@@ -18,6 +19,8 @@ pub struct Binding {
     pub cmd: bool,
     pub alt: bool,
     pub shift: bool,
+    /// Logic binds it with ⌃ (Control): tried after the ⌘ bindings.
+    pub ctrl: bool,
 }
 
 fn key_of(c: char) -> Option<Key> {
@@ -69,14 +72,12 @@ fn parse() -> Vec<Binding> {
         }
         let mut it = line.split('\t');
         let (Some(area), Some(command), Some(spec)) = (it.next(), it.next(), it.next()) else { continue };
-        if spec.contains('⌃') {
-            continue;
-        }
-        let rest: String = spec.chars().filter(|c| !"⌘⌥⇧".contains(*c)).collect();
+        let rest: String = spec.chars().filter(|c| !"⌘⌥⇧⌃".contains(*c)).collect();
         let mut chars = rest.chars();
         let (Some(c), None) = (chars.next(), chars.next()) else { continue };
         let Some(key) = key_of(c) else { continue };
-        out.push(Binding { area: area.to_string(), command: command.to_string(), key, cmd: spec.contains('⌘'), alt: spec.contains('⌥'), shift: spec.contains('⇧') });
+        let ctrl = spec.contains('⌃');
+        out.push(Binding { area: area.to_string(), command: command.to_string(), key, cmd: spec.contains('⌘') || ctrl, alt: spec.contains('⌥'), shift: spec.contains('⇧'), ctrl });
     }
     out
 }
@@ -102,13 +103,20 @@ pub enum Focus {
     Mixer,
 }
 
+/// The Tool Menu's letter for a tool (T, then the letter).
+pub fn tool_for(key: Key, shift: bool) -> Option<&'static str> {
+    bindings().iter().find(|b| b.area == "Tool Menu" && b.key == key && b.shift == shift && !b.cmd && !b.alt).map(|b| b.command.as_str())
+}
+
 /// The commands bound to a key press, in the order they should be tried.
 pub fn commands_for(key: Key, m: Modifiers, focus: Focus) -> Vec<&'static str> {
     let mut out = Vec::new();
-    for area in areas(focus) {
-        for b in bindings().iter().filter(|b| b.area == *area) {
-            if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
-                out.push(b.command.as_str());
+    for ctrl in [false, true] {
+        for area in areas(focus) {
+            for b in bindings().iter().filter(|b| b.area == *area && b.ctrl == ctrl) {
+                if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
+                    out.push(b.command.as_str());
+                }
             }
         }
     }

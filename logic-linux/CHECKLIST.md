@@ -88,13 +88,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 33 | 594 | 5% |
-| Local menus | 2 | 1191 | 0% |
-| Right-click menus | 5 | 2575 | 0% |
-| Key commands | 53 | 2207 | 2% |
+| Menu bar | 45 | 594 | 7% |
+| Local menus | 31 | 1191 | 2% |
+| Right-click menus | 51 | 2575 | 1% |
+| Key commands | 61 | 2207 | 2% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 33 of 594
+## Menu bar: 45 of 594
 
 
 <details><summary>Bramble Studio — 5/48</summary>
@@ -236,15 +236,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 0/166</summary>
+<details><summary>Edit — 3/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…  `⌃⌥⌘Z`
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
 - [ ] Delete
@@ -407,9 +407,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Track — 3/49</summary>
+<details><summary>Track — 5/49</summary>
 
-- [ ] New Tracks…  `⌥⌘N`
+- [x] New Tracks…  `⌥⌘N`
 - [x] New Audio Track  `⌥⌘A`
 - [x] New Software Instrument Track  `⌥⌘S`
 - [x] New Session Player SI Track…  `⌥⌘P`
@@ -422,7 +422,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] New Track For Overlapped Regions
   - [ ] New Track For Selected Regions
 - [ ] Rename Track  `⇧↩`
-- [ ] Delete Track  `⌘⌫`
+- [x] Delete Track  `⌘⌫`
 - [ ] Delete Unused Tracks  `⇧⌘⌫`
 - [ ] Create Track Stack…  `⇧⌘D`
 - [ ] Flatten Stack  `⇧⌘U`
@@ -461,7 +461,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Navigate — 1/56</summary>
+<details><summary>Navigate — 3/56</summary>
 
 - [ ] Go To
   - [ ] Position…  `/`
@@ -477,7 +477,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Rounded Locators by Selection and Enable Cycle  `U`
 - [x] Move Locators Forward by Cycle Length  `⇧⌘.`
 - [ ] Move Locators Backwards by Cycle Length  `⇧⌘,`
-- [ ] Create Marker  `⌥'`
+- [x] Create Marker  `⌥'`
 - [ ] Other
   - [ ] Create Marker for Region Selection  `⌥⇧'`
   - [ ] Create Without Rounding  `⌃⌥'`
@@ -506,7 +506,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Play From Selected Region
   - [ ] Play From Last Locate Position
 - [ ] Stop Button Options
-  - [ ] Stop
+  - [x] Stop
   - [ ] Stop and Go to Left Locator
   - [ ] Stop and Go to Last Locate Position
   - [ ] Jump between Marquee- and Project Start if stopped
@@ -522,7 +522,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Record — 0/56</summary>
+<details><summary>Record — 3/56</summary>
 
 - [ ] Count-in
   - [ ] None
@@ -547,8 +547,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Auto Input Monitoring
 - [ ] Low Latency Monitoring Mode
 - [ ] Record Button Options
-  - [ ] Record
-  - [ ] Record / Record Toggle
+  - [x] Record
+  - [x] Record / Record Toggle
   - [ ] Record / Record Repeat
 - [ ] Overlapping MIDI Recordings
   - [ ] Cycle Off
@@ -573,7 +573,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Overlapping Audio Recordings
   - [ ] Cycle Off
   - [ ] Create Take Folder
-  - [ ] Create New Track
+  - [x] Create New Track
   - [ ] Create Track Alternative
   - [ ] Cycle On
   - [ ] Create Take Folder
@@ -647,7 +647,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 5/68</summary>
+<details><summary>Window — 7/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -658,7 +658,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Move & Resize
   - [ ] Halves
   - [ ] Left  `⌃vk123`
-  - [ ] Right  `⌃vk124`
+  - [x] Right  `⌃vk124`
   - [ ] Top  `⌃vk126`
   - [ ] Bottom  `⌃vk125`
   - [ ] Quarters
@@ -707,7 +707,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Event Float  `⌥E`
 - [ ] Show Region Inspector Float  `⌥⇧R`
 - [ ] Show Play Surface  `⌘K`
-- [ ] Show Musical Typing
+- [x] Show Musical Typing
 - [ ] Show Step Input Keyboard  `⌥⌘K`
 - [ ] Hide All Plug-in Windows  `V`
 - [ ] Untitled.logicx - Tracks
@@ -741,7 +741,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 2 of 1191
+## Local menus (Edit / Functions / View in each area): 31 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -756,15 +756,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiofile-Edit — 2/36</summary>
+<details><summary>audiofile-Edit — 6/36</summary>
 
 - [x] Undo  `⌘Z`
 - [x] Redo  `⇧⌘Z`
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Delete
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Select All Previous Samples  `⌃⌥⇧←`
 - [ ] Select All Following Samples  `⌃⌥⇧→`
 - [ ] Region -> Selection  `⇞PgUp`
@@ -831,15 +831,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 0/118</summary>
+<details><summary>audiotrack-Edit — 3/118</summary>
 
 - [ ] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
 - [ ] Delete
@@ -982,15 +982,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Edit — 0/100</summary>
+<details><summary>eventlist-Edit — 4/100</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
 - [ ] Delete
@@ -1072,7 +1072,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Note End to Selected Notes (4 Ticks Overlap)
   - [ ] Note End to Following Notes (8 Ticks Gap)  `⇧\`
   - [ ] Note End to Following Notes (4 Ticks Overlap)
-- [ ] Transpose
+- [x] Transpose
   - [ ] +1 Semitone  `⌥↑`
   - [ ] -1 Semitone  `⌥↓`
   - [ ] +12 Semitones  `⌥⇧↑`
@@ -1142,7 +1142,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-Edit — 0/26</summary>
+<details><summary>mixer-Edit — 4/26</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1154,11 +1154,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Redo selected Channel Strips
 - [ ] Delete Mixer Undo History
 - [ ] Include Mixer Undo Steps in Project Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Delete
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Deselect All  `⇧D`
 - [ ] Invert Selection  `⇧I`
 - [ ] Select Audio Channel Strips  `⇧A`
@@ -1263,15 +1263,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-Edit — 0/100</summary>
+<details><summary>pianoroll-Edit — 4/100</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…  `⌃⌥⌘Z`
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
 - [ ] Delete
@@ -1353,7 +1353,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Note End to Selected Notes (4 Ticks Overlap)
   - [ ] Note End to Following Notes (8 Ticks Gap)  `⇧\`
   - [ ] Note End to Following Notes (4 Ticks Overlap)
-- [ ] Transpose
+- [x] Transpose
   - [ ] +1 Semitone  `⌥↑`
   - [ ] -1 Semitone  `⌥↓`
   - [ ] +12 Semitones  `⌥⇧↑`
@@ -1423,15 +1423,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Edit — 0/51</summary>
+<details><summary>score-Edit — 3/51</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…  `⌃⌥⌘Z`
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste Multiple  `⌥⇧⌘V`
 - [ ] Paste at Original Position
@@ -1699,15 +1699,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-Edit — 0/17</summary>
+<details><summary>stepseq-Edit — 3/17</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Delete
 - [ ] Repeat Step  `⌘R`
 - [ ] Copy Row  `⌃C`
@@ -1721,12 +1721,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-Functions — 0/17</summary>
+<details><summary>stepseq-Functions — 1/17</summary>
 
 - [ ] Live Record Options
   - [ ] Velocity
   - [ ] Note Length
-  - [ ] Quantize
+  - [x] Quantize
   - [ ] MPE
 - [ ] Transpose +1 Semitone  `⌥↑`
 - [ ] Transpose -1 Semitone  `⌥↓`
@@ -1766,15 +1766,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 0/168</summary>
+<details><summary>tracks-Edit — 3/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…
 - [ ] Delete Undo History
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
 - [ ] Delete
@@ -2085,7 +2085,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 5 of 2575
+## Right-click menus: 51 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2106,7 +2106,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-editor-ruler — 0/21</summary>
+<details><summary>audiotrack-editor-ruler — 1/21</summary>
 
 - [ ] Absolute
 - [ ] Automation Parameter
@@ -2122,7 +2122,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [ ] Absolute
       - [ ] Relative (±)
     - [ ] Solo
-    - [ ] Mute
+    - [x] Mute
 - [ ] Never move Track Automation with Regions
 - [ ] Always move Track Automation with Regions
 - [ ] Ask to move Track Automation with Regions
@@ -2132,15 +2132,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>automation-lane — 0/12</summary>
+<details><summary>automation-lane — 2/12</summary>
 
 - [ ] Create MIDI Region
 - [ ] Create Pattern Region
 - [ ] Create Session Player Region
-- [ ] Paste  `⌘V`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Select All Inside Locators  `⇧L`
 - [ ] Empty Regions
 - [ ] Select Overlapped Regions  `⇧O`
@@ -2191,14 +2191,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-row — 0/14</summary>
+<details><summary>eventlist-row — 4/14</summary>
 
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Delete
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Deselect All  `⇧D`
 - [ ] Invert Selection  `⇧I`
 - [ ] Select All Following  `⇧F`
@@ -2269,13 +2269,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-empty-cell — 0/18</summary>
+<details><summary>liveloops-empty-cell — 1/18</summary>
 
 - [ ] Create MIDI Cell
 - [ ] Create Pattern Cell
 - [ ] Create Session Player Cell
 - [ ] Record into Cell  `⌥R`
-- [ ] Paste  `⌘V`
+- [x] Paste  `⌘V`
 - [ ] Stop Playing Cell
 - [ ] Recording
   - [ ] Mode
@@ -2292,14 +2292,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-midi-cell — 0/151</summary>
+<details><summary>liveloops-midi-cell — 6/151</summary>
 
 - [ ] Record into Cell  `⌥R`
 - [ ] Queue Cell Playback  `⌥↩`
 - [ ] Edit
-  - [ ] Cut  `⌘X`
-  - [ ] Copy  `⌘C`
-  - [ ] Paste  `⌘V`
+  - [x] Cut  `⌘X`
+  - [x] Copy  `⌘C`
+  - [x] Paste  `⌘V`
   - [ ] Delete
   - [ ] Repeat  `⌘R`
 - [ ] Select
@@ -2311,7 +2311,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Same-Colored Cells  `⇧C`
   - [ ] Invert Cell Selection  `⇧I`
   - [ ] Deselect All  `⇧D`
-- [ ] Quantize
+- [x] Quantize
   - [ ] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
@@ -2346,7 +2346,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] 1/16 & 1/16 Triplet
   - [ ] 1/16 & 1/8 Triplet
   - [ ] 1/8 & 1/8 Triplet
-- [ ] Transpose
+- [x] Transpose
   - [ ] +36
   - [ ] +24
   - [ ] +12
@@ -2377,7 +2377,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] -24
   - [ ] -36
 - [ ] Playback
-  - [ ] Mute  `⌃M`
+  - [x] Mute  `⌃M`
   - [ ] Loop  `⌃L`
   - [ ] Reverse  `⌃⇧R`
   - [ ] Speed
@@ -2502,11 +2502,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>marker — 0/5</summary>
+<details><summary>marker — 2/5</summary>
 
-- [ ] Create Marker  `⌥'`
+- [x] Create Marker  `⌥'`
 - [ ] Rename Marker  `⇧'`
-- [ ] Delete Marker  `⌥⌫`
+- [x] Delete Marker  `⌥⌫`
 - [ ] Deselect Global Tracks
 - [ ] Configure Global Tracks…  `⌥G`
 
@@ -3673,12 +3673,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-empty-grid — 0/11</summary>
+<details><summary>pianoroll-empty-grid — 2/11</summary>
 
 - [ ] Create Note
-- [ ] Paste  `⌘V`
+- [x] Paste  `⌘V`
 - [ ] Paste at Original Position
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Select Overlapped Notes  `⇧O`
 - [ ] Select Muted Notes  `⇧M`
 - [ ] Deselect All  `⇧D`
@@ -3695,11 +3695,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-note — 0/321</summary>
+<details><summary>pianoroll-note — 4/321</summary>
 
 - [ ] Define as Default Note
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Delete
 - [ ] Invert Selection  `⇧I`
@@ -3980,8 +3980,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Trim Note End to Selected Notes (4 Ticks Overlap)
 - [ ] Trim Note End to Following Notes (8 Ticks Gap)  `⇧\`
 - [ ] Trim Note End to Following Notes (4 Ticks Overlap)
-- [ ] Nudge Region/Event/Marquee Position Left by Nudge Value  `⌥←`
-- [ ] Nudge Region/Event/Marquee Position Right by Nudge Value  `⌥→`
+- [x] Nudge Region/Event/Marquee Position Left by Nudge Value  `⌥←`
+- [x] Nudge Region/Event/Marquee Position Right by Nudge Value  `⌥→`
 - [ ] Nudge Region/Event/Marquee Length Left by Nudge Value  `⌥⇧←`
 - [ ] Nudge Region/Event/Marquee Length Right by Nudge Value  `⌥⇧→`
 - [ ] Set Nudge Value to
@@ -4036,7 +4036,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 0/172</summary>
+<details><summary>region-audio — 4/172</summary>
 
 - [ ] Mute Regions/Cells  `⌃M`
 - [ ] Loop  `⌃L`
@@ -4044,10 +4044,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Recent Item 4
 - [ ] Recent Item 5
 - [ ] Edit
-  - [ ] Cut  `⌘X`
-  - [ ] Copy  `⌘C`
+  - [x] Cut  `⌘X`
+  - [x] Copy  `⌘C`
   - [ ] Delete
-  - [ ] Repeat Regions/Cells/Events  `⌘R`
+  - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
   - [ ] Copy Region Selection to Live Loops Scene  `⌘↖Home`
@@ -4067,7 +4067,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Deselect Outside Locators
   - [ ] Deselect All  `⇧D`
 - [ ] Playback
-  - [ ] Mute  `⌃M`
+  - [x] Mute  `⌃M`
   - [ ] Loop  `⌃L`
   - [ ] Reverse  `⌃⇧R`
   - [ ] Set Locators by Selection and Enable Cycle  `⌘U`
@@ -4213,7 +4213,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 0/212</summary>
+<details><summary>region-midi — 5/212</summary>
 
 - [ ] Mute Regions/Cells  `⌃M`
 - [ ] Loop  `⌃L`
@@ -4221,10 +4221,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Recent Item 4
 - [ ] Recent Item 5
 - [ ] Edit
-  - [ ] Cut  `⌘X`
-  - [ ] Copy  `⌘C`
+  - [x] Cut  `⌘X`
+  - [x] Copy  `⌘C`
   - [ ] Delete
-  - [ ] Repeat Regions/Cells/Events  `⌘R`
+  - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
   - [ ] Copy Region Selection to Live Loops Scene  `⌘↖Home`
@@ -4244,13 +4244,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Deselect Outside Locators
   - [ ] Deselect All  `⇧D`
 - [ ] Playback
-  - [ ] Mute  `⌃M`
+  - [x] Mute  `⌃M`
   - [ ] Loop  `⌃L`
   - [ ] Reverse  `⌃⇧R`
   - [ ] Set Locators by Selection and Enable Cycle  `⌘U`
   - [ ] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
-- [ ] Quantize
+- [x] Quantize
   - [ ] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
@@ -4451,14 +4451,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-background — 0/8</summary>
+<details><summary>score-background — 2/8</summary>
 
 - [ ] Linear View
 - [ ] Wrapped View
 - [ ] Page View  `⌃P`
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Select All Inside Locators  `⇧L`
-- [ ] Paste  `⌘V`
+- [x] Paste  `⌘V`
 - [ ] Paste Multiple  `⌥⇧⌘V`
 - [ ] Paste at Original Position
 
@@ -4500,9 +4500,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-row-header — 0/10</summary>
+<details><summary>stepseq-row-header — 1/10</summary>
 
-- [ ] Copy  `⌃C`
+- [x] Copy  `⌃C`
 - [ ] Paste Row  `⌃V`
 - [ ] Paste Steps  `⌥⇧V`
 - [ ] Paste Row Settings  `⌃⌥⇧V`
@@ -4515,11 +4515,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-step-cell — 0/7</summary>
+<details><summary>stepseq-step-cell — 3/7</summary>
 
-- [ ] Cut  `⌘X`
-- [ ] Copy  `⌘C`
-- [ ] Paste  `⌘V`
+- [x] Cut  `⌘X`
+- [x] Copy  `⌘C`
+- [x] Paste  `⌘V`
 - [ ] Repeat  `⌘R`
 - [ ] Randomize On/Off
 - [ ] Clear On/Off
@@ -4527,7 +4527,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 0/212</summary>
+<details><summary>take-folder-region — 5/212</summary>
 
 - [ ] Mute Regions/Cells  `⌃M`
 - [ ] Loop  `⌃L`
@@ -4535,10 +4535,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Recent Item 4
 - [ ] Recent Item 5
 - [ ] Edit
-  - [ ] Cut  `⌘X`
-  - [ ] Copy  `⌘C`
+  - [x] Cut  `⌘X`
+  - [x] Copy  `⌘C`
   - [ ] Delete
-  - [ ] Repeat Regions/Cells/Events  `⌘R`
+  - [x] Repeat Regions/Cells/Events  `⌘R`
   - [ ] Repeat Regions/Events Multiple Times…
   - [ ] Copy MIDI Events…
   - [ ] Copy Region Selection to Live Loops Scene  `⌘↖Home`
@@ -4558,13 +4558,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Deselect Outside Locators
   - [ ] Deselect All  `⇧D`
 - [ ] Playback
-  - [ ] Mute  `⌃M`
+  - [x] Mute  `⌃M`
   - [ ] Loop  `⌃L`
   - [ ] Reverse  `⌃⇧R`
   - [ ] Set Locators by Selection and Enable Cycle  `⌘U`
   - [ ] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
-- [ ] Quantize
+- [x] Quantize
   - [ ] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
@@ -4810,7 +4810,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>track-header — 3/70</summary>
+<details><summary>track-header — 5/70</summary>
 
 - [ ] Reassign Track
   - [ ] Click & Ports
@@ -4832,7 +4832,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] New Track with Duplicate Settings  `⌘D`
 - [ ] New Track with Duplicate Settings and Content  `⌥⇧⌘D`
 - [ ] Rename Track  `⇧↩`
-- [ ] Delete Track  `⌘⌫`
+- [x] Delete Track  `⌘⌫`
 - [ ] Delete unused Tracks  `⇧⌘⌫`
 - [ ] Create Track Stack…  `⇧⌘D`
 - [ ] Flatten Stack  `⇧⌘U`
@@ -4845,7 +4845,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Assign Track Icon…
 - [ ] Track Header Components
   - [ ] On/Off
-  - [ ] Mute
+  - [x] Mute
   - [ ] Solo
   - [ ] Track Protect
   - [ ] Freeze
@@ -4885,15 +4885,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-area-empty-lane — 0/12</summary>
+<details><summary>tracks-area-empty-lane — 2/12</summary>
 
 - [ ] Create MIDI Region
 - [ ] Create Pattern Region
 - [ ] Create Session Player Region
-- [ ] Paste  `⌘V`
+- [x] Paste  `⌘V`
 - [ ] Paste Replace  `⇧⌘V`
 - [ ] Paste at Original Position
-- [ ] Select All  `⌘A`
+- [x] Select All  `⌘A`
 - [ ] Select All Inside Locators  `⇧L`
 - [ ] Empty Regions
 - [ ] Select Overlapped Regions  `⇧O`
@@ -4908,7 +4908,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 53 of 2207
+## Key commands: 61 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4917,14 +4917,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 32/679</summary>
+<details><summary>Global Commands — 40/679</summary>
 
-- [ ] Record  `R`
+- [x] Record  `R`
 - [ ] Record / Record Repeat
 - [ ] Record Repeat
 - [ ] Record Toggle
-- [ ] Record / Record Toggle  `*`
-- [ ] Discard Recording and Return to Last Play Position  `⌘.`
+- [x] Record / Record Toggle  `*`
+- [x] Discard Recording and Return to Last Play Position  `⌘.`
 - [ ] Record into Cell  `⌥R`
 - [ ] Flashback Capture as Recording  `⇧R`
 - [ ] Flashback Capture as Recording and Play
@@ -5005,18 +5005,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Go to Beginning  `↩`
 - [ ] Go to End
 - [ ] Select Previous Section for Realtime Comping
-- [ ] Create Marker  `⌥'`
+- [x] Create Marker  `⌥'`
 - [ ] Create Marker without rounding  `⌃⌥'`
 - [ ] Create Marker for Region/Marquee Selection  `⌥⇧'`
 - [ ] Create Marker by Cycle Area
-- [ ] Delete Marker  `⌥⌫`
+- [x] Delete Marker  `⌥⌫`
 - [ ] Open Marker List
 - [ ] Open Marker Text
 - [ ] Set Locators by Marker and Enable Cycle  `⌃⌥C`
 - [ ] Set Locators by Previous Marker and Enable Cycle  `⌃⌥,`
 - [ ] Set Locators by Next Marker and Enable Cycle  `⌃⌥.`
-- [ ] Go to Previous Marker
-- [ ] Go to Next Marker
+- [x] Go to Previous Marker
+- [x] Go to Next Marker
 - [ ] Go to Previous Marker And Set Locators  `⌥,`
 - [ ] Go to Next Marker And Set Locators  `⌥.`
 - [ ] Go to Marker Number…  `⌥/`
@@ -5174,7 +5174,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Signature List…
 - [ ] Show/Hide Play Surface  `⌘K`
 - [ ] Show/Hide Graphic Keyboard
-- [ ] Show/Hide Musical Typing
+- [x] Show/Hide Musical Typing
 - [ ] Show/Hide Event Float  `⌥E`
 - [ ] Show/Hide Event List
 - [ ] Show/Hide Main Window

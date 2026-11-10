@@ -104,6 +104,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             kp.text(pos2(keys.max.x - 3.0, key.center().y), Align2::RIGHT_CENTER, format!("C{}", pitch / 12 - 2), look::semibold(9.5), Color32::from_gray(0x40));
         }
         let kr = ui.interact(key, ui.scope_id().with(("key", pitch)), Sense::click());
+        crate::menus::context_menu(app, &kr, "pianoroll-keyboard");
         if kr.clicked() {
             preview(app, ti, pitch as u8);
         }
@@ -136,6 +137,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // notes: click selects (Shift adds), drag moves (snapped to 1/16; Shift: free; Option:
     // copies), double-click on the grid adds a 1/16 note, Delete removes the selection
     let bg = ui.interact(grid, ui.scope_id().with("roll-bg"), Sense::click());
+    crate::menus::context_menu(app, &bg, "pianoroll-empty-grid");
     let mut pressed_note = None;
     let sixteenth = lg_core::events::PPQ as f32 / 4.0;
     for (k, n) in region.notes.iter().enumerate() {
@@ -154,6 +156,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             gp.hline(r.min.x + 2.0..=r.min.x + 2.0 + w, r.center().y, Stroke::new(1.0, look::mix(c, Color32::BLACK, 0.5)));
         }
         let resp = ui.interact(r.intersect(grid), ui.scope_id().with(("note", k)), Sense::click_and_drag());
+        if resp.secondary_clicked() && !app.selected_notes.contains(&k) {
+            app.selected_notes = vec![k];
+        }
+        crate::menus::context_menu(app, &resp, "pianoroll-note");
         if resp.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }

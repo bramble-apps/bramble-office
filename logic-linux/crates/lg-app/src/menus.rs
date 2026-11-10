@@ -19,7 +19,12 @@ pub struct Item {
 const LEFT_OUT: &[&str] = &["Learn About Apple Creator Studio…", "Learn About Logic Remote…", "Manage Subscriptions", "Intelligence Features", "Provide Bramble Studio Feedback", "Privacy & Analytics", "Services", "Send Bramble Studio Feedback", "Sound Library…"];
 
 fn parse() -> Vec<Item> {
-    let text = include_str!("../data/menus.txt");
+    parse_text(include_str!("../data/menus.txt"), 2)
+}
+
+/// Menus in the research's text form: "=== Name ===" then items indented four spaces a level
+/// from `base` (the menu bar file starts its items at 2, the right-click and local menus at 0).
+fn parse_text(text: &str, base: usize) -> Vec<Item> {
     let mut menus: Vec<Item> = Vec::new();
     // the path of open submenus: (indent, index path)
     let mut stack: Vec<usize> = Vec::new();
@@ -30,7 +35,10 @@ fn parse() -> Vec<Item> {
             continue;
         }
         let indent = line.len() - line.trim_start().len();
-        let level = indent.saturating_sub(2) / 4;
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let level = indent.saturating_sub(base) / 4;
         let mut body = line.trim().to_string();
         let mut shortcut = String::new();
         if let (Some(a), true) = (body.rfind("  ["), body.ends_with(']')) {
@@ -76,6 +84,42 @@ pub fn menus() -> &'static [Item] {
     M.get_or_init(parse)
 }
 
+/// A right-click menu by place ("region-midi", "track-header", "pianoroll-note"…: the research's
+/// context-menus/ file names).
+pub fn context(place: &str) -> &'static [Item] {
+    static M: OnceLock<Vec<Item>> = OnceLock::new();
+    let all = M.get_or_init(|| parse_text(include_str!("../data/context-menus.txt"), 0));
+    all.iter().find(|m| m.label == place).map_or(&[], |m| m.children.as_slice())
+}
+
+/// A local menu ("tracks-Edit", "pianoroll-Functions", "mixer-View"…).
+pub fn local(name: &str) -> &'static [Item] {
+    static M: OnceLock<Vec<Item>> = OnceLock::new();
+    let all = M.get_or_init(|| parse_text(include_str!("../data/local-menus.txt"), 0));
+    all.iter().find(|m| m.label == name).map_or(&[], |m| m.children.as_slice())
+}
+
+/// Shows `items` in an open menu; runs the one picked.
+pub fn show_items(app: &mut App, ui: &mut egui::Ui, items: &[Item]) {
+    let mut fired = None;
+    ui.set_min_width(230.0);
+    for c in items {
+        item_ui(app, ui, c, &mut fired);
+    }
+    if let Some(cmd) = fired {
+        app.command(ui.ctx(), &cmd);
+    }
+}
+
+/// A right-click menu on `resp` from the research's menu for `place`.
+pub fn context_menu(app: &mut App, resp: &egui::Response, place: &str) {
+    let items = context(place);
+    if items.is_empty() {
+        return;
+    }
+    resp.context_menu(|ui| show_items(app, ui, items));
+}
+
 /// The commands Studio runs (menu labels; "Menu > Item" where a label is ambiguous).
 pub const IMPLEMENTED: &[&str] = &[
     "About Bramble Studio",
@@ -114,6 +158,15 @@ pub const IMPLEMENTED: &[&str] = &[
     "All MIDI Tracks as MIDI File…",
 ];
 
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/handled.rs"));
+}
+
+/// A command `App::key_command` runs (the build lists them).
+pub fn handled(label: &str) -> bool {
+    generated::HANDLED.contains(&label)
+}
+
 pub fn enabled(app: &App, label: &str) -> bool {
     if label.starts_with("Undo ") {
         return !app.undo.is_empty();
@@ -121,7 +174,7 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if label.starts_with("Can’t Redo") || label.starts_with("Redo") {
         return !app.redo.is_empty();
     }
-    if !IMPLEMENTED.contains(&label) {
+    if !IMPLEMENTED.contains(&label) && !handled(label) {
         return false;
     }
     match label {

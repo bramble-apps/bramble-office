@@ -93,6 +93,8 @@ pub struct App {
     /// Notes played in while recording (and, for Capture as Recording, the last ones played
     /// while not): song ticks.
     pub recorded: Vec<lg_core::events::Note>,
+    /// Musical Typing and MIDI keyboards.
+    pub live: crate::live::Live,
     pub played: Vec<lg_core::events::Note>,
     /// The Inspector's Region and Track sections open; the Track parameters by track.
     pub inspector_region_open: bool,
@@ -114,6 +116,25 @@ pub struct App {
     pub bottom: Bottom,
     pub selected_track: Option<usize>,
     pub selected_region: Option<(usize, usize)>,
+    /// Every selected region (Shift-click, Select All…); `selected_region` is the one in focus.
+    pub selected_regions: Vec<(usize, usize)>,
+    /// The nudge value in ticks (Set Nudge Value to…; Logic's default: a division).
+    pub nudge: u32,
+    /// The Tracks area's tool (T menu) and the Command-click tool.
+    pub tool: crate::edit::Tool,
+    pub cmd_tool: crate::edit::Tool,
+    pub snap_on: bool,
+    /// The Piano Roll's tool; Autopunch; the Quantize value (ticks) for the Q key.
+    pub roll_tool: crate::edit::Tool,
+    pub autopunch: bool,
+    pub quantize_grid: u32,
+    /// Where the pointer is (keys go to the area under it), the tracks area's width.
+    pub pointer: egui::Pos2,
+    pub tracks_w: f32,
+    /// A region or marker being renamed: what's typed so far.
+    pub renaming_region: Option<(usize, usize, String)>,
+    pub renaming_marker: Option<(usize, String)>,
+    pub tool_menu_open: bool,
     /// Points per bar in the tracks area, and its scroll (bars, rows in points).
     pub bar_w: f32,
     pub scroll_x: f32,
@@ -225,7 +246,21 @@ impl App {
             lcd_mode: crate::controlbar::LcdMode::BeatsProject,
             right_pane: None,
             record_from: None,
+            selected_regions: Vec::new(),
+            nudge: 240,
+            tool: crate::edit::Tool::Pointer,
+            cmd_tool: crate::edit::Tool::Marquee,
+            snap_on: true,
+            roll_tool: crate::edit::Tool::Pointer,
+            autopunch: false,
+            quantize_grid: 240,
+            pointer: egui::Pos2::ZERO,
+            tracks_w: 800.0,
+            renaming_region: None,
+            renaming_marker: None,
+            tool_menu_open: false,
             recorded: Vec::new(),
+            live: crate::live::Live::new(),
             played: Vec::new(),
             inspector_region_open: true,
             inspector_track_open: false,
@@ -963,13 +998,21 @@ impl App {
                 self.bounce(t);
             }
             "All MIDI Tracks as MIDI File…" => self.export_midi(),
-            _ => self.tell(format!("“{cmd}” isn't available yet")),
+            "Show Musical Typing" => {
+                self.key_command(ctx, "Show/Hide Musical Typing");
+            }
+            _ => {
+                if !self.key_command(ctx, cmd) {
+                    self.tell(format!("“{cmd}” isn't available yet"));
+                }
+            }
         }
     }
 
     /// Key presses: Logic's key commands for the focused area (keymap.rs); ⌘Z / ⇧⌘Z undo.
     fn keys(&mut self, ctx: &egui::Context) {
         if ctx.egui_wants_keyboard_input() {
+            crate::live::frame(self, ctx);
             return;
         }
         let presses: Vec<(egui::Key, egui::Modifiers)> = ctx.input(|i| i.events.iter().filter_map(|e| match e {
@@ -981,7 +1024,26 @@ impl App {
             (Bottom::PianoRoll, true) => crate::keymap::Focus::PianoRoll,
             _ => crate::keymap::Focus::Tracks,
         };
+        let used = crate::live::frame(self, ctx);
         for (key, m) in presses {
+            if used.contains(&key) {
+                continue;
+            }
+            // the T menu open: a letter picks the tool (T again: the Pointer), Esc closes it
+            if self.tool_menu_open {
+                self.tool_menu_open = false;
+                if key == egui::Key::T && !m.shift {
+                    self.edit_command(ctx, "Pointer Tool");
+                    continue;
+                }
+                if let Some(t) = crate::keymap::tool_for(key, m.shift) {
+                    self.edit_command(ctx, t);
+                    continue;
+                }
+                if key == egui::Key::Escape {
+                    continue;
+                }
+            }
             if m.command && key == egui::Key::Z {
                 if m.shift { self.redo() } else { self.undo() }
                 continue;
@@ -1062,6 +1124,12 @@ impl App {
                 let (a, b) = self.cycle;
                 if b - a >= 2 {
                     self.set_cycle((a, a + (b - a) / 2));
+                }
+            }
+            "Show/Hide Musical Typing" | "Show Musical Typing" | "Open Musical Typing" => {
+                self.live.typing_open = !self.live.typing_open;
+                if self.live.typing_open && self.live.input_names.is_empty() {
+                    self.live.connect_midi(ctx);
                 }
             }
             "Create Marker" | "Create Marker without Rounding" => {
@@ -1323,10 +1391,7 @@ impl App {
             }
             "Save" => self.save(),
             "Save Project as…" => self.save_as(),
-            _ => {
-                let _ = ctx;
-                return false;
-            }
+            other => return self.edit_command(ctx, other),
         }
         true
     }
@@ -1334,6 +1399,18 @@ impl App {
 
     fn frame(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        if let Some(pp) = ctx.input(|i| i.pointer.hover_pos()) {
+            self.pointer = pp;
+        }
+        // the focused region is always part of the selection
+        match self.selected_region {
+            None => self.selected_regions.clear(),
+            Some(x) if !self.selected_regions.contains(&x) => self.selected_regions = vec![x],
+            _ => {}
+        }
+        if let Some(p) = &self.project {
+            self.selected_regions.retain(|(t, r)| p.tracks.get(*t).is_some_and(|tr| *r < tr.regions.len()));
+        }
         if let Some((_, t)) = &mut self.message {
             *t += ctx.input(|i| i.stable_dt) as f64;
             if *t > 3.5 {
@@ -1414,6 +1491,7 @@ impl App {
             Bottom::SmartControls => 190.0f32.min(main.height() - 90.0),
         };
         let tracks = Rect::from_min_max(main.min, pos2(main.max.x, main.max.y - editor_h - if editor_h > 0.0 { 1.0 } else { 0.0 }));
+        self.tracks_w = (tracks.width() - self.header_w).max(100.0);
         crate::tracks::show(self, ui, tracks);
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
@@ -1447,6 +1525,7 @@ impl App {
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
+        crate::live::window(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;

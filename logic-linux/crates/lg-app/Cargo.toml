@@ -25,6 +25,8 @@ rodio = { version = "0.23", default-features = false, features = ["playback", "w
 # SoundFont instruments played natively (pure Rust, MIT)
 rustysynth = "1"
 lg-dsp = { path = "../lg-dsp" }
+# MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)
+midir = "0.11"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
