@@ -161,8 +161,105 @@ pub fn alternatives(pkg: &Path) -> Vec<(String, PathBuf)> {
     out
 }
 
-/// Reads a project: a .logicx package or a project folder holding one (the first alternative).
+/// GarageBand's .band: `projectData` is an NSKeyedArchiver plist whose "DfDocument logic model"
+/// holds a Logic ProjectData (NS.data); `Output/metadata.plist` has the tempo, key and title.
+pub fn open_band(pkg: &Path) -> Result<Project, Error> {
+    let archive = plist::Value::from_file(pkg.join("projectData")).map_err(|e| Error::NotAProject(format!("{}: {e}", pkg.display())))?;
+    let data = band_logic_model(&archive).ok_or_else(|| Error::NotAProject(format!("{} has no Logic model in its projectData", pkg.display())))?;
+    let mut p = read_project_data(&data)?;
+    p.path = pkg.to_path_buf();
+    p.name = pkg.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    if let Ok(plist::Value::Dictionary(m)) = plist::Value::from_file(pkg.join("Output/metadata.plist")) {
+        let get = |k: &str| m.get(&format!("com_apple_garageband_metadata_{k}"));
+        if let Some(t) = get("songTempo").and_then(|v| v.as_real().or_else(|| v.as_signed_integer().map(|i| i as f64))) {
+            if t > 0.0 {
+                p.tempo = t;
+                if p.tempo_map.len() == 1 {
+                    p.tempo_map[0].1 = t;
+                }
+            }
+        }
+        if let (Some(k), Some(g)) = (get("songKey").and_then(|v| v.as_string()), get("songGender").and_then(|v| v.as_string())) {
+            p.key = format!("{k} {g}");
+        }
+    }
+    p.audio_dir = Some(pkg.join("Media")).filter(|d| d.is_dir());
+    attach_audio(&mut p);
+    if p.sample_rate == 0 {
+        p.sample_rate = 44100;
+    }
+    Ok(p)
+}
+
+/// The Logic ProjectData bytes inside a GarageBand projectData archive.
+pub fn band_logic_model(archive: &plist::Value) -> Option<Vec<u8>> {
+    let d = archive.as_dictionary()?;
+    let objects = d.get("$objects")?.as_array()?;
+    // (references: plist UIDs in binary archives, {CF$UID: n} dictionaries in XML ones)
+    let resolve = |v: &plist::Value| -> Option<plist::Value> {
+        match v {
+            plist::Value::Uid(u) => objects.get(u.get() as usize).cloned(),
+            plist::Value::Dictionary(d) if d.len() == 1 && d.contains_key("CF$UID") => objects.get(d.get("CF$UID")?.as_unsigned_integer()? as usize).cloned(),
+            other => Some(other.clone()),
+        }
+    };
+    let top = d.get("$top")?.as_dictionary()?;
+    let model = resolve(top.get("DfDocument logic model")?)?;
+    let bytes = match &model {
+        plist::Value::Data(b) => b.clone(),
+        plist::Value::Dictionary(m) => match resolve(m.get("NS.data")?)? {
+            plist::Value::Data(b) => b,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    (bytes.len() > 24 && bytes[..4] == chunks::MAGIC).then_some(bytes)
+}
+
+/// Audio regions' files: by name in the project's audio folder, with their lengths.
+fn attach_audio(p: &mut Project) {
+    let Some(dir) = p.audio_dir.clone() else { return };
+    let tempo = p.tempo;
+    for t in &mut p.tracks {
+        for r in &mut t.regions {
+            if let Some(a) = &mut r.audio {
+                let name = a.file.file_name().unwrap_or_default().to_os_string();
+                let direct = dir.join(&name);
+                a.file = if direct.exists() {
+                    direct
+                } else {
+                    // (GarageBand keeps recordings in Media/ and Media/Recording/)
+                    find_file(&dir, &name).unwrap_or(direct)
+                };
+                a.seconds = wav_seconds(&a.file).unwrap_or(a.seconds);
+                if a.seconds > 0.0 && tempo > 0.0 {
+                    r.length = (a.seconds * tempo / 60.0 * events::PPQ as f64).round() as u32;
+                }
+            }
+        }
+    }
+}
+
+fn find_file(dir: &Path, name: &std::ffi::OsStr) -> Option<PathBuf> {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if let Some(f) = find_file(&p, name) {
+                return Some(f);
+            }
+        } else if p.file_name() == Some(name) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Reads a project: a .logicx package, a project folder holding one (the first alternative), or a
+/// GarageBand .band.
 pub fn open(path: &Path) -> Result<Project, Error> {
+    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("band")) || path.join("projectData").is_file() {
+        return open_band(path);
+    }
     let pkg = package_of(path);
     let alts = alternatives(&pkg);
     let Some((_, alt)) = alts.first() else {
@@ -190,19 +287,7 @@ pub fn open(path: &Path) -> Result<Project, Error> {
     let folder = path.join("Audio Files");
     let media = pkg.join("Media/Audio Files");
     p.audio_dir = [media, folder].into_iter().find(|d| d.is_dir());
-    if let Some(dir) = &p.audio_dir {
-        for t in &mut p.tracks {
-            for r in &mut t.regions {
-                if let Some(a) = &mut r.audio {
-                    a.file = dir.join(a.file.file_name().unwrap_or_default());
-                    a.seconds = wav_seconds(&a.file).unwrap_or(a.seconds);
-                    if a.seconds > 0.0 && p.tempo > 0.0 {
-                        r.length = (a.seconds * p.tempo / 60.0 * events::PPQ as f64).round() as u32;
-                    }
-                }
-            }
-        }
-    }
+    attach_audio(&mut p);
     if p.sample_rate == 0 {
         p.sample_rate = 48000;
     }
@@ -438,4 +523,40 @@ pub fn wav_seconds(path: &Path) -> Option<f64> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A GarageBand archive (NSKeyedArchiver: $top -> UID -> {NS.data}) holding ProjectData
+    /// bytes gives them back.
+    #[test]
+    fn band_archive_holds_the_logic_model() {
+        let mut data = chunks::MAGIC.to_vec();
+        data.extend_from_slice(&[0; 40]);
+        // as GarageBand writes it: XML, references as {CF$UID: n}
+        let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
+        let _ = hex;
+        let b64 = {
+            const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let mut o = String::new();
+            for c in data.chunks(3) {
+                let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+                for k in 0..4 {
+                    o.push(if k <= c.len() { T[(n >> (18 - 6 * k) & 63) as usize] as char } else { '=' });
+                }
+            }
+            o
+        };
+        let xml = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>$archiver</key><string>NSKeyedArchiver</string>
+<key>$objects</key><array><string>$null</string><dict><key>NS.data</key><data>{b64}</data></dict></array>
+<key>$top</key><dict><key>DfDocument logic model</key><dict><key>CF$UID</key><integer>1</integer></dict></dict>
+<key>$version</key><integer>100000</integer>
+</dict></plist>"#);
+        let back = plist::Value::from_reader_xml(xml.as_bytes()).unwrap();
+        assert_eq!(band_logic_model(&back), Some(data));
+    }
 }

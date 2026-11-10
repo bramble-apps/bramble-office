@@ -358,7 +358,8 @@ impl App {
             return;
         }
         // (a .logicx package is a folder on Linux and Windows)
-        if let Some(p) = kn_ui::files::FileDialog::new().set_title("Open a Logic Pro project (.logicx)").pick_folder() {
+        if let Some(p) = kn_ui::files::FileDialog::new().set_title("Open a Logic Pro or GarageBand project (.logicx, .band)").pick_folder() {
+            // (a GarageBand .band is a folder too)
             self.open_path(&p);
         }
     }
