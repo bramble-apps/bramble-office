@@ -634,9 +634,6 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                                 kn_ui::update::menu_item(ui, if kids { MENU_ICON_W } else { 0.0 });
                             }
                         }
-                        if m.label == "Letters" {
-                            kn_ui::update::menu_footer(ui);
-                        }
                     })
                 });
                 if app_menu {

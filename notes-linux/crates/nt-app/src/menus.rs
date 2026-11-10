@@ -474,9 +474,6 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                                 kn_ui::update::menu_item(ui, 0.0);
                             }
                         }
-                        if m.label == "Notes" {
-                            kn_ui::update::menu_footer(ui);
-                        }
                     });
                     if m.label == "Notes" {
                         kn_ui::update::title_dot(ui, sub.response.rect);
@@ -500,9 +497,6 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                     if app_menu && c.label == "About Notes" {
                         kn_ui::update::menu_item(ui, 0.0);
                     }
-                }
-                if app_menu {
-                    kn_ui::update::menu_footer(ui);
                 }
             });
             if app_menu {

@@ -923,9 +923,6 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                             kn_ui::update::menu_item(ui, if indent { MENU_ICON_W } else { 0.0 });
                         }
                     }
-                    if m.label == "Keydeck" {
-                        kn_ui::update::menu_footer(ui);
-                    }
                     if m.label == "Window" {
                         // the open presentations, the active one ticked
                         ui.separator();
@@ -2509,9 +2506,6 @@ pub fn debug_menu(app: &mut App, ctx: &egui::Context) {
             if m.label == "Keydeck" && c.label == "About Keydeck" {
                 kn_ui::update::menu_item(ui, if indent { MENU_ICON_W } else { 0.0 });
             }
-        }
-        if m.label == "Keydeck" {
-            kn_ui::update::menu_footer(ui);
         }
     });
 }

@@ -6,7 +6,8 @@
 //! a development build). Nothing is installed until the person presses the button.
 //!
 //! Each app calls `init` once at start, `title_dot` after drawing its app menu's title,
-//! `menu_item` in that menu (after About), `menu_footer` at its bottom and `sheet` every frame.
+//! `menu_item` in that menu (after About) and `sheet` every frame (its foot thanks the person
+//! and links to Support development).
 //!
 //! Test hooks: BRAMBLE_UPDATE_FAKE=<version> pretends that version is out (no network);
 //! BRAMBLE_UPDATE_OPEN=1 opens the sheet at start; BRAMBLE_NO_UPDATE_CHECK=1 turns checks off;
@@ -607,7 +608,7 @@ pub fn paint_heart(p: &egui::Painter, c: egui::Pos2, r: f32, col: egui::Color32)
 }
 
 /// The thank-you line with its Support development link, small and quiet.
-fn thanks(ui: &mut egui::Ui, in_menu: bool) {
+fn thanks(ui: &mut egui::Ui) {
     let weak = ui.visuals().weak_text_color();
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -621,20 +622,8 @@ fn thanks(ui: &mut egui::Ui, in_menu: bool) {
         }
         if link.on_hover_text(crate::DONATE_URL).clicked() {
             open_url(crate::DONATE_URL);
-            if in_menu {
-                ui.close();
-            }
         }
     });
-}
-
-/// At the bottom of the app menu: a separator and the thank-you line.
-pub fn menu_footer(ui: &mut egui::Ui) {
-    remember_ctx(ui.ctx());
-    ui.separator();
-    ui.add_space(1.0);
-    egui::Frame::new().inner_margin(egui::Margin::symmetric(ui.spacing().button_padding.x as i8, 0)).show(ui, |ui| thanks(ui, true));
-    ui.add_space(2.0);
 }
 
 fn open_url(url: &str) {
@@ -855,7 +844,7 @@ pub fn sheet(ctx: &egui::Context) {
             }
             ui.add_space(6.0);
             ui.separator();
-            thanks(ui, false);
+            thanks(ui);
         });
     if matches!(step, Step::Working(_)) {
         // the progress bar moves on its own
