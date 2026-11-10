@@ -68,7 +68,7 @@ pub fn value_slot(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: &mut f32, min
     let mut changed = false;
     if let Some(t) = typing.as_mut() {
         let te = ui.put(r, egui::TextEdit::singleline(t).font(look::regular(12.0)).align(egui::Align2::RIGHT_CENTER));
-        te.request_focus();
+        crate::widgets::focus_once(ui, &te);
         if te.lost_focus() {
             if let Ok(v) = t.trim().trim_end_matches('%').trim().parse::<f32>() {
                 *value = v.clamp(min, max);
@@ -176,4 +176,19 @@ pub fn disclosure(ui: &mut egui::Ui, r: Rect, id: egui::Id, label: &str, value: 
     }
     p.hline(r.x_range(), r.max.y, Stroke::new(1.0, look::line()));
     resp.clicked()
+}
+
+/// A typing field that has just opened takes the keyboard once; after that it keeps it only
+/// while it has it, so a click elsewhere ends the typing (and Escape too), as Logic's fields do.
+/// (Asking for focus every frame would take it straight back and the field would never close.)
+pub fn focus_once(ui: &egui::Ui, te: &egui::Response) {
+    let key = te.id.with("focused-once");
+    let done: bool = ui.data(|d| d.get_temp(key)).unwrap_or(false);
+    if !done {
+        te.request_focus();
+        ui.data_mut(|d| d.insert_temp(key, true));
+    }
+    if te.lost_focus() {
+        ui.data_mut(|d| d.remove::<bool>(key));
+    }
 }

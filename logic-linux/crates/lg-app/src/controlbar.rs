@@ -317,11 +317,13 @@ fn tempo_cell(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, c2: Rect) {
     let tr = Rect::from_center_size(pos2(c2.center().x, c2.min.y + 15.0), vec2(c2.width() - 8.0, 22.0));
     if let Some(text) = app.tempo_edit.as_mut() {
         let te = ui.put(tr, egui::TextEdit::singleline(text).align(egui::Align2::CENTER_CENTER).font(look::regular(15.0)));
-        te.request_focus();
+        crate::widgets::focus_once(ui, &te);
         if te.lost_focus() {
-            if let Ok(v) = text.trim().parse::<f64>() {
+            // Return or a click elsewhere sets it; Escape leaves the tempo as it was
+            let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if let (false, Ok(v)) = (cancel, text.trim().parse::<f64>()) {
                 app.checkpoint("Change Tempo");
-                app.set_tempo(v);
+                app.set_tempo(v.clamp(5.0, 990.0));
             }
             app.tempo_edit = None;
         }

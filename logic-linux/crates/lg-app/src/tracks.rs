@@ -242,7 +242,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         match app.renaming.as_mut() {
             Some((ti, text)) if *ti == i => {
                 let te = ui.put(name_r, egui::TextEdit::singleline(text).font(look::semibold(13.0)));
-                te.request_focus();
+                crate::widgets::focus_once(ui, &te);
                 if te.lost_focus() {
                     let (cancel, new) = (ui.input(|i| i.key_pressed(egui::Key::Escape)), text.trim().to_string());
                     app.renaming = None;
@@ -371,7 +371,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let (rt, rri) = (*rt, *rri);
                 let er = Rect::from_min_size(rr.min, vec2(rr.width().max(120.0), 18.0));
                 let te = ui.put(er, egui::TextEdit::singleline(text).font(look::regular(11.0)));
-                te.request_focus();
+                crate::widgets::focus_once(ui, &te);
                 if te.lost_focus() {
                     let name = text.clone();
                     app.renaming_region = None;
@@ -921,7 +921,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                 if let Some(mut t) = editing {
                     let er = Rect::from_min_size(pos2(lane.min.x + 4.0, row.min.y + 3.0), vec2(320.0, 22.0));
                     let te = ui.put(er, egui::TextEdit::singleline(&mut t).hint_text("C Am F G (one per bar)").font(look::regular(12.0)));
-                    te.request_focus();
+                    crate::widgets::focus_once(ui, &te);
                     if te.lost_focus() {
                         ui.data_mut(|d| d.remove::<String>(id));
                         app.chord_text = t;
@@ -984,7 +984,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                     if let Some(pos) = app.markers.get(k).map(|m| m.0) {
                         let er = Rect::from_min_size(pos2(x_of(pos as f32), row.min.y + 3.0), vec2(160.0, 22.0));
                         let te = ui.put(er, egui::TextEdit::singleline(text).font(look::regular(11.5)));
-                        te.request_focus();
+                        crate::widgets::focus_once(ui, &te);
                         if te.lost_focus() {
                             let name = text.clone();
                             if let Some(m) = app.markers.get_mut(k) {

@@ -61,6 +61,8 @@ fn parse_script(s: &str) -> std::collections::VecDeque<(egui::Modifiers, Vec<egu
                     out.push_back((mods, vec![Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: mods }]));
                 }
             }
+            // "type 96": text typed into the focused field
+            ("type", _) => out.push_back((Modifiers::NONE, vec![Event::Text(rest.to_string())])),
             _ => out.push_back((Modifiers::NONE, vec![])),
         }
     }

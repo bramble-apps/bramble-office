@@ -1890,7 +1890,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             if let Some((Some(k), _, text)) = app.live_loops.renaming.as_mut() {
                 if *k == key {
                     let te = ui.put(Rect::from_min_size(r.min + vec2(2.0, 2.0), vec2(r.width() - 4.0, 18.0)), egui::TextEdit::singleline(text).font(look::regular(11.0)));
-                    te.request_focus();
+                    crate::widgets::focus_once(ui, &te);
                     if te.lost_focus() {
                         let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
                         let new = text.trim().to_string();
@@ -2015,7 +2015,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         match app.live_loops.renaming.as_mut() {
             Some((None, k, text)) if *k == sc => {
                 let te = ui.put(Rect::from_min_size(pos2(r.min.x + 2.0, up.max.y), vec2(pitch - 4.0, 18.0)), egui::TextEdit::singleline(text).font(look::regular(11.0)));
-                te.request_focus();
+                crate::widgets::focus_once(ui, &te);
                 if te.lost_focus() {
                     let new = text.trim().to_string();
                     app.live_loops.renaming = None;
