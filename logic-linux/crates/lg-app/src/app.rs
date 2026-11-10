@@ -12,7 +12,7 @@ use crate::audio::{self, Engine, PlayTrack};
 use crate::look::{self, Look};
 
 pub const CONTROL_H: f32 = 62.0;
-pub const BROWSER_W: f32 = 270.0;
+pub const BROWSER_W: f32 = 520.0;
 pub const INSPECTOR_W: f32 = 236.0;
 /// The panes on the right (List Editors, Notes, Loop Browser, Browsers).
 pub const RIGHT_W: f32 = 330.0;
@@ -124,6 +124,12 @@ pub struct App {
     pub tool: crate::edit::Tool,
     pub cmd_tool: crate::edit::Tool,
     pub snap_on: bool,
+    /// The Browser: linked to the selected track, replacing its patch; its category filter and
+    /// sort (by name, else Logic's relevance).
+    pub browser_link: bool,
+    pub browser_replace: bool,
+    pub browser_filter: Option<String>,
+    pub browser_sort_name: bool,
     /// The Piano Roll's inspector: shown, its Time Quantize value, Strength and Swing.
     pub roll_inspector: bool,
     pub roll_quantize: u32,
@@ -259,6 +265,10 @@ impl App {
             tool: crate::edit::Tool::Pointer,
             cmd_tool: crate::edit::Tool::Marquee,
             snap_on: true,
+            browser_link: true,
+            browser_replace: true,
+            browser_filter: None,
+            browser_sort_name: false,
             roll_inspector: true,
             roll_quantize: 240,
             roll_strength: 100,
@@ -276,7 +286,7 @@ impl App {
             recorded: Vec::new(),
             live: crate::live::Live::new(),
             played: Vec::new(),
-            inspector_region_open: true,
+            inspector_region_open: false,
             inspector_track_open: false,
             track_props: Default::default(),
             instrument_choice: Default::default(),
@@ -702,6 +712,27 @@ impl App {
     }
 
     /// Sets a track's sound (the Browser's instruments: the SoundFont's presets).
+    /// The Browser: the track plays one of Logic's patches (our stand-in for it; until there is
+    /// one, the SoundFont's nearest General MIDI sound), and takes its name, as Logic's tracks do.
+    pub fn choose_patch(&mut self, track: usize, category: &str, name: &str) {
+        self.checkpoint("Change Patch");
+        self.instrument_choice.insert(track, name.to_string());
+        let guess = match category {
+            "Bass" => 33,
+            "Guitar" => 25,
+            "Strings" => 48,
+            "Brass & Woodwind" => 61,
+            "Mallet" => 11,
+            "Synthesizer" => {
+                let p = program_for(name, TrackKind::Instrument);
+                if p == 0 { 81 } else { p }
+            }
+            _ => program_for(name, TrackKind::Instrument),
+        };
+        self.set_program(track, guess, name);
+        self.load_engine();
+    }
+
     pub fn set_program(&mut self, track: usize, program: u8, name: &str) {
         if let Some(p) = self.programs.get_mut(track) {
             *p = program;
@@ -1475,7 +1506,7 @@ impl App {
                 let want = pp.x - r.min.x;
                 if want < 150.0 {
                     self.show_browser = false;
-                    self.browser_w = 320.0;
+                    self.browser_w = BROWSER_W;
                 } else {
                     self.browser_w = want.min(925.0);
                     if self.show_inspector && body.width() - self.browser_w - INSPECTOR_W < 360.0 {

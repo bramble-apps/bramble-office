@@ -14,3 +14,8 @@ pub fn effect(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Effect>> {
     let _ = (name, rate);
     None
 }
+
+/// The effects Studio has, by Logic's names (the Browser's Effects list).
+pub fn effect_names() -> Vec<&'static str> {
+    Vec::new()
+}

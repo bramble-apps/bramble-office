@@ -70,7 +70,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     });
     let mut left = area.min.x;
-    if app.roll_inspector && area.width() > 700.0 {
+    if app.roll_inspector && area.width() > 520.0 {
         let ir = Rect::from_min_max(pos2(area.min.x, local.max.y), pos2(area.min.x + ROLL_INSPECTOR_W, area.max.y));
         inspector(app, ui, ir, ti, ri);
         left = ir.max.x + 1.0;

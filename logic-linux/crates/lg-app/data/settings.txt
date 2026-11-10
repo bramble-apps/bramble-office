@@ -1,0 +1,383 @@
+# Logic Pro 13 Settings, tab by tab (from the research's control dumps): kind, label, default
+=== Audio / Devices ===
+StaticText		System Audio (PipeWire / PulseAudio / ALSA):
+CheckBox	Enabled	1
+StaticText		Output Device:
+PopUpButton		System Default
+StaticText		Input Device:
+PopUpButton		System Default
+StaticText		I/O Buffer Size:
+PopUpButton		128
+StaticText		Samples
+StaticText		Resulting Latency:
+StaticText		37.0 ms Roundtrip (5.6 ms Output)
+StaticText		Recording Delay:
+Slider		0
+StaticText		Samples
+StaticText		Processing Threads:
+PopUpButton		Automatic (Recommended)
+Slider		0
+StaticText		Process Buffer Range:
+PopUpButton		Medium
+StaticText		Multithreading:
+PopUpButton		Playback & Live Tracks
+StaticText		Summing:
+PopUpButton		High Precision (64-bit)
+=== Audio / Editing ===
+StaticText		Crossfade Time:
+Slider		20
+Slider		20
+StaticText		ms
+StaticText		Crossfade Curve:
+Slider		0
+Slider		0
+StaticText		Crossfades for Merge and Take Comping
+StaticText		Scrubbing
+CheckBox	Scrubbing with audio in Tracks area	0
+StaticText		Maximum Scrub Speed:
+PopUpButton		Normal
+StaticText		Scrub Response:
+PopUpButton		Normal
+=== Audio / File Editor ===
+CheckBox	Warning before processing function by key command	1
+CheckBox	Clear Undo History when closing project	0
+CheckBox	Record selection changes in Undo History	1
+CheckBox	Record Normalize operations in Undo History	1
+StaticText		Number of Undo Steps:
+Slider		5
+StaticText		External Sample Editor:
+=== Audio / General ===
+PopUpButton		Volume, Pan, Sends, Plug-in Parameters
+StaticText		Sample Accurate Automation:
+PopUpButton		All Busses
+StaticText		Automatic Bus Assignment Uses:
+CheckBox	Display audio engine overload message	1
+PopUpButton		All (recommended)
+StaticText		Compensation:
+StaticText		dB
+StaticText		Dim Level:
+Slider		-20
+Slider		-20
+Slider		5 (disabled)
+Slider		5 (disabled)
+StaticText		ms
+StaticText		Limit:
+CheckBox	Low Latency Monitoring Mode	0
+StaticText		Plug-in Latency
+CheckBox	Software monitoring	1 (disabled)
+CheckBox		1
+CheckBox		0
+CheckBox	Playback pre-roll	1
+=== Audio / I-O Assignments ===
+StaticText		Output:
+PopUpButton		1/2
+CheckBox	Mirroring	0 (disabled)
+StaticText		Show as:
+PopUpButton		5.1 (ITU 775)
+StaticText		Initialize:
+PopUpButton	Left	Output 1
+PopUpButton	Left center	Output 7 (disabled)
+PopUpButton	Center	Output 5
+PopUpButton	Right center	Output 8 (disabled)
+PopUpButton	Right	Output 2
+PopUpButton	Left mid	Output 7 (disabled)
+PopUpButton	LFE	Output 6
+PopUpButton	Right mid	Output 8 (disabled)
+PopUpButton	Left surround	Output 3
+PopUpButton	Surround	Output 7 (disabled)
+PopUpButton	Right surround	Output 4
+PopUpButton	Left top	Output 9 (disabled)
+PopUpButton	Right top	Output 10 (disabled)
+PopUpButton	Left top mid	Output 13 (disabled)
+PopUpButton	Right top mid	Output 14 (disabled)
+PopUpButton	Left top surround	Output 11 (disabled)
+PopUpButton	Right top surround	Output 12 (disabled)
+StaticText		Stereo
+StaticText		Surround
+=== Audio / Sampler ===
+StaticText		Sample Storage:
+PopUpButton		Original
+StaticText		Search Samples On:
+PopUpButton		Local Volumes
+StaticText		Read Root Key From:
+PopUpButton		File/Analysis
+StaticText		Root Key at File Name Position:
+PopUpButton		Auto
+CheckBox	Keep common samples in memory when switching projects	1
+=== Automation / main ===
+StaticText		Move Track Automation with Regions:
+PopUpButton		Ask
+CheckBox	Include trails, if possible	1
+StaticText		Region Automation:
+CheckBox	Create Node when cutting at constant values	1
+StaticText		Pencil Tool:
+PopUpButton		Hold Option for Stepped Editing
+StaticText		Snap Offset:
+Slider		-5
+StaticText		Ticks
+StaticText		Ramp Time:
+Slider		200
+StaticText		ms
+StaticText		Write Mode Changes To:
+PopUpButton		Touch
+StaticText		Click the Learn Message button to assign a new control.
+StaticText		Write Automation For:
+CheckBox	Volume	1
+CheckBox	Send	1
+CheckBox	Pan	1
+CheckBox	Plug-in	1
+CheckBox	Mute	1
+CheckBox	Solo	0
+StaticText		Automation Quick Access:
+=== Control Surfaces / General ===
+CheckBox	Bypass all while in background	0
+StaticText		Resolution of Relative Controls:
+Slider		128
+Slider		128
+StaticText		Maximum MIDI Bandwidth:
+Slider		50
+StaticText		%
+CheckBox	Touching fader selects track	0
+CheckBox	Control surface follows track selection	1
+CheckBox	Open or close plug-in window following change to control surface	0
+CheckBox	Control surface follows focused view	0
+CheckBox	Jog resolution depends on horizontal zoom	0
+CheckBox	Pickup mode	1
+CheckBox	Flash Mute and Solo buttons	1
+StaticText		Multiple Controls per Parameter:
+PopUpButton		2
+StaticText		For Longer Labels and Value Displays
+CheckBox	Only when all parameters fit on one page	1
+StaticText		Show Value Units For:
+CheckBox	Instrument/plug-in parameters	1
+CheckBox	Volume and other parameters	1
+Slider		50
+=== Control Surfaces / Help Tags ===
+StaticText		While Editing Show Long Names For:
+CheckBox	Parameter name	1
+CheckBox	Parameter value	1
+StaticText		Display Duration:
+Slider		2
+Slider		2
+StaticText		s
+CheckBox	Show info for multiple parameters	1
+CheckBox	Show info when selecting tracks	1
+CheckBox	Show info when editing volume	1
+StaticText		Show Value Units For:
+CheckBox	Instrument/plug-in parameters	1
+CheckBox	Volume and other parameters	1
+=== Control Surfaces / MIDI Controllers ===
+StaticText		The buttons, knobs and other controls on the following USB MIDI Controllers can be automatically assigned to Smart Controls and other functions. Select Auto to enable automatic assignment for a device.
+=== General / Accessibility ===
+StaticText		Enable Playhead position announcements when
+CheckBox	Open Plug-in windows in Controls view by default	0
+CheckBox	Playing	1
+CheckBox	Recording	0
+CheckBox	Scrubbing	1
+StaticText		When this option is selected, all plug-in windows open in Controls view, making plug-in parameters available for use with VoiceOver.
+StaticText		When these options are selected, VoiceOver announces the playhead position when starting and stopping recording or playback, or when moving the playhead.
+CheckBox	Allow Logic to flash the screen	1
+=== General / Catch ===
+StaticText		Editors with the Catch button will update their view to follow the playhead position. The options below change the default Catch settings for all editors. You can also change the Catch settings for individual editors by Control-clicking the Catch button.
+CheckBox	Catch when starting playback	1
+CheckBox	Catch when moving playhead	1
+CheckBox	Catch content by position if Catch and Link are enabled	0
+StaticText		Catch mode default settings
+=== General / Cycle ===
+StaticText		Cycle Pre-Processing:
+PopUpButton		Off
+CheckBox	Smooth Cycle Algorithm	0
+=== General / Editing ===
+StaticText		Number of Undo Steps:
+Slider		100
+CheckBox	Groove template edits immediately update all associated regions	1
+CheckBox	Create new regions after splitting loops	1
+CheckBox	Advanced split and marquee handling of MIDI regions	1
+CheckBox	Select regions on track selection	1
+CheckBox	Select tracks on region/marquee selection	1
+PopUpButton		Opens Shortcut Menu
+StaticText		Right Mouse Button:
+StaticText		Trackpad:
+CheckBox	Enable Force Touch trackpad	1
+StaticText		Pointer Tool in Tracks Provides:
+CheckBox	Fade tool click zones	0
+CheckBox	Marquee tool click zones	0
+CheckBox	Quick Swipe and Take Editing click zones	0
+StaticText		Limit Dragging to One Direction In:
+CheckBox	Piano Roll Editor and Score Editor	0
+CheckBox	Tracks area	0
+StaticText		Double-Clicking a MIDI Region Opens:
+PopUpButton		Piano Roll Editor
+StaticText		Piano Roll Editor:
+CheckBox	Region border trimming	1
+=== General / Notifications ===
+StaticText		Warnings and alerts set previously to “Do not show again.”
+=== General / Project Handling ===
+StaticText		Startup Action:
+PopUpButton		Open Most Recent Project
+StaticText		Default Template: (disabled)
+CheckBox	Export MIDI File command saves single MIDI region as format 0.	1
+StaticText		Auto Backup:
+PopUpButton		Last 10 Alternative Versions
+StaticText		Recent Items:
+PopUpButton		System Default
+CheckBox	Save undo history with project	1
+StaticText		When Opening a Project:
+PopUpButton		Close current Project
+=== MIDI / General ===
+CheckBox	External stop message ends recording	1
+StaticText		Articulation Switches
+StaticText		Set
+StaticText		MIDI Remote:
+PopUpButton		Off
+PopUpButton		Global
+StaticText		MIDI Channel:
+PopUpButton		All
+PopUpButton		Global
+StaticText		Octave Offset:
+PopUpButton		0 (disabled)
+PopUpButton		Per Channel Strip
+CheckBox	MIDI 2.0	0
+=== MIDI / Inputs ===
+StaticText		Enable MIDI ports to use as inputs in Logic
+=== MIDI / Reset Messages ===
+StaticText		Software Instruments
+CheckBox	Control 64 (Sustain) off	1
+CheckBox	Control 4 (Foot Control) to zero	1
+CheckBox	Control 2 (Breath) to zero	1
+CheckBox	Control 1 (Modulation) to zero	1
+CheckBox	Aftertouch to zero	1
+CheckBox	Pitch Bend to center position	1
+StaticText		External MIDI
+CheckBox	Control 123 (All Notes Off)	0
+CheckBox	Control 121 (Reset Controls)	0
+CheckBox	Control 64 (Sustain) off	1
+CheckBox	Control 4 (Foot Control) to zero	1
+CheckBox	Control 2 (Breath Control) to zero	1
+CheckBox	Control 1 (Modulation) to zero	1
+CheckBox	Aftertouch to zero	1
+CheckBox	Pitch Bend to center position	1
+CheckBox	Send used instrument settings on reset	0
+=== MIDI / Sync ===
+StaticText		All MIDI Output
+StaticText		Delay:
+Slider		0
+StaticText		ms
+StaticText		MIDI Time Code (MTC)
+StaticText		MTC Pickup Delay:
+Slider		0
+StaticText		Frames
+StaticText		Delay MTC Transmission By:
+Slider		0
+StaticText		ms
+StaticText		MIDI Machine Control (MMC)
+StaticText		MMC Uses:
+PopUpButton		MMC Standard Messages
+StaticText		Output ID (Transport):
+CheckBox	All	1 (disabled)
+Slider		127 (disabled)
+StaticText		Input ID (Transport):
+CheckBox	All	1 (disabled)
+Slider		127 (disabled)
+StaticText		Transmit Locate Commands When:
+CheckBox	Pressing Stop twice	1
+CheckBox	Dragging regions or events	1
+CheckBox	Transmit record-enable commands for audio tracks	0
+=== Movie / main ===
+StaticText		Adjustments
+StaticText		Movie to Project:
+Slider		0
+Slider		0
+StaticText		Quarter Frames
+StaticText		Movie Track
+StaticText		Cache Resolution:
+PopUpButton		Medium
+StaticText		Maximum Cache Size:
+Slider		40
+Slider		40
+StaticText		MB
+CheckBox	Use Logic Pro audio output	0
+CheckBox	Lock movie window when changing screensets	0
+=== Recording / main ===
+StaticText		Audio Recording
+StaticText		File Type:
+PopUpButton		AIFF
+StaticText		Bit Depth:
+PopUpButton		24-bit
+StaticText		MIDI Recording
+StaticText		Auto Record Enable:
+PopUpButton		The Focused Track
+StaticText		Overlapping Track Recordings
+PopUpButton	MIDI, Cycle Off	Merge
+PopUpButton	Audio, Cycle Off	Create Take Folder
+PopUpButton	MIDI, Cycle On	Merge
+PopUpButton	Audio, Cycle On	Create Take Folder
+PopUpButton	MIDI, Replace	Region Erase
+=== Score / main ===
+StaticText		Camera Tool
+CheckBox	Auto split notes in polyphonic staff styles	0
+StaticText		Split Notes At:
+Slider		60 (disabled)
+Slider		60 (disabled)
+StaticText		Split
+StaticText		Display
+CheckBox	Show region selection in color	1
+CheckBox	Display distance values in inches	0
+StaticText		Double-Click to Open:
+PopUpButton		Note Attributes
+StaticText		Selection Color:
+StaticText		Write To:
+=== View / Editors ===
+StaticText		Piano Roll
+CheckBox	Bright background	0
+=== View / General ===
+StaticText		Display Middle C As:
+PopUpButton		C3 (Yamaha)
+StaticText		Display Time As:
+PopUpButton		SMPTE/EBU with Subframes
+CheckBox	Zeros as spaces	0
+StaticText		Display Tempo As:
+PopUpButton		Beats per Minute (BPM, Maelzel)
+StaticText		Clock Format:
+PopUpButton		1  1  1  1
+StaticText		Display MIDI Data As:
+PopUpButton		MIDI 1.0
+CheckBox	Large local window menus	0
+CheckBox	Wide playhead	0
+CheckBox	Show help tags	1
+CheckBox	Show beats and time in help tags	0
+CheckBox	Show default values	0
+CheckBox	Show animations	1
+StaticText		Windows
+StaticText		Displays
+=== View / Mixer ===
+StaticText		Plug-in Window
+StaticText		Level Meters
+StaticText		Peak Hold Time:
+PopUpButton		800 ms
+StaticText		Return Time:
+PopUpButton		IEC Type I (11.8 dB/s)—Recommended
+StaticText		Channel Order:
+PopUpButton		Clockwise (Ls L C R Rs LFE)
+CheckBox	Open plug-in window on insertion	1
+CheckBox	Show recent plug-in list in plug-in menu	1
+CheckBox	Show “Mastering Assistant” Button in Stereo Output	1
+=== View / Tracks ===
+CheckBox	Show track or bar number while scrolling	0
+StaticText		Appearance
+StaticText		Track Color:
+PopUpButton		Static
+StaticText		Region Color:
+PopUpButton		Individual
+StaticText		Marker Color:
+PopUpButton		Static
+StaticText		Background:
+PopUpButton		Dark
+StaticText		Grid Lines
+StaticText		Placement:
+PopUpButton		Foreground
+StaticText		Color:
+CheckBox	Automatic	1
+StaticText		Regions
+CheckBox	Shaded loops	0
+CheckBox	Show “+” button next to Session Player regions	1

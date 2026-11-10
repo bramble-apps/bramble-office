@@ -1,0 +1,1730 @@
+# Logic Pro 13's instrument patch library (category, subcategory, name), the Browser's Instruments in Logic's order (its first 30 as Logic listed them); each plays our stand-in sound (units.rs)
+Library		Deluxe Classic
+Keyboard	Electric Piano	Deluxe Modern
+Keyboard	Electric Piano	Wurlitzer Classic
+Keyboard	Electric Piano	Wurlitzer Modern
+Keyboard	Electric Piano	Bright Suitcase
+Keyboard	Electric Piano	Synthetic Wurli
+Keyboard	Electric Piano	Classic Suitcase Mk IV
+Keyboard	Electric Piano	Flying Circus Piano
+Synthesizer	Keyboard	Faded Keys
+Keyboard	Electric Piano	Wide Suitcase
+Synthesizer	Keyboard	Plastic Keys
+Synthesizer	Plucked	Eastern Synth Guitar
+Keyboard	Clavinet	Nice Dream Clav
+Keyboard	Acoustic Piano	Steinway Grand Piano
+Synthesizer	Keyboard	Pixel EP
+Keyboard	Clavinet	Deep Funk Clav
+Keyboard	Clavinet	Solid Clav
+Keyboard	Clavinet	Seventies Clav
+Synthesizer	Keyboard	Neon Dreams
+Keyboard	Clavinet	Flying Clav
+Keyboard	Clavinet	70s Funk Clav
+Synthesizer	Strings	Bent Synth Strings
+Synthesizer	Brass	Late Night Brass
+Keyboard	Organ	Classic Rock Organ
+Keyboard	Electric Piano/Processed	Stage Mk I Flanger
+Synthesizer	Brass	80s Pop Synth Brass
+Keyboard	Clavinet	Pawnshop Clav
+Keyboard	Organ	Tonewheel Organ
+Synthesizer	Keyboard	Summer Tines
+Synthesizer	Plucked	Asian Plucked Strings
+Library	Drums & Percussion/Electronic Drums	Absolute Zero
+Library	Drums & Percussion/Electronic Drums	Analog Haze
+Library	Synthesizer/Bass	Big Stadium Bass
+Library	Drums & Percussion/Acoustic Drums	Blue Ridge
+Library	Drums & Percussion/Acoustic Drums	Bluebird
+Library	Drums & Percussion/Acoustic Drums	Brooklyn
+Library	Synthesizer/Bass	Chrome 808 Bass
+Library	Drums & Percussion/Percussion	Coffee Shop
+Library	Bass	Contemporary Soul
+Library	Bass	Dancefloor
+Library	Synthesizer/Pad	Deep Majesty
+Library	Drums & Percussion/Acoustic Drums	Detroit Garage
+Library	Synthesizer/Pad	Distant Dawn
+Library	Drums & Percussion/Electronic Drums	Drum Synth Kit
+Library	Drums & Percussion/Electronic Drums	Dusty Fingers
+Library	Drums & Percussion/Acoustic Drums	East Bay
+Library	Drums & Percussion/Electronic Drums	Empty Kit
+Library	Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template	Empty Pad
+Library	Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template	Empty Quick Sampler
+Library	Drums & Percussion/Electronic Drums	Festival Drop
+Library	Drums & Percussion/Electronic Drums	Flashback
+Library	Drums & Percussion/Acoustic Drums	Four on the Floor
+Library	Drums & Percussion/Acoustic Drums	Heavy
+Library	Drums & Percussion/Electronic Drums	Hollywood Haze
+Library	Drums & Percussion/Electronic Drums	House Heads
+Library	Drums & Percussion/Electronic Drums	Hyper Drop
+Library	Drums & Percussion/Electronic Drums	Ibiza Tech
+Library	Drums & Percussion/Percussion	Latin
+Library	Drums & Percussion/Acoustic Drums	Liverpool
+Library	Drums & Percussion/Acoustic Drums	Manchester
+Library	Drums & Percussion/Acoustic Drums	Motown Revisited
+Library	Drums & Percussion/Acoustic Drums	Neo Soul
+Library	Drums & Percussion/Electronic Drums	Platinum Cuts
+Library	Drums & Percussion/Acoustic Drums	Portland
+Library	Bass	Punchy Bottom
+Library	Synthesizer/Bass	Renegade Party
+Library	Drums & Percussion/Acoustic Drums	Retro Rock
+Library	Bass	Rock Legend
+Library	Drums & Percussion/Acoustic Drums	Roots
+Library	Bass	Roots Upright
+Library	Drums & Percussion/Electronic Drums	Rough Riddim
+Library	Synthesizer/Brass	Saw Prism
+Library	Drums & Percussion/Acoustic Drums	Scientific Method
+Library	Bass	Simple Foundation
+Library	Bass	Slap & Pop
+Library	Drums & Percussion/Acoustic Drums	Slow Jam
+Library	Drums & Percussion/Acoustic Drums	Smash
+Library	Drums & Percussion/Acoustic Drums	SoCal
+Library	Drums & Percussion/Acoustic Drums	Speakeasy
+Library	Drums & Percussion/Percussion	Studio
+Library	Keyboard/Acoustic Piano	Studio Grand
+Library	Drums & Percussion/Acoustic Drums	Sunset
+Library	Drums & Percussion/Electronic Drums	Trap Heat
+Library	Bass	Vintage Soul
+Library	Keyboard/Acoustic Piano	Vintage Upright
+Library	Bass	Warm & Clear
+Bass		Club Ambience Upright
+Bass		Coffee Shop Monstera
+Bass		Crunchy Pop
+Bass		Crunchy Vintage
+Bass		Dance Clean
+Bass		Dance Swirls
+Bass		Dark Soul
+Bass		Distant Vibe
+Bass		Envelope
+Bass		Focused Sixties
+Bass		Fuzzy
+Bass		Lo-Fi Tape Upright
+Bass		Psychedelic Rock
+Bass		Retro Crunch
+Bass		Retro Radio
+Bass		Rock Growl
+Bass		Slap & Pop Dark
+Bass		Solid Soul Electric Bass
+Bass		Swirling
+Bass		Wide Rock
+Brass & Woodwind	Studio Horns/3-Piece Section	Chicago Street
+Brass & Woodwind	Studio Horns/3-Piece Section	Elements Section
+Brass & Woodwind	Studio Horns/3-Piece Section	Hell's Kitchen
+Brass & Woodwind	Studio Horns/3-Piece Section	Strivers' Row
+Brass & Woodwind	Studio Horns/6-Piece Section	Funkhouse
+Brass & Woodwind	Studio Horns/6-Piece Section	Little Brazil
+Brass & Woodwind	Studio Horns/6-Piece Section	Memphis Blast
+Brass & Woodwind	Studio Horns/7-Piece Section	Mississippi Joint
+Brass & Woodwind	Studio Horns/7-Piece Section	Sugar Hill
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Alto Sax 1
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Alto Sax 2
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Baritone Sax
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Bass Trombone
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Tenor Sax 1
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Tenor Sax 2
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trombone 1
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trombone 2
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trombone 3
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trumpet 1
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trumpet 2
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trumpet 3
+Brass & Woodwind	Studio Horns/Single Instruments	Studio Trumpet 4
+Drums & Percussion	Electronic Drums	808 Flex
+Drums & Percussion	Electronic Drums	Above and Beyond
+Drums & Percussion	Electronic Drums	Abstract Thought
+Drums & Percussion	Electronic Drums	Acoustic Bump
+Drums & Percussion	Electronic Drums	Advanced Machines
+Drums & Percussion	Electronic Drums	Agogo Funk
+Drums & Percussion	Electronic Drums	Alphabet City
+Drums & Percussion	Electronic Drums	Amped Up
+Drums & Percussion	Electronic Drums	Analog Architecture
+Drums & Percussion	Electronic Drums	Analog Blaze
+Drums & Percussion	Electronic Drums	Analog Bliss
+Drums & Percussion	Electronic Drums	Analog Dream
+Drums & Percussion	Electronic Drums	Analog Drive
+Drums & Percussion	Electronic Drums	Analog Traces
+Drums & Percussion	Electronic Drums	Ancient Space
+Drums & Percussion	Electronic Drums	Arcade Frenzy
+Drums & Percussion	Electronic Drums	Autumn Leaves
+Drums & Percussion	Electronic Drums	Battle Blocks
+Drums & Percussion	Electronic Drums	Big Bang
+Drums & Percussion	Electronic Drums	Big Bump
+Drums & Percussion	Electronic Drums	Birdland Calls
+Drums & Percussion	Electronic Drums	Blazing Hot
+Drums & Percussion	Electronic Drums	Blowing Speakers
+Drums & Percussion	Electronic Drums	Breath of Air
+Drums & Percussion	Electronic Drums	Bright Bass House
+Drums & Percussion	Electronic Drums	Brooklyn Borough
+Drums & Percussion	Electronic Drums	Brooklyn Feels
+Drums & Percussion	Electronic Drums	Bumper
+Drums & Percussion	Electronic Drums	Burlington
+Drums & Percussion	Electronic Drums	CR-78 Made Iconic
+Drums & Percussion	Electronic Drums	Chopped Up
+Drums & Percussion	Electronic Drums	Chrome
+Drums & Percussion	Electronic Drums	Cinematic Funk
+Drums & Percussion	Electronic Drums	Clicks and Sticks
+Drums & Percussion	Electronic Drums	Compact
+Drums & Percussion	Electronic Drums	Console Operator
+Drums & Percussion	Electronic Drums	Control Voltage
+Drums & Percussion	Electronic Drums	Cory's Foley
+Drums & Percussion	Electronic Drums	Cory's LinnDrum
+Drums & Percussion	Electronic Drums	Cory's Rose
+Drums & Percussion	Electronic Drums	Cosmic Debris
+Drums & Percussion	Electronic Drums	Cream Soda
+Drums & Percussion	Electronic Drums	Dancefloor Bliss
+Drums & Percussion	Electronic Drums	Dark Arts
+Drums & Percussion	Electronic Drums	Dark Magic
+Drums & Percussion	Electronic Drums	Dark Mystic
+Drums & Percussion	Electronic Drums	Dark Secrets
+Drums & Percussion	Electronic Drums	Deep Bass House
+Drums & Percussion	Electronic Drums	Deep Blue
+Drums & Percussion	Electronic Drums	Deep Crunch
+Drums & Percussion	Electronic Drums	Deep End
+Drums & Percussion	Electronic Drums	Deep Mystery
+Drums & Percussion	Electronic Drums	Dembow
+Drums & Percussion	Electronic Drums	Doing Science
+Drums & Percussion	Electronic Drums	Double Vision
+Drums & Percussion	Electronic Drums	Dust Bowl
+Drums & Percussion	Electronic Drums	Dusty Road
+Drums & Percussion	Electronic Drums	East Side Dreams
+Drums & Percussion	Electronic Drums	Electronic Pop
+Drums & Percussion	Electronic Drums	Fluid Shadow
+Drums & Percussion	Electronic Drums	Found Sound
+Drums & Percussion	Electronic Drums	Future Breaks
+Drums & Percussion	Electronic Drums	Future Flex
+Drums & Percussion	Electronic Drums	Green Lights
+Drums & Percussion	Electronic Drums	Grimey Funk
+Drums & Percussion	Electronic Drums	H-Town Fire
+Drums & Percussion	Electronic Drums	Hacienda
+Drums & Percussion	Electronic Drums	Hard Bass House
+Drums & Percussion	Electronic Drums	Hard Bounce
+Drums & Percussion	Electronic Drums	Hard Knock
+Drums & Percussion	Electronic Drums	Hard Knocking
+Drums & Percussion	Electronic Drums	Hardwired
+Drums & Percussion	Electronic Drums	Heads Up
+Drums & Percussion	Electronic Drums	Heavy Bass House
+Drums & Percussion	Electronic Drums	Heavy Industry
+Drums & Percussion	Electronic Drums	Hillsborough
+Drums & Percussion	Electronic Drums	Hit Synth
+Drums & Percussion	Electronic Drums	Hollywood Foley
+Drums & Percussion	Electronic Drums	Hybrid Grime
+Drums & Percussion	Electronic Drums	Hybrid Knock
+Drums & Percussion	Electronic Drums	In The Kitchen
+Drums & Percussion	Electronic Drums	Infinity
+Drums & Percussion	Electronic Drums	Interchange
+Drums & Percussion	Electronic Drums	Jagged Edges
+Drums & Percussion	Electronic Drums	Jazz Vanguard
+Drums & Percussion	Electronic Drums	Laser Battle
+Drums & Percussion	Electronic Drums	LinnDrum
+Drums & Percussion	Electronic Drums	LinnDrum Tuned Down
+Drums & Percussion	Electronic Drums	Live Feel
+Drums & Percussion	Electronic Drums	Lo-Fi Cassette
+Drums & Percussion	Electronic Drums	Lo-Fi Feels
+Drums & Percussion	Electronic Drums	Lo-Fi Funk
+Drums & Percussion	Electronic Drums	Lo-Fi Hype
+Drums & Percussion	Electronic Drums	LowTech Funk
+Drums & Percussion	Electronic Drums	Lunar Bump
+Drums & Percussion	Electronic Drums	Metallic Edges
+Drums & Percussion	Electronic Drums	Micro Modular
+Drums & Percussion	Electronic Drums	Midnight Sillage
+Drums & Percussion	Electronic Drums	Midtown Summer
+Drums & Percussion	Electronic Drums	Minimalist
+Drums & Percussion	Electronic Drums	Mixed Boom Bap
+Drums & Percussion	Electronic Drums	Mixed Up
+Drums & Percussion	Electronic Drums	Modern 808
+Drums & Percussion	Electronic Drums	Modern 909
+Drums & Percussion	Electronic Drums	Modern CR-8000
+Drums & Percussion	Electronic Drums	Modern Chiptune
+Drums & Percussion	Electronic Drums	Modern Disco
+Drums & Percussion	Electronic Drums	Modern Knock
+Drums & Percussion	Electronic Drums	Modern TR-707
+Drums & Percussion	Electronic Drums	Modern TR-727
+Drums & Percussion	Electronic Drums	Modern Throwback
+Drums & Percussion	Electronic Drums	Modular Drop
+Drums & Percussion	Electronic Drums	Modular Mayhem
+Drums & Percussion	Electronic Drums	Modular Space
+Drums & Percussion	Electronic Drums	Moving Up
+Drums & Percussion	Electronic Drums	Mystic Groove
+Drums & Percussion	Electronic Drums	Natural Bass House
+Drums & Percussion	Electronic Drums	Natural Structures
+Drums & Percussion	Electronic Drums	Neon Glow
+Drums & Percussion	Electronic Drums	New World
+Drums & Percussion	Electronic Drums	No Man's Joint
+Drums & Percussion	Electronic Drums	Noise Reduction
+Drums & Percussion	Electronic Drums	Old School 8-Bit
+Drums & Percussion	Electronic Drums	Onyx Club
+Drums & Percussion	Electronic Drums	Orion
+Drums & Percussion	Electronic Drums	Overdrive Bump
+Drums & Percussion	Electronic Drums	Pawn Shop 808
+Drums & Percussion	Electronic Drums	Phantoms
+Drums & Percussion	Electronic Drums	Platinum
+Drums & Percussion	Electronic Drums	Platinum Dreams
+Drums & Percussion	Electronic Drums	Plonky Modular
+Drums & Percussion	Electronic Drums	Popping Bits
+Drums & Percussion	Electronic Drums	Precious Gems
+Drums & Percussion	Electronic Drums	Prismatica
+Drums & Percussion	Electronic Drums	Pucker Pop
+Drums & Percussion	Electronic Drums	Pulsar
+Drums & Percussion	Electronic Drums	Pure House
+Drums & Percussion	Electronic Drums	Radiant Flow
+Drums & Percussion	Electronic Drums	Radium Strobe
+Drums & Percussion	Electronic Drums	Red Line
+Drums & Percussion	Electronic Drums	Reel to Reel
+Drums & Percussion	Electronic Drums	Retro Box
+Drums & Percussion	Electronic Drums	Roland CR-78
+Drums & Percussion	Electronic Drums	Roland TR-606
+Drums & Percussion	Electronic Drums	Roland TR-808
+Drums & Percussion	Electronic Drums	Roland TR-909
+Drums & Percussion	Electronic Drums	Rolling Up
+Drums & Percussion	Electronic Drums	Sapphire
+Drums & Percussion	Electronic Drums	Secret Sauce
+Drums & Percussion	Electronic Drums	Sequential DrumTraks
+Drums & Percussion	Electronic Drums	Shadow Zone
+Drums & Percussion	Electronic Drums	Shell Game
+Drums & Percussion	Electronic Drums	Shockwave
+Drums & Percussion	Electronic Drums	Simmons SDS-V
+Drums & Percussion	Electronic Drums	Small Wonder
+Drums & Percussion	Electronic Drums	SoHo
+Drums & Percussion	Electronic Drums	Soft Decay
+Drums & Percussion	Electronic Drums	Solaris
+Drums & Percussion	Electronic Drums	Soul Fire
+Drums & Percussion	Electronic Drums	Spaced Out
+Drums & Percussion	Electronic Drums	Stardust
+Drums & Percussion	Electronic Drums	Steel Plates
+Drums & Percussion	Electronic Drums	Studio Cuts
+Drums & Percussion	Electronic Drums	Super Natural
+Drums & Percussion	Electronic Drums	Super Solid
+Drums & Percussion	Electronic Drums	Swirls of Smoke
+Drums & Percussion	Electronic Drums	Synthetic Bass House
+Drums & Percussion	Electronic Drums	Synthia
+Drums & Percussion	Electronic Drums	Tape Deck
+Drums & Percussion	Electronic Drums	Tension
+Drums & Percussion	Electronic Drums	Thick Heat
+Drums & Percussion	Electronic Drums	Tight Trap
+Drums & Percussion	Electronic Drums	Titans of Bass
+Drums & Percussion	Electronic Drums	Topaz
+Drums & Percussion	Electronic Drums	Tough Kit
+Drums & Percussion	Electronic Drums	Twilight Drive
+Drums & Percussion	Electronic Drums	Two Ton Pop
+Drums & Percussion	Electronic Drums	Uptown Flow
+Drums & Percussion	Electronic Drums	Vintage Arcade
+Drums & Percussion	Electronic Drums	Vintage Cinema
+Drums & Percussion	Electronic Drums	Warm Breeze
+Drums & Percussion	Electronic Drums	Warm Embers
+Drums & Percussion	Electronic Drums	Washington
+Drums & Percussion	Electronic Drums	West Coast Modular
+Drums & Percussion	Percussion	Blocks & Bells Performance
+Drums & Percussion	Percussion	Bongos Performance
+Drums & Percussion	Percussion	Bongos Stick Performance
+Drums & Percussion	Percussion	Cajon Performance
+Drums & Percussion	Percussion	Chinese Kit
+Drums & Percussion	Percussion	Claps & Snaps Performance
+Drums & Percussion	Percussion	Coffee Shop+
+Drums & Percussion	Percussion	Conga Bright Performance
+Drums & Percussion	Percussion	Conga Performance
+Drums & Percussion	Percussion	Disco Percussion+
+Drums & Percussion	Percussion	Electronic Percussion+
+Drums & Percussion	Percussion	Latin+
+Drums & Percussion	Percussion	Pawn Shop Percussion+
+Drums & Percussion	Percussion	Retro Percussion+
+Drums & Percussion	Percussion	Shaker 1 Performance
+Drums & Percussion	Percussion	Shaker 2 Performance
+Drums & Percussion	Percussion	Studio+
+Drums & Percussion	Percussion	Taiko Drums
+Drums & Percussion	Percussion	Tambourines Performance
+Drums & Percussion	Percussion	Timbales Performance
+Guitar		Acoustic Guitar
+Guitar		Classical Acoustic Guitar
+Guitar		Hard Rock
+Guitar	Processed	Phasing Guitar Plucks
+Keyboard	Acoustic Piano	Ballad
+Keyboard	Acoustic Piano	Concert Grand
+Keyboard	Acoustic Piano	Early Version
+Keyboard	Acoustic Piano	Easy
+Keyboard	Acoustic Piano	Grandma's Piano
+Keyboard	Acoustic Piano	I-95 Chronicle Piano
+Keyboard	Acoustic Piano	Ivory & Wood
+Keyboard	Acoustic Piano	Pop Producer Keys
+Keyboard	Acoustic Piano	Silver Age
+Keyboard	Acoustic Piano	Soft Cinematic
+Keyboard	Acoustic Piano	Songwriter
+Keyboard	Acoustic Piano	Squeeze Pop
+Keyboard	Acoustic Piano/Processed	70s Glam
+Keyboard	Acoustic Piano/Processed	Amplified Piano
+Keyboard	Acoustic Piano/Processed	Below The Surface Piano
+Keyboard	Acoustic Piano/Processed	Bokeh
+Keyboard	Acoustic Piano/Processed	Boogie Man Piano
+Keyboard	Acoustic Piano/Processed	Capstan Piano
+Keyboard	Acoustic Piano/Processed	Curious Hammers
+Keyboard	Acoustic Piano/Processed	Dark Lo-Fi Piano
+Keyboard	Acoustic Piano/Processed	Darkened Theater
+Keyboard	Acoustic Piano/Processed	Dusk
+Keyboard	Acoustic Piano/Processed	Echoes Of Pompeii
+Keyboard	Acoustic Piano/Processed	Flickering
+Keyboard	Acoustic Piano/Processed	Grain Clouds
+Keyboard	Acoustic Piano/Processed	Learner's Piano
+Keyboard	Acoustic Piano/Processed	Lucid Recollection
+Keyboard	Acoustic Piano/Processed	Magnetic Degredation
+Keyboard	Acoustic Piano/Processed	Mellow Vibe Piano
+Keyboard	Acoustic Piano/Processed	Muted Clank Keys
+Keyboard	Acoustic Piano/Processed	Oak Piano Dream Synth
+Keyboard	Acoustic Piano/Processed	Old-Time Recording Keys
+Keyboard	Acoustic Piano/Processed	Parallel Earth Piano
+Keyboard	Acoustic Piano/Processed	Psychic Energy Piano
+Keyboard	Acoustic Piano/Processed	Record Collection Grand
+Keyboard	Acoustic Piano/Processed	Reflected Sunlight
+Keyboard	Acoustic Piano/Processed	Rise Above Piano
+Keyboard	Acoustic Piano/Processed	Scattered Memories
+Keyboard	Acoustic Piano/Processed	Small Amped Acoustic Piano
+Keyboard	Acoustic Piano/Processed	Small Time Piano
+Keyboard	Acoustic Piano/Processed	Soft Touch
+Keyboard	Acoustic Piano/Processed	Subtle Dynamics Piano
+Keyboard	Acoustic Piano/Processed	Tin Can
+Keyboard	Acoustic Piano/Processed	Worn Tape Piano
+Keyboard	Clavinet	Chilled Clav
+Keyboard	Clavinet	Digging Deeper Clav
+Keyboard	Clavinet	Distorted Clav
+Keyboard	Clavinet	Guitar vs Clav
+Keyboard	Clavinet	Koto Clone
+Keyboard	Clavinet	Muted Clav
+Keyboard	Clavinet	Novel Approach Clav
+Keyboard	Clavinet	Vintage Wah Clav
+Keyboard	Clavinet	Wah-Wah Clav
+Keyboard	Clavinet/Processed	Claverotor
+Keyboard	Clavinet/Processed	Different Phases Clav
+Keyboard	Clavinet/Processed	Smooth Echo Clav
+Keyboard	Electric Piano	Double Tracked Wurli
+Keyboard	Electric Piano	Electromagnetic Keys
+Keyboard	Electric Piano	Flea Market Wurli
+Keyboard	Electric Piano	Phasing Bells
+Keyboard	Electric Piano	Powered Tube Piano
+Keyboard	Electric Piano	Pure Digital Piano
+Keyboard	Electric Piano	Supporting Cast Piano
+Keyboard	Electric Piano	Toy Piano
+Keyboard	Electric Piano/Processed	80s Signature Keyboard
+Keyboard	Electric Piano/Processed	Deep Bass Tines Electric Piano
+Keyboard	Electric Piano/Processed	Deep Drive Electric Piano
+Keyboard	Electric Piano/Processed	Distorted Wurli
+Keyboard	Electric Piano/Processed	Feedback Rhodes
+Keyboard	Electric Piano/Processed	Ferrous Wurli
+Keyboard	Electric Piano/Processed	Instant Hook Wurli
+Keyboard	Electric Piano/Processed	Shimmering Electric Piano
+Keyboard	Mellotron	Mellotron Airy Choir
+Keyboard	Mellotron	Mellotron Boys Choir
+Keyboard	Mellotron	Mellotron Brass
+Keyboard	Mellotron	Mellotron Brass Choir
+Keyboard	Mellotron	Mellotron Brassy Sequence
+Keyboard	Mellotron	Mellotron Cello
+Keyboard	Mellotron	Mellotron Choir
+Keyboard	Mellotron	Mellotron Choir & Flute
+Keyboard	Mellotron	Mellotron Cloud Choir
+Keyboard	Mellotron	Mellotron Flute
+Keyboard	Mellotron	Mellotron Flutes
+Keyboard	Mellotron	Mellotron GC Brass
+Keyboard	Mellotron	Mellotron Lo-Fi Lead
+Keyboard	Mellotron	Mellotron Lush Sci-Fi Pad
+Keyboard	Mellotron	Mellotron Orchestra Swirl
+Keyboard	Mellotron	Mellotron Replicant Pad
+Keyboard	Mellotron	Mellotron Shimmering Chords
+Keyboard	Mellotron	Mellotron Skating Pad
+Keyboard	Mellotron	Mellotron Strings & Flute
+Keyboard	Mellotron	Mellotron Vintage Pattern
+Keyboard	Mellotron	Mellotron Violins
+Keyboard	Organ	Bebop Organ
+Keyboard	Organ	Blips Piano
+Keyboard	Organ	Cheap Organ
+Keyboard	Organ	Dreamy Smooth Vox
+Keyboard	Organ	Fixer Upper Organ
+Keyboard	Organ	Grand Organ
+Keyboard	Organ	Hard Rock Organ
+Keyboard	Organ	Heavy Metal Organ
+Keyboard	Organ	Jazz Fusion Organ
+Keyboard	Organ	Jazz Organ
+Keyboard	Organ	Lighter Shade Organ
+Keyboard	Organ	Oakland Organ
+Keyboard	Organ	Power Chord Organ
+Keyboard	Organ	Progressive Organ
+Keyboard	Organ	Rhythm Organ
+Keyboard	Organ	Side Man Organ
+Keyboard	Organ	Soul Organ
+Keyboard	Organ	Top End Organ
+Keyboard	Organ	Toy Melodica
+Keyboard	Organ/Processed	Gamer's Organ
+Keyboard	Organ/Processed	Ghostly Reversed Organ
+Keyboard	Organ/Processed	Industrial Design Organ
+Keyboard	Organ/Processed	Pitched Vocals Organ
+Mallet		Lullaby Vibes
+Mallet		Marimba
+Mallet		Mini Marimba
+Mallet		Music Box
+Mallet		Taped Marimba
+Mallet		Toy Celesta
+Mallet		Toy Glockenspiel
+Mallet		Vibraphone
+Mallet		Xylo Keyboard
+Mallet	Processed	80s Chime Vibe
+Mallet	Processed	Fairy Dust
+Mallet	Processed	Giant's Doorbell
+Mallet	Processed	Hit Record Marimba
+Mallet	Processed	I-95 Silicon Pluck
+Mallet	Processed	Sweet Overdrive Kalimba
+Strings	Studio Strings	Studio Cellos
+Strings	Studio Strings	Studio Double Basses
+Strings	Studio Strings	Studio Violas
+Strings	Studio Strings	Studio Violins 1
+Strings	Studio Strings	Studio Violins 2
+Strings	Studio Strings/Section Instruments	Abbey Wood
+Strings	Studio Strings/Section Instruments	Bloomsbury
+Strings	Studio Strings/Section Instruments	Eden Park
+Strings	Studio Strings/Section Instruments	Kensington
+Strings	Studio Strings/Section Instruments	King's Cross
+Synthesizer	Arpeggiated	1970s Analog Arp
+Synthesizer	Arpeggiated	8-Bit Memories
+Synthesizer	Arpeggiated	Adventures In Circuitry
+Synthesizer	Arpeggiated	Airship Rising
+Synthesizer	Arpeggiated	Alien Language
+Synthesizer	Arpeggiated	Around You Arp
+Synthesizer	Arpeggiated	Arp Adventure
+Synthesizer	Arpeggiated	Arptron
+Synthesizer	Arpeggiated	Bell Echo Arp
+Synthesizer	Arpeggiated	Bleep City
+Synthesizer	Arpeggiated	Blinking Lights
+Synthesizer	Arpeggiated	Bright Arpeggiated Synth
+Synthesizer	Arpeggiated	Calculating Machine Arp
+Synthesizer	Arpeggiated	Capricorn
+Synthesizer	Arpeggiated	Catch This
+Synthesizer	Arpeggiated	Champlain Sublime Synth
+Synthesizer	Arpeggiated	Childish Movement
+Synthesizer	Arpeggiated	Classic Analog Arp
+Synthesizer	Arpeggiated	Comb Groover
+Synthesizer	Arpeggiated	Contrary Motion Arp
+Synthesizer	Arpeggiated	Cosmic Arp Cycles
+Synthesizer	Arpeggiated	Cosmic Dust Arp
+Synthesizer	Arpeggiated	Crushed Arp
+Synthesizer	Arpeggiated	Dew Drops
+Synthesizer	Arpeggiated	Digital Cascades
+Synthesizer	Arpeggiated	Distant Stars Arp
+Synthesizer	Arpeggiated	Dream Pluck Patterns
+Synthesizer	Arpeggiated	Drifting Images
+Synthesizer	Arpeggiated	Dripping Cycles
+Synthesizer	Arpeggiated	Electric Plink Pluck
+Synthesizer	Arpeggiated	Elixir of Life
+Synthesizer	Arpeggiated	Enchanted Lands
+Synthesizer	Arpeggiated	Epic Journey
+Synthesizer	Arpeggiated	Erratic Motion
+Synthesizer	Arpeggiated	Excitable Circuits
+Synthesizer	Arpeggiated	Glass Arp
+Synthesizer	Arpeggiated	Glass Bottle Arp
+Synthesizer	Arpeggiated	Glass Echoes Arp
+Synthesizer	Arpeggiated	Glistening Bells
+Synthesizer	Arpeggiated	Gritty Bells
+Synthesizer	Arpeggiated	Groovy Synth Pattern
+Synthesizer	Arpeggiated	Hardstyle
+Synthesizer	Arpeggiated	Hybrid Dancer
+Synthesizer	Arpeggiated	Icy Caverns
+Synthesizer	Arpeggiated	Instant Arcade
+Synthesizer	Arpeggiated	Jittery Pulses
+Synthesizer	Arpeggiated	Level Up
+Synthesizer	Arpeggiated	Machine Vox
+Synthesizer	Arpeggiated	Meteor Shower
+Synthesizer	Arpeggiated	Moonlight Glimmer
+Synthesizer	Arpeggiated	Natural Pluck Arp
+Synthesizer	Arpeggiated	Night Magic
+Synthesizer	Arpeggiated	Noisy Definition
+Synthesizer	Arpeggiated	Object In Motion
+Synthesizer	Arpeggiated	Opening Sequence
+Synthesizer	Arpeggiated	Pitch Black Night Arp
+Synthesizer	Arpeggiated	Plucked Voice Arp
+Synthesizer	Arpeggiated	Polymetric Structures
+Synthesizer	Arpeggiated	Quantizer Patterns
+Synthesizer	Arpeggiated	Quirky Moments
+Synthesizer	Arpeggiated	Radiating UFO
+Synthesizer	Arpeggiated	Rave Code
+Synthesizer	Arpeggiated	Refresh Rate
+Synthesizer	Arpeggiated	Replicant Arp
+Synthesizer	Arpeggiated	Resonant Waves
+Synthesizer	Arpeggiated	Sci-Fi Bass
+Synthesizer	Arpeggiated	Sines of Structure
+Synthesizer	Arpeggiated	Singing Bell Arp
+Synthesizer	Arpeggiated	Single Digit Drama
+Synthesizer	Arpeggiated	Sleep Pulse
+Synthesizer	Arpeggiated	Smooth Synth Arp
+Synthesizer	Arpeggiated	Soft Metals
+Synthesizer	Arpeggiated	Sparkling Stars
+Synthesizer	Arpeggiated	Swarming Arp
+Synthesizer	Arpeggiated	Sweeping Arp
+Synthesizer	Arpeggiated	Synth Chime Wash
+Synthesizer	Arpeggiated	Synth Skin Drum
+Synthesizer	Arpeggiated	Thought Patterns
+Synthesizer	Arpeggiated	Time Runner
+Synthesizer	Arpeggiated	Velo Jumper
+Synthesizer	Arpeggiated	Vintage Computer
+Synthesizer	Arpeggiated	Vintage Square Arp
+Synthesizer	Arpeggiated	Zen Garden
+Synthesizer	Arpeggiated/Bass	Acid House Bass
+Synthesizer	Arpeggiated/Bass	Analog Bass Sequence
+Synthesizer	Arpeggiated/Bass	Busy Arp Bass
+Synthesizer	Arpeggiated/Bass	Dark Bass Rhythms
+Synthesizer	Arpeggiated/Bass	Deep Bass Pattern
+Synthesizer	Arpeggiated/Bass	Deep Groove Synth Bass
+Synthesizer	Arpeggiated/Bass	House Arp Plucks
+Synthesizer	Arpeggiated/Bass	Hypnotic Synth Bass
+Synthesizer	Arpeggiated/Bass	Italo Disco Patterns
+Synthesizer	Arpeggiated/Bass	Modern Acid Patterns
+Synthesizer	Arpeggiated/Bass	Squelchy Synth Bass
+Synthesizer	Arpeggiated/Bass	Synth Pop Bassline
+Synthesizer	Arpeggiated/Chords	Deep Techno Chords
+Synthesizer	Arpeggiated/Chords	Detroit Chord Riff
+Synthesizer	Arpeggiated/Chords	Echo Chords
+Synthesizer	Arpeggiated/Chords	Single Digit Story
+Synthesizer	Arpeggiated/Layers	Bamboo Bell Patterns
+Synthesizer	Arpeggiated/Layers	Bleep Motion
+Synthesizer	Arpeggiated/Layers	Bright Majestic Waves
+Synthesizer	Arpeggiated/Layers	Clockwork Melodies
+Synthesizer	Arpeggiated/Layers	Constellation Map
+Synthesizer	Arpeggiated/Layers	Crystals and Voices
+Synthesizer	Arpeggiated/Layers	Flow Motion
+Synthesizer	Arpeggiated/Layers	Getting The Jitters
+Synthesizer	Arpeggiated/Layers	Glow Worms
+Synthesizer	Arpeggiated/Layers	Juicy Arp
+Synthesizer	Arpeggiated/Layers	Liquid Rhythms
+Synthesizer	Arpeggiated/Layers	Luscious Arp Layers
+Synthesizer	Arpeggiated/Layers	Midnight Drive
+Synthesizer	Arpeggiated/Layers	Neon Drive
+Synthesizer	Arpeggiated/Layers	Pressurized Voice Bubbles
+Synthesizer	Arpeggiated/Layers	Radiant Strings
+Synthesizer	Arpeggiated/Layers	Star Arp
+Synthesizer	Arpeggiated/Layers	Synth Bell Cycles
+Synthesizer	Arpeggiated/Layers	Warm Arp Pad
+Synthesizer	Bass	8-Bit Grit
+Synthesizer	Bass	808 Bass
+Synthesizer	Bass	808 Mutation Bass
+Synthesizer	Bass	80s FM Bass Attack
+Synthesizer	Bass	80s Pluck Bass
+Synthesizer	Bass	90s Solid Synth Bass
+Synthesizer	Bass	90s Stereo Synth Bass
+Synthesizer	Bass	Acid Etched Bass
+Synthesizer	Bass	Agile Synth Bass
+Synthesizer	Bass	Alien Pulse Bass
+Synthesizer	Bass	Alphabet City 808 Bass
+Synthesizer	Bass	Alphabet City Boundless Bass
+Synthesizer	Bass	Aluminum Sweep
+Synthesizer	Bass	Analog Bass Twister
+Synthesizer	Bass	Analog Resistance Bass
+Synthesizer	Bass	Analog Surge Bass
+Synthesizer	Bass	Analog Sweep Bass
+Synthesizer	Bass	Artificial Persona
+Synthesizer	Bass	Astro Funk
+Synthesizer	Bass	Auten Road Interaction Bass
+Synthesizer	Bass	Bass Keys
+Synthesizer	Bass	Big Saw Bass
+Synthesizer	Bass	Big Wide Reese
+Synthesizer	Bass	Blooming Bass
+Synthesizer	Bass	Boxy Synth Bass
+Synthesizer	Bass	Breaking Bass
+Synthesizer	Bass	Breathless Pumping
+Synthesizer	Bass	Breathless Synth Bass
+Synthesizer	Bass	Broken Signals
+Synthesizer	Bass	Byte Bass
+Synthesizer	Bass	Cable Strike Bass
+Synthesizer	Bass	Chainsaw Bass
+Synthesizer	Bass	Chipper Bass
+Synthesizer	Bass	Circuit Coil Bass
+Synthesizer	Bass	Classic Funk Boogie Bass
+Synthesizer	Bass	Classic Slap House Bass
+Synthesizer	Bass	Cloud Bass
+Synthesizer	Bass	Colossal Synth Bass
+Synthesizer	Bass	Communication Breakdown
+Synthesizer	Bass	Concussion Bass
+Synthesizer	Bass	Cortlandt Alley River Bass
+Synthesizer	Bass	Crushed 808 Bass
+Synthesizer	Bass	Dark Drone Bass
+Synthesizer	Bass	Dark Glide Bass
+Synthesizer	Bass	Dark Hammer
+Synthesizer	Bass	Dark Heavy Bass
+Synthesizer	Bass	Dark Impact Bass
+Synthesizer	Bass	Dark Secrets Bass
+Synthesizer	Bass	Deep 808 Bass
+Synthesizer	Bass	Deep Abyss
+Synthesizer	Bass	Deep Circuit Bass
+Synthesizer	Bass	Deep FM Thump
+Synthesizer	Bass	Deep Hollow Bass
+Synthesizer	Bass	Deep Moves Bass
+Synthesizer	Bass	Deep Sub Bass
+Synthesizer	Bass	Deep Synth Bass
+Synthesizer	Bass	Deep Techno FM Bass
+Synthesizer	Bass	Deep Texture Bass
+Synthesizer	Bass	Deep Thump Bass
+Synthesizer	Bass	Derailed Harmonics
+Synthesizer	Bass	Designer Bass
+Synthesizer	Bass	Destroyed 808 Bass
+Synthesizer	Bass	Devastating Dark Bass
+Synthesizer	Bass	Digital Dust
+Synthesizer	Bass	Dirty Planet
+Synthesizer	Bass	Doom Tune Bass
+Synthesizer	Bass	Edgy Synth Bass
+Synthesizer	Bass	Electric Blue
+Synthesizer	Bass	Enigma Bass Machine
+Synthesizer	Bass	FM Trunk Bass
+Synthesizer	Bass	Fast Talker
+Synthesizer	Bass	Fever Nights
+Synthesizer	Bass	Filthy Bass
+Synthesizer	Bass	Filthy Drop Bass
+Synthesizer	Bass	Filthy Slap Bass
+Synthesizer	Bass	Fireworks
+Synthesizer	Bass	Fizzy Sweeper
+Synthesizer	Bass	Flanged Bass
+Synthesizer	Bass	Flexible Machine Bass
+Synthesizer	Bass	Flexible Square Bass
+Synthesizer	Bass	Flutter Pluck
+Synthesizer	Bass	Flying Machine
+Synthesizer	Bass	Fragmentator
+Synthesizer	Bass	Full Sub
+Synthesizer	Bass	Funk Boogie Synth Bass
+Synthesizer	Bass	Future Wobble Bass
+Synthesizer	Bass	G-o-d-d Bass
+Synthesizer	Bass	Gliding 808 Bass
+Synthesizer	Bass	Gnarly Notch Bass
+Synthesizer	Bass	Gravity
+Synthesizer	Bass	Gravity Waves
+Synthesizer	Bass	Grimy Silver Box Bass
+Synthesizer	Bass	Grinding 808 Bass
+Synthesizer	Bass	Grinding Waves
+Synthesizer	Bass	Gritty Vowel Bass
+Synthesizer	Bass	Growling Brass Synth Bass
+Synthesizer	Bass	Growling Formants
+Synthesizer	Bass	Growling Pulse
+Synthesizer	Bass	Gruff Bass
+Synthesizer	Bass	Hard 808 Bass
+Synthesizer	Bass	Hard Hitting Bass
+Synthesizer	Bass	Heavy 808 Bass
+Synthesizer	Bass	Heavy Buzz Bass
+Synthesizer	Bass	Heavy Pulse Bass
+Synthesizer	Bass	Heavy Punch Stab
+Synthesizer	Bass	Heavy Rotation Bass
+Synthesizer	Bass	Hollow Frame Bass
+Synthesizer	Bass	Hollow Pluck
+Synthesizer	Bass	Hybrid Elastic Bass
+Synthesizer	Bass	Impact 808 Bass
+Synthesizer	Bass	Iron Bass
+Synthesizer	Bass	Knocked 808 Bass
+Synthesizer	Bass	Layered Brass
+Synthesizer	Bass	Liquid Bass
+Synthesizer	Bass	Liquid Gold
+Synthesizer	Bass	Lo-Fi Drive 808 Bass
+Synthesizer	Bass	Lo-Fi Throat
+Synthesizer	Bass	Low Growl Bass
+Synthesizer	Bass	Magical and New Bass 01
+Synthesizer	Bass	Magical and New Bass 02
+Synthesizer	Bass	Magical and New Bass 03
+Synthesizer	Bass	Make It Musical Bass 01
+Synthesizer	Bass	Make It Musical Bass 02
+Synthesizer	Bass	Make It Musical Bass 03
+Synthesizer	Bass	Massive 808 Bass
+Synthesizer	Bass	Massive Grime Bass
+Synthesizer	Bass	Massive Why
+Synthesizer	Bass	Massive Wobble Bass
+Synthesizer	Bass	Maximum Aggression Stab
+Synthesizer	Bass	Mech Growl
+Synthesizer	Bass	Mechanical Bass
+Synthesizer	Bass	Meditation Growl
+Synthesizer	Bass	Mega Wobble Bass
+Synthesizer	Bass	Megalodon Bass
+Synthesizer	Bass	Metal Sweep
+Synthesizer	Bass	Metallic Stab Bass
+Synthesizer	Bass	Metallic Waves
+Synthesizer	Bass	Midnight Fuzz
+Synthesizer	Bass	Minimal Bass
+Synthesizer	Bass	Monster 808 Bass
+Synthesizer	Bass	Music and Lights
+Synthesizer	Bass	Mutant Acoustic Bass
+Synthesizer	Bass	Neon Synth Bass
+Synthesizer	Bass	Noisy 808 Bass
+Synthesizer	Bass	Noisy Punch Bass
+Synthesizer	Bass	Nylon Plucked Bass
+Synthesizer	Bass	Oblivion Pulse Bass
+Synthesizer	Bass	Old School Funk Synth Bass
+Synthesizer	Bass	Opaque Deep Bass
+Synthesizer	Bass	Organic Distortion Bass
+Synthesizer	Bass	Overstuffed 808 Bass
+Synthesizer	Bass	Overtone Pulse Bass
+Synthesizer	Bass	Paisley Funk Bass
+Synthesizer	Bass	Pounding 808 Bass
+Synthesizer	Bass	Pressure Drop Bass
+Synthesizer	Bass	Pressure Shake Bass
+Synthesizer	Bass	Pulse Bass
+Synthesizer	Bass	Pulsing Organ Bass
+Synthesizer	Bass	Pumped Infinity Bass
+Synthesizer	Bass	Pumping Synth Waves
+Synthesizer	Bass	Punchy Alternating Bass
+Synthesizer	Bass	Pure Kick Bass
+Synthesizer	Bass	Rattle Punch Bass
+Synthesizer	Bass	Razor Wave Bass
+Synthesizer	Bass	Resonant Deep Bass
+Synthesizer	Bass	Resonant Pluck Bass
+Synthesizer	Bass	Retro Grit Bass
+Synthesizer	Bass	Robot Bass
+Synthesizer	Bass	Rough Synth Bass
+Synthesizer	Bass	Rough Waves Bass
+Synthesizer	Bass	Round House Bass
+Synthesizer	Bass	Round and Punchy Bass
+Synthesizer	Bass	Rounded Square Bass
+Synthesizer	Bass	Rubber Chord Bass
+Synthesizer	Bass	Scream Bass
+Synthesizer	Bass	Screech Bass
+Synthesizer	Bass	Sharp Cut Bass
+Synthesizer	Bass	Shelburne Road State Bass
+Synthesizer	Bass	Shimmering Bass
+Synthesizer	Bass	Short Circuit Bass
+Synthesizer	Bass	Sidechain Massive
+Synthesizer	Bass	Silky Smooth Bass
+Synthesizer	Bass	Simple Bass
+Synthesizer	Bass	Simple Foghorn Bass
+Synthesizer	Bass	Sinus Deformation
+Synthesizer	Bass	Slide Attack Bass
+Synthesizer	Bass	Sliding Structure Bass
+Synthesizer	Bass	Smashed 808 Bass
+Synthesizer	Bass	Smooth Short Bass
+Synthesizer	Bass	Smooth Thump Bass
+Synthesizer	Bass	Snappy 808 Bass
+Synthesizer	Bass	Snappy Bass
+Synthesizer	Bass	Society Bass
+Synthesizer	Bass	Solar Eclipse
+Synthesizer	Bass	Solid 808 Bass
+Synthesizer	Bass	Solid Body Bass
+Synthesizer	Bass	Solid Ground
+Synthesizer	Bass	Space Dance Octaves
+Synthesizer	Bass	Spectral Fusion
+Synthesizer	Bass	Spherical Bass
+Synthesizer	Bass	Squeaky 808 Bass
+Synthesizer	Bass	Star Villain Bass
+Synthesizer	Bass	Stochastic Horizons
+Synthesizer	Bass	String Theory Pulse
+Synthesizer	Bass	Strong Percussion Bass
+Synthesizer	Bass	Styrofoam Bass
+Synthesizer	Bass	Sub Tone Bass
+Synthesizer	Bass	Subwave Dragon Bass
+Synthesizer	Bass	Super Sub 808 Bass
+Synthesizer	Bass	Sweeping 808 Bass
+Synthesizer	Bass	Sweeping Scrape
+Synthesizer	Bass	Synth Upright Bass
+Synthesizer	Bass	Talking Bass
+Synthesizer	Bass	Taureg Moon Bass
+Synthesizer	Bass	Tech Bass
+Synthesizer	Bass	Tense Swelling Bass
+Synthesizer	Bass	Tense Synth Bass
+Synthesizer	Bass	Thick Funk
+Synthesizer	Bass	Thick Liquid Bass
+Synthesizer	Bass	Tight Percussive Bass
+Synthesizer	Bass	Tin Man
+Synthesizer	Bass	Titanium Edge
+Synthesizer	Bass	Tompkins Square 808 Bass
+Synthesizer	Bass	Torn Up Wobble Bass
+Synthesizer	Bass	Tough 808 Bass
+Synthesizer	Bass	Triple Band
+Synthesizer	Bass	Urban Grunge
+Synthesizer	Bass	Vintage Brassy Bass
+Synthesizer	Bass	Vintage Synth Bass
+Synthesizer	Bass	Vocal Grit Bass
+Synthesizer	Bass	Vox Voltage Bass
+Synthesizer	Bass	Warm 70s Bass
+Synthesizer	Bass	Waves Motion Bass
+Synthesizer	Bass	Waves of Deep Bass
+Synthesizer	Bass	Way to Live Bass
+Synthesizer	Bass	Wobble Fade Bass
+Synthesizer	Bass	Zap Bass
+Synthesizer	Bells	Azure Crystal Synth Bells
+Synthesizer	Bells	Bell Designer
+Synthesizer	Bells	Cathedral Bells
+Synthesizer	Bells	Charm Bells
+Synthesizer	Bells	Chimera Bells
+Synthesizer	Bells	Cute Crush Synth
+Synthesizer	Bells	Delicate Bells
+Synthesizer	Bells	Distant Bells
+Synthesizer	Bells	Distant Ethereal Bells
+Synthesizer	Bells	Dreamy Dulcet Bells
+Synthesizer	Bells	Ethereal Bells
+Synthesizer	Bells	Falling Bells
+Synthesizer	Bells	Gentle Sine Bells
+Synthesizer	Bells	Glass Bells
+Synthesizer	Bells	Liquid Crystal
+Synthesizer	Bells	Liquid Wires
+Synthesizer	Bells	Organic Bells
+Synthesizer	Bells	Retro Vibes Synth Bells
+Synthesizer	Bells	String Bells
+Synthesizer	Bells	Sweet Bells
+Synthesizer	Bells	Sweet Luck Chime
+Synthesizer	Brass	80s Fantasy
+Synthesizer	Brass	Analog Horns
+Synthesizer	Brass	Anthem Synth Brass
+Synthesizer	Brass	Brassy Ensemble
+Synthesizer	Brass	Brassy and Funky
+Synthesizer	Brass	Bright Synth Brass
+Synthesizer	Brass	Celestial Brass
+Synthesizer	Brass	Colossal Brass
+Synthesizer	Brass	Dark Heart Brass Synth
+Synthesizer	Brass	Ferrite Decay
+Synthesizer	Brass	Flutter Reel Brass
+Synthesizer	Brass	Future Feels Brass
+Synthesizer	Brass	Grungy Horn Hits
+Synthesizer	Brass	Just About Brass
+Synthesizer	Brass	Slide Pad
+Synthesizer	Brass	Slow Synth Brass Swell
+Synthesizer	Brass	The Final Lead
+Synthesizer	Brass	Vintage Vibes Brass
+Synthesizer	Keyboard	80s Bitrate Synth
+Synthesizer	Keyboard	80s Fizzy Synth
+Synthesizer	Keyboard	80s Sine Synth
+Synthesizer	Keyboard	80s Starlight
+Synthesizer	Keyboard	80s Wave Bells
+Synthesizer	Keyboard	80s Wave Synth
+Synthesizer	Keyboard	Analog Lullaby
+Synthesizer	Keyboard	Antique Key Moves
+Synthesizer	Keyboard	Arcturus
+Synthesizer	Keyboard	Atmospheric Rhodes
+Synthesizer	Keyboard	Azimuth Dream
+Synthesizer	Keyboard	Backwards Masking
+Synthesizer	Keyboard	Beautiful Melody
+Synthesizer	Keyboard	Big Dripper
+Synthesizer	Keyboard	Big Pulse Waves
+Synthesizer	Keyboard	Blockhead
+Synthesizer	Keyboard	Blown Bottle Keys
+Synthesizer	Keyboard	Breathy Keys
+Synthesizer	Keyboard	Bright Punchy Synth
+Synthesizer	Keyboard	Bright Swelling Synth
+Synthesizer	Keyboard	Capstan Drift
+Synthesizer	Keyboard	Cavernous Chords
+Synthesizer	Keyboard	Chill Keys
+Synthesizer	Keyboard	Chuck
+Synthesizer	Keyboard	Classic House Organ
+Synthesizer	Keyboard	Classic Super Saw
+Synthesizer	Keyboard	Clicky Bowed Keys
+Synthesizer	Keyboard	Clouds Of Mercury
+Synthesizer	Keyboard	Cortlandt Alley River Synth
+Synthesizer	Keyboard	Dancing Tines
+Synthesizer	Keyboard	Decaying Circuit
+Synthesizer	Keyboard	Decays
+Synthesizer	Keyboard	Detuned Chords
+Synthesizer	Keyboard	Dirty Pulse
+Synthesizer	Keyboard	Dreams and Visions
+Synthesizer	Keyboard	Dreamy Air Guitar
+Synthesizer	Keyboard	Drifting Keys
+Synthesizer	Keyboard	Eighties Poly Synth
+Synthesizer	Keyboard	Electric Sheep Synth
+Synthesizer	Keyboard	Electro Sweeper
+Synthesizer	Keyboard	Elements
+Synthesizer	Keyboard	Empty Spool
+Synthesizer	Keyboard	Escape The Grid
+Synthesizer	Keyboard	Fairytales Bells
+Synthesizer	Keyboard	Fantasy Echoes
+Synthesizer	Keyboard	Fast Vox
+Synthesizer	Keyboard	Faulty Memory
+Synthesizer	Keyboard	Ferrous Glow
+Synthesizer	Keyboard	Fifth Formant Keys
+Synthesizer	Keyboard	Filtered Key
+Synthesizer	Keyboard	Flywheel Flutter
+Synthesizer	Keyboard	Fragile Keys
+Synthesizer	Keyboard	Full Force Synth
+Synthesizer	Keyboard	Fuzzy Soul Organ
+Synthesizer	Keyboard	Ghost Guitar Organ
+Synthesizer	Keyboard	Glass Harmonium
+Synthesizer	Keyboard	Glitter Noise
+Synthesizer	Keyboard	Grainy Xylo Organ
+Synthesizer	Keyboard	Granular Vibraphone
+Synthesizer	Keyboard	Grunge Dream Synth
+Synthesizer	Keyboard	Guitar Keys
+Synthesizer	Keyboard	Hammered Mallets
+Synthesizer	Keyboard	Hammered Piano
+Synthesizer	Keyboard	Hard Detuned Saws
+Synthesizer	Keyboard	Harmonic Scream Synth
+Synthesizer	Keyboard	Hazy Plucked Synth
+Synthesizer	Keyboard	Heart Flutters Synth
+Synthesizer	Keyboard	Hold And Dissolve
+Synthesizer	Keyboard	Holographic Squares
+Synthesizer	Keyboard	Ice Blinks
+Synthesizer	Keyboard	Icicle Keys
+Synthesizer	Keyboard	Jitter Piano
+Synthesizer	Keyboard	Kalimba Space
+Synthesizer	Keyboard	Kenmare Heroic Synth
+Synthesizer	Keyboard	Lime Drops Synth Pluck
+Synthesizer	Keyboard	Liquid Breath Flute
+Synthesizer	Keyboard	Liquid Synth
+Synthesizer	Keyboard	Liquid Synth Keys
+Synthesizer	Keyboard	Lo-Fi Land Vibes
+Synthesizer	Keyboard	Low Res Piano
+Synthesizer	Keyboard	Low Sweeper
+Synthesizer	Keyboard	Luminous Tines
+Synthesizer	Keyboard	Lunaris
+Synthesizer	Keyboard	Lush Electro Pad
+Synthesizer	Keyboard	Lyrical Synth
+Synthesizer	Keyboard	Many Wires Modular
+Synthesizer	Keyboard	Massive Saws
+Synthesizer	Keyboard	Mellowed Out Keys
+Synthesizer	Keyboard	Mercer Memories Synth
+Synthesizer	Keyboard	Mirror Objects
+Synthesizer	Keyboard	Modern Mystic Bowl
+Synthesizer	Keyboard	Modulated Madness
+Synthesizer	Keyboard	More Modulation Piano
+Synthesizer	Keyboard	Mott Street Conquest Synth
+Synthesizer	Keyboard	Mountain Rain
+Synthesizer	Keyboard	Moving Fuzz
+Synthesizer	Keyboard	Mutant Keys
+Synthesizer	Keyboard	Mythic Sky Synth Lead
+Synthesizer	Keyboard	New Carnival Synth
+Synthesizer	Keyboard	Nostalgic Noise
+Synthesizer	Keyboard	Numerical Locution
+Synthesizer	Keyboard	Odd Key
+Synthesizer	Keyboard	Off Bias Blues
+Synthesizer	Keyboard	Old School Keys
+Synthesizer	Keyboard	Old VHS Tape Synth
+Synthesizer	Keyboard	Oxide Haze
+Synthesizer	Keyboard	Paper Pluck Keys
+Synthesizer	Keyboard	Paris
+Synthesizer	Keyboard	Percussive Drawbars
+Synthesizer	Keyboard	Perfect Mix Piano
+Synthesizer	Keyboard	Piano Air Curls
+Synthesizer	Keyboard	Piano Fragments
+Synthesizer	Keyboard	Picked Organ
+Synthesizer	Keyboard	Pixel Dust
+Synthesizer	Keyboard	Plucked Sweet Synth
+Synthesizer	Keyboard	Portable Player
+Synthesizer	Keyboard	Print Through
+Synthesizer	Keyboard	Pseudo Octave Tines
+Synthesizer	Keyboard	Pulse Nexus
+Synthesizer	Keyboard	Punchy 80s Synth
+Synthesizer	Keyboard	Punchy Drama
+Synthesizer	Keyboard	Quantum Grains
+Synthesizer	Keyboard	Reminisce Keys
+Synthesizer	Keyboard	Repetition Of Thought
+Synthesizer	Keyboard	Retro Sparkle Synth
+Synthesizer	Keyboard	Return To Zero
+Synthesizer	Keyboard	Reverse Engineering
+Synthesizer	Keyboard	Reverse Pulsar
+Synthesizer	Keyboard	Reversing Mood Keys
+Synthesizer	Keyboard	Route 22 Revelation Synth
+Synthesizer	Keyboard	Rusty Piano
+Synthesizer	Keyboard	Sad Story
+Synthesizer	Keyboard	Sand Dune Piano
+Synthesizer	Keyboard	Scarlet Synth Chimes
+Synthesizer	Keyboard	Shadow Piano
+Synthesizer	Keyboard	Shaky Keys
+Synthesizer	Keyboard	Shelburne Road Anthem Synth
+Synthesizer	Keyboard	Shimmering Glass
+Synthesizer	Keyboard	Shining Lights
+Synthesizer	Keyboard	Short Swell Synth
+Synthesizer	Keyboard	Short Worm
+Synthesizer	Keyboard	Simple Physics Piano
+Synthesizer	Keyboard	Simple Square Bells
+Synthesizer	Keyboard	Small Metal Box
+Synthesizer	Keyboard	Soft Ballet
+Synthesizer	Keyboard	Soft Keys
+Synthesizer	Keyboard	Soft Tines
+Synthesizer	Keyboard	Soft Warm Keys
+Synthesizer	Keyboard	Songthrush Chime
+Synthesizer	Keyboard	Spaced Out Synth
+Synthesizer	Keyboard	Spacetime Keys
+Synthesizer	Keyboard	Super Saw Inferno
+Synthesizer	Keyboard	Sweet Dream Flute
+Synthesizer	Keyboard	Synth Piano
+Synthesizer	Keyboard	Time Warp Synth
+Synthesizer	Keyboard	Tine Tonespace
+Synthesizer	Keyboard	Treasure Hunt
+Synthesizer	Keyboard	Unsettled Keys
+Synthesizer	Keyboard	Vibe Tines
+Synthesizer	Keyboard	Vox Lead
+Synthesizer	Keyboard	Warbling Hearts Decay
+Synthesizer	Keyboard	Warbly Keys
+Synthesizer	Keyboard	Washington Street Credit Synth
+Synthesizer	Keyboard	Water Jug Keys
+Synthesizer	Keyboard	Way To Live Wobble
+Synthesizer	Keyboard	Wooden Plank Keys
+Synthesizer	Keyboard	Woodland Adventures
+Synthesizer	Keyboard	Woodland EP
+Synthesizer	Keyboard	Zeal
+Synthesizer	Lead	70s Analog Lead
+Synthesizer	Lead	7th Player
+Synthesizer	Lead	A Simpler Time
+Synthesizer	Lead	Alien Lead
+Synthesizer	Lead	Ambient Lead
+Synthesizer	Lead	Analog Alarm Lead
+Synthesizer	Lead	Anthemic Lead
+Synthesizer	Lead	Anthemic Sync Lead
+Synthesizer	Lead	Arcade Square Lead
+Synthesizer	Lead	Arctic Noise Lead
+Synthesizer	Lead	Arena Sidechain Lead
+Synthesizer	Lead	Bending Lead
+Synthesizer	Lead	Big Horn
+Synthesizer	Lead	Big Square
+Synthesizer	Lead	Big Wave Lead
+Synthesizer	Lead	Bit Bot Vox Lead
+Synthesizer	Lead	Black Diamond
+Synthesizer	Lead	Bleepy Lead
+Synthesizer	Lead	Blip Fields
+Synthesizer	Lead	Blue Laser Lead
+Synthesizer	Lead	Burnt Vox Lead
+Synthesizer	Lead	But I Made This Lead
+Synthesizer	Lead	Buzzy Waves
+Synthesizer	Lead	Cathode Rays
+Synthesizer	Lead	Chaos Noise Lead
+Synthesizer	Lead	Chicago Chords
+Synthesizer	Lead	Chicago Stack
+Synthesizer	Lead	Circuits And Sounds Lead
+Synthesizer	Lead	Classic Rave Chord
+Synthesizer	Lead	Cloud City Lead
+Synthesizer	Lead	Cloud Of Spheres
+Synthesizer	Lead	Coin Operated
+Synthesizer	Lead	Crackling Lead
+Synthesizer	Lead	Creepy Bells
+Synthesizer	Lead	Crushed Crystals
+Synthesizer	Lead	Cutting Squares Synth Lead
+Synthesizer	Lead	Dark Chords
+Synthesizer	Lead	Dark Edge Lead
+Synthesizer	Lead	Detroit Chords
+Synthesizer	Lead	Dopamine Lead
+Synthesizer	Lead	Effervescent Lead
+Synthesizer	Lead	Electric Buzz
+Synthesizer	Lead	Electric Coil Lead
+Synthesizer	Lead	Event Horizon Lead
+Synthesizer	Lead	Fiddling Around Lead
+Synthesizer	Lead	Filthy Sweet Lead
+Synthesizer	Lead	Flanged Wobble
+Synthesizer	Lead	Frantic Energy Lead
+Synthesizer	Lead	Funk Spike
+Synthesizer	Lead	Funk Splash Lead
+Synthesizer	Lead	Fuzzy Minor Stab
+Synthesizer	Lead	Glass Reflection Lead
+Synthesizer	Lead	Gliding Pluck Lead
+Synthesizer	Lead	Gritty Lead
+Synthesizer	Lead	Handheld Lead Brass
+Synthesizer	Lead	Handheld Vowels
+Synthesizer	Lead	Hard Metal Lead
+Synthesizer	Lead	High Energy Lead
+Synthesizer	Lead	Hip Hop Block
+Synthesizer	Lead	Hollow Detuned Lead
+Synthesizer	Lead	Horizon Noise Lead
+Synthesizer	Lead	Hot Pluck Lead
+Synthesizer	Lead	I Wanna Dance Lead
+Synthesizer	Lead	I-95 Specter Lead
+Synthesizer	Lead	Jane Street Rampart Synth
+Synthesizer	Lead	Laser Flash Lead
+Synthesizer	Lead	Les Inferno
+Synthesizer	Lead	Lo-Fi Fuzz
+Synthesizer	Lead	Low Bit Lead
+Synthesizer	Lead	Mad Scientist Lead
+Synthesizer	Lead	Magical and New Lead
+Synthesizer	Lead	Mainroom Saw Lead
+Synthesizer	Lead	Mainstage Mover Lead
+Synthesizer	Lead	Massive Arena Lead
+Synthesizer	Lead	Massive Stack
+Synthesizer	Lead	Massive Synth Hit
+Synthesizer	Lead	Mellow Poly
+Synthesizer	Lead	Metallic Edge Lead
+Synthesizer	Lead	Minor Outbursts
+Synthesizer	Lead	Moving Shapes
+Synthesizer	Lead	Mysterious Synth Lead
+Synthesizer	Lead	Oceans and Space Arp
+Synthesizer	Lead	Oceans and Space Lead
+Synthesizer	Lead	Overdrive Lead Synth
+Synthesizer	Lead	Pharaoh's Lead
+Synthesizer	Lead	Pots and Pans Lead
+Synthesizer	Lead	Pulse Shock Lead
+Synthesizer	Lead	Push It Lead
+Synthesizer	Lead	Raspy Pluck Lead
+Synthesizer	Lead	Rattling Cage Lead
+Synthesizer	Lead	Ready Player Lead
+Synthesizer	Lead	Red Alert
+Synthesizer	Lead	Retro Horns Guy Chords
+Synthesizer	Lead	Retro Robotics
+Synthesizer	Lead	Saturn Lead
+Synthesizer	Lead	Searing Lead
+Synthesizer	Lead	Shelburne Road Attention Lead
+Synthesizer	Lead	Shimmering Pulse Lead
+Synthesizer	Lead	Shivering Sidechain Lead
+Synthesizer	Lead	Shooting Star
+Synthesizer	Lead	Soft 70s Lead
+Synthesizer	Lead	Stacked Supersaws Lead
+Synthesizer	Lead	Stadium Euphoria Lead
+Synthesizer	Lead	Starlight Dreams
+Synthesizer	Lead	Starting Line Lead
+Synthesizer	Lead	Supreme Lead Synth
+Synthesizer	Lead	Sweet Cream Synth Lead
+Synthesizer	Lead	Sync Lead
+Synthesizer	Lead	Sync Swell Lead
+Synthesizer	Lead	Test Tone Oscillator Lead
+Synthesizer	Lead	Thick Shake Lead
+Synthesizer	Lead	Third Pluck
+Synthesizer	Lead	Tight Punchy Lead
+Synthesizer	Lead	Tinfoil Monster Lead
+Synthesizer	Lead	Toy Store Lead
+Synthesizer	Lead	Trap Alert Synth
+Synthesizer	Lead	Vocal Star
+Synthesizer	Lead	Warehouse Lead
+Synthesizer	Lead	Way To Live Lead
+Synthesizer	Lead	West Coast Analog Synth Lead
+Synthesizer	Mallets	Abstract Mallets
+Synthesizer	Mallets	Chimera Hammer
+Synthesizer	Mallets	Eastern Hammers
+Synthesizer	Mallets	Endless Mallets
+Synthesizer	Mallets	Ethereal Mallets
+Synthesizer	Mallets	Granular Kalimba Pad
+Synthesizer	Mallets	Hammered Wood
+Synthesizer	Mallets	Lo-Fi Exotica
+Synthesizer	Mallets	Metallic Dreams
+Synthesizer	Mallets	Midnight Mallets
+Synthesizer	Mallets	Mystic Vibes
+Synthesizer	Mallets	Orbital Chimes
+Synthesizer	Mallets	Pensive Meditation Bell
+Synthesizer	Mallets	Rattling Bell Pad
+Synthesizer	Mallets	Realistic Vibraphones
+Synthesizer	Mallets	Shimmering Star Chimes
+Synthesizer	Mallets	Spare Change
+Synthesizer	Mallets	Trembles
+Synthesizer	Mallets	Vintage Synth Marimba
+Synthesizer	Mallets	Wooden Keys
+Synthesizer	Pad	Abandoned Pad
+Synthesizer	Pad	Above The Clouds
+Synthesizer	Pad	Active Piano Rolls
+Synthesizer	Pad	Air Choir Sweep
+Synthesizer	Pad	Airways
+Synthesizer	Pad	Airy Vocal Shimmer
+Synthesizer	Pad	Alone
+Synthesizer	Pad	Aluminium Angels
+Synthesizer	Pad	Amber Dark
+Synthesizer	Pad	Analog Poly Ensemble
+Synthesizer	Pad	Analog Waves
+Synthesizer	Pad	Angelic Guitar Pad
+Synthesizer	Pad	Angelic Motion
+Synthesizer	Pad	Animated Sparks
+Synthesizer	Pad	Anxious Strings
+Synthesizer	Pad	Aquatic Voices
+Synthesizer	Pad	Atmospheric Noise Pad
+Synthesizer	Pad	Aurora Waves
+Synthesizer	Pad	Autumn Haze
+Synthesizer	Pad	Bell String Pad
+Synthesizer	Pad	Beyond Deep Skies
+Synthesizer	Pad	Binary Star
+Synthesizer	Pad	Boarding Area
+Synthesizer	Pad	Bowed Vocal Pad
+Synthesizer	Pad	Breathless Space
+Synthesizer	Pad	Breathy Vox
+Synthesizer	Pad	Broome Street Significant Synth
+Synthesizer	Pad	Celestial Organ
+Synthesizer	Pad	Celestial Voices
+Synthesizer	Pad	Chain Reaction
+Synthesizer	Pad	Chill Out
+Synthesizer	Pad	Chiming Glockenspiel
+Synthesizer	Pad	Cinematic Suspense
+Synthesizer	Pad	Circuit Monks
+Synthesizer	Pad	Classic Analog Pad
+Synthesizer	Pad	Classic Choir
+Synthesizer	Pad	Classic Pad
+Synthesizer	Pad	Classic Strings
+Synthesizer	Pad	Clean Organ
+Synthesizer	Pad	Cloud Diving
+Synthesizer	Pad	Comfort
+Synthesizer	Pad	Cosmic Ascent
+Synthesizer	Pad	Cosmic Departure
+Synthesizer	Pad	Cosmic Dust
+Synthesizer	Pad	Creaky Daruan Pad
+Synthesizer	Pad	Crimson Horizon Synth Pad
+Synthesizer	Pad	Crystal Rain
+Synthesizer	Pad	Crystal Spheres
+Synthesizer	Pad	Crystal Sun
+Synthesizer	Pad	Crystalline Structures
+Synthesizer	Pad	Cubist Waves
+Synthesizer	Pad	Dark Textures
+Synthesizer	Pad	Data Streams Pad
+Synthesizer	Pad	Deep Space Tape
+Synthesizer	Pad	Deeper Emotion
+Synthesizer	Pad	Digital Dreamstate
+Synthesizer	Pad	Distant Drift Synth
+Synthesizer	Pad	Distant Memories
+Synthesizer	Pad	Divine Interference
+Synthesizer	Pad	Drifting Away
+Synthesizer	Pad	Drifting Metals
+Synthesizer	Pad	Dynamic Swell
+Synthesizer	Pad	Echoing Swarms Pad
+Synthesizer	Pad	Electric Red Sofa Pad
+Synthesizer	Pad	Electrical Box Pad
+Synthesizer	Pad	Elsewhere
+Synthesizer	Pad	Emerald Haze Pad
+Synthesizer	Pad	Emotional Drift
+Synthesizer	Pad	Emotional Machines
+Synthesizer	Pad	Endless Stratosphere
+Synthesizer	Pad	Epic Cloud Formation
+Synthesizer	Pad	FM Bell Swells
+Synthesizer	Pad	Fast Pad
+Synthesizer	Pad	Final Twilight
+Synthesizer	Pad	Financial Honest Pad
+Synthesizer	Pad	Floating Flugels
+Synthesizer	Pad	Floating Plasma
+Synthesizer	Pad	Floating in the Ether
+Synthesizer	Pad	Flutter By
+Synthesizer	Pad	Ghost Voices
+Synthesizer	Pad	Glistening Pad
+Synthesizer	Pad	Guitar Orchestra Pad
+Synthesizer	Pad	Harmonic Drift
+Synthesizer	Pad	Heat Haze
+Synthesizer	Pad	Hexagon Space
+Synthesizer	Pad	Hypnotic Bliss
+Synthesizer	Pad	Impossibly Soft Horns
+Synthesizer	Pad	Infinite Drone
+Synthesizer	Pad	Infinity Pad
+Synthesizer	Pad	Interrupted Voices
+Synthesizer	Pad	Jump to Warp
+Synthesizer	Pad	Kingdom Of The Sun
+Synthesizer	Pad	Lo-Fi Voices
+Synthesizer	Pad	Lone Pad
+Synthesizer	Pad	Lonely Voyage
+Synthesizer	Pad	Long Forgotten
+Synthesizer	Pad	Los Angeles 2019
+Synthesizer	Pad	Luscious Swirls Synth Pad
+Synthesizer	Pad	Lush Pulse
+Synthesizer	Pad	Lustrous Nightfall
+Synthesizer	Pad	Made Iconic Pad
+Synthesizer	Pad	Majestic Rise Pad
+Synthesizer	Pad	Massive Drone Wave Lead
+Synthesizer	Pad	Meditation Drone
+Synthesizer	Pad	Mellow Heart
+Synthesizer	Pad	Mercurial
+Synthesizer	Pad	Mercury Lake
+Synthesizer	Pad	Mirror Pad
+Synthesizer	Pad	Modwheel Sizzler
+Synthesizer	Pad	Morning Meditation
+Synthesizer	Pad	Motorized Choir
+Synthesizer	Pad	Mystic
+Synthesizer	Pad	Mystic Timepiece
+Synthesizer	Pad	Pangs of Nostalgia Pad
+Synthesizer	Pad	Photons
+Synthesizer	Pad	Pixel Zapper
+Synthesizer	Pad	Pumping Swirls
+Synthesizer	Pad	Rapid Eye Movement
+Synthesizer	Pad	Rattling Piano Pad
+Synthesizer	Pad	Rhythmic Skimmer Pad
+Synthesizer	Pad	Rippling Waves
+Synthesizer	Pad	Shifting Panels
+Synthesizer	Pad	Shifting Pixels
+Synthesizer	Pad	Shoulder of Orion
+Synthesizer	Pad	Slow Breaths
+Synthesizer	Pad	Solar Flare
+Synthesizer	Pad	Something Human
+Synthesizer	Pad	Space Continuum
+Synthesizer	Pad	Space Glitters
+Synthesizer	Pad	Space Waves
+Synthesizer	Pad	Spectacularity
+Synthesizer	Pad	Star Strings
+Synthesizer	Pad	Stars Drifting By
+Synthesizer	Pad	Starts with Voice Pad
+Synthesizer	Pad	Steel Dreams
+Synthesizer	Pad	Stepped Octave Piano
+Synthesizer	Pad	Stereo Drifter
+Synthesizer	Pad	Stones on Speaker Bass Pad
+Synthesizer	Pad	Strange Strings
+Synthesizer	Pad	Subtle Friction Pad
+Synthesizer	Pad	Sun Glitters Pad
+Synthesizer	Pad	Swaying Trees
+Synthesizer	Pad	Swelling Steam Pad
+Synthesizer	Pad	Tidal Space
+Synthesizer	Pad	Titanic Waves
+Synthesizer	Pad	Unstable Machine Pad
+Synthesizer	Pad	Variable Pulse Pad
+Synthesizer	Pad	Velvetine Synth Pad
+Synthesizer	Pad	Video Cassette
+Synthesizer	Pad	Vintage Dreamscape
+Synthesizer	Pad	Vintage Flyers
+Synthesizer	Pad	Vintage Silk Motion
+Synthesizer	Pad	Vintage Warmer
+Synthesizer	Pad	Voice Box
+Synthesizer	Pad	Voltage Waves
+Synthesizer	Pad	Warm Dust
+Synthesizer	Pad	Warm Flutters
+Synthesizer	Pad	Warm Synth Pad
+Synthesizer	Pad	Warm Tides
+Synthesizer	Pad	Warm Winter Day
+Synthesizer	Pad	Warped Strings
+Synthesizer	Pad	Waves of Synth Pads
+Synthesizer	Pad	Wide Swirling Pad
+Synthesizer	Pad	Widely Serene
+Synthesizer	Pad	Wobbly Synth Pad
+Synthesizer	Pad	Worn Motor
+Synthesizer	Pad	Worn Tape Flutes
+Synthesizer	Percussion	Synth Kick 01
+Synthesizer	Percussion	Synth Kick 02
+Synthesizer	Percussion	Synth Snare 01
+Synthesizer	Percussion	Synth Snare 02
+Synthesizer	Plucked	16mm Dream Sequence
+Synthesizer	Plucked	Air Brakes Pluck
+Synthesizer	Plucked	Bent Beyond
+Synthesizer	Plucked	Big String Plucks
+Synthesizer	Plucked	Black Magic Pluck
+Synthesizer	Plucked	Blue Cavern
+Synthesizer	Plucked	Boxy Room Pluck
+Synthesizer	Plucked	Bridled
+Synthesizer	Plucked	Cavernous Dreams
+Synthesizer	Plucked	Cloudy Plucked Synth
+Synthesizer	Plucked	Dark Space Pluck
+Synthesizer	Plucked	Deep Plucked Synth
+Synthesizer	Plucked	Delicate Touch Plucks
+Synthesizer	Plucked	Drop Saw Pluck
+Synthesizer	Plucked	Expanding Pluck
+Synthesizer	Plucked	Floating Sensation
+Synthesizer	Plucked	Fragile Sines
+Synthesizer	Plucked	Future Rave Pluck
+Synthesizer	Plucked	Gentle Chime Plucks
+Synthesizer	Plucked	Ghostly Plucks
+Synthesizer	Plucked	Glass FX Bell
+Synthesizer	Plucked	Gold Coins
+Synthesizer	Plucked	High Rise Pluck
+Synthesizer	Plucked	Hybrid Attacker
+Synthesizer	Plucked	Icicle Plucks
+Synthesizer	Plucked	Link to the Past
+Synthesizer	Plucked	Lo-Fi Plucks
+Synthesizer	Plucked	Main Room Pluck Lead
+Synthesizer	Plucked	Noisy Pluck
+Synthesizer	Plucked	Noisy Plucked Synth
+Synthesizer	Plucked	Open The Bottle
+Synthesizer	Plucked	Pensive Pluck
+Synthesizer	Plucked	Pinch Roller Plucks
+Synthesizer	Plucked	Plucked Nylon Guitar
+Synthesizer	Plucked	Plucking Echoes
+Synthesizer	Plucked	Plucky Patina
+Synthesizer	Plucked	Plucky Sine
+Synthesizer	Plucked	Primetime Plucks
+Synthesizer	Plucked	Pumping Pluck
+Synthesizer	Plucked	Punchy Synth Pluck
+Synthesizer	Plucked	Reign of the Sprites
+Synthesizer	Plucked	Short Sweet Plucks
+Synthesizer	Plucked	Simple Short Pluck
+Synthesizer	Plucked	Smooth Anthem Pluck
+Synthesizer	Plucked	Snapped Up Plucks
+Synthesizer	Plucked	Space Harp
+Synthesizer	Plucked	Sparkling Bell
+Synthesizer	Plucked	Sparkling Fireflies
+Synthesizer	Plucked	Sticky Percussion
+Synthesizer	Plucked	Synth Woodwind
+Synthesizer	Plucked	Tight Synth Pluck
+Synthesizer	Plucked	Tiny Pluck Box
+Synthesizer	Plucked	Trap Clunk
+Synthesizer	Plucked	Tuned Metallic Click
+Synthesizer	Plucked	Vintage Pluck
+Synthesizer	Plucked	Voice Plucks
+Synthesizer	Plucked	Warm Intro Plucks
+Synthesizer	Plucked	Warped Pluck
+Synthesizer	Plucked	Water Droplet Plucks
+Synthesizer	Plucked	Weighted Pluck
+Synthesizer	Rhythmic	Animated Swirls
+Synthesizer	Rhythmic	Anthem Chord Arp
+Synthesizer	Rhythmic	Aquatic Pulsations
+Synthesizer	Rhythmic	Arpeggio Song
+Synthesizer	Rhythmic	Bass Press
+Synthesizer	Rhythmic	Bellscape
+Synthesizer	Rhythmic	Bright Plucked String
+Synthesizer	Rhythmic	Carbon Particles
+Synthesizer	Rhythmic	Chattering Bells
+Synthesizer	Rhythmic	Chill Vocal Sequences
+Synthesizer	Rhythmic	Chop It Up
+Synthesizer	Rhythmic	Connect Chords
+Synthesizer	Rhythmic	Crimson Cloudscape
+Synthesizer	Rhythmic	Crushing Rust
+Synthesizer	Rhythmic	Crystalline Rhythms
+Synthesizer	Rhythmic	Cyborg
+Synthesizer	Rhythmic	Dark Gate Piano
+Synthesizer	Rhythmic	Dark Moody Waves
+Synthesizer	Rhythmic	Deep Drum Wobble
+Synthesizer	Rhythmic	Deep Neural Patterning
+Synthesizer	Rhythmic	Digital Gate
+Synthesizer	Rhythmic	Distant Harp Echoes
+Synthesizer	Rhythmic	Dramatic License
+Synthesizer	Rhythmic	Duality Synth
+Synthesizer	Rhythmic	Electro Trap Combo
+Synthesizer	Rhythmic	Elevated Construct
+Synthesizer	Rhythmic	Engine Room
+Synthesizer	Rhythmic	Finger On The Pulse
+Synthesizer	Rhythmic	Future Foundation
+Synthesizer	Rhythmic	Future Strings
+Synthesizer	Rhythmic	Gated Growl
+Synthesizer	Rhythmic	Grain Silo
+Synthesizer	Rhythmic	Granular Shaker Groove
+Synthesizer	Rhythmic	Groove Pattern Pad
+Synthesizer	Rhythmic	Hammered Octaves
+Synthesizer	Rhythmic	Harmonic Tides
+Synthesizer	Rhythmic	House Chords
+Synthesizer	Rhythmic	Hydroelectric
+Synthesizer	Rhythmic	Hypnotic Glitch
+Synthesizer	Rhythmic	I-95 Bass Meter
+Synthesizer	Rhythmic	In Motion
+Synthesizer	Rhythmic	Interrupted Transmission
+Synthesizer	Rhythmic	Liquid Light
+Synthesizer	Rhythmic	Looming Beat
+Synthesizer	Rhythmic	Mechanical Beat
+Synthesizer	Rhythmic	Metallic Fireflies
+Synthesizer	Rhythmic	Minor Incident
+Synthesizer	Rhythmic	Minor Tension
+Synthesizer	Rhythmic	Mixed Up Voices
+Synthesizer	Rhythmic	Modular Math Beats
+Synthesizer	Rhythmic	Moment Of Indecision
+Synthesizer	Rhythmic	Orchestral Circuits
+Synthesizer	Rhythmic	Percussive Pluck
+Synthesizer	Rhythmic	Pluck Groove
+Synthesizer	Rhythmic	Pneumatic
+Synthesizer	Rhythmic	Polished Concrete
+Synthesizer	Rhythmic	Power Up
+Synthesizer	Rhythmic	Primordial Elements
+Synthesizer	Rhythmic	Pulsed Pad
+Synthesizer	Rhythmic	Pulsing Patterns Lead
+Synthesizer	Rhythmic	Random Chatter
+Synthesizer	Rhythmic	Raw Circuitry
+Synthesizer	Rhythmic	Resonant Guqin Ostinato
+Synthesizer	Rhythmic	Rhythm Ghost
+Synthesizer	Rhythmic	Rising Tension
+Synthesizer	Rhythmic	Rising Waves
+Synthesizer	Rhythmic	Scattered Rhythm
+Synthesizer	Rhythmic	Sci-Fi Suspense Theme
+Synthesizer	Rhythmic	Shimmering Eternity
+Synthesizer	Rhythmic	Short Synth Patterns
+Synthesizer	Rhythmic	Shudder To Think
+Synthesizer	Rhythmic	Spikey Shoes
+Synthesizer	Rhythmic	Step Gate Pulsar
+Synthesizer	Rhythmic	Structural Glitch
+Synthesizer	Rhythmic	Swirling Flutters
+Synthesizer	Rhythmic	Tektonic Grooves
+Synthesizer	Rhythmic	Tuned Hydraulics
+Synthesizer	Rhythmic	Twilight Pulses
+Synthesizer	Rhythmic	Unraveled
+Synthesizer	Rhythmic	Variable Pulse Rhythm
+Synthesizer	Rhythmic	Vintage Vox
+Synthesizer	Rhythmic	Vortex Structures
+Synthesizer	Sound Effects	Adrenaline Rush
+Synthesizer	Sound Effects	Advanced Hydraulics
+Synthesizer	Sound Effects	Airfield
+Synthesizer	Sound Effects	Alien Chorus
+Synthesizer	Sound Effects	Alien Ice Jungle
+Synthesizer	Sound Effects	Another Dimension
+Synthesizer	Sound Effects	Arcade Incident
+Synthesizer	Sound Effects	Aural Cube
+Synthesizer	Sound Effects	Boss Battle
+Synthesizer	Sound Effects	Button Masher
+Synthesizer	Sound Effects	Caffeinated Wurli
+Synthesizer	Sound Effects	Chopped Riser
+Synthesizer	Sound Effects	Chord Swell Riser
+Synthesizer	Sound Effects	Complex Sequencer
+Synthesizer	Sound Effects	Cosmic Impacts
+Synthesizer	Sound Effects	Cymbal Swell
+Synthesizer	Sound Effects	Dark Bass Sweep FX
+Synthesizer	Sound Effects	Dark Eruption
+Synthesizer	Sound Effects	Deharmonizer
+Synthesizer	Sound Effects	Distorted Whoops
+Synthesizer	Sound Effects	Drive By Doppler
+Synthesizer	Sound Effects	Driving Force Riser
+Synthesizer	Sound Effects	Droid Room
+Synthesizer	Sound Effects	Echolocation
+Synthesizer	Sound Effects	Encoded Transmission
+Synthesizer	Sound Effects	Endlessly Variable Sci-Fi Alarm
+Synthesizer	Sound Effects	Entropy Fields
+Synthesizer	Sound Effects	FM Builder
+Synthesizer	Sound Effects	Flopper
+Synthesizer	Sound Effects	Forever Riser
+Synthesizer	Sound Effects	Fried
+Synthesizer	Sound Effects	Fuel Cells
+Synthesizer	Sound Effects	Fusion Drive
+Synthesizer	Sound Effects	Game Over
+Synthesizer	Sound Effects	Going Faster Riser
+Synthesizer	Sound Effects	Grain Droids
+Synthesizer	Sound Effects	Grind Bass Sweep FX
+Synthesizer	Sound Effects	Gritty Riser
+Synthesizer	Sound Effects	Heavenly Voices Choir
+Synthesizer	Sound Effects	Hidden Geology
+Synthesizer	Sound Effects	Howling Riser
+Synthesizer	Sound Effects	Light Speed
+Synthesizer	Sound Effects	Ludicrous Speed
+Synthesizer	Sound Effects	Marble Drops
+Synthesizer	Sound Effects	Mech Impact
+Synthesizer	Sound Effects	Mech Riser
+Synthesizer	Sound Effects	Meta Growler
+Synthesizer	Sound Effects	Motoriser
+Synthesizer	Sound Effects	Noise Crush
+Synthesizer	Sound Effects	Noise Sweep
+Synthesizer	Sound Effects	Noise Tides
+Synthesizer	Sound Effects	Ocean Waves Modular
+Synthesizer	Sound Effects	Particle Accelerator
+Synthesizer	Sound Effects	Particle Fusion
+Synthesizer	Sound Effects	Particles Blender
+Synthesizer	Sound Effects	Piano Crumbles
+Synthesizer	Sound Effects	Plasma Drop
+Synthesizer	Sound Effects	Pole Position
+Synthesizer	Sound Effects	Processing
+Synthesizer	Sound Effects	Pumping Pitch Riser
+Synthesizer	Sound Effects	Receiving Transmission
+Synthesizer	Sound Effects	Ridiculous Speed
+Synthesizer	Sound Effects	Rise Above
+Synthesizer	Sound Effects	Rumbling Waves
+Synthesizer	Sound Effects	Shapeshift Synth
+Synthesizer	Sound Effects	Shimmering Voice Texture
+Synthesizer	Sound Effects	Slow Machine
+Synthesizer	Sound Effects	Sludge Machine
+Synthesizer	Sound Effects	Space Whale
+Synthesizer	Sound Effects	Sparks and Sparkles
+Synthesizer	Sound Effects	Spectral Tensions
+Synthesizer	Sound Effects	Spiraling Downwards
+Synthesizer	Sound Effects	Superposition Bends
+Synthesizer	Sound Effects	Swarm Riser
+Synthesizer	Sound Effects	Swirling Riser
+Synthesizer	Sound Effects	Swishy Downer
+Synthesizer	Sound Effects	Terminal
+Synthesizer	Sound Effects	Texture Machine
+Synthesizer	Sound Effects	Thunderous Ambience
+Synthesizer	Sound Effects	Transform Device
+Synthesizer	Sound Effects	Transmuted Materials
+Synthesizer	Sound Effects	Trill Riser
+Synthesizer	Sound Effects	Underwater Laser
+Synthesizer	Sound Effects	Unison Riser
+Synthesizer	Sound Effects	Vowel Disintegrator
+Synthesizer	Sound Effects	Whimsical Tines Improv
+Synthesizer	Sound Effects	Zippy Build-Up
+Synthesizer	Soundscape	Abstract Landscape
+Synthesizer	Soundscape	Adrift In The Void
+Synthesizer	Soundscape	After The Rain
+Synthesizer	Soundscape	Air Strings
+Synthesizer	Soundscape	Alien Insect Infestation
+Synthesizer	Soundscape	Alien Rainforest
+Synthesizer	Soundscape	Ambient Guitar Landscape
+Synthesizer	Soundscape	Ambient Melody
+Synthesizer	Soundscape	Ancient Singing Bowl
+Synthesizer	Soundscape	Android Chamber
+Synthesizer	Soundscape	Antigravity
+Synthesizer	Soundscape	Arcane Future
+Synthesizer	Soundscape	Arctic Breeze
+Synthesizer	Soundscape	Ascending Waves
+Synthesizer	Soundscape	Atmosphere At Dusk
+Synthesizer	Soundscape	Behold
+Synthesizer	Soundscape	Bowed Metal
+Synthesizer	Soundscape	Bowed Metal Space
+Synthesizer	Soundscape	Breathable Atmosphere
+Synthesizer	Soundscape	Breathless
+Synthesizer	Soundscape	Broadway Big Dreamer Pad
+Synthesizer	Soundscape	Bulkhead
+Synthesizer	Soundscape	Burning Pad
+Synthesizer	Soundscape	Buzzy String Space
+Synthesizer	Soundscape	C-Beams Glittering
+Synthesizer	Soundscape	Celestial Vortex
+Synthesizer	Soundscape	Cosmology
+Synthesizer	Soundscape	Cosmonaut Space Capsule
+Synthesizer	Soundscape	Cross Talk
+Synthesizer	Soundscape	Crystal Cave Groove
+Synthesizer	Soundscape	Cutting Through Ice Caves
+Synthesizer	Soundscape	Dark Abyss
+Synthesizer	Soundscape	Dark Choral Soundscape
+Synthesizer	Soundscape	Dark Forces
+Synthesizer	Soundscape	Dark Movements
+Synthesizer	Soundscape	Dark Percussion Layers
+Synthesizer	Soundscape	Dark Whispers
+Synthesizer	Soundscape	Darkness and Light
+Synthesizer	Soundscape	Deep Ambient Stack
+Synthesizer	Soundscape	Deterioration
+Synthesizer	Soundscape	Distant Air
+Synthesizer	Soundscape	Dreamscape
+Synthesizer	Soundscape	Edge of Space
+Synthesizer	Soundscape	Electric Drop Flood
+Synthesizer	Soundscape	Electrical Pulses
+Synthesizer	Soundscape	Electromagnetic Array
+Synthesizer	Soundscape	Emergence
+Synthesizer	Soundscape	Empathy
+Synthesizer	Soundscape	Enchanted Soundscape
+Synthesizer	Soundscape	Entranced
+Synthesizer	Soundscape	Environmental Tension
+Synthesizer	Soundscape	Erosion
+Synthesizer	Soundscape	Ethereal World
+Synthesizer	Soundscape	Event Horizon
+Synthesizer	Soundscape	Exquisite Visions
+Synthesizer	Soundscape	Extraterrestrial Presence
+Synthesizer	Soundscape	Fade Away
+Synthesizer	Soundscape	Flying Waves
+Synthesizer	Soundscape	Forgotten Streets
+Synthesizer	Soundscape	Fragile Dreamscape
+Synthesizer	Soundscape	Fragments of Time
+Synthesizer	Soundscape	Glacial Forms
+Synthesizer	Soundscape	Glacial Pressure
+Synthesizer	Soundscape	Ice Wind Morph
+Synthesizer	Soundscape	Infinite Tensions
+Synthesizer	Soundscape	Inhospitable
+Synthesizer	Soundscape	Inhuman Chanting
+Synthesizer	Soundscape	Iron Atmosphere
+Synthesizer	Soundscape	Iron Forest
+Synthesizer	Soundscape	Lucid Dream
+Synthesizer	Soundscape	Luminous Bells
+Synthesizer	Soundscape	Luminous Decay
+Synthesizer	Soundscape	Magnificent Drone
+Synthesizer	Soundscape	Marble on a Journey
+Synthesizer	Soundscape	Marbles in a Glass Bowl
+Synthesizer	Soundscape	Metallic Drone
+Synthesizer	Soundscape	Metallic Memories Bowl
+Synthesizer	Soundscape	Micro Organisms
+Synthesizer	Soundscape	Midnight Arrival
+Synthesizer	Soundscape	Millenniums
+Synthesizer	Soundscape	Moonlight Comfort
+Synthesizer	Soundscape	Morning Mist
+Synthesizer	Soundscape	Ocean of Metal
+Synthesizer	Soundscape	October Rain
+Synthesizer	Soundscape	Ominous Beginnings
+Synthesizer	Soundscape	Orbital Elevator
+Synthesizer	Soundscape	Organic Binary
+Synthesizer	Soundscape	Palpable Tension
+Synthesizer	Soundscape	Parallel Universe
+Synthesizer	Soundscape	Particle Winds
+Synthesizer	Soundscape	Peaceful Anticipation
+Synthesizer	Soundscape	Peaceful Meadow
+Synthesizer	Soundscape	Pipa Spider Drone
+Synthesizer	Soundscape	Pipe Ambience
+Synthesizer	Soundscape	Plasma Conduit
+Synthesizer	Soundscape	Plasticity
+Synthesizer	Soundscape	Possessed Robot
+Synthesizer	Soundscape	Pulsating Resonance
+Synthesizer	Soundscape	Radiant Aftermath Pad
+Synthesizer	Soundscape	Radio Waves
+Synthesizer	Soundscape	Radioactive Decay
+Synthesizer	Soundscape	Rain Strum
+Synthesizer	Soundscape	Rattling Pad
+Synthesizer	Soundscape	Reception
+Synthesizer	Soundscape	Reconditioning
+Synthesizer	Soundscape	Repossessed
+Synthesizer	Soundscape	Resonant Disorder
+Synthesizer	Soundscape	Rising Thermals
+Synthesizer	Soundscape	Rusted Machine
+Synthesizer	Soundscape	Rusted Wasteland
+Synthesizer	Soundscape	Sci-Fi Communications
+Synthesizer	Soundscape	Sheet Metals
+Synthesizer	Soundscape	Shimmering Glitches
+Synthesizer	Soundscape	Skywriting
+Synthesizer	Soundscape	Soft Play
+Synthesizer	Soundscape	Space Station Escape
+Synthesizer	Soundscape	Spellbound
+Synthesizer	Soundscape	Still Moment
+Synthesizer	Soundscape	Stolen Memories
+Synthesizer	Soundscape	Strummed Texture
+Synthesizer	Soundscape	Subaquatic Dreams
+Synthesizer	Soundscape	Subtle Forces
+Synthesizer	Soundscape	Sunbathing on an Iceberg
+Synthesizer	Soundscape	Synthetic Chatter
+Synthesizer	Soundscape	Temptation
+Synthesizer	Soundscape	The Sea
+Synthesizer	Soundscape	Tormented
+Synthesizer	Soundscape	Tranquility
+Synthesizer	Soundscape	Traveling at Speed
+Synthesizer	Soundscape	Tuning Out
+Synthesizer	Soundscape	Ultra Cute
+Synthesizer	Soundscape	Underwater Temple
+Synthesizer	Soundscape	Urban Decay
+Synthesizer	Soundscape	Warm Rain
+Synthesizer	Soundscape	Warm Waves
+Synthesizer	Soundscape	Water Machine
+Synthesizer	Soundscape	Wave Space
+Synthesizer	Soundscape	Well Rested Chimes
+Synthesizer	Soundscape	White Out
+Synthesizer	Strings	Authentic Strings
+Synthesizer	Strings	Church Street Mixed Synth
+Synthesizer	Strings	Dusty Strings
+Synthesizer	Strings	Pizzicato Sticks
+Synthesizer	Strings	Smooth and Gentle
+Synthesizer	Strings	Snow Drift
+Synthesizer	Strings	Space Strings
+Synthesizer	Strings	The Highlander
+Synthesizer	Strings	Trill Bows
+Synthesizer	Strings	Way To Live Strings

@@ -220,11 +220,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let mut changed = false;
         let mut mute = t.mute;
         let mut solo = t.solo;
+        // (Logic's header buttons: M and S light up filled; R and I show their letter in red and
+        // orange until they're on)
         let ms = |ui: &mut egui::Ui, r: Rect, label: &str, on: bool, col: Color32, id: (&str, usize)| {
             let resp = ui.interact(r, ui.scope_id().with(id), Sense::click());
             let p = ui.painter();
+            let lettered = label == "R" || label == "I";
             p.rect_filled(r, 4.0, if on { col } else { look::group_bg() });
-            p.text(r.center(), Align2::CENTER_CENTER, label, look::bold(11.0), if on { Color32::BLACK } else { look::text() });
+            let text = if on { if lettered { Color32::WHITE } else { Color32::BLACK } } else if lettered { col } else { look::text() };
+            p.text(r.center(), Align2::CENTER_CENTER, label, look::bold(11.0), text);
             resp.clicked()
         };
         let by = row.min.y + 29.0;
