@@ -35,6 +35,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             app.tell(format!("The {n} editor isn't available yet"));
         }
     }
+    // a drummer region's Manual tab: the way back to the Session Player
+    if let Some((t, _)) = app.selected_region {
+        if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Drummer) {
+            let b = Rect::from_min_size(pos2(area.min.x + 10.0, area.min.y + 8.0), vec2(120.0, 24.0));
+            if ui.put(b, egui::Button::new("‹ Session Player").corner_radius(6.0)).clicked() {
+                app.drum_tab = 0;
+            }
+        }
+    }
     let Some((ti, ri)) = app.selected_region else {
         p.text(area.center(), Align2::CENTER_CENTER, "Select a MIDI region to see its notes", look::regular(14.0), look::text_dim());
         return;

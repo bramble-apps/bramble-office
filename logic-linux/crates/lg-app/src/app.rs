@@ -93,6 +93,10 @@ pub struct App {
     pub file: Option<(PathBuf, Vec<u8>)>,
     /// Edited since opened or saved.
     pub dirty: bool,
+    /// Bramble's drummer: each drummer region's settings, and the editor's tab (Main, Details,
+    /// Manual).
+    pub drum_params: std::collections::HashMap<(usize, usize), crate::drummer::Params>,
+    pub drum_tab: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -172,6 +176,8 @@ impl App {
             clipboard: None,
             file: None,
             dirty: false,
+            drum_params: std::collections::HashMap::new(),
+            drum_tab: 0,
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -522,6 +528,25 @@ impl App {
         self.save();
     }
 
+    /// Track > New Session Player SI Track…: a drummer track with an 8-bar region from the
+    /// playhead's bar, played by Bramble's drummer.
+    pub fn new_drummer(&mut self) {
+        self.checkpoint("New Session Player Track");
+        let bar = self.bar_ticks();
+        let at = (self.position() as u32 / bar) * bar;
+        let Some(p) = self.project.as_mut() else { return };
+        let row = p.tracks.len() as u32 + 1;
+        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None };
+        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false });
+        self.programs.push(0);
+        let t = p.tracks.len() - 1;
+        self.selected_track = Some(t);
+        self.selected_region = Some((t, 0));
+        self.bottom = Bottom::PianoRoll;
+        self.drum_tab = 0;
+        crate::drummer::regenerate(self, t, 0);
+    }
+
     /// Before an edit: the song as it is goes on the undo list.
     pub fn checkpoint(&mut self, what: &str) {
         self.dirty = true;
@@ -624,6 +649,10 @@ impl App {
             "Project or Section…" => self.bounce(None),
             "Save" => self.save(),
             "Save As…" | "Save A Copy As…" => self.save_as(),
+            "New Session Player SI Track…" => self.new_drummer(),
+            "New Software Instrument Track" | "New Audio Track" => {
+                let _ = self.key_command(ctx, cmd);
+            }
             c if c.starts_with("Undo ") => self.undo(),
             c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
             "1 Track as Audio File…" => {
@@ -807,6 +836,7 @@ impl App {
                 self.selected_region = None;
                 self.after_edit();
             }
+            "New Session Player SI Track…" => self.new_drummer(),
             "New Software Instrument Track" | "New Audio Track" | "New Tracks…" => {
                 self.checkpoint("Create New Track");
                 let audio = name == "New Audio Track";
@@ -1010,7 +1040,12 @@ impl App {
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
             self.editor_rect = ed;
+            let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
+                Bottom::PianoRoll if drummer.is_some() && self.drum_tab != 2 => {
+                    let (t, r) = drummer.unwrap();
+                    crate::drummer::show(self, ui, ed, t, r);
+                }
                 Bottom::PianoRoll => crate::pianoroll::show(self, ui, ed),
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),
                 Bottom::None => {}

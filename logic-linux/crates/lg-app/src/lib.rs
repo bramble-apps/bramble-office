@@ -9,6 +9,7 @@ mod chrome;
 mod controlbar;
 pub mod demo;
 mod dialogs;
+pub mod drummer;
 mod inspector;
 pub mod keymap;
 pub mod look;
