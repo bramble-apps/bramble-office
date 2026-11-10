@@ -37,6 +37,9 @@ pub struct PlayTrack {
     pub inserts: Vec<(String, Vec<f32>)>,
     /// The channel's sends: to which bus, at what gain, before the fader or after it.
     pub sends: Vec<Send>,
+    /// Automation the channel follows while playing: volume (gain) and pan lines at song ticks.
+    pub auto_volume: Vec<(u32, f32)>,
+    pub auto_pan: Vec<(u32, f32)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -416,7 +419,15 @@ impl Engine {
                     fx.process(&mut l, &mut r);
                 }
             }
-            let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
+            let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
+            if self.playing {
+                if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_volume, start_tick) {
+                    vol = v;
+                }
+                if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_pan, start_tick) {
+                    pan = v.clamp(-1.0, 1.0);
+                }
+            }
             let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
             let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
             // the sends: into their buses, before the fader or after it (with the pan)
@@ -701,6 +712,8 @@ mod tests {
             instrument_floats: Vec::new(),
             inserts: Vec::new(),
             sends: Vec::new(),
+            auto_volume: Vec::new(),
+            auto_pan: Vec::new(),
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
         let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
@@ -718,7 +731,7 @@ mod tests {
         let Some(sf) = system_soundfont() else { return };
         let level = |vols: [f32; 2], mute: [bool; 2]| {
             let mut e = Engine::new();
-            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new() }).collect();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new(), auto_volume: Vec::new(), auto_pan: Vec::new() }).collect();
             e.load_soundfont(Some(&sf));
             e.playing = true;
             let mut buf = vec![0f32; 2 * BLOCK];
@@ -742,7 +755,7 @@ mod tests {
     fn plays_notes_in_time() {
         let mut e = Engine::new();
         e.tempo = 120.0;
-        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new() }];
+        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new(), auto_volume: Vec::new(), auto_pan: Vec::new() }];
         e.playing = true;
         let mut buf = vec![0f32; 2 * BLOCK];
         // half a second at 120 BPM = one beat = 960 ticks

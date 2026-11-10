@@ -13,7 +13,7 @@ fn note(pitch: u8, velocity: u8, pos: u32, len: u32) -> Note {
 }
 
 fn track(name: &str, kind: TrackKind, row: u32, regions: Vec<Region>) -> Track {
-    Track { name: name.into(), kind, channel: 0x58 + row * 4, row, regions, volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() }
+    Track { name: name.into(), kind, channel: 0x58 + row * 4, row, regions, volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() }
 }
 
 fn region(name: &str, start: u32, length: u32, notes: Vec<Note>) -> Region {

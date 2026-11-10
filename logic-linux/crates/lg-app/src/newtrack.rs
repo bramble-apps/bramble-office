@@ -135,7 +135,7 @@ fn make(app: &mut App, kind: Kind) {
             if let Some(p) = app.project.as_mut() {
                 let row = p.tracks.len() as u32 + 1;
                 let name = if kind == Kind::Pattern { "Pattern" } else { "Inst 1" };
-                p.tracks.push(lg_core::Track { name: name.into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                p.tracks.push(lg_core::Track { name: name.into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
                 app.programs.push(0);
                 app.selected_track = Some(p.tracks.len() - 1);
             }

@@ -72,12 +72,12 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Mixer (X): strips with fader, pan, mute, solo, meter, slots. Missing: Single/Tracks/All views, filters, sends and buses, aux/output/master strips, groups, automation mode, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA"
+  "feature": "Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, Single / Tracks / All), strips with fader, pan, meters, scale, slots, sends to buses (level knob, pre/post, No Send) and aux strips (input bus, effects, fader) mixed by the engine. [ ] filters, groups, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA, reading sends and auxes from projects"
  },
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Editors pane: Piano Roll, Event List (right pane), Session Player editors. [ ] Score and Step Sequencer (being built), Step Editor, Smart Tempo, Audio Track/File Editor"
+  "feature": "Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, Smart Tempo and audio editors (being built), Live Loops (being built)"
  },
  {
   "area": "Main window",
@@ -126,8 +126,8 @@
  },
  {
   "area": "Editing",
-  "status": "Not started",
-  "feature": "Automation: Read/Touch/Latch/Write, points, curves, region vs track, snapshot"
+  "status": "Partial",
+  "feature": "Automation: read from projects (Track Automation Root Folder), shown on the tracks (A) with the mode (Off, Read, Touch, Latch, Write) and parameter pop-ups; points added, dragged, removed; played back (volume, pan); Touch / Latch / Write record from the faders; Set All Tracks, Delete commands. [ ] plug-in parameters, region automation, curves, snapshot, saving automation back into the file"
  },
  {
   "area": "Editing",

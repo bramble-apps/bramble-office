@@ -64,9 +64,19 @@ pub struct Track {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    /// Track automation (Logic's "*Automation" sequences): per parameter (7 = volume, 10 = pan,
+    /// Logic's numbering), points at song ticks with Logic's 0-127 value.
+    pub automation: Vec<AutoLane>,
     /// The track's channel strip: its instrument and Audio FX, in slot order (read from the
     /// project; empty for tracks made here).
     pub plugins: Vec<Plugin>,
+}
+
+/// One automation lane: a parameter and its points (song ticks, 0-127).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AutoLane {
+    pub param: u8,
+    pub points: Vec<(u32, u8)>,
 }
 
 #[derive(Clone, Debug)]
@@ -490,7 +500,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             let len = end.saturating_sub(region.start).max(1);
             region.length = len.div_ceil(bar) * bar;
         }
-        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
         if kind != TrackKind::Instrument {
             t.kind = kind;
         }
@@ -505,7 +515,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             continue;
         }
         let kind = if name.starts_with("Audio ") { TrackKind::Audio } else { TrackKind::Instrument };
-        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
         next_row += 1;
     }
     p.tracks = by_row.into_values().collect();
@@ -544,6 +554,26 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             let ch = p.tracks[i].channel;
             for t in p.tracks.iter_mut().filter(|t| t.channel == ch) {
                 t.plugins = strip.clone();
+            }
+        }
+    }
+    // track automation: the "Track Automation Root Folder" places each track's "*Automation"
+    // sequence under its channel; that sequence's EvSq holds the points (0x5n records)
+    let folder = live.iter().filter(|c| c.is("MSeq") && chunks::short_string(c.payload, 16).as_deref() == Some("Track Automation Root Folder")).map(|c| c.id).last();
+    if let Some(f) = folder {
+        if let Some(fe) = live.iter().filter(|c| c.is("EvSq") && c.id == f).last() {
+            for pl in events::records(fe.payload).iter().filter_map(events::placement) {
+                let Some(seq) = pl.sequence.map(|s| s << 16) else { continue };
+                let Some(ev) = live.iter().filter(|c| c.is("EvSq") && c.id == seq).last() else { continue };
+                let mut lanes: BTreeMap<u8, Vec<(u32, u8)>> = BTreeMap::new();
+                for r in events::records(ev.payload) {
+                    if let Some((param, value)) = events::automation(&r) {
+                        lanes.entry(param).or_default().push((r.pos.saturating_sub(events::BAR_ONE), value));
+                    }
+                }
+                for t in p.tracks.iter_mut().filter(|t| t.channel == pl.channel) {
+                    t.automation = lanes.iter().map(|(param, pts)| AutoLane { param: *param, points: pts.clone() }).collect();
+                }
             }
         }
     }

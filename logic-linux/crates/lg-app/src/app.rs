@@ -159,6 +159,10 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// Automation shown on the tracks (A); each track's mode and the lane its header shows.
+    pub show_automation: bool,
+    pub auto_mode: std::collections::HashMap<usize, crate::automation::AutoMode>,
+    pub auto_param: std::collections::HashMap<usize, u8>,
     /// The window's egui context (for state kept in egui's memory, e.g. the Step Sequencer's).
     pub ctx: egui::Context,
     /// The Mixer's aux strips, each track's sends, the Mixer's view and Sends on Faders (which
@@ -326,6 +330,9 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            show_automation: false,
+            auto_mode: Default::default(),
+            auto_param: Default::default(),
             ctx: cc.egui_ctx.clone(),
             auxes: Vec::new(),
             sends: Default::default(),
@@ -524,7 +531,7 @@ impl App {
                 }
             }
             notes.sort_by_key(|n| n.0);
-            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default() });
+            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
         let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
         {
@@ -615,7 +622,7 @@ impl App {
                 let drums = ch == 9;
                 let row = p.tracks.len() as u32 + 1;
                 let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() };
-                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
                 self.programs.push(if drums { 0 } else { program_for(&title, TrackKind::Instrument) });
             }
             if let Some(t) = m.tempo.filter(|_| p.tracks.len() == n) {
@@ -639,7 +646,7 @@ impl App {
             Some(t) => t,
             None => {
                 let row = p.tracks.len() as u32 + 1;
-                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
                 self.programs.push(0);
                 p.tracks.len() - 1
             }
@@ -1014,7 +1021,7 @@ impl App {
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
         let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
-        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
         self.selected_track = Some(t);

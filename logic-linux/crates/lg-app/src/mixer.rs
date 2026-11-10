@@ -124,6 +124,12 @@ pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
             tr.mute = m;
             tr.solo = s;
         }
+        if v != t.volume_db {
+            crate::automation::record(app, i, crate::automation::VOLUME, crate::automation::db_to_logic(v));
+        }
+        if pan != t.pan {
+            crate::automation::record(app, i, crate::automation::PAN, 64.0 + pan * 63.0);
+        }
         app.dirty = true;
         app.sync_mix();
     }

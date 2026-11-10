@@ -4,6 +4,7 @@
 
 pub mod app;
 pub mod audio;
+mod automation;
 mod browser;
 mod chrome;
 mod controlbar;

@@ -32,8 +32,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
 - [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
-- [~] Mixer (X): strips with fader, pan, mute, solo, meter, slots. Missing: Single/Tracks/All views, filters, sends and buses, aux/output/master strips, groups, automation mode, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA
-- [~] Editors pane: Piano Roll, Event List (right pane), Session Player editors. [ ] Score and Step Sequencer (being built), Step Editor, Smart Tempo, Audio Track/File Editor
+- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, Single / Tracks / All), strips with fader, pan, meters, scale, slots, sends to buses (level knob, pre/post, No Send) and aux strips (input bus, effects, fader) mixed by the engine. [ ] filters, groups, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA, reading sends and auxes from projects
+- [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, Smart Tempo and audio editors (being built), Live Loops (being built)
 - [ ] Live Loops grid, scenes, cell editing, queueing, Remix FX
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
 - [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
@@ -45,7 +45,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Snap to Grid toggle and the … menu. [ ] each snap and drag mode behaving
 - [~] Piano Roll: draw, move, resize, transpose, nudge, Time and Scale Quantize with Strength and Swing, velocity, local menus. [ ] velocity tool and lane, MIDI draw, articulations, Collapse mode, scale overlay, time handles, Brush tool
 - [ ] MIDI Transform, Functions (Quantize, Note Force Legato, Delete Duplicates…)
-- [ ] Automation: Read/Touch/Latch/Write, points, curves, region vs track, snapshot
+- [~] Automation: read from projects (Track Automation Root Folder), shown on the tracks (A) with the mode (Off, Read, Touch, Latch, Write) and parameter pop-ups; points added, dragged, removed; played back (volume, pan); Touch / Latch / Write record from the faders; Set All Tracks, Delete commands. [ ] plug-in parameters, region automation, curves, snapshot, saving automation back into the file
 - [ ] Flex Time and Flex Pitch, Smart Tempo analysis
 
 ## 4. Audio
@@ -88,13 +88,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 82 | 594 | 13% |
-| Local menus | 103 | 1191 | 8% |
-| Right-click menus | 181 | 2575 | 7% |
-| Key commands | 202 | 2207 | 9% |
+| Menu bar | 85 | 594 | 14% |
+| Local menus | 110 | 1191 | 9% |
+| Right-click menus | 192 | 2575 | 7% |
+| Key commands | 216 | 2207 | 9% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 82 of 594
+## Menu bar: 85 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -583,9 +583,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Mix — 0/36</summary>
+<details><summary>Mix — 3/36</summary>
 
-- [ ] Show Automation  `A`
+- [x] Show Automation  `A`
 - [ ] Create Track Automation
   - [ ] Create 1 Automation Point at Region Borders  `⌃⇧⌘1`
   - [ ] Create 2 Automation Points at Region Borders  `⌃⇧⌘2`
@@ -599,11 +599,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Convert Visible Region Automation to Track Automation  `⌃⌘↑`
   - [ ] Convert All Track Automation to Region Automation  `⌃⇧⌘↓`
   - [ ] Convert All Region Automation to Track Automation  `⌃⇧⌘↑`
-- [ ] Delete Automation
+- [x] Delete Automation
   - [ ] Delete Visible Automation on Selected Track  `⌃⌘⌫`
   - [ ] Delete All Automation on Selected Track  `⌃⇧⌘⌫`
   - [ ] Delete Orphaned Automation on Selected Track  `⌃⇧⌫`
-  - [ ] Delete Redundant Automation Points  `⌃⌫`
+  - [x] Delete Redundant Automation Points  `⌃⌫`
   - [ ] Delete All Track Automation
 - [ ] Move Track Automation with Regions
   - [ ] Never
@@ -741,7 +741,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 103 of 1191
+## Local menus (Edit / Functions / View in each area): 110 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -1120,10 +1120,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-View — 1/17</summary>
+<details><summary>eventlist-View — 2/17</summary>
 
 - [ ] Link
-  - [ ] Off
+  - [x] Off
   - [ ] Same Level
   - [x] Content
 - [ ] Relative Position  `⌃⇧R`
@@ -1173,10 +1173,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-more — 1/15</summary>
+<details><summary>mixer-more — 2/15</summary>
 
 - [ ] Sends on Faders
-  - [ ] Off
+  - [x] Off
 - [ ] Single
 - [ ] Tracks
 - [x] All
@@ -1625,10 +1625,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-View — 1/38</summary>
+<details><summary>score-View — 4/38</summary>
 
 - [ ] Link
-  - [ ] Off
+  - [x] Off
   - [ ] Same Level
   - [x] Content
 - [ ] Colors
@@ -1649,11 +1649,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Region Headers
 - [ ] Go to Page…  `⌃/`
 - [ ] Duration Bars
-  - [ ] Off
+  - [x] Off
   - [ ] Selected Notes
   - [ ] All Notes
 - [ ] Guides
-  - [ ] Off
+  - [x] Off
   - [ ] Dragged Objects
   - [ ] Selected Objects
   - [ ] All Objects
@@ -1939,10 +1939,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Functions — 4/61</summary>
+<details><summary>tracks-Functions — 5/61</summary>
 
 - [ ] Create MIDI Region
-- [ ] Create Pattern Region
+- [x] Create Pattern Region
 - [ ] Create Session Player Region
 - [x] Rename Regions/Cells/Scenes  `⇧N`
 - [x] Name Regions/Cells by Track Name  `⌥⇧N`
@@ -2055,10 +2055,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 1/25</summary>
+<details><summary>tracks-View — 2/25</summary>
 
 - [ ] Link
-  - [ ] Off
+  - [x] Off
   - [ ] Same Level
   - [x] Content
 - [ ] Zoom Focused Track  `⌃Z`
@@ -2085,7 +2085,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 181 of 2575
+## Right-click menus: 192 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2132,10 +2132,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>automation-lane — 4/12</summary>
+<details><summary>automation-lane — 5/12</summary>
 
 - [ ] Create MIDI Region
-- [ ] Create Pattern Region
+- [x] Create Pattern Region
 - [ ] Create Session Player Region
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
@@ -2292,7 +2292,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-midi-cell — 9/151</summary>
+<details><summary>liveloops-midi-cell — 12/151</summary>
 
 - [ ] Record into Cell  `⌥R`
 - [ ] Queue Cell Playback  `⌥↩`
@@ -2312,7 +2312,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Invert Cell Selection  `⇧I`
   - [x] Deselect All  `⇧D`
 - [x] Quantize
-  - [ ] Off
+  - [x] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
   - [ ] 1/4 Note
@@ -2404,9 +2404,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 1/8 Note
     - [ ] 1/8 Triplet (1/12)
     - [ ] 1/16 Note
-    - [ ] Off
+    - [x] Off
   - [ ] Quantize to Loop Start
-    - [ ] Off
+    - [x] Off
     - [ ] On
     - [ ] On, Preserve Start
   - [ ] Trigger Mode
@@ -2448,7 +2448,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-scene-trigger — 0/49</summary>
+<details><summary>liveloops-scene-trigger — 2/49</summary>
 
 - [ ] Queue Scene
 - [ ] Copy Playing Cells Here
@@ -2473,7 +2473,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] 1/8 Note
   - [ ] 1/8 Triplet (1/12)
   - [ ] 1/16 Note
-  - [ ] Off
+  - [x] Off
 - [ ] Trigger Mode
   - [ ] Start/Stop
   - [ ] Momentary
@@ -2494,7 +2494,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] 1/8 Note
     - [ ] 1/8 Triplet (1/12)
     - [ ] 1/16 Note
-    - [ ] Off
+    - [x] Off
   - [ ] Trigger Mode
     - [ ] Start/Stop
     - [ ] Momentary
@@ -4213,7 +4213,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 28/212</summary>
+<details><summary>region-midi — 30/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4251,7 +4251,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
 - [x] Quantize
-  - [ ] Off
+  - [x] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
   - [ ] 1/4 Note
@@ -4373,7 +4373,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate Pattern Region by Kit Piece
   - [ ] Separate by Articulation
   - [ ] Convert to MIDI Region  `⌃⌥⌘M`
-  - [ ] Convert to Pattern Region
+  - [x] Convert to Pattern Region
   - [ ] Replace with Session Player Region
 - [ ] Chords
   - [ ] Apply Region Chords to Chord Track
@@ -4527,7 +4527,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 28/212</summary>
+<details><summary>take-folder-region — 30/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4565,7 +4565,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
   - [ ] Toggle Auto Set Locators
 - [x] Quantize
-  - [ ] Off
+  - [x] Off
   - [ ] 1/1 Note
   - [ ] 1/2 Note
   - [ ] 1/4 Note
@@ -4687,7 +4687,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate Pattern Region by Kit Piece
   - [ ] Separate by Articulation
   - [ ] Convert to MIDI Region  `⌃⌥⌘M`
-  - [ ] Convert to Pattern Region
+  - [x] Convert to Pattern Region
   - [ ] Replace with Session Player Region
 - [ ] Chords
   - [ ] Apply Region Chords to Chord Track
@@ -4885,10 +4885,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-area-empty-lane — 4/12</summary>
+<details><summary>tracks-area-empty-lane — 5/12</summary>
 
 - [ ] Create MIDI Region
-- [ ] Create Pattern Region
+- [x] Create Pattern Region
 - [ ] Create Session Player Region
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
@@ -4908,7 +4908,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 202 of 2207
+## Key commands: 216 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4917,7 +4917,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 86/679</summary>
+<details><summary>Global Commands — 96/679</summary>
 
 - [x] Record  `R`
 - [ ] Record / Record Repeat
@@ -5158,8 +5158,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Main Window…  `⌘1`
 - [x] Open Mixer…  `⌘2`
 - [ ] Open Smart Controls…
-- [ ] Open Score Editor…  `⌘5`
-- [ ] Open Step Sequencer…  `⌘3`
+- [x] Open Score Editor…  `⌘5`
+- [x] Open Step Sequencer…  `⌘3`
 - [ ] Open Transform…  `⌘9`
 - [ ] Open Step Editor…
 - [x] Open Piano Roll…  `⌘4`
@@ -5182,11 +5182,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Show/Hide Smart Controls  `Y`
 - [ ] Show/Hide Keyswitches
 - [ ] Show/Hide Keyswitches Window
-- [ ] Show/Hide Score Editor  `N`
+- [x] Show/Hide Score Editor  `N`
 - [ ] Show/Hide Staff Style Window  `⌃⌥⇧S`
 - [ ] Show/Hide Score Sets Window  `⌃⌥⇧I`
 - [ ] Show/Hide Text Style Window
-- [ ] Show/Hide Step Sequencer
+- [x] Show/Hide Step Sequencer
 - [ ] Show/Hide Transform
 - [ ] Show/Hide Step Editor
 - [x] Show/Hide Piano Roll  `P`
@@ -5243,18 +5243,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Toggle Level of Auxiliary Channel Strips
 - [ ] Toggle Level of Bus Channel Strips
 - [ ] Toggle Level of Output Channel Strips
-- [ ] Toggle Selected Tracks or Channel Strips Automation Off/Read  `⌃⌘O`
+- [x] Toggle Selected Tracks or Channel Strips Automation Off/Read  `⌃⌘O`
 - [ ] Set Selected Tracks or Channel Strips to Automation Read
 - [ ] Toggle Selected Tracks or Channel Strips Automation Touch/Read
-- [ ] Toggle Selected Tracks or Channel Strips Automation Latch/Read  `⌃⌘A`
+- [x] Toggle Selected Tracks or Channel Strips Automation Latch/Read  `⌃⌘A`
 - [ ] Toggle Selected Tracks or Channel Strips Automation Write/Read
 - [ ] Toggle Selected Tracks or Channel Strips Automation Trim Mode
 - [ ] Toggle Selected Tracks or Channel Strips Automation Write Relative Mode
 - [ ] Toggle Selected Tracks or Channel Strips Record Region Automation Mode
-- [ ] Set All Tracks to Automation Off  `⌃⇧⌘O`
-- [ ] Set All Tracks to Automation Read  `⌃⇧⌘R`
-- [ ] Set All Tracks to Automation Touch  `⌃⇧⌘T`
-- [ ] Set All Tracks to Automation Latch  `⌃⇧⌘L`
+- [x] Set All Tracks to Automation Off  `⌃⇧⌘O`
+- [x] Set All Tracks to Automation Read  `⌃⇧⌘R`
+- [x] Set All Tracks to Automation Touch  `⌃⇧⌘T`
+- [x] Set All Tracks to Automation Latch  `⌃⇧⌘L`
 - [ ] Set All Tracks to Automation Write
 - [ ] Track Automation Event List…  `⌃⌘E`
 - [ ] Toggle Writing Volume Automation in Write Mode
@@ -5748,9 +5748,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 54/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 55/290</summary>
 
-- [ ] Show/Hide Automation  `A`
+- [x] Show/Hide Automation  `A`
 - [ ] Show Track Automation
 - [ ] Show Region Automation
 - [x] New Tracks…  `⌥⌘N`
@@ -6227,7 +6227,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 21/249</summary>
+<details><summary>Main Window Tracks — 24/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6272,9 +6272,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Create 2 Track Automation Points at Region Borders  `⌃⇧⌘2`
 - [ ] Create 1 Track Automation Point at Every Region Border  `⌃⌘1`
 - [ ] Create 2 Track Automation Points at Every Region Border  `⌃⌘2`
-- [ ] Delete Redundant Automation Points  `⌃⌫`
-- [ ] Delete Visible Automation on Selected Tracks  `⌃⌘⌫`
-- [ ] Delete All Automation on Selected Tracks  `⌃⇧⌘⌫`
+- [x] Delete Redundant Automation Points  `⌃⌫`
+- [x] Delete Visible Automation on Selected Tracks  `⌃⌘⌫`
+- [x] Delete All Automation on Selected Tracks  `⌃⇧⌘⌫`
 - [ ] Delete Orphaned Automation on Selected Tracks  `⌃⇧⌫`
 - [ ] Delete All Track Automation
 - [ ] Move Visible Region Data to Track Automation  `⌃⌘↑`

@@ -318,6 +318,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
                 tr.pan = pan;
             }
+            crate::automation::record(app, i, crate::automation::PAN, 64.0 + pan * 63.0);
             app.dirty = true;
             app.sync_mix();
         }
@@ -344,7 +345,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 tr.solo = solo;
                 tr.volume_db = vol;
             }
+            if vol != t.volume_db {
+                crate::automation::record(app, i, crate::automation::VOLUME, crate::automation::db_to_logic(vol));
+            }
             app.sync_mix();
+        }
+        // automation shown: the mode and parameter pop-ups in place of the volume slider
+        if app.show_automation {
+            let ar = Rect::from_min_size(pos2(row.min.x + 170.0, by), vec2((hw - 210.0).max(90.0), 17.0));
+            hp.rect_filled(ar.expand(2.0), 0.0, if selected { look::track_selected() } else { look::track_header_bg() });
+            crate::automation::header(app, ui, ar, i);
         }
         // regions
         for (ri, r) in t.regions.iter().enumerate() {
@@ -437,6 +447,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.drag = None;
                 app.load_engine();
             }
+        }
+        // the automation lane over the row (it takes the clicks while it shows, as Logic's)
+        if app.show_automation && lane.intersects(lanes) {
+            let xo = move |tick: f32| x_of(tick, scroll);
+            let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
+            crate::automation::lane(app, ui, lane.intersect(lanes), i, &xo, &to);
         }
     }
     // click on an empty lane: nothing selected; with the Pencil, a new empty region of a bar

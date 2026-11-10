@@ -728,7 +728,7 @@ impl App {
                             b.row = row;
                             b
                         }
-                        None => lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() },
+                        None => lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() },
                     };
                     p.tracks.push(tr);
                     self.programs.push(4);
@@ -740,7 +740,7 @@ impl App {
                 self.checkpoint("New Audio Track");
                 if let Some(p) = self.project.as_mut() {
                     let row = p.tracks.len() as u32 + 1;
-                    p.tracks.push(lg_core::Track { name: format!("Audio {}", p.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count() + 1), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new() });
+                    p.tracks.push(lg_core::Track { name: format!("Audio {}", p.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count() + 1), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
                     self.programs.push(0);
                     self.selected_track = Some(p.tracks.len() - 1);
                 }
@@ -969,6 +969,46 @@ impl App {
                 self.scroll_x = (at as f32 / bar as f32 - 1.0).max(0.0);
             }
             "Show Tool Menu" => self.tool_menu_open = true,
+            "Show/Hide Automation" | "Show Automation" | "Hide Automation" => self.show_automation = !self.show_automation,
+            "Set All Tracks to Automation Off" | "Set All Tracks to Automation Read" | "Set All Tracks to Automation Touch" | "Set All Tracks to Automation Latch" => {
+                use crate::automation::AutoMode;
+                let m = match name.rsplit(' ').next().unwrap_or("") { "Off" => AutoMode::Off, "Touch" => AutoMode::Touch, "Latch" => AutoMode::Latch, _ => AutoMode::Read };
+                for t in 0..self.project.as_ref().map_or(0, |p| p.tracks.len()) {
+                    self.auto_mode.insert(t, m);
+                }
+                self.load_engine();
+            }
+            "Toggle Selected Tracks or Channel Strips Automation Off/Read" | "Toggle Selected Tracks or Channel Strips Automation Latch/Read" => {
+                use crate::automation::AutoMode;
+                if let Some(t) = self.selected_track {
+                    let cur = crate::automation::mode(self, t);
+                    let other = if name.contains("Latch") { AutoMode::Latch } else { AutoMode::Off };
+                    self.auto_mode.insert(t, if cur == other { AutoMode::Read } else { other });
+                    self.load_engine();
+                }
+            }
+            "Delete All Automation on Selected Tracks" | "Delete Visible Automation on Selected Tracks" => {
+                if let Some(t) = self.selected_track {
+                    self.checkpoint("Delete Automation");
+                    let only = (name.contains("Visible")).then(|| crate::automation::shown_param(self, t));
+                    if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                        tr.automation.retain(|l| only.is_some_and(|o| o != l.param));
+                    }
+                    self.after_edit();
+                }
+            }
+            "Delete Redundant Automation Points" => {
+                self.checkpoint("Delete Redundant Automation Points");
+                if let Some(p) = self.project.as_mut() {
+                    for tr in &mut p.tracks {
+                        for l in &mut tr.automation {
+                            let pts = l.points.clone();
+                            l.points = pts.iter().enumerate().filter(|(k, x)| *k == 0 || *k + 1 == pts.len() || !(pts[k - 1].1 == x.1 && pts[k + 1].1 == x.1)).map(|(_, x)| *x).collect();
+                        }
+                    }
+                }
+                self.after_edit();
+            }
             "Convert to Pattern Region" | "Open Step Sequencer…" | "Show/Hide Step Sequencer" => {
                 if let Some((t, r)) = self.selected_region {
                     crate::stepseq::convert_to_pattern(self, ctx, t, r);
