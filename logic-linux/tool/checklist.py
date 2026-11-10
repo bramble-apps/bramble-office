@@ -26,7 +26,8 @@ def handled_keys():
     if i < 0:
         return set()
     j = t.find('\n    pub fn ', i + 10)
-    return set(re.findall(r'"((?:[^"\\]|\\.)*)"', t[i:j]))
+    names = set(re.findall(r'"((?:[^"\\]|\\.)*)"', t[i:j]))
+    return names | set(re.findall(r'"((?:[^"\\]|\\.)*)"', src('edit.rs')))
 
 def menu_tree(path):
     """[(section, [(depth, label, key, disabled)])]"""
@@ -69,6 +70,7 @@ def main():
     menus_done = const_list(src('menus.rs'), 'IMPLEMENTED')
     ctx_done = const_list(src('context.rs'), 'IMPLEMENTED')
     keys_done = handled_keys()
+    menus_done = menus_done | keys_done
     out = [MARK, '\n# Item by item\n', 'Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.']
     totals = []
     totals.append(('Menu bar', *section(out, 'Menu bar', menu_tree(os.path.join(APP, 'data/menus.txt')), menus_done)))
