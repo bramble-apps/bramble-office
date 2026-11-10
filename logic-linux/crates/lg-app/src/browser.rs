@@ -115,7 +115,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     });
     let top = sr.max.y + 8.0;
     // ---- the sidebar
-    let side_w = (area.width() * 0.385).clamp(120.0, 200.0);
+    // narrow (as it comes back after snapping closed): the sidebar shows icons only (Logic)
+    let icons_only = area.width() < 380.0;
+    let side_w = if icons_only { 44.0 } else { (area.width() * 0.385).clamp(120.0, 200.0) };
     let side = Rect::from_min_max(pos2(area.min.x, top), pos2(area.min.x + side_w, area.max.y));
     let list = Rect::from_min_max(pos2(side.max.x + 2.0, top), pos2(area.max.x - 1.0, area.max.y - 42.0));
     p.rect_filled(list, 0.0, look::lane_bg());
@@ -134,7 +136,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             p.rect_filled(r, 6.0, look::group_bg().gamma_multiply(0.5));
         }
         sidebar_icon(&p, Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(16.0, 16.0)), *cat, look::text());
-        p.with_clip_rect(r).text(pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, *name, look::regular(13.0), look::text());
+        if !icons_only {
+            p.with_clip_rect(r).text(pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, *name, look::regular(13.0), look::text());
+        }
+        let resp = resp.on_hover_text(*name);
         if resp.clicked() {
             app.browser_tab = i;
         }

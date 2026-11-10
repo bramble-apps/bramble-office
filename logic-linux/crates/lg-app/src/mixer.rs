@@ -176,6 +176,14 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         let mr = Rect::from_min_max(pos2(meter_r.min.x + 1.0, meter_r.max.y - lv * fh), pos2(meter_r.max.x - 1.0, meter_r.max.y));
         p.rect_filled(mr, 1.0, if meter > 0.98 { look::record_red() } else { Color32::from_rgb(0x4c, 0xd9, 0x64) });
     }
+    // the scale between fader and meter, as Logic's: 0 at the top mark, down to 60
+    if r.width() >= 80.0 {
+        for db in [0.0f32, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0] {
+            let yy = track.max.y - db_to_frac(-db) * fh;
+            p.hline(meter_r.max.x + 2.0..=meter_r.max.x + 5.0, yy, Stroke::new(1.0, look::text_dim()));
+            p.text(pos2(meter_r.max.x + 7.0, yy), Align2::LEFT_CENTER, format!("{db:.0}"), look::regular(8.0), look::text_dim());
+        }
+    }
     let fy = track.max.y - db_to_frac(vol) * fh;
     let cap = Rect::from_center_size(pos2(track.center().x, fy), vec2(26.0, 14.0));
     let fresp = ui.interact(Rect::from_min_max(pos2(track.min.x - 12.0, y - 8.0), pos2(track.max.x + 12.0, y + fh + 8.0)), ui.scope_id().with(("fader", i)), Sense::click_and_drag()).on_hover_text("Volume (double-click: 0 dB)");

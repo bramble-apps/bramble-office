@@ -18,6 +18,10 @@ use crate::look;
 /// The track headers' width: Logic's minimum 265 pt, up to 547 (RESIZING.txt).
 pub const HEADER_W: f32 = 265.0;
 const GLOBAL_ROW: f32 = 28.0;
+/// Logic 13's global tracks (G) and their heights: the Tempo lane is tall, with its scale.
+const GLOBAL_ROWS: [(&str, f32); 5] = [("Arrangement", GLOBAL_ROW), ("Marker", GLOBAL_ROW), ("Tempo", 64.0), ("Signature", GLOBAL_ROW), ("Chord", GLOBAL_ROW)];
+/// The arrangement markers the (+) adds, in Logic's order.
+const SECTIONS: [&str; 8] = ["Intro", "Verse", "Chorus", "Verse", "Chorus", "Bridge", "Chorus", "Outro"];
 pub const ROW_H: f32 = 52.0;
 const LOCAL_H: f32 = 32.0;
 const RULER_H: f32 = 32.0;
@@ -93,7 +97,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
-    let global_h = if app.global_tracks { 3.0 * GLOBAL_ROW } else { 0.0 };
+    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() } else { 0.0 };
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
@@ -840,13 +844,61 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
     let (scroll, bw) = (app.scroll_x, app.bar_w);
     let x_of = |tick: f32| lanes_x + (tick / bar_t - scroll) * bw;
     let tick_of = |x: f32| ((x - lanes_x) / bw + scroll) * bar_t;
-    let names = ["Marker", "Tempo", "Signature"];
-    for (i, n) in names.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(area.min.x, area.min.y + i as f32 * GLOBAL_ROW), vec2(area.width(), GLOBAL_ROW));
+    let mut top = area.min.y;
+    for (i, (n, h)) in GLOBAL_ROWS.iter().enumerate() {
+        let row = Rect::from_min_size(pos2(area.min.x, top), vec2(area.width(), *h));
+        top += h;
         p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
-        p.text(pos2(row.min.x + 14.0, row.center().y), Align2::LEFT_CENTER, *n, look::semibold(12.0), look::text_dim());
+        p.text(pos2(row.min.x + 14.0, row.min.y + GLOBAL_ROW / 2.0), Align2::LEFT_CENTER, *n, look::semibold(12.0), look::text_dim());
+        // (+) at the right of each global track's header
+        let plus = Rect::from_center_size(pos2(lanes_x - 18.0, row.min.y + GLOBAL_ROW / 2.0), vec2(18.0, 18.0));
+        let presp = ui.interact(plus, ui.scope_id().with(("gplus", i)), Sense::click()).on_hover_text(format!("Add to the {n} track"));
+        p.circle_stroke(plus.center(), 7.5, Stroke::new(1.2, if presp.hovered() { look::text() } else { look::text_dim() }));
+        p.text(plus.center(), Align2::CENTER_CENTER, "+", look::regular(12.0), look::text_dim());
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
         let lp = ui.painter_at(lane);
+        let i = match i {
+            0 => {
+                // Arrangement: each (+) appends an 8-bar section after the last (Logic)
+                if presp.clicked() {
+                    let start = app.arrangement.last().map_or(0, |a| a.0 + a.1);
+                    let name = SECTIONS[app.arrangement.len() % SECTIONS.len()].to_string();
+                    app.arrangement.push((start, 8 * bar_t as u32, name));
+                    app.dirty = true;
+                }
+                let colors = [Color32::from_rgb(0x5a, 0x8f, 0xd6), Color32::from_rgb(0x4f, 0xb0, 0x6a), Color32::from_rgb(0xd6, 0x7a, 0x4a), Color32::from_rgb(0xa8, 0x6a, 0xd6)];
+                for (k, (start, len, name)) in app.arrangement.iter().enumerate() {
+                    let r = Rect::from_min_max(pos2(x_of(*start as f32), row.min.y + 3.0), pos2(x_of((start + len) as f32) - 1.0, row.max.y - 3.0));
+                    let ci = SECTIONS.iter().position(|s| s == name).unwrap_or(k) % colors.len();
+                    lp.rect_filled(r, 4.0, colors[ci]);
+                    lp.with_clip_rect(r).text(pos2(r.min.x + 6.0, r.center().y), Align2::LEFT_CENTER, name, look::semibold(11.5), Color32::WHITE);
+                }
+                continue;
+            }
+            1 => {
+                if presp.clicked() {
+                    let ctx = ui.ctx().clone();
+                    app.key_command(&ctx, "Create Marker");
+                }
+                0
+            }
+            2 => {
+                // the scale: 100 / 120 / 140 as Logic labels it
+                for bpm in [100.0f64, 120.0, 140.0] {
+                    let y = row.max.y - 6.0 - ((bpm - 80.0) / 80.0) as f32 * (h - 12.0);
+                    p.text(pos2(lanes_x - 34.0, y), Align2::RIGHT_CENTER, format!("{bpm:.0}"), look::regular(9.5), look::text_dim());
+                    lp.hline(lane.x_range(), y, Stroke::new(1.0, look::grid_line()));
+                }
+                1
+            }
+            3 => 2,
+            _ => {
+                lp.text(pos2(lane.min.x + 6.0, row.center().y), Align2::LEFT_CENTER, "", look::regular(11.0), look::text_dim());
+                continue;
+            }
+        };
+        let row = Rect::from_min_max(row.min, pos2(row.max.x, row.max.y));
+        let _ = GLOBAL_ROW;
         match i {
             0 => {
                 let resp = ui.interact(lane, ui.scope_id().with("marker-lane"), Sense::click());
@@ -910,7 +962,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
             1 => {
                 // the tempo line: 40..240 BPM over the lane's height
                 let tempo = app.tempo();
-                let y_of = |bpm: f64| row.max.y - 4.0 - ((bpm - 40.0) / 200.0).clamp(0.0, 1.0) as f32 * (GLOBAL_ROW - 8.0);
+                let y_of = |bpm: f64| row.max.y - 6.0 - ((bpm - 80.0) / 80.0).clamp(0.0, 1.0) as f32 * (row.height() - 12.0);
                 let mut pts = vec![pos2(lane.min.x, y_of(app.project.as_ref().map_or(tempo, |p| p.tempo)))];
                 if let Some(pr) = &app.project {
                     for (t, b) in pr.tempo_map.iter().filter(|e| e.0 > 0) {

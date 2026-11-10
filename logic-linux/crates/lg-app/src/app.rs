@@ -124,8 +124,14 @@ pub struct App {
     pub tool: crate::edit::Tool,
     pub cmd_tool: crate::edit::Tool,
     pub snap_on: bool,
+    /// The Settings window's tab and sub-tab, and the Logic settings' values.
+    pub settings_tab: String,
+    pub settings_sub: String,
+    pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// Arrangement markers: start, length (ticks), name.
+    pub arrangement: Vec<(u32, u32, String)>,
     /// The Browser: linked to the selected track, replacing its patch; its category filter and
     /// sort (by name, else Logic's relevance).
     pub browser_link: bool,
@@ -267,7 +273,11 @@ impl App {
             tool: crate::edit::Tool::Pointer,
             cmd_tool: crate::edit::Tool::Marquee,
             snap_on: true,
+            settings_tab: "General".into(),
+            settings_sub: String::new(),
+            logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            arrangement: Vec::new(),
             browser_link: true,
             browser_replace: true,
             browser_filter: None,
@@ -938,7 +948,8 @@ impl App {
         self.dirty = true;
         let Some(p) = &self.project else { return };
         self.undo.push((what.to_string(), p.clone(), self.programs.clone()));
-        if self.undo.len() > 100 {
+        let steps = self.logic_settings.get("General / Editing / Number of Undo Steps:").parse::<usize>().unwrap_or(100).max(1);
+        while self.undo.len() > steps {
             self.undo.remove(0);
         }
         self.redo.clear();
@@ -1002,7 +1013,11 @@ impl App {
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
         match cmd {
             "About Bramble Studio" => self.show_about = true,
-            "General…" | "View…" => self.show_settings = true,
+            "General…" | "Audio…" | "Recording…" | "MIDI…" | "Score…" | "Movie…" | "Automation…" | "Control Surfaces…" | "View…" | "My Info…" => {
+                self.settings_tab = cmd.trim_end_matches('…').to_string();
+                self.settings_sub.clear();
+                self.show_settings = true;
+            }
             "Quit Bramble Studio" | "Close" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             "Hide Bramble Studio" | "Minimize" => crate::chrome::minimize(ctx),
             "Zoom" => {
@@ -1509,7 +1524,7 @@ impl App {
                 let want = pp.x - r.min.x;
                 if want < 150.0 {
                     self.show_browser = false;
-                    self.browser_w = BROWSER_W;
+                    self.browser_w = 320.0;
                 } else {
                     self.browser_w = want.min(925.0);
                     if self.show_inspector && body.width() - self.browser_w - INSPECTOR_W < 360.0 {
@@ -1569,7 +1584,9 @@ impl App {
                 }
             }
         }
-        if let Some(tag) = self.help_tag.take() {
+        MIDDLE_C4.store(self.logic_settings.get("View / General / Display Middle C As:").starts_with("C4"), std::sync::atomic::Ordering::Relaxed);
+        let tags_on = self.logic_settings.get("View / General / Show help tags") != "0";
+        if let Some(tag) = self.help_tag.take().filter(|_| tags_on) {
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
@@ -1729,9 +1746,13 @@ pub fn bbdt_len(ticks: u32, sig: (u8, u8)) -> String {
 }
 
 /// Logic's note names (C3 = 60).
+/// Settings ▸ View ▸ Display Middle C As: C3 (Yamaha, Logic's default) or C4 (Roland).
+pub static MIDDLE_C4: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub fn note_name(p: u8) -> String {
     const N: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    format!("{}{}", N[(p % 12) as usize], p as i32 / 12 - 2)
+    let base = if MIDDLE_C4.load(std::sync::atomic::Ordering::Relaxed) { 1 } else { 2 };
+    format!("{}{}", N[(p % 12) as usize], p as i32 / 12 - base)
 }
 
 #[cfg(test)]

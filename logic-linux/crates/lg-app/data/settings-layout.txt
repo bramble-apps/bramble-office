@@ -1,0 +1,548 @@
+# Logic Pro 13 Settings window, transcribed tab by tab for Bramble Studio (dark appearance).
+# Source: research screenshots (about 2x) + accessibility dumps. Order/rows/labels from the PNGs; strings/values from the dumps.
+# Format: row<TAB>left label<TAB>kind<TAB>text<TAB>default<TAB>choices
+#   kinds: check, popup, stepper, slider, radio, button, text, field, group <title>/endgroup, separator, table
+#   left label "^" = this control sits on the SAME line as the row above, to its right (sliders' steppers, units, second grid column).
+#   "# heading" before a text row = bold 13pt section heading, flush left at the content edge (not a label column item).
+#   "# small" before a text row = 11pt help/info text.
+#   choices starting with "~" were not seen in the research (standard Logic knowledge).
+#   "(disabled)" after a control's text = drawn greyed out.
+# Tabs with sub-tabs draw all their rows inside the sub-tab group box (segmented control centred on its top border);
+#   that outer box is described under "look" and is not repeated as group/endgroup. Rows marked "below the box" sit outside it.
+# Privacy: device names replaced with "System Default". Sound Library sub-tab left out (shows a path). My Info tab not researched.
+#
+# look: all sizes in points (PNG px / 2), colours sampled from the PNGs (dark mode).
+# look: window width 750 (height per tab below); outer corner radius large (~10+), 0.5pt black outline.
+# look: title band (title bar + icon tab row) fill #2e2d2c, 88 tall incl. title bar; 0.5pt divider #353433 at its bottom; body below #262524.
+# look: title "Settings" bold 13pt, #aaa9a8, centred, cap top y≈10.5. Traffic lights ~14 dia at x 9..22.5, y 10..21.5 (red #e1675b, others #525150).
+# look: icon tab row: 10 items (General Audio Recording MIDI Score Movie Automation Control Surfaces View My Info), centred as a row.
+# look:   icons are line glyphs ~19-26 wide x 16-21 tall (gear 20.5x20.5, waveform 23.5x21, record 19x19, MIDI 19x17.5, eye 26x16, person 19x19), icon centre y≈48.
+# look:   labels 11pt regular, cap top y≈64, baseline y≈71.5; unselected label #979696, unselected icon #a1a1a0; selected icon #3478f6, selected label #3d85f7.
+# look:   selected tab highlight: rounded rect y 32..80 (48 tall), width = label width + ~8 each side (General 55, Recording 64, Control Surfaces 100), radius ~7.5,
+# look:   fill #4b4a49 with slight top gradient (#545251 at top), 0.5pt top highlight #7b7977 fading round the corners, 0.5pt dark rim #100f0f at the sides.
+# look: sub-tab segmented control: y 106.5..130.5 (24 tall), fill #363534, radius ~5, no visible border (soft #31302f edge); labels 13pt regular #e0e0e0;
+# look:   segment width = label + ~15 padding each side; selected segment inset 2 (20 tall), fill #545251 (gradient #575554 top → #535150), radius ~4,
+# look:   0.5pt lighter rim #7c7978 (top) / #7d7c7b (bottom).
+# look: sub-tab group box: x 20..730 (20 from window sides and 20 from bottom), top border at y 118 (behind the segmented control's middle), radius 4,
+# look:   border 1pt (2px: outer #464545, inner #383736), fill #2d2c2b; first row's centre ~42 below the top border; content left edge x≈43 (23 inside the box).
+# look:   nested box (Audio / Sampler): same style, 23 inside the outer box, with its own segmented control on its top border.
+# look: tabs without sub-tabs (Recording, Score, Movie, Automation): no box, rows on body #262524, content left edge x=20.
+# look: separators 1pt: #424140 inside the box (x 43..707), #3b3a39 on body (x 20..730). Headings bold 13pt #dedede.
+# look: labels: 13pt regular #dfdfdf (cap height 9.5), right-aligned, ending with ":", gap 7-10 to the control; label column width varies per tab (see each section).
+# look: small/help text 11pt #dfdfdf; disabled text #61605f..#676665.
+# look: row pitch: checkbox stacks 22; popup stacks 30-32; checkbox<->popup 26; popup/stepper/button height 24.
+# look: checkbox 16x16, radius ~3.5; on: fill #397bf7 + white #ffffff tick; off: fill #424140 in box / #3b3a39 on body; no border.
+# look:   disabled on: fill #3c3b3a, tick #6c6b6b, label #61605f. Checkbox label 13pt starts 6.5 right of the box (box x + 22.5).
+# look: radio 16 dia; on: #397bf7 with white dot 5 dia; off: #3b3a39 (on body).
+# look: popup: height 24, radius ~5, fill #3d3c3b in box / #363534 on body, no border; value text 13pt #dfdfdf at 12 left inset;
+# look:   chevron = up/down double chevron 7 wide x 10.5 tall, #e1e1e1, right edge 10.5 from the popup's right edge; width per tab (typ. 235, small 55-90).
+# look: stepper (numeric field with v ^): height 24, radius ~5, same fill as popup; width 69-110 (General/Editing 105); "v" at left, "^" at right,
+# look:   chevrons 9.5x5 #8b8a89, 5 in from the ends; value 13pt #dfdfdf centred. Disabled: fill #353433, value #676665.
+# look: slider: track 6 tall, radius 3, filled part #397bf7, rest #424140; knob 20x16 capsule #e0e0e0 with soft dark shadow;
+# look:   tick dots 2x2 #61605f, 6.5 below the track centre. Slider usually followed by a stepper on the same line.
+# look: push button: height 24, radius ~5, fill #3d3c3b in box / #363533 on body; title 13pt #e1e1e1 centred; disabled fill #353433 (box) / #2e2d2b (body), title #676665.
+# look: table: 1pt border #424140; header 29 tall, fill #2e2d2c, titles ~11pt #ffffff, 0.5pt column divider #525150, 1pt header bottom line #484746;
+# look:   body rows 24 tall, alternating #262524 / #302f2e (first row dark).
+# look: colour well (Score): capsule 44.5x21.5, ring #3b3a39, inner swatch 38.5x15.5 capsule (#80b066, lighter rim #9ece84).
+
+=== General / Project Handling ===
+# window: 750x388 points
+# label column right edge x≈192.5, controls at x≈202; popups 309 wide (top) / 223 wide (the rest)
+row	Startup Action:	popup	Open Most Recent Project	Open Most Recent Project	
+row	Default Template:	button	Select Template (disabled)		
+# the "Default Template:" label is also disabled in the dump (StaticText ... (disabled)), though it reads near-normal on screen; button is 223 wide
+row	When Opening a Project:	popup	Close current Project	Close current Project	
+row		check	Export MIDI File command saves single MIDI region as format 0.	1	
+row		check	Save undo history with project	1	
+row	Auto Backup:	popup	Last 10 Alternative Versions	Last 10 Alternative Versions	
+row	Recent Items:	popup	System Default	System Default	
+
+=== General / Editing ===
+# window: 750x539 points
+# label column right edge x≈272.5, controls at x≈282; popups 235 wide; stepper 105 wide
+row	Number of Undo Steps:	stepper		100	
+row		check	Groove template edits immediately update all associated regions	1	
+row		check	Create new regions after splitting loops	1	
+row		check	Advanced split and marquee handling of MIDI regions	1	
+row		check	Select regions on track selection	1	
+row		check	Select tracks on region/marquee selection	1	
+row	Right Mouse Button:	popup	Opens Shortcut Menu	Opens Shortcut Menu	~Is Assignable to a Tool|Opens Tool Menu|Opens Shortcut Menu|Opens Tool and Shortcut Menu
+row	Trackpad:	check	Enable Force Touch trackpad	1	
+row	Pointer Tool in Tracks Provides:	check	Fade tool click zones	0	
+row		check	Marquee tool click zones	0	
+row		check	Quick Swipe and Take Editing click zones	0	
+row	Limit Dragging to One Direction In:	check	Piano Roll Editor and Score Editor	0	
+row		check	Tracks area	0	
+row	Double-Clicking a MIDI Region Opens:	popup	Piano Roll Editor	Piano Roll Editor	
+row	Piano Roll Editor:	check	Region border trimming	1	
+
+=== General / Cycle ===
+# window: 750x539 points
+# label column right edge x≈175.5, controls at x≈185.5; popup 91 wide; rest of the box empty
+row	Cycle Pre-Processing:	popup	Off	Off	
+row		check	Smooth Cycle Algorithm	0	
+
+=== General / Catch ===
+# window: 750x539 points
+# no label column: everything flush left at x≈43
+row		text	Catch mode default settings		
+# small (justified paragraph, wraps to 3 lines across the box width)
+row		text	Editors with the Catch button will update their view to follow the playhead position. The options below change the default Catch settings for all editors. You can also change the Catch settings for individual editors by Control-clicking the Catch button.		
+row		check	Catch when starting playback	1	
+row		check	Catch when moving playhead	1	
+row		check	Catch content by position if Catch and Link are enabled	0	
+# "Catch mode default settings" is regular weight 13pt (not bold)
+
+=== General / Notifications ===
+# window: 750x539 points
+# no label column; table fills the box width (x 43..707), ~11 visible striped rows, empty by default
+row		text	Warnings and alerts set previously to “Do not show again.”		
+row		table			Text|Triggered Button
+# "Triggered Button" column ~120 wide at the right
+row		button	Reset Selected Warnings (disabled)		
+row	^	button	Reset All Warnings		
+# the two buttons are 175 wide each; Reset Selected at the left edge, Reset All right-aligned to the table's right edge
+
+=== General / Accessibility ===
+# window: 750x539 points
+# no label column: flush left at x≈43; small texts are indented 20 (x≈63, aligned with the checkbox labels) and justified
+row		text	Enable Playhead position announcements when		
+row		check	Playing	1	
+row		check	Recording	0	
+row		check	Scrubbing	1	
+# small (indented, justified, 2 lines)
+row		text	When these options are selected, VoiceOver announces the playhead position when starting and stopping recording or playback, or when moving the playhead.		
+row		check	Open Plug-in windows in Controls view by default	0	
+# small (indented, justified, 2 lines)
+row		text	When this option is selected, all plug-in windows open in Controls view, making plug-in parameters available for use with VoiceOver.		
+row		check	Allow Logic to flash the screen	1	
+# "Enable Playhead position announcements when" is regular 13pt (not bold); extra ~17 gap above "Open Plug-in windows..."
+
+=== Audio / Devices ===
+# window: 750x587 points
+# label column right edge x≈177.5, controls at x≈197; popups 246 wide; units at x≈462; row pitch 30
+row	Core Audio:	check	Enabled	1	
+row	Output Device:	popup	System Default	System Default	
+row	Input Device:	popup	System Default	System Default	
+row	I/O Buffer Size:	popup	128	128	~32|64|128|256|512|1024
+row	^	text	Samples		
+row	Resulting Latency:	text	37.0 ms Roundtrip (5.6 ms Output)		
+row	Recording Delay:	slider		0	
+# Recording Delay slider is 246 wide with 11 tick dots; 0 sits in the middle (blue fill from the left end to the knob)
+row	^	text	Samples		
+row	Processing Threads:	popup	Automatic (Recommended)	Automatic (Recommended)	
+row	^	stepper		0	
+row	Process Buffer Range:	popup	Medium	Medium	~Small|Medium|Large
+row	Multithreading:	popup	Playback & Live Tracks	Playback & Live Tracks	~Playback Tracks|Playback & Live Tracks
+row	Summing:	popup	High Precision (64-bit)	High Precision (64-bit)	
+row		button	Apply (disabled)		
+# Apply: 100 wide, bottom-right corner of the box (inside it)
+
+=== Audio / General ===
+# window: 750x587 points
+# label column right edge x≈241.5, controls at x≈251.5; popups 291 wide
+row		check	Display audio engine overload message	1	
+row	Sample Accurate Automation:	popup	Volume, Pan, Sends, Plug-in Parameters	Volume, Pan, Sends, Plug-in Parameters	~Off|Volume|Volume, Pan|Volume, Pan, Sends|Volume, Pan, Sends, Plug-in Parameters
+row	Automatic Bus Assignment Uses:	popup	All Busses	All Busses	
+row		check	Software monitoring (disabled)	1	
+row		check	Input monitoring only for the focused track, and only when input monitoring is enabled (as in GarageBand)	1	
+# that label wraps to 2 lines (box is top-aligned with the first line); its text is from the PNG (unnamed in the dump)
+row		check	Independent monitoring level for record-enabled channel strips	0	
+# text from the PNG (unnamed in the dump)
+row	Dim Level:	slider		-20	
+row	^	stepper		-20	
+row	^	text	dB		
+# Dim Level slider 209 wide, 7 tick dots; stepper 72 wide
+row		separator			
+# heading
+row		text	Plug-in Latency		
+row	Compensation:	popup	All (recommended)	All (recommended)	
+row		check	Playback pre-roll	1	
+row		check	Low Latency Monitoring Mode	0	
+row	Limit:	slider	(disabled)	5	
+row	^	stepper	(disabled)	5	
+row	^	text	ms		
+# the Limit slider knob still draws white but has no blue fill; its stepper is greyed
+
+=== Audio / Sampler ===
+# window: 750x587 points
+# nested group box with its own segmented control (Misc | Virtual Memory, Misc selected) on its top border; label column right edge x≈253, controls at x≈260.5; popups 155 wide
+row		radio	Misc | Virtual Memory	Misc	Misc|Virtual Memory
+# ^ drawn as a segmented control (24 tall) centred on the nested box's top border, not as radio buttons
+row		group Misc			
+row	Sample Storage:	popup	Original	Original	
+row	Search Samples On:	popup	Local Volumes	Local Volumes	
+row	Read Root Key From:	popup	File/Analysis	File/Analysis	
+row	Root Key at File Name Position:	popup	Auto	Auto	
+row		check	Keep common samples in memory when switching projects	1	
+row		endgroup			
+# Virtual Memory pane was not captured
+
+=== Audio / Editing ===
+# window: 750x587 points
+# label column right edge x≈186.5; sliders at x≈193 (265 wide, 7 tick dots); steppers 69 wide at x≈464; popups 265 wide
+# heading
+row		text	Crossfades for Merge and Take Comping		
+row	Crossfade Time:	slider		20	
+row	^	stepper		20	
+row	^	text	ms		
+row	Crossfade Curve:	slider		0	
+row	^	stepper		0	
+# Crossfade Curve 0 sits in the middle of its slider
+row		separator			
+# heading
+row		text	Scrubbing		
+row		check	Scrubbing with audio in Tracks area	0	
+row	Maximum Scrub Speed:	popup	Normal	Normal	
+row	Scrub Response:	popup	Normal	Normal	
+
+=== Audio / I/O Assignments ===
+# window: unknown (no screenshot; built from the control dump only, so order is accessibility order, not visual)
+# has its own inner segmented control: Output | Bounce Extensions | Input (Output selected); only the Output pane was dumped
+# in Logic this pane shows a "Stereo" area and a "Surround" area where the speaker popups are laid out around a speaker diagram;
+#   the per-speaker popups carry accessibility names (used as left labels here) that may not be visible text
+row		radio	Output | Bounce Extensions | Input	Output	Output|Bounce Extensions|Input
+# ^ drawn as a segmented control
+# heading
+row		text	Stereo		
+row	Output:	popup	1/2	1/2	
+row		check	Mirroring (disabled)	0	
+# heading
+row		text	Surround		
+row	Show as:	popup	5.1 (ITU 775)	5.1 (ITU 775)	
+row	Initialize:	button	Default		
+row	^	button	ITU		
+row	^	button	WG-4		
+row	Left	popup	Output 1	Output 1	
+row	Left center	popup	Output 7 (disabled)	Output 7	
+row	Center	popup	Output 5	Output 5	
+row	Right center	popup	Output 8 (disabled)	Output 8	
+row	Right	popup	Output 2	Output 2	
+row	Left mid	popup	Output 7 (disabled)	Output 7	
+row	LFE	popup	Output 6	Output 6	
+row	Right mid	popup	Output 8 (disabled)	Output 8	
+row	Left surround	popup	Output 3	Output 3	
+row	Surround	popup	Output 7 (disabled)	Output 7	
+row	Right surround	popup	Output 4	Output 4	
+row	Left top	popup	Output 9 (disabled)	Output 9	
+row	Right top	popup	Output 10 (disabled)	Output 10	
+row	Left top mid	popup	Output 13 (disabled)	Output 13	
+row	Right top mid	popup	Output 14 (disabled)	Output 14	
+row	Left top surround	popup	Output 11 (disabled)	Output 11	
+row	Right top surround	popup	Output 12 (disabled)	Output 12	
+# placement of "Stereo"/"Surround" as headings is a guess; the dump lists them after all popups
+
+=== Audio / File Editor ===
+# window: 750x803 points (this capture's window was taller; content is top-aligned, rest of the box empty)
+# label column right edge x≈184.5, controls at x≈193.5
+row		check	Warning before processing function by key command	1	
+row		check	Clear Undo History when closing project	0	
+row		check	Record selection changes in Undo History	1	
+row		check	Record Normalize operations in Undo History	1	
+row	Number of Undo Steps:	stepper		5	
+# stepper 75 wide
+row	External Sample Editor:	field			
+# path field: fill #191919 (darker than the box), radius ~5, 24 tall, 424 wide, empty by default
+row	^	button	Choose...		
+row		button	Remove		
+# Remove: 72 wide, under the field's left edge
+
+=== Recording ===
+# window: 750x498 points
+# no box; label column right edge x≈142.5, controls at x≈149; headings at x=20 with full-width separators
+# heading
+row		text	Audio Recording		
+row	File Type:	popup	AIFF	AIFF	~AIFF|WAVE|CAF
+row	Bit Depth:	popup	24-bit	24-bit	~16-bit|24-bit|32-bit Float
+row		separator			
+# heading
+row		text	MIDI Recording		
+row	Auto Record Enable:	popup	The Focused Track	The Focused Track	
+row		separator			
+# heading
+row		text	Overlapping Track Recordings		
+# two columns: MIDI popups at x 149 (245 wide), Audio popups at x 401 (246 wide); column titles 13pt regular above them
+row		text	MIDI		
+row	^	text	Audio		
+row	Cycle Off:	popup	Merge	Merge	
+row	^	popup	Create Take Folder	Create Take Folder	
+row	Cycle On:	popup	Merge	Merge	
+row	^	popup	Create Take Folder	Create Take Folder	
+row	Replace:	popup	Region Erase	Region Erase	
+# the "Cycle Off:/Cycle On:/Replace:" labels are from the PNG; the dump names the popups "MIDI, Cycle Off", "Audio, Cycle Off", etc.
+row		button	Recording Project Settings…		
+# right-aligned at the bottom (right edge x=730), 196 wide
+
+=== MIDI / General ===
+# window: 750x430 points
+# label column right edge x≈130, controls at x≈137; left popups 90 wide, "Set" popups 153 wide at x≈233
+row		check	MIDI 2.0	0	
+row		check	External stop message ends recording	1	
+row		button	Reset All MIDI Drivers		
+row		separator			
+# heading
+row		text	Articulation Switches		
+# column title "Set" (13pt regular) sits over the second popup column (x≈233), not at the control column
+row		text	Set		
+row	MIDI Remote:	popup	Off	Off	
+row	^	popup	Global	Global	
+row	MIDI Channel:	popup	All	All	
+row	^	popup	Global	Global	
+row	Octave Offset:	popup	0 (disabled)	0	
+row	^	popup	Per Channel Strip	Per Channel Strip	
+
+=== MIDI / Reset Messages ===
+# window: 750x596 points
+# no label column: flush left at x≈43
+# heading
+row		text	Software Instruments		
+row		check	Control 64 (Sustain) off	1	
+row		check	Control 4 (Foot Control) to zero	1	
+row		check	Control 2 (Breath) to zero	1	
+row		check	Control 1 (Modulation) to zero	1	
+row		check	Aftertouch to zero	1	
+row		check	Pitch Bend to center position	1	
+row		separator			
+# heading
+row		text	External MIDI		
+row		check	Control 123 (All Notes Off)	0	
+row		check	Control 121 (Reset Controls)	0	
+row		check	Control 64 (Sustain) off	1	
+row		check	Control 4 (Foot Control) to zero	1	
+row		check	Control 2 (Breath Control) to zero	1	
+row		check	Control 1 (Modulation) to zero	1	
+row		check	Aftertouch to zero	1	
+row		check	Pitch Bend to center position	1	
+row		check	Send used instrument settings on reset	0	
+
+=== MIDI / Sync ===
+# window: 750x612 points
+# label column right edge x≈254, controls at x≈260.5; steppers 110 wide (ID steppers 72 wide); the dump calls the steppers "Slider"
+# heading
+row		text	All MIDI Output		
+row	Delay:	stepper		0	
+row	^	text	ms		
+row		separator			
+# heading
+row		text	MIDI Time Code (MTC)		
+row	MTC Pickup Delay:	stepper		0	
+row	^	text	Frames		
+row	Delay MTC Transmission By:	stepper		0	
+row	^	text	ms		
+row		separator			
+# heading
+row		text	MIDI Machine Control (MMC)		
+row	MMC Uses:	popup	MMC Standard Messages	MMC Standard Messages	
+row	Output ID (Transport):	check	All (disabled)	1	
+row	^	stepper	(disabled)	127	
+row	Input ID (Transport):	check	All (disabled)	1	
+row	^	stepper	(disabled)	127	
+row	Transmit Locate Commands When:	check	Pressing Stop twice	1	
+row		check	Dragging regions or events	1	
+row		check	Transmit record-enable commands for audio tracks	0	
+row		button	MIDI Sync Project Settings…		
+# right-aligned inside the box (right edge x≈707), 195 wide
+
+=== MIDI / Inputs ===
+# window: 750x612 points
+# no label column; table fills the box width (x 43..707), ~15 visible striped rows; "On" column ~64 wide
+row		text	Enable MIDI ports to use as inputs in Logic		
+row		table			On|Device or Port
+# table row 1: checkbox (centred in "On" column) = 1, "Logic Pro Virtual In" (13pt) in "Device or Port"
+row		check	Logic Pro Virtual In	1	
+
+=== Score ===
+# window: 750x502 points
+# no box; label column right edge x≈153.5, controls at x≈161; headings at x=20 with full-width separators
+# heading
+row		text	Display		
+row		check	Show region selection in color	1	
+row		check	Display distance values in inches	0	
+row	Double-Click to Open:	popup	Note Attributes	Note Attributes	
+row	Selection Color:	button			
+# ^ colour well (capsule, green swatch #80b066), see look
+row	^	button	Reset		
+row		separator			
+# heading
+row		text	Camera Tool		
+row	Write To:	radio	Clipboard | PDF file	Clipboard	Clipboard|PDF file
+# radios stacked vertically, 22 pitch
+row		separator			
+# heading
+row		text	Split		
+row		check	Auto split notes in polyphonic staff styles	0	
+row	Split Notes At:	slider	(disabled)	60	0..127
+# slider 280 wide, 2 tick dots (ends); value is a MIDI note number (60 = C3), knob in the middle
+row	^	stepper	(disabled)	C3	
+row		button	Score Project Settings…		
+# right-aligned at the bottom (right edge x=730), 170 wide
+
+=== Movie ===
+# window: 750x381 points
+# no box; label column right edge x≈151.5, controls at x≈159.5; sliders 305 wide (9 tick dots), steppers 78 wide
+# heading
+row		text	Adjustments		
+row	Movie to Project:	slider		0	
+# 0 sits in the middle of the slider
+row	^	stepper		0	
+row	^	text	Quarter Frames		
+row		separator			
+# heading
+row		text	Movie Track		
+row	Cache Resolution:	popup	Medium	Medium	
+row	Maximum Cache Size:	slider		40	
+row	^	stepper		40	
+row	^	text	MB		
+row		check	Use Logic Pro audio output	0	
+row		check	Lock movie window when changing screensets	0	
+row		button	Movie Project Settings…		
+# right-aligned at the bottom (right edge x=730), 171 wide
+
+=== Automation ===
+# window: 750x477 points
+# no box; label column right edge x≈246.5, controls at x≈253.5; popups 241 wide; steppers 85 wide
+row	Move Track Automation with Regions:	popup	Ask	Ask	~Never|Always|Ask
+row		check	Include trails, if possible	1	
+row	Region Automation:	check	Create Node when cutting at constant values	1	
+row	Pencil Tool:	popup	Hold Option for Stepped Editing	Hold Option for Stepped Editing	
+row	Snap Offset:	stepper		-5	
+row	^	text	Ticks		
+row	Ramp Time:	stepper		200	
+row	^	text	ms		
+row	Write Mode Changes To:	popup	Touch	Touch	~Touch|Latch
+# Write Automation For: 2-column checkbox grid, second column at x≈326
+row	Write Automation For:	check	Volume	1	
+row	^	check	Send	1	
+row		check	Pan	1	
+row	^	check	Plug-in	1	
+row		check	Mute	1	
+row	^	check	Solo	0	
+row	Automation Quick Access:	radio	Off | On	Off	Off|On
+# radios side by side on one line, "On" aligned with the grid's second column
+row		button	Learn Message		
+row	^	text	Click the Learn Message button to assign a new control.		
+row		button	Edit... (disabled)		
+# both buttons 116 wide
+
+=== Control Surfaces / General ===
+# window: 750x580 points
+# label column right edge x≈237.5, controls at x≈247.5; sliders 280 wide (11 tick dots), steppers 80 wide; the box ends above the bottom buttons
+row		check	Bypass all while in background	0	
+row	Resolution of Relative Controls:	slider		128	
+row	^	stepper		128	
+row	Maximum MIDI Bandwidth:	slider		50	
+row	^	stepper		50	
+row	^	text	%		
+row		check	Touching fader selects track	0	
+row		check	Control surface follows track selection	1	
+row		check	Open or close plug-in window following change to control surface	0	
+row		check	Control surface follows focused view	0	
+row		check	Jog resolution depends on horizontal zoom	0	
+row		check	Pickup mode	1	
+row		check	Flash Mute and Solo buttons	1	
+row	Multiple Controls per Parameter:	popup	2	2	
+# popup 56 wide
+# small (sub-heading for the next checkbox, at the control column)
+row		text	For Longer Labels and Value Displays		
+row		check	Only when all parameters fit on one page	1	
+row	Show Value Units For:	check	Instrument/plug-in parameters	1	
+row		check	Volume and other parameters	1	
+# below the box, right-aligned (right edge x=730), 24 tall
+row		button	Controller Assignments…		
+row	^	button	Setup…		
+
+=== Control Surfaces / Help Tags ===
+# window: 750x580 points
+# label column right edge x≈264.5, controls at x≈273.5; slider 278 wide (11 tick dots), stepper 70 wide
+row	While Editing Show Long Names For:	check	Parameter name	1	
+row		check	Parameter value	1	
+row	Display Duration:	slider		2	
+row	^	stepper		2.0	
+# the stepper shows "2.0" (dump value 2)
+row	^	text	s		
+row		check	Show info for multiple parameters	1	
+row		check	Show info when selecting tracks	1	
+row		check	Show info when editing volume	1	
+row	Show Value Units For:	check	Instrument/plug-in parameters	1	
+row		check	Volume and other parameters	1	
+# below the box, right-aligned
+row		button	Controller Assignments…		
+row	^	button	Setup…		
+
+=== Control Surfaces / MIDI Controllers ===
+# window: 750x580 points
+# no label column; text wraps to 2 lines across the box; table x 40..710 (slightly wider than the text column), empty, ~9 striped rows
+row		text	The buttons, knobs and other controls on the following USB MIDI Controllers can be automatically assigned to Smart Controls and other functions. Select Auto to enable automatic assignment for a device.		
+row		table			Auto|Manufacturer|Model Name
+# column widths ~80 | ~242 | rest
+# below the box, right-aligned
+row		button	Controller Assignments…		
+row	^	button	Setup…		
+
+=== View / General ===
+# window: 750x565 points
+# label column right edge x≈171.5, controls at x≈179; popups 292 wide
+# heading
+row		text	Windows		
+row		check	Large local window menus	0	
+row		check	Wide playhead	0	
+row		check	Show help tags	1	
+row		check	Show beats and time in help tags	0	
+row		check	Show default values	0	
+row		check	Show animations	1	
+row		separator			
+# heading
+row		text	Displays		
+row	Display Middle C As:	popup	C3 (Yamaha)	C3 (Yamaha)	~C3 (Yamaha)|C4 (Roland)
+# the dump's label has a leading space (" Display Middle C As:")
+row	Display Time As:	popup	SMPTE/EBU with Subframes	SMPTE/EBU with Subframes	
+row	^	check	Zeros as spaces	0	
+row	Display Tempo As:	popup	Beats per Minute (BPM, Maelzel)	Beats per Minute (BPM, Maelzel)	
+row	Clock Format:	popup	1  1  1  1	1  1  1  1	
+# Clock Format value has two spaces between the 1s (as in the dump)
+row	Display MIDI Data As:	popup	MIDI 1.0	MIDI 1.0	
+
+=== View / Tracks ===
+# window: 750x663 points
+# label column right edge x≈123.5, controls at x≈130.5; popups 191 wide; extra empty space (~40) under Appearance and Grid Lines before the separators
+row		check	Show track or bar number while scrolling	0	
+row		separator			
+# heading
+row		text	Appearance		
+row	Track Color:	popup	Static	Static	
+row	Region Color:	popup	Individual	Individual	
+row	Marker Color:	popup	Static	Static	
+row	Background:	popup	Dark	Dark	
+row		separator			
+# heading
+row		text	Grid Lines		
+row	Placement:	popup	Foreground	Foreground	
+row	Color:	check	Automatic	1	
+row		separator			
+# heading
+row		text	Regions		
+row		check	Shaded loops	0	
+row		check	Show “+” button next to Session Player regions	1	
+
+=== View / Mixer ===
+# window: 750x663 points
+# label column right edge x≈141, controls at x≈147.5; popups 277 wide
+row		check	Show “Mastering Assistant” Button in Stereo Output	1	
+row		separator			
+# heading
+row		text	Plug-in Window		
+row		check	Open plug-in window on insertion	1	
+row		check	Show recent plug-in list in plug-in menu	1	
+row		separator			
+# heading
+row		text	Level Meters		
+row	Peak Hold Time:	popup	800 ms	800 ms	
+row	Return Time:	popup	IEC Type I (11.8 dB/s)—Recommended	IEC Type I (11.8 dB/s)—Recommended	
+row	Channel Order:	popup	Clockwise (Ls L C R Rs LFE)	Clockwise (Ls L C R Rs LFE)	
+
+=== View / Editors ===
+# window: 750x663 points
+# no label column: flush left at x≈43
+# heading
+row		text	Piano Roll		
+row		check	Bright background	0	

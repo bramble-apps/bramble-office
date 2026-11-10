@@ -21,6 +21,7 @@ mod mixer;
 mod pianoroll;
 mod snap;
 mod rightpane;
+pub mod settings;
 mod smartcontrols;
 mod tracks;
 pub mod units;

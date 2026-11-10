@@ -66,7 +66,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // ---- views
     let (b, c) = run(x, cy, &[BTN; 4]);
     caps.push(c);
-    if button(ui, b[0], "browser", app.show_browser, true, "Browser (Y)", |p, r, c| icon_browser(p, r, c)).clicked() {
+    if button(ui, b[0], "browser", app.show_browser, true, "Browser (B)", |p, r, c| icon_browser(p, r, c)).clicked() {
         app.show_browser = !app.show_browser;
     }
     if button(ui, b[1], "inspector", app.show_inspector, true, "Inspector (I)", |p, r, c| icon_inspector(p, r, c)).clicked() {

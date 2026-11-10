@@ -95,6 +95,13 @@ impl eframe::App for Snap {
                     self.app.center_roll(t, r);
                 }
             }
+            // LG_SETTINGS="General/Editing": the Settings window on that tab
+            if let Ok(s) = std::env::var("LG_SETTINGS") {
+                let (t, sub) = s.split_once('/').unwrap_or((s.as_str(), ""));
+                self.app.settings_tab = t.to_string();
+                self.app.settings_sub = sub.to_string();
+                self.app.show_settings = true;
+            }
             if std::env::var_os("LG_MIXER").is_some() {
                 self.app.bottom = app::Bottom::Mixer;
             }
