@@ -1790,6 +1790,7 @@ dependencies = [
  "lg-core",
  "lg-dsp",
  "lg-players",
+ "lg-synth",
  "libc",
  "midir",
  "rodio",

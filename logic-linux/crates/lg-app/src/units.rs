@@ -5,8 +5,10 @@
 /// An instrument for a Logic plug-in name ("Vintage Electric Piano") or patch name ("Deluxe
 /// Classic").
 pub fn instrument(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Instrument>> {
-    let _ = (name, rate);
-    None
+    if std::env::var_os("LG_SOUNDFONT_ONLY").is_some() {
+        return None;
+    }
+    lg_synth::by_logic_name(name, rate).or_else(|| lg_synth::for_patch(name, rate))
 }
 
 /// An effect for a Logic plug-in name ("Compressor", "ChromaVerb").

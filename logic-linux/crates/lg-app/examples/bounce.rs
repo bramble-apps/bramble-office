@@ -20,7 +20,7 @@ fn main() {
             let mut notes: Vec<(u32, u32, u8, u8)> = t.regions.iter().flat_map(|r| r.notes.iter().map(|n| (n.pos, n.pos + n.len.max(1), n.pitch, n.velocity))).collect();
             notes.sort_by_key(|n| n.0);
             let audio = t.regions.iter().filter_map(|r| r.audio.as_ref().and_then(|a| audio::load_audio(&a.file)).map(|s| (r.start, std::sync::Arc::new(s)))).collect();
-            audio::PlayTrack { channel, program: app::program_for(&t.name, t.kind), notes, audio, volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None }
+            audio::PlayTrack { channel, program: app::program_for(&t.name, t.kind), notes, audio, volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: (t.kind != lg_core::TrackKind::Audio).then(|| t.name.clone()) }
         })
         .collect();
     let end = p.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.start + r.length).max().unwrap_or(3840);

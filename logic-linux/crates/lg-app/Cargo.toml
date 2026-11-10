@@ -26,6 +26,7 @@ rodio = { version = "0.23", default-features = false, features = ["playback", "w
 rustysynth = "1"
 lg-dsp = { path = "../lg-dsp" }
 lg-players = { path = "../lg-players" }
+lg-synth = { path = "../lg-synth" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)
 midir = "0.11"
 
