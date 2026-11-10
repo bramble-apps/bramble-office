@@ -99,7 +99,36 @@ def main():
     path = os.path.join(ROOT, 'CHECKLIST.md')
     head = open(path).read().split(MARK)[0] if os.path.exists(path) else '# Bramble Studio — 1-1 checklist\n\n'
     open(path, 'w').write(head + '\n'.join(out) + '\n')
+    globals()['head'] = head
     for t in totals:
         print('%-18s %4d / %4d' % t)
+    write_progress(totals, groups, keys_done, open(path).read().split(MARK)[0])
+
+
+def write_progress(totals, groups, keys_done, head):
+    """progress/*.json for the parity dashboard: the totals, key commands by group, and the
+    hand audit's features (section, item, status)."""
+    import json
+    out = os.path.join(ROOT, 'progress')
+    os.makedirs(out, exist_ok=True)
+    json.dump([{'area': a, 'done': n, 'total': t, 'percent': round(100 * n / max(t, 1), 1)} for a, n, t in totals], open(os.path.join(out, 'areas.json'), 'w'), indent=1)
+    rows = []
+    for a, v in groups.items():
+        n = sum(1 for c, _ in v if c in keys_done)
+        rows.append({'group': a, 'done': n, 'total': len(v), 'percent': round(100 * n / max(len(v), 1), 1)})
+    json.dump(rows, open(os.path.join(out, 'key-groups.json'), 'w'), indent=1)
+    feats = []
+    section = ''
+    for line in head.splitlines():
+        m = re.match(r'## (\d+)\. (.*)', line)
+        if m:
+            section = m.group(2).strip()
+            continue
+        m = re.match(r'- \[(x|~| )\] (.*)', line)
+        if m and section:
+            status = {'x': 'Done', '~': 'Partial', ' ': 'Not started'}[m.group(1)]
+            text = m.group(2).strip()
+            feats.append({'area': section, 'status': status, 'feature': text})
+    json.dump(feats, open(os.path.join(out, 'features.json'), 'w'), indent=1)
 
 main()

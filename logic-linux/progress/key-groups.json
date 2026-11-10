@@ -1,0 +1,170 @@
+[
+ {
+  "group": "None",
+  "done": 0,
+  "total": 1,
+  "percent": 0.0
+ },
+ {
+  "group": "Global Commands",
+  "done": 86,
+  "total": 679,
+  "percent": 12.7
+ },
+ {
+  "group": "Global Control Surfaces Commands",
+  "done": 0,
+  "total": 7,
+  "percent": 0.0
+ },
+ {
+  "group": "Various Windows",
+  "done": 15,
+  "total": 110,
+  "percent": 13.6
+ },
+ {
+  "group": "Windows Showing Audio Files",
+  "done": 0,
+  "total": 15,
+  "percent": 0.0
+ },
+ {
+  "group": "Main Window Tracks and Various Editors",
+  "done": 54,
+  "total": 290,
+  "percent": 18.6
+ },
+ {
+  "group": "Various Editors",
+  "done": 4,
+  "total": 67,
+  "percent": 6.0
+ },
+ {
+  "group": "Views Showing Time Ruler",
+  "done": 4,
+  "total": 80,
+  "percent": 5.0
+ },
+ {
+  "group": "Views Showing Automation",
+  "done": 0,
+  "total": 22,
+  "percent": 0.0
+ },
+ {
+  "group": "Main Window Tracks",
+  "done": 21,
+  "total": 249,
+  "percent": 8.4
+ },
+ {
+  "group": "Live Loops Grid",
+  "done": 0,
+  "total": 18,
+  "percent": 0.0
+ },
+ {
+  "group": "Mixer",
+  "done": 2,
+  "total": 86,
+  "percent": 2.3
+ },
+ {
+  "group": "MIDI Environment",
+  "done": 0,
+  "total": 50,
+  "percent": 0.0
+ },
+ {
+  "group": "Piano Roll",
+  "done": 0,
+  "total": 12,
+  "percent": 0.0
+ },
+ {
+  "group": "Score Editor",
+  "done": 0,
+  "total": 139,
+  "percent": 0.0
+ },
+ {
+  "group": "Event Editor",
+  "done": 0,
+  "total": 9,
+  "percent": 0.0
+ },
+ {
+  "group": "Step Editor",
+  "done": 0,
+  "total": 16,
+  "percent": 0.0
+ },
+ {
+  "group": "Step Sequencer",
+  "done": 0,
+  "total": 96,
+  "percent": 0.0
+ },
+ {
+  "group": "Project Audio",
+  "done": 0,
+  "total": 20,
+  "percent": 0.0
+ },
+ {
+  "group": "Audio File Editor",
+  "done": 0,
+  "total": 55,
+  "percent": 0.0
+ },
+ {
+  "group": "Smart Tempo Editor",
+  "done": 0,
+  "total": 32,
+  "percent": 0.0
+ },
+ {
+  "group": "Browser",
+  "done": 0,
+  "total": 16,
+  "percent": 0.0
+ },
+ {
+  "group": "Sampler",
+  "done": 0,
+  "total": 36,
+  "percent": 0.0
+ },
+ {
+  "group": "Drum Machine Designer",
+  "done": 0,
+  "total": 16,
+  "percent": 0.0
+ },
+ {
+  "group": "Step Input Keyboard",
+  "done": 0,
+  "total": 49,
+  "percent": 0.0
+ },
+ {
+  "group": "Smart Controls",
+  "done": 0,
+  "total": 6,
+  "percent": 0.0
+ },
+ {
+  "group": "Tool Menu",
+  "done": 16,
+  "total": 29,
+  "percent": 55.2
+ },
+ {
+  "group": "Control Surface Install Window",
+  "done": 0,
+  "total": 2,
+  "percent": 0.0
+ }
+]

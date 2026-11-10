@@ -1,0 +1,252 @@
+[
+ {
+  "area": "Look and suite parity",
+  "status": "Partial",
+  "feature": "Dark appearance, Logic's colours, Sfera fonts. Measured on screenshots; light mode untested"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Done",
+  "feature": "Liquid glass and the suite's capsules (kn_ui::capsule: glass / classic / dark rimmed) on the control bar"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Done",
+  "feature": "Appearance, colour theme, liquid glass and title bar in Settings \u25b8 View (per-app look file)"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Done",
+  "feature": "Window frame, title bar, resize edges, HiDPI pointer, Wayland pinch: from kn-ui's winframe and the patched winit"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Partial",
+  "feature": "Help tags on region, cycle, note, pan, XY and master drags. [ ] the rest of Logic's, Quick Help panel"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Not started",
+  "feature": "Animations: panes sliding, region drop, playhead catch, zoom (interactions/UI-ANIMATIONS)"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Not started",
+  "feature": "App icon final; About window"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] Customize Control Bar, the Tuner window, autopunch locators"
+ },
+ {
+  "area": "Main window",
+  "status": "Not started",
+  "feature": "Toolbar (Ctrl-Option-Cmd-T) and Customize Control Bar and Display\u2026"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, take folders, flex, track alternatives, Transposition and Movie tracks"
+ },
+ {
+  "area": "Main window",
+  "status": "Done",
+  "feature": "Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the \u2026 menu; header row (+, duplicate, S). [ ] catch button, zoom sliders"
+ },
+ {
+  "area": "Main window",
+  "status": "Done",
+  "feature": "Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Mixer (X): strips with fader, pan, mute, solo, meter, slots. Missing: Single/Tracks/All views, filters, sends and buses, aux/output/master strips, groups, automation mode, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Editors pane: Piano Roll, Event List (right pane), Session Player editors. [ ] Score and Step Sequencer (being built), Step Editor, Smart Tempo, Audio Track/File Editor"
+ },
+ {
+  "area": "Main window",
+  "status": "Not started",
+  "feature": "Live Loops grid, scenes, cell editing, queueing, Remix FX"
+ },
+ {
+  "area": "Main window",
+  "status": "Done",
+  "feature": "Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import"
+ },
+ {
+  "area": "Main window",
+  "status": "Done",
+  "feature": "Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings"
+ },
+ {
+  "area": "Editing",
+  "status": "Done",
+  "feature": "Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Loop (inspector), split, join, trims. [ ] loop by edge drag, crossfades, fades, gain, reverse, normalize"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "T tool menu, left / Command-click tools; Pencil, Eraser, Scissors, Join, Mute, Solo, Zoom, Text work. [ ] Marquee, Fade, Automation, Flex tools"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Snap to Grid toggle and the \u2026 menu. [ ] each snap and drag mode behaving"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Piano Roll: draw, move, resize, transpose, nudge, Time and Scale Quantize with Strength and Swing, velocity, local menus. [ ] velocity tool and lane, MIDI draw, articulations, Collapse mode, scale overlay, time handles, Brush tool"
+ },
+ {
+  "area": "Editing",
+  "status": "Not started",
+  "feature": "MIDI Transform, Functions (Quantize, Note Force Legato, Delete Duplicates\u2026)"
+ },
+ {
+  "area": "Editing",
+  "status": "Not started",
+  "feature": "Automation: Read/Touch/Latch/Write, points, curves, region vs track, snapshot"
+ },
+ {
+  "area": "Editing",
+  "status": "Not started",
+  "feature": "Flex Time and Flex Pitch, Smart Tempo analysis"
+ },
+ {
+  "area": "Audio",
+  "status": "Done",
+  "feature": "Playback through our instruments and effects (SoundFont fallback), audio regions, bounce to WAV, metronome"
+ },
+ {
+  "area": "Audio",
+  "status": "Done",
+  "feature": "Real instruments (lg-synth): Vintage Keys EP (\u22482 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble, Studio Plucks & Mallets, Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy, ES2, Sculpture, Quick Sampler, Drum Machine Designer as their own instruments; SF3 (needs an Ogg decoder)"
+ },
+ {
+  "area": "Audio",
+  "status": "Done",
+  "feature": "Real effects (lg-fx, 25): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, \u22640.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper. [ ] Multipressor, Amp Designer, Bass Amp, Pedalboard, Delay Designer, ChromaGlow, Phat FX, Graph EQ, Space Designer IRs, Mastering Assistant, Stem Splitter"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch"
+ },
+ {
+  "area": "Audio",
+  "status": "Not started",
+  "feature": "Sends, buses, aux strips, master chain; latency compensation"
+ },
+ {
+  "area": "Audio",
+  "status": "Not started",
+  "feature": "Hosting third-party CLAP/VST3/LV2 plug-ins"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops"
+ },
+ {
+  "area": "Session Players",
+  "status": "Done",
+  "feature": "Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM"
+ },
+ {
+  "area": "Session Players",
+  "status": "Done",
+  "feature": "Bass Player and Keyboard Player: tracks from the New Track sheet, their editor (style, XY pad, knobs, Details), the Chord track drives them. [ ] Logic-measured styles beyond Pop Songwriter / Strummed"
+ },
+ {
+  "area": "Session Players",
+  "status": "Not started",
+  "feature": "Drum Kit Designer and Drum Machine Designer kits"
+ },
+ {
+  "area": "Files",
+  "status": "Done",
+  "feature": "Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio"
+ },
+ {
+  "area": "Files",
+  "status": "Done",
+  "feature": "Open GarageBand .band (iOS); [ ] macOS GarageBand sample"
+ },
+ {
+  "area": "Files",
+  "status": "Partial",
+  "feature": "Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes"
+ },
+ {
+  "area": "Files",
+  "status": "Not started",
+  "feature": "Save .band"
+ },
+ {
+  "area": "Files",
+  "status": "Partial",
+  "feature": "Export MIDI, import MIDI and audio, bounce WAV. [ ] AAF/XML, more export formats, stems"
+ },
+ {
+  "area": "Files",
+  "status": "Not started",
+  "feature": "Project templates (the chooser), alternatives, backups, consolidate"
+ },
+ {
+  "area": "Interaction parity (interactions/ research)",
+  "status": "Partial",
+  "feature": "Resizable panes (Browser, header, editor, mixer). Missing: Inspector, Piano Roll keyboard, global tracks, Smart Controls, persistence (DisplayState)"
+ },
+ {
+  "area": "Interaction parity (interactions/ research)",
+  "status": "Partial",
+  "feature": "Drags with modifiers: region move/copy, notes. Missing: the rest of DRAGS.txt (fades, velocity, automation, tempo points, track reorder, slot copy, Library to track, marquee, zoom)"
+ },
+ {
+  "area": "Interaction parity (interactions/ research)",
+  "status": "Partial",
+  "feature": "Scroll and pinch: scroll, Option-scroll zoom. Missing: two-finger horizontal, pinch zoom per area, Shift-scroll, catch"
+ },
+ {
+  "area": "Interaction parity (interactions/ research)",
+  "status": "Not started",
+  "feature": "Clipboard behaviour per area (keyboard-and-modifiers.txt)"
+ },
+ {
+  "area": "Interaction parity (interactions/ research)",
+  "status": "Done",
+  "feature": "Musical Typing window and MIDI keyboards (all inputs). [ ] Caps Lock keyboard"
+ }
+]

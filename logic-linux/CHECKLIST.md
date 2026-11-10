@@ -17,51 +17,51 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 ## 1. Look and suite parity
 - [~] Dark appearance, Logic's colours, Sfera fonts. Measured on screenshots; light mode untested
-- [~] Liquid glass: setting exists; control-bar capsules not drawn with kn_ui::capsule (glass/classic/dark rimmed) as the other suite apps do
-- [ ] Colour themes and appearance in Settings > View, as Keydeck/Letters/Notes (per-app look file)
+- [x] Liquid glass and the suite's capsules (kn_ui::capsule: glass / classic / dark rimmed) on the control bar
+- [x] Appearance, colour theme, liquid glass and title bar in Settings ▸ View (per-app look file)
 - [x] Window frame, title bar, resize edges, HiDPI pointer, Wayland pinch: from kn-ui's winframe and the patched winit
-- [ ] Help tags (the yellow drag readouts) everywhere Logic shows them
+- [~] Help tags on region, cycle, note, pan, XY and master drags. [ ] the rest of Logic's, Quick Help panel
 - [ ] Animations: panes sliding, region drop, playhead catch, zoom (interactions/UI-ANIMATIONS)
 - [ ] App icon final; About window
 
 ## 2. Main window
-- [~] Control bar: transport, LCD (bar/beat/tempo/signature/key), cycle, metronome. Missing: Library/Inspector/Toolbar/Smart Controls/Mixer/Editors/Browsers buttons as Logic's, LCD modes (Beats & Project, Time, Custom), count-in, replace, autopunch, tuner, solo, low latency, Master volume, Logic Remote
+- [~] Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] Customize Control Bar, the Tuner window, autopunch locators
 - [ ] Toolbar (Ctrl-Option-Cmd-T) and Customize Control Bar and Display…
-- [~] Tracks area: ruler, cycle, regions, track headers. Missing: header controls as Logic's (icon, M S R I, volume slider, pan knob, configurable), track zoom, global tracks (Arrangement, Marker, Tempo, Signature, Transposition, Movie, Chord), automation lanes, folders and track stacks, take folders, flex, groove track, track alternatives
-- [~] Tracks local bar: Edit/Functions/View menus listed; missing the toolbar row (+, duplicate, global S), catch, snap and drag menus, zoom sliders, the "…" menu
-- [~] Inspector: region and track sections; missing region parameters (quantize, Q-swing, transpose, velocity, dynamics, gate time, delay, loop), track parameters, and the two channel strips (track plus output) with full slots
-- [~] Browser: instruments list (SoundFont presets). Missing: Logic's patch library (categories, the 1,332 patches), Loops and One-Shots, Plug-in Presets, Sound Library, All Files, search, sort, preview, drag to tracks
-- [ ] Smart Controls (B): screen controls per patch, arpeggiator, mapping
+- [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, take folders, flex, track alternatives, Transposition and Movie tracks
+- [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
+- [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
+- [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
+- [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
 - [~] Mixer (X): strips with fader, pan, mute, solo, meter, slots. Missing: Single/Tracks/All views, filters, sends and buses, aux/output/master strips, groups, automation mode, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA
-- [ ] Editors pane: Piano Roll ~, Score, Step Sequencer, Step Editor, Smart Tempo, Audio Track/File Editor, Event List, Live Loops
+- [~] Editors pane: Piano Roll, Event List (right pane), Session Player editors. [ ] Score and Step Sequencer (being built), Step Editor, Smart Tempo, Audio Track/File Editor
 - [ ] Live Loops grid, scenes, cell editing, queueing, Remix FX
-- [ ] Library window, Loop Browser, Notes pad (Lists: Event, Marker, Tempo, Signature)
+- [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
 - [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
 
 ## 3. Editing
-- [x] Region move, Option-copy, resize, delete, copy/paste at the playhead, Repeat, undo/redo
-- [ ] Region split/join, loop by edge drag, trim, crossfade, fades, gain, reverse, normalize
-- [ ] Marquee tool, Pencil, Eraser, Scissors, Glue, Solo, Mute, Zoom, Fade, Automation tools; T tool menu; left/Cmd tools
-- [ ] Snap modes (Smart, Bar, Beat, Division, Ticks, Frames, Samples) and Drag modes (Overlap, No Overlap, X-Fade, Shuffle)
-- [~] Piano Roll: draw, move, resize, transpose, nudge, velocity. Missing: quantize (Time, Scale), velocity tool and lane, MIDI draw (controllers, pitch bend), articulations, Collapse mode, scale overlay, chord track, time handles, Brush tool
+- [x] Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo
+- [~] Loop (inspector), split, join, trims. [ ] loop by edge drag, crossfades, fades, gain, reverse, normalize
+- [~] T tool menu, left / Command-click tools; Pencil, Eraser, Scissors, Join, Mute, Solo, Zoom, Text work. [ ] Marquee, Fade, Automation, Flex tools
+- [~] Snap to Grid toggle and the … menu. [ ] each snap and drag mode behaving
+- [~] Piano Roll: draw, move, resize, transpose, nudge, Time and Scale Quantize with Strength and Swing, velocity, local menus. [ ] velocity tool and lane, MIDI draw, articulations, Collapse mode, scale overlay, time handles, Brush tool
 - [ ] MIDI Transform, Functions (Quantize, Note Force Legato, Delete Duplicates…)
 - [ ] Automation: Read/Touch/Latch/Write, points, curves, region vs track, snapshot
 - [ ] Flex Time and Flex Pitch, Smart Tempo analysis
 
 ## 4. Audio
-- [~] Playback of MIDI (via SoundFont) and audio regions; bounce to WAV; metronome
+- [x] Playback through our instruments and effects (SoundFont fallback), audio regions, bounce to WAV, metronome
 - [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble, Studio Plucks & Mallets, Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy, ES2, Sculpture, Quick Sampler, Drum Machine Designer as their own instruments; SF3 (needs an Ogg decoder)
 - [x] Real effects (lg-fx, 25): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper. [ ] Multipressor, Amp Designer, Bass Amp, Pedalboard, Delay Designer, ChromaGlow, Phat FX, Graph EQ, Space Designer IRs, Mastering Assistant, Stem Splitter
 - [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views
-- [ ] Recording audio and MIDI (inputs, monitoring, count-in, takes, punch), MIDI input from devices
+- [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch
 - [ ] Sends, buses, aux strips, master chain; latency compensation
 - [ ] Hosting third-party CLAP/VST3/LV2 plug-ins
-- [x] Native SoundFont playback (Bramble extra); [ ] SoundFont → Sampler conversion option ("Apple way")
-- [ ] Matched sounds: Logic's plug-ins/patches/kits/loops swapped for ours on load
+- [~] Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont
+- [~] Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops
 
 ## 5. Session Players
 - [x] Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM
-- [~] Bass Player and Keyboard Player generators (lg-players); [ ] their tracks and editors in the app, the chord track
+- [x] Bass Player and Keyboard Player: tracks from the New Track sheet, their editor (style, XY pad, knobs, Details), the Chord track drives them. [ ] Logic-measured styles beyond Pop Songwriter / Strummed
 - [ ] Drum Kit Designer and Drum Machine Designer kits
 
 ## 6. Files
@@ -69,7 +69,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Open GarageBand .band (iOS); [ ] macOS GarageBand sample
 - [~] Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes
 - [ ] Save .band
-- [x] Export MIDI; [ ] Import MIDI, audio, AAF/XML, Export track/project as audio (all formats), stems
+- [~] Export MIDI, import MIDI and audio, bounce WAV. [ ] AAF/XML, more export formats, stems
 - [ ] Project templates (the chooser), alternatives, backups, consolidate
 
 ## 7. Interaction parity (interactions/ research)
@@ -77,7 +77,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Drags with modifiers: region move/copy, notes. Missing: the rest of DRAGS.txt (fades, velocity, automation, tempo points, track reorder, slot copy, Library to track, marquee, zoom)
 - [~] Scroll and pinch: scroll, Option-scroll zoom. Missing: two-finger horizontal, pinch zoom per area, Shift-scroll, catch
 - [ ] Clipboard behaviour per area (keyboard-and-modifiers.txt)
-- [ ] Musical Typing (Cmd-K) and Caps Lock keyboard
+- [x] Musical Typing window and MIDI keyboards (all inputs). [ ] Caps Lock keyboard
 
 <!-- GENERATED: tool/checklist.py rewrites everything below -->
 
@@ -88,13 +88,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 83 | 594 | 13% |
+| Menu bar | 82 | 594 | 13% |
 | Local menus | 103 | 1191 | 8% |
 | Right-click menus | 181 | 2575 | 7% |
 | Key commands | 202 | 2207 | 9% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 83 of 594
+## Menu bar: 82 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -522,7 +522,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Record — 3/56</summary>
+<details><summary>Record — 2/56</summary>
 
 - [ ] Count-in
   - [ ] None
@@ -573,7 +573,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Overlapping Audio Recordings
   - [ ] Cycle Off
   - [ ] Create Take Folder
-  - [x] Create New Track
+  - [ ] Create New Track
   - [ ] Create Track Alternative
   - [ ] Cycle On
   - [ ] Create Take Folder
