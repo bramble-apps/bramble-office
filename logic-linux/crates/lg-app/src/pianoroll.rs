@@ -34,7 +34,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         p.text(r.center(), Align2::CENTER_CENTER, *n, look::regular(13.0), if i == 0 { Color32::WHITE } else { look::text() });
         if i > 0 && ui.interact(r, ui.scope_id().with(("edtab", i)), Sense::click()).clicked() {
-            app.tell(format!("The {n} editor isn't available yet"));
+            if i == 1 {
+                crate::score::set_editor_tab(ui.ctx(), crate::score::EditorTab::Score);
+            } else {
+                app.tell(format!("The {n} editor isn't available yet"));
+            }
         }
     }
     // a drummer region's Manual tab: the way back to the Session Player

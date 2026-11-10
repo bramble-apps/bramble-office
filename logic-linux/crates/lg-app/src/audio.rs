@@ -35,6 +35,25 @@ pub struct PlayTrack {
     /// Logic's plug-in name and its saved settings.
     pub instrument_floats: Vec<f32>,
     pub inserts: Vec<(String, Vec<f32>)>,
+    /// The channel's sends: to which bus, at what gain, before the fader or after it.
+    pub sends: Vec<Send>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Send {
+    pub bus: usize,
+    pub gain: f32,
+    pub pre: bool,
+}
+
+/// An aux channel strip: what it takes in (a bus), its effects, its fader.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuxBus {
+    pub bus: usize,
+    pub volume: f32,
+    pub pan: f32,
+    pub mute: bool,
+    pub inserts: Vec<(String, Vec<f32>)>,
 }
 
 /// A track's own plug-ins as the engine runs them (built from PlayTrack::instrument).
@@ -76,6 +95,11 @@ pub struct Engine {
     voices: Vec<Voice>,
     /// Each track's instrument and effects (our stand-ins for Logic's plug-ins).
     pub units: Vec<Units>,
+    /// The aux strips (fed by the sends' buses), their effects as running, their meters.
+    pub auxes: Vec<AuxBus>,
+    aux_units: Vec<Units>,
+    pub aux_meters: Vec<f32>,
+    buses: Vec<(Vec<f32>, Vec<f32>)>,
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
@@ -95,7 +119,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -178,6 +202,25 @@ impl Engine {
         }
     }
 
+    /// The aux strips' effects: built when their lists change.
+    fn build_aux_units(&mut self) {
+        self.aux_units.resize_with(self.auxes.len(), Units::default);
+        self.aux_units.truncate(self.auxes.len());
+        for (a, u) in self.auxes.iter().zip(self.aux_units.iter_mut()) {
+            let names: Vec<String> = a.inserts.iter().map(|x| x.0.clone()).collect();
+            if u.inserts_for != names {
+                u.inserts = a.inserts.iter().filter_map(|(n, floats)| {
+                    let mut fx = crate::units::effect(n, RATE as f32)?;
+                    if !floats.is_empty() {
+                        fx.load_floats(floats);
+                    }
+                    Some(fx)
+                }).collect();
+                u.inserts_for = names;
+            }
+        }
+    }
+
     /// The track's instrument parameters and values (Smart Controls, the plug-in window).
     pub fn instrument_params(&self, t: usize) -> Option<(Vec<lg_dsp::Param>, Vec<f32>)> {
         let ins = self.units.get(t)?.instrument.as_ref()?;
@@ -195,6 +238,7 @@ impl Engine {
     /// Each track's synthesizer, with the track's sound on its channel.
     pub fn program_changes(&mut self) {
         self.build_units();
+        self.build_aux_units();
         let Some(sf) = self.sf.clone() else {
             self.synths.clear();
             return;
@@ -375,6 +419,20 @@ impl Engine {
             let (vol, pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
             let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
             let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
+            // the sends: into their buses, before the fader or after it (with the pan)
+            for s in self.tracks[i].sends.clone() {
+                if self.buses.len() <= s.bus {
+                    self.buses.resize_with(s.bus + 1, || (Vec::new(), Vec::new()));
+                }
+                let (bl, br) = &mut self.buses[s.bus];
+                bl.resize(frames, 0.0);
+                br.resize(frames, 0.0);
+                let (sl, sr) = if s.pre { (s.gain, s.gain) } else { (s.gain * gl, s.gain * gr) };
+                for k in 0..frames {
+                    bl[k] += l[k] * sl;
+                    br[k] += r[k] * sr;
+                }
+            }
             let mut peak = 0f32;
             for k in 0..frames {
                 let (x, y) = (l[k] * gl, r[k] * gr);
@@ -385,6 +443,38 @@ impl Engine {
             if let Some(m) = self.meters.get_mut(i) {
                 *m = m.max(peak);
             }
+        }
+        // the aux strips: each takes its bus, runs its effects, then its fader into the mix
+        self.aux_meters.resize(self.auxes.len(), 0.0);
+        for (ai, aux) in self.auxes.clone().iter().enumerate() {
+            let Some((bl, br)) = self.buses.get_mut(aux.bus) else { continue };
+            if bl.len() != frames {
+                continue;
+            }
+            l.copy_from_slice(bl);
+            r.copy_from_slice(br);
+            if let Some(u) = self.aux_units.get_mut(ai) {
+                for fx in u.inserts.iter_mut() {
+                    fx.process(&mut l, &mut r);
+                }
+            }
+            if aux.mute {
+                continue;
+            }
+            let a = (aux.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+            let (gl, gr) = (aux.volume * a.cos() * std::f32::consts::SQRT_2, aux.volume * a.sin() * std::f32::consts::SQRT_2);
+            let mut peak = 0f32;
+            for k in 0..frames {
+                let (x, y) = (l[k] * gl, r[k] * gr);
+                out[2 * k] += x;
+                out[2 * k + 1] += y;
+                peak = peak.max(x.abs()).max(y.abs());
+            }
+            self.aux_meters[ai] = self.aux_meters[ai].max(peak);
+        }
+        for (bl, br) in &mut self.buses {
+            bl.fill(0.0);
+            br.fill(0.0);
         }
         if self.sf.is_none() {
             for v in &mut self.voices {
@@ -428,7 +518,7 @@ impl Engine {
         }
         self.master_meter = self.master_meter.max(peak);
         let fall = 0.985f32.powf(frames as f32 / 64.0);
-        for m in &mut self.meters {
+        for m in self.meters.iter_mut().chain(self.aux_meters.iter_mut()) {
             *m *= fall;
         }
         self.master_meter *= fall;
@@ -610,6 +700,7 @@ mod tests {
             instrument: None,
             instrument_floats: Vec::new(),
             inserts: Vec::new(),
+            sends: Vec::new(),
         }).collect();
         // two bars at 104 BPM: about 4.6 s, plus the tail
         let out = bounce(tracks, p.tempo, Vec::new(), Some(&sf), 0, 2 * 3840);
@@ -627,7 +718,7 @@ mod tests {
         let Some(sf) = system_soundfont() else { return };
         let level = |vols: [f32; 2], mute: [bool; 2]| {
             let mut e = Engine::new();
-            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new() }).collect();
+            e.tracks = (0..2).map(|i| PlayTrack { channel: i as u8, program: 0, notes: vec![(0, 3840, 60 + 7 * i as u8, 100)], audio: Vec::new(), volume: vols[i], pan: 0.0, mute: mute[i], solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new() }).collect();
             e.load_soundfont(Some(&sf));
             e.playing = true;
             let mut buf = vec![0f32; 2 * BLOCK];
@@ -651,7 +742,7 @@ mod tests {
     fn plays_notes_in_time() {
         let mut e = Engine::new();
         e.tempo = 120.0;
-        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new() }];
+        e.tracks = vec![PlayTrack { channel: 0, program: 0, notes: vec![(0, 480, 60, 100), (960, 1440, 64, 100)], audio: Vec::new(), volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: Vec::new(), sends: Vec::new() }];
         e.playing = true;
         let mut buf = vec![0f32; 2 * BLOCK];
         // half a second at 120 BPM = one beat = 960 ticks

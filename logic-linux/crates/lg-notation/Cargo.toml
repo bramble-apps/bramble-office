@@ -1,0 +1,8 @@
+[package]
+name = "lg-notation"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Engraving for Bramble Studio's Score editor: spelling by key, display quantisation, rests, ties, beams, stems"
+
+[dependencies]

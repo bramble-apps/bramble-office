@@ -6,33 +6,110 @@
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 use lg_core::TrackKind;
 
-use crate::app::App;
+use crate::app::{App, MixerView};
 use crate::look;
 use crate::tracks::{db_to_frac, frac_to_db};
 
 const STRIP_W: f32 = 92.0;
+/// Strip indexes from here up are aux strips (AUX + the aux's index).
+pub const AUX: usize = 1_000_000;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
     let Some(proj) = app.project.clone() else { return };
-    let meters: Vec<f32> = app.engine.lock().map(|e| e.meters.clone()).unwrap_or_default();
-    let master = app.engine.lock().map(|e| e.master_meter).unwrap_or(0.0);
-    let mut x = area.min.x + 8.0;
-    for i in 0..proj.tracks.len() {
-        let r = Rect::from_min_size(pos2(x, area.min.y + 6.0), vec2(STRIP_W, area.height() - 10.0));
-        if r.min.x > area.max.x - STRIP_W - 10.0 {
+    // Logic's Mixer bar: Edit / Options / View, Sends on Faders, Single | Tracks | All
+    let bar = Rect::from_min_size(area.min, vec2(area.width(), 30.0));
+    p.rect_filled(bar, 0.0, look::header_bg());
+    p.hline(bar.x_range(), bar.max.y, Stroke::new(1.0, look::line()));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+        crate::menus::local_bar(app, ui, &[("Edit", "mixer-Edit"), ("Options", "mixer-Options"), ("View", "mixer-View")]);
+        let sof = match app.sends_on_faders { Some(b) => format!("Sends on Faders: Bus {}", b + 1), None => "Sends on Faders: Off".into() };
+        ui.menu_button(sof, |ui| {
+            if ui.add(egui::Button::selectable(app.sends_on_faders.is_none(), "Off")).clicked() {
+                app.sends_on_faders = None;
+                ui.close();
+            }
+            let buses: Vec<usize> = app.auxes.iter().map(|a| a.bus).collect();
+            for b in buses {
+                if ui.add(egui::Button::selectable(app.sends_on_faders == Some(b), format!("Bus {}", b + 1))).clicked() {
+                    app.sends_on_faders = Some(b);
+                    ui.close();
+                }
+            }
+        });
+    });
+    // the view switch at the right
+    let seg = Rect::from_min_size(pos2(bar.max.x - 200.0, bar.min.y + 4.0), vec2(190.0, 22.0));
+    p.rect_filled(seg, 6.0, look::group_bg());
+    for (k, (v, name)) in [(MixerView::Single, "Single"), (MixerView::Tracks, "Tracks"), (MixerView::All, "All")].into_iter().enumerate() {
+        let r = Rect::from_min_size(pos2(seg.min.x + 2.0 + k as f32 * 62.0, seg.min.y + 2.0), vec2(62.0, 18.0));
+        let on = app.mixer_view == v;
+        if on {
+            p.rect_filled(r, 5.0, look::accent());
+        }
+        p.text(r.center(), Align2::CENTER_CENTER, name, look::regular(12.0), if on { Color32::WHITE } else { look::text() });
+        if ui.interact(r, ui.scope_id().with(("mixview", k)), Sense::click()).clicked() {
+            app.mixer_view = v;
+        }
+    }
+    let body = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), area.max);
+    // which strips: Single = the selected track and what it feeds; Tracks = the tracks, their
+    // auxes and the output; All = every channel strip
+    let tracks: Vec<usize> = match app.mixer_view {
+        MixerView::Single => app.selected_track.into_iter().filter(|t| *t < proj.tracks.len()).collect(),
+        _ => (0..proj.tracks.len()).collect(),
+    };
+    let auxes: Vec<usize> = match app.mixer_view {
+        MixerView::Single => {
+            let used: Vec<usize> = tracks.iter().flat_map(|t| app.sends.get(t).into_iter().flatten().map(|s| s.bus)).collect();
+            (0..app.auxes.len()).filter(|a| used.contains(&app.auxes[*a].bus)).collect()
+        }
+        _ => (0..app.auxes.len()).collect(),
+    };
+    let mut x = body.min.x + 8.0;
+    let room = body.max.x - STRIP_W - 16.0;
+    for i in tracks {
+        if x + STRIP_W > room {
             break;
         }
+        let r = Rect::from_min_size(pos2(x, body.min.y + 6.0), vec2(STRIP_W, body.height() - 10.0));
         track_strip(app, ui, r, i);
         x += STRIP_W + 2.0;
     }
-    let _ = (meters, master);
+    if !auxes.is_empty() {
+        x += 8.0;
+        p.vline(x - 5.0, body.min.y + 8.0..=body.max.y - 8.0, Stroke::new(1.0, look::line()));
+    }
+    for a in auxes {
+        if x + STRIP_W > room {
+            break;
+        }
+        let r = Rect::from_min_size(pos2(x, body.min.y + 6.0), vec2(STRIP_W, body.height() - 10.0));
+        aux_strip(app, ui, r, a);
+        x += STRIP_W + 2.0;
+    }
     // the Stereo Out at the right
-    let r = Rect::from_min_size(pos2(area.max.x - STRIP_W - 8.0, area.min.y + 6.0), vec2(STRIP_W, area.height() - 10.0));
-    if r.min.x > x {
+    let r = Rect::from_min_size(pos2(body.max.x - STRIP_W - 8.0, body.min.y + 6.0), vec2(STRIP_W, body.height() - 10.0));
+    if r.min.x > x - 2.0 {
         output_strip(app, ui, r);
+    }
+}
+
+/// An aux strip (its bus in, its effects, its fader).
+pub fn aux_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, a: usize) {
+    let Some(aux) = app.auxes.get(a).cloned() else { return };
+    let meter = app.engine.lock().map(|e| e.aux_meters.get(a).copied().unwrap_or(0.0)).unwrap_or(0.0);
+    if let Some((v, pan, m, s)) = strip(app, ui, r, AUX + a, &aux.name, None, aux.volume_db, aux.pan, aux.mute, aux.solo, meter, false) {
+        if let Some(x) = app.auxes.get_mut(a) {
+            x.volume_db = v;
+            x.pan = pan;
+            x.mute = m;
+            x.solo = s;
+        }
+        app.dirty = true;
+        app.load_engine();
     }
 }
 
@@ -80,7 +157,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     y += 24.0;
     // the EQ slot: a click opens the Channel EQ; with one on the strip, its curve
     let eq_r = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
-    match (i != usize::MAX).then(|| app.eqs.get(&i).copied()).flatten() {
+    match (i < AUX).then(|| app.eqs.get(&i).copied()).flatten() {
         Some(e) => {
             p.rect_filled(eq_r, 4.0, look::lcd_bg());
             let pts: Vec<egui::Pos2> = (0..=40).map(|k| {
@@ -91,13 +168,14 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         }
         None => slot(&p, y, "EQ", None),
     }
-    if i != usize::MAX && ui.interact(eq_r, ui.scope_id().with(("eqslot", i)), Sense::click()).on_hover_text("Channel EQ").clicked() {
+    if i < AUX && ui.interact(eq_r, ui.scope_id().with(("eqslot", i)), Sense::click()).on_hover_text("Channel EQ").clicked() {
         app.eqs.entry(i).or_default();
         app.eq_window = Some(i);
         app.load_engine();
     }
     y += 26.0;
-    let chain: Vec<String> = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).map(|t| t.plugins.iter().map(|u| (u.slot, u.name.clone())).collect::<Vec<_>>())).flatten().unwrap_or_default().into_iter().filter(|(s, _)| *s >= 3).map(|(_, n)| n).filter(|n| n != "Channel EQ").collect();
+    let aux = (i >= AUX && i != usize::MAX).then(|| i - AUX);
+    let chain: Vec<String> = if let Some(a) = aux { app.auxes.get(a).map(|x| x.inserts.clone()).unwrap_or_default() } else { (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).map(|t| t.plugins.iter().map(|u| (u.slot, u.name.clone())).collect::<Vec<_>>())).flatten().unwrap_or_default().into_iter().filter(|(s, _)| *s >= 3).map(|(_, n)| n).filter(|n| n != "Channel EQ").collect() };
     let instrument = (i != usize::MAX).then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).and_then(|t| t.plugins.iter().find(|u| u.slot == 2)).map(|u| u.name.clone())).flatten();
     if matches!(kind, Some(TrackKind::Instrument) | Some(TrackKind::Drummer)) {
         slot(&p, y, "MIDI FX", None);
@@ -113,6 +191,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
         Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
         Some(TrackKind::Audio) => slot(&p, y, "Input 1", None),
+        None if aux.is_some() => {
+            let bus = app.auxes.get(aux.unwrap()).map_or(0, |a| a.bus);
+            slot(&p, y, &format!("Bus {}", bus + 1), None);
+        }
         None => {
             // (the output's stereo link)
             let s = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
@@ -129,9 +211,71 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     }
     slot(&p, y, "Audio FX", None);
     y += 24.0;
-    if kind.is_some() {
+    if kind.is_some() && i < AUX {
+        // the sends: each "Bus N" with its level knob; the empty slot below adds one
+        let list = app.sends.get(&i).cloned().unwrap_or_default();
+        for (k, snd) in list.iter().enumerate() {
+            let sr = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 34.0, 20.0));
+            p.rect_filled(sr, 4.0, Color32::from_rgb(0x2a, 0x5a, 0x86));
+            p.text(sr.center(), Align2::CENTER_CENTER, format!("Bus {}", snd.bus + 1), look::regular(11.0), Color32::WHITE);
+            let kc = pos2(r.max.x - 16.0, y + 10.0);
+            let kr = ui.interact(Rect::from_center_size(kc, vec2(18.0, 18.0)), ui.scope_id().with(("send", i, k)), Sense::click_and_drag()).on_hover_text(format!("Send to Bus {}: {:.1} dB{}", snd.bus + 1, snd.level_db, if snd.pre { " (pre fader)" } else { "" }));
+            p.circle_filled(kc, 8.0, Color32::from_gray(0x55));
+            let f = db_to_frac(snd.level_db);
+            let ang = std::f32::consts::PI * (0.75 + 1.5 * f);
+            p.line_segment([kc, kc + vec2(ang.cos(), ang.sin()) * 6.5], Stroke::new(1.6, Color32::WHITE));
+            let mut changed = None;
+            if kr.dragged() {
+                let nf = (f - kr.drag_delta().y / 120.0).clamp(0.0, 1.0);
+                changed = Some(frac_to_db(nf).min(6.0));
+            }
+            if kr.double_clicked() {
+                changed = Some(0.0);
+            }
+            if let Some(db) = changed {
+                if let Some(x) = app.sends.get_mut(&i).and_then(|v| v.get_mut(k)) {
+                    x.level_db = db;
+                }
+                app.dirty = true;
+                app.load_engine();
+            }
+            let sresp = ui.interact(sr, ui.scope_id().with(("sendslot", i, k)), Sense::click());
+            egui::Popup::menu(&sresp).show(|ui| {
+                if ui.add(egui::Button::selectable(snd.pre, "Pre Fader")).clicked() {
+                    if let Some(x) = app.sends.get_mut(&i).and_then(|v| v.get_mut(k)) {
+                        x.pre = !x.pre;
+                    }
+                    app.load_engine();
+                    ui.close();
+                }
+                if ui.button("No Send").clicked() {
+                    if let Some(v) = app.sends.get_mut(&i) {
+                        v.remove(k);
+                    }
+                    app.load_engine();
+                    ui.close();
+                }
+            });
+            y += 22.0;
+        }
+        let er = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
         slot(&p, y, "Sends", None);
+        let eresp = ui.interact(er, ui.scope_id().with(("sendadd", i)), Sense::click());
+        egui::Popup::menu(&eresp).show(|ui| {
+            ui.set_min_width(140.0);
+            ui.label(egui::RichText::new("Bus").color(look::text_dim()));
+            for b in 0..16 {
+                let used = app.auxes.iter().find(|a| a.bus == b).map(|a| a.name.clone());
+                let label = match used { Some(n) => format!("Bus {} → {n}", b + 1), None => format!("Bus {}", b + 1) };
+                if ui.button(label).clicked() {
+                    app.add_send(i, b);
+                    ui.close();
+                }
+            }
+        });
         y += 24.0;
+        slot(&p, y, "Stereo Out", None);
+    } else if aux.is_some() {
         slot(&p, y, "Stereo Out", None);
     } else {
         slot(&p, y, "Mastering", None);
@@ -208,7 +352,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     let by = r.max.y - bottom_room + 8.0;
     let mr = Rect::from_min_size(pos2(r.center().x - 30.0, by), vec2(26.0, 20.0));
     let sr = Rect::from_min_size(pos2(r.center().x + 4.0, by), vec2(26.0, 20.0));
-    if kind.is_some() {
+    if kind.is_some() || aux.is_some() {
         for (rr, label, on, col, which) in [(mr, "M", mute, Color32::from_rgb(0x4f, 0xa8, 0xe8), 0), (sr, "S", solo, Color32::from_rgb(0xe8, 0xc8, 0x3c), 1)] {
             p.rect_filled(rr, 4.0, if on { col } else { look::group_bg() });
             p.text(rr.center(), Align2::CENTER_CENTER, label, look::bold(11.0), if on { Color32::BLACK } else { look::text() });

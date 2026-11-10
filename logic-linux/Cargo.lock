@@ -1790,6 +1790,7 @@ dependencies = [
  "lg-core",
  "lg-dsp",
  "lg-fx",
+ "lg-notation",
  "lg-players",
  "lg-synth",
  "libc",
@@ -1816,6 +1817,10 @@ version = "0.4.2"
 dependencies = [
  "lg-dsp",
 ]
+
+[[package]]
+name = "lg-notation"
+version = "0.4.2"
 
 [[package]]
 name = "lg-players"

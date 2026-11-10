@@ -24,6 +24,8 @@ mod newtrack;
 mod pluginwin;
 mod players;
 mod rightpane;
+mod score;
+mod stepseq;
 pub mod settings;
 mod smartcontrols;
 mod tracks;

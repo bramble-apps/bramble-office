@@ -102,6 +102,25 @@ impl eframe::App for Snap {
                 self.app.settings_sub = sub.to_string();
                 self.app.show_settings = true;
             }
+            // LG_EDITOR=score|stepseq: that editor for the selected region; LG_SEND=1: track 1
+            // sends to Bus 1 (an aux with a reverb), to check the Mixer
+            match std::env::var("LG_EDITOR").as_deref() {
+                Ok("score") => {
+                    crate::score::set_editor_tab(&ctx, crate::score::EditorTab::Score);
+                    self.app.bottom = app::Bottom::PianoRoll;
+                }
+                Ok("stepseq") => {
+                    if let Some((t, r)) = self.app.selected_region {
+                        crate::stepseq::convert_to_pattern(&mut self.app, &ctx, t, r);
+                    }
+                    self.app.bottom = app::Bottom::PianoRoll;
+                }
+                _ => {}
+            }
+            if std::env::var_os("LG_SEND").is_some() {
+                self.app.add_send(1, 0);
+                self.app.add_send(2, 0);
+            }
             if std::env::var_os("LG_MIXER").is_some() {
                 self.app.bottom = app::Bottom::Mixer;
             }

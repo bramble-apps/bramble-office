@@ -45,6 +45,35 @@ impl Default for TrackProps {
     }
 }
 
+/// An aux channel strip (made when a send to a new bus is set up, as Logic does): its input bus,
+/// effects, fader, pan, mute and solo.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuxStrip {
+    pub name: String,
+    pub bus: usize,
+    pub volume_db: f32,
+    pub pan: f32,
+    pub mute: bool,
+    pub solo: bool,
+    pub inserts: Vec<String>,
+}
+
+/// One send on a channel strip: the bus, its level (dB), before the fader or after it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SendSlot {
+    pub bus: usize,
+    pub level_db: f32,
+    pub pre: bool,
+}
+
+/// The Mixer's view (Logic: Single, Tracks, All).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MixerView {
+    Single,
+    Tracks,
+    All,
+}
+
 /// The panes on the window's right (Logic: List Editors, Notes, Loop Browser, Browsers).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RightPane {
@@ -130,6 +159,14 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
+    /// The window's egui context (for state kept in egui's memory, e.g. the Step Sequencer's).
+    pub ctx: egui::Context,
+    /// The Mixer's aux strips, each track's sends, the Mixer's view and Sends on Faders (which
+    /// send the faders show: None = the channels' own).
+    pub auxes: Vec<AuxStrip>,
+    pub sends: std::collections::HashMap<usize, Vec<SendSlot>>,
+    pub mixer_view: MixerView,
+    pub sends_on_faders: Option<usize>,
     /// Bass / Keyboard Player regions' settings; the chord track (one chord per bar, "C Am F G").
     pub players: std::collections::HashMap<(usize, usize), crate::players::Player>,
     pub chord_text: String,
@@ -289,6 +326,11 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
+            ctx: cc.egui_ctx.clone(),
+            auxes: Vec::new(),
+            sends: Default::default(),
+            mixer_view: MixerView::Tracks,
+            sends_on_faders: None,
             players: Default::default(),
             chord_text: String::new(),
             new_track_open: false,
@@ -482,7 +524,7 @@ impl App {
                 }
             }
             notes.sort_by_key(|n| n.0);
-            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect() });
+            tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default() });
         }
         let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
         {
@@ -492,6 +534,8 @@ impl App {
             e.tempo_map = p.tempo_map.clone();
             e.beats_per_bar = p.signature.0.max(1) as u32;
             e.tracks = tracks;
+            let any_solo = self.auxes.iter().any(|a| a.solo);
+            e.auxes = self.auxes.iter().map(|a| audio::AuxBus { bus: a.bus, volume: db_to_gain(a.volume_db), pan: a.pan, mute: a.mute || (any_solo && !a.solo), inserts: a.inserts.iter().map(|n| (n.clone(), Vec::new())).collect() }).collect();
             e.cycle = Some(self.cycle);
             e.program_changes();
         }
@@ -643,6 +687,21 @@ impl App {
         let r = tr.regions.len() - 1;
         self.selected_region = Some((t, r));
         self.after_edit();
+    }
+
+    /// Sends a track to `bus`: Logic makes an aux strip for a bus that has none, with a reverb on
+    /// it, and the send starts at −∞ … here at −10 dB so it's heard.
+    pub fn add_send(&mut self, track: usize, bus: usize) {
+        if !self.auxes.iter().any(|a| a.bus == bus) {
+            let n = self.auxes.len() + 1;
+            self.auxes.push(AuxStrip { name: format!("Aux {n}"), bus, volume_db: 0.0, pan: 0.0, mute: false, solo: false, inserts: vec!["ChromaVerb".into()] });
+        }
+        let list = self.sends.entry(track).or_default();
+        if !list.iter().any(|s| s.bus == bus) {
+            list.push(SendSlot { bus, level_db: -10.0, pre: false });
+        }
+        self.dirty = true;
+        self.load_engine();
     }
 
     pub fn recording(&self) -> bool {
@@ -873,6 +932,7 @@ impl App {
                     tr.regions.remove(r);
                 }
             }
+            crate::stepseq::region_removed(&self.ctx, t, r);
             self.selected_region = None;
         }
         self.after_edit();
@@ -1573,6 +1633,7 @@ impl App {
             self.editor_rect = ed;
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
+                Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) && self.drum_tab != 2 => {
                     let (t, r) = self.selected_region.unwrap();
                     crate::players::show(self, ui, ed, t, r);
@@ -1581,7 +1642,11 @@ impl App {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
                 }
-                Bottom::PianoRoll => crate::pianoroll::show(self, ui, ed),
+                Bottom::PianoRoll => match crate::score::editor_tab(self, ui.ctx()) {
+                    crate::score::EditorTab::Score => crate::score::show(self, ui, ed),
+                    crate::score::EditorTab::StepSequencer => crate::stepseq::show(self, ui, ed),
+                    crate::score::EditorTab::PianoRoll => crate::pianoroll::show(self, ui, ed),
+                },
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),
                 Bottom::SmartControls => crate::smartcontrols::show(self, ui, ed),
                 Bottom::None => {}

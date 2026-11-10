@@ -969,6 +969,27 @@ impl App {
                 self.scroll_x = (at as f32 / bar as f32 - 1.0).max(0.0);
             }
             "Show Tool Menu" => self.tool_menu_open = true,
+            "Convert to Pattern Region" | "Open Step Sequencer…" | "Show/Hide Step Sequencer" => {
+                if let Some((t, r)) = self.selected_region {
+                    crate::stepseq::convert_to_pattern(self, ctx, t, r);
+                    self.bottom = Bottom::PianoRoll;
+                }
+            }
+            "Create Pattern Region" => {
+                if let Some(t) = self.selected_track {
+                    let at = pos;
+                    crate::stepseq::new_pattern_region(self, ctx, t, at);
+                    self.bottom = Bottom::PianoRoll;
+                }
+            }
+            "Open Score Editor…" | "Show/Hide Score Editor" => {
+                crate::score::set_editor_tab(ctx, crate::score::EditorTab::Score);
+                self.bottom = Bottom::PianoRoll;
+            }
+            "Open Piano Roll…" => {
+                crate::score::set_editor_tab(ctx, crate::score::EditorTab::PianoRoll);
+                self.bottom = Bottom::PianoRoll;
+            }
             "New Tracks…" | "New Tracks" | "New Track…" => self.new_track_open = true,
             "New Bass Player Track" => crate::players::new_track(self, false),
             "New Keyboard Player Track" => crate::players::new_track(self, true),
