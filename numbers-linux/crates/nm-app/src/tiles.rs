@@ -622,23 +622,39 @@ impl Tiles {
         if dbg {
             eprintln!("render tile {tx},{ty} span {span} scale {scale}");
         }
-        let mut pm = sk::Pixmap::new(TILE, TILE).expect("tile pixmap");
+        let pm = self.tile_part(doc, drawables, (tx, ty), span, scale, (0, 0, TILE, TILE));
+        if dbg {
+            eprintln!("rendered tile {tx},{ty}");
+        }
+        pm
+    }
+
+    /// Part (x, y, w, h: pixels within the tile) of tile (`tx`, `ty`), drawn exactly as the
+    /// whole tile draws it (the same crop of each table, so the same pixels), white where
+    /// nothing is.
+    fn tile_part(&mut self, doc: &Document, drawables: &[Drawable], tile: (i32, i32), span: f32, scale: f32, part: (u32, u32, u32, u32)) -> sk::Pixmap {
+        let (px0, py0, pw, ph) = part;
+        let mut pm = sk::Pixmap::new(pw.max(1), ph.max(1)).expect("tile pixmap");
         pm.fill(sk::Color::WHITE);
-        let (ox, oy) = (tx as f32 * span, ty as f32 * span);
-        let base = sk::Transform::from_row(scale, 0.0, 0.0, scale, -ox * scale, -oy * scale);
+        let (ox, oy) = (tile.0 as f32 * span, tile.1 as f32 * span);
+        let base = sk::Transform::from_row(scale, 0.0, 0.0, scale, -ox * scale - px0 as f32, -oy * scale - py0 as f32);
+        // (the part on the sheet: cells of a table wholly outside it needn't show their text)
+        let keep = egui::Rect::from_min_size(egui::pos2(ox + px0 as f32 / scale, oy + py0 as f32 / scale), egui::vec2(pw as f32 / scale, ph as f32 / scale));
+        let whole = (px0, py0, pw, ph) == (0, 0, TILE, TILE);
         for d in drawables {
             let g = frame(d);
             // generous margin for strokes, shadows and text that spills out of its box
             let m = 40.0;
-            if g.x - m > ox + span || g.y - m > oy + span || g.x + g.w + m < ox || g.y + g.h + m < oy {
-                if g.angle == 0.0 {
-                    continue;
-                }
+            if (g.x - m > ox + span || g.y - m > oy + span || g.x + g.w + m < ox || g.y + g.h + m < oy) && g.angle == 0.0 {
+                continue;
             }
             match &d.kind {
                 // big tables: only the rows and columns this tile shows
                 DrawableKind::Table(t) if g.angle == 0.0 && t.rows * t.cols > 64 => {
-                    if let Some((c, off)) = crop_table(d, t, ox, oy, span) {
+                    if let Some((mut c, off)) = crop_table(d, t, ox, oy, span, span) {
+                        if !whole {
+                            blank_outside(&mut c, keep);
+                        }
                         self.draw_table(doc, &c, off, &mut pm, base);
                     }
                 }
@@ -646,17 +662,100 @@ impl Tiles {
                 _ => self.renderer.draw_drawable(doc, d, &mut pm, base),
             }
         }
-        if dbg {
-            eprintln!("rendered tile {tx},{ty}");
-        }
         pm
+    }
+
+    /// Part of the sheet, `region` (sheet points), drawn as the tiles draw it at the current
+    /// zoom (tile by tile, each part as its tile draws it: the same pixels), and the sheet
+    /// rect it covers, on the tiles' pixel grid so it lies over them without a seam. For
+    /// changes shown before they are made (the rows an add-rows drag passes) without drawing
+    /// whole tiles again.
+    pub fn region_image(&mut self, doc: &Document, drawables: &[Drawable], region: egui::Rect) -> Option<(egui::ColorImage, egui::Rect)> {
+        let scale = self.scale;
+        if scale <= 0.0 || region.width() <= 0.0 || region.height() <= 0.0 {
+            return None;
+        }
+        // device pixels from the sheet's origin, as the tiles count them
+        let (gx0, gy0) = ((region.min.x * scale).floor() as i64, (region.min.y * scale).floor() as i64);
+        let (gx1, gy1) = ((region.max.x * scale).ceil() as i64, (region.max.y * scale).ceil() as i64);
+        let (w, h) = ((gx1 - gx0) as usize, (gy1 - gy0) as usize);
+        // (a sane size: the part in view)
+        if w == 0 || h == 0 || w > 8192 || h > 8192 {
+            return None;
+        }
+        let span = TILE as f32 / scale;
+        let t = i64::from(TILE);
+        let mut out = vec![0u8; w * h * 4];
+        for ty in gy0.div_euclid(t)..=(gy1 - 1).div_euclid(t) {
+            for tx in gx0.div_euclid(t)..=(gx1 - 1).div_euclid(t) {
+                // this tile's share of the region, in the tile's own pixels
+                let (x0, x1) = (gx0.max(tx * t) - tx * t, gx1.min(tx * t + t) - tx * t);
+                let (y0, y1) = (gy0.max(ty * t) - ty * t, gy1.min(ty * t + t) - ty * t);
+                if x1 <= x0 || y1 <= y0 {
+                    continue;
+                }
+                let pm = self.tile_part(doc, drawables, (tx as i32, ty as i32), span, scale, (x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32));
+                let (ox, oy) = ((tx * t + x0 - gx0) as usize, (ty * t + y0 - gy0) as usize);
+                let pw = (x1 - x0) as usize;
+                for row in 0..(y1 - y0) as usize {
+                    let src = &pm.data()[row * pw * 4..(row + 1) * pw * 4];
+                    let at = ((oy + row) * w + ox) * 4;
+                    out[at..at + pw * 4].copy_from_slice(src);
+                }
+            }
+        }
+        let img = egui::ColorImage::from_rgba_premultiplied([w, h], &out);
+        Some((img, egui::Rect::from_min_size(egui::pos2(gx0 as f32 / scale, gy0 as f32 / scale), egui::vec2(w as f32 / scale, h as f32 / scale))))
     }
 }
 
-/// The part of a table drawable inside the sheet square (ox, oy, span): its rows and columns
+/// A table crop's cells wholly outside sheet rect `keep` (beyond a small margin): their text
+/// left out. They lie outside the picture being drawn; their fills and lines stay, and the
+/// rows keep their heights, so nothing that shows moves. (Cells of a merge reaching into
+/// `keep` keep their text.)
+fn blank_outside(d: &mut Drawable, keep: egui::Rect) {
+    let (x, y) = (d.geom.x, d.geom.y);
+    let DrawableKind::Table(t) = &mut d.kind else { return };
+    let edges = |sizes: &[f32], n: u32, from: f32| -> Vec<f32> {
+        let mut v = vec![from];
+        for i in 0..n as usize {
+            v.push(v[i] + sizes.get(i).copied().unwrap_or(0.0));
+        }
+        v
+    };
+    let ys = edges(&t.row_heights, t.rows, y);
+    let xs = edges(&t.col_widths, t.cols, x);
+    // (a column's worth either side: text running over into a neighbour still shows)
+    let wide = t.col_widths.iter().copied().fold(0.0f32, f32::max);
+    let out_r = |r: u32| ys[r as usize + 1] < keep.min.y - 2.0 || ys[r as usize] > keep.max.y + 2.0;
+    let out_c = |c: u32| xs[c as usize + 1] < keep.min.x - wide || xs[c as usize] > keep.max.x + wide;
+    for r in 0..t.rows {
+        let row_out = out_r(r);
+        for c in 0..t.cols {
+            if !row_out && !out_c(c) {
+                continue;
+            }
+            if let Some(m) = t.merge_at(r, c)
+                && (m.row..m.row + m.rows).any(|rr| !out_r(rr))
+                && (m.col..m.col + m.cols).any(|cc| !out_c(cc))
+            {
+                continue;
+            }
+            let i = (r * t.cols + c) as usize;
+            if let Some(s) = t.cells.get_mut(i) {
+                s.clear();
+            }
+            if let Some(rt) = t.rich.get_mut(i) {
+                *rt = None;
+            }
+        }
+    }
+}
+
+/// The part of a table drawable inside the sheet rect (ox, oy, w, h): its rows and columns
 /// there plus a margin (text spilling over, strokes at the edges), widened to cover every
 /// merged range it cuts through.
-fn crop_table(d: &Drawable, t: &TableData, ox: f32, oy: f32, span: f32) -> Option<(Drawable, (u32, u32))> {
+fn crop_table(d: &Drawable, t: &TableData, ox: f32, oy: f32, w: f32, h: f32) -> Option<(Drawable, (u32, u32))> {
     let g = t.frame(&d.geom);
     let edges = |sizes: &[f32], n: u32| {
         let mut v = vec![0.0f32];
@@ -668,8 +767,8 @@ fn crop_table(d: &Drawable, t: &TableData, ox: f32, oy: f32, span: f32) -> Optio
     let xs = edges(&t.col_widths, t.cols);
     let ys = edges(&t.row_heights, t.rows);
     let first = |es: &[f32], v: f32| es.partition_point(|&e| e <= v).saturating_sub(1) as u32;
-    let (x0, x1) = (ox - g.x, ox + span - g.x);
-    let (y0, y1) = (oy - g.y, oy + span - g.y);
+    let (x0, x1) = (ox - g.x, ox + w - g.x);
+    let (y0, y1) = (oy - g.y, oy + h - g.y);
     if x1 < 0.0 || y1 < 0.0 || x0 > *xs.last()? || y0 > *ys.last()? {
         return None;
     }
@@ -733,8 +832,20 @@ fn crop_table(d: &Drawable, t: &TableData, ox: f32, oy: f32, span: f32) -> Optio
             c.v_strokes.push(t.v_strokes.get((row * (t.cols + 1) + b) as usize).cloned().flatten());
         }
     }
-    let mut out = d.clone();
-    out.geom = Geometry { x: g.x + xs[c0 as usize], y: g.y + ys[r0 as usize], w: xs[c1 as usize + 1] - xs[c0 as usize], h: ys[r1 as usize + 1] - ys[r0 as usize], ..g };
-    out.kind = DrawableKind::Table(c);
+    // (the drawable without its whole table: cloning that cost each tile of a big table
+    // more than drawing it)
+    let out = Drawable {
+        id: d.id,
+        geom: Geometry { x: g.x + xs[c0 as usize], y: g.y + ys[r0 as usize], w: xs[c1 as usize + 1] - xs[c0 as usize], h: ys[r1 as usize + 1] - ys[r0 as usize], ..g },
+        opacity: d.opacity,
+        shadow: d.shadow.clone(),
+        reflection: d.reflection,
+        locked: d.locked,
+        hyperlink: d.hyperlink.clone(),
+        alt_text: d.alt_text.clone(),
+        placeholder: d.placeholder.clone(),
+        from_template: d.from_template,
+        kind: DrawableKind::Table(c),
+    };
     Some((out, (r0, c0)))
 }

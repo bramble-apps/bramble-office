@@ -94,6 +94,8 @@ pub struct App {
     formula_cache: Option<((u64, ObjId, u32, u32), Option<String>)>,
     /// NM_PERF: time spent building each frame (ms).
     perf: Vec<f32>,
+    /// NM_PERF: the frames of an add-rows / columns handle drag (ms).
+    perf_grow: Vec<f32>,
     /// The desktop's window buttons (left / right of the title bar).
     pub buttons: kn_ui::winframe::ButtonLayout,
     pub menu_bar_width: Option<f32>,
@@ -187,9 +189,17 @@ pub struct App {
     pub cat_groups: std::collections::HashMap<ObjId, std::collections::HashMap<usize, crate::organize::GroupRow>>,
     /// The next edit continues the last one when it has the same label (one undo step).
     pub merge_next_edit: bool,
+    /// The next edit is another part of the user action the last edit began (same label):
+    /// it joins that undo step however long ago it was (a paste that first adds rows for
+    /// itself). Set it only right after an edit of the same action.
+    pub continue_edit: bool,
     /// The mouse button is held this frame: edits repeated while dragging (a colour in the
-    /// Colors window, a slider, a stepper) make one undo step, not one per frame.
+    /// Colors window, a slider) make one undo step, not one per frame.
     pointer_held: bool,
+    /// Presses of the mouse button so far, and the press the last edit was made in: edits
+    /// of one press (a drag) join; separate clicks are separate steps.
+    press_seq: u64,
+    edit_press: Option<u64>,
     /// NM_SCRIPT "menu <command>" steps waiting to run.
     script_cmds: Vec<String>,
     /// Keydeck's look (shared) and Values' own settings; Values > Settings… shows them.
@@ -252,6 +262,7 @@ impl App {
             set_password: None,
             comment_dialog: None,
             perf: Vec::new(),
+            perf_grow: Vec::new(),
             buttons: kn_ui::winframe::ButtonLayout::from_desktop(),
             menu_bar_width: None,
             title_press_at: -1.0,
@@ -301,6 +312,9 @@ impl App {
             obj_tab: 0,
             copied_style: None,
             merge_next_edit: false,
+            continue_edit: false,
+            press_seq: 0,
+            edit_press: None,
             pointer_held: false,
             cell_clip: None,
             sorts: Default::default(),
@@ -580,6 +594,30 @@ impl App {
         self.wb.as_ref().map(|w| w.sheets()).unwrap_or_default()
     }
 
+    /// A table as shown, to show a change before it is made (the rows an add-rows drag
+    /// passes); [`App::reload_drawables`] puts back what the document holds. The shown rows
+    /// past the document's are numbered on from its last.
+    pub(crate) fn show_table(&mut self, id: ObjId, t: nm_core::kn_model::TableData) {
+        if let Some(v) = self.views.get_mut(&id) {
+            let next = v.rows.iter().flatten().max().map_or(0, |m| m + 1);
+            let have = v.rows.len() as u32;
+            if t.rows < have {
+                v.rows.truncate(t.rows as usize);
+            } else {
+                v.rows.extend((0..t.rows - have).map(|k| Some(next + k)));
+            }
+        }
+        if let Some(d) = self.drawables.iter_mut().find(|d| d.id == id) {
+            d.kind = DrawableKind::Table(t);
+        }
+    }
+
+    /// The drawables read again from the document (after [`App::show_table`]).
+    pub(crate) fn reload_drawables(&mut self) {
+        self.drawables_for = (u64::MAX, usize::MAX);
+        self.refresh();
+    }
+
     /// The current sheet's drawables, rebuilt when the document or the sheet changed.
     pub(crate) fn refresh(&mut self) {
         if self.drawables_for == (self.version, self.sheet) {
@@ -770,11 +808,17 @@ impl App {
     /// Run an undoable edit on the document.
     pub fn edit<R>(&mut self, label: &str, f: impl FnOnce(&mut Document, &mut History) -> R) -> Option<R> {
         let wb = self.wb.as_mut()?;
-        if self.merge_next_edit || self.pointer_held {
+        // (one press's edits: a drag of a slider or a colour; a click after another click is
+        // its own step)
+        let same_press = self.pointer_held && self.edit_press == Some(self.press_seq);
+        if self.continue_edit || same_press {
+            wb.doc.begin_continue(&mut self.hist, label);
+        } else if self.merge_next_edit {
             wb.doc.begin_merge(&mut self.hist, label);
         } else {
             wb.doc.begin(&mut self.hist, label);
         }
+        self.edit_press = self.pointer_held.then_some(self.press_seq);
         let r = f(&mut wb.doc, &mut self.hist);
         // formulas reading other tables follow (Keydeck's recalculation is per table)
         nm_core::formula::recalc_cross(&mut wb.doc, &mut self.hist);
@@ -2045,6 +2089,14 @@ impl App {
                 let pick = |q: f32| sorted.get(((sorted.len() as f32 - 1.0) * q) as usize).copied().unwrap_or(0.0);
                 eprintln!("perf: {} frames, mean {:.2} ms, p50 {:.2}, p95 {:.2}, max {:.2}", v.len(), v.iter().sum::<f32>() / v.len().max(1) as f32, pick(0.5), pick(0.95), pick(1.0));
                 eprintln!("blank tiles seen: {} (zooming), {} (any time)", crate::tiles::BLANKS.with(|b| b.get()), crate::tiles::MISSING.with(|b| b.get()));
+                if !self.perf_grow.is_empty() {
+                    let mut g = self.perf_grow.clone();
+                    let mean = g.iter().sum::<f32>() / g.len() as f32;
+                    g.sort_by(f32::total_cmp);
+                    let pick = |q: f32| g[((g.len() as f32 - 1.0) * q) as usize];
+                    let over = g.iter().filter(|ms| **ms > 1000.0 / 60.0).count();
+                    eprintln!("grow drag: {} frames, mean {:.2} ms, p50 {:.2}, p95 {:.2}, max {:.2}, {} over 16.7 ms", g.len(), mean, pick(0.5), pick(0.95), pick(1.0), over);
+                }
             }
             self.snap = None;
             let ctx2 = ctx.clone();
@@ -2102,6 +2154,9 @@ impl eframe::App for App {
             kn_ui::typing(&ctx);
         }
         self.pointer_held = ctx.input(|i| i.pointer.any_down() || i.pointer.any_released());
+        if ctx.input(|i| i.pointer.any_pressed()) {
+            self.press_seq += 1;
+        }
         fit_window_to_screen(&ctx);
         // documents opened from Finder, Open With or the Dock come as an Apple event (patched
         // winit queues them), not on the command line (Keydeck's)
@@ -2141,7 +2196,14 @@ impl eframe::App for App {
             kn_ui::winframe::paint_outline(&ctx, inner, self.corner, dark);
         }
         if std::env::var_os("NM_PERF").is_some() {
-            self.perf.push(t0.elapsed().as_secs_f32() * 1000.0);
+            let ms = t0.elapsed().as_secs_f32() * 1000.0;
+            self.perf.push(ms);
+            if self.canvas.grow_done {
+                eprintln!("grow drag let go: {ms:.2} ms (the one edit, as one undo step)");
+            } else if matches!(self.canvas.drag, Some(crate::canvas::Drag::Grow { .. })) {
+                self.perf_grow.push(ms);
+            }
+            self.canvas.grow_done = false;
         }
     }
 }
@@ -2552,6 +2614,19 @@ fn parse_script(s: &str) -> std::collections::VecDeque<Vec<egui::Event>> {
                 out.push_back(vec![button(a, true)]);
                 for i in 1..=8 {
                     out.push_back(vec![Event::PointerMoved(a + (b - a) * (i as f32 / 8.0))]);
+                }
+                out.push_back(vec![button(b, false)]);
+                out.push_back(vec![]);
+            }
+            // a slow drag of n frames, one pointer move a frame (frame-time checks):
+            // "sdrag x1 y1 x2 y2 n"
+            ("sdrag", [x1, y1, x2, y2, n]) => {
+                let (a, b) = (Pos2::new(*x1, *y1), Pos2::new(*x2, *y2));
+                let n = (*n as usize).max(1);
+                out.push_back(vec![Event::PointerMoved(a)]);
+                out.push_back(vec![button(a, true)]);
+                for i in 1..=n {
+                    out.push_back(vec![Event::PointerMoved(a + (b - a) * (i as f32 / n as f32))]);
                 }
                 out.push_back(vec![button(b, false)]);
                 out.push_back(vec![]);

@@ -22,8 +22,13 @@ pub struct CellCopy {
     /// A cell a merge covers (not its first): Numbers pastes the merge as its first cell
     /// only and leaves the destination of the covered ones untouched (Mac N18 P11).
     pub covered: bool,
-    /// The cell's borders as they show (top, bottom, left, right): a paste brings them along.
+    /// The cell's own borders as they show (top, bottom, left, right): a paste brings them
+    /// along. A covered cell keeps its part of the merge's outline here, so a merge made again
+    /// gets its whole outline back.
     pub edges: [Option<Stroke>; 4],
+    /// A merge's first cell: the merge's outline (top and left from this cell, bottom and
+    /// right from its last cells), for when it pastes as one ordinary cell.
+    pub outline: Option<[Option<Stroke>; 4]>,
     /// Header row, footer, header column or body ([`region`]).
     pub region: u8,
 }
@@ -130,17 +135,18 @@ pub fn cell_copy(app: &mut App, t: nm_core::kn_format::ObjId, r: u32, c: u32) ->
     let formula = mr.and_then(|mr| app.formula_of(t, mr, c));
     let format = mr.and_then(|mr| app.doc().map(|d| d.cell_format(t, mr, c))).unwrap_or(CellFormat::Automatic);
     let covered = app.table(t).and_then(|(_, d)| d.merge_at(r, c)).is_some_and(|m| (m.row, m.col) != (r, c));
-    // a merge's borders are its outline: the right / bottom ones from its last cells
-    let edges = app.table(t).map(|(_, d)| match d.merge_at(r, c) {
+    let edges = app.table(t).map(|(_, d)| cell_edges(d, r, c)).unwrap_or_default();
+    // a merge's outline: the right / bottom borders from its last cells
+    let outline = app.table(t).and_then(|(_, d)| match d.merge_at(r, c) {
         Some(m) if !covered => {
             let (last_r, last_c) = (m.row + m.rows - 1, m.col + m.cols - 1);
             let (a, b) = (cell_edges(d, r, c), cell_edges(d, last_r, last_c));
-            [a[0].clone(), b[1].clone(), a[2].clone(), b[3].clone()]
+            Some([a[0].clone(), b[1].clone(), a[2].clone(), b[3].clone()])
         }
-        _ => cell_edges(d, r, c),
-    }).unwrap_or_default();
+        _ => None,
+    });
     let region = app.table(t).map(|(_, d)| region(d, r, c)).unwrap_or(3);
-    Some(CellCopy { formula, shown, format, style, covered, edges, region })
+    Some(CellCopy { formula, shown, format, style, covered, edges, outline, region })
 }
 
 /// Table > Merge Cells as Numbers merges: when only one of the cells holds something, the merged
@@ -349,6 +355,13 @@ pub fn paste(app: &mut App, mode: PasteMode) -> bool {
             if cc.covered && !remerge {
                 continue;
             }
+            // a merge pasted as one ordinary cell: the merge's outline is that cell's border; a
+            // merge made again takes each of its cells' own edges (covered ones too), so every
+            // side of it is drawn whole
+            let cc = match &cc.outline {
+                Some(o) if !remerge => CellCopy { edges: o.clone(), ..cc },
+                _ => cc,
+            };
             let (dest, dest_edges, dest_region) = app.table(t).map(|(_, d)| (d.cell_styles.get((r * d.cols + c) as usize).cloned(), cell_edges(d, r, c), region(d, r, c))).unwrap_or((None, Default::default(), 3));
             let src_look = clip.looks[cc.region as usize].clone();
             let dest_look = dest_looks[dest_region as usize].clone();
@@ -386,8 +399,8 @@ pub fn paste(app: &mut App, mode: PasteMode) -> bool {
         }
     };
     // (the rows / columns made for it and the paste are one step to undo)
-    let merge_before = app.merge_next_edit;
-    app.merge_next_edit |= more_r > 0 || more_c > 0;
+    let merge_before = app.continue_edit;
+    app.continue_edit |= more_r > 0 || more_c > 0;
     let res = app.edit(label, |d, hist| -> Result<(), nm_core::kn_format::Error> {
         for &(r, c) in &unmerge {
             d.unmerge_cells(hist, t, r, c);
@@ -404,7 +417,7 @@ pub fn paste(app: &mut App, mode: PasteMode) -> bool {
         }
         failed.map_or(Ok(()), Err)
     });
-    app.merge_next_edit = merge_before;
+    app.continue_edit = merge_before;
     match res {
         Some(Err(e)) => app.notify(format!("Couldn't paste every cell: {e}")),
         _ => {
@@ -438,12 +451,15 @@ struct Job {
 /// format, and (plain Paste) the copied cell's whole look in place of the destination's: fill,
 /// text style, alignment, wrap, inset and borders, for empty cells too.
 fn write_cell(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model::edit::History, t: nm_core::kn_format::ObjId, job: &Job, mode: PasteMode, origin: (u32, u32), portable: &dyn Fn(&CellFormat) -> CellFormat) -> Result<(), nm_core::kn_format::Error> {
-    use nm_core::kn_model::format::{Dash, StrokeSpec};
-    use nm_core::kn_model::tablefmt::BorderEdges;
     let (r, c, cc) = (job.r, job.c, &job.cc);
-    // a cell a re-made merge covers: emptied (the merge takes its first cell's content)
+    // a cell a re-made merge covers: emptied (the merge takes its first cell's content), its
+    // part of the merge's outline drawn
     if cc.covered {
-        return d.set_cell(hist, t, r, c, &CellInput::Empty);
+        d.set_cell(hist, t, r, c, &CellInput::Empty)?;
+        if mode == PasteMode::All {
+            write_edges(d, hist, t, job);
+        }
+        return Ok(());
     }
     // values and formulas (Paste Formula Results: what the formulas show)
     match (&cc.formula, mode) {
@@ -533,8 +549,17 @@ fn write_cell(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model:
             }
         }
     }
-    // the borders: the copied cell's own (lines like its table's usual grid are the
-    // destination's grid), where the destination shows something else
+    write_edges(d, hist, t, job);
+    Ok(())
+}
+
+/// A pasted cell's borders: the copied cell's own (lines like its table's usual grid are the
+/// destination's grid), where the destination shows something else.
+fn write_edges(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model::edit::History, t: nm_core::kn_format::ObjId, job: &Job) {
+    use nm_core::kn_model::format::{Dash, StrokeSpec};
+    use nm_core::kn_model::tablefmt::BorderEdges;
+    let (r, c, cc) = (job.r, job.c, &job.cc);
+    let b = (r, c, r, c);
     let spec = |s: &Stroke| StrokeSpec { color: s.color, width: s.width, dash: if s.dash.is_empty() { Dash::Solid } else if s.dash[0] < 0.5 { Dash::Dotted } else { Dash::Dashed } };
     let same = |a: &Option<Stroke>, h: &Option<Stroke>| match (a, h) {
         (Some(a), Some(h)) => a.color == h.color && (a.width - h.width).abs() < 0.01 && a.dash.is_empty() == h.dash.is_empty(),
@@ -550,7 +575,6 @@ fn write_cell(d: &mut nm_core::kn_model::Document, hist: &mut nm_core::kn_model:
             let _ = d.set_cells_border(hist, t, b, edge, want.as_ref().map(spec).as_ref());
         }
     }
-    Ok(())
 }
 
 fn table_model(d: &nm_core::kn_model::Document, t: nm_core::kn_format::ObjId) -> Option<nm_core::kn_format::ObjId> {
@@ -865,6 +889,359 @@ mod tests {
         assert!(a.message.is_none(), "{:?}", a.message);
     }
 
+    fn blue() -> Color {
+        Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 }
+    }
+
+    /// Two borders look the same (colour, width, solid or not).
+    fn same_edge(a: &Option<Stroke>, b: &Option<Stroke>) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => a.color == b.color && (a.width - b.width).abs() < 0.01 && a.dash.is_empty() == b.dash.is_empty(),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    /// B2:D4 of table `t`: B2:D3 a 2×3 merge with a red 2 pt outline and a red fill, B4:D4
+    /// plain cells with blue 1 pt borders all round (inner strokes between them too).
+    fn bordered_block(a: &mut App, t: ObjId) {
+        let thin = StrokeSpec { color: blue(), width: 1.0, dash: Dash::Solid };
+        let thick = StrokeSpec { color: red(), width: 2.0, dash: Dash::Solid };
+        put(a, t, 1, 1, "m");
+        put(a, t, 3, 2, "x");
+        fill(a, t, (1, 1, 1, 1));
+        a.edit("t", |d, h| d.set_cells_border(h, t, (3, 1, 3, 3), BorderEdges::All, Some(&thin))).unwrap().unwrap();
+        a.edit("t", |d, h| d.set_cells_border(h, t, (1, 1, 2, 3), BorderEdges::Outside, Some(&thick))).unwrap().unwrap();
+        a.edit("t", |d, h| d.merge_cells(h, t, CellRange { row: 1, col: 1, rows: 2, cols: 3 })).unwrap().unwrap();
+        a.refresh();
+    }
+
+    /// Every border of block `n` (rows, cols) at `to` in table `u` as in the block at `from`
+    /// in table `t`: outer edges and inner ones, merged cells' edges included.
+    fn assert_edges_match(a: &App, t: ObjId, from: (u32, u32), u: ObjId, to: (u32, u32), n: (u32, u32)) {
+        let (_, src) = a.table(t).unwrap();
+        let (_, dst) = a.table(u).unwrap();
+        for i in 0..n.0 {
+            for j in 0..n.1 {
+                let (s, d) = (cell_edges(src, from.0 + i, from.1 + j), cell_edges(dst, to.0 + i, to.1 + j));
+                for k in 0..4 {
+                    // (lines inside a merge don't show: only the drawn ones count)
+                    let inner = match k {
+                        0 => i > 0 && src.merge_at(from.0 + i, from.1 + j).is_some_and(|m| m.contains(from.0 + i - 1, from.1 + j)),
+                        1 => src.merge_at(from.0 + i, from.1 + j).is_some_and(|m| m.contains(from.0 + i + 1, from.1 + j)),
+                        2 => j > 0 && src.merge_at(from.0 + i, from.1 + j).is_some_and(|m| m.contains(from.0 + i, from.1 + j - 1)),
+                        _ => src.merge_at(from.0 + i, from.1 + j).is_some_and(|m| m.contains(from.0 + i, from.1 + j + 1)),
+                    };
+                    if inner {
+                        continue;
+                    }
+                    assert!(same_edge(&s[k], &d[k]), "cell +{i},+{j} edge {k}: copied {:?}, pasted {:?}", s[k], d[k]);
+                }
+            }
+        }
+    }
+
+    /// A merged block with an outline, and bordered plain cells under it, pasted onto plain
+    /// cells: the merge comes back with every side of its outline whole (the covered cells'
+    /// parts too, not only its first cell's), and the plain cells' borders inside and out.
+    #[test]
+    fn merged_borders_paste_whole() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((6, 1), (6, 1)));
+        let (_, d) = a.table(t).unwrap();
+        assert!(d.merges.iter().any(|m| (m.row, m.col, m.rows, m.cols) == (6, 1, 2, 3)), "{:?}", d.merges);
+        assert_edges_match(&a, t, (1, 1), t, (6, 1), (3, 3));
+        // the bottom of the merge, under its second and third columns (its covered cells)
+        let (_, d) = a.table(t).unwrap();
+        for c in 1..=3 {
+            assert!(cell_edges(d, 7, c)[1].as_ref().is_some_and(|s| s.color == red() && (s.width - 2.0).abs() < 0.01), "bottom under column {c}");
+            assert!(cell_edges(d, 6, c)[0].as_ref().is_some_and(|s| s.color == red()), "top over column {c}");
+        }
+        for r in 6..=7 {
+            assert!(cell_edges(d, r, 3)[3].as_ref().is_some_and(|s| s.color == red()), "right side, row {r}");
+            assert!(cell_edges(d, r, 1)[2].as_ref().is_some_and(|s| s.color == red()), "left side, row {r}");
+        }
+    }
+
+    /// The same block pasted into another table, and onto cells that are merged differently
+    /// (the destination's merge is undone, the copy's made, every edge whole).
+    #[test]
+    fn merged_borders_paste_cross_table_and_over_merges() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        a.insert_table(0);
+        a.refresh();
+        let u = *tables(&a).iter().find(|x| **x != t).unwrap();
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), u, ((2, 0), (2, 0)));
+        assert!(a.table(u).unwrap().1.merges.iter().any(|m| (m.row, m.col, m.rows, m.cols) == (2, 0, 2, 3)));
+        assert_edges_match(&a, t, (1, 1), u, (2, 0), (3, 3));
+        // onto a destination merged another way (a 2×2 across where the copy's merge ends)
+        a.edit("t", |d, h| d.merge_cells(h, t, CellRange { row: 10, col: 2, rows: 2, cols: 2 })).unwrap().unwrap();
+        a.refresh();
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((9, 1), (9, 1)));
+        let (_, d) = a.table(t).unwrap();
+        assert!(d.merges.iter().any(|m| (m.row, m.col, m.rows, m.cols) == (9, 1, 2, 3)), "{:?}", d.merges);
+        assert!(!d.merges.iter().any(|m| (m.row, m.col) == (10, 2)), "the old merge is undone");
+        assert_edges_match(&a, t, (1, 1), t, (9, 1), (3, 3));
+        // onto another merge of the same size
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((9, 1), (9, 1)));
+        assert_edges_match(&a, t, (1, 1), t, (9, 1), (3, 3));
+    }
+
+    /// A lone merged cell onto one plain cell: one plain cell with the merge's whole outline.
+    #[test]
+    fn lone_merge_outline_on_one_cell() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        copy_paste(&mut a, t, ((1, 1), (1, 1)), t, ((8, 5), (8, 5)));
+        let (_, d) = a.table(t).unwrap();
+        assert!(d.merge_at(8, 5).is_none());
+        let e = cell_edges(d, 8, 5);
+        assert!(e.iter().all(|s| s.as_ref().is_some_and(|s| s.color == red() && (s.width - 2.0).abs() < 0.01)), "{e:?}");
+    }
+
+    /// Everything the table shows: size, rows' and columns' sizes, values, looks, merges and
+    /// borders.
+    fn table_state(a: &App, t: ObjId) -> String {
+        let (_, d) = a.table(t).unwrap();
+        format!("{:?}", (d.rows, d.cols, &d.row_heights, &d.col_widths, &d.cells, &d.merges, &d.h_strokes, &d.v_strokes, &d.cell_styles))
+    }
+
+    /// Where two table states first differ (for the failure message).
+    fn first_difference(a: &[String], b: &[String]) -> String {
+        for (x, y) in a.iter().zip(b) {
+            if let Some(i) = x.bytes().zip(y.bytes()).position(|(p, q)| p != q) {
+                let lo = i.saturating_sub(300);
+                return format!("\n  was: …{}…\n  now: …{}…", &x[lo..(i + 200).min(x.len())], &y[lo..(i + 200).min(y.len())]);
+            }
+        }
+        String::new()
+    }
+
+    /// `act` is one undo step: undo puts every table back exactly as it was, redo makes it
+    /// again exactly.
+    fn one_step(a: &mut App, label: &str, act: impl FnOnce(&mut App)) {
+        a.refresh();
+        let ts = tables(a);
+        let before: Vec<String> = ts.iter().map(|t| table_state(a, *t)).collect();
+        let n = a.hist.undo_len();
+        act(a);
+        a.refresh();
+        let after: Vec<String> = ts.iter().map(|t| table_state(a, *t)).collect();
+        assert_ne!(before, after, "{label}: nothing changed");
+        assert_eq!(a.hist.undo_len(), n + 1, "{label}: one undo step");
+        a.undo();
+        a.refresh();
+        let undone: Vec<String> = ts.iter().map(|t| table_state(a, *t)).collect();
+        assert!(undone == before, "{label}: undo didn't put the tables back{}", first_difference(&before, &undone));
+        a.redo();
+        a.refresh();
+        let redone: Vec<String> = ts.iter().map(|t| table_state(a, *t)).collect();
+        assert!(redone == after, "{label}: redo didn't make it again{}", first_difference(&after, &redone));
+        assert_eq!(a.hist.undo_len(), n + 1);
+    }
+
+    #[test]
+    fn undo_paste_range_to_range() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        fill(&mut a, t, (7, 2, 7, 2));
+        put(&mut a, t, 6, 1, "old");
+        sel(&mut a, t, (1, 1), (3, 3));
+        copy(&mut a).unwrap();
+        sel(&mut a, t, (6, 1), (8, 3));
+        one_step(&mut a, "range to range", |a| {
+            paste(a, PasteMode::All);
+        });
+    }
+
+    #[test]
+    fn undo_paste_range_to_one_cell_growing() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        let (rows, cols) = a.table(t).map(|(_, d)| (d.rows, d.cols)).unwrap();
+        sel(&mut a, t, (1, 1), (3, 3));
+        copy(&mut a).unwrap();
+        // the table grows by rows and columns for it: the same one step
+        sel(&mut a, t, (rows - 1, cols - 1), (rows - 1, cols - 1));
+        one_step(&mut a, "range to one cell", |a| {
+            paste(a, PasteMode::All);
+        });
+        assert_eq!(a.table(t).map(|(_, d)| (d.rows, d.cols)), Some((rows + 2, cols + 2)));
+    }
+
+    #[test]
+    fn undo_paste_merged_to_unmerged() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        sel(&mut a, t, (1, 1), (1, 1));
+        copy(&mut a).unwrap();
+        sel(&mut a, t, (8, 4), (8, 4));
+        one_step(&mut a, "merged to one cell", |a| {
+            paste(a, PasteMode::All);
+        });
+        sel(&mut a, t, (8, 1), (9, 3));
+        one_step(&mut a, "merged to its size", |a| {
+            paste(a, PasteMode::All);
+        });
+    }
+
+    #[test]
+    fn undo_paste_cross_table() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        a.insert_table(0);
+        a.refresh();
+        let u = *tables(&a).iter().find(|x| **x != t).unwrap();
+        sel(&mut a, t, (1, 1), (3, 3));
+        copy(&mut a).unwrap();
+        sel(&mut a, u, (1, 1), (1, 1));
+        one_step(&mut a, "cross table", |a| {
+            paste(a, PasteMode::All);
+        });
+    }
+
+    #[test]
+    fn undo_merge_cells() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        put(&mut a, t, 2, 2, "5");
+        fill(&mut a, t, (2, 2, 2, 2));
+        one_step(&mut a, "merge keeping a lone value", |a| merge_cells(a, t, (1, 1, 2, 2)));
+        put(&mut a, t, 5, 1, "x");
+        put(&mut a, t, 5, 2, "y");
+        one_step(&mut a, "merge joining values", |a| merge_cells(a, t, (5, 1, 5, 2)));
+    }
+
+    /// Two pastes in a row (menu clicks moments apart) are two steps, not one.
+    #[test]
+    fn two_pastes_two_steps() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        put(&mut a, t, 1, 1, "a");
+        sel(&mut a, t, (1, 1), (1, 1));
+        copy(&mut a).unwrap();
+        let n = a.hist.undo_len();
+        sel(&mut a, t, (4, 1), (4, 1));
+        paste(&mut a, PasteMode::All);
+        sel(&mut a, t, (5, 1), (5, 1));
+        paste(&mut a, PasteMode::All);
+        assert_eq!(a.hist.undo_len(), n + 2);
+        a.undo();
+        a.refresh();
+        assert_eq!(cell(&a, t, 4, 1).0, "a");
+        assert_eq!(cell(&a, t, 5, 1).0, "");
+    }
+
+    /// The add-rows / columns handle let go: the rows and columns it showed are one step.
+    #[test]
+    fn undo_grow_drag() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        put(&mut a, t, 1, 1, "a");
+        let (rows, cols) = a.table(t).map(|(_, d)| (d.rows, d.cols)).unwrap();
+        one_step(&mut a, "add rows and columns", |a| crate::canvas::grow_table(a, t, 5, 2));
+        assert_eq!(a.table(t).map(|(_, d)| (d.rows, d.cols)), Some((rows + 5, cols + 2)));
+        one_step(&mut a, "take empty rows away", |a| crate::canvas::grow_table(a, t, -7, 0));
+        assert_eq!(a.table(t).map(|(_, d)| d.rows), Some(rows - 2));
+    }
+
+    /// The table an add-rows / columns drag shows while dragging is the one the drop makes:
+    /// sizes, cells, looks and lines (no jump when the handle is let go).
+    #[test]
+    fn grow_preview_matches_the_drop() {
+        for (dr, dc) in [(3, 0), (0, 2), (4, 3), (-2, 0), (0, -1), (-3, -2)] {
+            let mut a = app();
+            let t = tables(&a)[0];
+            put(&mut a, t, 1, 1, "a");
+            fill(&mut a, t, (1, 1, 1, 1));
+            let base = a.table(t).unwrap().1.clone();
+            let (er, ec) = crate::canvas::grow_limits(&base, dr, dc);
+            let shown = crate::canvas::grown_table(&base, er, ec);
+            crate::canvas::grow_table(&mut a, t, er, ec);
+            a.refresh();
+            let (_, made) = a.table(t).unwrap();
+            assert_eq!((shown.rows, shown.cols), (made.rows, made.cols), "{dr},{dc}");
+            assert_eq!(shown.row_heights, made.row_heights, "{dr},{dc} row heights");
+            assert_eq!(shown.col_widths, made.col_widths, "{dr},{dc} column widths");
+            assert_eq!(shown.cells, made.cells, "{dr},{dc}");
+            for i in 0..made.cell_styles.len() {
+                assert!(shown.cell_styles[i] == made.cell_styles[i], "{dr},{dc}: cell {} {} look", i as u32 / made.cols, i as u32 % made.cols);
+            }
+            for (i, (x, y)) in shown.h_strokes.iter().zip(&made.h_strokes).enumerate() {
+                assert!(same_edge(x, y), "{dr},{dc}: horizontal line {} {}: {x:?} {y:?}", i as u32 / made.cols, i as u32 % made.cols);
+            }
+            for (i, (x, y)) in shown.v_strokes.iter().zip(&made.v_strokes).enumerate() {
+                assert!(same_edge(x, y), "{dr},{dc}: vertical line row {} {}: {x:?} {y:?}", i as u32 / (made.cols + 1), i as u32 % (made.cols + 1));
+            }
+        }
+    }
+
+    /// Typing wrapped text that makes its row grow: one step; undo shrinks the row back.
+    #[test]
+    fn undo_typing_that_grows_a_row() {
+        let mut a = app();
+        let t = tables(&a)[0];
+        a.edit("t", |d, h| d.set_cells_wrap(h, t, (2, 1, 2, 1), true)).unwrap().unwrap();
+        a.refresh();
+        let h0 = a.table(t).unwrap().1.row_heights[2];
+        one_step(&mut a, "typing", |a| {
+            a.canvas.edit = Some(crate::canvas::CellEdit { table: t, row: 2, col: 1, text: "a long line of text that wraps over several lines in its narrow cell".into(), focus: true, typed: true, click: None });
+            a.refresh();
+            commit(a);
+        });
+        assert!(a.table(t).unwrap().1.row_heights[2] > h0 + 1.0, "the row grew");
+        a.undo();
+        a.refresh();
+        assert!((a.table(t).unwrap().1.row_heights[2] - h0).abs() < 0.01, "and shrinks back");
+    }
+
+    /// The merged, bordered block pasted onto plain cells and onto a merge, saved for a
+    /// snapshot: `NM_MERGED_OUT=file.numbers cargo test -p nm-app make_merged_paste -- --ignored`.
+    #[test]
+    #[ignore]
+    fn make_merged_paste() {
+        let Some(out) = std::env::var_os("NM_MERGED_OUT") else { return };
+        let mut a = app();
+        let t = tables(&a)[0];
+        bordered_block(&mut a, t);
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((6, 1), (6, 1)));
+        a.edit("t", |d, h| d.merge_cells(h, t, CellRange { row: 11, col: 2, rows: 2, cols: 2 })).unwrap().unwrap();
+        a.refresh();
+        copy_paste(&mut a, t, ((1, 1), (3, 3)), t, ((10, 1), (10, 1)));
+        a.wb.as_mut().unwrap().doc.save_as(std::path::Path::new(&out)).unwrap();
+    }
+
+    /// A 200 × 20 table full of numbers for frame-time checks: `NM_BIG_OUT=file.numbers
+    /// cargo test -p nm-app make_big_table -- --ignored`.
+    #[test]
+    #[ignore]
+    fn make_big_table() {
+        let Some(out) = std::env::var_os("NM_BIG_OUT") else { return };
+        let mut a = app();
+        let t = tables(&a)[0];
+        let (rows, cols) = a.table(t).map(|(_, d)| (d.rows, d.cols)).unwrap();
+        crate::canvas::grow_table(&mut a, t, 200 - rows as i32, 20 - cols as i32);
+        a.refresh();
+        a.edit("t", |d, h| -> Result<(), nm_core::kn_format::Error> {
+            for r in 1..200 {
+                for c in 1..20 {
+                    d.set_cell(h, t, r, c, &CellInput::parse(&format!("{}", r * 100 + c)))?;
+                }
+            }
+            Ok(())
+        }).unwrap().unwrap();
+        a.wb.as_mut().unwrap().doc.save_as(std::path::Path::new(&out)).unwrap();
+    }
+
     #[test]
     fn formulas_transpose_references() {
         assert_eq!(transpose_formula("=B3+$A$1*C2"), "=C2+$A$1*B3");
@@ -908,9 +1285,9 @@ pub fn insert_copied(app: &mut App, rows: bool) {
     }
     let Some((trows, tcols)) = app.table(t).map(|(_, d)| (d.rows, d.cols)) else { return };
     app.sel = Some(if rows { crate::app::Sel { table: t, anchor: (at, 0), cursor: (at + n - 1, tcols - 1) } } else { crate::app::Sel { table: t, anchor: (0, at), cursor: (trows - 1, at + n - 1) } });
-    app.merge_next_edit = true;
+    app.continue_edit = true;
     paste(app, PasteMode::All);
-    app.merge_next_edit = false;
+    app.continue_edit = false;
 }
 
 /// Table > Add Row / Column: the new line takes the look of the one it was added next to
@@ -1196,9 +1573,9 @@ pub fn paste_picture(app: &mut App, bytes: Vec<u8>, name: &str) {
             // in the middle of the view (Numbers, Mac N15)
             if let (Some(g), Some(c)) = (app.drawables.iter().find(|d| d.id == id).map(crate::tiles::frame), app.canvas.view_center()) {
                 let (dx, dy) = (c.x - (g.x + g.w / 2.0), c.y - (g.y + g.h / 2.0));
-                app.merge_next_edit = true;
+                app.continue_edit = true;
                 app.edit("Paste", |d, h| d.move_by(h, id, dx, dy));
-                app.merge_next_edit = false;
+                app.continue_edit = false;
             }
         }
         Some(Err(e)) => app.notify(format!("Couldn't paste the picture: {e}")),

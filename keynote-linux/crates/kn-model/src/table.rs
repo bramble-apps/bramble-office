@@ -795,7 +795,7 @@ pub(crate) fn predicate_holds(f: &Msg, cell: &CellValue) -> bool {
 
 /// Merged ranges: TST.MergeRegionMapArchive (older files) and the merge owner's formula store
 /// (one absolute colon-tract range per merge, ends inclusive).
-fn merges(k: &KeyFile, model: &Msg) -> Vec<CellRange> {
+pub(crate) fn merges(k: &KeyFile, model: &Msg) -> Vec<CellRange> {
     let mut out = Vec::new();
     let ds = model.msg("base_data_store");
     if let Some(mm) = ds.and_then(|d| d.ref_id("merge_region_map")).and_then(|id| k.obj(id)) {

@@ -717,7 +717,17 @@ impl Document {
         if stroke.is_none() {
             stroke_m.set_f32("width", 0.0);
         }
-        self.structural(h, &[sidecar], |k| {
+        // the layers already there whose runs change: recorded too, so undo puts their runs
+        // back (only the sidecar was, and a border drawn over an earlier one stayed)
+        let mut touch = vec![sidecar];
+        if let Some(sc) = self.file.obj(sidecar) {
+            for &(field, idx, ..) in &segs {
+                touch.extend(sc.ref_ids(field).into_iter().filter(|l| self.file.obj(*l).and_then(|m| m.u32("row_column_index")) == Some(idx)));
+            }
+        }
+        touch.sort_unstable();
+        touch.dedup();
+        self.structural(h, &touch, |k| {
             for (field, idx, origin, len) in segs {
                 let have = k.obj(sidecar).map(|s| s.ref_ids(field)).unwrap_or_default();
                 let layer = match have.iter().copied().find(|l| k.obj(*l).and_then(|m| m.u32("row_column_index")) == Some(idx)) {

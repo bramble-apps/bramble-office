@@ -45,8 +45,10 @@ pub(crate) enum Drag {
     AutoFill { table: ObjId, src: (u32, u32, u32, u32), to: (u32, u32, u32, u32) },
     /// The table's "=" (rows, kind 0), "||" (columns, 1) and corner (both, 2) handles: drag to
     /// add or remove rows (one per 20 pt) and columns (one per 98 pt), Numbers' N16. They come
-    /// and go as the pointer passes each one (Mac N21 13); `start` is the table's size before.
-    Grow { table: ObjId, kind: u8, from: Pos2, start: (u32, u32) },
+    /// and go as the pointer passes each one (Mac N21 13), shown without touching the
+    /// document ([`GrowPreview`]) and made in one step when let go; `grab` is the handle's
+    /// offset from the pointer (the handle follows the pointer exactly).
+    Grow { table: ObjId, kind: u8, from: Pos2, grab: Vec2 },
     /// Dragging the selected cells by a cell inside them moves their content (Numbers, N16):
     /// the block and the cell the drag started on.
     MoveCells { table: ObjId, src: (u32, u32, u32, u32), from: (u32, u32) },
@@ -87,6 +89,10 @@ pub struct Canvas {
     pub editing: Option<crate::textedit::Editing>,
     pub edit: Option<CellEdit>,
     pub(crate) drag: Option<Drag>,
+    /// The add-rows / columns drag's table as it will be (see [`GrowPreview`]).
+    pub(crate) grow: Option<GrowPreview>,
+    /// NM_PERF: an add-rows / columns drag was let go this frame (its frame counts as the drag's).
+    pub(crate) grow_done: bool,
     /// A selected chart, shape, text box or image (tables select cells instead).
     pub obj: Option<ObjId>,
     /// Shift-click: several objects selected, `obj` first (valid while it is `obj`'s; see
@@ -117,7 +123,7 @@ pub struct Canvas {
 
 impl Default for Canvas {
     fn default() -> Self {
-        Canvas { title_edit: None, multi: Vec::new(), zoom_anim: None, merge_entry: None, editing: None, zoom: 1.25, origin: None, tiles: Tiles::default(), edit: None, drag: None, obj: None, pick: None, tab: None, return_col: None, size: Vec2::new(800.0, 600.0), reveal: None }
+        Canvas { title_edit: None, multi: Vec::new(), zoom_anim: None, merge_entry: None, editing: None, zoom: 1.25, origin: None, tiles: Tiles::default(), edit: None, drag: None, grow: None, grow_done: false, obj: None, pick: None, tab: None, return_col: None, size: Vec2::new(800.0, 600.0), reveal: None }
     }
 }
 
@@ -378,10 +384,20 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
     if std::env::var_os("NM_DEBUG").is_some() {
         eprintln!("view origin {:?} zoom {} rect {:?} version {}", view.origin, view.zoom, rect, app.version);
     }
+    // an add-rows / columns drag: the table shown at the size the pointer asks for
+    if let Some(Drag::Grow { kind, from, .. }) = app.canvas.drag {
+        if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+            let d = (p - from) / view.zoom;
+            let dr = if kind != 1 { (d.y / 20.0).round() as i32 } else { 0 };
+            let dc = if kind != 0 { (d.x / 98.0).round() as i32 } else { 0 };
+            grow_preview_update(app, dr, dc);
+        }
+    }
     let pending = match app.wb.as_ref() {
         Some(wb) => app.canvas.tiles.paint(ui, rect, view.origin, view.zoom, &wb.doc, &app.drawables, app.version),
         None => false,
     };
+    grow_preview_paint(app, ui, &view, pending);
     if std::env::var_os("NM_DEBUG").is_some() {
         eprintln!("pending {pending}");
     }
@@ -390,6 +406,11 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
     }
 
     let painter = ui.painter_at(rect);
+    // (the frozen headers' pictures are of the table as shown: an add-rows drag's own shape)
+    // (the header rows' picture changes with the columns, the header columns' with the rows)
+    let shown = app.canvas.grow.as_ref().filter(|g| g.settling.is_none()).map_or((0, 0), |g| g.shown);
+    let shape_version = |n: i32| if n == 0 { app.version } else { app.version ^ (1 << 62) ^ (n as u32 as u64) };
+    let (rows_version, cols_version) = (shape_version(shown.1), shape_version(shown.0));
     // frozen header rows stay at the top while their table scrolls under them
     let mut pinned: Vec<(ObjId, Rect, f32)> = Vec::new();
     for d in &app.drawables {
@@ -403,7 +424,7 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             continue;
         }
         let Some(wb) = app.wb.as_ref() else { continue };
-        if let Some((tex, size)) = app.canvas.tiles.header_strip(ui, &wb.doc, d, view.zoom, app.version) {
+        if let Some((tex, size)) = app.canvas.tiles.header_strip(ui, &wb.doc, d, view.zoom, rows_version) {
             let r = Rect::from_min_size(Pos2::new(top.x - 1.0 * view.zoom, rect.min.y - 1.0 * view.zoom), size * view.zoom);
             painter.image(tex, r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             painter.line_segment([Pos2::new(top.x, rect.min.y + hh * view.zoom + 1.0), Pos2::new(top.x + g.w * view.zoom, rect.min.y + hh * view.zoom + 1.0)], Stroke::new(1.0, Color32::from_black_alpha(40)));
@@ -447,7 +468,7 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
         }
         let y0: f32 = t.row_heights.iter().take(r0 as usize).sum();
         let Some(wb) = app.wb.as_ref() else { continue };
-        if let Some((tex, size)) = app.canvas.tiles.header_col_strip(ui, &wb.doc, d, view.zoom, app.version, r0, r1) {
+        if let Some((tex, size)) = app.canvas.tiles.header_col_strip(ui, &wb.doc, d, view.zoom, cols_version, r0, r1) {
             let p = Pos2::new(rect.min.x - 1.0 * view.zoom, view.to_screen(Pos2::new(0.0, g.y + y0)).y - 1.0 * view.zoom);
             painter.image(tex, Rect::from_min_size(p, size * view.zoom), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             let x = rect.min.x + hw * view.zoom + 1.0;
@@ -582,7 +603,18 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             // "=" under the row bar, "||" right of the column bar, and the corner circle
             {
                 let tb = view.rect(grid.block(0, 0, rows.saturating_sub(1), cols.saturating_sub(1)));
-                let hs = [Pos2::new(rowbar.center().x, tb.max.y + 14.0), Pos2::new(tb.max.x + 14.0, colbar.center().y), Pos2::new(tb.max.x + 14.0, tb.max.y + 14.0)];
+                let mut hs = [Pos2::new(rowbar.center().x, tb.max.y + 14.0), Pos2::new(tb.max.x + 14.0, colbar.center().y), Pos2::new(tb.max.x + 14.0, tb.max.y + 14.0)];
+                // the handle being dragged stays under the pointer (along its own way)
+                if let (Some(Drag::Grow { table, kind, grab, .. }), Some(p)) = (app.canvas.drag, ui.input(|i| i.pointer.interact_pos())) {
+                    if table == sel.table {
+                        let (k, to) = (kind as usize, p + grab);
+                        hs[k] = match kind {
+                            0 => Pos2::new(hs[k].x, to.y),
+                            1 => Pos2::new(to.x, hs[k].y),
+                            _ => to,
+                        };
+                    }
+                }
                 for (k, h) in hs.iter().enumerate() {
                     painter.circle(*h, 8.0, Color32::WHITE, Stroke::new(1.2, accent()));
                     let st = Stroke::new(1.2, accent());
@@ -800,14 +832,14 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             } else {
                 None
             };
-            let on_grow = grow_handles.and_then(|(t, hs)| hs.iter().position(|h| h.distance(p) <= 9.0).map(|k| (t, k as u8)));
+            let on_grow = grow_handles.and_then(|(t, hs)| hs.iter().position(|h| h.distance(p) <= 9.0).map(|k| (t, k as u8, hs[k] - p)));
             if let Some(g) = grab {
                 commit(app);
                 app.canvas.drag = Some(g);
-            } else if let Some((table, kind)) = on_grow {
+            } else if let Some((table, kind, grab)) = on_grow {
                 commit(app);
-                let start = app.table(table).map(|(_, d)| (d.rows, d.cols)).unwrap_or((0, 0));
-                app.canvas.drag = Some(Drag::Grow { table, kind, from: p, start });
+                app.canvas.grow = app.table(table).map(|(_, d)| GrowPreview::new(table, d.clone()));
+                app.canvas.drag = Some(Drag::Grow { table, kind, from: p, grab });
             } else if let Some((id, handle)) = on_handle {
                 commit(app);
                 app.canvas.drag = Some(if ui.input(|i| i.modifiers.command) { Drag::Rotate { id, from: p } } else { Drag::ObjSize { id, handle, from: p } });
@@ -1175,22 +1207,6 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
                 }
             }
         }
-        (Some(Drag::Grow { table, kind, from, start }), Some(p)) => {
-            let d = (p - from) / view.zoom;
-            let dr = if kind != 1 { (d.y / 20.0).round() as i32 } else { 0 };
-            let dc = if kind != 0 { (d.x / 98.0).round() as i32 } else { 0 };
-            // the rows / columns are added (or empty ones taken away) as the pointer passes
-            // each, so the table shows what the drag does; the whole drag is one undo step
-            if let Some((rows, cols)) = app.table(table).map(|(_, t)| (t.rows, t.cols)) {
-                let (have_r, have_c) = (rows as i32 - start.0 as i32, cols as i32 - start.1 as i32);
-                if dr != have_r || dc != have_c {
-                    let merge = app.merge_next_edit;
-                    app.merge_next_edit = have_r != 0 || have_c != 0;
-                    grow_table(app, table, dr - have_r, dc - have_c);
-                    app.merge_next_edit = merge;
-                }
-            }
-        }
         (Some(Drag::Rotate { id, from }), Some(p)) => {
             if let Some(d) = app.drawables.iter().find(|d| d.id == id) {
                 let g = tiles::frame(d);
@@ -1333,6 +1349,10 @@ pub fn canvas(app: &mut App, ui: &mut egui::Ui) -> bool {
             if gs != user_guides {
                 app.edit(if index.is_some() && away { "Remove Guide" } else { "Guide" }, |d, h| d.set_guides(h, s, &gs));
             }
+        }
+        // the add-rows / columns handle let go: what it showed, made in one step
+        if let Some(Drag::Grow { table, .. }) = app.canvas.drag {
+            grow_finish(app, table);
         }
         // the autofill dot let go: the cells it covered fill from the block (series continue)
         if let Some(Drag::AutoFill { table, src, to }) = app.canvas.drag.take() {
@@ -2548,6 +2568,330 @@ fn tooltip(painter: &egui::Painter, at: Pos2, text: &str) {
 }
 
 /// Add (or remove, while they're empty) rows at the bottom and columns at the right.
+/// An add-rows / columns drag under way: the table as it was (`base`), the rows and columns
+/// it is shown with now, and pictures of the parts that changed (sheet rects), drawn over the
+/// tiles. Nothing is written to the document until the handle is let go, and the tiles aren't
+/// drawn again until then: each row passed costs one small picture, so the drag keeps the
+/// display's frame rate on a big table. After the drop the pictures stay until the tiles
+/// have caught up (no flash of the old table).
+pub(crate) struct GrowPreview {
+    table: ObjId,
+    base: TableData,
+    shown: (i32, i32),
+    /// (the part of the sheet asked for, its picture, the sheet rect the picture covers)
+    pics: Vec<(Rect, egui::TextureHandle, Rect)>,
+    /// The table's usual looks and lines, for the new cells ([`grown_table_with`]).
+    looks: [Option<nm_core::kn_model::TableCellStyle>; 4],
+    grid: (Option<nm_core::kn_model::Stroke>, Option<nm_core::kn_model::Stroke>),
+    /// What the pictures were made for: rows / columns shown, zoom, view origin.
+    made_for: Option<((i32, i32), f32, Pos2)>,
+    /// Let go: the document version the drop made (the pictures stay until its tiles are in),
+    /// and the frames since.
+    settling: Option<(u64, u32)>,
+    /// The note that rows wait for categories to be off was shown.
+    told: bool,
+}
+
+impl GrowPreview {
+    fn new(table: ObjId, base: TableData) -> Self {
+        let (looks, grid) = (crate::clip::region_looks(&base), crate::clip::grid_lines(&base));
+        GrowPreview { table, base, shown: (0, 0), pics: Vec::new(), looks, grid, made_for: None, settling: None, told: false }
+    }
+}
+
+/// How many rows / columns (signed) a drag asking for `dr`, `dc` really changes: rows and
+/// columns are added freely; only empty ones at the end are taken away, one always stays
+/// ([`grow_table`]'s rule).
+pub(crate) fn grow_limits(t: &TableData, dr: i32, dc: i32) -> (i32, i32) {
+    let empty_row = |r: u32| (0..t.cols).all(|c| t.cells.get((r * t.cols + c) as usize).is_none_or(|v| v.is_empty()));
+    let empty_col = |c: u32| (0..t.rows).all(|r| t.cells.get((r * t.cols + c) as usize).is_none_or(|v| v.is_empty()));
+    let mut del_r = 0;
+    while dr < 0 && del_r < (-dr) as u32 && t.rows > del_r + 1 && empty_row(t.rows - 1 - del_r) {
+        del_r += 1;
+    }
+    let mut del_c = 0;
+    while dc < 0 && del_c < (-dc) as u32 && t.cols > del_c + 1 && empty_col(t.cols - 1 - del_c) {
+        del_c += 1;
+    }
+    (if dr < 0 { -(del_r as i32) } else { dr }, if dc < 0 { -(del_c as i32) } else { dc })
+}
+
+/// Table `b` with `dr` rows and `dc` columns more (or fewer: taken from the end), as adding
+/// them in the document lays them out: the last row's height / column's width, empty cells
+/// with their part of the table's look (header column, body…), the usual inner lines, and the
+/// table's outer border moved to the new edge.
+#[cfg(test)]
+pub(crate) fn grown_table(b: &TableData, dr: i32, dc: i32) -> TableData {
+    grown_table_with(b, dr, dc, &crate::clip::region_looks(b), &crate::clip::grid_lines(b))
+}
+
+/// [`grown_table`] with the table's usual looks and lines worked out already.
+fn grown_table_with(b: &TableData, dr: i32, dc: i32, looks: &[Option<nm_core::kn_model::TableCellStyle>; 4], grid: &(Option<nm_core::kn_model::Stroke>, Option<nm_core::kn_model::Stroke>)) -> TableData {
+    let mut t = b.clone();
+    let styled = !t.cell_styles.is_empty();
+    // rows
+    let (rows, cols) = (t.rows, t.cols);
+    if dr > 0 && rows > 0 {
+        let n = dr as u32;
+        let new_rows = rows + n;
+        let shape = TableData { rows: new_rows, cols, ..TableData::default() }.with_heads(b);
+        let region = |r: u32, c: u32| crate::clip::region(&shape, r, c);
+        let last = (rows - 1) as usize;
+        let h_last = t.row_heights[last];
+        t.row_heights.extend(std::iter::repeat_n(h_last, n as usize));
+        t.cells.extend(std::iter::repeat_n(String::new(), (n * cols) as usize));
+        if styled {
+            for r in rows..new_rows {
+                for c in 0..cols {
+                    let st = looks[region(r, c) as usize].clone().unwrap_or_else(|| b.cell_styles[last * cols as usize + c as usize].clone());
+                    t.cell_styles.push(st);
+                }
+            }
+        }
+        if !t.rich.is_empty() {
+            t.rich.extend(std::iter::repeat_n(None, (n * cols) as usize));
+        }
+        if let Some(&a) = t.auto_rows.last() {
+            t.auto_rows.extend(std::iter::repeat_n(a, n as usize));
+        }
+        // the lines between rows: as between the last two body rows; the bottom border moves down
+        let bottom: Vec<_> = (0..cols).map(|c| b.h_strokes.get((rows * cols + c) as usize).cloned().flatten()).collect();
+        let inner: Vec<_> = (0..cols).map(|c| if rows >= 2 && rows - 1 > b.header_rows { b.h_strokes.get(((rows - 1) * cols + c) as usize).cloned().flatten() } else { grid.0.clone() }).collect();
+        if t.h_strokes.len() == ((rows + 1) * cols) as usize {
+            let at = rows as usize * cols as usize;
+            t.h_strokes[at..at + cols as usize].clone_from_slice(&inner);
+            for k in 1..=n {
+                t.h_strokes.extend(if k == n { bottom.clone() } else { inner.clone() });
+            }
+        }
+        if t.v_strokes.len() == (rows * (cols + 1)) as usize {
+            let row: Vec<_> = t.v_strokes[last * (cols as usize + 1)..].to_vec();
+            for _ in 0..n {
+                t.v_strokes.extend(row.iter().cloned());
+            }
+        }
+        t.rows = new_rows;
+    } else if dr < 0 {
+        let n = rows - ((-dr) as u32).min(rows - 1);
+        let bottom: Vec<_> = (0..cols).map(|c| b.h_strokes.get((rows * cols + c) as usize).cloned().flatten()).collect();
+        t.row_heights.truncate(n as usize);
+        t.cells.truncate((n * cols) as usize);
+        if styled {
+            t.cell_styles.truncate((n * cols) as usize);
+        }
+        if !t.rich.is_empty() {
+            t.rich.truncate((n * cols) as usize);
+        }
+        t.auto_rows.truncate(n as usize);
+        if t.h_strokes.len() == ((rows + 1) * cols) as usize {
+            t.h_strokes.truncate(((n + 1) * cols) as usize);
+            let at = n as usize * cols as usize;
+            t.h_strokes[at..at + cols as usize].clone_from_slice(&bottom);
+        }
+        t.v_strokes.truncate((n * (cols + 1)) as usize);
+        t.merges.retain(|m| m.row + m.rows <= n);
+        t.rows = n;
+        t.header_rows = t.header_rows.min(n);
+        t.footer_rows = t.footer_rows.min(n - t.header_rows);
+    }
+    // columns
+    let (rows, cols) = (t.rows, t.cols);
+    if dc > 0 && cols > 0 {
+        let n = dc as u32;
+        let new_cols = cols + n;
+        let w_last = t.col_widths[(cols - 1) as usize];
+        t.col_widths.extend(std::iter::repeat_n(w_last, n as usize));
+        let shape = TableData { rows, cols: new_cols, ..TableData::default() }.with_heads(&t);
+        t.cells = t.cells.chunks(cols as usize).flat_map(|row| row.iter().cloned().chain(std::iter::repeat_n(String::new(), n as usize))).collect();
+        if styled {
+            let old = std::mem::take(&mut t.cell_styles);
+            for (r, row) in old.chunks(cols as usize).enumerate() {
+                t.cell_styles.extend(row.iter().cloned());
+                for c in cols..new_cols {
+                    t.cell_styles.push(looks[crate::clip::region(&shape, r as u32, c) as usize].clone().unwrap_or_else(|| row[row.len() - 1].clone()));
+                }
+            }
+        }
+        if !t.rich.is_empty() {
+            let old = std::mem::take(&mut t.rich);
+            t.rich = old.chunks(cols as usize).flat_map(|row| row.iter().cloned().chain(std::iter::repeat_n(None, n as usize))).collect();
+        }
+        if t.h_strokes.len() == ((rows + 1) * cols) as usize {
+            let old = std::mem::take(&mut t.h_strokes);
+            t.h_strokes = old.chunks(cols as usize).flat_map(|line| { let l = line[line.len() - 1].clone(); line.iter().cloned().chain(std::iter::repeat_n(l, n as usize)).collect::<Vec<_>>() }).collect();
+        }
+        if t.v_strokes.len() == (rows * (cols + 1)) as usize {
+            let old = std::mem::take(&mut t.v_strokes);
+            let header_cols = b.header_cols;
+            t.v_strokes = old
+                .chunks(cols as usize + 1)
+                .flat_map(|row| {
+                    let right = row[cols as usize].clone();
+                    let inner = if cols >= 2 && cols - 1 > header_cols { row[cols as usize - 1].clone() } else { grid.1.clone() };
+                    let mut v: Vec<_> = row[..cols as usize].to_vec();
+                    v.extend(std::iter::repeat_n(inner, n as usize));
+                    v.push(right);
+                    v
+                })
+                .collect();
+        }
+        t.cols = new_cols;
+    } else if dc < 0 {
+        let n = cols - ((-dc) as u32).min(cols - 1);
+        t.col_widths.truncate(n as usize);
+        t.cells = t.cells.chunks(cols as usize).flat_map(|row| row[..n as usize].to_vec()).collect();
+        if styled {
+            t.cell_styles = t.cell_styles.chunks(cols as usize).flat_map(|row| row[..n as usize].to_vec()).collect();
+        }
+        if !t.rich.is_empty() {
+            t.rich = t.rich.chunks(cols as usize).flat_map(|row| row[..n as usize].to_vec()).collect();
+        }
+        if t.h_strokes.len() == ((rows + 1) * cols) as usize {
+            t.h_strokes = t.h_strokes.chunks(cols as usize).flat_map(|line| line[..n as usize].to_vec()).collect();
+        }
+        if t.v_strokes.len() == (rows * (cols + 1)) as usize {
+            t.v_strokes = t.v_strokes.chunks(cols as usize + 1).flat_map(|row| { let mut v = row[..n as usize].to_vec(); v.push(row[cols as usize].clone()); v }).collect();
+        }
+        t.merges.retain(|m| m.col + m.cols <= n);
+        t.cols = n;
+        t.header_cols = t.header_cols.min(n);
+    }
+    t
+}
+
+trait WithHeads {
+    fn with_heads(self, like: &TableData) -> TableData;
+}
+
+impl WithHeads for TableData {
+    /// (For [`crate::clip::region`] on a table's new shape: its header and footer counts.)
+    fn with_heads(self, like: &TableData) -> TableData {
+        TableData { header_rows: like.header_rows, footer_rows: like.footer_rows, header_cols: like.header_cols, ..self }
+    }
+}
+
+/// The drag asks for `dr` rows and `dc` columns more: show the table so (no document edit).
+fn grow_preview_update(app: &mut App, dr: i32, dc: i32) {
+    let Some(g) = app.canvas.grow.as_ref() else { return };
+    let t = g.table;
+    let categorized = app.categorized(t);
+    let want = if categorized { (0, grow_limits(&g.base, 0, dc).1) } else { grow_limits(&g.base, dr, dc) };
+    // (rows can't be added while categories show: said once a drag)
+    if categorized && dr != 0 && !g.told {
+        app.notify("Rows wait until categories are off.");
+        if let Some(g) = app.canvas.grow.as_mut() {
+            g.told = true;
+        }
+    }
+    let Some(g) = app.canvas.grow.as_ref() else { return };
+    let shown_dims = |base: &TableData, s: (i32, i32)| ((base.rows as i32 + s.0) as u32, (base.cols as i32 + s.1) as u32);
+    // (the drawables read again meanwhile: shown again)
+    let now = app.table(t).map(|(_, d)| (d.rows, d.cols));
+    if want == g.shown && now == Some(shown_dims(&g.base, want)) {
+        return;
+    }
+    let shape = if want == (0, 0) { g.base.clone() } else { grown_table_with(&g.base, want.0, want.1, &g.looks, &g.grid) };
+    app.show_table(t, shape);
+    if let Some(g) = app.canvas.grow.as_mut() {
+        g.shown = want;
+    }
+}
+
+/// The pictures of what the drag changed, over the tiles (made again when the rows / columns
+/// shown, the zoom or the scroll change); after the drop until the tiles have caught up.
+fn grow_preview_paint(app: &mut App, ui: &egui::Ui, view: &View, pending: bool) {
+    let Some(g) = app.canvas.grow.as_mut() else { return };
+    if let Some((version, frames)) = &mut g.settling {
+        *frames += 1;
+        // the drop's tiles are all in (or something else changed since): the pictures go
+        if !pending || *version != app.version || *frames > 120 || g.made_for.is_some_and(|m| m.1 != view.zoom || m.2 != view.origin) {
+            app.canvas.grow = None;
+            return;
+        }
+    } else if g.made_for != Some((g.shown, view.zoom, view.origin)) {
+        // (pictures of parts that are still the same are kept: another row added changes the
+        // rows' strip, not the new columns')
+        if g.made_for.is_some_and(|m| m.1 != view.zoom || m.2 != view.origin) {
+            g.pics.clear();
+        }
+        let mut old = std::mem::take(&mut g.pics);
+        g.made_for = Some((g.shown, view.zoom, view.origin));
+        let (Some(d), Some(wb)) = (app.drawables.iter().find(|d| d.id == g.table), app.wb.as_ref()) else { return };
+        let DrawableKind::Table(t) = &d.kind else { return };
+        let b = &g.base;
+        let pos = Pos2::new(t.frame(&d.geom).x, t.frame(&d.geom).y);
+        let edge = |sizes: &[f32], n: usize| -> f32 { sizes.iter().take(n).sum() };
+        let (w0, h0) = (edge(&b.col_widths, b.cols as usize), edge(&b.row_heights, b.rows as usize));
+        let (w1, h1) = (edge(&t.col_widths, t.cols as usize), edge(&t.row_heights, t.rows as usize));
+        let in_view = Rect::from_min_max(view.to_sheet(view.rect.min), view.to_sheet(view.rect.max));
+        // (a margin for the borders' width either side of their lines)
+        let m = 4.0;
+        // the rows' strip: from the last row both have, across the whole width (the corner
+        // too); the columns' strip: from the last column both have, down to that row
+        let mut regions = Vec::new();
+        let top = edge(&b.row_heights, (b.rows.min(t.rows) as usize).saturating_sub(1));
+        if t.rows != b.rows {
+            regions.push(Rect::from_min_max(Pos2::new(pos.x - m, pos.y + top - 1.0), Pos2::new(pos.x + w0.max(w1) + m, pos.y + h0.max(h1) + m)));
+        }
+        if t.cols != b.cols {
+            let left = edge(&b.col_widths, (b.cols.min(t.cols) as usize).saturating_sub(1));
+            let bottom = if t.rows != b.rows { top + 1.0 } else { h0 + m };
+            regions.push(Rect::from_min_max(Pos2::new(pos.x + left - 1.0, pos.y - m), Pos2::new(pos.x + w0.max(w1) + m, pos.y + bottom)));
+        }
+        let mut pics = Vec::new();
+        for r in regions {
+            let r = r.intersect(in_view);
+            if !r.is_positive() {
+                continue;
+            }
+            if let Some(i) = old.iter().position(|p| p.0 == r) {
+                pics.push(old.swap_remove(i));
+                continue;
+            }
+            if let Some((img, at)) = app.canvas.tiles.region_image(&wb.doc, &app.drawables, r) {
+                let tex = ui.ctx().load_texture("grow-preview", img, egui::TextureOptions::LINEAR);
+                pics.push((r, tex, at));
+            }
+        }
+        if let Some(g) = app.canvas.grow.as_mut() {
+            g.pics = pics;
+        }
+    }
+    let Some(g) = app.canvas.grow.as_ref() else { return };
+    // on the tiles' device pixels, as the tiles are placed
+    let ppp = ui.ctx().pixels_per_point();
+    let snap = |v: f32| (v * ppp).round() / ppp;
+    let painter = ui.painter_at(view.rect);
+    for (_, tex, at) in &g.pics {
+        let a = view.to_screen(at.min);
+        let r = Rect::from_min_size(Pos2::new(snap(a.x), snap(a.y)), at.size() * view.zoom);
+        painter.image(tex.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    }
+    if g.settling.is_some() {
+        ui.ctx().request_repaint();
+    }
+}
+
+/// The add-rows / columns handle let go: the rows and columns shown, made in the document
+/// as one undo step ("Resize Table"); the pictures stay until the tiles show it.
+fn grow_finish(app: &mut App, t: ObjId) {
+    app.canvas.grow_done = true;
+    let Some((shown, size)) = app.canvas.grow.as_ref().filter(|g| g.table == t).map(|g| (g.shown, (g.base.rows, g.base.cols))) else { return };
+    if shown == (0, 0) {
+        app.reload_drawables();
+        app.canvas.grow = None;
+        return;
+    }
+    // (the shown table's sizes and emptiness were the document's, checked as it was shown:
+    // the edit reads the drawables again afterwards)
+    resize_table(app, t, size, shown);
+    app.refresh();
+    let version = app.version;
+    if let Some(g) = app.canvas.grow.as_mut() {
+        g.settling = Some((version, 0));
+    }
+}
+
 pub(crate) fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
     let Some((rows, cols)) = app.table(t).map(|(_, d)| (d.rows, d.cols)) else { return };
     if dr != 0 && app.categorized(t) {
@@ -2569,6 +2913,15 @@ pub(crate) fn grow_table(app: &mut App, t: ObjId, dr: i32, dc: i32) {
     if dr <= 0 && dc <= 0 && del_r == 0 && del_c == 0 {
         return;
     }
+    resize_table(app, t, (rows, cols), (if dr < 0 { -(del_r as i32) } else { dr }, if dc < 0 { -(del_c as i32) } else { dc }));
+}
+
+/// Table `t`, `size` (rows, columns) now, given `d` rows and columns more (negative: that
+/// many fewer, taken from the end, which must be empty): one undo step, "Resize Table".
+fn resize_table(app: &mut App, t: ObjId, size: (u32, u32), d: (i32, i32)) {
+    let (rows, cols) = size;
+    let (dr, dc) = d;
+    let (del_r, del_c) = ((-dr).max(0) as u32, (-dc).max(0) as u32);
     let res = app.edit("Resize Table", |d, h| -> Result<(), nm_core::kn_format::Error> {
         for k in 0..dr.max(0) as u32 {
             d.table_insert(h, t, Axis::Row, rows + k, rows + k - 1)?;

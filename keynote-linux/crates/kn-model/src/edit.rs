@@ -128,6 +128,19 @@ impl Document {
         }
     }
 
+    /// Continue the previous action whatever its age or kind, when it has this label and
+    /// nothing was undone since: the parts of one user action made by several edits (a paste
+    /// that first adds rows for itself, a long drag) stay one undo step. The caller knows the
+    /// previous action is its own; otherwise a new one starts, as [`Document::begin`].
+    pub fn begin_continue(&mut self, history: &mut History, label: &str) {
+        self.end(history);
+        if history.redo.is_empty() && history.undo.last().is_some_and(|s| s.label == label) {
+            history.current = history.undo.pop();
+        } else {
+            history.current = Some(Snapshot::new(label));
+        }
+    }
+
     /// Close the current action (no-op if nothing was touched).
     pub fn end(&mut self, history: &mut History) {
         if let Some(mut s) = history.current.take() {

@@ -796,7 +796,9 @@ impl Document {
     /// change point they move, one spanning it grows (insert) or shrinks (delete), one left
     /// a single cell or emptied goes. All in the caller's undo step, so undo puts them back.
     fn around_merges(&mut self, h: &mut History, table: ObjId, axis: Axis, op: Op, edit: impl FnOnce(&mut Document, &mut History) -> Result<(), kn_format::Error>) -> Result<(), kn_format::Error> {
-        let merges: Vec<crate::CellRange> = self.file.obj(table).and_then(|m| crate::table::table(&self.file, m)).map(|t| t.merges).unwrap_or_default();
+        // (the merges alone: reading the whole table for them made each row added to a big
+        // table cost tens of milliseconds)
+        let merges: Vec<crate::CellRange> = self.file.obj(table).and_then(|m| m.ref_id("tableModel")).and_then(|id| self.file.obj(id)).map(|model| crate::table::merges(&self.file, model)).unwrap_or_default();
         if merges.is_empty() {
             return edit(self, h);
         }
