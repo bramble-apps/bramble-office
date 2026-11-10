@@ -1,0 +1,9 @@
+[package]
+name = "lg-core"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Reads Logic Pro (.logicx) projects: tracks, regions, MIDI events, tempo, signatures, audio files, plug-in settings"
+
+[dependencies]
+plist = "1"

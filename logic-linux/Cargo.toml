@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.4.2"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# the suite's patched toolkit (HiDPI cursor scale, Wayland pinch, pointer fixes); see
+# keynote-linux/vendor/README-patches.md
+[patch.crates-io]
+smithay-client-toolkit = { path = "../keynote-linux/vendor/smithay-client-toolkit-0.19.2" }
+winit = { path = "../keynote-linux/vendor/winit-0.30.13" }
