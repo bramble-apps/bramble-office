@@ -4,6 +4,7 @@
 
 pub mod app;
 pub mod audio;
+pub mod audioedit;
 mod automation;
 mod browser;
 mod chrome;
@@ -29,6 +30,7 @@ mod rightpane;
 mod score;
 mod stepseq;
 pub mod settings;
+pub mod smarttempo;
 mod smartcontrols;
 mod tracks;
 pub mod units;

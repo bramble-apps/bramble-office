@@ -161,6 +161,8 @@ pub struct App {
     pub global_tracks: bool,
     /// Live Loops: the grid, its cells, what plays and what's queued.
     pub live_loops: crate::liveloops::State,
+    /// The audio editors (Track, File, Smart Tempo): their state and the regions' audio edits.
+    pub audio_edit: crate::audioedit::AudioEdit,
     /// Automation shown on the tracks (A); each track's mode and the lane its header shows.
     pub show_automation: bool,
     pub auto_mode: std::collections::HashMap<usize, crate::automation::AutoMode>,
@@ -333,6 +335,7 @@ impl App {
             logic_settings: crate::settings::Values::load(),
             global_tracks: false,
             live_loops: Default::default(),
+            audio_edit: Default::default(),
             show_automation: false,
             auto_mode: Default::default(),
             auto_param: Default::default(),
@@ -536,7 +539,7 @@ impl App {
             notes.sort_by_key(|n| n.0);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
-        let audio_files: Vec<(usize, u32, PathBuf)> = p.tracks.iter().enumerate().flat_map(|(i, t)| t.regions.iter().filter_map(move |r| r.audio.as_ref().map(|a| (i, r.start, a.file.clone())))).collect();
+        let audio_files = crate::audioedit::playback(self);
         {
             let mut e = self.engine.lock().unwrap_or_else(|e| e.into_inner());
             e.all_off();
@@ -552,8 +555,8 @@ impl App {
         if !audio_files.is_empty() {
             let engine = self.engine.clone();
             std::thread::spawn(move || {
-                for (track, start, file) in audio_files {
-                    if let Some(samples) = audio::load_audio(&file) {
+                for (track, start, plan) in audio_files {
+                    if let Some(samples) = plan.render() {
                         let mut e = engine.lock().unwrap_or_else(|e| e.into_inner());
                         if let Some(t) = e.tracks.get_mut(track) {
                             t.audio.push((start, Arc::new(samples)));
@@ -1108,6 +1111,9 @@ impl App {
     }
 
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
+        if crate::audioedit::command(self, cmd) {
+            return;
+        }
         match cmd {
             "About Bramble Studio" => self.show_about = true,
             "General…" | "Audio…" | "Recording…" | "MIDI…" | "Score…" | "Movie…" | "Automation…" | "Control Surfaces…" | "View…" | "My Info…" => {
@@ -1206,6 +1212,9 @@ impl App {
                 if key == egui::Key::Escape {
                     continue;
                 }
+            }
+            if focus == crate::keymap::Focus::PianoRoll && crate::audioedit::key_press(self, key, m) {
+                continue;
             }
             if m.command && key == egui::Key::Z {
                 if m.shift { self.redo() } else { self.undo() }
@@ -1661,6 +1670,7 @@ impl App {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
                 }
+                Bottom::PianoRoll if crate::audioedit::is_audio_region(self) => crate::audioedit::show(self, ui, ed),
                 Bottom::PianoRoll => match crate::score::editor_tab(self, ui.ctx()) {
                     crate::score::EditorTab::Score => crate::score::show(self, ui, ed),
                     crate::score::EditorTab::StepSequencer => crate::stepseq::show(self, ui, ed),

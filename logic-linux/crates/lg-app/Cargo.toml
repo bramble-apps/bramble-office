@@ -25,6 +25,7 @@ rodio = { version = "0.23", default-features = false, features = ["playback", "w
 # SoundFont instruments played natively (pure Rust, MIT)
 rustysynth = "1"
 lg-dsp = { path = "../lg-dsp" }
+lg-audio = { path = "../lg-audio" }
 lg-players = { path = "../lg-players" }
 lg-synth = { path = "../lg-synth" }
 lg-fx = { path = "../lg-fx" }

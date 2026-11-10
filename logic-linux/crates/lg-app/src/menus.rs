@@ -182,7 +182,7 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if label.starts_with("Can’t Redo") || label.starts_with("Redo") {
         return !app.redo.is_empty();
     }
-    if !IMPLEMENTED.contains(&label) && !handled(label) {
+    if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) {
         return false;
     }
     match label {
@@ -218,6 +218,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 }
 
 fn checked(app: &App, label: &str) -> bool {
+    if let Some(c) = crate::audioedit::checked(app, label) {
+        return c;
+    }
     match label {
         "Cycle Mode" => app.cycle_on(),
         _ => false,

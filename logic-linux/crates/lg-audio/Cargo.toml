@@ -1,0 +1,8 @@
+[package]
+name = "lg-audio"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Audio files for Bramble Studio's audio editors: WAV/AIFF reading and writing, waveform overviews, transients, Smart Tempo analysis, destructive file functions, region fades, time stretch and pitch shift"
+
+[dependencies]
