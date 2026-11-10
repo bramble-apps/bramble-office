@@ -170,6 +170,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             n.pitch = (o.pitch as i32 + dp).clamp(0, 127) as u8;
                         }
                     }
+                    // Logic's help tag: the pressed note's position, length and pitch
+                    if let Some(n) = rg.notes.get(k) {
+                        let sig = (4, 4);
+                        app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(n.pos, sig)), ("Length:".into(), crate::app::bbdt_len(n.len, sig)), ("Pitch:".into(), crate::app::note_name(n.pitch))]);
+                    }
                 }
             }
         }

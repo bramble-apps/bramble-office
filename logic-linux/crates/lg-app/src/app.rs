@@ -77,6 +77,13 @@ pub struct App {
     pub selected_notes: Vec<usize>,
     /// The region's notes as they were when a note drag began (the drag moves from these).
     pub drag_notes: Vec<lg_core::events::Note>,
+    /// Pane sizes (points): Browser width, track header width, editor and Mixer heights.
+    pub browser_w: f32,
+    pub header_w: f32,
+    pub editor_h: f32,
+    pub mixer_h: f32,
+    /// The help tag beside the pointer while dragging (Logic's: "Cycle Range / Left: …").
+    pub help_tag: Option<Vec<(String, String)>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -147,6 +154,11 @@ impl App {
             redo: Vec::new(),
             selected_notes: Vec::new(),
             drag_notes: Vec::new(),
+            browser_w: BROWSER_W,
+            header_w: crate::tracks::HEADER_W,
+            editor_h: EDITOR_H,
+            mixer_h: 420.0,
+            help_tag: None,
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -657,9 +669,29 @@ impl App {
         let body = Rect::from_min_max(pos2(window.min.x, top + 1.0), window.max);
         let mut left = body.min.x;
         if self.show_browser {
-            let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + BROWSER_W, body.max.y));
+            let w = self.browser_w.min(body.width() - 360.0 - if self.show_inspector { INSPECTOR_W } else { 0.0 }).max(200.0);
+            let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + w, body.max.y));
             crate::browser::show(self, ui, r);
             left = r.max.x + 1.0;
+            // its right edge: drag to resize; past the minimum it snaps closed; past the room left
+            // the Inspector hides (Logic, RESIZING.txt)
+            let edge = Rect::from_min_max(pos2(r.max.x - 3.0, r.min.y), pos2(r.max.x + 3.0, r.max.y));
+            let e = ui.interact(edge, ui.scope_id().with("browser-edge"), egui::Sense::drag());
+            if e.hovered() || e.dragged() {
+                ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            }
+            if let (true, Some(pp)) = (e.dragged(), e.interact_pointer_pos()) {
+                let want = pp.x - r.min.x;
+                if want < 150.0 {
+                    self.show_browser = false;
+                    self.browser_w = 320.0;
+                } else {
+                    self.browser_w = want.min(925.0);
+                    if self.show_inspector && body.width() - self.browser_w - INSPECTOR_W < 360.0 {
+                        self.show_inspector = false;
+                    }
+                }
+            }
         }
         if self.show_inspector {
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + INSPECTOR_W, body.max.y));
@@ -670,8 +702,8 @@ impl App {
         // (the Mixer takes more of the window than an editor, as Logic's)
         let editor_h = match self.bottom {
             Bottom::None => 0.0,
-            Bottom::PianoRoll => EDITOR_H.min(main.height() * 0.6),
-            Bottom::Mixer => (main.height() * 0.62).max(EDITOR_H.min(main.height() * 0.6)),
+            Bottom::PianoRoll => self.editor_h.clamp(120.0, main.height() - 90.0),
+            Bottom::Mixer => self.mixer_h.clamp(260.0, main.height() - 90.0),
         };
         let tracks = Rect::from_min_max(main.min, pos2(main.max.x, main.max.y - editor_h - if editor_h > 0.0 { 1.0 } else { 0.0 }));
         crate::tracks::show(self, ui, tracks);
@@ -682,6 +714,22 @@ impl App {
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),
                 Bottom::None => {}
             }
+            // the divider between the tracks and the editor: drag up or down
+            let edge = Rect::from_min_max(pos2(ed.min.x, ed.min.y - 3.0), pos2(ed.max.x, ed.min.y + 3.0));
+            let e = ui.interact(edge, ui.scope_id().with("editor-edge"), egui::Sense::drag());
+            if e.hovered() || e.dragged() {
+                ctx.set_cursor_icon(egui::CursorIcon::ResizeVertical);
+            }
+            if let (true, Some(pp)) = (e.dragged(), e.interact_pointer_pos()) {
+                let h = (main.max.y - pp.y).clamp(120.0, main.height() - 60.0);
+                match self.bottom {
+                    Bottom::Mixer => self.mixer_h = h,
+                    _ => self.editor_h = h,
+                }
+            }
+        }
+        if let Some(tag) = self.help_tag.take() {
+            help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
         if let Some((m, _)) = &self.message {
@@ -785,4 +833,62 @@ pub fn soundfont_presets(p: &Path) -> Vec<(u16, u8, String)> {
     let mut v: Vec<(u16, u8, String)> = sf.get_presets().iter().map(|pr| (pr.get_bank_number() as u16, pr.get_patch_number() as u8, pr.get_name().to_string())).collect();
     v.sort();
     v
+}
+
+/// Logic's help tag: a small dark box of label / value rows by the pointer while dragging.
+fn help_tag(ctx: &egui::Context, rows: &[(String, String)]) {
+    let Some(at) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    egui::Area::new(egui::Id::unique("help-tag")).order(egui::Order::Tooltip).fixed_pos(at + vec2(16.0, 18.0)).interactable(false).show(ctx, |ui| {
+        egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(30, 30, 32, 235)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(9, 6)).show(ui, |ui| {
+            egui::Grid::new("help-tag-grid").num_columns(2).spacing([10.0, 2.0]).show(ui, |ui| {
+                for (k, v) in rows {
+                    ui.label(egui::RichText::new(k).font(look::semibold(11.5)).color(egui::Color32::from_gray(0xc8)));
+                    ui.label(egui::RichText::new(v).font(look::regular(11.5)).color(egui::Color32::WHITE));
+                    ui.end_row();
+                }
+            });
+        });
+    });
+}
+
+/// A position as Logic writes it in help tags and the LCD: "bar beat division tick" (1-based;
+/// division = 1/16, ticks of 960 per quarter within it).
+pub fn bbdt(tick: u32, sig: (u8, u8)) -> String {
+    let beat_t = lg_core::events::PPQ * 4 / sig.1.max(1) as u32;
+    let bar_t = beat_t * sig.0.max(1) as u32;
+    let div_t = lg_core::events::PPQ / 4;
+    let bar = tick / bar_t + 1;
+    let beat = (tick % bar_t) / beat_t + 1;
+    let div = (tick % beat_t) / div_t + 1;
+    let t = tick % div_t + 1;
+    format!("{bar} {beat} {div} {t}")
+}
+
+/// A length the same way, counting from 0 ("5 1 0 0" = five bars and a beat).
+pub fn bbdt_len(ticks: u32, sig: (u8, u8)) -> String {
+    let beat_t = lg_core::events::PPQ * 4 / sig.1.max(1) as u32;
+    let bar_t = beat_t * sig.0.max(1) as u32;
+    let div_t = lg_core::events::PPQ / 4;
+    format!("{} {} {} {}", ticks / bar_t, (ticks % bar_t) / beat_t, (ticks % beat_t) / div_t, ticks % div_t)
+}
+
+/// Logic's note names (C3 = 60).
+pub fn note_name(p: u8) -> String {
+    const N: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    format!("{}{}", N[(p % 12) as usize], p as i32 / 12 - 2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn positions_as_logic_writes_them() {
+        assert_eq!(bbdt(0, (4, 4)), "1 1 1 1");
+        // bar 2 beat 2, the 4th sixteenth (the research's 40080 - 34560)
+        assert_eq!(bbdt(40080 - 34560, (4, 4)), "2 2 4 1");
+        assert_eq!(bbdt_len(5 * 3840 + 960, (4, 4)), "5 1 0 0");
+        assert_eq!(note_name(60), "C3");
+        assert_eq!(note_name(61), "C#3");
+    }
 }

@@ -14,7 +14,8 @@ use lg_core::TrackKind;
 use crate::app::{App, Drag};
 use crate::look;
 
-pub const HEADER_W: f32 = 250.0;
+/// The track headers' width: Logic's minimum 265 pt, up to 547 (RESIZING.txt).
+pub const HEADER_W: f32 = 265.0;
 pub const ROW_H: f32 = 52.0;
 const LOCAL_H: f32 = 32.0;
 const RULER_H: f32 = 32.0;
@@ -30,7 +31,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         local_menus(app, ui);
     });
     // ---- the list header and the ruler
-    let head = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(HEADER_W, RULER_H));
+    let hw = app.header_w.clamp(HEADER_W, 547.0);
+    let head = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(hw, RULER_H));
     let ruler = Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(area.max.x, local.max.y + RULER_H));
     p.rect_filled(head, 0.0, look::header_bg());
     p.rect_filled(ruler, 0.0, look::header_bg());
@@ -70,45 +72,64 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     for b in first..first + visible {
         let x = x_of(b as f32 * bar_t, scroll);
         if b % step == 0 {
-            rp.vline(x, ruler.min.y + 14.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
-            rp.text(pos2(x + 3.0, ruler.min.y + 16.0), Align2::LEFT_TOP, format!("{}", b + 1), look::semibold(11.0), look::text());
+            rp.vline(x, ruler.min.y + 2.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
+            rp.text(pos2(x + 3.0, ruler.min.y + 2.0), Align2::LEFT_TOP, format!("{}", b + 1), look::semibold(11.0), look::text());
         } else {
             rp.vline(x, ruler.max.y - 6.0..=ruler.max.y, Stroke::new(1.0, look::text_dim().gamma_multiply(0.6)));
         }
     }
     let (ca, cb) = app.cycle;
     let cycle_on = app.cycle_on();
-    let crect = Rect::from_min_max(pos2(x_of(ca as f32, scroll), ruler.min.y + 2.0), pos2(x_of(cb as f32, scroll), ruler.min.y + 13.0));
-    rp.rect_filled(crect, 3.0, if cycle_on { look::cycle() } else { look::cycle().gamma_multiply(0.25) });
+    // the cycle area: a band in the upper strip, behind the bar numbers
+    let crect = Rect::from_min_max(pos2(x_of(ca as f32, scroll), ruler.min.y + 1.0), pos2(x_of(cb as f32, scroll), ruler.min.y + 16.0));
+    rp.rect_filled(crect, 3.0, if cycle_on { look::cycle().gamma_multiply(0.85) } else { look::cycle().gamma_multiply(0.22) });
+    // the ruler (Logic, DRAGS.txt): the upper strip (bar numbers) draws a cycle area and turns
+    // Cycle on (dragging inside the area moves it; a click toggles Cycle); the lower strip
+    // moves the playhead
     let r_resp = ui.interact(ruler, ui.scope_id().with("ruler"), Sense::click_and_drag());
+    let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
     if let Some(pp) = r_resp.interact_pointer_pos() {
-        let tick = ((pp.x - lanes.min.x) / app.bar_w + scroll) * bar_t;
-        let snap = |t: f32| ((t / (bar_t / 4.0)).round() * (bar_t / 4.0)).max(0.0);
+        let tick = ((pp.x - lanes.min.x) / bw + scroll) * bar_t;
+        let beat = bar_t / sig.0.max(1) as f32;
+        let snap = |t: f32| ((t / beat).round() * beat).max(0.0);
+        let upper = |y: f32| y < ruler.min.y + RULER_H / 2.0;
         if r_resp.drag_started() {
-            app.drag = if pp.y < ruler.min.y + 14.0 { Some(Drag::Cycle { from_tick: tick, start: app.cycle }) } else { Some(Drag::Playhead) };
+            let from = r_resp.interact_pointer_pos().map_or(pp, |_| ui.input(|i| i.pointer.press_origin()).unwrap_or(pp));
+            let from_tick = ((from.x - lanes.min.x) / bw + scroll) * bar_t;
+            app.drag = if upper(from.y) { Some(Drag::Cycle { from_tick, start: app.cycle }) } else { Some(Drag::Playhead) };
         }
         match app.drag {
             Some(Drag::Cycle { from_tick, start }) if r_resp.dragged() => {
-                // inside the cycle area: move it; outside: draw a new one
-                let inside = from_tick >= start.0 as f32 && from_tick <= start.1 as f32;
-                if inside {
+                let inside = from_tick >= start.0 as f32 && from_tick <= start.1 as f32 && (start.1 - start.0) > 0;
+                let c = if inside {
                     let d = snap(tick - from_tick + start.0 as f32) as u32;
-                    app.set_cycle((d, d + (start.1 - start.0)));
+                    (d, d + (start.1 - start.0))
                 } else {
-                    let (a, b) = (snap(from_tick.min(tick)) as u32, snap(from_tick.max(tick)) as u32);
-                    if b > a {
-                        app.set_cycle((a, b));
-                        if !app.cycle_on() {
-                            app.toggle_cycle();
-                        }
+                    (snap(from_tick.min(tick)) as u32, snap(from_tick.max(tick)) as u32)
+                };
+                if c.1 > c.0 {
+                    app.set_cycle(c);
+                    if !app.cycle_on() {
+                        app.toggle_cycle();
                     }
+                    app.help_tag = Some(vec![
+                        ("Cycle Range".into(), String::new()),
+                        ("Left:".into(), crate::app::bbdt(c.0, sig)),
+                        ("Length:".into(), crate::app::bbdt_len(c.1 - c.0, sig)),
+                        ("Right:".into(), crate::app::bbdt(c.1, sig)),
+                    ]);
                 }
             }
+            Some(Drag::Playhead) if r_resp.dragged() => {
+                app.locate(snap(tick) as f64);
+            }
             _ => {
-                if r_resp.clicked() && pp.y < ruler.min.y + 14.0 && tick >= ca as f32 && tick <= cb as f32 {
-                    app.toggle_cycle();
-                } else if r_resp.clicked() || matches!(app.drag, Some(Drag::Playhead)) {
-                    app.locate(snap(tick) as f64);
+                if r_resp.clicked() {
+                    if upper(pp.y) && tick >= ca as f32 && tick <= cb as f32 {
+                        app.toggle_cycle();
+                    } else if !upper(pp.y) {
+                        app.locate(snap(tick) as f64);
+                    }
                 }
             }
         }
@@ -129,7 +150,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if y + ROW_H < headers.min.y || y > headers.max.y {
             continue;
         }
-        let row = Rect::from_min_size(pos2(headers.min.x, y), vec2(HEADER_W, ROW_H));
+        let row = Rect::from_min_size(pos2(headers.min.x, y), vec2(hw, ROW_H));
         let lane = Rect::from_min_max(pos2(lanes.min.x, y), pos2(lanes.max.x, y + ROW_H));
         let selected = app.selected_track == Some(i);
         if selected {
@@ -170,7 +191,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         // volume: a small slider (dB)
         let mut vol = t.volume_db;
-        let vr = Rect::from_min_size(pos2(row.min.x + 124.0, by + 1.0), vec2(108.0, 15.0));
+        let vr = Rect::from_min_size(pos2(row.min.x + 124.0, by + 1.0), vec2(hw - 142.0, 15.0));
         let vresp = ui.interact(vr, ui.scope_id().with(("vol", i)), Sense::click_and_drag()).on_hover_text(format!("Volume {vol:.1} dB"));
         let frac = db_to_frac(vol);
         hp.rect_filled(Rect::from_center_size(pos2(vr.center().x, vr.center().y), vec2(vr.width(), 4.0)), 2.0, look::group_bg());
@@ -224,6 +245,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             new = (new / beat).round() * beat;
                         }
                         move_region(app, i, ri, new.max(0.0) as u32);
+                        app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(new.max(0.0) as u32, sig))]);
                     }
                 }
             }
@@ -255,6 +277,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)).and_then(|t| t.regions.get_mut(ri)) {
                         rg.length = len;
                     }
+                    app.help_tag = Some(vec![("Length Change:".into(), String::new()), ("Position:".into(), crate::app::bbdt(r.start + len, sig)), ("Length:".into(), crate::app::bbdt_len(len, sig))]);
                 }
             }
             if eresp.drag_stopped() {
@@ -315,8 +338,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             app.scroll_x = bar_pos.floor().max(0.0);
         }
     }
-    // the divider between headers and lanes
+    // the divider between headers and lanes: drag to widen the headers (265–547 pt)
     p.vline(head.max.x, area.min.y + LOCAL_H..=area.max.y, Stroke::new(1.0, look::line()));
+    let edge = Rect::from_min_max(pos2(head.max.x - 3.0, head.max.y), pos2(head.max.x + 3.0, area.max.y));
+    let e = ui.interact(edge, ui.scope_id().with("header-edge"), Sense::drag());
+    if e.hovered() || e.dragged() {
+        ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+    }
+    if let (true, Some(pp)) = (e.dragged(), e.interact_pointer_pos()) {
+        app.header_w = (pp.x - area.min.x).clamp(HEADER_W, 547.0);
+    }
 }
 
 fn local_menus(app: &mut App, ui: &mut egui::Ui) {

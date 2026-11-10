@@ -89,7 +89,7 @@ fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: 
         pan = (pan - kresp.drag_delta().y / 120.0).clamp(-1.0, 1.0);
         out = Some(());
     }
-    if kresp.double_clicked() {
+    if kresp.double_clicked() || (kresp.clicked() && ui.input(|i| i.modifiers.alt)) {
         pan = 0.0;
         out = Some(());
     }
