@@ -1,0 +1,104 @@
+//! Bramble Studio's sound: the instruments and effects (our own stand-ins for Logic's, written
+//! from scratch), all on one small interface so the engine, the mixer's slots and the plug-in
+//! windows treat them alike.
+//!
+//! - Every unit renders 32-bit float stereo at the engine's sample rate, in blocks of any size.
+//! - Parameters are listed in Logic's order (index for index with the plug-in's saved float
+//!   block, the GAMETSPP state) so a project's settings and presets carry over.
+//! - `registry` maps Logic's plug-in codes and names to ours (the matched-sounds idea).
+
+pub mod registry;
+
+/// One parameter, as the plug-in window and automation see it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Param {
+    /// Index in Logic's saved parameter block (the GAMETSPP floats); our own extras after them.
+    pub id: u32,
+    pub name: &'static str,
+    pub min: f32,
+    pub max: f32,
+    pub default: f32,
+    pub unit: Unit,
+    /// Choices for a menu parameter (index = value).
+    pub choices: &'static [&'static str],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unit {
+    None,
+    Db,
+    Hz,
+    Ms,
+    Percent,
+    Ratio,
+    Semitones,
+    Cents,
+    Seconds,
+    Octaves,
+    Pan,
+    OnOff,
+    Menu,
+}
+
+impl Param {
+    pub const fn new(id: u32, name: &'static str, min: f32, max: f32, default: f32, unit: Unit) -> Param {
+        Param { id, name, min, max, default, unit, choices: &[] }
+    }
+    pub const fn menu(id: u32, name: &'static str, choices: &'static [&'static str], default: f32) -> Param {
+        Param { id, name, min: 0.0, max: (choices.len() as f32) - 1.0, default, unit: Unit::Menu, choices }
+    }
+}
+
+/// What instruments and effects share.
+pub trait Plugin: Send {
+    /// The unit's parameters (stable order).
+    fn params(&self) -> &[Param];
+    fn get(&self, id: u32) -> f32;
+    fn set(&mut self, id: u32, value: f32);
+    /// Clears delay lines, envelopes, voices (on stop and locate).
+    fn reset(&mut self);
+    /// Seconds the output keeps sounding after the input stops (reverb, delay tails), for bounces.
+    fn tail(&self) -> f32 {
+        0.0
+    }
+    /// Sets parameters from Logic's saved float block (index = Param::id).
+    fn load_floats(&mut self, floats: &[f32]) {
+        let ids: Vec<u32> = self.params().iter().map(|p| p.id).collect();
+        for id in ids {
+            if let Some(v) = floats.get(id as usize) {
+                self.set(id, *v);
+            }
+        }
+    }
+}
+
+/// A software instrument: notes in, stereo out.
+pub trait Instrument: Plugin {
+    fn note_on(&mut self, pitch: u8, velocity: u8);
+    fn note_off(&mut self, pitch: u8);
+    /// MIDI controller (1 mod wheel, 7 volume, 10 pan, 11 expression, 64 sustain, 74 brightness…).
+    fn controller(&mut self, _cc: u8, _value: u8) {}
+    /// -8192..8191.
+    fn pitch_bend(&mut self, _value: i16) {}
+    /// Adds this block's sound into `left` and `right` (same length).
+    fn render(&mut self, left: &mut [f32], right: &mut [f32]);
+}
+
+/// An audio effect: processes the block in place.
+pub trait Effect: Plugin {
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]);
+    /// The tempo, for tempo-synced delays and LFOs.
+    fn set_tempo(&mut self, _bpm: f64) {}
+}
+
+pub fn db_to_gain(db: f32) -> f32 {
+    10f32.powf(db / 20.0)
+}
+
+pub fn gain_to_db(g: f32) -> f32 {
+    20.0 * g.max(1e-9).log10()
+}
+
+pub fn midi_hz(pitch: f32) -> f32 {
+    440.0 * 2f32.powf((pitch - 69.0) / 12.0)
+}
