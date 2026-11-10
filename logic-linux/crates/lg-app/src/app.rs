@@ -522,7 +522,7 @@ impl App {
                         if saved.unsaved.is_empty() {
                             self.tell("Saved");
                         } else {
-                            self.tell(format!("Saved — {} region(s) made here aren't in the Logic file yet", saved.unsaved.len()));
+                            self.tell(format!("Saved — {} new region(s) without a model to copy (e.g. new Drummer regions) aren't in the Logic file yet", saved.unsaved.len()));
                         }
                     }
                     Err(e) => self.tell(format!("Couldn't save: {e}")),
