@@ -93,6 +93,10 @@ pub fn areas(focus: Focus) -> &'static [&'static str] {
         Focus::PianoRoll => &["Piano Roll", "Various Editors", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Various Windows", "Global Commands"],
         Focus::Mixer => &["Mixer", "Various Windows", "Global Commands"],
         Focus::Browser => &["Browser", "Various Windows", "Global Commands"],
+        Focus::Score => &["Score Editor", "Various Editors", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Various Windows", "Global Commands"],
+        Focus::StepSeq => &["Step Sequencer", "Various Windows", "Global Commands"],
+        Focus::StepEditor => &["Step Editor", "Various Editors", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Various Windows", "Global Commands"],
+        Focus::EventList => &["Event Editor", "Various Editors", "Main Window Tracks and Various Editors", "Various Windows", "Global Commands"],
         Focus::Tracks => &["Main Window Tracks", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Windows Showing Audio Files", "Various Windows", "Global Commands"],
     }
 }
@@ -104,6 +108,11 @@ pub enum Focus {
     Mixer,
     /// The pointer over the Browser: its own keys (↩ New Track with Selected Item…) first.
     Browser,
+    /// The Score, the Step Sequencer, the Step Editor window and the Event List (List Editors).
+    Score,
+    StepSeq,
+    StepEditor,
+    EventList,
 }
 
 /// The Tool Menu's letter for a tool (T, then the letter).

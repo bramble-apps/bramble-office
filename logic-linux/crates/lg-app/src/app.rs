@@ -1228,11 +1228,14 @@ impl App {
             egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
             _ => None,
         }).collect());
-        let over_browser = self.show_browser && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.nav.browser_rect.contains(p));
-        let focus = match (self.bottom, ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.editor_rect.contains(p))) {
+        let hover = ctx.input(|i| i.pointer.hover_pos());
+        let over_browser = self.show_browser && hover.is_some_and(|p| self.nav.browser_rect.contains(p));
+        let focus = match (self.bottom, hover.is_some_and(|p| self.editor_rect.contains(p))) {
+            _ if crate::stepedit::hovered(ctx, hover) => crate::keymap::Focus::StepEditor,
+            _ if crate::eventedit::hovered(self, ctx, hover) => crate::keymap::Focus::EventList,
             _ if over_browser => crate::keymap::Focus::Browser,
             (Bottom::Mixer, true) => crate::keymap::Focus::Mixer,
-            (Bottom::PianoRoll, true) => crate::keymap::Focus::PianoRoll,
+            (Bottom::PianoRoll, true) => crate::score::focus(self, ctx),
             _ => crate::keymap::Focus::Tracks,
         };
         let used = crate::live::frame(self, ctx);
@@ -1254,6 +1257,9 @@ impl App {
                 if key == egui::Key::Escape {
                     continue;
                 }
+            }
+            if crate::stepinput::key_press(self, ctx, key, m) {
+                continue;
             }
             if focus == crate::keymap::Focus::PianoRoll && crate::audioedit::key_press(self, key, m) {
                 continue;
@@ -1291,6 +1297,11 @@ impl App {
             return true;
         }
         if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
+            return true;
+        }
+        // the MIDI editors besides the Piano Roll: Score, Step Sequencer, Step Input, Step and
+        // Event Editors
+        if crate::scorecmd::command(self, ctx, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
             return true;
         }
         if crate::mixercmd::run(self, ctx, name) {
@@ -1762,6 +1773,8 @@ impl App {
         }
         crate::dialogs::show(self, &ctx);
         crate::midiwin::windows(self, &ctx);
+        crate::stepinput::window(self, &ctx);
+        crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);

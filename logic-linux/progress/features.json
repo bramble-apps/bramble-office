@@ -92,7 +92,37 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [ ] Project Audio window (\u23188) and its 17 other commands"
+  "feature": "Editors pane: Piano Roll, Score (see below), Step Sequencer (see below), Session Player editors. [ ] audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Score editor (score.rs, scorecmd.rs, lg-notation, lg-core score): Linear, Wrapped and Page views (lines laid out by content, pages with title, page numbers, page rulers, Go to Page), staff styles (Treble, 8va / 8vb, Bass, Piano grand staff, Alto, Tenor, Drums with the GM drum map and cross heads, Guitar, Bass Guitar, B\u266d Trumpet / Clarinet / Tenor Sax, E\u266d Alto Sax, F Horn: written transposition and key), the region's Quantize / Interpretation / Syncopation, voice separation (two voices per staff, Explode Polyphony), Explode Folders (every MIDI track), score sets, instrument names, colour views (pitch, velocity, voice, B&W, note colours), duration bars, drag guides; Part box (notes with dot and triplet, articulations, dynamics with MIDI Meaning velocities, slurs, hairpins, clef changes, text, lyrics, chord symbols, key changes); note attributes (stems up / down / hidden / centred / end moved, ties up / down, Beam / Unbeam Selected, accidentals force / hide / guide, enharmonic shifts, Flats\u2194Sharps, interpretation / syncopation per note, staff assignment, fingering, pick fingers, auto slurs); Fix Displayed Note Positions (and Durations), Assign MIDI Channels based on Score Split, Nudge Position, Paste Multiple; Score Project Settings window (staff size, bar numbers, chord size, key on every line, MIDI Meaning, colours) and Staff Style window; 133/139 of Logic's Score Editor key commands; every edit one undo step (attributes live in the project). [ ] Stem Position Automatic / Side and Independent / Independent Grace are stored but not drawn differently; user-defined staff styles (Duplicate Staff Style only pins the current one), tablature, Extended Layout, Align Object Positions, Reset Line Layout; dragging symbols; time signature changes; key / clef changes are at bar lines only; score data not saved into the .logicx (and attributes keyed by note position are lost when a note is moved outside the Score); print / export to PDF and MusicXML; Logic's exact engraving distances unmeasured"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (\u2325\u21e7B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. [ ] automation rows, per-step Step Rate mode, Zoom Focused Row, Display Edit Mode Values options, Sort Rows, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Step Input Keyboard (stepinput.rs, \u2325\u2318K): Logic's window (chord, values 1/1\u20131/64, dot, triplet, rest, ppp\u2013fff, Q, channel, keyboard C0\u2013C7), all 49 key commands while it is open, notes from MIDI keyboards, into the selected region at the playhead (the region grows), Diatonic Insert in the Score. [ ] the Score's own step-input cursor"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Step Editor (stepedit.rs, Window \u25b8 Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Event Editor (eventedit.rs, the List Editors' Events): \u2191 \u2193, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (notes have no articulation ID yet)"
+ },
+ {
+  "area": "Main window",
+  "status": "Not started",
+  "feature": "Drum Machine Designer key commands: no pad view in Studio yet"
  },
  {
   "area": "Main window",
