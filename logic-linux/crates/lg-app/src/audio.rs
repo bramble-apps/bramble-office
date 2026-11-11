@@ -236,6 +236,7 @@ impl Engine {
                     if !t.instrument_floats.is_empty() {
                         ins.load_floats(&t.instrument_floats);
                     }
+                    ins.set_tempo(self.tempo);
                 }
                 u.built_for = t.instrument.clone();
             }

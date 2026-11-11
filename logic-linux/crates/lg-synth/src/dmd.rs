@@ -3,10 +3,10 @@
 //! (Quick-Sampler style one-shot) — summed into one stereo out with a shared room.
 //! The default layout follows Logic's "Drum Synth Kit" pad page (session-players/KIT-NOTES).
 
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use crate::drums::{Pad, StudioDrumKit};
-use crate::sampler::{LoopMode, Pcm, SampleData, Sampler, Zone};
+use crate::quick::QuickSampler;
 use lg_dsp::{Instrument, Param, Plugin, Unit};
 
 pub const FIRST_PAD: u8 = 36;
@@ -153,10 +153,14 @@ pub fn default_layout(style: u8) -> [Pad; 128] {
 pub struct DrumMachineDesigner {
     params: crate::poly::Params,
     drums: StudioDrumKit,
-    samples: Sampler,
-    sample_pads: [bool; 128],
-    zones: Vec<Zone>,
+    /// A pad with a sample plays it through its own Quick Sampler (One Shot by default).
+    quick: Vec<Option<Box<QuickSampler>>>,
+    /// Pad Mute / Solo (by note).
+    pub muted: [bool; 128],
+    pub soloed: [bool; 128],
     rate: f32,
+    /// The editor's revision the pads came from.
+    pub doc_rev: u64,
 }
 
 impl DrumMachineDesigner {
@@ -164,10 +168,11 @@ impl DrumMachineDesigner {
         let mut d = DrumMachineDesigner {
             params: crate::poly::Params::new(params()),
             drums: StudioDrumKit::new(rate),
-            samples: Sampler::new(Vec::new(), rate),
-            sample_pads: [false; 128],
-            zones: Vec::new(),
+            quick: (0..128).map(|_| None).collect(),
+            muted: [false; 128],
+            soloed: [false; 128],
             rate,
+            doc_rev: 0,
         };
         d.apply();
         d
@@ -204,33 +209,73 @@ impl DrumMachineDesigner {
         self.drums.set(18, self.params.get(1));
         self.drums.set(20, 0.4);
     }
-    /// Puts a sample on a pad (one-shot, unpitched at the pad's own key).
+    /// Puts a sample on a pad: its own Quick Sampler, One Shot, at the pad's key.
     pub fn set_pad_sample(&mut self, note: u8, audio: &crate::wav::Audio) {
-        let ch = audio
-            .channels
-            .iter()
-            .take(2)
-            .map(|c| Pcm::F32(c.clone()))
-            .collect();
-        let data = Arc::new(SampleData {
-            rate: audio.rate as f32,
-            ch,
-        });
-        self.zones.retain(|z| z.lokey != note);
-        let mut z = Zone::new(data);
-        z.lokey = note;
-        z.hikey = note;
-        z.root = note;
-        z.loop_mode = LoopMode::OneShot;
-        z.env = [0.0, 0.001, 0.0, 0.0, 1.0, 0.05];
-        self.zones.push(z);
-        self.sample_pads[note as usize & 127] = true;
-        self.samples.set_zones(self.zones.clone());
+        let mut q = QuickSampler::new(self.rate);
+        q.set_audio(audio.clone());
+        q.set(0, 1.0);
+        q.set(1, note as f32);
+        q.set(15, 0.0);
+        self.quick[note as usize & 127] = Some(Box::new(q));
+    }
+    /// A pad's Quick Sampler as it is set up (the pad editor).
+    pub fn set_pad_quick(&mut self, note: u8, q: QuickSampler) {
+        self.quick[note as usize & 127] = Some(Box::new(q));
+    }
+    pub fn pad_quick(&self, note: u8) -> Option<&QuickSampler> {
+        self.quick.get(note as usize)?.as_deref()
+    }
+    pub fn pad_quick_mut(&mut self, note: u8) -> Option<&mut QuickSampler> {
+        self.quick.get_mut(note as usize)?.as_deref_mut()
     }
     pub fn clear_pad_sample(&mut self, note: u8) {
-        self.zones.retain(|z| z.lokey != note);
-        self.sample_pads[note as usize & 127] = false;
-        self.samples.set_zones(self.zones.clone());
+        self.quick[note as usize & 127] = None;
+    }
+    /// The pad's choke (exclusive) group.
+    pub fn pad_choke(&self, note: u8) -> u8 {
+        let k = note as usize;
+        if (FIRST_PAD as usize..FIRST_PAD as usize + PADS).contains(&k) { self.params.get(pad_param(k - FIRST_PAD as usize, 6)).round() as u8 } else { 0 }
+    }
+    /// Resample Pad: the pad's sound now (its drum or sample with its tuning), rendered into a
+    /// sample that the pad then plays.
+    pub fn resample_pad(&mut self, note: u8) -> crate::wav::Audio {
+        let rate = self.rate;
+        let mut tmp = DrumMachineDesigner::new(rate);
+        for p in params() {
+            tmp.params.set(p.id, self.params.get(p.id));
+        }
+        tmp.apply();
+        if let Some(q) = self.pad_quick(note) {
+            tmp.quick[note as usize] = Some(Box::new(q.duplicate()));
+        }
+        tmp.note_on(note, 127);
+        let mut l = Vec::new();
+        let mut r = Vec::new();
+        let block = 256;
+        let (mut bl, mut br) = (vec![0.0f32; block], vec![0.0f32; block]);
+        let mut quiet = 0;
+        for i in 0..(rate as usize * 8 / block) {
+            bl.fill(0.0);
+            br.fill(0.0);
+            tmp.render(&mut bl, &mut br);
+            if i == (rate as usize / 10) / block {
+                tmp.note_off(note);
+            }
+            let pk = bl.iter().chain(br.iter()).fold(0.0f32, |m, x| m.max(x.abs()));
+            l.extend_from_slice(&bl);
+            r.extend_from_slice(&br);
+            quiet = if pk < 1e-4 { quiet + 1 } else { 0 };
+            if quiet * block > rate as usize / 10 && i > 4 {
+                break;
+            }
+        }
+        let a = crate::wav::Audio { rate: rate as u32, channels: vec![l, r], ..Default::default() };
+        self.set_pad_sample(note, &a);
+        a
+    }
+    fn audible(&self, p: u8) -> bool {
+        let k = p as usize & 127;
+        !self.muted[k] && (!self.soloed.iter().any(|s| *s) || self.soloed[k])
     }
 }
 
@@ -270,7 +315,9 @@ impl Plugin for DrumMachineDesigner {
     }
     fn reset(&mut self) {
         self.drums.reset();
-        self.samples.reset();
+        for q in self.quick.iter_mut().flatten() {
+            q.reset();
+        }
         self.apply();
     }
     fn tail(&self) -> f32 {
@@ -280,26 +327,51 @@ impl Plugin for DrumMachineDesigner {
 
 impl Instrument for DrumMachineDesigner {
     fn note_on(&mut self, p: u8, v: u8) {
-        if self.sample_pads[p as usize & 127] {
-            self.samples.note_on(p, v)
-        } else {
-            self.drums.note_on(p, v)
+        if v == 0 {
+            return self.note_off(p);
+        }
+        if !self.audible(p) {
+            return;
+        }
+        // an exclusive group: this pad stops the others in it (samples and drums alike)
+        let g = self.pad_choke(p);
+        if g != 0 {
+            for n in 0..128u8 {
+                if n != p && self.pad_choke(n) == g {
+                    if let Some(q) = self.quick[n as usize].as_mut() {
+                        q.choke();
+                    }
+                }
+            }
+            self.drums.choke_group(g, p);
+        }
+        match self.quick[p as usize & 127].as_mut() {
+            Some(q) => q.note_on(p, v),
+            None => self.drums.note_on(p, v),
         }
     }
     fn note_off(&mut self, p: u8) {
-        if self.sample_pads[p as usize & 127] {
-            self.samples.note_off(p)
+        if let Some(q) = self.quick[p as usize & 127].as_mut() {
+            q.note_off(p)
         }
     }
     fn controller(&mut self, cc: u8, v: u8) {
         self.drums.controller(cc, v);
-        self.samples.controller(cc, v);
+        for q in self.quick.iter_mut().flatten() {
+            q.controller(cc, v);
+        }
     }
     fn render(&mut self, l: &mut [f32], r: &mut [f32]) {
         let _ = self.rate;
         self.drums.render(l, r);
-        if !self.zones.is_empty() {
-            self.samples.render(l, r);
+        for q in self.quick.iter_mut().flatten() {
+            q.render(l, r);
         }
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
 }

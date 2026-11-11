@@ -12,6 +12,8 @@
 //! stay synthesized.
 
 pub mod alchemy;
+pub mod alchemy_extra;
+pub mod arp;
 pub mod bass;
 pub mod clav;
 pub mod dmd;
@@ -31,6 +33,8 @@ pub mod quick;
 pub mod retro;
 pub mod sampled;
 pub mod sampler;
+pub mod sampler_doc;
+pub mod sampler_synth;
 pub mod sculpture;
 pub mod string;
 pub mod wav;

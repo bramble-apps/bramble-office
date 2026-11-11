@@ -276,6 +276,8 @@ pub struct App {
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
+    /// The instrument editors (Sampler, Quick Sampler, Drum Machine / Kit Designer, Alchemy).
+    pub inst: crate::instwin::State,
     /// The Mixer's groups, VCAs, routing, master chain, filters, selection and undo (mixstate).
     pub mix: crate::mixstate::Mix,
     /// MIDI editing: the Piano Roll's focus, note clipboard, MIDI Transform window, View options.
@@ -465,6 +467,7 @@ impl App {
             plugin_clipboard: None,
             rec: Default::default(),
             plugin_compare: Default::default(),
+            inst: Default::default(),
             midi: Default::default(),
             stopbtn: Default::default(),
             cb_show: Default::default(),
@@ -1218,6 +1221,10 @@ impl App {
             if focus == crate::keymap::Focus::PianoRoll && crate::audioedit::key_press(self, key, m) {
                 continue;
             }
+            // over an instrument editor: its undo and its key commands
+            if crate::instwin::key_press(self, ctx, key, m) {
+                continue;
+            }
             if m.command && key == egui::Key::Z {
                 // over the Mixer, its own history first (Include Mixer Undo Steps in Project Undo)
                 if focus == crate::keymap::Focus::Mixer && self.mix.include_in_project_undo && (if m.shift { crate::mixstate::redo(self) } else { crate::mixstate::undo(self) }) {
@@ -1251,7 +1258,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
+        if crate::instwin::command(self, ctx, name) || crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
             return true;
         }
         if crate::flex::command(self, ctx, name) || crate::hosting::command(self, name) {
@@ -1784,7 +1791,9 @@ impl eframe::App for App {
         kn_ui::begin_frame(&ctx);
         // a .logicx dropped on the window opens
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
-        if let Some(p) = dropped.first() {
+        if let Some(p) = dropped.first()
+            && !crate::instwin::takes_drop(self, &ctx, &dropped)
+        {
             self.open_path(p);
         }
         self.keys(&ctx);

@@ -31,7 +31,7 @@ fn fmt(p: &lg_dsp::Param, v: f32) -> String {
 
 /// The Controls view: a row per parameter; returns the parameters changed (id, value).
 /// `texts`: the plug-in's own text for a value when it has one (hosted plug-ins).
-fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], texts: &[Option<String>], salt: &str) -> Vec<(u32, f32)> {
+pub(crate) fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], texts: &[Option<String>], salt: &str) -> Vec<(u32, f32)> {
     let mut set = Vec::new();
     egui::ScrollArea::vertical().id_salt(salt).auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
@@ -107,6 +107,9 @@ fn header_buttons(ui: &mut egui::Ui, p: &egui::Painter, hr: Rect, salt: &str, co
 pub fn window(app: &mut App, ctx: &egui::Context) {
     fx_window(app, ctx);
     crate::mixer::group_window(app, ctx);
+    if crate::instwin::window(app, ctx) {
+        return;
+    }
     let Some(t) = app.plugin_window else { return };
     let Some((params, values)) = app.engine.lock().ok().and_then(|e| e.instrument_params(t)) else {
         app.plugin_window = None;

@@ -41,7 +41,11 @@ pub struct QuickSampler {
     inner: Sampler,
     /// Slice start frames (Slice mode).
     pub slices: Vec<usize>,
+    /// Slices placed by hand (the waveform's slice markers); None: found by Slice Sensitivity.
+    pub manual_slices: Option<Vec<usize>>,
     rate: f32,
+    /// The editor's revision this sample came from.
+    pub doc_rev: u64,
 }
 
 impl QuickSampler {
@@ -52,7 +56,9 @@ impl QuickSampler {
             data: None,
             inner: Sampler::new(Vec::new(), rate),
             slices: Vec::new(),
+            manual_slices: None,
             rate,
+            doc_rev: 0,
         }
     }
     pub fn from_file(path: &Path, rate: f32) -> std::io::Result<QuickSampler> {
@@ -141,7 +147,18 @@ impl QuickSampler {
                 zones.push(base);
             }
             2 => {
-                self.slices = detect_slices(&data, start, end, p(14));
+                self.slices = match &self.manual_slices {
+                    Some(m) => {
+                        let mut v: Vec<usize> = m.iter().copied().filter(|&x| x >= start && x < end).collect();
+                        v.sort_unstable();
+                        v.dedup();
+                        if v.first() != Some(&start) {
+                            v.insert(0, start);
+                        }
+                        v
+                    }
+                    None => detect_slices(&data, start, end, p(14)),
+                };
                 for (k, &s0) in self.slices.iter().enumerate().take(64) {
                     let s1 = self.slices.get(k + 1).copied().unwrap_or(end);
                     let mut z = base.clone();
@@ -172,6 +189,36 @@ impl QuickSampler {
         self.inner.set_zones(zones);
         self.inner.set(0, p(13));
         self.inner.set(12, p(18));
+    }
+}
+
+impl QuickSampler {
+    /// The loaded sample (for the waveform display).
+    pub fn audio(&self) -> Option<&Audio> {
+        self.audio.as_ref()
+    }
+    /// The slice markers by hand (Slice mode), or back to the detected ones.
+    pub fn set_slices(&mut self, s: Option<Vec<usize>>) {
+        self.manual_slices = s;
+        self.rebuild();
+    }
+    /// A copy with the same sample and settings.
+    pub fn duplicate(&self) -> QuickSampler {
+        let mut q = QuickSampler::new(self.rate);
+        if let Some(a) = &self.audio {
+            q.set_audio(a.clone());
+        }
+        for p in PARAMS {
+            q.params.set(p.id, self.params.get(p.id));
+        }
+        q.manual_slices = self.manual_slices.clone();
+        q.rebuild_data();
+        q.rebuild();
+        q
+    }
+    /// Stops the sound at once (a choke).
+    pub fn choke(&mut self) {
+        self.inner.choke();
     }
 }
 
@@ -289,5 +336,11 @@ impl Instrument for QuickSampler {
     fn render(&mut self, l: &mut [f32], r: &mut [f32]) {
         let _ = self.rate;
         self.inner.render(l, r)
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
 }

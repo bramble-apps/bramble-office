@@ -164,27 +164,9 @@ pub fn menu_items(ui: &mut egui::Ui, kind: Kind, current: Option<&str>) -> Optio
     picked
 }
 
-/// The instrument slot's menu (click on its arrow, or right-click): No Plug-in and the hosted
-/// instruments under Audio Units. Loads the pick on the track.
-pub fn instrument_slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
-    let current = app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.plugins.iter().find(|u| u.slot == 2)).map(|u| u.name.clone());
-    let hosted_now = current.as_deref().is_some_and(|n| lg_host::parse_studio_name(n).is_some());
-    let mut pick: Option<Option<String>> = None;
-    resp.context_menu(|ui| {
-        ui.set_min_width(200.0);
-        if hosted_now && ui.button("No Plug-in").clicked() {
-            pick = Some(None);
-            ui.close();
-        }
-        ui.menu_button("Audio Units", |ui| {
-            if let Some(n) = menu_items(ui, Kind::Instrument, current.as_deref()) {
-                pick = Some(Some(n));
-            }
-        });
-    });
-    if let Some(p) = pick {
-        set_instrument(app, t, p);
-    }
+/// The hosted instruments by manufacturer, for another slot menu (instwin.rs); the one picked.
+pub fn instrument_items(ui: &mut egui::Ui) -> Option<String> {
+    menu_items(ui, Kind::Instrument, None)
 }
 
 /// Puts a hosted instrument in a track's instrument slot (None: takes it out, the track plays

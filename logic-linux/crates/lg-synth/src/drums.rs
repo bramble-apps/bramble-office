@@ -49,7 +49,27 @@ pub static PARAMS: &[Param] = &[
     Param::new(21, "Stereo Width", 0.0, 1.0, 0.6, Unit::Ratio),
     Param::new(22, "Tune", -12.0, 12.0, 0.0, Unit::Semitones),
     Param::new(23, "Punch", 0.0, 1.0, 0.3, Unit::Ratio),
+    // Drum Kit Designer: each kit piece from another kit ("Kit": the kit's own), the tune and
+    // damp of the pieces the knobs above don't have
+    Param::menu(24, "Kick Piece", PIECE_KITS, 0.0),
+    Param::menu(25, "Snare Piece", PIECE_KITS, 0.0),
+    Param::menu(26, "Toms Piece", PIECE_KITS, 0.0),
+    Param::menu(27, "Hi-Hat Piece", PIECE_KITS, 0.0),
+    Param::menu(28, "Cymbals Piece", PIECE_KITS, 0.0),
+    Param::menu(29, "Percussion Piece", PIECE_KITS, 0.0),
+    Param::new(30, "Hi-Hat Tune", -12.0, 12.0, 0.0, Unit::Semitones),
+    Param::new(31, "Cymbals Tune", -12.0, 12.0, 0.0, Unit::Semitones),
+    Param::new(32, "Percussion Tune", -12.0, 12.0, 0.0, Unit::Semitones),
+    Param::new(33, "Percussion Decay", 0.2, 3.0, 1.0, Unit::Ratio),
 ];
+
+/// A kit piece's source (Drum Kit Designer's piece choices): the kit's own, or another kit's.
+pub const PIECE_KITS: &[&str] = &["Kit", "Studio Kit", "Vintage Kit", "Heavy Kit", "Brush Kit", "Analog 808", "Analog 909", "Electronic Pop"];
+
+/// The kit piece (mixer group) a note plays in the Drum Kit Designer map.
+pub fn piece_of(note: u8) -> Option<Group> {
+    build_hit(0, note, 0.5, [0.0; 4]).map(|h| h.group)
+}
 
 /// Which mixer group a piece belongs to (for the level/tune/decay knobs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -1002,6 +1022,8 @@ impl Voice<DrumShared> for DrumVoice {
 }
 
 pub struct StudioDrumKit {
+    /// Kit pieces swapped in from other kits (the pads say which).
+    pieces: bool,
     params: Params,
     poly: Poly<DrumVoice>,
     ch: Channel,
@@ -1015,6 +1037,7 @@ impl StudioDrumKit {
         dsp::warm_tables();
         let mut seed = 1000;
         let mut k = StudioDrumKit {
+            pieces: false,
             params: Params::new(PARAMS),
             poly: Poly::new(48, || {
                 seed += 101;
@@ -1036,6 +1059,14 @@ impl StudioDrumKit {
         self.sh.pads = *pads;
         self.sh.use_pads = true;
     }
+    /// Stops the hits of an exclusive (choke) group, except on `except`'s key.
+    pub fn choke_group(&mut self, group: u8, except: u8) {
+        for v in &mut self.poly.voices {
+            if v.on && v.choke == group && v.note != except {
+                v.kill(self.rate);
+            }
+        }
+    }
     /// Selects a kit by index (see `KITS`).
     pub fn with_kit(rate: f32, kit: u8) -> StudioDrumKit {
         let mut k = StudioDrumKit::new(rate);
@@ -1056,15 +1087,31 @@ impl StudioDrumKit {
             db(self.p(15)),
             db(self.p(17)),
         ];
-        self.sh.tunes = [self.p(3), self.p(6), self.p(10), 0.0, 0.0, 0.0];
+        self.sh.tunes = [self.p(3), self.p(6), self.p(10), self.p(30), self.p(31), self.p(32)];
         self.sh.decays = [
             self.p(4),
             self.p(7),
             self.p(11),
             self.p(14),
             self.p(16),
-            1.0,
+            self.p(33),
         ];
+        // kit pieces from other kits (Drum Kit Designer): every note of the piece plays that kit
+        let pieces: [u8; 6] = std::array::from_fn(|k| self.p(24 + k as u32).round() as u8);
+        if pieces.iter().any(|&x| x > 0) {
+            let mut pads = [Pad::default(); 128];
+            for n in 0..128u8 {
+                let g = piece_of(n).map(|g| g as usize).unwrap_or(5);
+                let kit = if pieces[g] > 0 { pieces[g] - 1 } else { self.sh.kit };
+                pads[n as usize] = Pad { kit, src: n, ..Pad::default() };
+            }
+            self.sh.pads = pads;
+            self.sh.use_pads = true;
+            self.pieces = true;
+        } else if self.pieces {
+            self.sh.use_pads = false;
+            self.pieces = false;
+        }
         self.sh.wires = self.p(8);
         self.sh.hat_tone = self.p(13);
         self.sh.vel_sens = self.p(19);
@@ -1150,6 +1197,12 @@ impl Instrument for StudioDrumKit {
     }
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());

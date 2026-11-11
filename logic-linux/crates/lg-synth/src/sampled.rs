@@ -35,7 +35,8 @@ impl SampledInstrument {
 
 impl Plugin for SampledInstrument {
     fn params(&self) -> &[Param] {
-        self.inner.params()
+        // the Sampler's first knobs (the synth section's are for the Sampler editor)
+        sampler::PARAMS
     }
     fn get(&self, id: u32) -> f32 {
         self.inner.get(id)
