@@ -49,6 +49,11 @@ pub mod beat_breaker;
 pub mod step_fx;
 pub mod delay_designer;
 pub mod meters;
+pub mod more_fx;
+pub mod verbs;
+pub mod pitchfx;
+pub mod evoc;
+pub mod match_eq;
 
 use lg_dsp::Effect;
 
@@ -148,6 +153,15 @@ pub fn by_logic_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
         "Step FX" => Box::new(step_fx::StepFx::new(rate)),
         "Beat Breaker" | "Beat Break" => Box::new(beat_breaker::BeatBreaker::new(rate)),
         n => {
+            if n == "Match EQ" {
+                return Some(Box::new(match_eq::MatchEq::new(rate)));
+            }
+            if let Some(m) = verbs::by_name(n, rate).or_else(|| pitchfx::by_name(n, rate)).or_else(|| evoc::by_name(n, rate)) {
+                return Some(m);
+            }
+            if let Some(m) = more_fx::by_name(n, rate) {
+                return Some(m);
+            }
             if let Some(m) = meters::Meter::new(n, rate) {
                 return Some(Box::new(m));
             }
@@ -165,5 +179,7 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
     let mut v = NAMES.to_vec();
     v.extend(pedals::PEDALS.iter().map(|(n, ..)| (*n, *n)));
     v.extend(meters::Meter::names().iter().map(|n| (*n, *n)));
+    v.extend(more_fx::NAMES.iter().map(|n| (*n, *n)));
+    v.extend(verbs::NAMES.iter().chain(pitchfx::NAMES).chain(evoc::NAMES).chain(&["Match EQ"]).map(|n| (*n, *n)));
     v
 }

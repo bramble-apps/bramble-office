@@ -20,8 +20,8 @@
 //! layouts for these pedals aren't decoded, so the order after On is the guide's.
 
 use crate::kit::{Shifter, Svf};
-use crate::util::{Biquad, Coefs, Delay, Follower, Noise, PI, Phase, Smooth, TAU, Values, db, flush, plugin_impl, sine01, tri};
-use lg_dsp::{Effect, Param, Plugin, Unit};
+use crate::util::{Biquad, Coefs, Delay, Follower, Noise, PI, Phase, Smooth, Values, db, flush, plugin_impl, sine01, tri};
+use lg_dsp::{Effect, Param, Unit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -105,12 +105,12 @@ const fn rate(id: u32, d: f32) -> Param {
 
 static SPRING: [Param; 5] = [ON, Param::menu(1, "Time", &["Short", "Medium", "Long"], 1.0), pct(2, "Tone", 55.0), Param::menu(3, "Style", &["Boutique", "Simple", "Vintage", "Bright", "Resonant"], 0.0), pct(4, "Mix", 35.0)];
 static TIEDYE: [Param; 8] = [ON, Param::new(1, "Sync", 0.0, 1.0, 1.0, Unit::OnOff), Param::new(2, "Time", 0.02, 2.0, 0.25, Unit::None), pct(3, "Feedback", 35.0), pct(4, "Tone", 60.0), Param::menu(5, "Bright/Dark", &["Bright", "Dark"], 1.0), pct(6, "Mix", 40.0), Param::new(7, "Listen", 0.0, 1.0, 0.0, Unit::OnOff)];
-static CANDY: [Param; 3] = [ON, pct(1, "Drive", 60.0), lvl(2, "Level", -6.0)];
+static CANDY: [Param; 3] = [ON, pct(1, "Drive", 60.0), lvl(2, "Level", -18.0)];
 static DRAGON: [Param; 9] = [ON, pct(1, "Drive", 50.0), pct(2, "Tone", 50.0), lvl(3, "Level", -6.0), lvl(4, "Input", 0.0), pct(5, "Squash", 30.0), pct(6, "Contour", 40.0), pct(7, "Mix", 100.0), Param::menu(8, "Bright/Fat", &["Bright", "Fat"], 0.0)];
 static FUZZM: [Param; 4] = [ON, pct(1, "Fuzz", 60.0), lvl(2, "Level", -8.0), pct(3, "Tone", 50.0)];
 static GRINDER: [Param; 5] = [ON, pct(1, "Grind", 60.0), pct(2, "Filter", 50.0), lvl(3, "Level", -8.0), Param::menu(4, "Full/Scoop", &["Full", "Scoop"], 0.0)];
 static GRIT: [Param; 4] = [ON, pct(1, "Volume", 50.0), pct(2, "Filter", 50.0), pct(3, "Distortion", 50.0)];
-static HAPPY: [Param; 3] = [ON, pct(1, "Fuzz", 55.0), lvl(2, "Volume", -6.0)];
+static HAPPY: [Param; 3] = [ON, pct(1, "Fuzz", 55.0), lvl(2, "Volume", -18.0)];
 static HIDRIVE: [Param; 3] = [ON, lvl(1, "Level", -3.0), Param::menu(2, "Treble/Full", &["Treble", "Full"], 0.0)];
 static MONSTER: [Param; 7] = [ON, pct(1, "Roar", 60.0), pct(2, "Growl", 50.0), pct(3, "Tone", 50.0), pct(4, "Texture", 30.0), pct(5, "Grain", 30.0), lvl(6, "Level", -10.0)];
 static OCTA: [Param; 4] = [ON, pct(1, "Fuzz", 60.0), lvl(2, "Level", -8.0), pct(3, "Tone", 30.0)];
@@ -455,7 +455,7 @@ impl Pedal {
                     Grinder => g(3),
                     MonsterFuzz => g(6) - 6.0 * t,
                     HappyFace => g(2),
-                    _ => -6.0,
+                    _ => -16.0,
                 };
             }
             HiDrive => {
@@ -678,7 +678,8 @@ impl Effect for Pedal {
                     for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
                         self.svf[s][0].set(rate, f, q);
                         let o = self.svf[s][0].run(*x);
-                        *x = if lp { o.low } else { o.band * if self.kind == AutoFunk { 1.0 } else { 1.6 } + if mode >= 2 { 0.15 * *x } else { 0.0 } };
+                        // the band output normalised to unity at its peak, a little dry kept
+                        *x = if lp { o.low } else { o.band / q * 2.0 + if self.kind == ClassicWah { 0.1 * *x } else { 0.3 * *x } };
                     }
                 }
             }
@@ -975,6 +976,8 @@ pub fn is_modulation(k: Kind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::TAU;
+    use lg_dsp::Plugin;
 
     fn sine(n: usize, hz: f32, a: f32) -> Vec<f32> {
         (0..n).map(|i| (TAU * hz * i as f32 / 48000.0).sin() * a).collect()

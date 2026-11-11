@@ -100,7 +100,6 @@ pub const fn step_id(m: usize, s: usize, f: u32) -> u32 {
 
 /// The parameter each target moves (by index into TARGETS; 0..3 are gate / pan).
 const TARGET_PARAM: [u32; 23] = [0, 0, 0, 0, MOD_DELAY, MOD_RATE, MOD_DEPTH, MOD_FB, MOD_MIX, DLY_FB, DLY_CUT, DLY_MIX, FLT_CUT, FLT_RES, FLT_DRIVE, FLT_MIX, DST_EXC, DST_DIRT, REV_TIME, REV_MIX, INPUT, MIX, OUTPUT];
-const RATES: [usize; 8] = [4, 7, 10, 13, 5, 8, 11, 9];
 
 static PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
     let mut v = vec![
@@ -790,6 +789,6 @@ mod tests {
         let y = run(&mut fx, &x);
         let p = y[24000..].iter().fold(0.0f32, |m, v| m.max(v.abs()));
         assert!(p < 0.01, "{p}");
-        let _ = RATES;
+
     }
 }

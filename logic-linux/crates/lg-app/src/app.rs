@@ -1256,6 +1256,9 @@ impl App {
         if crate::recording::command(self, name) {
             return true;
         }
+        if crate::stemsplit::command(self, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
@@ -1717,6 +1720,7 @@ impl App {
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
+        crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projfile::windows(self, &ctx);
         if let Some(t) = self.eq_window {

@@ -55,6 +55,11 @@ fn region(app: &App, t: usize, r: usize) -> Option<&Region> {
     app.project.as_ref()?.tracks.get(t)?.regions.get(r)
 }
 
+/// `seconds` for other modules (Stem Splitter).
+pub(crate) fn seconds_pub(app: &App, a: u32, b: u32) -> f64 {
+    seconds(app, a, b)
+}
+
 fn seconds(app: &App, a: u32, b: u32) -> f64 {
     app.seconds_at(b as f64) - app.seconds_at(a as f64)
 }

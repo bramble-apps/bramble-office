@@ -10,7 +10,7 @@ use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 use crate::app::App;
 use crate::look;
 
-fn fmt(p: &lg_dsp::Param, v: f32) -> String {
+pub(crate) fn fmt(p: &lg_dsp::Param, v: f32) -> String {
     use lg_dsp::Unit::*;
     match p.unit {
         Menu => p.choices.get(v.round().max(0.0) as usize).copied().unwrap_or("").to_string(),
@@ -29,12 +29,25 @@ fn fmt(p: &lg_dsp::Param, v: f32) -> String {
     }
 }
 
-/// The Controls view: a row per parameter; returns the parameters changed (id, value).
-fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &str) -> Vec<(u32, f32)> {
+/// The Controls view: a row per parameter (the hidden ones, a custom view's stored state,
+/// left out); returns the parameters changed (id, value).
+pub(crate) fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &str) -> Vec<(u32, f32)> {
     let mut set = Vec::new();
     egui::ScrollArea::vertical().id_salt(salt).auto_shrink([false, false]).show(ui, |ui| {
+        set = control_rows(ui, params, values, salt);
+    });
+    set
+}
+
+/// The Controls view's rows without the scroll area (custom views embed them).
+pub(crate) fn control_rows(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &str) -> Vec<(u32, f32)> {
+    let mut set = Vec::new();
+    {
         ui.spacing_mut().item_spacing.y = 2.0;
         for (prm, &v) in params.iter().zip(values.iter()) {
+            if prm.hidden {
+                continue;
+            }
             let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
             let p = ui.painter().clone();
             let name_w = (row.width() * 0.34).min(200.0);
@@ -71,7 +84,7 @@ fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &
             }
             p.text(pos2(row.max.x - 4.0, row.center().y), Align2::RIGHT_CENTER, fmt(prm, v), look::regular(12.0), look::text());
         }
-    });
+    }
     set
 }
 
@@ -182,6 +195,11 @@ fn effect_state(app: &App, s: usize, k: usize) -> Option<(String, Vec<lg_dsp::Pa
     Some((u.name, params, values))
 }
 
+/// `effect_state` for the custom views' actions.
+pub(crate) fn effect_state_pub(app: &App, s: usize, k: usize) -> Option<(String, Vec<lg_dsp::Param>, Vec<f32>)> {
+    effect_state(app, s, k)
+}
+
 /// The saved float block for these values (index = parameter id), as a project keeps it.
 pub fn floats_of(params: &[lg_dsp::Param], values: &[f32], base: &[f32]) -> Vec<f32> {
     let n = params.iter().map(|p| p.id as usize + 1).max().unwrap_or(0).max(base.len());
@@ -285,7 +303,9 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     let mut reset = false;
     let mut save: Option<String> = None;
     let comparing = app.mix.compare.contains_key(&(s, k));
-    egui::Window::new(format!("{strip} — {name}")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(520.0, 460.0)).show(ctx, |ui| {
+    let mut fx_action: Option<crate::fxviews::Action> = None;
+    let size = crate::fxviews::default_size(&name);
+    egui::Window::new(format!("{strip} — {name}")).open(&mut open).collapsible(false).resizable(true).default_size(size).show(ctx, |ui| {
         let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
         let p = ui.painter().clone();
         p.rect_filled(hr, 6.0, look::header_bg());
@@ -343,17 +363,55 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
         if let Some(a) = header_buttons(ui, &p, hr, "fx", comparing) {
             action = Some(a);
         }
+        // View: Logic's editor (where Studio has one for the plug-in) or Controls
+        let has_editor = crate::fxviews::has_editor(&name);
+        let view_id = ui.scope_id().with(("fx-view", s, k));
+        let mut editor = has_editor && ui.data(|d| d.get_temp::<bool>(view_id)).unwrap_or(true);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("View:").color(look::text_dim()));
-            ui.label("Controls");
+            if has_editor {
+                if ui.add(egui::Button::selectable(editor, "Editor")).clicked() {
+                    editor = true;
+                }
+                if ui.add(egui::Button::selectable(!editor, "Controls")).clicked() {
+                    editor = false;
+                }
+                ui.data_mut(|d| d.insert_temp(view_id, editor));
+            } else {
+                ui.label("Controls");
+            }
             if comparing {
                 ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
             }
         });
         ui.add_space(4.0);
-        set.extend(controls(ui, &params, &values, "fx"));
+        if editor {
+            let live = app.engine.lock().map(|e| {
+                let strip = crate::mixer::fx_strip(s);
+                let mut curves = std::collections::HashMap::new();
+                let mut readouts = Vec::new();
+                for c in crate::fxviews::curves_for(&name) {
+                    let (r, v) = e.effect_readouts(strip, k, c);
+                    readouts = r;
+                    curves.insert(c.to_string(), v);
+                }
+                if readouts.is_empty() {
+                    readouts = e.effect_readouts(strip, k, "").0;
+                }
+                crate::fxviews::Live { readouts, curves }
+            }).unwrap_or_default();
+            let (more, act) = crate::fxviews::editor(ui, &name, &params, &values, &live, (s, k));
+            set.extend(more);
+            fx_action = act;
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(40));
+        } else {
+            set.extend(controls(ui, &params, &values, "fx"));
+        }
     });
     let base = slot.params.clone();
+    if let Some(a) = fx_action.take() {
+        set.extend(crate::fxviews::run_action(app, (s, k), &name, a));
+    }
     if toggle_bypass {
         crate::mixstate::checkpoint(app, "Bypass Plug-in");
         crate::mixstate::edit_inserts(app, s, |v| {
@@ -409,17 +467,38 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
         app.mix.compare.entry((s, k)).or_insert_with(|| floats_of(&params, &values, &base));
         app.mix.compare_back.remove(&(s, k));
         let mut vals = values.clone();
-        if let Ok(mut e) = app.engine.lock() {
+        // the engine's state after the edit: an edit can move other stored values (a custom
+        // view's selected-slice controls, a Pedalboard slot's new pedal), so it is read back
+        let after = app.engine.lock().ok().and_then(|mut e| {
             for (id, v) in &set {
                 e.set_effect_param(crate::mixer::fx_strip(s), k, *id, *v);
             }
-        }
-        for (id, v) in set {
-            if let Some(i) = params.iter().position(|p| p.id == id) {
-                vals[i] = v;
+            e.effect_params(crate::mixer::fx_strip(s), k)
+        });
+        let f = if let Some((p2, v2)) = after {
+            floats_of(&p2, &v2, &base)
+        } else {
+            // (not running: a stand-in built from the slot's settings takes the edit)
+            let mut fx = crate::units::effect(&name, crate::audio::RATE as f32);
+            if let Some(fx) = fx.as_mut() {
+                if !base.is_empty() {
+                    fx.load_floats(&base);
+                }
+                for (id, v) in &set {
+                    fx.set(*id, *v);
+                }
+                let p2 = fx.params().to_vec();
+                let v2: Vec<f32> = p2.iter().map(|p| fx.get(p.id)).collect();
+                floats_of(&p2, &v2, &base)
+            } else {
+                for (id, v) in set {
+                    if let Some(i) = params.iter().position(|p| p.id == id) {
+                        vals[i] = v;
+                    }
+                }
+                floats_of(&params, &vals, &base)
             }
-        }
-        let f = floats_of(&params, &vals, &base);
+        };
         crate::mixstate::edit_inserts(app, s, |v| {
             if let Some(u) = v.get_mut(k) {
                 u.params = f;

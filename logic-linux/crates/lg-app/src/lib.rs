@@ -35,6 +35,8 @@ mod regionops;
 mod snap;
 mod newtrack;
 mod pluginwin;
+mod fxviews;
+mod stemsplit;
 mod players;
 mod rightpane;
 mod screensets;
