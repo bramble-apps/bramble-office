@@ -110,6 +110,10 @@ pub trait Instrument: Plugin {
     }
     /// The project tempo (tempo-synced LFOs, arpeggiators, sequencers).
     fn set_tempo(&mut self, _bpm: f64) {}
+    /// This block of the side chain source (the plug-in window's Side Chain pop-up), handed
+    /// over before `render` for the same block: vocoder analysis (EVOC 20 PolySynth), a
+    /// synth's external oscillator or modulation input (ES1, ES2, Ultrabeat).
+    fn side_chain(&mut self, _left: &[f32], _right: &[f32]) {}
     /// The instrument itself, for editors that change more than parameters (a Sampler's zones,
     /// a Drum Machine Designer's pads): downcast to the concrete type.
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {

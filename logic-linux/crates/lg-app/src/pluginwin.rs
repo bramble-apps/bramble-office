@@ -251,7 +251,7 @@ pub fn saved_settings(plugin: &str) -> Vec<(String, std::path::PathBuf)> {
 }
 
 /// A saved setting: "id value" per line.
-fn read_setting(path: &std::path::Path) -> Option<Vec<(u32, f32)>> {
+pub(crate) fn read_setting(path: &std::path::Path) -> Option<Vec<(u32, f32)>> {
     let t = std::fs::read_to_string(path).ok()?;
     Some(t.lines().filter_map(|l| {
         let mut w = l.split_whitespace();
@@ -259,7 +259,7 @@ fn read_setting(path: &std::path::Path) -> Option<Vec<(u32, f32)>> {
     }).collect())
 }
 
-fn write_setting(plugin: &str, name: &str, params: &[lg_dsp::Param], values: &[f32]) -> Option<()> {
+pub(crate) fn write_setting(plugin: &str, name: &str, params: &[lg_dsp::Param], values: &[f32]) -> Option<()> {
     let dir = settings_dir(plugin)?;
     std::fs::create_dir_all(&dir).ok()?;
     let body: String = params.iter().zip(values).map(|(p, v)| format!("{} {}\n", p.id, v)).collect();
