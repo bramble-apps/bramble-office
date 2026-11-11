@@ -110,7 +110,7 @@ pub fn run() -> eframe::Result {
             .with_decorations(system_title_bar)
             // macOS: always transparent, so Translucent sidebars can show the system blur behind the
             // content view with the macOS title bar too (panes still paint opaque when it is off)
-            .with_transparent(!system_title_bar || cfg!(target_os = "macos"))
+            .with_transparent(!system_title_bar || cfg!(any(target_os = "macos", target_os = "linux")))
             .with_title("Keydeck")
             .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "keydeck".into())) // (in a Flatpak, its app id, so the desktop finds the icon)
             .with_icon(app_icon())

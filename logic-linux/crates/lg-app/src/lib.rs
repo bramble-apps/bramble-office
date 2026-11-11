@@ -100,7 +100,7 @@ pub fn run() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(system_title_bar)
-            .with_transparent(!system_title_bar)
+            .with_transparent(!system_title_bar || cfg!(target_os = "linux"))
             .with_title("Studio")
             .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "bramble-studio".into()))
             .with_inner_size([size.0 + 2.0 * m, size.1 + 2.0 * m])

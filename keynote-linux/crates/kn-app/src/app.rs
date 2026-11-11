@@ -2251,6 +2251,8 @@ impl App {
 
         // the window's visible area (menus keep inside it)
         ctx.data_mut(|d| d.insert_temp(egui::Id::unique("kd-window-rect"), window));
+        // (the Settings switch takes effect right away)
+        crate::winframe::follow(&ctx, self.settings.system_title_bar);
         let integrated = !crate::winframe::system_title_bar();
         if integrated {
             self.window_edges(&ctx, window);

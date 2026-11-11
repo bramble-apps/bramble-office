@@ -2352,6 +2352,8 @@ impl App {
         }
         let window: egui::Rect = ui.max_rect();
         ctx.data_mut(|d| d.insert_temp(egui::Id::unique("nm-window-rect"), window));
+        // (the Settings switch takes effect right away)
+        kn_ui::winframe::follow(&ctx, self.look.system_title_bar);
         let integrated = !kn_ui::winframe::system_title_bar();
         if integrated {
             crate::chrome::window_edges(&ctx, window);

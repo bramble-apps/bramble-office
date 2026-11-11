@@ -12,12 +12,34 @@ pub const SHADOW_MARGIN: u32 = 32;
 /// Corner radius of GNOME (libadwaita) windows.
 pub const RADIUS: f32 = 12.0;
 
-/// The frame chosen when the window was made (Settings > Window takes effect at the next start).
+/// The frame chosen when the window was made ([`follow`] switches it while running).
 pub static SYSTEM_TITLE_BAR: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// The frame switched to while running (0: as at start, 1: own, 2: system's), see [`follow`].
+static LIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// Whether this window uses the system's own title bar.
 pub fn system_title_bar() -> bool {
-    SYSTEM_TITLE_BAR.get().copied().unwrap_or(false)
+    match LIVE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => false,
+        2 => true,
+        _ => SYSTEM_TITLE_BAR.get().copied().unwrap_or(false),
+    }
+}
+
+/// Every frame, with the app's "System title bar" setting: switches the window's frame as soon
+/// as the setting changes (the system's decorations on or off, the shadow margin with them),
+/// no restart needed. Windows and Android keep the app's own title bar.
+pub fn follow(ctx: &egui::Context, want: bool) {
+    let want = want && !cfg!(any(target_os = "windows", target_os = "android"));
+    if system_title_bar() == want {
+        return;
+    }
+    LIVE.store(if want { 2 } else { 1 }, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(target_os = "linux")]
+    winit::platform::wayland::set_client_shadow_margin(if want { 0 } else { SHADOW_MARGIN });
+    ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(want));
+    ctx.request_repaint();
 }
 
 /// Desktops that leave window frames to the app: their "system" title bar is only a basic one.
