@@ -1733,6 +1733,7 @@ version = "0.4.2"
 dependencies = [
  "i_overlay",
  "kn-format",
+ "serde_json",
  "uuid",
 ]
 
