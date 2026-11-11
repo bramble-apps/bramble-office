@@ -24,7 +24,7 @@ pub struct Live {
     pub octave_c: u8,
     pub velocity: u8,
     /// Notes held: pitch → (start tick, velocity).
-    held: HashMap<u8, (f64, u8)>,
+    pub held: HashMap<u8, (f64, u8)>,
     /// Musical Typing's keys down (so a key's repeat doesn't retrigger).
     keys_down: HashMap<egui::Key, u8>,
     /// MIDI inputs: their connections and the messages they send.

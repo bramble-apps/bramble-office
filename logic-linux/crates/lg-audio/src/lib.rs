@@ -9,6 +9,7 @@
 //! - [`ops`]: the Audio File Editor's destructive Functions, zero crossings, Search Peak /
 //!   Silence, Create Backup / Revert to Backup;
 //! - [`fade`]: audio region fades (Logic's lengths in ms and -99..99 curves);
+//! - [`record`]: recording: WAV files written as the audio comes in, comps joined into one file;
 //! - [`stretch`]: WSOLA time stretch, pitch shift and piecewise warping (Flex Time / Flex Pitch
 //!   groundwork), and a YIN pitch detector.
 
@@ -17,6 +18,7 @@ mod fft;
 pub mod file;
 pub mod ops;
 pub mod peaks;
+pub mod record;
 pub mod stretch;
 pub mod tempo;
 pub mod transients;

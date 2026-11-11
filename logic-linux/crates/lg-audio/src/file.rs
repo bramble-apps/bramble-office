@@ -194,7 +194,7 @@ fn chunk(out: &mut Vec<u8>, id: &[u8; 4], body: &[u8], be: bool) {
     }
 }
 
-fn put_sample(out: &mut Vec<u8>, s: f32, bits: u16, float: bool, be: bool) {
+pub(crate) fn put_sample(out: &mut Vec<u8>, s: f32, bits: u16, float: bool, be: bool) {
     if float {
         out.extend_from_slice(&if be { s.to_be_bytes() } else { s.to_le_bytes() });
         return;

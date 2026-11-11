@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 103,
+  "done": 121,
   "total": 679,
-  "percent": 15.2
+  "percent": 17.8
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -31,9 +31,9 @@
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 149,
+  "done": 150,
   "total": 290,
-  "percent": 51.4
+  "percent": 51.7
  },
  {
   "group": "Various Editors",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 34,
+  "done": 53,
   "total": 249,
-  "percent": 13.7
+  "percent": 21.3
  },
  {
   "group": "Live Loops Grid",

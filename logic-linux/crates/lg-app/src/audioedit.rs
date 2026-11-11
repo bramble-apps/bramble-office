@@ -308,7 +308,7 @@ fn set_extras(app: &mut App, t: usize, r: usize, x: RegionAudio) {
 }
 
 /// Before an edit of the project or the extras: one undo step for both.
-fn checkpoint(app: &mut App, what: &str) {
+pub(crate) fn checkpoint(app: &mut App, what: &str) {
     let before = app.audio_edit.regions.clone();
     app.checkpoint(what);
     let n = app.undo.len();

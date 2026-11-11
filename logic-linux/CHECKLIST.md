@@ -25,9 +25,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] App icon final; About window
 
 ## 2. Main window
-- [~] Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] Customize Control Bar, the Tuner window, autopunch locators
+- [~] Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, Autopunch (its locators: the ruler's red strip, dragged by its ends or middle), master volume, right-pane buttons. [ ] Customize Control Bar (Autopunch shows by default here; in Logic it's a customize option), the Tuner window
 - [ ] Toolbar (Ctrl-Option-Cmd-T) and Customize Control Bar and Display…
-- [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, take folders, flex, track alternatives, Transposition and Movie tracks
+- [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, flex, track alternatives, Transposition and Movie tracks
 - [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
 - [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
@@ -53,7 +53,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
 - [x] Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter
 - [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views
-- [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch
+- [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace (Region Erase / Region Punch / Content Erase / Content Punch), the Record menu's Overlapping MIDI Recordings (Merge, Create Take Folder, Overlap, Overlap/Merge Selected, Create Track(s), Create Tracks and Mute, Merge Current Recording Only), cycle passes, Use Musical Grid. [ ] Create Track Alternative(s), Flashback Capture
+- [~] Audio recording (recording.rs): the system input (cpal, Settings ▸ Audio ▸ Input Device or the default), record-enabled audio tracks (or the selected one), input monitoring (I, Auto Input Monitoring), the input per track (Mixer input slot: Input 1 / 2 / 1-2), streamed to WAV in the project's Media/Audio Files (bit depth from Settings ▸ Recording), shown growing in red with its waveform, then regions; Count-in (Record ▸ Count-in bars / beats; before bar 1 the playhead waits while it clicks), Metronome during record, Autopunch, Replace (cuts the regions under it), cycle recording (a pass per cycle), Overlapping Audio Recordings (Create Take Folder, Create New Track, Create Tracks And Mute), Record Button Options (Record / Toggle / Repeat), Allow Quick Punch-In, Discard (⌘.), punch locator key commands, Move to Recorded Position (files recorded this session), one undo step. LG_TEST_INPUT=<wav> stands in for the input (checks; headless never opens the microphone). [ ] input latency compensation, Low Latency Monitoring, Create Track Alternative, recorded audio and take folders saved into the .logicx (new audio regions aren't written yet), file types other than WAV, Logic's Settings ▸ Recording popups don't drive the Record menu's choices yet
+- [~] Take folders (lg-core takes, takes.rs): made by cycle and overlapping recordings (audio and MIDI) and Pack Take Folder; header with disclosure triangle and the take number / comp letter (the take folder menu: takes, comps, commands); opened, the take lanes show as a drop-down over the tracks below (Logic pushes the tracks down: not yet); click a take to play it, Quick Swipe Comping (⌥Q, Snap) makes Comp A…; Create New Comp, Select Next / Previous, Rename (⇧T), Delete (⌥⇧⌫), Flatten, Flatten and Merge (a new crossfaded file), Export / Move Active Comp to New Track, Unpack to New Tracks (and mute inactive), Trim to Active Comp Sections, MIDI: New Empty / Duplicate take; undo. [ ] Slice at Comp Section Borders, Unpack to Existing Tracks / Track Alternatives, comp section edge drags, take folders read from Logic files, new tracks go at the end of the list (Logic: below)
 - [ ] Sends, buses, aux strips, master chain; latency compensation
 - [ ] Hosting third-party CLAP/VST3/LV2 plug-ins
 - [~] Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont
@@ -88,13 +90,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 128 | 594 | 21% |
-| Local menus | 393 | 1191 | 32% |
-| Right-click menus | 568 | 2575 | 22% |
-| Key commands | 404 | 2207 | 18% |
+| Menu bar | 163 | 594 | 27% |
+| Local menus | 397 | 1191 | 33% |
+| Right-click menus | 576 | 2575 | 22% |
+| Key commands | 442 | 2207 | 20% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 128 of 594
+## Menu bar: 163 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -236,7 +238,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 53/166</summary>
+<details><summary>Edit — 54/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -300,7 +302,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Join per Tracks  `J`
 - [ ] Move
   - [x] To Playhead  `;`
-  - [ ] To Recorded Position  `⌥⇧⌘R`
+  - [x] To Recorded Position  `⌥⇧⌘R`
   - [ ] To Beat
   - [ ] First Transient to Nearest Beat
   - [ ] To Focused Track  `⌃⇧T`
@@ -522,64 +524,64 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Record — 10/56</summary>
+<details><summary>Record — 44/56</summary>
 
-- [ ] Count-in
-  - [ ] None
+- [x] Count-in
+  - [x] None
   - [x] 1 Bar
   - [x] 2 Bars
   - [x] 3 Bars
   - [x] 4 Bars
-  - [ ] 5 Bars
+  - [x] 5 Bars
   - [x] 6 Bars
   - [ ] 1/4
-  - [ ] 2/4
-  - [ ] 3/4
-  - [ ] 4/4
-  - [ ] 5/4
-  - [ ] 6/4
-  - [ ] 7/4
-  - [ ] 8/4
-  - [ ] 9/4
+  - [x] 2/4
+  - [x] 3/4
+  - [x] 4/4
+  - [x] 5/4
+  - [x] 6/4
+  - [x] 7/4
+  - [x] 8/4
+  - [x] 9/4
 - [ ] Metronome Settings…
-- [ ] Use Musical Grid
-- [ ] Allow Quick Punch-In
-- [ ] Auto Input Monitoring
+- [x] Use Musical Grid
+- [x] Allow Quick Punch-In
+- [x] Auto Input Monitoring
 - [ ] Low Latency Monitoring Mode
-- [ ] Record Button Options
+- [x] Record Button Options
   - [x] Record
   - [x] Record / Record Toggle
-  - [ ] Record / Record Repeat
-- [ ] Overlapping MIDI Recordings
+  - [x] Record / Record Repeat
+- [x] Overlapping MIDI Recordings
   - [ ] Cycle Off
-  - [ ] Create Take Folder
+  - [x] Create Take Folder
   - [x] Merge
   - [ ] Overlap
-  - [ ] Overlap/Merge Selected Regions
-  - [ ] Create Track
+  - [x] Overlap/Merge Selected Regions
+  - [x] Create Track
   - [ ] Create Track Alternative
   - [ ] Cycle On
-  - [ ] Create Take Folder
+  - [x] Create Take Folder
   - [x] Merge
-  - [ ] Merge Current Recording Only
-  - [ ] Create Tracks
-  - [ ] Create Tracks and Mute
+  - [x] Merge Current Recording Only
+  - [x] Create Tracks
+  - [x] Create Tracks and Mute
   - [ ] Create Track Alternatives
   - [x] Replace
-  - [ ] Region Erase
-  - [ ] Region Punch
-  - [ ] Content Erase
-  - [ ] Content Punch
-- [ ] Overlapping Audio Recordings
+  - [x] Region Erase
+  - [x] Region Punch
+  - [x] Content Erase
+  - [x] Content Punch
+- [x] Overlapping Audio Recordings
   - [ ] Cycle Off
-  - [ ] Create Take Folder
-  - [ ] Create New Track
+  - [x] Create Take Folder
+  - [x] Create New Track
   - [ ] Create Track Alternative
   - [ ] Cycle On
-  - [ ] Create Take Folder
-  - [ ] Create Tracks And Mute
+  - [x] Create Take Folder
+  - [x] Create Tracks And Mute
   - [ ] Create Track Alternatives
-- [ ] Recording Settings…
+- [x] Recording Settings…
 
 </details>
 
@@ -741,7 +743,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 393 of 1191
+## Local menus (Edit / Functions / View in each area): 397 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -831,7 +833,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 44/118</summary>
+<details><summary>audiotrack-Edit — 45/118</summary>
 
 - [ ] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -877,7 +879,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Join per Tracks  `J`
 - [ ] Move
   - [x] To Playhead  `;`
-  - [ ] To Recorded Position  `⌥⇧⌘R`
+  - [x] To Recorded Position  `⌥⇧⌘R`
   - [ ] To Beat
   - [ ] First Transient to Nearest Beat
   - [ ] To Focused Track  `⌃⇧T`
@@ -1766,7 +1768,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 52/168</summary>
+<details><summary>tracks-Edit — 53/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1830,7 +1832,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Join per Tracks  `J`
 - [ ] Move
   - [x] To Playhead  `;`
-  - [ ] To Recorded Position  `⌥⇧⌘R`
+  - [x] To Recorded Position  `⌥⇧⌘R`
   - [ ] To Beat
   - [ ] First Transient to Nearest Beat
   - [ ] To Focused Track  `⌃⇧T`
@@ -1939,7 +1941,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Functions — 23/61</summary>
+<details><summary>tracks-Functions — 24/61</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -1999,13 +2001,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Unlock SMPTE Position  `⌘⇞PgUp`
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
-  - [ ] Pack Take Folder  `⌃⌥⌘F`
+  - [x] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Folder to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Folder to Existing Tracks  `⌃⌘U`
 
 </details>
 
-<details><summary>tracks-more — 0/45</summary>
+<details><summary>tracks-more — 1/45</summary>
 
 - [ ] Snap
   - [ ] Snap to Grid  `⌘G`
@@ -2020,7 +2022,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Snap Regions to Absolute Value
   - [ ] Snap Regions to Relative Value
   - [ ] Snap Flexed Audio Regions by First Downbeat
-  - [ ] Snap Quick Swipe Comping
+  - [x] Snap Quick Swipe Comping
   - [ ] Snap Edits to Zero Crossings  `⌃0`
   - [ ] Snap Automation
     - [ ] Active
@@ -2085,7 +2087,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 568 of 2575
+## Right-click menus: 576 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4036,7 +4038,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 68/172</summary>
+<details><summary>region-audio — 70/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4075,7 +4077,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Toggle Auto Set Locators
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
-  - [ ] Pack Take Folder  `⌃⌥⌘F`
+  - [x] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Folder to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Folder to Existing Tracks  `⌃⌘U`
 - [x] Name and Color
@@ -4085,7 +4087,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
-  - [ ] Move to Recorded Position  `⌥⇧⌘R`
+  - [x] Move to Recorded Position  `⌥⇧⌘R`
   - [ ] Move to Beat
   - [ ] Move Selection with First Transient to Nearest Beat
   - [ ] Move to Focused Track  `⌃⇧T`
@@ -4213,7 +4215,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 94/212</summary>
+<details><summary>region-midi — 96/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4291,7 +4293,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Quantization Permanently  `⌃Q`
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
-  - [ ] Pack Take Folder  `⌃⌥⌘F`
+  - [x] Pack Take Folder  `⌃⌥⌘F`
   - [ ] Unpack Folder to New Tracks  `⌃⇧⌘U`
   - [ ] Unpack Folder to Existing Tracks  `⌃⌘U`
 - [x] Name and Color
@@ -4301,7 +4303,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
-  - [ ] Move to Recorded Position  `⌥⇧⌘R`
+  - [x] Move to Recorded Position  `⌥⇧⌘R`
   - [ ] Move to Beat
   - [ ] Move Selection with First Transient to Nearest Beat
   - [ ] Move to Focused Track  `⌃⇧T`
@@ -4527,7 +4529,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 94/212</summary>
+<details><summary>take-folder-region — 98/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4605,9 +4607,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Quantization Permanently  `⌃Q`
 - [ ] Folder
   - [ ] Pack Folder  `⌃⌥⇧F`
-  - [ ] Pack Take Folder  `⌃⌥⌘F`
-  - [ ] Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  `⌃⇧⌘U`
-  - [ ] Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  `⌃⌘U`
+  - [x] Pack Take Folder  `⌃⌥⌘F`
+  - [x] Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  `⌃⇧⌘U`
+  - [x] Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  `⌃⌘U`
 - [x] Name and Color
   - [ ] Rename Regions  `⇧N`
   - [ ] Name Regions by Tracks  `⌥⇧N`
@@ -4615,7 +4617,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Show/Hide Colors  `⌥C`
 - [ ] Move
   - [ ] Move to Playhead Position  `;`
-  - [ ] Move to Recorded Position  `⌥⇧⌘R`
+  - [x] Move to Recorded Position  `⌥⇧⌘R`
   - [ ] Move to Beat
   - [ ] Move Selection with First Transient to Nearest Beat
   - [ ] Move to Focused Track  `⌃⇧T`
@@ -4908,7 +4910,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 404 of 2207
+## Key commands: 442 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4917,12 +4919,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 103/679</summary>
+<details><summary>Global Commands — 121/679</summary>
 
 - [x] Record  `R`
-- [ ] Record / Record Repeat
-- [ ] Record Repeat
-- [ ] Record Toggle
+- [x] Record / Record Repeat
+- [x] Record Repeat
+- [x] Record Toggle
 - [x] Record / Record Toggle  `*`
 - [x] Discard Recording and Return to Last Play Position  `⌘.`
 - [x] Record into Cell  `⌥R`
@@ -4971,12 +4973,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Right Locator numerically…
 - [ ] Set Left Locator by Playhead
 - [ ] Set Left Locator by Rounded Playhead
-- [ ] Set Punch In Locator by Playhead  `⌃⌥⌘I`
-- [ ] Set Punch In Locator by Rounded Playhead  `⌃⌥⇧⌘I`
+- [x] Set Punch In Locator by Playhead  `⌃⌥⌘I`
+- [x] Set Punch In Locator by Rounded Playhead  `⌃⌥⇧⌘I`
 - [ ] Set Right Locator by Playhead
 - [ ] Set Right Locator by Rounded Playhead
-- [ ] Set Punch Out Locator by Playhead  `⌃⌥⌘O`
-- [ ] Set Punch Out Locator Point by Rounded Playhead  `⌃⌥⇧⌘O`
+- [x] Set Punch Out Locator by Playhead  `⌃⌥⌘O`
+- [x] Set Punch Out Locator Point by Rounded Playhead  `⌃⌥⇧⌘O`
 - [ ] Set Locators/Loop by Regions/Events/Marquee
 - [x] Set Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop  `⌘U`
 - [ ] Set Rounded Locators/Loop by Regions/Events/Marquee
@@ -4984,12 +4986,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Locators and Play
 - [ ] Set Rounded Locators and Play
 - [ ] Set Rounded Locators and Cycle Play
-- [ ] Set Rounded Locators and Record
-- [ ] Set Rounded Locators and Cycle Record
+- [x] Set Rounded Locators and Record
+- [x] Set Rounded Locators and Cycle Record
 - [x] Play from Selection  `⇧˽`
-- [ ] Set Punch Locators by Regions/Events/Marquee
-- [ ] Set Rounded Punch Locators by Regions/Events
-- [ ] Set Punch Locators by Cycle Locators
+- [x] Set Punch Locators by Regions/Events/Marquee
+- [x] Set Rounded Punch Locators by Regions/Events
+- [x] Set Punch Locators by Cycle Locators
 - [x] Skip Cycle  `=`
 - [x] Move Locators Forward by Cycle Length / Loop Forward by Loop Length  `⇧⌘.`
 - [x] Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length  `⇧⌘,`
@@ -5074,7 +5076,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Reselect Solo-Locked Regions
 - [x] Clear/Recall Solo  `⌥S`
 - [x] Mute off for all  `⌃⇧M`
-- [ ] Record off for all
+- [x] Record off for all
 - [ ] Toggle Sync intern/extern
 - [ ] Tap Tempo
 - [ ] Toggle MIDI Machine Control
@@ -5142,7 +5144,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Settings…  `⌘,`
 - [ ] Open General Settings…
 - [ ] Open Audio Settings…
-- [ ] Open Recording Settings…
+- [x] Open Recording Settings…
 - [ ] Open MIDI Settings…
 - [ ] Open View Settings…
 - [ ] Open Score Settings…
@@ -5416,8 +5418,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] I/O Labels…
 - [ ] Mastering Assistant…
 - [ ] Toggle Varispeed
-- [ ] Toggle Allow Quick Punch-in
-- [ ] Toggle Auto Input Monitoring
+- [x] Toggle Allow Quick Punch-in
+- [x] Toggle Auto Input Monitoring
 - [ ] Toggle Pre-Fader Metering
 - [ ] Clear Overload Flag in Audio Channel Display
 - [ ] Close Project without Saving
@@ -5512,8 +5514,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Previous Patch, Plug-in Setting or Sampler Instrument  `[`
 - [x] Toggle Channel Strip Mute  `M`
 - [x] Toggle Channel Strip Solo  `S`
-- [ ] Toggle Channel Strip Record Enable
-- [ ] Toggle Channel Strip Input Monitoring  `⌃I`
+- [x] Toggle Channel Strip Record Enable
+- [x] Toggle Channel Strip Input Monitoring  `⌃I`
 - [ ] Toggle Channel Strip Format (mono/stereo)  `⌃⇧S`
 - [ ] Toggle Channel Strip Arpeggiator
 - [ ] Set Plug-in Latency Compensation Mode
@@ -5748,7 +5750,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 149/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 150/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [ ] Show Track Automation
@@ -6026,7 +6028,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Snap Mode: Samples
 - [ ] Snap Mode: Off
 - [x] Toggle Snap to Grid  `⌘G`
-- [ ] Toggle Snap Quick Swipe Comping
+- [x] Toggle Snap Quick Swipe Comping
 - [ ] Toggle Snap Flexed Audio Regions by First Downbeat
 - [ ] Snap Regions to Absolute/Relative Value
 - [ ] Snap Regions to Absolute Value
@@ -6227,7 +6229,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 34/249</summary>
+<details><summary>Main Window Tracks — 53/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6264,8 +6266,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Fill Chord Track from selected Regions
 - [ ] Deselect All Regions/Cells except on Focused Track
 - [ ] Pack Folder  `⌃⌥⇧F`
-- [ ] Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  `⌃⇧⌘U`
-- [ ] Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  `⌃⌘U`
+- [x] Unpack Take Folder to Independent Tracks or Unpack Folder/Take Cell to New Tracks  `⌃⇧⌘U`
+- [x] Unpack Take Folder to Independent Tracks (mute inactive) or Unpack Folder/Take Cell to Existing Tracks  `⌃⌘U`
 - [ ] Unpack Take Folder to Tracks with same channel
 - [ ] Unpack Take Folder to Track Alternatives
 - [ ] Create 1 Track Automation Point at Region Borders  `⌃⇧⌘1`
@@ -6282,22 +6284,22 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Move All Region Data to Track Automation  `⌃⇧⌘↑`
 - [ ] Move All Track Automation to Region  `⌃⇧⌘↓`
 - [ ] Delete All Region Automation
-- [ ] Pack Take Folder  `⌃⌥⌘F`
-- [ ] Un/disclose Take Folder  `⌥F`
-- [ ] Flatten Take Folder/Cell  `⌥⇧U`
-- [ ] Flatten and Merge Take Folder/Cell  `⌥U`
-- [ ] Create New Empty MIDI Take
-- [ ] Duplicate Active MIDI Take
-- [ ] Rename Take or Comp  `⇧T`
-- [ ] Delete Take or Comp  `⌥⇧⌫`
-- [ ] Export Active Take or Comp to New Track
-- [ ] Move Active Take or Comp to New Track
-- [ ] Toggle Take Folder Quick Swipe Comping Mode  `⌥Q`
-- [ ] Create New Comp
-- [ ] Select Previous Take or Comp  `⇧⌘↑`
-- [ ] Select Next Take or Comp  `⇧⌘↓`
+- [x] Pack Take Folder  `⌃⌥⌘F`
+- [x] Un/disclose Take Folder  `⌥F`
+- [x] Flatten Take Folder/Cell  `⌥⇧U`
+- [x] Flatten and Merge Take Folder/Cell  `⌥U`
+- [x] Create New Empty MIDI Take
+- [x] Duplicate Active MIDI Take
+- [x] Rename Take or Comp  `⇧T`
+- [x] Delete Take or Comp  `⌥⇧⌫`
+- [x] Export Active Take or Comp to New Track
+- [x] Move Active Take or Comp to New Track
+- [x] Toggle Take Folder Quick Swipe Comping Mode  `⌥Q`
+- [x] Create New Comp
+- [x] Select Previous Take or Comp  `⇧⌘↑`
+- [x] Select Next Take or Comp  `⇧⌘↓`
 - [ ] Slice at Comp Section Borders
-- [ ] Trim to Active Comp Sections
+- [x] Trim to Active Comp Sections
 - [ ] New Tracks for Overlapped Regions
 - [ ] New Tracks for Selected Regions
 - [ ] Create Track Stack…  `⇧⌘D`
@@ -6320,7 +6322,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Track Solo
 - [ ] Toggle Track Protect
 - [ ] Toggle Track Freeze
-- [ ] Toggle Track Record Enable  `⌃R`
+- [x] Toggle Track Record Enable  `⌃R`
 - [ ] Toggle Automation Subtracks
 - [ ] Hide Automation Subtracks
 - [ ] Show Automation Subtracks
@@ -6373,7 +6375,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Create Flex Marker At Playhead Position
 - [ ] Create Flex Marker At Previous Transient
 - [ ] Create Flex Marker At Next Transient
-- [ ] Move Region to Recorded Position  `⌥⇧⌘R`
+- [x] Move Region to Recorded Position  `⌥⇧⌘R`
 - [ ] Convert Regions to New Regions  `⌥⌘R`
 - [ ] Convert Regions to New Audio Files…  `⌥⌘F`
 - [ ] Convert Regions to New Sampler Track…  `⌃E`

@@ -1,26 +1,26 @@
 [
  {
   "area": "Menu bar",
-  "done": 128,
+  "done": 163,
   "total": 594,
-  "percent": 21.5
+  "percent": 27.4
  },
  {
   "area": "Local menus",
-  "done": 393,
+  "done": 397,
   "total": 1191,
-  "percent": 33.0
+  "percent": 33.3
  },
  {
   "area": "Right-click menus",
-  "done": 568,
+  "done": 576,
   "total": 2575,
-  "percent": 22.1
+  "percent": 22.4
  },
  {
   "area": "Key commands",
-  "done": 404,
+  "done": 442,
   "total": 2207,
-  "percent": 18.3
+  "percent": 20.0
  }
 ]

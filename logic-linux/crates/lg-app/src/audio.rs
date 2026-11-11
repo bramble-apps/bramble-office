@@ -106,6 +106,8 @@ pub struct Engine {
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
+    /// Recording: the input, input monitoring, the count-in, the capture (recording.rs).
+    pub rec: crate::recording::EngineRec,
 }
 
 #[derive(Clone, Copy)]
@@ -122,7 +124,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -293,7 +295,7 @@ impl Engine {
     }
 
     /// Renders one block of stereo frames into `out` (interleaved).
-    fn render(&mut self, out: &mut [f32]) {
+    pub(crate) fn render(&mut self, out: &mut [f32]) {
         let frames = out.len() / 2;
         out.fill(0.0);
         if self.meters.len() != self.tracks.len() {
@@ -301,7 +303,10 @@ impl Engine {
         }
         let bpm = self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1);
         let tps = bpm / 60.0 * PPQ as f64 / RATE as f64;
-        if self.playing {
+        // recording: the input for this block; a count-in before bar 1 holds the playhead
+        let input = self.rec.input(frames);
+        let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
+        if self.playing && !held {
             let from = self.pos;
             let to = from + tps * frames as f64;
             // notes ending in this block
@@ -345,7 +350,7 @@ impl Engine {
                 }
             }
             // the click: a beat line crossed in this block
-            if self.metronome {
+            if self.metronome || self.rec.click_forced(from) {
                 let beat = PPQ as f64;
                 let next = (from / beat).ceil() * beat;
                 if next < to {
@@ -355,10 +360,12 @@ impl Engine {
                 }
             }
             self.pos = to;
+            self.rec.capture(from, tps, input.as_deref());
             if let (true, Some((a, b))) = (self.cycle_on, self.cycle) {
                 if b > a && self.pos >= b as f64 {
                     self.all_off();
                     self.pos = a as f64;
+                    self.rec.wrapped();
                 }
             }
         }
@@ -366,7 +373,7 @@ impl Engine {
         // its volume and pan (equal power) into the mix; its meter
         let n_tracks = self.tracks.len();
         self.eqs.resize_with(n_tracks, || None);
-        let start_tick = if self.playing { self.pos - tps * frames as f64 } else { self.pos };
+        let start_tick = if self.playing && !held { self.pos - tps * frames as f64 } else { self.pos };
         let mut l = vec![0f32; frames];
         let mut r = vec![0f32; frames];
         for i in 0..n_tracks {
@@ -396,6 +403,9 @@ impl Engine {
                         any = true;
                     }
                 }
+            }
+            if self.rec.monitor(i, input.as_deref(), &mut l, &mut r) {
+                any = true;
             }
             if !any || !self.audible(i) {
                 continue;

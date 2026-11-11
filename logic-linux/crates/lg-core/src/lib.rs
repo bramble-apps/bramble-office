@@ -10,6 +10,7 @@ pub mod midi;
 pub mod plugin;
 pub mod project;
 pub mod save;
+pub mod takes;
 pub mod transform;
 
 pub use project::{open, Project, Region, Track, TrackKind};

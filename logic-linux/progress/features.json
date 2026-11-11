@@ -37,7 +37,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] Customize Control Bar, the Tuner window, autopunch locators"
+  "feature": "Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, Autopunch (its locators: the ruler's red strip, dragged by its ends or middle), master volume, right-pane buttons. [ ] Customize Control Bar (Autopunch shows by default here; in Logic it's a customize option), the Tuner window"
  },
  {
   "area": "Main window",
@@ -47,7 +47,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, take folders, flex, track alternatives, Transposition and Movie tracks"
+  "feature": "Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, flex, track alternatives, Transposition and Movie tracks"
  },
  {
   "area": "Main window",
@@ -157,7 +157,17 @@
  {
   "area": "Audio",
   "status": "Partial",
-  "feature": "MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch"
+  "feature": "MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace (Region Erase / Region Punch / Content Erase / Content Punch), the Record menu's Overlapping MIDI Recordings (Merge, Create Take Folder, Overlap, Overlap/Merge Selected, Create Track(s), Create Tracks and Mute, Merge Current Recording Only), cycle passes, Use Musical Grid. [ ] Create Track Alternative(s), Flashback Capture"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "Audio recording (recording.rs): the system input (cpal, Settings \u25b8 Audio \u25b8 Input Device or the default), record-enabled audio tracks (or the selected one), input monitoring (I, Auto Input Monitoring), the input per track (Mixer input slot: Input 1 / 2 / 1-2), streamed to WAV in the project's Media/Audio Files (bit depth from Settings \u25b8 Recording), shown growing in red with its waveform, then regions; Count-in (Record \u25b8 Count-in bars / beats; before bar 1 the playhead waits while it clicks), Metronome during record, Autopunch, Replace (cuts the regions under it), cycle recording (a pass per cycle), Overlapping Audio Recordings (Create Take Folder, Create New Track, Create Tracks And Mute), Record Button Options (Record / Toggle / Repeat), Allow Quick Punch-In, Discard (\u2318.), punch locator key commands, Move to Recorded Position (files recorded this session), one undo step. LG_TEST_INPUT=<wav> stands in for the input (checks; headless never opens the microphone). [ ] input latency compensation, Low Latency Monitoring, Create Track Alternative, recorded audio and take folders saved into the .logicx (new audio regions aren't written yet), file types other than WAV, Logic's Settings \u25b8 Recording popups don't drive the Record menu's choices yet"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
+  "feature": "Take folders (lg-core takes, takes.rs): made by cycle and overlapping recordings (audio and MIDI) and Pack Take Folder; header with disclosure triangle and the take number / comp letter (the take folder menu: takes, comps, commands); opened, the take lanes show as a drop-down over the tracks below (Logic pushes the tracks down: not yet); click a take to play it, Quick Swipe Comping (\u2325Q, Snap) makes Comp A\u2026; Create New Comp, Select Next / Previous, Rename (\u21e7T), Delete (\u2325\u21e7\u232b), Flatten, Flatten and Merge (a new crossfaded file), Export / Move Active Comp to New Track, Unpack to New Tracks (and mute inactive), Trim to Active Comp Sections, MIDI: New Empty / Duplicate take; undo. [ ] Slice at Comp Section Borders, Unpack to Existing Tracks / Track Alternatives, comp section edge drags, take folders read from Logic files, new tracks go at the end of the list (Logic: below)"
  },
  {
   "area": "Audio",

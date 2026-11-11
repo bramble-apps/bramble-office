@@ -27,6 +27,8 @@ def handled_keys():
         return set()
     j = t.find('\n    pub fn ', i + 10)
     names = set(re.findall(r'"((?:[^"\\]|\\.)*)"', t[i:j]))
+    # recording.rs and takes.rs: their COMMANDS lists (and the Record menu's choices)
+    names |= const_list(src('recording.rs'), 'pub const COMMANDS') | const_list(src('recording.rs'), 'pub const CHOICES') | const_list(src('takes.rs'), 'pub const COMMANDS')
     return names | set(re.findall(r'"((?:[^"\\]|\\.)*)"', src('edit.rs') + src('liveloops.rs') + src('midifunc.rs')))
 
 def menu_tree(path):

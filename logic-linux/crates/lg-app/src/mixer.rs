@@ -196,7 +196,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     match kind {
         Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
         Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
-        Some(TrackKind::Audio) => slot(&p, y, "Input 1", None),
+        Some(TrackKind::Audio) => {
+            slot(&p, y, crate::recording::input_label(app, i), None);
+            crate::recording::input_slot(app, ui, Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0)), i);
+        }
         None if aux.is_some() => {
             let bus = app.auxes.get(aux.unwrap()).map_or(0, |a| a.bus);
             slot(&p, y, &format!("Bus {}", bus + 1), None);

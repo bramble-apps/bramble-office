@@ -43,6 +43,8 @@ pub struct Project {
     pub audio_dir: Option<PathBuf>,
     /// Things read in a way still being checked (shown in the app's project info).
     pub notes: Vec<String>,
+    /// Take folders made by recording here (not read from Logic's file yet).
+    pub takes: Vec<crate::takes::TakeFolder>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
