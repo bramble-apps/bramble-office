@@ -125,7 +125,8 @@ fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32]) -> 
 }
 
 fn strip_latency(u: &Units, bypass: &[bool]) -> usize {
-    u.inserts.iter().zip(u.insert_index.iter()).filter(|(_, k)| !bypass.get(**k).copied().unwrap_or(false)).map(|(fx, _)| fx.latency()).sum()
+    // (a hosted instrument's reported latency counts too: lg-host)
+    u.instrument.as_ref().map_or(0, |i| i.latency()) + u.inserts.iter().zip(u.insert_index.iter()).filter(|(_, k)| !bypass.get(**k).copied().unwrap_or(false)).map(|(fx, _)| fx.latency()).sum::<usize>()
 }
 
 pub struct Engine {
@@ -310,6 +311,14 @@ impl Engine {
             (self.master_units.inserts, self.master_units.insert_index) = build_inserts(&self.master_inserts, self.tempo);
             self.master_units.inserts_for = names;
         }
+    }
+
+    /// Every strip's running plug-ins (hosting.rs: the hosted ones' editors, state, latency).
+    pub(crate) fn all_units_mut(&mut self) -> Vec<(FxStrip, &mut Units)> {
+        let mut v: Vec<(FxStrip, &mut Units)> = self.units.iter_mut().enumerate().map(|(i, u)| (FxStrip::Track(i), u)).collect();
+        v.extend(self.aux_units.iter_mut().enumerate().map(|(i, u)| (FxStrip::Aux(i), u)));
+        v.push((FxStrip::Master, &mut self.master_units));
+        v
     }
 
     fn units_of(&self, s: FxStrip) -> Option<&Units> {

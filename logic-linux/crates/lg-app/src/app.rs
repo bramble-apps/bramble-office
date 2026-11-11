@@ -1254,7 +1254,7 @@ impl App {
         if crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
             return true;
         }
-        if crate::flex::command(self, ctx, name) {
+        if crate::flex::command(self, ctx, name) || crate::hosting::command(self, name) {
             return true;
         }
         if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
@@ -1741,6 +1741,7 @@ impl App {
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
+        crate::hosting::manager(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);
@@ -1791,6 +1792,7 @@ impl eframe::App for App {
         crate::liveloops::update(self);
         crate::recording::update(self);
         crate::flex::update(self);
+        crate::hosting::idle(self, &ctx);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };

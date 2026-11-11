@@ -68,8 +68,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace (Region Erase / Region Punch / Content Erase / Content Punch), the Record menu's Overlapping MIDI Recordings (Merge, Create Take Folder, Overlap, Overlap/Merge Selected, Create Track(s), Create Tracks and Mute, Merge Current Recording Only), cycle passes, Use Musical Grid. [ ] Create Track Alternative(s), Flashback Capture
 - [~] Audio recording (recording.rs): the system input (cpal, Settings ▸ Audio ▸ Input Device or the default), record-enabled audio tracks (or the selected one), input monitoring (I, Auto Input Monitoring), the input per track (Mixer input slot: Input 1 / 2 / 1-2), streamed to WAV in the project's Media/Audio Files (bit depth from Settings ▸ Recording), shown growing in red with its waveform, then regions; Count-in (Record ▸ Count-in bars / beats; before bar 1 the playhead waits while it clicks), Metronome during record, Autopunch, Replace (cuts the regions under it), cycle recording (a pass per cycle), Overlapping Audio Recordings (Create Take Folder, Create New Track, Create Tracks And Mute), Record Button Options (Record / Toggle / Repeat), Allow Quick Punch-In, Discard (⌘.), punch locator key commands, Move to Recorded Position (files recorded this session), one undo step. LG_TEST_INPUT=<wav> stands in for the input (checks; headless never opens the microphone). [ ] input latency compensation, Low Latency Monitoring, Create Track Alternative, recorded audio and take folders saved into the .logicx (new audio regions aren't written yet), file types other than WAV, Logic's Settings ▸ Recording popups don't drive the Record menu's choices yet
 - [~] Take folders (lg-core takes, takes.rs): made by cycle and overlapping recordings (audio and MIDI) and Pack Take Folder; header with disclosure triangle and the take number / comp letter (the take folder menu: takes, comps, commands); opened, the take lanes show as a drop-down over the tracks below (Logic pushes the tracks down: not yet); click a take to play it, Quick Swipe Comping (⌥Q, Snap) makes Comp A…; Create New Comp, Select Next / Previous, Rename (⇧T), Delete (⌥⇧⌫), Flatten, Flatten and Merge (a new crossfaded file), Export / Move Active Comp to New Track, Unpack to New Tracks (and mute inactive), Trim to Active Comp Sections, MIDI: New Empty / Duplicate take; undo. [ ] Slice at Comp Section Borders, Unpack to Existing Tracks / Track Alternatives, comp section edge drags, take folders read from Logic files, new tracks go at the end of the list (Logic: below)
-- [~] Signal flow (lg-dsp routing + engine): tracks and auxes routed by output (Stereo Out, Bus N, none) and sends (pre / post fader) into buses, auxes reading buses in dependency order (aux into aux chains), feedback cut, bypassed effects skipped, Stereo Out effects (master chain, Mastering Assistant…), VCAs, plug-in delay compensation (each connection delayed so tracks, sends and aux returns line up at buses and the Stereo Out; tested with the Limiter's look-ahead). Read from .logicx (lg-core mixer): strips' volume / pan / mute / solo, aux strips with their input bus, output bus and effects, track outputs to buses (summing stacks, Drum Machine Designer kits), sends to buses (E07, E22, E23), groups (membership and link mask, E24). [ ] send level and pre/post read from the file are unchecked (every sample is a new send: 0 dB read from a guessed float), aux names only when the aux tracks line up, input and Bus strips, latency compensation of instruments, sidechains, Low Latency mode bypassing, writing any of it back on Save
-- [ ] Hosting third-party CLAP/VST3/LV2 plug-ins
+- [~] Signal flow (lg-dsp routing + engine): tracks and auxes routed by output (Stereo Out, Bus N, none) and sends (pre / post fader) into buses, auxes reading buses in dependency order (aux into aux chains), feedback cut, bypassed effects skipped, Stereo Out effects (master chain, Mastering Assistant…), VCAs, plug-in delay compensation (each connection delayed so tracks, sends and aux returns line up at buses and the Stereo Out; tested with the Limiter's look-ahead). Read from .logicx (lg-core mixer): strips' volume / pan / mute / solo, aux strips with their input bus, output bus and effects, track outputs to buses (summing stacks, Drum Machine Designer kits), sends to buses (E07, E22, E23), groups (membership and link mask, E24). [ ] send level and pre/post read from the file are unchecked (every sample is a new send: 0 dB read from a guessed float), aux names only when the aux tracks line up, input and Bus strips, sidechains, Low Latency mode bypassing, writing any of it back on Save
+- [~] Hosting third-party CLAP / VST3 / LV2 plug-ins (lg-host; Logic hosts Audio Units, Studio the Linux formats): the standard folders (~/.clap, /usr/lib/clap, CLAP_PATH, ~/.vst3, /usr/lib/vst3, ~/.lv2, /usr/lib/lv2, LV2_PATH …) scanned in the background at launch and from the Plug-in Manager, each file looked at in its own process (Studio run as `--scan-plugin`, or lg-plugscan) so a crash or hang takes only that process down; results, crash counts and the manager's choices kept in ~/.config/bramble-studio (plug-ins.txt, plug-in-manager.txt). Plug-in Manager (Settings ▸ Plug-in Manager…): All / Instruments / Effects / by manufacturer, search, Name, Manufacturer, Type, Format, Version, Latency, Compatibility (validated, not compatible with the reason, crashed N times while scanning, timed out, ignored), Show All for the Hide and Ignore columns, Reset & Rescan Selection, Full Reset & Rescan, Restore Default Settings, Done. The Audio FX slot menu's and the instrument slot's right-click "Audio Units" submenu lists them by manufacturer ▸ plug-in ▸ Stereo. Loaded into instrument and Audio FX slots (tracks, auxes, Stereo Out), processed by the engine; reported latency (instruments too) goes into the plug-in delay compensation; the slot help tag shows latency in samples and ms; parameters (hidden / read-only left out, stepped ones as menus with the plug-in's names) in the Controls view with the plug-in's own value text, automation lanes and Smart Controls; state (values + the plug-in's own blob) in the slot's floats, so Copy / Paste, Compare, Mixer undo and Plug-in Presets (Save Setting As… keeps the whole state) carry it; on Save the project's hosted plug-ins go to ~/.config/bramble-studio/hosted-plug-ins/ (the Logic file can't hold them) and come back on open. View: Editor opens the plug-in's own editor embedded in an X11 window Studio makes (through XWayland on Wayland), its timers / file descriptors (CLAP timer-support, posix-fd-support; VST3 IRunLoop; LV2 UI idle) served from the main thread, resize requests followed; CLAP floating editors (X11, Wayland) when a plug-in only offers those. Checked with test plug-ins built in lg-host (no plug-ins are installed on this machine): load, process, notes, parameters, latency, state, scan with a crashing file, editors embedded on a headless X. [ ] LV2 GTK / Qt editors (need the system's suil, not installed: X11 UIs only), LV2 state with files (no state:makePath), VST3 note expression / IMidiMapping CCs only (no MIDI CC events), CLAP note expression, sample-accurate event timing (events at the block start, 64-frame blocks), multi-output instruments, side chains, MIDI FX plug-ins, custom / short names and categories in the manager, the plug-in window's Editor view inside the egui window (it's a window of its own), Plug-in Undo, running plug-ins out of process (only the scan is), checked with real third-party plug-ins
 - [~] Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont
 - [~] Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops
 
@@ -102,16 +102,16 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 297 | 594 | 50% |
+| Menu bar | 298 | 594 | 50% |
 | Local menus | 620 | 1191 | 52% |
-| Right-click menus | 1264 | 2575 | 49% |
-| Key commands | 1215 | 2207 | 55% |
+| Right-click menus | 1266 | 2575 | 49% |
+| Key commands | 1216 | 2207 | 55% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 297 of 594
+## Menu bar: 298 of 594
 
 
-<details><summary>Bramble Studio — 14/48</summary>
+<details><summary>Bramble Studio — 15/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -131,7 +131,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] View…
   - [x] My Info…
   - [ ] Reset All Settings Except Key Command Assignments…
-  - [ ] Plug-in Manager…
+  - [x] Plug-in Manager…
   - [ ] Chord Grid Library…
 - [ ] Control Surfaces
   - [ ] Learn Assignment for “Solo”  `⌘L`
@@ -2099,7 +2099,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1264 of 2575
+## Right-click menus: 1266 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2526,7 +2526,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-audiofx-slot — 42/404</summary>
+<details><summary>mixer-audiofx-slot — 43/404</summary>
 
 - [ ] Amps and Pedals
   - [x] Amp Designer
@@ -2859,7 +2859,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Test Oscillator
     - [ ] Stereo
     - [ ] Dual Mono
-- [ ] Audio Units
+- [x] Audio Units
   - [ ] Apple
     - [ ] AUBandpass
       - [ ] Stereo
@@ -3076,7 +3076,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-midifx-slot — 0/13</summary>
+<details><summary>mixer-midifx-slot — 1/13</summary>
 
 - [ ] Arpeggiator
 - [ ] Chord Trigger
@@ -3087,7 +3087,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Scripter
 - [ ] Transposer
 - [ ] Velocity Processor
-- [ ] Audio Units
+- [x] Audio Units
   - [ ] JustChords
     - [ ] JustChords
 - [ ] Record MIDI to Track Here
@@ -4922,7 +4922,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1215 of 2207
+## Key commands: 1216 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4931,7 +4931,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 322/679</summary>
+<details><summary>Global Commands — 323/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5166,7 +5166,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open My Info Settings…
 - [ ] Open Surround Settings…
 - [ ] Reset All Settings Except Key Command Assignments…
-- [ ] Plug-in Manager…
+- [x] Plug-in Manager…
 - [ ] Open Chord Grid Library…
 - [x] Open Event List…  `⌘7`
 - [x] Open Main Window…  `⌘1`

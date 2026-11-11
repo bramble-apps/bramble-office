@@ -113,6 +113,7 @@ pub fn after_open(app: &mut App, path: &Path) {
         }
     }
     take_from_project(app);
+    crate::hosting::after_open(app);
 }
 
 /// The app's side of what the project holds: markers, arrangement, audio regions' extras.
@@ -295,6 +296,9 @@ pub fn save(app: &mut App) {
 
 /// "Saved", or what the Logic file doesn't have yet.
 fn report(app: &mut App, mut left: Vec<String>) {
+    // (hosted CLAP / VST3 / LV2 plug-ins are kept in Studio's own settings)
+    crate::hosting::saved_elsewhere(&mut left);
+    crate::hosting::save_sidecar(app);
     left.dedup();
     app.pf.last_left_out = left.clone();
     if left.is_empty() {

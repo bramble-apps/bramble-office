@@ -279,6 +279,15 @@ fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String
                 ui.separator();
                 continue;
             }
+            if it.label == "Audio Units" {
+                // the hosted CLAP / VST3 / LV2 effects, by manufacturer (hosting.rs)
+                ui.menu_button("Audio Units", |ui| {
+                    if let Some(n) = crate::hosting::menu_items(ui, lg_host::Kind::Effect, current) {
+                        *picked = Some(Some(n));
+                    }
+                });
+                continue;
+            }
             let have = effect_names().contains(it.label.as_str());
             let is_plugin = it.children.iter().any(|c| c.label == "Stereo" || c.label == "Dual Mono" || c.label == "Mono");
             if is_plugin {
@@ -433,6 +442,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         }
         let resp = ui.interact(ir, id.with("input"), Sense::click());
         if inst_track {
+            // (right-click: No Plug-in and the hosted instruments, hosting.rs)
+            crate::hosting::instrument_slot_menu(app, &resp, i);
             if resp.on_hover_text("Open the instrument's window").clicked() {
                 app.plugin_window = Some(i);
             }
@@ -529,7 +540,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             if ui.interact(bypass_r, id.with(("bypass", k)), Sense::click()).on_hover_text("Bypass").clicked() {
                 toggle_bypass(app);
             }
-            let body = ui.interact(body_r, id.with(("fxslot", k)), Sense::click_and_drag());
+            let body = ui.interact(body_r, id.with(("fxslot", k)), Sense::click_and_drag()).on_hover_text(crate::hosting::slot_tip(app, i, k, &u.name));
             if body.clicked() {
                 if ui.input(|i| i.modifiers.alt) {
                     // Option-click: bypass (Logic's shortcut)
