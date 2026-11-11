@@ -7,7 +7,7 @@
 //! bindings, then the ⌃ ones (the first command Studio runs wins). The Tool Menu's letters
 //! apply only while the T menu is open.
 
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 use egui::{Key, Modifiers};
 
@@ -64,6 +64,103 @@ fn key_of(c: char) -> Option<Key> {
     })
 }
 
+/// A key spec as Logic writes it ("⌥⇧K", "⌘←", "˽"): the key and its modifiers (⌃ counts as
+/// Ctrl, as ⌘ does). None: a key Studio can't press (keypad-only keys such as ⌅, or none).
+pub fn parse_spec(spec: &str) -> Option<(Key, bool, bool, bool, bool)> {
+    let rest: String = spec.chars().filter(|c| !"⌘⌥⇧⌃".contains(*c)).collect();
+    let mut chars = rest.chars();
+    let (Some(c), None) = (chars.next(), chars.next()) else { return None };
+    let key = key_of(c)?;
+    let ctrl = spec.contains('⌃');
+    Some((key, spec.contains('⌘') || ctrl, spec.contains('⌥'), spec.contains('⇧'), ctrl))
+}
+
+/// The spec Logic shows for a key press (⌃⌥⇧⌘ order, as its Key Commands window).
+pub fn spec_of(key: Key, m: Modifiers) -> Option<String> {
+    let c = match key {
+        Key::Num0 => '0',
+        Key::Num1 => '1',
+        Key::Num2 => '2',
+        Key::Num3 => '3',
+        Key::Num4 => '4',
+        Key::Num5 => '5',
+        Key::Num6 => '6',
+        Key::Num7 => '7',
+        Key::Num8 => '8',
+        Key::Num9 => '9',
+        Key::Comma => ',',
+        Key::Period => '.',
+        Key::Slash => '/',
+        Key::Semicolon => ';',
+        Key::Equals => '=',
+        Key::Minus => '-',
+        Key::OpenBracket => '[',
+        Key::CloseBracket => ']',
+        Key::Backslash => '\\',
+        Key::Backtick => '`',
+        Key::Quote => '\'',
+        Key::Space => '˽',
+        Key::Enter => '↩',
+        Key::Backspace => '⌫',
+        Key::Delete => '⌦',
+        Key::ArrowLeft => '←',
+        Key::ArrowRight => '→',
+        Key::ArrowUp => '↑',
+        Key::ArrowDown => '↓',
+        Key::Tab => '⇥',
+        Key::Home => '⤒',
+        Key::End => '⤓',
+        Key::PageUp => '⇞',
+        Key::PageDown => '⇟',
+        k => {
+            let n = k.name();
+            let mut it = n.chars();
+            match (it.next(), it.next()) {
+                (Some(c), None) if c.is_ascii_alphabetic() => c.to_ascii_uppercase(),
+                _ => return None,
+            }
+        }
+    };
+    let mut s = String::new();
+    // (Ctrl is ⌘ here: Linux and Windows have no separate Command key)
+    if m.alt {
+        s.push('⌥');
+    }
+    if m.shift {
+        s.push('⇧');
+    }
+    if m.command || m.ctrl || m.mac_cmd {
+        s.push('⌘');
+    }
+    s.push(c);
+    Some(s)
+}
+
+/// Every Logic key command, assigned or not (data/commands.txt): (area, command, U.S. key).
+pub fn all_commands() -> &'static [(String, String, String)] {
+    static C: OnceLock<Vec<(String, String, String)>> = OnceLock::new();
+    C.get_or_init(|| {
+        include_str!("../data/commands.txt")
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.starts_with("None\t"))
+            .filter_map(|l| {
+                let mut it = l.split('\t');
+                Some((it.next()?.to_string(), it.next()?.to_string(), it.next().unwrap_or("").trim().to_string()))
+            })
+            .collect()
+    })
+}
+
+/// The bindings a set of (area, command, key spec) makes: specs Studio can't press are left out.
+pub fn bindings_of<'a>(assigned: impl IntoIterator<Item = (&'a str, &'a str, &'a str)>) -> Vec<Binding> {
+    let mut out = Vec::new();
+    for (area, command, spec) in assigned {
+        let Some((key, cmd, alt, shift, ctrl)) = parse_spec(spec) else { continue };
+        out.push(Binding { area: area.to_string(), command: command.to_string(), key, cmd, alt, shift, ctrl });
+    }
+    out
+}
+
 fn parse() -> Vec<Binding> {
     let mut out = Vec::new();
     for line in include_str!("../data/keys.txt").lines() {
@@ -72,19 +169,32 @@ fn parse() -> Vec<Binding> {
         }
         let mut it = line.split('\t');
         let (Some(area), Some(command), Some(spec)) = (it.next(), it.next(), it.next()) else { continue };
-        let rest: String = spec.chars().filter(|c| !"⌘⌥⇧⌃".contains(*c)).collect();
-        let mut chars = rest.chars();
-        let (Some(c), None) = (chars.next(), chars.next()) else { continue };
-        let Some(key) = key_of(c) else { continue };
-        let ctrl = spec.contains('⌃');
-        out.push(Binding { area: area.to_string(), command: command.to_string(), key, cmd: spec.contains('⌘') || ctrl, alt: spec.contains('⌥'), shift: spec.contains('⇧'), ctrl });
+        out.extend(bindings_of([(area, command, spec)]));
     }
     out
 }
 
-pub fn bindings() -> &'static [Binding] {
+/// Logic's U.S. preset, as shipped.
+pub fn defaults() -> &'static [Binding] {
     static B: OnceLock<Vec<Binding>> = OnceLock::new();
     B.get_or_init(parse)
+}
+
+/// The key command set in use (the Key Commands window edits it): the U.S. defaults until a set
+/// is loaded or edited.
+static CURRENT: RwLock<Option<&'static [Binding]>> = RwLock::new(None);
+
+pub fn bindings() -> &'static [Binding] {
+    CURRENT.read().ok().and_then(|c| *c).unwrap_or_else(defaults)
+}
+
+/// Makes `b` the set every key press reads. (Each set lives for the rest of the run: sets change
+/// only when the Key Commands window edits or loads one.)
+pub fn set_bindings(b: Vec<Binding>) {
+    let leaked: &'static [Binding] = Box::leak(b.into_boxed_slice());
+    if let Ok(mut c) = CURRENT.write() {
+        *c = Some(leaked);
+    }
 }
 
 /// Which areas' bindings apply, most specific first.

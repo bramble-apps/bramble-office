@@ -30,13 +30,17 @@ pub struct Live {
     /// MIDI inputs: their connections and the messages they send.
     _inputs: Vec<midir::MidiInputConnection<()>>,
     pub input_names: Vec<String>,
+    /// Every input port found, opened or switched off in Settings ▸ MIDI ▸ Inputs.
+    pub all_ports: Vec<String>,
+    #[cfg(unix)]
+    _virtual: Option<midir::MidiInputConnection<()>>,
     rx: Option<mpsc::Receiver<MidiMsg>>,
     sustain: bool,
 }
 
 impl Live {
     pub fn new() -> Live {
-        Live { typing_open: false, octave_c: 60, velocity: 100, held: HashMap::new(), keys_down: HashMap::new(), _inputs: Vec::new(), input_names: Vec::new(), rx: None, sustain: false }
+        Live { typing_open: false, octave_c: 60, velocity: 100, held: HashMap::new(), keys_down: HashMap::new(), _inputs: Vec::new(), input_names: Vec::new(), all_ports: Vec::new(), #[cfg(unix)] _virtual: None, rx: None, sustain: false }
     }
 
     /// Opens every MIDI input (call once; again to pick up keyboards plugged in later).
@@ -47,12 +51,36 @@ impl Live {
         let (tx, rx) = mpsc::channel();
         let mut conns = Vec::new();
         let mut names = Vec::new();
+        let mut all = Vec::new();
+        // (Settings ▸ MIDI ▸ Inputs: the virtual input other apps play into)
+        #[cfg(unix)]
+        {
+            use midir::os::unix::VirtualInput;
+            self._virtual = None;
+            let virt = crate::settings::Values::load();
+            if crate::prefs::virtual_in(&virt) {
+                if let Ok(input) = midir::MidiInput::new("Bramble Studio") {
+                    let (tx, ctx) = (tx.clone(), ctx.clone());
+                    self._virtual = input.create_virtual("Bramble Studio Virtual In", move |_, msg, _| {
+                        if msg.len() >= 2 {
+                            let _ = tx.send((msg[0], msg[1], msg.get(2).copied().unwrap_or(0)));
+                            ctx.request_repaint();
+                        }
+                    }, ()).ok();
+                }
+            }
+        }
         let Ok(probe) = midir::MidiInput::new("Bramble Studio") else { return };
         for port in probe.ports() {
             let Ok(input) = midir::MidiInput::new("Bramble Studio") else { continue };
             let name = input.port_name(&port).unwrap_or_default();
             // (ALSA's own "Midi Through" port only echoes)
-            if name.contains("Midi Through") {
+            if name.contains("Midi Through") || name.contains("Bramble Studio Virtual In") {
+                continue;
+            }
+            all.push(name.clone());
+            // (switched off in Settings ▸ MIDI ▸ Inputs: not opened, so not recorded from)
+            if crate::prefs::input_off(&name) {
                 continue;
             }
             let tx = tx.clone();
@@ -67,8 +95,10 @@ impl Live {
                 names.push(name);
             }
         }
+        self._inputs = Vec::new();
         self._inputs = conns;
         self.input_names = names;
+        self.all_ports = all;
         self.rx = Some(rx);
     }
 }
@@ -134,6 +164,26 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
     let msgs: Vec<MidiMsg> = app.live.rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
     let t = app.selected_track.unwrap_or(0);
     for (status, a, b) in msgs {
+        // (a controller message learned in the Key Commands window runs its command)
+        if crate::keycmds::midi_in(app, ctx, status, a, b) {
+            continue;
+        }
+        // Project Settings ▸ MIDI ▸ Input Filter
+        if !crate::projsettings::input_passes(&app.proj, status) {
+            continue;
+        }
+        // MIDI ▸ General: CC 7 / 10 move the track's fader and pan
+        if status & 0xF0 == 0xB0 && (a == 7 || a == 10) && crate::projsettings::cc_moves_strip(&app.proj) {
+            if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                if a == 7 {
+                    tr.volume_db = crate::automation::logic_to_db(b as f32);
+                } else {
+                    tr.pan = (b as f32 - 64.0) / 63.0;
+                }
+                app.sync_mix();
+            }
+            continue;
+        }
         match status & 0xF0 {
             0x90 => note(app, a, b),
             0x80 => note(app, a, 0),

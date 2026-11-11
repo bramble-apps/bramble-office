@@ -562,6 +562,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             });
             if let Some(choice) = picked {
                 mixstate::checkpoint(app, if choice.is_some() { "Insert Plug-in" } else { "Remove Plug-in" });
+                let inserted = choice.is_some();
                 mixstate::edit_inserts(app, i, |v| match choice {
                     Some(n) => v[k] = mixstate::new_plugin(&n),
                     None => {
@@ -570,6 +571,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 });
                 if app.mix.fx_window == Some((i, k)) {
                     app.mix.fx_window = None;
+                }
+                if inserted && app.logic_settings.on(crate::prefs::OPEN_ON_INSERT) {
+                    app.mix.fx_window = Some((i, k));
                 }
                 app.load_engine();
             }
@@ -584,7 +588,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         if let Some(Some(n)) = picked {
             mixstate::checkpoint(app, "Insert Plug-in");
             mixstate::edit_inserts(app, i, |v| v.push(mixstate::new_plugin(&n)));
-            app.mix.fx_window = Some((i, mixstate::inserts(app, i).len() - 1));
+            // (Settings ▸ View ▸ Mixer ▸ Open plug-in window on insertion)
+            if app.logic_settings.on(crate::prefs::OPEN_ON_INSERT) {
+                app.mix.fx_window = Some((i, mixstate::inserts(app, i).len() - 1));
+            }
             app.load_engine();
         }
         y += 24.0;

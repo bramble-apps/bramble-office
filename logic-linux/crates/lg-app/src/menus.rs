@@ -221,7 +221,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     // (the Record menu's choice submenus: their items share names)
-    if crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
+    if crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -236,9 +236,17 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
     let checked = checked(app, &it.label);
     let shown = app.menu_label(&it.label);
     let label = if checked { format!("✓ {shown}") } else { shown };
-    let b = egui::Button::new(label).shortcut_text(it.shortcut.clone());
-    if ui.add_enabled(on, b).clicked() {
-        *fired = Some(it.label.clone());
+    // (the key the edited key command set gives it)
+    let short = crate::keycmds::shortcut_for(app, &it.label).unwrap_or_else(|| it.shortcut.clone());
+    let b = egui::Button::new(label).shortcut_text(short);
+    let resp = ui.add_enabled(on, b);
+    if resp.clicked() {
+        // Control-choosing a command opens the Key Commands window with it selected
+        if ui.input(|i| i.modifiers.ctrl) {
+            app.keycmds.open_with(&it.label);
+        } else {
+            *fired = Some(it.label.clone());
+        }
         ui.close();
     }
 }

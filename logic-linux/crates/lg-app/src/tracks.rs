@@ -278,6 +278,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if row_resp.clicked() {
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
             crate::trackarea::click_track(app, i, shift, cmd);
+            // (Settings ▸ Select regions on track selection; Option-click always)
+            if !shift && !cmd {
+                crate::prefs::track_clicked(app, i, ui.input(|i| i.modifiers.alt));
+            }
         }
         if row_resp.secondary_clicked() && !app.ta.selected.contains(&i) {
             crate::trackarea::click_track(app, i, false, false);
@@ -610,9 +614,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     crate::trackarea::dialogs(app, ui.ctx());
     crate::regionops::dialogs(app, ui.ctx());
     if let Some((t, r, double, drag, pp)) = region_pressed {
-        app.selected_track = Some(t);
-        if !app.ta.selected.contains(&t) {
-            app.ta.selected = vec![t];
+        // (Settings ▸ Select tracks on region/marquee selection)
+        if crate::prefs::region_selects_track(app) || app.selected_track.is_none() {
+            app.selected_track = Some(t);
+            if !app.ta.selected.contains(&t) {
+                app.ta.selected = vec![t];
+            }
         }
         // Shift-click adds or removes a region from the selection (Logic)
         if ui.input(|i| i.modifiers.shift) && !drag {
@@ -638,6 +645,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         app.selected_region = Some((t, r));
         if double {
             app.bottom = crate::app::Bottom::PianoRoll;
+            // a MIDI region: the editor Settings ▸ Double-Clicking a MIDI Region Opens names
+            if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Instrument) {
+                crate::prefs::open_midi_region(app, &ui.ctx().clone());
+            }
         }
         app.center_roll(t, r);
         if drag {
@@ -671,7 +682,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ph = x_of(app.position() as f32, scroll);
     if ph >= lanes.min.x && ph <= lanes.max.x {
         let full = ui.painter_at(Rect::from_min_max(ruler.min, area.max));
-        full.vline(ph, ruler.min.y + 14.0..=area.max.y, Stroke::new(1.2, look::playhead()));
+        full.vline(ph, ruler.min.y + 14.0..=area.max.y, Stroke::new(crate::prefs::playhead_width(), look::playhead()));
         full.add(egui::Shape::convex_polygon(vec![pos2(ph - 6.0, ruler.min.y + 14.0), pos2(ph + 6.0, ruler.min.y + 14.0), pos2(ph, ruler.min.y + 22.0)], look::playhead(), Stroke::NONE));
     }
     // follow the playhead while playing (Logic's Catch; Scroll in Play: nav.rs)

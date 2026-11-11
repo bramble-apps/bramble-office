@@ -53,11 +53,7 @@ pub const COMMANDS: &[&str] = &[
     "Open Assets Project Settings…",
 ];
 
-/// Logic's Project Settings panes, in its menu's order (Studio has the first ones' basics).
-const SETTINGS_TABS: [&str; 11] = ["General", "Audio", "Recording", "Smart Tempo", "MIDI", "Score", "Movie", "Synchronization", "Metronome", "Tuning", "Assets"];
 
-/// How many backups an alternative keeps (Logic's Project File Backups 00..09).
-const BACKUPS: usize = 10;
 
 /// Something asked in a small window before it's done.
 #[derive(Clone, Debug, PartialEq)]
@@ -114,6 +110,7 @@ pub fn after_open(app: &mut App, path: &Path) {
     }
     take_from_project(app);
     crate::hosting::after_open(app);
+    crate::projsettings::after_open(app);
 }
 
 /// The app's side of what the project holds: markers, arrangement, audio regions' extras.
@@ -232,6 +229,7 @@ pub fn give_to_project(app: &mut App) -> Vec<String> {
 /// File ▸ Save (⌘S): the edits written into the project's own file; the alternative's
 /// ProjectData goes into its Project File Backups first.
 pub fn save(app: &mut App) {
+    crate::projsettings::save(app);
     if app.project.is_none() || app.file.is_none() || app.demo {
         app.tell(if app.demo { "The demo song can't be saved: open a Logic project (⌘O)" } else { "A project made here can't be saved as a Logic file yet: start from one of My Templates (Save as Template…) or open a .logicx" });
         return;
@@ -273,7 +271,10 @@ pub fn save(app: &mut App) {
                 let _ = std::fs::copy(&target, &first);
             }
             if saved.data != *original || !target.exists() {
-                let _ = package::make_backup(&alt, BACKUPS);
+                // (Settings ▸ Project Handling ▸ Auto Backup)
+                if let Some(keep) = crate::prefs::backups(&app.logic_settings) {
+                    let _ = package::make_backup(&alt, keep);
+                }
             }
             match std::fs::write(&target, &saved.data) {
                 Ok(()) => {
@@ -758,9 +759,12 @@ pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> boo
                         continue;
                     }
                     let pane = c.label.trim_end_matches('…').to_string();
-                    let on = SETTINGS_TABS.contains(&pane.as_str());
-                    if ui.add_enabled(on, egui::Button::new(&c.label)).clicked() {
-                        app.pf.settings = Some(pane);
+                    if ui.button(&c.label).clicked() {
+                        if crate::projsettings::PANES.contains(&pane.as_str()) {
+                            app.pf.settings = Some(pane);
+                        } else {
+                            crate::projsettings::command(app, &c.label);
+                        }
                         ui.close();
                     }
                 }
@@ -1002,98 +1006,60 @@ fn edit_alternatives(app: &mut App, ctx: &egui::Context) {
 fn project_settings(app: &mut App, ctx: &egui::Context) {
     let Some(mut tab) = app.pf.settings.clone() else { return };
     let mut open = true;
-    egui::Window::new("Project Settings").open(&mut open).collapsible(false).resizable(false).default_width(480.0).show(ctx, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for t in SETTINGS_TABS {
-                let have = matches!(t, "General" | "Audio" | "Recording" | "Assets");
-                if ui.add_enabled(have, egui::Button::selectable(tab == t, t)).clicked() {
-                    tab = t.to_string();
+    crate::projsettings::window(app, ctx, &mut tab, &mut open);
+    app.pf.settings = open.then_some(tab);
+}
+
+/// Project Settings ▸ General: the project, where it's saved, tempo, signature, key, and what
+/// the last Save couldn't write.
+pub fn general_info(app: &mut App, ui: &mut egui::Ui) {
+    let Some(p) = app.project.clone() else { return };
+    egui::Grid::new("ps-general").num_columns(2).show(ui, |ui| {
+        ui.label("Project:");
+        ui.label(&p.name);
+        ui.end_row();
+        ui.label("Saved in:");
+        ui.label(match (&app.pf.band, package(app)) {
+            (Some(b), _) => b.display().to_string(),
+            (_, Some(pkg)) => pkg.display().to_string(),
+            _ => "not saved yet".into(),
+        });
+        ui.end_row();
+        if let Some(pkg) = package(app) {
+            ui.label("Alternatives:");
+            ui.label(package::list(&pkg).iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "));
+            ui.end_row();
+        }
+        ui.label("Tempo:");
+        let mut bpm = p.tempo;
+        if ui.add(egui::DragValue::new(&mut bpm).range(5.0..=990.0).speed(0.1).suffix(" BPM")).changed() {
+            app.checkpoint("Tempo");
+            if let Some(pr) = app.project.as_mut() {
+                pr.tempo = bpm;
+                if let Some(first) = pr.tempo_map.first_mut() {
+                    first.1 = bpm;
                 }
+            }
+            app.after_edit();
+        }
+        ui.end_row();
+        ui.label("Time signature:");
+        ui.label(format!("{}/{}", p.signature.0, p.signature.1));
+        ui.end_row();
+        ui.label("Key:");
+        ui.label(&p.key);
+        ui.end_row();
+    });
+    if !app.pf.last_left_out.is_empty() {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("Not in the Logic file after the last save:").color(crate::look::text_dim()));
+        egui::ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
+            for l in &app.pf.last_left_out {
+                ui.label(format!("• {l}"));
             }
         });
-        ui.separator();
-        let Some(p) = app.project.clone() else { return };
-        match tab.as_str() {
-            "General" => {
-                egui::Grid::new("ps-general").num_columns(2).show(ui, |ui| {
-                    ui.label("Project:");
-                    ui.label(&p.name);
-                    ui.end_row();
-                    ui.label("Saved in:");
-                    ui.label(match (&app.pf.band, package(app)) {
-                        (Some(b), _) => b.display().to_string(),
-                        (_, Some(pkg)) => pkg.display().to_string(),
-                        _ => "not saved yet".into(),
-                    });
-                    ui.end_row();
-                    if let Some(pkg) = package(app) {
-                        ui.label("Alternatives:");
-                        ui.label(package::list(&pkg).iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "));
-                        ui.end_row();
-                    }
-                    ui.label("Tempo:");
-                    let mut bpm = p.tempo;
-                    if ui.add(egui::DragValue::new(&mut bpm).range(5.0..=990.0).speed(0.1).suffix(" BPM")).changed() {
-                        app.checkpoint("Tempo");
-                        if let Some(pr) = app.project.as_mut() {
-                            pr.tempo = bpm;
-                            if let Some(first) = pr.tempo_map.first_mut() {
-                                first.1 = bpm;
-                            }
-                        }
-                        app.after_edit();
-                    }
-                    ui.end_row();
-                    ui.label("Time signature:");
-                    ui.label(format!("{}/{}", p.signature.0, p.signature.1));
-                    ui.end_row();
-                    ui.label("Key:");
-                    ui.label(&p.key);
-                    ui.end_row();
-                });
-                if !app.pf.last_left_out.is_empty() {
-                    ui.add_space(6.0);
-                    ui.label(egui::RichText::new("Not in the Logic file after the last save:").color(crate::look::text_dim()));
-                    egui::ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
-                        for l in &app.pf.last_left_out {
-                            ui.label(format!("• {l}"));
-                        }
-                    });
-                }
-            }
-            "Audio" => {
-                egui::Grid::new("ps-audio").num_columns(2).show(ui, |ui| {
-                    ui.label("Sample Rate:");
-                    ui.label(format!("{:.1} kHz", p.sample_rate as f64 / 1000.0));
-                    ui.end_row();
-                    ui.label("Audio files:");
-                    ui.label(p.audio_dir.as_ref().map_or("—".into(), |d| d.display().to_string()));
-                    ui.end_row();
-                });
-                ui.label(egui::RichText::new("(The sample rate is the project's own; Studio plays at its output's rate.)").color(crate::look::text_dim()));
-            }
-            "Recording" => {
-                egui::Grid::new("ps-rec").num_columns(2).show(ui, |ui| {
-                    ui.label("Audio Recording Path:");
-                    ui.label(p.audio_dir.as_ref().map_or("the project's Audio Files".into(), |d| d.display().to_string()));
-                    ui.end_row();
-                    ui.label("File type:");
-                    ui.label("WAV");
-                    ui.end_row();
-                    ui.label("Bit depth:");
-                    let b = app.logic_settings.get("Recording / main / Bit Depth:");
-                    ui.label(if b.is_empty() { "24-bit".to_string() } else { b });
-                    ui.end_row();
-                });
-            }
-            "Assets" => {
-                ui.checkbox(&mut app.pf.copy_assets, "Copy audio files into project");
-                ui.label(egui::RichText::new("On: Save copies audio files from outside the project into its Audio Files first (Consolidate).").color(crate::look::text_dim()));
-            }
-            _ => {}
-        }
-    });
-    app.pf.settings = open.then_some(tab);
+    }
+    
 }
 
 #[cfg(test)]

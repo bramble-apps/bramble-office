@@ -1411,7 +1411,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         app.audio_edit.t_scroll = app.position();
     }
     if main.x_range().contains(ph) {
-        ui.painter_at(main).vline(ph, main.y_range(), Stroke::new(1.2, look::playhead()));
+        ui.painter_at(main).vline(ph, main.y_range(), Stroke::new(crate::prefs::playhead_width(), look::playhead()));
     }
     // the amplitude scale
     amp_scale(&p, amp, lane, 25.0, true, 1.0);
@@ -1743,7 +1743,7 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
     let ph_sec = app.seconds_at(app.position()) - app.seconds_at(rg.start as f64);
     let ph_f = x.offset as f64 + ph_sec * rate as f64;
     if ph_sec >= 0.0 && wave.x_range().contains(x_of(ph_f)) {
-        wp.vline(x_of(ph_f), wave.y_range(), Stroke::new(1.2, look::playhead()));
+        wp.vline(x_of(ph_f), wave.y_range(), Stroke::new(crate::prefs::playhead_width(), look::playhead()));
     }
     if (app.audio_edit.catch || app.audio_edit.f_scroll_in_play) && app.playing() && (x_of(ph_f) > wave.max.x || x_of(ph_f) < wave.min.x) && ph_sec >= 0.0 {
         app.audio_edit.f_start = ph_f;
@@ -2348,7 +2348,7 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     if let Some(rt) = &rt {
         let ph = x_of(crate::smarttempo::tick_to_file(app, rt, app.position()));
         if main.x_range().contains(ph) {
-            mp.vline(ph, header.min.y..=main.max.y, Stroke::new(1.2, look::playhead()));
+            mp.vline(ph, header.min.y..=main.max.y, Stroke::new(crate::prefs::playhead_width(), look::playhead()));
         }
     }
     // ---- gestures: the beat markers (click selects, drag moves, double-click: the downbeat),

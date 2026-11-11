@@ -516,7 +516,8 @@ fn first_loop_sets_project(app: &mut App, it: &Item) {
     if p.tracks.iter().any(|t| !t.regions.is_empty()) || it.kind != Kind::Loop {
         return;
     }
-    if let Some(b) = it.bpm {
+    // (Project Settings ▸ Smart Tempo ▸ Keep Project Tempo: the tempo stays)
+    if let Some(b) = it.bpm.filter(|_| !crate::projsettings::keep_tempo(&app.proj)) {
         p.tempo = b;
         p.tempo_map.clear();
     }
