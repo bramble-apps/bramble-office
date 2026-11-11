@@ -10,6 +10,7 @@ pub enum Synth {
     EsM,
     EsP,
     Efm1,
+    Es2,
 }
 
 pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
@@ -23,6 +24,8 @@ pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
         })
     } else if any.is::<lg_synth::efm1::Efm1>() {
         Some(Synth::Efm1)
+    } else if any.is::<lg_synth::es2::Es2>() {
+        Some(Synth::Es2)
     } else {
         None
     }
@@ -35,5 +38,6 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, s: Synth) {
         Synth::EsM => crate::esmwin::window(app, ctx, t),
         Synth::EsP => crate::espwin::window(app, ctx, t),
         Synth::Efm1 => crate::efm1win::window(app, ctx, t),
+        Synth::Es2 => crate::es2win::window(app, ctx, t),
     }
 }

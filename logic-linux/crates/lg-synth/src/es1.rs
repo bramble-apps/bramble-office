@@ -307,7 +307,7 @@ impl Voice<Shared> for V {
         let gain = 0.5 * level_vel * (1.0 + m[5]).clamp(0.0, 2.0) * post;
         let mut peak = 0.0f32;
         for i in 0..n {
-            let main = self.osc.next(wave, inc, pw);
+            let main = if wave == Wave::Triangle { kit::tri(&mut self.osc, inc) } else { self.osc.next(wave, inc, pw) };
             let s1 = self.sub1.next(Wave::Pulse, inc * 0.5, 0.5);
             let s2 = self.sub2.next(Wave::Pulse, inc * 0.25, if sub == 3 { 0.25 } else { 0.5 });
             let subv = match sub {

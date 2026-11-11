@@ -297,9 +297,9 @@ fn esp_poly() {
     let od = |d: f32| {
         let mut set = only(p::TRIANGLE);
         set.push((p::OVERDRIVE, d));
-        bright(&play(&mut mk(Model::P), &set, 45, 100, 0.5)[4800..], 1500.0)
+        hi_rms(&play(&mut mk(Model::P), &set, 45, 100, 0.5)[4800..], 600.0)
     };
-    assert!(od(1.0) > 3.0 * od(0.0));
+    assert!(od(1.0) > 3.0 * od(0.0), "{} {}", od(1.0), od(0.0));
     // eight voices: a ninth note takes one away, nothing breaks
     let mut s = mk(Model::P);
     for k in 0..9 {

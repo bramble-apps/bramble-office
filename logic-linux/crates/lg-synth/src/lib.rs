@@ -22,7 +22,6 @@ pub mod dsp;
 pub mod ensemble;
 pub mod ep;
 pub mod es2;
-pub mod es_small;
 pub mod mellotron;
 pub mod organ;
 pub mod patches;

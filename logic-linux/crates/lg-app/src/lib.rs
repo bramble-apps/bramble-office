@@ -65,6 +65,7 @@ mod esewin;
 mod esmwin;
 mod espwin;
 mod efm1win;
+mod es2win;
 mod fxviews;
 mod stemsplit;
 mod players;

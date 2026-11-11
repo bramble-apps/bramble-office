@@ -329,3 +329,18 @@ pub const CTRLS: &[&str] = &[
 ];
 /// Index of Aftertouch in `CTRLS`.
 pub const CTRL_AT: usize = 120;
+
+/// A triangle wave from an oscillator's phase (starting at a rising zero crossing); no
+/// integrator, so no offset to settle at a note's start.
+#[inline]
+pub fn tri(osc: &mut crate::dsp::Osc, inc: f32) -> f32 {
+    let t = osc.phase;
+    osc.advance(inc.clamp(1e-7, 0.5));
+    if t < 0.25 {
+        4.0 * t
+    } else if t < 0.75 {
+        2.0 - 4.0 * t
+    } else {
+        4.0 * t - 4.0
+    }
+}

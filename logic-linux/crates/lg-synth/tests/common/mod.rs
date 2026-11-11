@@ -50,23 +50,31 @@ pub fn tone(x: &[f32], hz: f32) -> f32 {
     (p.max(0.0).sqrt() * 2.0 / x.len() as f64) as f32
 }
 
+/// The signal above `hz` (four one-pole high-passes in a row).
+pub fn highpassed(x: &[f32], hz: f32) -> Vec<f32> {
+    let a = (-std::f32::consts::TAU * hz / RATE).exp();
+    let mut lp = [0.0f32; 4];
+    x.iter().map(|&v| {
+        let mut h = v;
+        for l in &mut lp {
+            *l = h + (*l - h) * a;
+            h -= *l;
+        }
+        h
+    }).collect()
+}
+
 /// Energy above `hz` over the whole energy (0…1): how bright the sound is.
 pub fn bright(x: &[f32], hz: f32) -> f32 {
-    // one-pole high-pass, run twice
-    let a = (-std::f32::consts::TAU * hz / RATE).exp();
-    let mut lp1 = 0.0;
-    let mut lp2 = 0.0;
-    let mut hi = 0.0f64;
-    let mut all = 0.0f64;
-    for &v in x {
-        lp1 = v + (lp1 - v) * a;
-        let h1 = v - lp1;
-        lp2 = h1 + (lp2 - h1) * a;
-        let h = h1 - lp2;
-        hi += (h * h) as f64;
-        all += (v * v) as f64;
-    }
+    let h = highpassed(x, hz);
+    let hi: f64 = h.iter().map(|v| (*v as f64) * (*v as f64)).sum();
+    let all: f64 = x.iter().map(|v| (*v as f64) * (*v as f64)).sum();
     (hi / all.max(1e-20)) as f32
+}
+
+/// The level of what lies above `hz`.
+pub fn hi_rms(x: &[f32], hz: f32) -> f32 {
+    rms(&highpassed(x, hz))
 }
 
 /// Fundamental by normalised autocorrelation between `lo` and `hi` Hz.

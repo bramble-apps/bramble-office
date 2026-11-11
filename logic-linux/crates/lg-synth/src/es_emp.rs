@@ -137,7 +137,7 @@ impl Voice<Tone> for V {
                 x += self.osc.next(Wave::Saw, inc, 0.5) * sh.saw;
             }
             if sh.tri > 0.0 {
-                x += self.tri.next(Wave::Triangle, inc, 0.5) * sh.tri;
+                x += kit::tri(&mut self.tri, inc) * sh.tri;
             }
             if sh.pulse > 0.0 {
                 x += self.pul.next(Wave::Pulse, pinc, sh.pw) * sh.pulse;

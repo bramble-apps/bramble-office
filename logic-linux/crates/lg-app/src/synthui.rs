@@ -80,7 +80,7 @@ impl Pane<'_> {
     pub fn rect(&self, x: f32, y: f32, w: f32, h: f32) -> Rect {
         Rect::from_min_size(self.o + vec2(x, y), vec2(w, h))
     }
-    fn id(&self, what: &str, id: u32) -> egui::Id {
+    pub fn id(&self, what: &str, id: u32) -> egui::Id {
         egui::Id::unique(("synth", self.t, what, id))
     }
     pub fn painter(&self) -> egui::Painter {
@@ -168,7 +168,9 @@ impl Pane<'_> {
         let track = Rect::from_center_size(r.center(), vec2(4.0, r.height() - 8.0));
         pt.rect_filled(track, 2.0, Color32::from_gray(0x18));
         let cy = track.max.y - track.height() * f;
-        pt.rect_filled(Rect::from_min_max(pos2(track.min.x, cy), track.max), 2.0, self.skin.accent.gamma_multiply(0.7));
+        // lit from the bottom, or from zero for values that go both ways
+        let zy = if p.min < 0.0 && p.max > 0.0 { track.max.y - track.height() * (-p.min / (p.max - p.min)) } else { track.max.y };
+        pt.rect_filled(Rect::from_min_max(pos2(track.min.x, cy.min(zy)), pos2(track.max.x, cy.max(zy))), 2.0, self.skin.accent.gamma_multiply(0.7));
         pt.rect_filled(Rect::from_center_size(pos2(r.center().x, cy), vec2(w.min(18.0), 8.0)), 2.0, Color32::from_gray(0xd8));
         if !label.is_empty() {
             pt.text(pos2(r.center().x, r.max.y + 8.0), Align2::CENTER_CENTER, label, look::regular(10.5), self.skin.dim);
