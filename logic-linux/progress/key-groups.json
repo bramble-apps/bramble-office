@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 157,
+  "done": 322,
   "total": 679,
-  "percent": 23.1
+  "percent": 47.4
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 36,
+  "done": 63,
   "total": 110,
-  "percent": 32.7
+  "percent": 57.3
  },
  {
   "group": "Windows Showing Audio Files",
@@ -43,9 +43,9 @@
  },
  {
   "group": "Views Showing Time Ruler",
-  "done": 4,
+  "done": 5,
   "total": 80,
-  "percent": 5.0
+  "percent": 6.2
  },
  {
   "group": "Views Showing Automation",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 108,
+  "done": 109,
   "total": 249,
-  "percent": 43.4
+  "percent": 43.8
  },
  {
   "group": "Live Loops Grid",
@@ -85,27 +85,27 @@
  },
  {
   "group": "Score Editor",
-  "done": 0,
+  "done": 133,
   "total": 139,
-  "percent": 0.0
+  "percent": 95.7
  },
  {
   "group": "Event Editor",
-  "done": 0,
+  "done": 8,
   "total": 9,
-  "percent": 0.0
+  "percent": 88.9
  },
  {
   "group": "Step Editor",
-  "done": 0,
+  "done": 16,
   "total": 16,
-  "percent": 0.0
+  "percent": 100.0
  },
  {
   "group": "Step Sequencer",
-  "done": 0,
+  "done": 93,
   "total": 96,
-  "percent": 0.0
+  "percent": 96.9
  },
  {
   "group": "Project Audio",
@@ -145,9 +145,9 @@
  },
  {
   "group": "Step Input Keyboard",
-  "done": 7,
+  "done": 49,
   "total": 49,
-  "percent": 14.3
+  "percent": 100.0
  },
  {
   "group": "Smart Controls",

@@ -70,6 +70,13 @@ pub fn patches() -> &'static [(String, String, String)] {
     })
 }
 
+/// The favourites saved (the Browser's own list, for other areas).
+pub fn load_favorites() -> Vec<String> {
+    let mut v: Vec<String> = sl::Saved::load().favorites.into_iter().collect();
+    v.sort();
+    v
+}
+
 /// Logic's order for the list ("Relevance"): the everyday instruments first.
 fn relevance(cat: &str) -> u8 {
     match cat {

@@ -288,6 +288,8 @@ pub struct App {
     pub cb_show: crate::controlbar::Shown,
     /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
     /// automation selection (trackarea.rs, regionops.rs, automation.rs).
+    /// File menu: templates, alternatives, backups, Project Settings (projfile.rs).
+    pub pf: crate::projfile::State,
     pub ta: crate::trackarea::State,
     /// The Browser (browser.rs, soundlib.rs), Smart Controls and the Arpeggiators
     /// (smartcontrols.rs, arp.rs), Project Audio and All Files (projaudio.rs, allfiles.rs), the
@@ -298,6 +300,10 @@ pub struct App {
     pub af: crate::allfiles::State,
     pub pf_tab: usize,
     pub preview: crate::preview::Preview,
+    /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
+    pub nav: crate::nav::State,
+    pub screens: crate::screensets::State,
+    pub bars: crate::toolbar::State,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -469,6 +475,10 @@ impl App {
             af: Default::default(),
             pf_tab: 0,
             preview: Default::default(),
+            nav: Default::default(),
+            screens: Default::default(),
+            bars: crate::toolbar::State::load(),
+            pf: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -497,6 +507,7 @@ impl App {
                 let pkg = lg_core::project::package_of(p);
                 self.file = lg_core::project::alternatives(&pkg).into_iter().next().and_then(|(_, alt)| std::fs::read(alt.join("ProjectData")).ok().map(|d| (alt, d)));
                 self.set_project(proj, false);
+                crate::projfile::after_open(self, p);
                 self.dirty = false;
                 self.tell(format!("Opened with {n} track{}", if n == 1 { "" } else { "s" }));
             }
@@ -994,76 +1005,12 @@ impl App {
     /// File > Save (⌘S): the edits written into the project's own ProjectData (Logic's file,
     /// everything else unchanged); the first save keeps the original beside it.
     pub fn save(&mut self) {
-        let (Some(p), Some((alt, original))) = (&self.project, &self.file) else {
-            self.tell(if self.demo { "The demo song can't be saved: open a Logic project (⌘O)" } else { "Saving GarageBand projects isn't available yet" });
-            return;
-        };
-        // (checks: LG_SAVE=1 lets a scripted run save its scratch copy)
-        if self.automated && std::env::var_os("LG_SAVE").is_none() {
-            return;
-        }
-        let _ = ();
-        match lg_core::save::save(p, original) {
-            Ok(mut saved) => {
-                // the Live Loops grid's cells written into the same bytes
-                let (data, unsaved_cells) = crate::liveloops::save_into(self, &saved.data);
-                saved.data = data;
-                saved.unsaved.extend(unsaved_cells);
-                let target = alt.join("ProjectData");
-                let backup = alt.join("ProjectData.before-bramble");
-                if !backup.exists() {
-                    let _ = std::fs::copy(&target, &backup);
-                }
-                match std::fs::write(&target, &saved.data) {
-                    Ok(()) => {
-                        lg_core::save::update_metadata(alt, p);
-                        let alt = alt.clone();
-                        self.file = Some((alt, saved.data));
-                        self.dirty = false;
-                        if !saved.unsaved_automation.is_empty() {
-                            self.tell(format!("Saved — not in the Logic file yet: {}", saved.unsaved_automation.join(", ")));
-                        } else if saved.unsaved.is_empty() {
-                            self.tell("Saved");
-                        } else {
-                            self.tell(format!("Saved — {} new region(s) without a model to copy (e.g. new Drummer regions) aren't in the Logic file yet", saved.unsaved.len()));
-                        }
-                    }
-                    Err(e) => self.tell(format!("Couldn't save: {e}")),
-                }
-            }
-            Err(e) => self.tell(format!("Couldn't save: {e}")),
-        }
+        crate::projfile::save(self)
     }
 
     /// File > Save As… / Save A Copy As…: the whole package copied to a new place, then saved there.
     pub fn save_as(&mut self) {
-        let (Some(p), Some((alt, _))) = (&self.project, &self.file) else {
-            self.save();
-            return;
-        };
-        if self.automated {
-            return;
-        }
-        let pkg = alt.parent().and_then(|a| a.parent()).map(Path::to_path_buf);
-        let Some(pkg) = pkg else { return };
-        let Some(dest) = kn_ui::files::FileDialog::new().set_title("Save As").set_file_name(format!("{}.logicx", p.name)).save_file() else { return };
-        let dest = if dest.extension().is_some_and(|e| e == "logicx") { dest } else { dest.with_extension("logicx") };
-        if let Err(e) = copy_dir(&pkg, &dest) {
-            self.tell(format!("Couldn't save: {e}"));
-            return;
-        }
-        let rel = alt.strip_prefix(&pkg).map(Path::to_path_buf).unwrap_or_default();
-        if let Some((a, d)) = self.file.take() {
-            let _ = a;
-            self.file = Some((dest.join(rel), d));
-        }
-        if let Some(pr) = self.project.as_mut() {
-            pr.name = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            pr.path = dest.clone();
-        }
-        // (the grid stays as it is, not re-read from the new path)
-        crate::liveloops::keep_after_save_as(self);
-        self.save();
+        crate::projfile::save_as(self, false)
     }
 
     /// Track > New Session Player SI Track…: a drummer track with an 8-bar region from the
@@ -1135,6 +1082,9 @@ impl App {
     }
 
     pub fn menu_label(&self, label: &str) -> String {
+        if let Some(l) = crate::nav::menu_label(self, label) {
+            return l;
+        }
         match label {
             "Hide Browser" if !self.show_browser => "Show Browser".into(),
             "Hide Inspector" if !self.show_inspector => "Show Inspector".into(),
@@ -1178,10 +1128,7 @@ impl App {
                 let f = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!f));
             }
-            "New" | "New from Template…" => {
-                self.stop();
-                self.set_project(crate::demo::empty(), true);
-            }
+            "New" | "New from Template…" => crate::projfile::new_project(self, cmd),
             "Open…" | "Logic Projects…" => self.open_dialog(),
             "Close Project" => {
                 self.stop();
@@ -1199,7 +1146,7 @@ impl App {
             }
             "Project or Section…" => self.bounce(None),
             "Save" => self.save(),
-            "Save As…" | "Save A Copy As…" => self.save_as(),
+            "Save As…" | "Save A Copy As…" => crate::projfile::save_as(self, cmd == "Save A Copy As…"),
             "New Session Player SI Track…" => {
                 self.new_track_kind = crate::newtrack::Kind::Drummer;
                 self.new_track_open = true;
@@ -1235,9 +1182,14 @@ impl App {
             egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
             _ => None,
         }).collect());
-        let focus = match (self.bottom, ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.editor_rect.contains(p))) {
+        let hover = ctx.input(|i| i.pointer.hover_pos());
+        let over_browser = self.show_browser && hover.is_some_and(|p| self.nav.browser_rect.contains(p));
+        let focus = match (self.bottom, hover.is_some_and(|p| self.editor_rect.contains(p))) {
+            _ if crate::stepedit::hovered(ctx, hover) => crate::keymap::Focus::StepEditor,
+            _ if crate::eventedit::hovered(self, ctx, hover) => crate::keymap::Focus::EventList,
+            _ if over_browser => crate::keymap::Focus::Browser,
             (Bottom::Mixer, true) => crate::keymap::Focus::Mixer,
-            (Bottom::PianoRoll, true) => crate::keymap::Focus::PianoRoll,
+            (Bottom::PianoRoll, true) => crate::score::focus(self, ctx),
             _ => crate::keymap::Focus::Tracks,
         };
         let used = crate::live::frame(self, ctx);
@@ -1259,6 +1211,9 @@ impl App {
                 if key == egui::Key::Escape {
                     continue;
                 }
+            }
+            if crate::stepinput::key_press(self, ctx, key, m) {
+                continue;
             }
             if focus == crate::keymap::Focus::PianoRoll && crate::audioedit::key_press(self, key, m) {
                 continue;
@@ -1300,6 +1255,17 @@ impl App {
             return true;
         }
         if crate::flex::command(self, ctx, name) {
+            return true;
+        }
+        if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
+            return true;
+        }
+        // the MIDI editors besides the Piano Roll: Score, Step Sequencer, Step Input, Step and
+        // Event Editors
+        if crate::scorecmd::command(self, ctx, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
+            return true;
+        }
+        if crate::projfile::command(self, name) {
             return true;
         }
         if crate::mixercmd::run(self, ctx, name) {
@@ -1661,6 +1627,13 @@ impl App {
         if self.show_control_bar {
             let bar = Rect::from_min_size(pos2(window.min.x, top), vec2(window.width(), CONTROL_H));
             crate::controlbar::show(self, ui, bar);
+            crate::windows::area(self, bar, "control-bar");
+            top = bar.max.y;
+        }
+        if self.show_toolbar {
+            let bar = Rect::from_min_size(pos2(window.min.x, top), vec2(window.width(), crate::toolbar::H));
+            crate::toolbar::show(self, ui, bar);
+            crate::windows::area(self, bar, "toolbar");
             top = bar.max.y;
         }
         let body = Rect::from_min_max(pos2(window.min.x, top + 1.0), window.max);
@@ -1669,6 +1642,8 @@ impl App {
             let w = self.browser_w.min(body.width() - 360.0 - if self.show_inspector { INSPECTOR_W } else { 0.0 }).max(200.0);
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + w, body.max.y));
             crate::browser::show(self, ui, r);
+            crate::windows::area(self, r, "browser");
+            self.nav.browser_rect = r;
             left = r.max.x + 1.0;
             // its right edge: drag to resize; past the minimum it snaps closed; past the room left
             // the Inspector hides (Logic, RESIZING.txt)
@@ -1693,6 +1668,8 @@ impl App {
         if self.show_inspector {
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + INSPECTOR_W, body.max.y));
             crate::inspector::show(self, ui, r);
+            crate::windows::area(self, r, "inspector");
+            self.nav.inspector_rect = r;
             left = r.max.x + 1.0;
         }
         let mut right = body.max.x;
@@ -1700,6 +1677,7 @@ impl App {
             let w = RIGHT_W.min(body.width() - left - 360.0).max(220.0);
             let r = Rect::from_min_max(pos2(body.max.x - w, body.min.y), body.max);
             crate::rightpane::show(self, ui, r, pane);
+            crate::windows::area(self, r, "right-pane");
             right = r.min.x - 1.0;
         }
         let main = Rect::from_min_max(pos2(left, body.min.y), pos2(right, body.max.y));
@@ -1716,6 +1694,7 @@ impl App {
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
             self.editor_rect = ed;
+            crate::windows::area(self, ed, if self.bottom == Bottom::Mixer { "mixer" } else { "editor" });
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
@@ -1758,12 +1737,15 @@ impl App {
         }
         crate::dialogs::show(self, &ctx);
         crate::midiwin::windows(self, &ctx);
+        crate::stepinput::window(self, &ctx);
+        crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);
         crate::browser::frame(self, &ctx);
+        crate::projfile::windows(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;
@@ -1805,6 +1787,7 @@ impl eframe::App for App {
             self.open_path(p);
         }
         self.keys(&ctx);
+        crate::nav::frame(self);
         crate::liveloops::update(self);
         crate::recording::update(self);
         crate::flex::update(self);
@@ -1944,19 +1927,4 @@ mod tests {
         assert_eq!(note_name(60), "C3");
         assert_eq!(note_name(61), "C#3");
     }
-}
-
-fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for e in std::fs::read_dir(from)? {
-        let e = e?;
-        let p = e.path();
-        let q = to.join(e.file_name());
-        if p.is_dir() {
-            copy_dir(&p, &q)?;
-        } else {
-            std::fs::copy(&p, &q)?;
-        }
-    }
-    Ok(())
 }

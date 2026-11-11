@@ -128,6 +128,12 @@ impl eframe::App for Snap {
                 Ok("roll") => self.app.bottom = app::Bottom::PianoRoll,
                 _ => {}
             }
+            // LG_CMDS="Page View|Stems: up": key commands run by name (the editors' checks)
+            if let Ok(c) = std::env::var("LG_CMDS") {
+                for n in c.split('|') {
+                    self.app.key_command(&ctx, n.trim());
+                }
+            }
             // LG_MIDI="lane,collapse,scale,handles,labels": the Piano Roll's views; "all": every note selected
             if let Ok(v) = std::env::var("LG_MIDI") {
                 let m = &mut self.app.midi;
@@ -147,6 +153,12 @@ impl eframe::App for Snap {
             }
             if std::env::var_os("LG_MIXER").is_some() {
                 self.app.bottom = app::Bottom::Mixer;
+            }
+            // LG_CMD="Show/Hide Toolbar;Recall Screenset 2": commands run by their Logic names
+            if let Ok(v) = std::env::var("LG_CMD") {
+                for c in v.split(';').map(str::trim).filter(|c| !c.is_empty()) {
+                    self.app.command(&ctx, c);
+                }
             }
         }
         if self.frames >= 8 && self.script.is_empty() && !crate::flex::busy(&self.app) && !self.shot {

@@ -110,7 +110,10 @@ fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     };
     let Some(region) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return };
     let w = body.width() - 16.0;
-    let cols = [("Position", w * 0.34), ("Status", w * 0.17), ("Ch", w * 0.09), ("Num", w * 0.14), ("Val", w * 0.11), ("Length", w * 0.15)];
+    // the Event Editor's view options (eventedit.rs): Relative Position, Length as Absolute Position
+    let ev = crate::eventedit::state(ui.ctx());
+    crate::eventedit::with(ui.ctx(), |s| s.rect = Some(body));
+    let cols = [(if ev.relative { "Rel. Position" } else { "Position" }, w * 0.34), ("Status", w * 0.17), ("Ch", w * 0.09), ("Num", w * 0.14), ("Val", w * 0.11), (if ev.abs_length { "End" } else { "Length" }, w * 0.15)];
     let hr = Rect::from_min_size(body.min, vec2(body.width(), ROW));
     header_row(&p, hr, &cols);
     let list = Rect::from_min_max(pos2(body.min.x, hr.max.y + 1.0), body.max);
@@ -139,7 +142,8 @@ fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             }
             let mut x = row.min.x + 8.0;
             let cell = |x: f32, w: f32| Rect::from_min_size(pos2(x - 4.0, row.min.y + 1.0), vec2(w - 2.0, ROW - 2.0));
-            p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, bbdt(app, n.pos), look::regular(12.0), look::text());
+            let shown = if ev.relative { n.pos.saturating_sub(region.start) } else { n.pos };
+            p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, bbdt(app, shown), look::regular(12.0), look::text());
             x += cols[0].1;
             p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, "Note", look::regular(12.0), look::text());
             x += cols[1].1;
@@ -157,11 +161,33 @@ fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             x += cols[4].1;
             let mut len = n.len as f32;
             let beat = 960.0;
-            if widgets::value_slot(ui, cell(x, cols[5].1), ui.scope_id().with(("ev-len", i)), &mut len, 1.0, 3840.0 * 64.0, n.len as f32, 10.0, &move |v| format!("{} {}", (v / beat).floor() as u32, (v % beat) as u32)) {
+            if ev.abs_length {
+                // Length as Absolute Position: the note's end
+                ui.painter().text(pos2(x, row.center().y), Align2::LEFT_CENTER, bbdt(app, n.pos + n.len), look::regular(12.0), look::text());
+            } else if widgets::value_slot(ui, cell(x, cols[5].1), ui.scope_id().with(("ev-len", i)), &mut len, 1.0, 3840.0 * 64.0, n.len as f32, 10.0, &move |v| format!("{} {}", (v / beat).floor() as u32, (v % beat) as u32)) {
                 edit = Some((i, lg_core::events::Note { len: len as u32, ..n }));
             }
         }
     });
+    // Numerical Edit of Event Position: the position typed
+    if let Some((i, mut text)) = ev.typing.clone() {
+        let mut done = None;
+        egui::Area::new(egui::Id::unique("lg-ev-typing")).fixed_pos(body.min + vec2(10.0, 30.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label("Position (bar beat division tick):");
+                ui.add(egui::TextEdit::singleline(&mut text).desired_width(140.0)).request_focus();
+                if ui.input(|x| x.key_pressed(egui::Key::Enter)) {
+                    done = Some(true);
+                } else if ui.input(|x| x.key_pressed(egui::Key::Escape)) {
+                    done = Some(false);
+                }
+            });
+        });
+        crate::eventedit::with(ui.ctx(), |s| s.typing = if done.is_some() { None } else { Some((i, text.clone())) });
+        if done == Some(true) {
+            crate::eventedit::set_position(app, i, &text);
+        }
+    }
     if let Some((i, n)) = edit {
         app.checkpoint("Change Event");
         if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
@@ -284,7 +310,7 @@ fn notes(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 const AUDIO_EXT: &[&str] = &["wav", "aif", "aiff", "caf", "mp3", "flac", "ogg", "m4a"];
 const MIDI_EXT: &[&str] = &["mid", "midi", "smf", "kar"];
 
-fn loop_folders() -> Vec<PathBuf> {
+pub(crate) fn loop_folders() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     let mut v = vec![home.join("Music/Loops"), home.join("Music/Apple Loops"), home.join("Music/Audio Music Apps/Apple Loops"), home.join("Library/Audio/Apple Loops"), PathBuf::from("/Library/Audio/Apple Loops"), home.join("Music/Samples")];
     v.retain(|p| p.is_dir());
@@ -391,7 +417,7 @@ fn list_dir(d: &Path) -> Vec<(PathBuf, bool)> {
     v
 }
 
-fn walk(d: &Path, out: &mut Vec<PathBuf>, depth: u32) {
+pub(crate) fn walk(d: &Path, out: &mut Vec<PathBuf>, depth: u32) {
     let Ok(rd) = std::fs::read_dir(d) else { return };
     for e in rd.flatten() {
         let p = e.path();

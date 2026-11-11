@@ -8,6 +8,9 @@
 pub const PPQ: u32 = 960;
 /// The tick of bar 1 beat 1 (Logic counts from a fixed point before the song's start).
 pub const BAR_ONE: u32 = 34560;
+/// Bar 1 for global events (tempo changes, markers, signatures after the first): Logic counts
+/// them from 38400 (format-analysis §11, §10, §25), regions from `BAR_ONE`.
+pub const EVENT_BAR_ONE: u32 = 38400;
 /// The end marker's position.
 pub const END: u32 = 0x3FFF_FFFF;
 
@@ -106,9 +109,22 @@ pub struct Placement {
     pub channel: u32,
     pub row: u32,
     pub sequence: Option<u32>,
-    /// Audio placements: the audio region's number (the n-th AuRg, from 1).
+    /// Audio placements: a key for the audio region (1 + its file's AuFl id >> 2 in the high
+    /// half, its number among that file's regions in the low half); MIDI: the record's u32 @56.
     pub audio_region: u32,
+    /// Audio placements: the file (record @44 = the AuFl's and its AuRg's header id >> 16) and
+    /// the region's number among that file's AuRg (record @40 = AuRg header u32 @12 >> 16).
+    pub audio_file: u32,
+    pub audio_index: u32,
     pub muted: bool,
+    /// The Region inspector's values kept in the record (format-analysis §14, §8): Loop (byte
+    /// 13 bit 0x02), Velocity offset (52), Transpose (53); audio fades in the fifth unit (ms,
+    /// curve).
+    pub looped: bool,
+    pub velocity: i8,
+    pub transpose: i8,
+    pub fade_in: (u16, i8),
+    pub fade_out: (u16, i8),
 }
 
 pub fn placement(r: &Record) -> Option<Placement> {
@@ -116,16 +132,91 @@ pub fn placement(r: &Record) -> Option<Placement> {
         return None;
     }
     let seq = r.u32_at(32);
+    let audio = r.kind == 0x24;
+    let (audio_file, audio_index) = if audio { (r.u32_at(44), r.u32_at(40)) } else { (0, 0) };
     Some(Placement {
-        audio: r.kind == 0x24,
+        audio,
         pos: r.pos,
         channel: r.u32_at(16),
         // (u16: byte 7 of the unit is the continuation mark)
         row: r.u16_at(20) as u32,
         sequence: (seq != u32::MAX && seq != 0).then_some(seq),
-        audio_region: r.u32_at(56),
+        audio_region: if audio { 1 + ((audio_file >> 2) << 16 | (audio_index & 0xFFFF)) } else { r.u32_at(56) },
+        audio_file,
+        audio_index,
         muted: false,
+        looped: !audio && r.u8_at(13) & 0x02 != 0,
+        velocity: if r.units() >= 4 && !audio { r.u8_at(52) as i8 } else { 0 },
+        transpose: if r.units() >= 4 && !audio { r.u8_at(53) as i8 } else { 0 },
+        fade_in: if audio && r.units() >= 5 { (r.u16_at(76), r.u8_at(79) as i8) } else { (0, 0) },
+        fade_out: if audio && r.units() >= 5 { (r.u16_at(72), r.u8_at(75) as i8) } else { (0, 0) },
     })
+}
+
+/// Writes the Region inspector's values into a placement record (`placement` reads them).
+pub fn set_region_props(b: &mut [u8], looped: bool, velocity: i8, transpose: i8, fade_in: (u16, i8), fade_out: (u16, i8)) {
+    if b.len() < 80 {
+        return;
+    }
+    if b[0] == 0x24 {
+        b[72..74].copy_from_slice(&fade_out.0.to_le_bytes());
+        b[75] = fade_out.1 as u8;
+        b[76..78].copy_from_slice(&fade_in.0.to_le_bytes());
+        b[79] = fade_in.1 as u8;
+    } else {
+        b[13] = if looped { b[13] | 0x02 } else { b[13] & !0x02 };
+        b[52] = velocity as u8;
+        b[53] = transpose as u8;
+    }
+}
+
+/// Minor keys by Logic's fifths number (the relative major's: F minor shares A♭ major's 4 flats).
+const MINOR_NAMES: [&str; 15] = ["A\u{266d}", "E\u{266d}", "B\u{266d}", "F", "C", "G", "D", "A", "E", "B", "F\u{266f}", "C\u{266f}", "G\u{266f}", "D\u{266f}", "A\u{266f}"];
+
+/// Logic's key byte (format-analysis §13: fifths + 7, + 0x10 for minor) as "F minor".
+pub fn key_string(k: u8) -> String {
+    if k & 0x10 != 0 {
+        format!("{} minor", MINOR_NAMES.get((k & 0x0F) as usize).copied().unwrap_or("A"))
+    } else {
+        format!("{} major", key_name(k & 0x0F))
+    }
+}
+
+fn pitch_class(name: &str) -> Option<i32> {
+    let mut c = name.chars();
+    let base = match c.next()?.to_ascii_uppercase() {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let acc: i32 = c.map(|x| match x {
+        '\u{266d}' | 'b' => -1,
+        '\u{266f}' | '#' => 1,
+        _ => 0,
+    }).sum();
+    Some((base + acc).rem_euclid(12))
+}
+
+/// "F minor", "E♭ major", "D♭ minor" (spelled as Logic's C♯ minor) as Logic's key byte.
+pub fn key_byte(s: &str) -> Option<u8> {
+    let mut words = s.split_whitespace();
+    let root = words.next()?;
+    let minor = words.next().is_some_and(|w| w.eq_ignore_ascii_case("minor"));
+    let pc = pitch_class(root)?;
+    let names: Vec<&str> = if minor { MINOR_NAMES.to_vec() } else { (0..15).map(key_name).collect() };
+    let norm = root.replace('b', "\u{266d}").replace('#', "\u{266f}");
+    let i = names.iter().position(|n| *n == norm).or_else(|| {
+        // the simplest spelling (fewest accidentals) of that pitch class
+        let mut c: Vec<usize> = (0..15).filter(|&i| pitch_class(names[i]) == Some(pc)).collect();
+        c.sort_by_key(|&i| (i as i32 - 7).abs());
+        c.first().copied()
+    })?;
+    Some(i as u8 | if minor { 0x10 } else { 0 })
 }
 
 /// Logic's key number as a name (7 = C; the circle runs in fifths around it).
@@ -164,6 +255,18 @@ mod tests {
         assert_eq!(r.len(), 2);
         assert_eq!(note(&r[0]), Some(Note { channel: 0, pitch: 61, velocity: 80, pos: 40080, len: 240 }));
         assert_eq!(control(&r[1]).map(|c| (c.channel, c.number, c.value)), Some((1, 7, 100)));
+    }
+
+    #[test]
+    fn key_bytes_both_ways() {
+        // format-analysis §13: C major 7, F minor 0x13, E major 0x0B
+        assert_eq!(key_byte("C major"), Some(7));
+        assert_eq!(key_byte("F minor"), Some(0x13));
+        assert_eq!(key_byte("E major"), Some(0x0B));
+        assert_eq!(key_byte("D\u{266d} minor"), Some(0x10 | 11), "spelled C\u{266f} minor");
+        for k in (0..15u8).chain((0..15).map(|k| k | 0x10)) {
+            assert_eq!(key_byte(&key_string(k)), Some(k), "{}", key_string(k));
+        }
     }
 
     #[test]

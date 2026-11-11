@@ -95,12 +95,15 @@ pub struct EngineRec {
     pub monitored: Vec<(usize, InputSel)>,
     /// The input's peak level (decaying), for the meters.
     pub level: f32,
+    /// The Tuner is open: the input is read, its last samples kept (mono) for it.
+    pub tuner: bool,
+    pub tap: VecDeque<f32>,
 }
 
 impl EngineRec {
     /// The input for a block of `frames` (stereo, interleaved), when something needs it.
     pub fn input(&mut self, frames: usize) -> Option<Vec<f32>> {
-        let need = self.capturing || !self.monitored.is_empty();
+        let need = self.capturing || !self.monitored.is_empty() || self.tuner;
         let out = match &mut self.feed {
             Feed::None => return None,
             Feed::Device(q) => {
@@ -136,6 +139,11 @@ impl EngineRec {
         };
         let peak = out.iter().fold(0f32, |m, x| m.max(x.abs()));
         self.level = (self.level * 0.97).max(peak);
+        if self.tuner {
+            self.tap.extend(out.chunks(2).map(|f| (f[0] + f.get(1).copied().unwrap_or(f[0])) * 0.5));
+            let extra = self.tap.len().saturating_sub(8192);
+            self.tap.drain(..extra);
+        }
         Some(out)
     }
 
@@ -526,7 +534,7 @@ fn midi_target(app: &App) -> Option<usize> {
 }
 
 /// The input feed set up for the engine: the test file, else the sound card (never headless).
-fn ensure_feed(app: &mut App) -> bool {
+pub(crate) fn ensure_feed(app: &mut App) -> bool {
     if let Some(path) = test_input() {
         let has = matches!(app.engine_lock().rec.feed, Feed::File { .. });
         if !has {

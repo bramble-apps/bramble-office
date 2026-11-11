@@ -1,19 +1,22 @@
-//! The Score editor (Logic Pro 13's Score tab, linear view): the selected track's MIDI regions
-//! as notation on a treble, bass or grand staff chosen by range, in the project's key and time
-//! signature. Notes are quantised for display (the region's display Quantize, Logic's 16,24 by
-//! default), with rests filled in, ties across beats and bars, chords on one stem, beams and
-//! flags, ledger lines and accidentals by key (engraving in lg-notation).
+//! The Score editor (Logic Pro 13's Score tab): MIDI regions as notation in Linear, Wrapped and
+//! Page view, on the track's staff style (Treble, Bass, Piano, Alto, Tenor, Drums, transposing
+//! instruments, 8va / 8vb), in the project's key (and the key changes inserted here) and time
+//! signature. Notes are quantised for display (the Quantize, Interpretation and Syncopation
+//! parameters), with rests filled in, ties, chords on one stem, beams and flags, triplets,
+//! ledger lines, accidentals by key, and voice separation (two voices on a staff, or one staff
+//! each with Explode Polyphony). Engraving decisions are lg-notation's.
 //!
-//! Editing as Logic's: a click selects a note (Shift adds), a drag moves it diatonically up and
-//! down and in time on the display grid, a double-click on a staff adds a note of the Part
-//! box's value, Delete removes the selection (the app's Delete, as in the Piano Roll). The Part
-//! box sits as a strip under the local menus: note values, rests and dynamics.
-//!
-//! Music symbols are drawn with shapes (no music font is bundled).
+//! Editing as Logic's: a click selects a note (Shift adds), a drag moves it diatonically and in
+//! time, a double-click inserts the Part box's symbol (a note of its value, an articulation,
+//! a dynamic, a slur or hairpin, a clef change, text, a lyric or a chord symbol), Delete
+//! removes the selection. A Part box symbol clicked with notes selected is attached to them.
+//! Per-note attributes, staff styles and symbols live in the project (lg-core score), so every
+//! edit is one Undo step. The key commands are scorecmd.rs's.
 
 use egui::epaint::{PathShape, PathStroke};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Shape, Stroke};
 use lg_core::events::Note;
+use lg_core::score::{NoteAttr, Symbol, SymbolKind, ARTICULATIONS};
 use lg_notation as nt;
 
 use crate::app::App;
@@ -21,7 +24,7 @@ use crate::look;
 
 const TABS_H: f32 = 40.0;
 const LOCAL_H: f32 = 28.0;
-const PART_H: f32 = 34.0;
+const PART_H: f32 = 64.0;
 const RULER_H: f32 = 26.0;
 const HEAD_W: f32 = 120.0;
 
@@ -56,6 +59,20 @@ pub fn set_editor_tab(ctx: &egui::Context, tab: EditorTab) {
     ctx.data_mut(|d| d.insert_temp(tab_id(), tab));
 }
 
+/// The key-command area for the editor under the pointer (keymap.rs).
+pub fn focus(app: &App, ctx: &egui::Context) -> crate::keymap::Focus {
+    use crate::keymap::Focus;
+    if crate::audioedit::is_audio_region(app) {
+        return Focus::PianoRoll;
+    }
+    let players = app.selected_region.is_some_and(|x| app.players.contains_key(&x));
+    match editor_tab(app, ctx) {
+        EditorTab::Score if !players => Focus::Score,
+        EditorTab::StepSequencer => Focus::StepSeq,
+        _ => Focus::PianoRoll,
+    }
+}
+
 /// Logic's editor tabs, Piano Roll | Score | Smart Tempo, in one capsule; a click switches.
 pub fn tabs(app: &mut App, ui: &mut egui::Ui, area: Rect, current: EditorTab) {
     let p = ui.painter_at(area);
@@ -84,26 +101,150 @@ pub fn tabs(app: &mut App, ui: &mut egui::Ui, area: Rect, current: EditorTab) {
     }
 }
 
-/// The Score's own settings (kept in egui's memory: no App field needed).
+/// View ▸ View Mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum View {
+    #[default]
+    Linear,
+    Wrapped,
+    Page,
+}
+
+/// View ▸ Colors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Colors {
+    #[default]
+    Normal,
+    Pitch,
+    Velocity,
+    Voice,
+    BlackWhite,
+}
+
+/// A Part box symbol (group, item).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    Note(usize),
+    Rest(usize),
+    Artic(usize),
+    Dynamic(usize),
+    /// Slur up, slur down, crescendo, decrescendo.
+    Line(usize),
+    Clef(usize),
+    /// Text, lyric, chord symbol.
+    Text(usize),
+}
+
+impl Part {
+    /// (group, item) and the groups' sizes, for Next / Previous Part Box Symbol and Group.
+    pub const GROUPS: [usize; 7] = [7, 6, 10, 8, 4, 5, 3];
+    pub fn index(self) -> (usize, usize) {
+        match self {
+            Part::Note(i) => (0, i),
+            Part::Rest(i) => (1, i),
+            Part::Artic(i) => (2, i),
+            Part::Dynamic(i) => (3, i),
+            Part::Line(i) => (4, i),
+            Part::Clef(i) => (5, i),
+            Part::Text(i) => (6, i),
+        }
+    }
+    pub fn from_index(g: usize, i: usize) -> Part {
+        let i = i.min(Part::GROUPS[g % 7] - 1);
+        match g % 7 {
+            0 => Part::Note(i),
+            1 => Part::Rest(i),
+            2 => Part::Artic(i),
+            3 => Part::Dynamic(i),
+            4 => Part::Line(i),
+            5 => Part::Clef(i),
+            _ => Part::Text(i),
+        }
+    }
+}
+
+/// The Part box's articulations (indices into lg-core's ARTICULATIONS).
+pub const PART_ARTICS: [usize; 10] = [2, 3, 4, 5, 6, 7, 0, 8, 9, 10];
+pub const CLEFS: [&str; 5] = ["Treble", "Bass", "Alto", "Tenor", "Percussion"];
+const LINES: [&str; 4] = ["Slur Up", "Slur Down", "Crescendo", "Decrescendo"];
+const TEXTS: [&str; 3] = ["Text", "Lyric", "Chord"];
+
+/// The Score's own view settings (kept in egui's memory; edits to the music are in the project).
 #[derive(Clone, Debug)]
-struct State {
-    /// Part box: the note value inserted (index into VALUES), dotted, the dynamic (index).
-    value: usize,
-    dotted: bool,
-    dynamic: Option<usize>,
-    /// Display Quantize (index into nt::Quant::CHOICES).
-    quant: usize,
-    /// Staff space in points, bar width, scroll (bars, points).
-    space: f32,
-    bar_w: f32,
-    scroll_x: f32,
-    scroll_y: f32,
+pub struct State {
+    pub part: Part,
+    pub dotted: bool,
+    pub triplet: bool,
+    /// Staff space in points, bar width (linear), scroll (bars, points).
+    pub space: f32,
+    pub bar_w: f32,
+    pub scroll_x: f32,
+    pub scroll_y: f32,
     drag: Option<DragState>,
+    pub view: View,
+    pub colors: Colors,
+    pub explode_poly: bool,
+    pub explode_folders: bool,
+    pub names: bool,
+    pub rulers: bool,
+    /// Duration bars: 0 off, 1 selected notes, 2 all notes.
+    pub duration_bars: u8,
+    pub guides: bool,
+    pub snap: bool,
+    pub diatonic: bool,
+    /// Tracks shown by a score set (track ids); None: the selected track.
+    pub score_set: Option<Vec<u64>>,
+    /// Text being typed for a symbol: (track, tick, kind, staff, text, where).
+    pub typing: Option<(usize, u32, SymbolKind, u8, String, Pos2)>,
+    /// Go to Page… being typed.
+    pub goto: Option<String>,
+    /// The Score Project Settings window (its tab), the Staff Style window.
+    pub settings: Option<usize>,
+    pub styles_window: bool,
+    /// Settings: bar numbers at line starts, key signature on every line, chord symbol size,
+    /// the MIDI Meaning of dynamics (velocity per Part box dynamic).
+    pub bar_numbers: bool,
+    pub key_every_line: bool,
+    pub chord_size: f32,
+    pub dyn_velocity: [u8; 8],
+    /// Pages in the Page view (for Go to Page), and the page to bring into view.
+    pub pages: usize,
+    pub goto_page: Option<usize>,
 }
 
 impl Default for State {
     fn default() -> Self {
-        State { value: 2, dotted: false, dynamic: None, quant: 9, space: 8.0, bar_w: 300.0, scroll_x: 0.0, scroll_y: 0.0, drag: None }
+        State {
+            part: Part::Note(2),
+            dotted: false,
+            triplet: false,
+            space: 8.0,
+            bar_w: 300.0,
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            drag: None,
+            view: View::Linear,
+            colors: Colors::Normal,
+            explode_poly: false,
+            explode_folders: false,
+            names: false,
+            rulers: false,
+            duration_bars: 0,
+            guides: true,
+            snap: true,
+            diatonic: false,
+            score_set: None,
+            typing: None,
+            goto: None,
+            settings: None,
+            styles_window: false,
+            bar_numbers: true,
+            key_every_line: true,
+            chord_size: 1.0,
+            dyn_velocity: [16, 32, 48, 64, 80, 96, 112, 127],
+            pages: 1,
+            goto_page: None,
+        }
     }
 }
 
@@ -119,64 +260,351 @@ fn state_id() -> egui::Id {
     egui::Id::unique("lg-score-state")
 }
 
-/// Part box note values: (label, base, key command).
-const VALUES: [(&str, u8); 7] = [("1/1", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8), ("1/16", 16), ("1/32", 32), ("1/64", 64)];
-/// Dynamics and the velocity each stands for (Logic's MIDI Meaning defaults).
-const DYNAMICS: [(&str, u8); 8] = [("ppp", 16), ("pp", 32), ("p", 48), ("mp", 64), ("mf", 80), ("f", 96), ("ff", 112), ("fff", 127)];
+/// Reads and changes the Score's view state.
+pub fn with_state<R>(ctx: &egui::Context, f: impl FnOnce(&mut State) -> R) -> R {
+    ctx.data_mut(|d| f(d.get_temp_mut_or_default::<State>(state_id())))
+}
+
+pub fn state(ctx: &egui::Context) -> State {
+    ctx.data(|d| d.get_temp::<State>(state_id())).unwrap_or_default()
+}
+
+/// Part box note values: (label, base).
+pub const VALUES: [(&str, u8); 7] = [("1/1", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8), ("1/16", 16), ("1/32", 32), ("1/64", 64)];
+/// Dynamics (Logic's MIDI Meaning defaults give each a velocity).
+pub const DYNAMICS: [&str; 8] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
 
 /// Paper and ink (Logic's Score is light in dark mode too).
 const PAPER: Color32 = Color32::from_rgb(0xbf, 0xbf, 0xb8);
 const REGION_PAPER: Color32 = Color32::from_rgb(0xfe, 0xff, 0xf3);
+const PAGE: Color32 = Color32::from_rgb(0xff, 0xff, 0xfb);
 const INK: Color32 = Color32::from_rgb(0x10, 0x10, 0x10);
 
-/// A staff on screen: clef, its bottom line's y, and which notes it shows.
+/// A staff on screen: clef, its bottom line's y.
 #[derive(Clone, Copy)]
 struct Staff {
-    clef: nt::Clef,
     bottom: f32,
-    /// Grand staff: true for the upper (notes from middle C up), false for the lower.
-    part: Option<bool>,
+}
+
+/// A staff row of the score: which track, which staff of its style, which voice (Explode
+/// Polyphony), and the style.
+#[derive(Clone)]
+struct Row {
+    t: usize,
+    id: u64,
+    staff: usize,
+    voice: Option<u8>,
+    style: nt::StaffStyle,
+    name: String,
+    /// The first row of a two-staff (grand staff) track.
+    brace: bool,
+    /// Offset of the staff's bottom line from the line's top.
+    off: f32,
+}
+
+/// One engraved stretch: a region's notes on a row between key and clef changes.
+struct Seg {
+    row: usize,
+    rix: usize,
+    voice: nt::Voice,
+    from: u32,
+    hide_rests: bool,
+}
+
+/// A line (system) on screen: bars b0..b1, where each bar starts (xs has one more for the
+/// end), the y of its top, where the music's header starts.
+#[derive(Clone)]
+struct Line {
+    b0: u32,
+    b1: u32,
+    xs: Vec<f32>,
+    top: f32,
+    x_start: f32,
+    first: bool,
+}
+
+impl Line {
+    fn x_of(&self, tick: f32, bar_t: f32) -> f32 {
+        let b = (tick / bar_t).floor();
+        let k = (b as i64 - self.b0 as i64).clamp(0, self.xs.len() as i64 - 2) as usize;
+        let frac = tick / bar_t - (self.b0 as f32 + k as f32);
+        self.xs[k] + (self.xs[k + 1] - self.xs[k]) * frac
+    }
+    fn tick_of(&self, x: f32, bar_t: f32) -> f32 {
+        let k = self.xs.windows(2).position(|w| x < w[1]).unwrap_or(self.xs.len().saturating_sub(2));
+        let w = (self.xs[k + 1] - self.xs[k]).max(1.0);
+        (self.b0 as f32 + k as f32 + (x - self.xs[k]) / w) * bar_t
+    }
+}
+
+/// The clef a row uses from `tick`: the last clef change at or before it, else the style's.
+fn clef_at(app: &App, row: &Row, tick: u32) -> (nt::Clef, i8) {
+    let base = (row.style.clefs[row.staff.min(row.style.clefs.len() - 1)], row.style.octave);
+    let Some(ts) = app.project.as_ref().and_then(|p| p.score.track(row.id)) else { return base };
+    ts.symbols.iter().filter(|s| s.kind == SymbolKind::Clef && s.staff as usize == row.staff && s.tick <= tick).max_by_key(|s| s.tick).map_or(base, |s| (clef_named(&s.text), 0))
+}
+
+pub fn clef_named(name: &str) -> nt::Clef {
+    match name {
+        "Bass" => nt::Clef::Bass,
+        "Alto" => nt::Clef::Alto,
+        "Tenor" => nt::Clef::Tenor,
+        "Percussion" => nt::Clef::Percussion,
+        _ => nt::Clef::Treble,
+    }
+}
+
+/// The staff style a track uses (its own, or Logic's automatic choice by range).
+pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
+    let Some(tr) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { return nt::StaffStyle::ALL[0] };
+    if let Some(s) = app.project.as_ref().and_then(|p| p.score.track(tr.extra.id)).and_then(|ts| nt::StaffStyle::by_name(&ts.style)) {
+        return s;
+    }
+    let pitches: Vec<u8> = tr.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
+    let lname = tr.name.to_lowercase();
+    if tr.kind == lg_core::TrackKind::Drummer || ["drum", "kit", "beat", "perc"].iter().any(|w| lname.contains(w)) {
+        return nt::StaffStyle::by_name("Drums").unwrap_or(nt::StaffStyle::ALL[0]);
+    }
+    let piano = ["piano", "keys", "grand", "steinway", "rhodes", "clav", "organ", "harpsichord"].iter().any(|w| lname.contains(w));
+    nt::StaffStyle::auto(&pitches, piano)
+}
+
+/// The display Quantize a track reads with.
+fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
+    let ts = app.project.as_ref().and_then(|p| p.score.track(id));
+    let q = ts.and_then(|t| nt::Quant::CHOICES.iter().position(|c| c.0 == t.quantize)).unwrap_or(9);
+    (q, ts.is_none_or(|t| !t.no_interpretation), ts.is_some_and(|t| t.syncopation))
+}
+
+/// The tracks the Score shows: the score set, every MIDI track (Explode Folders), or the
+/// selected region's track.
+fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
+    let Some(p) = app.project.as_ref() else { return Vec::new() };
+    let midi = |t: &lg_core::Track| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none());
+    if let Some(set) = &st.score_set {
+        let v: Vec<usize> = p.tracks.iter().enumerate().filter(|(_, t)| set.contains(&t.extra.id) && midi(t)).map(|(i, _)| i).collect();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+    if st.explode_folders {
+        return p.tracks.iter().enumerate().filter(|(_, t)| midi(t)).map(|(i, _)| i).collect();
+    }
+    app.selected_region.map(|(t, _)| vec![t]).unwrap_or_default()
+}
+
+/// The rows for the shown tracks, with their vertical offsets (in staff spaces × sp).
+fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
+    let mut rows = Vec::new();
+    let mut off = 4.0 * sp;
+    for (k, &t) in tracks.iter().enumerate() {
+        let Some(tr) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { continue };
+        let style = style_of(app, t);
+        if k > 0 {
+            off += 12.0 * sp;
+        }
+        let n = style.clefs.len();
+        for s in 0..n {
+            let voices: &[Option<u8>] = if st.explode_poly { &[Some(0), Some(1)] } else { &[None] };
+            for (vk, &v) in voices.iter().enumerate() {
+                if s > 0 || vk > 0 {
+                    off += 10.0 * sp;
+                }
+                rows.push(Row { t, id: tr.extra.id, staff: s, voice: v, style, name: tr.name.clone(), brace: n > 1 && s == 0 && vk == 0, off });
+            }
+        }
+    }
+    rows
+}
+
+/// The notes of a region a row shows, as lg-notation reads them (written pitch, attributes),
+/// split into voices: (notes, voice of each).
+fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn, u8)> {
+    let score = app.project.as_ref().map(|p| &p.score);
+    let mine: Vec<nt::NoteIn> = region
+        .notes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| {
+            let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+            let staff = match a.staff {
+                1 => 0,
+                -1 => row.style.clefs.len() - 1,
+                _ => row.style.staff_of(n.pitch),
+            };
+            staff == row.staff
+        })
+        .map(|(i, n)| {
+            let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+            nt::NoteIn { index: i, pitch: row.style.written(n.pitch), pos: n.pos, len: n.len, spell: a.spell, stem: a.stem, beam: a.beam, interp: a.interp, synco: a.synco, tie: a.tie, acc: a.accidental }
+        })
+        .collect();
+    let voices = nt::split_voices(&mine);
+    mine.into_iter().zip(voices).collect()
+}
+
+fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
+    let Some(p) = app.project.as_ref() else { return Vec::new() };
+    let sig = p.signature;
+    let bar_t = lg_core::project::bar_ticks(sig);
+    let first_key = nt::Key::parse(&p.key);
+    let mut out = Vec::new();
+    for (ri, row) in rows.iter().enumerate() {
+        let Some(track) = p.tracks.get(row.t) else { continue };
+        let (q, interp, synco) = quant_of(app, row.id);
+        // where keys and clefs change (bars)
+        let mut cuts: Vec<u32> = p.score.keys.iter().map(|k| k.0 / bar_t * bar_t).collect();
+        if let Some(ts) = p.score.track(row.id) {
+            cuts.extend(ts.symbols.iter().filter(|s| s.kind == SymbolKind::Clef && s.staff as usize == row.staff).map(|s| s.tick / bar_t * bar_t));
+        }
+        cuts.sort_unstable();
+        cuts.dedup();
+        for (rix, region) in track.regions.iter().enumerate() {
+            if region.audio.is_some() {
+                continue;
+            }
+            let from = region.start / bar_t * bar_t;
+            let to = ((region.start + region.length).div_ceil(bar_t) * bar_t).max(from + bar_t);
+            let notes = row_notes(app, row, region);
+            let two = notes.iter().any(|x| x.1 == 1);
+            let mut bounds = vec![from];
+            bounds.extend(cuts.iter().copied().filter(|&c| c > from && c < to));
+            bounds.push(to);
+            for w in bounds.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                let (clef, _) = clef_at(app, row, a);
+                let key = nt::Key { fifths: p.score.key_at(a, first_key.fifths) };
+                let key = row.style.written_key(key);
+                let mut opts = nt::Options::new(sig, key, nt::Quant::CHOICES[q].1, a, b);
+                opts.interpretation = interp;
+                opts.syncopation = synco;
+                let voices: Vec<u8> = match row.voice {
+                    Some(v) => vec![v],
+                    None if two => vec![0, 1],
+                    None => vec![0],
+                };
+                for v in voices {
+                    let mut sel: Vec<nt::NoteIn> = notes.iter().filter(|x| x.1 == v || (row.voice.is_none() && !two)).map(|x| x.0).filter(|n| n.pos + n.len > a && n.pos < b).collect();
+                    if two && row.voice.is_none() {
+                        for n in sel.iter_mut().filter(|n| n.stem == 0) {
+                            n.stem = if v == 0 { 1 } else { -1 };
+                        }
+                    }
+                    out.push(Seg { row: ri, rix, voice: nt::engrave(&sel, clef, &opts), from: a, hide_rests: v == 1 && row.voice.is_none() });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Where a staff position is on a staff whose bottom line is at `bottom`.
+fn y_at(bottom: f32, pos: i32, sp: f32) -> f32 {
+    bottom - pos as f32 * sp / 2.0
+}
+
+/// The colour of a note in the View ▸ Colors mode (and its own Color attribute).
+fn note_color(colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
+    const PALETTE: [Color32; 16] = [
+        INK,
+        Color32::from_rgb(0xd0, 0x30, 0x30),
+        Color32::from_rgb(0xe0, 0x80, 0x20),
+        Color32::from_rgb(0xc0, 0xa0, 0x10),
+        Color32::from_rgb(0x50, 0xa0, 0x30),
+        Color32::from_rgb(0x20, 0x90, 0x90),
+        Color32::from_rgb(0x30, 0x60, 0xd0),
+        Color32::from_rgb(0x80, 0x40, 0xc0),
+        Color32::from_rgb(0xc0, 0x40, 0x90),
+        Color32::from_rgb(0x70, 0x50, 0x30),
+        Color32::from_rgb(0x60, 0x60, 0x60),
+        Color32::from_rgb(0x90, 0x20, 0x20),
+        Color32::from_rgb(0x20, 0x70, 0x40),
+        Color32::from_rgb(0x20, 0x40, 0x90),
+        Color32::from_rgb(0xa0, 0x70, 0x00),
+        Color32::from_rgb(0x50, 0x20, 0x70),
+    ];
+    match colors {
+        Colors::BlackWhite => INK,
+        Colors::Pitch => {
+            let h = (n.pitch % 12) as f32 / 12.0;
+            egui::ecolor::Hsva::new(h, 0.8, 0.7, 1.0).into()
+        }
+        Colors::Velocity => {
+            // blue (soft) through green to red (loud), as Logic's velocity colours
+            let h = (1.0 - n.velocity as f32 / 127.0) * 0.66;
+            egui::ecolor::Hsva::new(h, 0.85, 0.75, 1.0).into()
+        }
+        Colors::Voice => if voice == 0 { Color32::from_rgb(0x20, 0x50, 0xc0) } else { Color32::from_rgb(0xc0, 0x40, 0x20) },
+        Colors::Normal => PALETTE[attr.color as usize % 16],
+    }
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ctx = ui.ctx().clone();
-    let mut st: State = ctx.data(|d| d.get_temp(state_id())).unwrap_or_default();
+    let mut st = state(&ctx);
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
     let tabs_r = Rect::from_min_size(area.min, vec2(area.width(), TABS_H));
     tabs(app, ui, tabs_r, EditorTab::Score);
-    let Some((ti, ri)) = app.selected_region else {
+    let tracks = shown_tracks(app, &st);
+    let Some(&first_t) = tracks.first() else {
         p.text(area.center(), Align2::CENTER_CENTER, "Select a MIDI region to see its score", look::regular(14.0), look::text_dim());
         return;
     };
-    let Some(track) = app.project.as_ref().and_then(|pr| pr.tracks.get(ti)).cloned() else { return };
-    if track.regions.get(ri).is_some_and(|r| r.audio.is_some()) {
+    if app.selected_region.is_some_and(|(t, r)| app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).is_some_and(|r| r.audio.is_some())) {
         p.text(area.center(), Align2::CENTER_CENTER, "An audio region has no score", look::regular(14.0), look::text_dim());
         return;
     }
-    let (sig, key_text) = app.project.as_ref().map(|p| (p.signature, p.key.clone())).unwrap_or(((4, 4), "C major".into()));
-    let key = nt::Key::parse(&key_text);
+    let (sig, project_name) = app.project.as_ref().map(|p| (p.signature, p.name.clone())).unwrap_or(((4, 4), String::new()));
     let bar_t = lg_core::project::bar_ticks(sig) as f32;
+    let cur_t = app.selected_region.map_or(first_t, |x| x.0);
+    let cur_id = app.project.as_ref().and_then(|p| p.tracks.get(cur_t)).map_or(0, |t| t.extra.id);
 
-    // the local menus: Layout / Edit / Functions / View, and the display Quantize
+    // the local menus: Layout / Edit / Functions / View; the region's Style, Quantize,
+    // Interpretation and Syncopation (Logic's Region inspector for the Score)
     let local = Rect::from_min_size(pos2(area.min.x, tabs_r.max.y), vec2(area.width(), LOCAL_H));
     p.rect_filled(local, 0.0, look::header_bg());
     ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
         crate::menus::local_bar(app, ui, &[("Layout", "score-Layout"), ("Edit", "score-Edit"), ("Functions", "score-Functions"), ("View", "score-View")]);
+        let (q, interp, synco) = quant_of(app, cur_id);
+        let style = style_of(app, cur_t);
+        let own = app.project.as_ref().and_then(|p| p.score.track(cur_id)).is_some_and(|t| !t.style.is_empty());
+        ui.label(egui::RichText::new("Style:").color(look::text_dim()).size(12.0));
+        let mut names: Vec<String> = vec![format!("Auto ({})", if own { "off" } else { style.name })];
+        names.extend(nt::StaffStyle::ALL.iter().map(|s| s.name.to_string()));
+        let cur = if own { nt::StaffStyle::ALL.iter().position(|s| s.name == style.name).map_or(0, |k| k + 1) } else { 0 };
+        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let r = Rect::from_min_size(ui.cursor().min + vec2(4.0, 1.0), vec2(120.0, 22.0));
+        if let Some(k) = crate::widgets::choice_slot(ui, r, ui.scope_id().with("sc-style"), cur, &refs) {
+            set_style(app, cur_t, if k == 0 { "" } else { nt::StaffStyle::ALL[k - 1].name });
+        }
+        ui.add_space(128.0);
         ui.label(egui::RichText::new("Quantize:").color(look::text_dim()).size(12.0));
-        let names: Vec<&str> = nt::Quant::CHOICES.iter().map(|q| q.0).collect();
+        let qn: Vec<&str> = nt::Quant::CHOICES.iter().map(|q| q.0).collect();
         let r = Rect::from_min_size(ui.cursor().min + vec2(4.0, 1.0), vec2(70.0, 22.0));
-        if let Some(k) = crate::widgets::choice_slot(ui, r, ui.scope_id().with("sc-quant"), st.quant, &names) {
-            st.quant = k;
+        if let Some(k) = crate::widgets::choice_slot(ui, r, ui.scope_id().with("sc-quant"), q, &qn) {
+            region_param(app, cur_t, "Quantize", |ts| ts.quantize = if k == 9 { String::new() } else { nt::Quant::CHOICES[k].0.to_string() });
+        }
+        ui.add_space(80.0);
+        let mut i = interp;
+        if ui.checkbox(&mut i, egui::RichText::new("Interpretation").size(12.0)).changed() {
+            region_param(app, cur_t, "Interpretation", |ts| ts.no_interpretation = !i);
+        }
+        let mut s = synco;
+        if ui.checkbox(&mut s, egui::RichText::new("Syncopation").size(12.0)).changed() {
+            region_param(app, cur_t, "Syncopation", |ts| ts.syncopation = s);
         }
     });
     // the Part box strip
     let part = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(area.width(), PART_H));
     part_box(ui, part, &mut st, app);
-    let ruler = Rect::from_min_max(pos2(area.min.x + HEAD_W, part.max.y), pos2(area.max.x, part.max.y + RULER_H));
+    let linear = st.view == View::Linear;
+    let head_w = if linear { HEAD_W + if st.names { 80.0 } else { 0.0 } } else { 0.0 };
+    let ruler_h = if linear { RULER_H } else { 0.0 };
+    let ruler = Rect::from_min_max(pos2(area.min.x + head_w, part.max.y), pos2(area.max.x, part.max.y + ruler_h));
     let body = Rect::from_min_max(pos2(area.min.x, ruler.max.y), area.max);
-    let head = Rect::from_min_max(body.min, pos2(area.min.x + HEAD_W, body.max.y));
+    let head = Rect::from_min_max(body.min, pos2(area.min.x + head_w, body.max.y));
     let music = Rect::from_min_max(pos2(head.max.x, body.min.y), body.max);
 
     // scrolling and zoom (⌘ + wheel or a pinch zooms the staff, Shift + wheel scrolls in time)
@@ -184,180 +612,407 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let (scroll, zoom, cmd, shift) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.command, i.modifiers.shift));
         if cmd && scroll.y != 0.0 {
             let f = 1.0 + scroll.y * 0.003;
-            st.space = (st.space * f).clamp(4.0, 24.0);
+            st.space = (st.space * f).clamp(3.0, 24.0);
             st.bar_w = (st.bar_w * f).clamp(80.0, 2400.0);
         } else if (zoom - 1.0).abs() > 0.001 {
-            st.space = (st.space * zoom).clamp(4.0, 24.0);
+            st.space = (st.space * zoom).clamp(3.0, 24.0);
             st.bar_w = (st.bar_w * zoom).clamp(80.0, 2400.0);
-        } else if shift {
+        } else if shift && linear {
             st.scroll_x = (st.scroll_x - scroll.y / st.bar_w).max(0.0);
         } else {
-            st.scroll_x = (st.scroll_x - scroll.x / st.bar_w).max(0.0);
-            st.scroll_y = (st.scroll_y - scroll.y).clamp(-400.0, 1200.0);
+            if linear {
+                st.scroll_x = (st.scroll_x - scroll.x / st.bar_w).max(0.0);
+            }
+            st.scroll_y = (st.scroll_y - scroll.y).clamp(-400.0, 100_000.0);
         }
     }
     // the region in view when it isn't
-    let sel_region = &track.regions[ri];
-    let first_bar = (sel_region.start as f32 / bar_t).floor();
-    if first_bar < st.scroll_x || first_bar > st.scroll_x + music.width() / st.bar_w - 1.0 {
-        if !ui.ctx().data(|d| d.get_temp::<(usize, usize)>(egui::Id::unique("lg-score-seen"))).is_some_and(|x| x == (ti, ri)) {
-            st.scroll_x = (first_bar - 0.15).max(0.0);
+    if let (true, Some((ti, ri))) = (linear, app.selected_region) {
+        if let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(ti)?.regions.get(ri)) {
+            let first_bar = (rg.start as f32 / bar_t).floor();
+            if (first_bar < st.scroll_x || first_bar > st.scroll_x + music.width() / st.bar_w - 1.0) && !ctx.data(|d| d.get_temp::<(usize, usize)>(egui::Id::unique("lg-score-seen"))).is_some_and(|x| x == (ti, ri)) {
+                st.scroll_x = (first_bar - 0.15).max(0.0);
+            }
+            ctx.data_mut(|d| d.insert_temp(egui::Id::unique("lg-score-seen"), (ti, ri)));
         }
     }
-    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("lg-score-seen"), (ti, ri)));
+    // the Page view shows a whole page's width (zoom in from there)
+    let sp = if st.view == View::Page { st.space.min((music.width() - 24.0) / 120.0).max(3.0) } else { st.space };
+    let rows = rows_for(app, &st, &tracks, sp);
+    let block_h = rows.last().map_or(4.0 * sp, |r| r.off) + 4.0 * sp;
+    let segs = engrave_rows(app, &rows);
+    let key0 = app.project.as_ref().map_or(nt::Key::default(), |p| nt::Key::parse(&p.key));
+    let score_keys = app.project.as_ref().map(|p| p.score.keys.clone()).unwrap_or_default();
+    let key_at = |tick: u32| nt::Key { fifths: score_keys.iter().filter(|k| k.0 <= tick).last().map_or(key0.fifths, |k| k.1) };
 
-    let sp = st.space;
-    let (sx, bw) = (st.scroll_x, st.bar_w);
-    let x_of = move |tick: f32| music.min.x + (tick / bar_t - sx) * bw;
-    let tick_of = move |x: f32| ((x - music.min.x) / bw + sx) * bar_t;
-
-    // which staves: by the whole track's range (piano parts get the grand staff)
-    let pitches: Vec<u8> = track.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
-    let lname = track.name.to_lowercase();
-    let piano = ["piano", "keys", "grand", "steinway", "rhodes", "clav", "organ", "harpsichord"].iter().any(|w| lname.contains(w));
-    let style = nt::staves_for(&pitches, piano);
-    // the staves centred in the editor when they fit (the wheel scrolls them)
-    let block_h = if style == nt::Staves::Piano { 14.0 * sp } else { 4.0 * sp } + 10.0 * sp;
-    let top = body.min.y + 5.0 * sp + ((body.height() - block_h) / 2.0).max(0.0) - st.scroll_y;
-    let staves: Vec<Staff> = match style {
-        nt::Staves::Treble => vec![Staff { clef: nt::Clef::Treble, bottom: top + 4.0 * sp, part: None }],
-        nt::Staves::Bass => vec![Staff { clef: nt::Clef::Bass, bottom: top + 4.0 * sp, part: None }],
-        nt::Staves::Piano => vec![
-            Staff { clef: nt::Clef::Treble, bottom: top + 4.0 * sp, part: Some(true) },
-            Staff { clef: nt::Clef::Bass, bottom: top + 4.0 * sp + 10.0 * sp, part: Some(false) },
-        ],
-    };
-    let block_top = top - 5.0 * sp;
-    let block_bottom = staves.last().map_or(top, |s| s.bottom) + 5.0 * sp;
-
-    // the ruler
-    let rp = ui.painter_at(ruler);
-    rp.rect_filled(ruler, 0.0, look::header_bg());
-    rp.hline(ruler.x_range(), ruler.max.y - 0.5, Stroke::new(1.0, look::line()));
-    let beats = sig.0.max(1) as i32;
-    let first = sx.floor() as i32;
-    for b in first..first + (music.width() / bw).ceil() as i32 + 1 {
-        for k in 0..beats {
-            let x = x_of(b as f32 * bar_t + k as f32 * bar_t / beats as f32);
-            if k == 0 {
-                rp.vline(x, ruler.y_range(), Stroke::new(1.0, look::text_dim()));
-                rp.text(pos2(x + 4.0, ruler.min.y + 8.0), Align2::LEFT_CENTER, format!("{}", b + 1), look::semibold(12.0), look::text());
-            } else {
-                rp.vline(x, ruler.max.y - 6.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
+    // the bars the shown tracks cover
+    let (bar_lo, bar_hi) = {
+        let mut lo = u32::MAX;
+        let mut hi = 0;
+        if let Some(p) = app.project.as_ref() {
+            for &t in &tracks {
+                for r in p.tracks[t].regions.iter().filter(|r| r.audio.is_none()) {
+                    lo = lo.min(r.start / bar_t as u32);
+                    hi = hi.max((r.start + r.length).div_ceil(bar_t as u32));
+                }
             }
         }
-    }
-    let hp = ui.painter_at(Rect::from_min_max(pos2(area.min.x, part.max.y), pos2(head.max.x, ruler.max.y)));
-    hp.rect_filled(Rect::from_min_max(pos2(area.min.x, part.max.y), pos2(head.max.x, ruler.max.y)), 0.0, look::header_bg());
+        if lo == u32::MAX { (0, 1) } else { (lo, hi.max(lo + 1)) }
+    };
 
     // paper
     let mp = ui.painter_at(music);
     let headp = ui.painter_at(head);
     mp.rect_filled(music, 0.0, PAPER);
-    headp.rect_filled(head, 0.0, PAPER);
-    p.vline(head.max.x, body.y_range(), Stroke::new(1.0, Color32::from_gray(0x30)));
+    if linear {
+        headp.rect_filled(head, 0.0, PAPER);
+        p.vline(head.max.x, body.y_range(), Stroke::new(1.0, Color32::from_gray(0x30)));
+    }
+    // a line's header: clef, key, time signature
+    let header_w = |key: nt::Key, time: bool| (3.6 + key.fifths.unsigned_abs() as f32 * 1.1 + if time { 2.8 } else { 0.6 }) * sp;
+    // the lines (systems)
+    let mut lines: Vec<Line> = Vec::new();
+    let mut pages: Vec<Rect> = Vec::new();
+    match st.view {
+        View::Linear => {
+            let top = body.min.y + 5.0 * sp + ((body.height() - block_h - 10.0 * sp) / 2.0).max(0.0) - st.scroll_y;
+            let (sx, bw) = (st.scroll_x, st.bar_w);
+            let b0 = sx.floor().max(0.0) as u32;
+            let n = (music.width() / bw).ceil() as u32 + 2;
+            let xs = (0..=n).map(|k| music.min.x + ((b0 + k) as f32 - sx) * bw).collect();
+            lines.push(Line { b0, b1: b0 + n, xs, top, x_start: music.min.x, first: true });
+        }
+        View::Wrapped | View::Page => {
+            let page_w = 120.0 * sp;
+            let page_h = 170.0 * sp;
+            let margin = if st.view == View::Page { 9.0 * sp } else { 2.0 * sp } + if st.names { 9.0 * sp } else { 0.0 };
+            let width = if st.view == View::Page { page_w - 2.0 * margin } else { music.width() - 2.0 * margin };
+            let widths: Vec<f32> = (bar_lo..bar_hi)
+                .map(|b| segs.iter().filter(|s| (s.from / bar_t as u32) <= b).map(|s| nt::bar_width(&s.voice, b - s.from / bar_t as u32, sp)).fold(12.0 * sp, f32::max))
+                .collect();
+            let hw = header_w(key0, true);
+            let systems = nt::systems(&widths, (width - hw).max(20.0 * sp));
+            let line_h = block_h + 11.0 * sp;
+            let x0 = if st.view == View::Page { music.min.x + ((music.width() - page_w) / 2.0).max(12.0) } else { music.min.x };
+            let tops: Vec<(usize, f32)> = if st.view == View::Page {
+                nt::paginate(systems.len(), line_h, page_h, 10.0 * sp, 14.0 * sp)
+            } else {
+                (0..systems.len()).map(|k| (0, 4.0 * sp + k as f32 * line_h)).collect()
+            };
+            let n_pages = tops.last().map_or(1, |t| t.0 + 1);
+            st.pages = n_pages;
+            if let Some(pg) = st.goto_page.take() {
+                st.scroll_y = (pg.min(n_pages - 1) as f32 * (page_h + 4.0 * sp)).max(0.0);
+            }
+            if st.view == View::Page {
+                for k in 0..n_pages {
+                    let r = Rect::from_min_size(pos2(x0, music.min.y + 12.0 + k as f32 * (page_h + 4.0 * sp) - st.scroll_y), vec2(page_w, page_h));
+                    pages.push(r);
+                }
+            }
+            for (li, &(b, n, scale)) in systems.iter().enumerate() {
+                let (pg, y) = tops[li];
+                let base_y = if st.view == View::Page { pages[pg].min.y } else { music.min.y - st.scroll_y };
+                let xs_start = x0 + margin;
+                let key = key_at((bar_lo + b as u32) * bar_t as u32);
+                let hw = header_w(if st.key_every_line || li == 0 { key } else { nt::Key::default() }, li == 0);
+                let mut xs = vec![xs_start + hw];
+                for k in 0..n {
+                    let last = *xs.last().unwrap_or(&0.0);
+                    xs.push(last + widths[b + k] * scale);
+                }
+                lines.push(Line { b0: bar_lo + b as u32, b1: bar_lo + (b + n) as u32, xs, top: base_y + y + 5.0 * sp, x_start: xs_start, first: li == 0 });
+            }
+        }
+    }
+    // pages, their rulers and the title
+    for (k, pr) in pages.iter().enumerate() {
+        if !pr.intersects(music) {
+            continue;
+        }
+        mp.rect_filled(pr.translate(vec2(2.0, 3.0)), 0.0, Color32::from_black_alpha(40));
+        mp.rect_filled(*pr, 0.0, PAGE);
+        if k == 0 {
+            mp.text(pos2(pr.center().x, pr.min.y + 8.0 * sp), Align2::CENTER_CENTER, &project_name, look::semibold(3.0 * sp), INK);
+        }
+        mp.text(pos2(pr.max.x - 4.0 * sp, pr.max.y - 4.0 * sp), Align2::RIGHT_CENTER, format!("{}", k + 1), look::regular(1.6 * sp), INK);
+        if st.rulers {
+            // centimetres (a staff space is 1.75 mm on a 21 cm page)
+            let cm = 10.0 / 1.75 * sp;
+            let top = Rect::from_min_size(pr.min - vec2(0.0, 2.2 * sp), vec2(pr.width(), 2.0 * sp));
+            mp.rect_filled(top, 0.0, look::header_bg());
+            let mut i = 0;
+            while i as f32 * cm <= pr.width() {
+                let x = pr.min.x + i as f32 * cm;
+                mp.vline(x, top.max.y - sp..=top.max.y, Stroke::new(1.0, look::text_dim()));
+                mp.text(pos2(x + 2.0, top.min.y + 1.0), Align2::LEFT_TOP, i.to_string(), look::regular(9.0), look::text_dim());
+                i += 1;
+            }
+            let left = Rect::from_min_size(pr.min - vec2(2.2 * sp, 0.0), vec2(2.0 * sp, pr.height()));
+            mp.rect_filled(left, 0.0, look::header_bg());
+            let mut i = 0;
+            while i as f32 * cm <= pr.height() {
+                mp.hline(left.max.x - sp..=left.max.x, pr.min.y + i as f32 * cm, Stroke::new(1.0, look::text_dim()));
+                i += 1;
+            }
+        }
+    }
+
+    // the ruler (linear)
+    if linear {
+        let rp = ui.painter_at(ruler);
+        rp.rect_filled(ruler, 0.0, look::header_bg());
+        rp.hline(ruler.x_range(), ruler.max.y - 0.5, Stroke::new(1.0, look::line()));
+        let beats = sig.0.max(1) as i32;
+        let l = &lines[0];
+        for b in l.b0..l.b1 {
+            for k in 0..beats {
+                let x = l.x_of(b as f32 * bar_t + k as f32 * bar_t / beats as f32, bar_t);
+                if k == 0 {
+                    rp.vline(x, ruler.y_range(), Stroke::new(1.0, look::text_dim()));
+                    rp.text(pos2(x + 4.0, ruler.min.y + 8.0), Align2::LEFT_CENTER, format!("{}", b + 1), look::semibold(12.0), look::text());
+                } else {
+                    rp.vline(x, ruler.max.y - 6.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
+                }
+            }
+        }
+        let hp = ui.painter_at(Rect::from_min_max(pos2(area.min.x, part.max.y), pos2(head.max.x, ruler.max.y)));
+        hp.rect_filled(Rect::from_min_max(pos2(area.min.x, part.max.y), pos2(head.max.x, ruler.max.y)), 0.0, look::header_bg());
+    }
 
     // the background: clicks, double-clicks (insert), the right-click menu
     let bg = ui.interact(music, ui.scope_id().with("sc-bg"), Sense::click());
     crate::menus::context_menu(app, &bg, "score-background");
 
-    let quant = nt::Quant::CHOICES[st.quant].1;
-    let sel_color = look::mix(look::region_color(track.kind), Color32::BLACK, 0.12);
-    let mut pressed: Option<(usize, usize, bool)> = None;
-    for (rix, region) in track.regions.iter().enumerate() {
-        if region.audio.is_some() {
+    let sel_color = look::mix(look::accent(), Color32::BLACK, 0.1);
+    let mut pressed: Option<(usize, usize, usize, bool)> = None;
+    let score = app.project.as_ref().map(|p| p.score.clone()).unwrap_or_default();
+    let project_tracks: Vec<lg_core::Track> = app.project.as_ref().map(|p| tracks.iter().map(|&t| p.tracks[t].clone()).collect()).unwrap_or_default();
+    let track_of = |t: usize| -> Option<&lg_core::Track> { tracks.iter().position(|&x| x == t).and_then(|k| project_tracks.get(k)) };
+    let dragging = st.drag.is_some();
+    let mut guide_x: Option<f32> = None;
+    let (sel_region_now, sel_notes_now) = (app.selected_region, app.selected_notes.clone());
+    for (li, line) in lines.iter().enumerate() {
+        let line_x1 = *line.xs.last().unwrap_or(&line.x_start);
+        if line.top - 8.0 * sp > music.max.y || line.top + block_h + 8.0 * sp < music.min.y {
             continue;
         }
-        let from = (region.start as f32 / bar_t).floor() as u32 * bar_t as u32;
-        let to = ((region.start + region.length) as f32 / bar_t).ceil().max(1.0) as u32 * bar_t as u32;
-        let to = to.max(from + bar_t as u32);
-        let (rx0, rx1) = (x_of(region.start as f32), x_of((region.start + region.length) as f32));
-        if rx1 < music.min.x || rx0 > music.max.x {
-            continue;
-        }
-        // the region's paper (Logic: a cream box under the staves)
-        mp.rect_filled(Rect::from_min_max(pos2(rx0, block_top), pos2(rx1, block_bottom)), 4.0, REGION_PAPER);
-        let opts = nt::Options { sig, key, quant, from, to };
-        let notes: Vec<nt::NoteIn> = region.notes.iter().enumerate().map(|(i, n)| nt::NoteIn { index: i, pitch: n.pitch, pos: n.pos, len: n.len }).collect();
-        for staff in &staves {
-            let mine: Vec<nt::NoteIn> = notes.iter().copied().filter(|n| staff.part.is_none_or(|upper| (n.pitch >= 60) == upper)).collect();
-            let voice = nt::engrave(&mine, staff.clef, &opts);
-            let selected = |i: usize| app.selected_region == Some((ti, rix)) && app.selected_notes.contains(&i);
-            draw_voice(&mp, &voice, staff, sp, &x_of, &selected, sel_color);
-            // the notes' heads: click, drag (ids by note, so a head keeps its drag as it moves)
-            let mut pieces: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-            for it in voice.items.iter() {
-                for h in it.heads.iter() {
-                    let piece = pieces.entry(h.note).or_default();
-                    *piece += 1;
-                    let c = head_center(it, h, staff, sp, x_of(it.tick as f32));
-                    let r = Rect::from_center_size(c, vec2(sp * 1.6, sp * 1.2));
-                    if !r.intersects(music) {
+        let x_of = |tick: f32| line.x_of(tick, bar_t);
+        // region paper (linear)
+        if linear {
+            for row_k in 0..rows.len() {
+                if row_k > 0 && rows[row_k].t == rows[row_k - 1].t {
+                    continue;
+                }
+                let row = &rows[row_k];
+                let last = rows.iter().rposition(|r| r.t == row.t).unwrap_or(row_k);
+                let Some(tr) = track_of(row.t) else { continue };
+                for region in tr.regions.iter().filter(|r| r.audio.is_none()) {
+                    let (rx0, rx1) = (x_of(region.start as f32), x_of((region.start + region.length) as f32));
+                    if rx1 < music.min.x || rx0 > music.max.x || (region.start as f32) >= line.b1 as f32 * bar_t {
                         continue;
                     }
-                    let resp = ui.interact(r.intersect(music), ui.scope_id().with("lg-sc").with(("sc-head", rix, h.note, *piece)), Sense::click_and_drag());
-                    if resp.hovered() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    mp.rect_filled(Rect::from_min_max(pos2(rx0, line.top + row.off - 9.0 * sp), pos2(rx1, line.top + rows[last].off + 5.0 * sp)), 4.0, REGION_PAPER);
+                }
+            }
+        }
+        // staves
+        for (rk, row) in rows.iter().enumerate() {
+            let bottom = line.top + row.off;
+            let x_from = if linear { music.min.x } else { line.x_start };
+            for l in 0..5 {
+                let y = bottom - l as f32 * sp;
+                if row.style.clefs[0] == nt::Clef::Percussion || true {
+                    mp.hline(x_from..=if linear { music.max.x } else { line_x1 }, y, Stroke::new(1.0, INK));
+                }
+            }
+            let (clef, octave) = clef_at(app, row, line.b0 * bar_t as u32);
+            let key = row.style.written_key(key_at(line.b0 * bar_t as u32));
+            if linear {
+                // the header panel
+                for l in 0..5 {
+                    headp.hline(head.min.x + 8.0 + if st.names { 80.0 } else { 0.0 }..=head.max.x, bottom - l as f32 * sp, Stroke::new(1.0, INK));
+                }
+                let x = head.min.x + 14.0 + if st.names { 80.0 } else { 0.0 };
+                if st.names && (rk == 0 || rows[rk - 1].t != row.t) {
+                    headp.text(pos2(head.min.x + 6.0, bottom - 2.0 * sp), Align2::LEFT_CENTER, &row.name, look::regular(12.0), INK);
+                }
+                draw_header(&headp, x, bottom, sp, clef, octave, key, Some(sig));
+            } else if line.first || st.key_every_line {
+                draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, clef, octave, if line.first || st.key_every_line { key } else { nt::Key::default() }, if line.first { Some(sig) } else { None });
+            } else {
+                draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, clef, octave, nt::Key::default(), None);
+            }
+            if !linear && st.names && line.first && (rk == 0 || rows[rk - 1].t != row.t) {
+                mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, &row.name, look::regular(1.5 * sp), INK);
+            }
+            // bar lines
+            for b in line.b0..=line.b1 {
+                let x = x_of(b as f32 * bar_t);
+                if x < music.min.x - 2.0 || x > music.max.x + 2.0 {
+                    continue;
+                }
+                let has = track_of(row.t).is_some_and(|tr| tr.regions.iter().any(|r| r.audio.is_none() && (r.start as f32) < b as f32 * bar_t + 1.0 && (r.start + r.length) as f32 > (b as f32 - 1.0) * bar_t));
+                if (!linear || has) && (b > line.b0 || !linear) && (linear || b > line.b0) {
+                    let w = if !linear && b == line.b1 && line.b1 == bar_hi { 2.5 } else { 1.0 };
+                    mp.vline(x, bottom - 4.0 * sp..=bottom, Stroke::new(w, INK));
+                }
+                // key changes at a bar inside the line
+                if b > line.b0 && b < line.b1 && score_keys.iter().any(|k| k.0 / bar_t as u32 == b) {
+                    let kk = row.style.written_key(key_at(b * bar_t as u32));
+                    let mut kx = x + 0.6 * sp;
+                    for (pos, acc) in kk.signature_positions(clef) {
+                        accidental(&mp, pos2(kx, y_at(bottom, pos, sp)), sp, acc, INK);
+                        kx += 1.1 * sp;
                     }
-                    if resp.clicked() || resp.drag_started() {
-                        pressed = Some((rix, h.note, resp.drag_started()));
-                    }
-                    if resp.secondary_clicked() {
-                        app.selected_region = Some((ti, rix));
-                        if !app.selected_notes.contains(&h.note) {
-                            app.selected_notes = vec![h.note];
+                }
+            }
+            // bar numbers at line starts (wrapped and page)
+            if !linear && st.bar_numbers && rk == 0 && !line.first {
+                mp.text(pos2(line.x_start, bottom - 6.0 * sp), Align2::LEFT_BOTTOM, format!("{}", line.b0 + 1), look::regular(1.3 * sp), INK);
+            }
+            if row.brace {
+                let lower = line.top + rows.get(rk + 1).map_or(row.off, |r| r.off);
+                let x = if linear { head.min.x + 8.0 + if st.names { 80.0 } else { 0.0 } } else { line.x_start };
+                let pp = if linear { &headp } else { &mp };
+                pp.vline(x, bottom - 4.0 * sp..=lower, Stroke::new(1.5, INK));
+                brace(pp, x - 3.0, bottom - 4.0 * sp, lower, INK);
+            }
+        }
+        // the music
+        for seg in segs.iter() {
+            let row = &rows[seg.row];
+            let Some(tr) = track_of(row.t) else { continue };
+            let Some(region) = tr.regions.get(seg.rix) else { continue };
+            let bottom = line.top + row.off;
+            let staff = Staff { bottom };
+            let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32;
+            let sel_here = sel_region_now == Some((row.t, seg.rix));
+            let selected = |i: usize| sel_here && sel_notes_now.contains(&i);
+            let voice_of = |i: usize| seg.voice.items.iter().find(|it| it.heads.iter().any(|h| h.note == i)).map_or(0, |it| (!it.stem_up) as u8);
+            let color = |i: usize| -> Color32 {
+                if selected(i) {
+                    return sel_color;
+                }
+                let n = region.notes.get(i).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 0 });
+                note_color(st.colors, &n, voice_of(i), &score.attr(row.id, n.pos, n.pitch))
+            };
+            let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line };
+            draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
+            // duration bars: the notes' real lengths
+            if st.duration_bars > 0 {
+                for it in seg.voice.items.iter().filter(|it| in_line(it.tick)) {
+                    for h in &it.heads {
+                        if st.duration_bars == 1 && !selected(h.note) {
+                            continue;
+                        }
+                        if let Some(n) = region.notes.get(h.note) {
+                            if n.pos >= it.tick && n.pos < it.tick + it.dur {
+                                let y = y_at(bottom, h.pos, sp);
+                                let (a, b) = (x_of(n.pos as f32) + 0.8 * sp, x_of((n.pos + n.len) as f32) + 0.8 * sp);
+                                mp.rect_filled(Rect::from_min_max(pos2(a, y - 0.18 * sp), pos2(b, y + 0.18 * sp)), 1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 140));
+                            }
                         }
                     }
                 }
             }
+            // the notes' heads: click, drag (ids by note, so a head keeps its drag as it moves)
+            let mut pieces: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+            for it in seg.voice.items.iter() {
+                for h in it.heads.iter() {
+                    let piece = pieces.entry(h.note).or_default();
+                    *piece += 1;
+                    if !in_line(it.tick) {
+                        continue;
+                    }
+                    let c = head_center(it, h, &staff, sp, x_of(it.tick as f32));
+                    let r = Rect::from_center_size(c, vec2(sp * 1.6, sp * 1.2));
+                    if !r.intersects(music) {
+                        continue;
+                    }
+                    let resp = ui.interact(r.intersect(music), ui.scope_id().with("lg-sc").with(("sc-head", li, row.t, seg.rix, seg.row, h.note, *piece)), Sense::click_and_drag());
+                    if resp.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if resp.clicked() || resp.drag_started() {
+                        pressed = Some((row.t, seg.rix, h.note, resp.drag_started()));
+                    }
+                    if resp.secondary_clicked() {
+                        app.selected_region = Some((row.t, seg.rix));
+                        if !app.selected_notes.contains(&h.note) {
+                            app.selected_notes = vec![h.note];
+                        }
+                    }
+                    if dragging && st.guides && selected(h.note) && *piece == 1 {
+                        guide_x = Some(c.x);
+                    }
+                }
+            }
         }
-    }
-    // staves: lines through the music area and the header (clef, key, time signature)
-    for staff in &staves {
-        for l in 0..5 {
-            let y = staff.bottom - l as f32 * sp;
-            mp.hline(music.x_range(), y, Stroke::new(1.0, INK));
-            headp.hline(head.min.x + 8.0..=head.max.x, y, Stroke::new(1.0, INK));
+        // symbols: dynamics, hairpins, text, lyrics, chords, slurs, clef changes
+        for (rk, row) in rows.iter().enumerate() {
+            if rk > 0 && rows[rk - 1].t == row.t && rows[rk - 1].staff == row.staff {
+                continue;
+            }
+            let Some(ts) = score.track(row.id) else { continue };
+            let bottom = line.top + row.off;
+            for s in ts.symbols.iter().filter(|s| s.staff as usize == row.staff) {
+                let lo = line.b0 as f32 * bar_t;
+                let hi = line.b1 as f32 * bar_t;
+                let (a, b) = (s.tick as f32, (s.tick + s.len) as f32);
+                if b < lo || a >= hi {
+                    continue;
+                }
+                let x = x_of(a.max(lo)) + 0.8 * sp;
+                let x2 = x_of(b.min(hi)) + 0.8 * sp;
+                draw_symbol(&mp, s, x, x2, bottom, sp, st.chord_size);
+            }
+            // automatic slurs (a note's Slur attribute): to the next note of the region
+            if let Some(tr) = track_of(row.t) {
+                for (&(pos, pitch), a) in ts.notes.iter().filter(|(_, a)| a.slur != 0) {
+                    let Some(region) = tr.regions.iter().find(|r| r.audio.is_none() && pos >= r.start && pos < r.start + r.length) else { continue };
+                    let Some(next) = region.notes.iter().filter(|n| n.pos > pos).min_by_key(|n| n.pos) else { continue };
+                    let (lo, hi) = (line.b0 * bar_t as u32, line.b1 * bar_t as u32);
+                    if pos < lo || pos >= hi {
+                        continue;
+                    }
+                    let st_ = row.style;
+                    let (clef, _) = clef_at(app, row, pos);
+                    let k = key_at(pos);
+                    let p1 = st_.written_key(k).spell(st_.written(pitch)).step - clef.bottom_line();
+                    let p2 = st_.written_key(k).spell(st_.written(next.pitch)).step - clef.bottom_line();
+                    let above = match a.slur {
+                        1 => true,
+                        -1 => false,
+                        _ => p1 + p2 >= 8,
+                    };
+                    let d = if above { -1.0 } else { 1.0 };
+                    let pa = pos2(x_of(pos as f32) + 1.4 * sp, y_at(bottom, p1, sp) + d * 0.8 * sp);
+                    let pb = pos2(x_of(next.pos as f32) + 1.4 * sp, y_at(bottom, p2, sp) + d * 0.8 * sp);
+                    tie(&mp, pa, pb, d * (1.0 * sp + (pb.x - pa.x) * 0.06).min(2.5 * sp), sp, INK);
+                }
+            }
         }
-        let mut x = head.min.x + 14.0;
-        match staff.clef {
-            nt::Clef::Treble => treble_clef(&headp, pos2(x + 1.3 * sp, staff.bottom), sp, INK),
-            nt::Clef::Bass => bass_clef(&headp, pos2(x + 0.3 * sp, staff.bottom), sp, INK),
-        }
-        x += 3.4 * sp;
-        for (pos, acc) in key.signature_positions(staff.clef) {
-            accidental(&headp, pos2(x, staff.bottom - pos as f32 * sp / 2.0), sp, acc, INK);
-            x += 1.1 * sp;
-        }
-        x += 0.8 * sp;
-        // SMuFL time signature digits, centred on the fourth and second lines
-        let digits = |n: u8| -> String { n.to_string().chars().map(|d| char::from_u32(0xE080 + d.to_digit(10).unwrap_or(0)).unwrap_or(' ')).collect() };
-        for (n, line) in [(sig.0, 3.0), (sig.1, 1.0)] {
-            let g = headp.layout_no_wrap(digits(n), look::music(4.0 * sp), INK);
-            let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(0.0, |gl| gl.pos.y);
-            let w = g.size().x;
-            headp.galley(pos2(x + sp - w / 2.0, staff.bottom - line * sp - base), g, INK);
-        }
-        // bar lines
-        for b in first..first + (music.width() / bw).ceil() as i32 + 2 {
-            let x = x_of(b as f32 * bar_t);
-            if b > 0 && track.regions.iter().any(|r| r.audio.is_none() && (r.start as f32) < b as f32 * bar_t + 1.0 && (r.start + r.length) as f32 > (b - 1) as f32 * bar_t) {
-                mp.vline(x, staff.bottom - 4.0 * sp..=staff.bottom, Stroke::new(1.0, INK));
+        // the playhead
+        let ph = app.position() as f32;
+        if ph >= line.b0 as f32 * bar_t && ph < line.b1 as f32 * bar_t {
+            let x = x_of(ph);
+            if music.x_range().contains(x) {
+                mp.vline(x, (line.top - 6.0 * sp)..=(line.top + block_h + 2.0 * sp), Stroke::new(1.2, Color32::from_gray(0x30)));
             }
         }
     }
-    // the grand staff's brace line
-    if staves.len() == 2 {
-        let x = head.min.x + 8.0;
-        headp.vline(x, staves[0].bottom - 4.0 * sp..=staves[1].bottom, Stroke::new(1.5, INK));
-        brace(&headp, x - 3.0, staves[0].bottom - 4.0 * sp, staves[1].bottom, INK);
+    if let Some(x) = guide_x {
+        mp.vline(x, music.y_range(), Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 160)));
     }
 
     // a press: select (Shift toggles), start a move
-    if let Some((rix, note, drag)) = pressed {
+    if let Some((t, rix, note, drag)) = pressed {
         let shift = ui.input(|i| i.modifiers.shift);
-        if app.selected_region != Some((ti, rix)) {
-            app.selected_region = Some((ti, rix));
+        if app.selected_region != Some((t, rix)) {
+            app.selected_region = Some((t, rix));
+            app.selected_track = Some(t);
             app.selected_notes.clear();
         }
         if shift && !drag {
@@ -374,24 +1029,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         if drag {
-            if let (Some(pp), Some(orig)) = (ui.input(|i| i.pointer.press_origin()), app.project.as_ref().and_then(|p| p.tracks.get(ti)?.regions.get(rix)).map(|r| r.notes.clone())) {
-                st.drag = Some(DragState { region: (ti, rix), orig, from: pp, moved: false });
+            if let (Some(pp), Some(orig)) = (ui.input(|i| i.pointer.press_origin()), app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(rix)).map(|r| r.notes.clone())) {
+                st.drag = Some(DragState { region: (t, rix), orig, from: pp, moved: false });
             }
         }
         if !drag {
-            if let Some(n) = app.project.as_ref().and_then(|p| p.tracks.get(ti)?.regions.get(rix)?.notes.get(note)).copied() {
-                crate::pianoroll::preview(app, ti, n.pitch);
+            if let Some(n) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(rix)?.notes.get(note)).copied() {
+                crate::pianoroll::preview(app, t, n.pitch);
             }
         }
     }
-    // a drag: diatonic steps up and down, time on the display grid
+    // a drag: diatonic steps up and down, time on the display grid (or the tick with Snap off)
     if let Some(d) = st.drag.clone() {
         let (pointer, down) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.primary_down()));
-        if let (Some(pp), true) = (pointer, down) {
+        let line = lines.iter().find(|l| d.from.y >= l.top - 8.0 * sp && d.from.y <= l.top + block_h + 6.0 * sp).or(lines.first()).cloned();
+        if let (Some(pp), true, Some(line)) = (pointer, down, line) {
             let dy = pp.y - d.from.y;
             let steps = -(dy / (sp / 2.0)).round() as i32;
-            let grid = quant.straight as f32;
-            let dt = ((tick_of(pp.x) - tick_of(d.from.x)) / grid).round() * grid;
+            let (q, _, _) = quant_of(app, app.project.as_ref().and_then(|p| p.tracks.get(d.region.0)).map_or(0, |t| t.extra.id));
+            let grid = if st.snap { nt::Quant::CHOICES[q].1.straight as f32 } else { 10.0 };
+            let dt = ((line.tick_of(pp.x, bar_t) - line.tick_of(d.from.x, bar_t)) / grid).round() * grid;
             if (steps != 0 || dt != 0.0) && !d.moved {
                 app.checkpoint("Move Notes");
                 if let Some(x) = st.drag.as_mut() {
@@ -400,11 +1057,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             if steps != 0 || dt != 0.0 || d.moved {
                 let sel = app.selected_notes.clone();
+                let key = key_at(d.orig.first().map_or(0, |n| n.pos));
+                let style = style_of(app, d.region.0);
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(d.region.0)?.regions.get_mut(d.region.1)) {
                     for &i in &sel {
                         if let (Some(o), Some(n)) = (d.orig.get(i), rg.notes.get_mut(i)) {
-                            let step = key.spell(o.pitch).step + steps;
-                            n.pitch = nt::step_pitch(step, key);
+                            if style.clefs[0] == nt::Clef::Percussion {
+                                n.pitch = (o.pitch as i32 + steps).clamp(0, 127) as u8;
+                            } else {
+                                let wk = style.written_key(key);
+                                let step = wk.spell(style.written(o.pitch)).step + steps;
+                                n.pitch = (nt::step_pitch(step, wk) as i32 - style.transpose as i32).clamp(0, 127) as u8;
+                            }
                             n.pos = (o.pos as f32 + dt).max(0.0) as u32;
                         }
                     }
@@ -416,6 +1080,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         if !down {
             if st.drag.as_ref().is_some_and(|d| d.moved) {
+                // the moved notes keep their score attributes
+                let (t, r) = d.region;
+                let id = app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(0, |t| t.extra.id);
+                let now = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).map(|r| r.notes.clone()).unwrap_or_default();
+                if let Some(p) = app.project.as_mut() {
+                    for &i in &app.selected_notes {
+                        if let (Some(o), Some(n)) = (d.orig.get(i), now.get(i)) {
+                            p.score.moved(id, (o.pos, o.pitch), (n.pos, n.pitch));
+                        }
+                    }
+                }
                 app.after_edit();
             }
             st.drag = None;
@@ -424,58 +1099,352 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if pressed.is_none() {
         if bg.double_clicked() {
             if let Some(pp) = bg.interact_pointer_pos() {
-                insert_note(app, &st, pp, &staves, &track, ti, key, tick_of(pp.x), quant, sp);
+                // the line and staff under the pointer
+                if let Some(line) = lines.iter().find(|l| pp.y >= l.top - 9.0 * sp && pp.y <= l.top + block_h + 7.0 * sp && pp.x >= l.x_start) {
+                    if let Some((rk, row)) = rows.iter().enumerate().min_by(|a, b| (line.top + a.1.off - 2.0 * sp - pp.y).abs().total_cmp(&(line.top + b.1.off - 2.0 * sp - pp.y).abs())) {
+                        let _ = rk;
+                        let tick = line.tick_of(pp.x, bar_t).max(0.0);
+                        let bottom = line.top + row.off;
+                        let pos = ((bottom - pp.y) / (sp / 2.0)).round() as i32;
+                        insert_at(app, &mut st, row, tick, pos, pp);
+                    }
+                }
             }
         } else if bg.clicked() {
             app.selected_notes.clear();
         }
     }
-    // the playhead
-    let ph = x_of(app.position() as f32);
-    if music.x_range().contains(ph) {
-        mp.vline(ph, music.y_range(), Stroke::new(1.2, Color32::from_gray(0x30)));
+    // text being typed for a symbol
+    if let Some((t, tick, kind, staff, mut text, at)) = st.typing.clone() {
+        let mut done = None;
+        egui::Area::new(egui::Id::unique("lg-score-typing")).fixed_pos(at).order(egui::Order::Foreground).show(&ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(egui::RichText::new(match kind {
+                    SymbolKind::Lyric => "Lyric",
+                    SymbolKind::Chord => "Chord symbol",
+                    _ => "Text",
+                }).size(11.0));
+                let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(160.0));
+                r.request_focus();
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    done = Some(true);
+                } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    done = Some(false);
+                }
+            });
+        });
+        st.typing = Some((t, tick, kind, staff, text.clone(), at));
+        if let Some(ok) = done {
+            st.typing = None;
+            if ok && !text.trim().is_empty() {
+                add_symbol(app, t, Symbol { tick, kind, text: text.trim().to_string(), len: 0, staff }, "Insert Text");
+            }
+        }
     }
+    // Go to Page…
+    if let Some(mut s) = st.goto.clone() {
+        let mut done = None;
+        egui::Area::new(egui::Id::unique("lg-score-goto")).fixed_pos(music.center() - vec2(80.0, 20.0)).order(egui::Order::Foreground).show(&ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(format!("Go to Page (1–{}):", st.pages));
+                let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(60.0));
+                r.request_focus();
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    done = Some(true);
+                } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    done = Some(false);
+                }
+            });
+        });
+        st.goto = Some(s.clone());
+        if let Some(ok) = done {
+            st.goto = None;
+            if let (true, Ok(n)) = (ok, s.trim().parse::<usize>()) {
+                st.goto_page = Some(n.max(1) - 1);
+            }
+        }
+    }
+    windows(app, &ctx, &mut st, cur_t);
     ctx.data_mut(|d| d.insert_temp(state_id(), st));
 }
 
-/// Double-click on a staff: a note of the Part box's value at the line or space clicked, on the
-/// display grid, inside the region under the pointer (or the selected one).
-#[allow(clippy::too_many_arguments)]
-fn insert_note(app: &mut App, st: &State, pp: Pos2, staves: &[Staff], track: &lg_core::Track, ti: usize, key: nt::Key, tick: f32, quant: nt::Quant, sp: f32) {
-    let Some(staff) = staves.iter().min_by(|a, b| (a.bottom - 2.0 * sp - pp.y).abs().total_cmp(&(b.bottom - 2.0 * sp - pp.y).abs())) else { return };
-    let pos = ((staff.bottom - pp.y) / (sp / 2.0)).round() as i32;
-    let pitch = nt::pitch_at(staff.clef, pos, key);
-    let grid = quant.straight as f32;
-    let tick = ((tick / grid).floor() * grid).max(0.0) as u32;
-    let rix = track.regions.iter().position(|r| r.audio.is_none() && tick >= r.start && tick < r.start + r.length).or(app.selected_region.map(|x| x.1));
-    let Some(rix) = rix else { return };
-    let v = nt::Value { base: VALUES[st.value].1, dots: st.dotted as u8 };
-    let velocity = st.dynamic.map_or(80, |d| DYNAMICS[d].1);
+/// The Score Project Settings window (Layout ▸ Global Format… and the others) and the Staff
+/// Style window.
+fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
+    if let Some(mut tab) = st.settings {
+        let mut open = true;
+        egui::Window::new("Score Project Settings").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                for (k, n) in SETTINGS_TABS.iter().enumerate() {
+                    if ui.selectable_label(tab == k, *n).clicked() {
+                        tab = k;
+                    }
+                }
+            });
+            ui.separator();
+            match tab {
+                0 => {
+                    ui.add(egui::Slider::new(&mut st.space, 3.0..=24.0).text("Staff space (pt)"));
+                    ui.add(egui::Slider::new(&mut st.bar_w, 80.0..=2400.0).text("Linear bar width"));
+                }
+                1 => {
+                    ui.checkbox(&mut st.bar_numbers, "Bar numbers at line starts");
+                    ui.checkbox(&mut st.names, "Instrument names");
+                }
+                2 => {
+                    ui.add(egui::Slider::new(&mut st.chord_size, 0.6..=2.0).text("Chord symbol size"));
+                }
+                3 => {
+                    ui.checkbox(&mut st.key_every_line, "Key signature on every line");
+                }
+                4 => {
+                    ui.label("Dynamics: the velocity each Part box dynamic gives notes");
+                    for (k, n) in DYNAMICS.iter().enumerate() {
+                        let mut v = st.dyn_velocity[k] as f32;
+                        if ui.add(egui::Slider::new(&mut v, 1.0..=127.0).text(*n)).changed() {
+                            st.dyn_velocity[k] = v as u8;
+                        }
+                    }
+                }
+                _ => {
+                    for (c, n) in [(Colors::Normal, "Normal"), (Colors::Pitch, "Pitch"), (Colors::Velocity, "Velocity"), (Colors::Voice, "Voice Assignment"), (Colors::BlackWhite, "Black & White")] {
+                        if ui.radio(st.colors == c, n).clicked() {
+                            st.colors = c;
+                        }
+                    }
+                }
+            }
+        });
+        st.settings = open.then_some(tab);
+    }
+    if st.styles_window {
+        let mut open = true;
+        let cur = style_of(app, t);
+        let mut pick = None;
+        egui::Window::new("Staff Style").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+            ui.label(egui::RichText::new("The selected track's staff style").size(11.0));
+            if ui.selectable_label(app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| app.project.as_ref()?.score.track(tr.extra.id)).is_none_or(|ts| ts.style.is_empty()), "Auto").clicked() {
+                pick = Some("");
+            }
+            for s in nt::StaffStyle::ALL {
+                let detail = format!("{}  ({} staff{}{})", s.name, s.clefs.len(), if s.clefs.len() > 1 { "s" } else { "" }, if s.transpose != 0 { format!(", transpose {:+}", s.transpose) } else { String::new() });
+                if ui.selectable_label(cur.name == s.name, detail).clicked() {
+                    pick = Some(s.name);
+                }
+            }
+        });
+        if let Some(n) = pick {
+            set_style(app, t, n);
+        }
+        st.styles_window = open;
+    }
+}
+
+pub const SETTINGS_TABS: [&str; 6] = ["Global Format", "Numbers and Names", "Chords and Grids", "Clefs and Signatures", "MIDI Meaning", "Score Colors"];
+
+/// Sets a track's staff style (one undo step).
+pub fn set_style(app: &mut App, t: usize, name: &str) {
+    region_param(app, t, "Staff Style", |ts| ts.style = name.to_string());
+}
+
+fn region_param(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut lg_core::score::TrackScore)) {
+    let Some(id) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|t| t.extra.id) else { return };
+    app.checkpoint(what);
+    if let Some(p) = app.project.as_mut() {
+        f(p.score.track_mut(id));
+    }
+    app.after_edit();
+}
+
+/// Adds a symbol to a track's staff (one undo step).
+pub fn add_symbol(app: &mut App, t: usize, s: Symbol, what: &str) {
+    let Some(id) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|t| t.extra.id) else { return };
+    app.checkpoint(what);
+    if let Some(p) = app.project.as_mut() {
+        let ts = p.score.track_mut(id);
+        // a clef change replaces one at the same bar
+        if s.kind == SymbolKind::Clef {
+            ts.symbols.retain(|x| !(x.kind == SymbolKind::Clef && x.tick == s.tick && x.staff == s.staff));
+        }
+        ts.symbols.push(s);
+        ts.symbols.sort_by_key(|x| x.tick);
+    }
+    app.after_edit();
+}
+
+/// The drum a drum staff position stands for (the first in the map).
+fn drum_at(pos: i32) -> u8 {
+    (35u8..=81).find(|&p| nt::drum_position(p).0 == pos).unwrap_or(38)
+}
+
+/// A double-click on a staff: the Part box's symbol there.
+fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: Pos2) {
+    let bar_t = app.bar_ticks();
+    let (q, _, _) = quant_of(app, row.id);
+    let grid = nt::Quant::CHOICES[q].1.straight as f32;
+    let tick_q = ((tick / grid).floor() * grid).max(0.0) as u32;
+    let key = app.project.as_ref().map_or(nt::Key::default(), |p| nt::Key { fifths: p.score.key_at(tick_q, nt::Key::parse(&p.key).fifths) });
+    match st.part {
+        Part::Note(v) => {
+            let (clef, _) = clef_at(app, row, tick_q);
+            let pitch = if clef == nt::Clef::Percussion {
+                drum_at(pos)
+            } else {
+                let wk = row.style.written_key(key);
+                (nt::pitch_at(clef, pos, wk) as i32 - row.style.transpose as i32).clamp(0, 127) as u8
+            };
+            let mut len = nt::Value { base: VALUES[v].1, dots: st.dotted as u8 }.ticks();
+            if st.triplet {
+                len = len * 2 / 3;
+            }
+            insert_note(app, row.t, tick_q, pitch, len, 80);
+        }
+        Part::Rest(_) => app.tell("Rests are drawn by the Score itself (user rests aren't available yet)"),
+        Part::Artic(_) | Part::Dynamic(_) => {
+            // on the note nearest the click, or (a dynamic) at the place
+            if let Some((rix, i)) = nearest_note(app, row.t, tick_q) {
+                app.selected_region = Some((row.t, rix));
+                app.selected_notes = vec![i];
+                apply_part(app, st, st.part);
+            } else if let Part::Dynamic(d) = st.part {
+                add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff: row.staff as u8 }, "Insert Dynamic");
+            }
+        }
+        Part::Line(k) => {
+            let kind = [SymbolKind::SlurUp, SymbolKind::SlurDown, SymbolKind::Crescendo, SymbolKind::Decrescendo][k];
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind, text: String::new(), len: bar_t / 2, staff: row.staff as u8 }, LINES[k]);
+        }
+        Part::Clef(k) => {
+            let at_bar = tick_q / bar_t * bar_t;
+            add_symbol(app, row.t, Symbol { tick: at_bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff: row.staff as u8 }, "Insert Clef");
+        }
+        Part::Text(k) => {
+            let kind = [SymbolKind::Text, SymbolKind::Lyric, SymbolKind::Chord][k];
+            st.typing = Some((row.t, tick_q, kind, row.staff as u8, String::new(), at));
+        }
+    }
+}
+
+/// The note of a track nearest a tick: (region, index).
+fn nearest_note(app: &App, t: usize, tick: u32) -> Option<(usize, usize)> {
+    let tr = app.project.as_ref()?.tracks.get(t)?;
+    tr.regions
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.audio.is_none())
+        .flat_map(|(rix, r)| r.notes.iter().enumerate().map(move |(i, n)| (rix, i, n.pos.abs_diff(tick))))
+        .filter(|x| x.2 <= 480)
+        .min_by_key(|x| x.2)
+        .map(|x| (x.0, x.1))
+}
+
+/// A note into the track's region at `tick` (or the selected region), selected (one undo step).
+pub fn insert_note(app: &mut App, t: usize, tick: u32, pitch: u8, len: u32, velocity: u8) -> bool {
+    let Some(track) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { return false };
+    let rix = track.regions.iter().position(|r| r.audio.is_none() && tick >= r.start && tick < r.start + r.length).or(app.selected_region.filter(|x| x.0 == t).map(|x| x.1));
+    let Some(rix) = rix else { return false };
     app.checkpoint("Insert events");
-    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(rix)) {
-        rg.notes.push(Note { channel: 0, pitch, velocity, pos: tick, len: v.ticks() });
+    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(rix)) {
+        rg.notes.push(Note { channel: 0, pitch, velocity, pos: tick, len });
         rg.notes.sort_by_key(|n| (n.pos, n.pitch));
         let idx = rg.notes.iter().position(|n| n.pos == tick && n.pitch == pitch).unwrap_or(0);
-        app.selected_region = Some((ti, rix));
+        app.selected_region = Some((t, rix));
         app.selected_notes = vec![idx];
     }
     app.after_edit();
-    crate::pianoroll::preview(app, ti, pitch);
+    crate::pianoroll::preview(app, t, pitch);
+    true
 }
 
-/// The Part box as a strip: note values (and a dot), rests, dynamics.
+/// The selected notes as (pos, pitch) keys, with their track's id.
+pub fn selected_keys(app: &App) -> Option<(u64, Vec<(u32, u8)>)> {
+    let (t, r) = app.selected_region?;
+    let tr = app.project.as_ref()?.tracks.get(t)?;
+    let rg = tr.regions.get(r)?;
+    let keys: Vec<(u32, u8)> = app.selected_notes.iter().filter_map(|&i| rg.notes.get(i)).map(|n| (n.pos, n.pitch)).collect();
+    (!keys.is_empty()).then_some((tr.extra.id, keys))
+}
+
+/// Changes the selected notes' attributes (one undo step); false with nothing selected.
+pub fn edit_attrs(app: &mut App, what: &str, f: impl Fn(&mut NoteAttr)) -> bool {
+    let Some((id, keys)) = selected_keys(app) else { return false };
+    app.checkpoint(what);
+    if let Some(p) = app.project.as_mut() {
+        for (pos, pitch) in keys {
+            p.score.edit(id, pos, pitch, &f);
+        }
+    }
+    app.after_edit();
+    true
+}
+
+/// A Part box symbol applied to the selected notes (articulations toggle; dynamics set the
+/// velocity by MIDI Meaning and place the mark; lines span the selection; clefs change there).
+pub fn apply_part(app: &mut App, st: &State, part: Part) -> bool {
+    let Some((t, r)) = app.selected_region else { return false };
+    let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return false };
+    let sel: Vec<Note> = app.selected_notes.iter().filter_map(|&i| rg.notes.get(i)).copied().collect();
+    if sel.is_empty() {
+        return false;
+    }
+    let first = sel.iter().map(|n| n.pos).min().unwrap_or(0);
+    let last = sel.iter().map(|n| n.pos + n.len).max().unwrap_or(first);
+    let staff = style_of(app, t).staff_of(sel[0].pitch) as u8;
+    match part {
+        Part::Artic(k) => {
+            let bit = 1u32 << PART_ARTICS[k];
+            let all = selected_keys(app).is_some_and(|(id, keys)| keys.iter().all(|&(p, q)| app.project.as_ref().is_some_and(|pr| pr.score.attr(id, p, q).artic & bit != 0)));
+            edit_attrs(app, "Attach Symbol", |a| if all { a.artic &= !bit } else { a.artic |= bit })
+        }
+        Part::Dynamic(d) => {
+            let vel = st.dyn_velocity[d];
+            let id = app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(0, |t| t.extra.id);
+            app.checkpoint("Insert Dynamic");
+            let idx = app.selected_notes.clone();
+            if let Some(p) = app.project.as_mut() {
+                if let Some(region) = p.tracks.get_mut(t).and_then(|tr| tr.regions.get_mut(r)) {
+                    for &k in &idx {
+                        if let Some(n) = region.notes.get_mut(k) {
+                            n.velocity = vel;
+                        }
+                    }
+                }
+                let ts = p.score.track_mut(id);
+                ts.symbols.retain(|s| !(s.kind == SymbolKind::Dynamic && s.tick == first && s.staff == staff));
+                ts.symbols.push(Symbol { tick: first, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff });
+                ts.symbols.sort_by_key(|s| s.tick);
+            }
+            app.after_edit();
+            true
+        }
+        Part::Line(k) => {
+            let kind = [SymbolKind::SlurUp, SymbolKind::SlurDown, SymbolKind::Crescendo, SymbolKind::Decrescendo][k];
+            add_symbol(app, t, Symbol { tick: first, kind, text: String::new(), len: (last - first).max(240), staff }, LINES[k]);
+            true
+        }
+        Part::Clef(k) => {
+            let bar = app.bar_ticks();
+            add_symbol(app, t, Symbol { tick: first / bar * bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff }, "Insert Clef");
+            true
+        }
+        _ => false,
+    }
+}
+
+/// The Part box: note values (dot, triplet), rests and dynamics on the first row; the
+/// articulations, slurs and hairpins, clefs, text / lyric / chord and the key on the second.
 fn part_box(ui: &mut egui::Ui, r: Rect, st: &mut State, app: &mut App) {
     let p = ui.painter_at(r);
     p.rect_filled(r, 0.0, look::pane_bg());
     p.hline(r.x_range(), r.max.y - 0.5, Stroke::new(1.0, look::line()));
     let cell = vec2(30.0, 26.0);
-    let mut x = r.min.x + 10.0;
-    let y = r.center().y - cell.y / 2.0;
-    p.text(pos2(x, r.center().y), Align2::LEFT_CENTER, "Part Box:", look::regular(12.0), look::text_dim());
-    x += 66.0;
     let ink = look::text();
-    let button = |ui: &mut egui::Ui, x: f32, on: bool, id: (&str, usize), tip: &str, draw: &dyn Fn(&egui::Painter, Rect)| -> bool {
-        let b = Rect::from_min_size(pos2(x, y), cell);
+    let mut clicked: Option<Part> = None;
+    let button = |ui: &mut egui::Ui, x: f32, y: f32, w: f32, on: bool, id: (&str, usize), tip: &str, draw: &dyn Fn(&egui::Painter, Rect, Color32)| -> bool {
+        let b = Rect::from_min_size(pos2(x, y), vec2(w, cell.y));
+        if b.max.x > r.max.x - 4.0 {
+            return false;
+        }
         let resp = ui.interact(b, ui.scope_id().with(id), Sense::click()).on_hover_text(tip);
         let pp = ui.painter_at(b);
         if on {
@@ -483,69 +1452,310 @@ fn part_box(ui: &mut egui::Ui, r: Rect, st: &mut State, app: &mut App) {
         } else if resp.hovered() {
             pp.rect_filled(b, 5.0, look::group_bg());
         }
-        draw(&pp, b);
+        draw(&pp, b, if on { Color32::WHITE } else { ink });
         resp.clicked()
     };
+    let y1 = r.min.y + 3.0;
+    let y2 = r.min.y + 3.0 + cell.y + 4.0;
+    let mut x = r.min.x + 10.0;
+    p.text(pos2(x, y1 + cell.y / 2.0), Align2::LEFT_CENTER, "Part Box:", look::regular(12.0), look::text_dim());
+    x += 66.0;
     for (i, (label, base)) in VALUES.iter().enumerate() {
-        let on = st.value == i;
-        let col = if on { Color32::WHITE } else { ink };
         let v = nt::Value { base: *base, dots: 0 };
-        if button(ui, x, on, ("pb-v", i), &format!("{label} Note"), &|pp, b| note_icon(pp, b, v, col)) {
-            st.value = i;
+        if button(ui, x, y1, cell.x, st.part == Part::Note(i), ("pb-v", i), &format!("{label} Note"), &|pp, b, c| note_icon(pp, b, v, c)) {
+            clicked = Some(Part::Note(i));
         }
         x += cell.x + 2.0;
     }
     let on = st.dotted;
-    if button(ui, x, on, ("pb-dot", 0), "Dotted", &|pp, b| {
-        pp.circle_filled(b.center(), 2.6, if on { Color32::WHITE } else { ink });
+    if button(ui, x, y1, cell.x, on, ("pb-dot", 0), "Dotted", &|pp, b, c| {
+        pp.circle_filled(b.center(), 2.6, c);
     }) {
         st.dotted = !st.dotted;
     }
+    x += cell.x + 2.0;
+    let on = st.triplet;
+    if button(ui, x, y1, cell.x, on, ("pb-trip", 0), "Triplet", &|pp, b, c| {
+        pp.text(b.center(), Align2::CENTER_CENTER, "3", look::bold(13.0), c);
+    }) {
+        st.triplet = !st.triplet;
+    }
     x += cell.x + 12.0;
-    p.vline(x - 6.0, r.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
+    p.vline(x - 6.0, y1..=y1 + cell.y, Stroke::new(1.0, look::line()));
     for (i, (label, base)) in VALUES.iter().enumerate().take(6) {
         let v = nt::Value { base: *base, dots: 0 };
-        if button(ui, x, false, ("pb-r", i), &format!("{label} Rest"), &|pp, b| {
-            let sp = 4.0;
-            rest(pp, b.center().x, b.center().y + 2.0 * sp, sp, v, false, ink);
+        if button(ui, x, y1, cell.x, st.part == Part::Rest(i), ("pb-r", i), &format!("{label} Rest"), &|pp, b, c| {
+            rest(pp, b.center().x, b.center().y + 8.0, 4.0, v, false, c);
         }) {
-            app.tell("Rests are drawn by the Score itself (user rests aren't available yet)");
+            clicked = Some(Part::Rest(i));
         }
         x += cell.x + 2.0;
     }
     x += 10.0;
-    p.vline(x - 6.0, r.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
-    for (i, (label, vel)) in DYNAMICS.iter().enumerate() {
-        let on = st.dynamic == Some(i);
-        let col = if on { Color32::WHITE } else { ink };
-        let b = Rect::from_min_size(pos2(x, y), vec2(34.0, cell.y));
-        if button(ui, x, on, ("pb-d", i), &format!("{label}: velocity {vel} (new notes and the selected ones)"), &|pp, _| {
-            pp.text(b.center(), Align2::CENTER_CENTER, *label, look::bold(13.0), col);
+    p.vline(x - 6.0, y1..=y1 + cell.y, Stroke::new(1.0, look::line()));
+    for (i, label) in DYNAMICS.iter().enumerate() {
+        let vel = st.dyn_velocity[i];
+        if button(ui, x, y1, 34.0, st.part == Part::Dynamic(i), ("pb-d", i), &format!("{label} (velocity {vel}: the selected notes)"), &|pp, b, c| {
+            smufl_text(pp, &dynamic_glyphs(label), pos2(b.center().x, b.center().y + 5.0), 4.0, c);
         }) {
-            st.dynamic = if on { None } else { Some(i) };
-            if !on && !app.selected_notes.is_empty() {
-                if let Some((t, rg)) = app.selected_region {
-                    app.checkpoint("Change Velocity");
-                    let sel = app.selected_notes.clone();
-                    if let Some(region) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(rg)) {
-                        for &k in &sel {
-                            if let Some(n) = region.notes.get_mut(k) {
-                                n.velocity = *vel;
-                            }
-                        }
-                    }
-                    app.after_edit();
-                }
-            }
+            clicked = Some(Part::Dynamic(i));
         }
         x += 36.0;
-        if x > r.max.x - 40.0 {
-            break;
+    }
+    // second row
+    let mut x = r.min.x + 76.0;
+    for (i, &a) in PART_ARTICS.iter().enumerate() {
+        if button(ui, x, y2, cell.x, st.part == Part::Artic(i), ("pb-a", i), ARTICULATIONS[a], &|pp, b, c| {
+            artic_glyph(pp, a, pos2(b.center().x, b.center().y + 3.0), 5.0, true, c);
+        }) {
+            clicked = Some(Part::Artic(i));
+        }
+        x += cell.x + 2.0;
+    }
+    x += 10.0;
+    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
+    for (i, name) in LINES.iter().enumerate() {
+        if button(ui, x, y2, cell.x, st.part == Part::Line(i), ("pb-l", i), name, &|pp, b, c| {
+            let (a, z) = (pos2(b.min.x + 6.0, b.center().y), pos2(b.max.x - 6.0, b.center().y));
+            match i {
+                0 | 1 => {
+                    let d = if i == 0 { -6.0 } else { 6.0 };
+                    let pts = bezier([a, pos2(a.x + 4.0, a.y + d), pos2(z.x - 4.0, z.y + d), z], 12);
+                    pp.add(Shape::line(pts, Stroke::new(1.4, c)));
+                }
+                2 => {
+                    pp.line_segment([a, pos2(z.x, z.y - 5.0)], Stroke::new(1.2, c));
+                    pp.line_segment([a, pos2(z.x, z.y + 5.0)], Stroke::new(1.2, c));
+                }
+                _ => {
+                    pp.line_segment([pos2(a.x, a.y - 5.0), z], Stroke::new(1.2, c));
+                    pp.line_segment([pos2(a.x, a.y + 5.0), z], Stroke::new(1.2, c));
+                }
+            }
+        }) {
+            clicked = Some(Part::Line(i));
+        }
+        x += cell.x + 2.0;
+    }
+    x += 10.0;
+    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
+    for (i, name) in CLEFS.iter().enumerate() {
+        if button(ui, x, y2, cell.x, st.part == Part::Clef(i), ("pb-c", i), &format!("{name} Clef"), &|pp, b, c| {
+            let ch = [GCLEF, FCLEF, CCLEF, CCLEF, PERC_CLEF][i];
+            let g = pp.layout_no_wrap(ch.to_string(), look::music(14.0), c);
+            pp.galley(b.center() - g.size() / 2.0, g, c);
+        }) {
+            clicked = Some(Part::Clef(i));
+        }
+        x += cell.x + 2.0;
+    }
+    x += 10.0;
+    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
+    for (i, name) in TEXTS.iter().enumerate() {
+        if button(ui, x, y2, 44.0, st.part == Part::Text(i), ("pb-t", i), &format!("{name}: double-click the staff, then type"), &|pp, b, c| {
+            pp.text(b.center(), Align2::CENTER_CENTER, ["A", "Lyr", "C7"][i], look::semibold(12.0), c);
+        }) {
+            clicked = Some(Part::Text(i));
+        }
+        x += 46.0;
+    }
+    x += 10.0;
+    // key signature: inserted at the playhead's bar
+    let kb = Rect::from_min_size(pos2(x, y2), vec2(60.0, cell.y));
+    if kb.max.x < r.max.x - 4.0 {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(kb), |ui| {
+            ui.menu_button(egui::RichText::new("Key ⌄").size(12.0).color(ink), |ui| {
+                for f in -7i8..=7 {
+                    let name = key_name(f);
+                    if ui.button(name).clicked() {
+                        let bar = app.bar_ticks();
+                        let at = app.position() as u32 / bar * bar;
+                        insert_key(app, at, f);
+                        ui.close();
+                    }
+                }
+            });
+        });
+    }
+    if let Some(c) = clicked {
+        st.part = c;
+        if !app.selected_notes.is_empty() {
+            apply_part(app, st, c);
         }
     }
 }
 
+/// A key change into the score at a bar (at bar 1: the project's key itself).
+pub fn insert_key(app: &mut App, at: u32, fifths: i8) {
+    app.checkpoint("Insert Key Signature");
+    if let Some(p) = app.project.as_mut() {
+        if at == 0 {
+            p.key = key_name(fifths);
+            p.score.keys.retain(|k| k.0 != 0);
+        } else {
+            p.score.keys.retain(|k| k.0 != at);
+            p.score.keys.push((at, fifths));
+            p.score.keys.sort_unstable();
+        }
+    }
+    app.after_edit();
+}
+
+pub fn key_name(fifths: i8) -> String {
+    const N: [&str; 15] = ["C♭", "G♭", "D♭", "A♭", "E♭", "B♭", "F", "C", "G", "D", "A", "E", "B", "F♯", "C♯"];
+    format!("{} major", N[(fifths + 7).clamp(0, 14) as usize])
+}
+
 // ---- drawing -------------------------------------------------------------------------------
+
+const GCLEF: char = '\u{E050}';
+const GCLEF_8VB: char = '\u{E052}';
+const GCLEF_8VA: char = '\u{E053}';
+const CCLEF: char = '\u{E05C}';
+const FCLEF: char = '\u{E062}';
+const FCLEF_8VB: char = '\u{E064}';
+const PERC_CLEF: char = '\u{E069}';
+
+/// Clef, key signature and (the first line's) time signature from `x`.
+fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, clef: nt::Clef, octave: i8, key: nt::Key, time: Option<(u8, u8)>) {
+    let mut x = x;
+    // SMuFL clefs: origin on their line (G: 2nd, F: 4th, C: its line, percussion: middle)
+    let (ch, line) = match clef {
+        nt::Clef::Treble => (if octave < 0 { GCLEF_8VB } else if octave > 0 { GCLEF_8VA } else { GCLEF }, 1.0),
+        nt::Clef::Bass => (if octave < 0 { FCLEF_8VB } else { FCLEF }, 3.0),
+        nt::Clef::Alto => (CCLEF, 2.0),
+        nt::Clef::Tenor => (CCLEF, 3.0),
+        nt::Clef::Percussion => (PERC_CLEF, 2.0),
+    };
+    smufl(p, ch, pos2(x, bottom - line * sp), sp, INK, false);
+    x += 3.4 * sp;
+    if clef != nt::Clef::Percussion {
+        for (pos, acc) in key.signature_positions(clef) {
+            accidental(p, pos2(x, bottom - pos as f32 * sp / 2.0), sp, acc, INK);
+            x += 1.1 * sp;
+        }
+    }
+    x += 0.8 * sp;
+    if let Some(sig) = time {
+        // SMuFL time signature digits, centred on the fourth and second lines
+        let digits = |n: u8| -> String { n.to_string().chars().map(|d| char::from_u32(0xE080 + d.to_digit(10).unwrap_or(0)).unwrap_or(' ')).collect() };
+        for (n, line) in [(sig.0, 3.0), (sig.1, 1.0)] {
+            let g = p.layout_no_wrap(digits(n), look::music(4.0 * sp), INK);
+            let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(0.0, |gl| gl.pos.y);
+            let w = g.size().x;
+            p.galley(pos2(x + sp - w / 2.0, bottom - line * sp - base), g, INK);
+        }
+    }
+}
+
+/// "mf" → SMuFL dynamics letters (p m f r s z n).
+fn dynamic_glyphs(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            'p' => '\u{E520}',
+            'm' => '\u{E521}',
+            'f' => '\u{E522}',
+            'r' => '\u{E523}',
+            's' => '\u{E524}',
+            'z' => '\u{E525}',
+            'n' => '\u{E526}',
+            c => c,
+        })
+        .collect()
+}
+
+/// A string of SMuFL glyphs centred at `at` (its baseline).
+fn smufl_text(p: &egui::Painter, s: &str, at: Pos2, sp: f32, col: Color32) {
+    let g = p.layout_no_wrap(s.to_string(), look::music(4.0 * sp), col);
+    let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(g.size().y * 0.8, |gl| gl.pos.y);
+    p.galley(pos2(at.x - g.size().x / 2.0, at.y - base), g, col);
+}
+
+/// An articulation (index into ARTICULATIONS) at `at`, above or below the note.
+fn artic_glyph(p: &egui::Painter, a: usize, at: Pos2, sp: f32, above: bool, col: Color32) {
+    let pick = |up: u32| char::from_u32(if above { up } else { up + 1 }).unwrap_or(' ');
+    let ch = match a {
+        0 => '\u{E4C0}',
+        1 => '\u{E4C1}',
+        2 => pick(0xE4A2),
+        3 => pick(0xE4A6),
+        4 => pick(0xE4A0),
+        5 => pick(0xE4AC),
+        6 => pick(0xE4B4),
+        7 => pick(0xE4A4),
+        8 => '\u{E612}',
+        9 => '\u{E610}',
+        10 => '\u{E614}',
+        11 => '\u{E633}',
+        14 => pick(0xE4B6),
+        15 => pick(0xE4AE),
+        16 => '\u{E5D0}',
+        17 => '\u{E5D1}',
+        18 => '\u{E5D4}',
+        19 => '\u{E5D7}',
+        20 => '\u{E5E0}',
+        21 => '\u{E5E3}',
+        _ => {
+            p.text(at, Align2::CENTER_CENTER, if a == 12 { "L.H." } else { "R.H." }, look::regular(1.6 * sp), col);
+            return;
+        }
+    };
+    let g = p.layout_no_wrap(ch.to_string(), look::music(4.0 * sp), col);
+    // centred on `at` by its ink (the glyph box's middle)
+    let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(g.size().y * 0.8, |gl| gl.pos.y);
+    p.galley(pos2(at.x - g.size().x / 2.0, at.y - base), g, col);
+}
+
+/// A staff symbol between x and x2 on a staff whose bottom line is at `bottom`.
+fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: f32, chord_size: f32) {
+    let top = bottom - 4.0 * sp;
+    match s.kind {
+        SymbolKind::Dynamic => smufl_text(p, &dynamic_glyphs(&s.text), pos2(x + 0.6 * sp, bottom + 3.6 * sp), sp, INK),
+        SymbolKind::Crescendo | SymbolKind::Decrescendo => {
+            let y = bottom + 3.2 * sp;
+            let (open, close) = if s.kind == SymbolKind::Crescendo { (x2, x) } else { (x, x2) };
+            let st = Stroke::new(1.2, INK);
+            p.line_segment([pos2(close, y), pos2(open, y - 0.7 * sp)], st);
+            p.line_segment([pos2(close, y), pos2(open, y + 0.7 * sp)], st);
+        }
+        SymbolKind::Text => {
+            p.text(pos2(x, top - 2.6 * sp), Align2::LEFT_CENTER, &s.text, egui::FontId::new(1.7 * sp, egui::FontFamily::Proportional), INK);
+        }
+        SymbolKind::Chord => {
+            p.text(pos2(x, top - 4.4 * sp), Align2::LEFT_CENTER, &s.text, look::bold(2.0 * sp * chord_size), INK);
+        }
+        SymbolKind::Lyric => {
+            p.text(pos2(x + 0.6 * sp, bottom + 6.0 * sp), Align2::CENTER_CENTER, &s.text, egui::FontId::new(1.6 * sp, egui::FontFamily::Proportional), INK);
+        }
+        SymbolKind::SlurUp | SymbolKind::SlurDown => {
+            let up = s.kind == SymbolKind::SlurUp;
+            let y = if up { top - 1.0 * sp } else { bottom + 1.0 * sp };
+            let d = if up { -1.0 } else { 1.0 };
+            tie(p, pos2(x + 0.6 * sp, y), pos2(x2.max(x + 2.0 * sp), y), d * (1.2 * sp + (x2 - x) * 0.05).min(3.0 * sp), sp, INK);
+        }
+        SymbolKind::Clef => {
+            let c = clef_named(&s.text);
+            let (ch, line) = match c {
+                nt::Clef::Treble => (GCLEF, 1.0),
+                nt::Clef::Bass => (FCLEF, 3.0),
+                nt::Clef::Alto => (CCLEF, 2.0),
+                nt::Clef::Tenor => (CCLEF, 3.0),
+                nt::Clef::Percussion => (PERC_CLEF, 2.0),
+            };
+            // a clef change is drawn smaller, before the bar's first note
+            smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * 0.75, INK, false);
+        }
+    }
+}
+
+/// How draw_voice colours and decorates: per note colour and attributes, rests shown or not,
+/// which ticks belong to the line being drawn.
+struct DrawOpts<'a> {
+    color: &'a dyn Fn(usize) -> Color32,
+    attr: &'a dyn Fn(usize) -> NoteAttr,
+    hide_rests: bool,
+    in_line: &'a dyn Fn(u32) -> bool,
+}
 
 fn y_of(staff: &Staff, pos: i32, sp: f32) -> f32 {
     staff.bottom - pos as f32 * sp / 2.0
@@ -588,22 +1798,33 @@ fn notehead(p: &egui::Painter, c: Pos2, sp: f32, base: u8, col: Color32, paper: 
     smufl(p, ch, c, sp, col, true);
 }
 
-fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &dyn Fn(f32) -> f32, selected: &dyn Fn(usize) -> bool, sel_color: Color32) {
+fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &dyn Fn(f32) -> f32, o: &DrawOpts) {
     let stem_w = (0.12 * sp).max(1.0);
     // stem ends, for beams
     let mut stems: Vec<Option<(f32, f32, f32)>> = vec![None; v.items.len()];
+    // pitches tied into the item from the one before (no articulation repeated on them)
+    let mut tied_in: Vec<u8> = Vec::new();
     for (k, it) in v.items.iter().enumerate() {
+        let here = (o.in_line)(it.tick);
         let x = x_of(it.tick as f32);
         if it.is_rest() {
-            let cx = if it.full_bar { x_of((it.tick + it.dur / 2) as f32) } else { x + 0.8 * sp + 0.6 * sp };
-            rest(p, cx, staff.bottom, sp, it.value, it.full_bar, INK);
+            if here && !o.hide_rests {
+                let cx = if it.full_bar { x_of((it.tick + it.dur / 2) as f32) } else { x + 0.8 * sp + 0.6 * sp };
+                rest(p, cx, staff.bottom, sp, it.value, it.full_bar, INK);
+            }
+            tied_in.clear();
             continue;
         }
-        let any_sel = it.heads.iter().any(|h| selected(h.note));
+        let next_tied: Vec<u8> = it.heads.iter().filter(|h| h.tie).map(|h| h.pitch).collect();
+        if !here {
+            tied_in = next_tied;
+            continue;
+        }
+        let stem_col = it.heads.first().map_or(INK, |h| (o.color)(h.note));
         let w = head_w(it.value, sp);
         let hi = it.heads.iter().map(|h| h.pos).max().unwrap_or(0);
         let lo = it.heads.iter().map(|h| h.pos).min().unwrap_or(0);
-        // ledger lines
+        // ledger lines (none on a drum staff's cross heads above it… they still need them)
         let base_x = x + 0.8 * sp;
         let shifted = it.heads.iter().any(|h| h.shifted);
         let lx0 = base_x - 0.35 * sp - if shifted && !it.stem_up { w } else { 0.0 };
@@ -624,37 +1845,95 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         let n_heads = it.heads.len();
         for (h_k, h) in it.heads.iter().enumerate().rev() {
             let c = head_center(it, h, staff, sp, x);
-            let col = if selected(h.note) { sel_color } else { INK };
-            notehead(p, c, sp, it.value.base, col, REGION_PAPER);
+            let col = (o.color)(h.note);
+            if h.cross {
+                smufl(p, '\u{E0A9}', c, sp, col, true);
+            } else {
+                notehead(p, c, sp, it.value.base, col, REGION_PAPER);
+            }
             if let Some(a) = h.acc {
                 if (last_acc_pos - h.pos).abs() < 6 && last_acc_pos != i32::MAX {
                     acc_x -= 1.1 * sp;
                 }
+                if h.guide {
+                    // a guide accidental, in brackets
+                    p.text(pos2(acc_x - 0.9 * sp, c.y), Align2::CENTER_CENTER, "(", egui::FontId::proportional(2.2 * sp), col);
+                    p.text(pos2(acc_x + 0.75 * sp, c.y), Align2::CENTER_CENTER, ")", egui::FontId::proportional(2.2 * sp), col);
+                }
                 accidental(p, pos2(acc_x, c.y), sp, a, col);
+                if h.guide {
+                    acc_x -= 0.9 * sp;
+                }
                 last_acc_pos = h.pos;
             }
             for d in 0..it.value.dots {
                 let dy = if h.pos % 2 == 0 { -sp / 2.0 } else { 0.0 };
                 p.circle_filled(pos2(base_x + w + 0.5 * sp + d as f32 * 0.6 * sp + if shifted && it.stem_up { w } else { 0.0 }, c.y + dy), 0.18 * sp, col);
             }
-            if h.tie {
-                if let Some(next) = v.items.get(k + 1) {
-                    if let Some(nh) = next.heads.iter().find(|x| x.pitch == h.pitch) {
+            if h.tie && !h.tie_hidden {
+                let next = v.items.get(k + 1).and_then(|next| next.heads.iter().find(|x| x.pitch == h.pitch).map(|nh| (next, nh)));
+                // a chord's lower notes tie below, upper above; one note away from the stem
+                let below = match h.tie_dir {
+                    1 => false,
+                    -1 => true,
+                    _ => if n_heads > 1 && (n_heads % 2 == 0 || h_k != n_heads / 2) { h_k < n_heads / 2 } else { it.stem_up },
+                };
+                let dir = if below { 1.0 } else { -1.0 };
+                let a = pos2(c.x + 0.5 * sp, c.y + dir * 0.45 * sp);
+                let b = match next {
+                    // into the next line: a tie to the line's end
+                    Some((next, nh)) if (o.in_line)(next.tick) => {
                         let c2 = head_center(next, nh, staff, sp, x_of(next.tick as f32));
-                        // a chord's lower notes tie below, upper above; one note away from the stem
-                        let below = if n_heads > 1 && (n_heads % 2 == 0 || h_k != n_heads / 2) { h_k < n_heads / 2 } else { it.stem_up };
-                        let dir = if below { 1.0 } else { -1.0 };
-                        let (a, b) = (pos2(c.x + 0.5 * sp, c.y + dir * 0.45 * sp), pos2(c2.x - 0.5 * sp, c2.y + dir * 0.45 * sp));
-                        let lift = dir * (0.6 * sp + (b.x - a.x) * 0.05).min(1.6 * sp);
-                        tie(p, a, b, lift, sp, col);
+                        pos2(c2.x - 0.5 * sp, c2.y + dir * 0.45 * sp)
                     }
-                }
+                    _ => pos2(c.x + 3.0 * sp, c.y + dir * 0.45 * sp),
+                };
+                let lift = dir * (0.6 * sp + (b.x - a.x) * 0.05).min(1.6 * sp);
+                tie(p, a, b, lift, sp, col);
             }
         }
+        // articulations and fingering: on the side away from the stem (fermatas above), not on
+        // tied continuations
+        let fresh: Vec<&nt::Head> = it.heads.iter().filter(|h| !tied_in.contains(&h.pitch)).collect();
+        let mut bits = 0u32;
+        let mut fingers: Vec<String> = Vec::new();
+        for h in &fresh {
+            let a = (o.attr)(h.note);
+            bits |= a.artic;
+            if a.finger > 0 {
+                fingers.push(a.finger.to_string());
+            }
+            if a.pick > 0 {
+                fingers.push(["p", "i", "m", "a", "c"][(a.pick as usize - 1).min(4)].to_string());
+            }
+        }
+        if bits != 0 || !fingers.is_empty() {
+            let cx = base_x + w / 2.0;
+            let above = !it.stem_up || it.stem_hidden || it.value.base == 1;
+            let mut y = if above { y_of(staff, hi.max(7), sp) - 1.4 * sp } else { y_of(staff, lo.min(1), sp) + 1.4 * sp };
+            for a in 0..ARTICULATIONS.len() {
+                if bits & (1 << a) == 0 || a <= 1 {
+                    continue;
+                }
+                artic_glyph(p, a, pos2(cx, y + if above { 0.0 } else { 0.4 * sp }), sp, above, stem_col);
+                y += if above { -1.3 * sp } else { 1.3 * sp };
+            }
+            for f in &fingers {
+                p.text(pos2(cx, y), Align2::CENTER_CENTER, f, look::semibold(1.4 * sp), stem_col);
+                y += if above { -1.5 * sp } else { 1.5 * sp };
+            }
+            if bits & 0b11 != 0 {
+                let up = bits & 1 != 0;
+                let fy = if up { y_of(staff, hi.max(9), sp) - 1.6 * sp } else { y_of(staff, lo.min(-1), sp) + 1.6 * sp };
+                artic_glyph(p, if up { 0 } else { 1 }, pos2(cx, fy), sp, up, stem_col);
+            }
+        }
+        tied_in = next_tied;
         // the stem
-        if it.value.base > 1 {
+        if it.value.base > 1 && !it.stem_hidden {
             let up = it.stem_up;
-            let sx = if up { base_x + w - stem_w / 2.0 } else { base_x + stem_w / 2.0 };
+            let attr = it.heads.first().map(|h| (o.attr)(h.note)).unwrap_or_default();
+            let sx = if attr.stem_pos == 1 { base_x + w / 2.0 } else if up { base_x + w - stem_w / 2.0 } else { base_x + stem_w / 2.0 };
             let (from_pos, to_pos) = if up { (lo, hi) } else { (hi, lo) };
             let y0 = y_of(staff, from_pos, sp);
             let mut y1 = y_of(staff, to_pos, sp) + if up { -3.5 * sp } else { 3.5 * sp };
@@ -666,12 +1945,13 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             if !up && y1 < mid {
                 y1 = mid;
             }
-            let col = if any_sel { sel_color } else { INK };
+            // Stem End: Move Up / Down (half spaces)
+            y1 -= attr.stem_end as f32 * sp / 2.0;
             stems[k] = Some((sx, y0, y1));
             if it.beam.is_none() {
-                p.line_segment([pos2(sx, y0), pos2(sx, y1)], Stroke::new(stem_w, col));
+                p.line_segment([pos2(sx, y0), pos2(sx, y1)], Stroke::new(stem_w, stem_col));
                 for f in 0..it.value.flags() {
-                    flag(p, pos2(sx, y1 + if up { f as f32 * 0.8 * sp } else { -(f as f32) * 0.8 * sp }), sp, up, col);
+                    flag(p, pos2(sx, y1 + if up { f as f32 * 0.8 * sp } else { -(f as f32) * 0.8 * sp }), sp, up, stem_col);
                 }
             }
         }
@@ -680,6 +1960,13 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
     for b in &v.beams {
         let pts: Vec<(usize, f32, f32, f32)> = b.items.iter().filter_map(|&i| stems[i].map(|(x, y0, y1)| (i, x, y0, y1))).collect();
         if pts.len() < 2 {
+            for &(i, x, y0, y1) in &pts {
+                // a beam cut by the line's end: the stem and its flags
+                p.line_segment([pos2(x, y0), pos2(x, y1)], Stroke::new(stem_w, INK));
+                for f in 0..v.items[i].value.flags() {
+                    flag(p, pos2(x, y1 + if b.up { f as f32 * 0.8 * sp } else { -(f as f32) * 0.8 * sp }), sp, b.up, INK);
+                }
+            }
             continue;
         }
         let (f, l) = (pts[0], pts[pts.len() - 1]);
@@ -700,8 +1987,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         let line = |x: f32| f.3 + off + slope * (x - f.1);
         let thick = 0.5 * sp;
         let dir = if b.up { 1.0 } else { -1.0 };
-        let any_sel = b.items.iter().any(|&i| v.items[i].heads.iter().any(|h| selected(h.note)));
-        let col = if any_sel { sel_color } else { INK };
+        let col = v.items[b.items[0]].heads.first().map_or(INK, |h| (o.color)(h.note));
         for &(_, x, y0, _) in &pts {
             p.line_segment([pos2(x, y0), pos2(x, line(x))], Stroke::new(stem_w, col));
         }
@@ -732,6 +2018,9 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
     // triplet numbers
     for t in &v.tuplets {
         let (a, b) = (&v.items[t.first], &v.items[t.last]);
+        if !(o.in_line)(a.tick) {
+            continue;
+        }
         let xa = x_of(a.tick as f32) + 0.8 * sp;
         let xb = x_of(b.tick as f32) + 0.8 * sp + 1.25 * sp;
         let ys: Vec<f32> = (t.first..=t.last).filter_map(|i| stems[i].map(|s| s.2)).collect();
@@ -861,18 +2150,6 @@ fn spline(pts: &[(f32, f32)], per: usize) -> Vec<(f32, f32)> {
 }
 
 
-/// The G clef, curling round the second line; `at` is the stroke's x on the bottom line.
-pub(crate) fn treble_clef(p: &egui::Painter, at: Pos2, sp: f32, col: Color32) {
-    // SMuFL gClef: its origin on the G line (the second line)
-    smufl(p, '\u{E050}', pos2(at.x - 1.3 * sp, at.y - sp), sp, col, false);
-}
-
-/// The F clef: its dot on the fourth line, two dots either side of it.
-pub(crate) fn bass_clef(p: &egui::Painter, at: Pos2, sp: f32, col: Color32) {
-    // SMuFL fClef: its origin on the F line (the fourth line)
-    smufl(p, '\u{E062}', pos2(at.x - 0.3 * sp, at.y - 3.0 * sp), sp, col, false);
-}
-
 fn brace(p: &egui::Painter, x: f32, y0: f32, y1: f32, col: Color32) {
     let h = y1 - y0;
     let m = (y0 + y1) / 2.0;
@@ -915,6 +2192,6 @@ mod tests {
 
     #[test]
     fn dynamics_rise() {
-        assert!(DYNAMICS.windows(2).all(|w| w[0].1 < w[1].1));
+        assert!(State::default().dyn_velocity.windows(2).all(|w| w[0] < w[1]));
     }
 }

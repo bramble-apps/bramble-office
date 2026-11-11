@@ -354,7 +354,10 @@ mod tests {
 
     #[test]
     fn reads_volume_mute_and_groups() {
-        if let Some(p) = sample("E23-live-loops-base.logicx") {
+        // (E23 opens on its alternative 001 now; the fader and mute were set in 000)
+        let e23 = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata-private/sample-files/E23-live-loops-base.logicx");
+        let alt = e23.join("Alternatives/000");
+        if let Some(p) = std::fs::read(alt.join("ProjectData")).ok().map(|d| crate::project::open_alternative(&e23, &alt, &d).expect("opens")) {
             let s = p.mixer.strips.iter().find(|s| s.kind == StripKind::Instrument && s.number == 0).unwrap();
             assert!(s.mute);
             assert!((s.volume_db - fader_to_db(41.0)).abs() < 1e-4);

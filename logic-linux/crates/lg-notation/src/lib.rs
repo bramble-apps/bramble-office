@@ -16,6 +16,11 @@ const LETTER_PC: [i32; 7] = [0, 2, 4, 5, 7, 9, 11];
 pub enum Clef {
     Treble,
     Bass,
+    /// C clefs (Logic's Alto and Tenor staff styles).
+    Alto,
+    Tenor,
+    /// The drum staff: positions from the drum map, not from pitch.
+    Percussion,
 }
 
 impl Clef {
@@ -23,8 +28,10 @@ impl Clef {
     /// octave × 7 + letter, so middle C, MIDI 60, is step 35).
     pub fn bottom_line(self) -> i32 {
         match self {
-            Clef::Treble => 37,
+            Clef::Treble | Clef::Percussion => 37,
             Clef::Bass => 25,
+            Clef::Alto => 31,
+            Clef::Tenor => 29,
         }
     }
 }
@@ -99,7 +106,16 @@ impl Key {
     pub fn signature_positions(self, clef: Clef) -> Vec<(i32, i8)> {
         let sharp_pos = [8, 5, 9, 6, 3, 7, 4];
         let flat_pos = [4, 7, 3, 6, 2, 5, 1];
-        let shift = if clef == Clef::Bass { -2 } else { 0 };
+        let shift = match clef {
+            Clef::Bass => -2,
+            Clef::Alto => -1,
+            Clef::Tenor if self.fifths < 0 => 1,
+            _ => 0,
+        };
+        if self.fifths > 0 && clef == Clef::Tenor {
+            // the tenor clef's sharps: F♯ on the second line, then up and down inside the staff
+            return sharp_pos.iter().take(self.fifths as usize).map(|p| (if p - 6 < 1 { p + 1 } else { p - 6 }, 1)).collect();
+        }
         if self.fifths > 0 {
             sharp_pos.iter().take(self.fifths as usize).map(|p| (p + shift, 1)).collect()
         } else {
@@ -137,6 +153,30 @@ impl Key {
         let natural = LETTER_PC[letter] + alter as i32;
         let oct = oct + if natural < 0 { 1 } else if natural > 11 { -1 } else { 0 };
         Spelled { letter: letter as u8, alter, step: oct * 7 + letter as i32 }
+    }
+}
+
+impl Key {
+    /// A pitch spelled with a preference (Logic's Enharmonic Shift: 1 = written as a sharp,
+    /// −1 as a flat, 0 = as the key spells it). Naturals stay naturals unless shifted onto the
+    /// neighbouring letter (E as F♭, B♯ as C…) is the only way to honour the shift.
+    pub fn spell_pref(self, pitch: u8, pref: i8) -> Spelled {
+        let base = self.spell(pitch);
+        if pref == 0 || base.alter.signum() == pref.signum() {
+            return base;
+        }
+        let pc = (pitch % 12) as i32;
+        let oct = (pitch / 12) as i32;
+        let want = pref.signum();
+        // the letter a step away whose alteration by `want` gives this pitch class
+        for l in 0..7usize {
+            if (LETTER_PC[l] + want as i32).rem_euclid(12) == pc {
+                let natural = LETTER_PC[l] + want as i32;
+                let oct = oct + if natural < 0 { 1 } else if natural > 11 { -1 } else { 0 };
+                return Spelled { letter: l as u8, alter: want, step: oct * 7 + l as i32 };
+            }
+        }
+        base
     }
 }
 
@@ -234,13 +274,33 @@ impl Quant {
     ];
 }
 
-/// A note as the region has it (ticks from bar 1), with its index in the region.
-#[derive(Clone, Copy, Debug)]
+/// A note as the region has it (ticks from bar 1), with its index in the region, and the
+/// Score's per-note attributes (Logic's Functions ▸ Note Attributes; 0 = default for each).
+#[derive(Clone, Copy, Debug, Default)]
 pub struct NoteIn {
     pub index: usize,
     pub pitch: u8,
     pub pos: u32,
     pub len: u32,
+    /// Enharmonic shift: 1 sharp, −1 flat.
+    pub spell: i8,
+    /// Stem: 1 up, −1 down, 2 hidden.
+    pub stem: i8,
+    /// Beam: 1 beamed with the next selected (Beam Selected), −1 unbeamed.
+    pub beam: i8,
+    /// Interpretation / Syncopation: 1 force, −1 defeat.
+    pub interp: i8,
+    pub synco: i8,
+    /// Tie: 1 above, −1 below, 2 hidden.
+    pub tie: i8,
+    /// Accidental: 1 force, 2 hide, 3 guide (in brackets), 4 force sharps and flats only.
+    pub acc: u8,
+}
+
+impl NoteIn {
+    pub fn new(index: usize, pitch: u8, pos: u32, len: u32) -> NoteIn {
+        NoteIn { index, pitch, pos, len, ..Default::default() }
+    }
 }
 
 /// One notehead of a chord.
@@ -258,6 +318,13 @@ pub struct Head {
     pub tie: bool,
     /// Set off to the other side of the stem (a second in a chord).
     pub shifted: bool,
+    /// The tie's side: 1 above, −1 below, 0 automatic; hidden ties aren't drawn.
+    pub tie_dir: i8,
+    pub tie_hidden: bool,
+    /// A guide (cautionary) accidental, drawn in brackets.
+    pub guide: bool,
+    /// A drum staff's cross head (cymbals and hi-hats).
+    pub cross: bool,
 }
 
 /// A chord or a rest.
@@ -277,6 +344,8 @@ pub struct Item {
     pub full_bar: bool,
     /// The bar (0 = bar 1).
     pub bar: u32,
+    /// Stem hidden (Stems ▸ Hide).
+    pub stem_hidden: bool,
 }
 
 impl Item {
@@ -334,6 +403,16 @@ pub struct Options {
     /// The span shown (ticks from bar 1; whole bars).
     pub from: u32,
     pub to: u32,
+    /// Logic's region parameters Interpretation (notes lengthened to read simply) and
+    /// Syncopation (a note across a beat written as one value).
+    pub interpretation: bool,
+    pub syncopation: bool,
+}
+
+impl Options {
+    pub fn new(sig: (u8, u8), key: Key, quant: Quant, from: u32, to: u32) -> Options {
+        Options { sig, key, quant, from, to, interpretation: false, syncopation: false }
+    }
 }
 
 /// Quantised onsets: per beat, the straight or the triplet grid, whichever fits the notes
@@ -381,8 +460,17 @@ fn quantise(notes: &[NoteIn], m: Metre, q: Quant, from: u32) -> (Vec<(u32, u32, 
     (out, triplet_beats)
 }
 
+/// Where the Score shows each note (Fix Displayed Note Positions): (index, on, off) on the
+/// display grid, from `from` (a bar line).
+pub fn display_positions(notes: &[NoteIn], sig: (u8, u8), q: Quant, from: u32) -> Vec<(usize, u32, u32)> {
+    let (out, _) = quantise(notes, Metre::new(sig), q, from);
+    let mut v: Vec<(usize, u32, u32)> = out.into_iter().map(|(on, off, i)| (notes[i].index, on, off)).collect();
+    v.sort_unstable();
+    v
+}
+
 /// The values a span is written in from `p` to `e` within one bar (with ties between them).
-fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bool) -> Vec<(u32, u32, Value, bool)> {
+fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bool, synco: bool) -> Vec<(u32, u32, Value, bool)> {
     let mut out = Vec::new();
     let cands: [(u32, Value); 11] = [
         (3840, Value { base: 1, dots: 0 }),
@@ -438,7 +526,10 @@ fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bo
             if rest && val.dots > 0 && v > m.beat && !m.compound {
                 continue;
             }
-            let ok = if v > m.beat {
+            // syncopation: one value across a beat (an eighth, a quarter, an eighth), placed on
+            // half its own length and ending inside the bar
+            let sync_ok = synco && !rest && val.dots == 0 && v >= 480 && v <= m.beat * 2 && rel % (v / 2) == 0;
+            let ok = sync_ok || if v > m.beat {
                 // longer than a beat: on a beat, and not across the middle of a 4/4 bar
                 rel % m.beat == 0 && !(m.sig == (4, 4) && rel != 0 && rel < half && rel + v > half) && (val.base != 1 || v == m.bar)
             } else if v == m.beat {
@@ -481,7 +572,16 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
         let members: Vec<&(u32, u32, usize)> = q.iter().filter(|x| x.0 == on).collect();
         let next = onsets.get(k + 1).copied().unwrap_or(u32::MAX);
         // No Overlap (Logic's default): a note ends where the next chord starts
-        let end = members.iter().map(|x| x.1).max().unwrap_or(on).min(next).min(o.to);
+        let mut end = members.iter().map(|x| x.1).max().unwrap_or(on).min(next).min(o.to);
+        // Interpretation: a short note reads as the value up to the next eighth (or the next
+        // note), so a staccato quarter isn't a sixteenth and rests
+        let f = members.iter().map(|x| notes[x.2].interp).find(|&x| x != 0).unwrap_or(0);
+        if if f == 0 { o.interpretation } else { f > 0 } {
+            let g = (m.beat / 2).max(1);
+            let rel = end.saturating_sub(o.from);
+            let up = o.from + rel.div_ceil(g) * g;
+            end = end.max(up.min(next).min(o.to));
+        }
         if on < o.from {
             continue;
         }
@@ -509,11 +609,15 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
             let bar_end = bar0 + m.bar;
             let end = e.min(bar_end);
             if chord.is_none() && p == bar0 && end == bar_end {
-                v.items.push(Item { tick: p, dur: m.bar, value: Value { base: 1, dots: 0 }, heads: vec![], stem_up: true, beam: None, triplet: false, full_bar: true, bar });
+                v.items.push(Item { tick: p, dur: m.bar, value: Value { base: 1, dots: 0 }, heads: vec![], stem_up: true, beam: None, triplet: false, full_bar: true, bar, stem_hidden: false });
                 p = end;
                 continue;
             }
-            let parts = decompose(p, end, bar0, m, &triplets, chord.is_none());
+            let synco = chord.is_some_and(|ci| {
+                let f = chords[ci].members.iter().map(|&i| notes[i].synco).find(|&x| x != 0).unwrap_or(0);
+                if f == 0 { o.syncopation } else { f > 0 }
+            });
+            let parts = decompose(p, end, bar0, m, &triplets, chord.is_none(), synco);
             let last_of_note = end == e;
             let n_parts = parts.len();
             for (k, (tick, dur, value, triplet)) in parts.into_iter().enumerate() {
@@ -523,22 +627,65 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
                         let tie = !(last_of_note && k + 1 == n_parts);
                         let mut hs: Vec<Head> = chords[ci].members.iter().map(|&i| {
                             let n = notes[i];
-                            let sp = o.key.spell(n.pitch);
-                            Head { note: n.index, pitch: n.pitch, spelled: sp, pos: sp.step - clef.bottom_line(), acc: None, tie, shifted: false }
+                            let sp = o.key.spell_pref(n.pitch, n.spell);
+                            let (pos, cross) = if clef == Clef::Percussion { drum_position(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
+                            Head { note: n.index, pitch: n.pitch, spelled: sp, pos, acc: None, tie, shifted: false, tie_dir: if n.tie == 1 || n.tie == -1 { n.tie } else { 0 }, tie_hidden: n.tie == 2, guide: false, cross }
                         }).collect();
                         hs.sort_by_key(|h| h.pos);
                         hs.dedup_by_key(|h| h.pitch);
                         hs
                     }
                 };
-                v.items.push(Item { tick, dur, value, heads, stem_up: true, beam: None, triplet, full_bar: false, bar });
+                v.items.push(Item { tick, dur, value, heads, stem_up: true, beam: None, triplet, full_bar: false, bar, stem_hidden: false });
             }
             p = end;
         }
     }
-    accidentals(&mut v, o.key);
-    stems_and_beams(&mut v, m);
+    if clef != Clef::Percussion {
+        accidentals(&mut v, o.key);
+    }
+    let attr = |i: usize| notes.iter().find(|n| n.index == i).copied().unwrap_or_default();
+    // the per-note accidental modes
+    for it in &mut v.items {
+        for h in &mut it.heads {
+            let a = attr(h.note);
+            match a.acc {
+                1 => h.acc = Some(h.spelled.alter),
+                2 => h.acc = None,
+                3 => {
+                    h.acc = Some(h.spelled.alter);
+                    h.guide = true;
+                }
+                4 if h.spelled.alter != 0 => h.acc = Some(h.spelled.alter),
+                _ => {}
+            }
+        }
+    }
+    let stem_of = |it: &Item| it.heads.iter().map(|h| attr(h.note).stem).find(|&s| s != 0).unwrap_or(0);
+    let beam_of = |it: &Item| it.heads.iter().map(|h| attr(h.note).beam).find(|&s| s != 0).unwrap_or(0);
+    let flags: Vec<(i8, i8)> = v.items.iter().map(|it| (stem_of(it), beam_of(it))).collect();
+    stems_and_beams(&mut v, m, &flags, clef == Clef::Percussion);
     v
+}
+
+/// A drum staff's position (half-spaces up from the bottom line) for a General MIDI drum, and
+/// whether it takes a cross head (Logic's default drum mapping: kick in the bottom space, snare
+/// on the third space, hi-hats and cymbals above the staff in crosses).
+pub fn drum_position(pitch: u8) -> (i32, bool) {
+    match pitch {
+        35 | 36 => (1, false),
+        37 | 38 | 39 | 40 => (5, false),
+        41 | 43 => (2, false),
+        45 | 47 => (6, false),
+        48 | 50 => (7, false),
+        42 | 46 => (9, true),
+        44 => (-1, true),
+        49 | 52 | 55 | 57 => (10, true),
+        51 | 53 | 59 => (8, true),
+        54 | 56 | 69 | 70 | 75 => (9, false),
+        p if p < 35 => (0, false),
+        _ => (4, false),
+    }
 }
 
 /// Accidentals: shown where a note differs from the key signature or from an earlier note on
@@ -571,7 +718,7 @@ fn accidentals(v: &mut Voice, key: Key) {
     }
 }
 
-fn stems_and_beams(v: &mut Voice, m: Metre) {
+fn stems_and_beams(v: &mut Voice, m: Metre, flags: &[(i8, i8)], drums: bool) {
     // beam groups: notes shorter than a quarter, within a beat (a 4/4 half bar of plain eighths
     // as one group, as Logic does), broken by rests
     let unit_of = |it: &Item| -> u32 {
@@ -582,7 +729,7 @@ fn stems_and_beams(v: &mut Voice, m: Metre) {
     let mut cur: Vec<usize> = Vec::new();
     let mut cur_key = (u32::MAX, u32::MAX);
     for (i, it) in v.items.iter().enumerate() {
-        let beamable = !it.is_rest() && it.value.flags() > 0;
+        let beamable = !it.is_rest() && it.value.flags() > 0 && flags.get(i).is_none_or(|f| f.1 >= 0);
         let key = (it.bar, unit_of(it));
         if !beamable || key != cur_key {
             if cur.len() > 1 {
@@ -623,6 +770,29 @@ fn stems_and_beams(v: &mut Voice, m: Metre) {
         }
         groups = merged;
     }
+    // Beam Selected: neighbouring groups (and lone flagged notes) whose notes are all marked
+    // beam into one
+    let marked = |i: usize| flags.get(i).is_some_and(|f| f.1 > 0) && !v.items[i].is_rest() && v.items[i].value.flags() > 0;
+    let mut joined: Vec<Vec<usize>> = Vec::new();
+    let mut i = 0;
+    while i < v.items.len() {
+        if marked(i) {
+            let mut g = vec![i];
+            while i + 1 < v.items.len() && marked(i + 1) {
+                i += 1;
+                g.push(i);
+            }
+            if g.len() > 1 {
+                joined.push(g);
+            }
+        }
+        i += 1;
+    }
+    if !joined.is_empty() {
+        groups.retain(|g| !g.iter().any(|x| joined.iter().any(|j| j.contains(x))));
+        groups.extend(joined);
+        groups.sort_by_key(|g| g[0]);
+    }
     // stems: away from the middle line (down from it), a group by its notes' average
     let dir = |positions: &[i32]| -> bool {
         if positions.is_empty() {
@@ -633,14 +803,25 @@ fn stems_and_beams(v: &mut Voice, m: Metre) {
         // the note furthest from the middle line decides
         (hi - 4).abs() <= (4 - lo).abs() && (hi + lo) < 8 || (hi - 4).abs() < (4 - lo).abs()
     };
-    for it in v.items.iter_mut() {
+    for (k, it) in v.items.iter_mut().enumerate() {
         let ps: Vec<i32> = it.heads.iter().map(|h| h.pos).collect();
-        it.stem_up = dir(&ps);
+        // drums: stems up; Stems ▸ Up / Down / Hide override
+        it.stem_up = drums || dir(&ps);
+        match flags.get(k).map_or(0, |f| f.0) {
+            1 => it.stem_up = true,
+            -1 => it.stem_up = false,
+            2 => it.stem_hidden = true,
+            _ => {}
+        }
     }
     for g in groups {
         let ps: Vec<i32> = g.iter().flat_map(|&i| v.items[i].heads.iter().map(|h| h.pos)).collect();
         let mean = ps.iter().sum::<i32>() as f32 / ps.len().max(1) as f32;
-        let up = mean < 4.0;
+        let forced = g.iter().map(|&i| flags.get(i).map_or(0, |f| f.0)).find(|&s| s == 1 || s == -1);
+        let up = match forced {
+            Some(s) => s > 0,
+            None => drums || mean < 4.0,
+        };
         let b = v.beams.len();
         for &i in &g {
             v.items[i].stem_up = up;
@@ -688,6 +869,173 @@ fn stems_and_beams(v: &mut Voice, m: Metre) {
     }
 }
 
+
+/// Logic's staff styles (Layout ▸ Staff Styles): the staves a part is written on, their clefs,
+/// and the transposition of written notes (a B♭ trumpet is written a tone above sounding).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StaffStyle {
+    pub name: &'static str,
+    /// Clefs top to bottom (two for the grand staff); notes from `split` up go on the first.
+    pub clefs: &'static [Clef],
+    pub split: u8,
+    /// Semitones added to the sounding pitch to write it.
+    pub transpose: i8,
+    /// The clef's octave sign: 1 = 8va, −1 = 8vb.
+    pub octave: i8,
+}
+
+impl StaffStyle {
+    pub const ALL: [StaffStyle; 16] = [
+        StaffStyle { name: "Treble", clefs: &[Clef::Treble], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Treble 8va", clefs: &[Clef::Treble], split: 0, transpose: -12, octave: 1 },
+        StaffStyle { name: "Treble 8vb", clefs: &[Clef::Treble], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "Bass", clefs: &[Clef::Bass], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Bass 8vb", clefs: &[Clef::Bass], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "Piano", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Alto Clef", clefs: &[Clef::Alto], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Tenor Clef", clefs: &[Clef::Tenor], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Drums", clefs: &[Clef::Percussion], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Guitar", clefs: &[Clef::Treble], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "Bass Guitar", clefs: &[Clef::Bass], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "B♭ Trumpet", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
+        StaffStyle { name: "B♭ Clarinet", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
+        StaffStyle { name: "E♭ Alto Sax", clefs: &[Clef::Treble], split: 0, transpose: 9, octave: 0 },
+        StaffStyle { name: "B♭ Tenor Sax", clefs: &[Clef::Treble], split: 0, transpose: 14, octave: 0 },
+        StaffStyle { name: "F Horn", clefs: &[Clef::Treble], split: 0, transpose: 7, octave: 0 },
+    ];
+
+    pub fn by_name(name: &str) -> Option<StaffStyle> {
+        StaffStyle::ALL.iter().copied().find(|s| s.name == name)
+    }
+
+    /// Logic's automatic choice (by the notes' range, a piano part on the grand staff).
+    pub fn auto(pitches: &[u8], piano: bool) -> StaffStyle {
+        match staves_for(pitches, piano) {
+            Staves::Treble => StaffStyle::ALL[0],
+            Staves::Bass => StaffStyle::ALL[3],
+            Staves::Piano => StaffStyle::ALL[5],
+        }
+    }
+
+    /// The key a transposing style writes in (concert key moved by the transposition).
+    pub fn written_key(self, key: Key) -> Key {
+        if self.transpose == 0 || self.clefs[0] == Clef::Percussion {
+            return key;
+        }
+        // each semitone up is seven fifths up; keep the signature within seven
+        let mut f = key.fifths as i32 + 7 * self.transpose as i32;
+        f = f.rem_euclid(12);
+        if f > 6 {
+            f -= 12;
+        }
+        Key { fifths: f as i8 }
+    }
+
+    /// Which staff (index into `clefs`) a sounding pitch goes on.
+    pub fn staff_of(self, pitch: u8) -> usize {
+        if self.clefs.len() > 1 && pitch < self.split { 1 } else { 0 }
+    }
+
+    /// The pitch as written.
+    pub fn written(self, pitch: u8) -> u8 {
+        if self.clefs[0] == Clef::Percussion {
+            return pitch;
+        }
+        (pitch as i32 + self.transpose as i32).clamp(0, 127) as u8
+    }
+}
+
+/// Voice separation (Logic's polyphonic staff styles, Explode Polyphony): notes that start
+/// while another, started earlier, still sounds go to a second voice; the upper voice keeps
+/// the higher line. Returns each note's voice, 0 (upper, stems up) or 1 (lower, stems down).
+pub fn split_voices(notes: &[NoteIn]) -> Vec<u8> {
+    use std::collections::BTreeMap;
+    // per onset, sub-chords by where they end
+    let mut onsets: BTreeMap<u32, BTreeMap<u32, Vec<usize>>> = BTreeMap::new();
+    for (i, n) in notes.iter().enumerate() {
+        onsets.entry(n.pos).or_default().entry(n.pos + n.len.max(1)).or_default().push(i);
+    }
+    let mut voice = vec![0u8; notes.len()];
+    let mut ends = [0u32; 2];
+    for (pos, subs) in onsets {
+        let top = subs.iter().max_by_key(|(_, m)| m.iter().map(|&i| notes[i].pitch).max()).map(|(e, _)| *e);
+        for (end, members) in subs {
+            let v = if Some(end) == top && ends[0] <= pos {
+                0
+            } else if ends[1] <= pos || Some(end) != top {
+                1
+            } else {
+                0
+            };
+            for &i in &members {
+                voice[i] = v;
+            }
+            ends[v as usize] = ends[v as usize].max(end);
+        }
+    }
+    // a lower voice of single stray notes, nothing overlapping at all: one voice after all
+    if !notes.iter().enumerate().any(|(i, n)| voice[i] == 1 && notes.iter().enumerate().any(|(j, m)| voice[j] == 0 && m.pos < n.pos + n.len && n.pos < m.pos + m.len)) {
+        return vec![0; notes.len()];
+    }
+    voice
+}
+
+/// Wrapped and Page views: bars into lines (systems). Each bar asks for `widths[k]` points; a
+/// line holds bars while they fit `line_w` (at least one), and the bars of a line are then
+/// stretched to fill it. Returns (first bar, bars on the line, scale) per line.
+pub fn systems(widths: &[f32], line_w: f32) -> Vec<(usize, usize, f32)> {
+    let mut out = Vec::new();
+    let mut k = 0;
+    while k < widths.len() {
+        let mut w = 0.0;
+        let mut n = 0;
+        while k + n < widths.len() && (n == 0 || w + widths[k + n] <= line_w) {
+            w += widths[k + n];
+            n += 1;
+        }
+        // the last line isn't stretched more than half again (Logic's ragged last line)
+        let last = k + n == widths.len();
+        let scale = if w > 0.0 { (line_w / w).min(if last { 1.5 } else { f32::MAX }) } else { 1.0 };
+        out.push((k, n, scale));
+        k += n;
+    }
+    out
+}
+
+/// The width a bar needs: a head room, then per item by its value (shorter values closer).
+pub fn bar_width(v: &Voice, bar: u32, space: f32) -> f32 {
+    let items = v.items.iter().filter(|it| it.bar == bar);
+    let mut w = 2.0 * space;
+    for it in items {
+        let base = match it.value.base {
+            1 if it.full_bar => 6.0,
+            1 => 5.0,
+            2 => 4.0,
+            4 => 3.2,
+            8 => 2.6,
+            _ => 2.2,
+        };
+        w += base * space + it.heads.iter().filter(|h| h.acc.is_some()).count().min(1) as f32 * space;
+    }
+    w.max(12.0 * space)
+}
+
+/// Pages for the Page view: lines of `line_h` on pages of `page_h` (after a title block on the
+/// first). Returns (page, y on the page) per line.
+pub fn paginate(lines: usize, line_h: f32, page_h: f32, top: f32, title: f32) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    let (mut page, mut y) = (0usize, top + title);
+    for _ in 0..lines {
+        if y + line_h > page_h - top && y > top + if page == 0 { title } else { 0.0 } {
+            page += 1;
+            y = top;
+        }
+        out.push((page, y));
+        y += line_h;
+    }
+    out
+}
+
 /// Splits a part across a grand staff at middle C.
 pub fn split_piano(notes: &[NoteIn]) -> (Vec<NoteIn>, Vec<NoteIn>) {
     notes.iter().partition(|n| n.pitch >= 60)
@@ -698,10 +1046,10 @@ mod tests {
     use super::*;
 
     fn opts(bars: u32) -> Options {
-        Options { sig: (4, 4), key: Key::default(), quant: Quant::default(), from: 0, to: bars * 3840 }
+        Options::new((4, 4), Key::default(), Quant::default(), 0, bars * 3840)
     }
     fn n(i: usize, pitch: u8, pos: u32, len: u32) -> NoteIn {
-        NoteIn { index: i, pitch, pos, len }
+        NoteIn::new(i, pitch, pos, len)
     }
     fn shape(v: &Voice) -> Vec<String> {
         v.items.iter().map(|it| {
@@ -865,5 +1213,128 @@ mod tests {
         assert_eq!(staves_for(&[36, 40, 43], false), Staves::Bass);
         assert_eq!(staves_for(&[36, 48, 64, 72], false), Staves::Piano);
         assert_eq!(staves_for(&[52, 64], true), Staves::Piano);
+    }
+
+    #[test]
+    fn fixed_positions() {
+        let v = display_positions(&[n(0, 64, 950, 1000), n(1, 67, 10, 230)], (4, 4), Quant::default(), 0);
+        assert_eq!(v, [(0, 960, 1920), (1, 0, 240)]);
+    }
+
+    #[test]
+    fn enharmonic_shift() {
+        let c = Key::default();
+        assert_eq!(c.spell_pref(63, 1).name(), "D♯");
+        assert_eq!(c.spell_pref(61, -1).name(), "D♭");
+        assert_eq!(c.spell_pref(61, 1).name(), "C♯");
+        // a natural shifted: E as F♭ needs a flat on F
+        assert_eq!(c.spell_pref(64, -1).name(), "F♭");
+        assert_eq!(c.spell_pref(60, 1).name(), "B♯");
+        assert_eq!(c.spell_pref(60, 1).step, 34);
+        let v = engrave(&[NoteIn { spell: 1, ..n(0, 63, 0, 960) }], Clef::Treble, &opts(1));
+        assert_eq!(v.items[0].heads[0].spelled.name(), "D♯");
+        assert_eq!(v.items[0].heads[0].acc, Some(1));
+    }
+
+    #[test]
+    fn stem_and_beam_overrides() {
+        // a high note: stem down by default, Stems ▸ Up forces it
+        let v = engrave(&[NoteIn { stem: 1, ..n(0, 79, 0, 960) }], Clef::Treble, &opts(1));
+        assert!(v.items[0].stem_up);
+        let v = engrave(&[NoteIn { stem: 2, ..n(0, 79, 0, 960) }], Clef::Treble, &opts(1));
+        assert!(v.items[0].stem_hidden);
+        // Unbeam: two eighths no longer share a beam
+        let e = [NoteIn { beam: -1, ..n(0, 67, 0, 480) }, NoteIn { beam: -1, ..n(1, 67, 480, 480) }];
+        assert!(engrave(&e, Clef::Treble, &opts(1)).beams.is_empty());
+        // Beam Selected across the beat: four eighths over two beats become one beam (3/4)
+        let mut o = opts(1);
+        o.sig = (3, 4);
+        o.to = 2880;
+        let e: Vec<NoteIn> = (0..4).map(|k| NoteIn { beam: 1, ..n(k, 67, 480 + k as u32 * 480, 480) }).collect();
+        let v = engrave(&e, Clef::Treble, &o);
+        assert_eq!(v.beams.len(), 1);
+        assert_eq!(v.beams[0].items.len(), 4);
+    }
+
+    #[test]
+    fn accidental_modes() {
+        // Force on a note the key already gives: a natural shown; Hide drops a needed one
+        let v = engrave(&[NoteIn { acc: 1, ..n(0, 60, 0, 960) }], Clef::Treble, &opts(1));
+        assert_eq!(v.items[0].heads[0].acc, Some(0));
+        let v = engrave(&[NoteIn { acc: 2, ..n(0, 61, 0, 960) }], Clef::Treble, &opts(1));
+        assert_eq!(v.items[0].heads[0].acc, None);
+        let v = engrave(&[NoteIn { acc: 3, ..n(0, 60, 0, 960) }], Clef::Treble, &opts(1));
+        assert!(v.items[0].heads[0].guide);
+    }
+
+    #[test]
+    fn interpretation_and_syncopation() {
+        // a staccato quarter (100 ticks): sixteenth and rests plain, an eighth interpreted
+        let short = [n(0, 67, 0, 100)];
+        assert_eq!(shape(&engrave(&short, Clef::Treble, &opts(1)))[0], "n16");
+        let mut o = opts(1);
+        o.interpretation = true;
+        assert_eq!(shape(&engrave(&short, Clef::Treble, &o))[0], "n8");
+        // eighth, quarter, eighth: the quarter across beat 2 tied, or one value syncopated
+        let s = [n(0, 67, 0, 480), n(1, 67, 480, 960), n(2, 67, 1440, 480)];
+        assert_eq!(&shape(&engrave(&s, Clef::Treble, &opts(1)))[..4], ["n8", "n8~", "n8", "n8"]);
+        let mut o = opts(1);
+        o.syncopation = true;
+        assert_eq!(&shape(&engrave(&s, Clef::Treble, &o))[..3], ["n8", "n4", "n8"]);
+    }
+
+    #[test]
+    fn drum_staff() {
+        let v = engrave(&[n(0, 36, 0, 240), n(1, 42, 0, 240), n(2, 38, 960, 240)], Clef::Percussion, &opts(1));
+        let first = &v.items[0];
+        assert_eq!(first.heads.iter().map(|h| (h.pos, h.cross)).collect::<Vec<_>>(), [(1, false), (9, true)]);
+        assert!(first.stem_up);
+        assert!(v.items.iter().all(|it| it.heads.iter().all(|h| h.acc.is_none())));
+    }
+
+    #[test]
+    fn staff_styles() {
+        let t = StaffStyle::by_name("B♭ Trumpet").unwrap();
+        assert_eq!(t.written(60), 62);
+        // concert E♭ major is written F major for a B♭ instrument
+        assert_eq!(t.written_key(Key::parse("Eb major")).fifths, -1);
+        let sax = StaffStyle::by_name("E♭ Alto Sax").unwrap();
+        assert_eq!(sax.written_key(Key::default()).fifths, 3);
+        let p = StaffStyle::by_name("Piano").unwrap();
+        assert_eq!((p.staff_of(60), p.staff_of(59)), (0, 1));
+        assert_eq!(StaffStyle::auto(&[36, 40], false).name, "Bass");
+        // the alto clef's middle line is middle C
+        assert_eq!(pitch_at(Clef::Alto, 4, Key::default()), 60);
+        assert_eq!(pitch_at(Clef::Tenor, 6, Key::default()), 60);
+    }
+
+    #[test]
+    fn voices() {
+        // a held whole note under moving quarters: two voices, the melody on top
+        let notes = [n(0, 72, 0, 960), n(1, 60, 0, 3840), n(2, 74, 960, 960), n(3, 76, 1920, 960)];
+        assert_eq!(split_voices(&notes), [0, 1, 0, 0]);
+        // plain melody: one voice
+        let m: Vec<NoteIn> = (0..4).map(|k| n(k, 60 + k as u8, k as u32 * 960, 960)).collect();
+        assert_eq!(split_voices(&m), [0, 0, 0, 0]);
+        // a chord: one voice
+        assert_eq!(split_voices(&[n(0, 60, 0, 960), n(1, 64, 0, 960)]), [0, 0]);
+    }
+
+    #[test]
+    fn line_and_page_layout() {
+        let l = systems(&[100.0; 10], 350.0);
+        assert_eq!(l.iter().map(|x| x.1).collect::<Vec<_>>(), [3, 3, 3, 1]);
+        assert!((l[0].2 - 350.0 / 300.0).abs() < 1e-4);
+        assert!((l[3].2 - 1.5).abs() < 1e-4);
+        // a bar wider than the line still gets a line of its own
+        assert_eq!(systems(&[500.0, 50.0], 300.0).len(), 2);
+        let pages = paginate(10, 100.0, 1000.0, 50.0, 100.0);
+        assert_eq!(pages[0], (0, 150.0));
+        assert_eq!(pages.iter().filter(|p| p.0 == 0).count(), 8);
+        assert_eq!(pages[8], (1, 50.0));
+        // busy bars ask for more room
+        let busy = engrave(&(0..16).map(|k| n(k, 67, k as u32 * 240, 240)).collect::<Vec<_>>(), Clef::Treble, &opts(1));
+        let empty = engrave(&[], Clef::Treble, &opts(1));
+        assert!(bar_width(&busy, 0, 8.0) > bar_width(&empty, 0, 8.0));
     }
 }
