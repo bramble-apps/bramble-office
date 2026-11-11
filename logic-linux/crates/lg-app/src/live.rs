@@ -111,6 +111,9 @@ pub fn note(app: &mut App, pitch: u8, velocity: u8) {
             e.live(t, pitch, velocity);
         }
     }
+    if velocity > 0 {
+        crate::instwin::note_played(app, pitch);
+    }
     let pos = app.position();
     if velocity > 0 {
         app.live.held.insert(pitch, (pos, velocity));

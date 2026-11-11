@@ -433,7 +433,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         }
         let resp = ui.interact(ir, id.with("input"), Sense::click());
         if inst_track {
-            if resp.on_hover_text("Open the instrument's window").clicked() {
+            crate::instwin::slot_menu(app, &resp, i);
+            if resp.on_hover_text("Open the instrument's window (right-click: choose the instrument)").clicked() {
                 app.plugin_window = Some(i);
             }
         } else if kind == Some(TrackKind::Audio) {

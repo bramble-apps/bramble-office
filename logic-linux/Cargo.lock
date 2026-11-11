@@ -1845,6 +1845,7 @@ name = "lg-synth"
 version = "0.4.2"
 dependencies = [
  "lg-dsp",
+ "lg-fx",
  "lg-sounds",
  "rustysynth",
  "symphonia",

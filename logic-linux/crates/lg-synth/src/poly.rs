@@ -69,6 +69,8 @@ pub struct Poly<V> {
     counter: u64,
     /// When true a new note on a key that is still sounding fades the old voice out.
     pub retrigger_kills: bool,
+    /// The next note-ons add voices to the key (layers, unison) instead of replacing it.
+    pub stacking: bool,
 }
 
 impl<V> Poly<V> {
@@ -80,6 +82,7 @@ impl<V> Poly<V> {
             max,
             counter: 0,
             retrigger_kills: true,
+            stacking: false,
         }
     }
 
@@ -95,6 +98,9 @@ impl<V> Poly<V> {
         self.counter += 1;
         // A key still sounding: let the old voice go.
         for i in 0..self.voices.len() {
+            if self.stacking {
+                break;
+            }
             if self.voices[i].active() && self.slots[i].note == note && !self.slots[i].killed {
                 if self.retrigger_kills {
                     self.voices[i].kill(ctl.rate);

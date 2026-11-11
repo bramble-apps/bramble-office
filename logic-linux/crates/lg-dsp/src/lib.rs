@@ -83,6 +83,16 @@ pub trait Instrument: Plugin {
     fn pitch_bend(&mut self, _value: i16) {}
     /// Adds this block's sound into `left` and `right` (same length).
     fn render(&mut self, left: &mut [f32], right: &mut [f32]);
+    /// The project tempo (tempo-synced LFOs, arpeggiators, sequencers).
+    fn set_tempo(&mut self, _bpm: f64) {}
+    /// The instrument itself, for editors that change more than parameters (a Sampler's zones,
+    /// a Drum Machine Designer's pads): downcast to the concrete type.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        None
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
 }
 
 /// An audio effect: processes the block in place.
