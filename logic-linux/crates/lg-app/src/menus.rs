@@ -224,6 +224,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     // (the Record menu's choice submenus: their items share names)
+    if !it.children.is_empty() && crate::movie::menu_ui(app, ui, &it.label) {
+        return;
+    }
     if crate::arranging::menu_ui(app, ui, it) || crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
         return;
     }
@@ -255,6 +258,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 }
 
 fn checked(app: &App, label: &str) -> bool {
+    if let Some(c) = crate::envhub::checked(app, label) {
+        return c;
+    }
     if let Some(c) = crate::stopbutton::checked(app, label) {
         return c;
     }

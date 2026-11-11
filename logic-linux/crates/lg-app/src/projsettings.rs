@@ -53,6 +53,12 @@ const ROWS: &[Row] = &[
     Row("Synchronization", "General", "Bar Position 1 1 1 1 plays at SMPTE:", Kind::Text, "01:00:00:00.00"),
     Row("Synchronization", "General", "Enable separate SMPTE view offset", Kind::Check, "0"),
     Row("Synchronization", "Audio", "Core Audio:", Kind::Popup(&["MTC Continuous", "MTC Trigger + Auto Speed Detection", "MTC Trigger", "External or Free"]), "MTC Continuous"),
+    Row("Synchronization", "General", "Auto enable External Sync", Kind::Check, "0"),
+    Row("Synchronization", "MIDI", "Transmit MIDI Clock", Kind::Check, "0"),
+    Row("Synchronization", "MIDI", "MIDI Clock Destination:", Kind::Text, "All"),
+    Row("Synchronization", "MIDI", "Clock Mode:", Kind::Popup(&["Pattern", "Song - SPP at Play Start and Cycle Jump", "Song - SPP at Play Start, Cycle Jump and while Playing (scrubbing)"]), "Song - SPP at Play Start and Cycle Jump"),
+    Row("Synchronization", "MIDI", "Transmit MTC", Kind::Check, "0"),
+    Row("Synchronization", "MIDI", "MTC Destination:", Kind::Text, "All"),
     Row("Synchronization", "MIDI", "Transmit MIDI Machine Control (MMC)", Kind::Check, "0"),
     Row("Synchronization", "MIDI", "Listen to MIDI Machine Control (MMC) input", Kind::Check, "0"),
     Row("Metronome", "", "Simple mode", Kind::Check, "1"),
@@ -513,11 +519,14 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
             });
         }
         let note = match (pane.as_str(), sub.as_str()) {
-            ("Synchronization", "General") => "Studio runs on its own clock (Internal): Ableton Link, MTC and Manual aren't available. The frame rate and bar 1's SMPTE time set the control bar's time display.",
-            ("Synchronization", _) | ("Audio", "Channel Strips") => "Studio has no external sync or Environment: these are kept with the project only.",
+            ("Synchronization", "General") => "Sync Mode MTC: with external sync on (Toggle Sync intern/extern) Studio follows incoming MIDI Time Code. Ableton Link and Manual (Tempo Interpreter) aren't available. The frame rate and bar 1's SMPTE time set MTC, MMC and the time display.",
+            ("Synchronization", "MIDI") => "Destinations: a MIDI output's name, All or Off (Bramble Studio Virtual Out reaches other apps). MIDI Clock and MTC go out while playing; MMC is sent on play, stop, record and locate.",
+            ("Synchronization", _) => "Studio has no word clock: Core Audio's choice is kept with the project only.",
+            ("Audio", "Channel Strips") => "Automatic management keeps one channel strip object per track on the Environment's Mixer layer (Window ▸ Open MIDI Environment).",
             ("Metronome", _) => "Klopfgeist: Studio's own click (bar, beat and division pitches, Tone, Volume).",
             ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning isn't built (plays equal tempered).",
-            ("MIDI", "Chase") | ("MIDI", "Clip Length") => "Kept with the project; Studio's instruments don't chase or reset these yet.",
+            ("MIDI", "Chase") => "Notes: notes already under way at a play start or locate sound from there. Studio's regions carry no program, pitch bend or controller events to chase.",
+            ("MIDI", "Clip Length") => "Kept with the project; Studio's instruments don't reset these yet.",
             ("Audio", "General") => "Studio's mixer pans with its own law: the Pan Law choice is kept with the project only.",
             _ => "",
         };

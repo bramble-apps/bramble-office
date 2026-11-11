@@ -112,6 +112,7 @@ pub fn after_open(app: &mut App, path: &Path) {
     crate::hosting::after_open(app);
     crate::projsettings::after_open(app);
     crate::arranging::after_open(app);
+    crate::envhub::after_open(app);
 }
 
 /// The app's side of what the project holds: markers, arrangement, audio regions' extras.
@@ -231,6 +232,7 @@ pub fn give_to_project(app: &mut App) -> Vec<String> {
 /// ProjectData goes into its Project File Backups first.
 pub fn save(app: &mut App) {
     crate::projsettings::save(app);
+    crate::envhub::save(app);
     if app.project.is_none() || app.file.is_none() || app.demo {
         app.tell(if app.demo { "The demo song can't be saved: open a Logic project (⌘O)" } else { "A project made here can't be saved as a Logic file yet: start from one of My Templates (Save as Template…) or open a .logicx" });
         return;

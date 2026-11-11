@@ -173,6 +173,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // ---- modes: Low Latency, Tuner, Solo | Count-in, Metronome
     x = lcd.max.x + 12.0;
     let right_w = 4.0 * BTN + 2.0 * PAD;
+    // the Sync button (Customize Control Bar ▸ Modes and Functions ▸ Sync)
+    if app.hub.sync.show_button {
+        let (b, c) = run(x, cy, &[BTN]);
+        caps.push(c);
+        crate::syncmidi::sync_button(app, ui, b[0]);
+        x = c.max.x + 8.0;
+    }
     let room = bar.max.x - 10.0 - right_w - x;
     if room > 3.0 * BTN + 2.0 * BTN + 30.0 {
         let (b, c) = run(x, cy, &[BTN; 3]);

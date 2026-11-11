@@ -162,6 +162,8 @@ pub struct App {
     pub logic_settings: crate::settings::Values,
     /// The Key Commands window and the key command set in use (keycmds.rs).
     pub keycmds: crate::keycmds::State,
+    /// The MIDI Environment, control surfaces, sync and the movie (envhub.rs).
+    pub hub: crate::envhub::Hub,
     /// The open project's Project Settings and their window's state (projsettings.rs).
     pub proj: crate::projsettings::Values,
     pub ps_ui: crate::projsettings::Ui,
@@ -380,6 +382,7 @@ impl App {
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
             keycmds: crate::keycmds::State::load(),
+            hub: Default::default(),
             proj: Default::default(),
             ps_ui: Default::default(),
             global_tracks: false,
@@ -1238,6 +1241,10 @@ impl App {
             if crate::keycmds::key_press(self, key, m, physical) {
                 continue;
             }
+            // the Environment and Controller Assignments windows' own keys
+            if crate::envhub::key_press(self, ctx, key, m) {
+                continue;
+            }
             // the T menu open: a letter picks the tool (T again: the Pointer), Esc closes it
             if self.tool_menu_open {
                 self.tool_menu_open = false;
@@ -1296,6 +1303,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::envhub::command(self, ctx, name) {
+            return true;
+        }
         if crate::instwin::command(self, ctx, name) || crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
             return true;
         }

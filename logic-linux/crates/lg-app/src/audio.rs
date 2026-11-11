@@ -183,6 +183,11 @@ pub struct Engine {
     plan: lg_dsp::routing::Plan,
     edge_delays: Vec<Vec<lg_dsp::routing::StereoDelay>>,
     sounding: Vec<(usize, u8, u8, u32)>,
+    /// Project Settings ▸ MIDI ▸ Chase ▸ Notes: notes already under way at a play start or
+    /// locate start sounding (syncmidi.rs sets it); and whether the next block must chase.
+    pub chase_notes: bool,
+    chase_due: bool,
+    was_playing: bool,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
     /// Recording: the input, input monitoring, the count-in, the capture (recording.rs).
@@ -212,7 +217,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default() }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -508,6 +513,7 @@ impl Engine {
     pub fn locate(&mut self, ticks: f64) {
         self.all_off();
         self.pos = ticks.max(0.0);
+        self.chase_due = true;
     }
 
     fn audible(&self, i: usize) -> bool {
@@ -535,6 +541,12 @@ impl Engine {
         // recording: the input for this block; a count-in before bar 1 holds the playhead
         let input = self.rec.input(frames);
         let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
+        let was = self.was_playing;
+        self.was_playing = self.playing && !held;
+        if !self.playing {
+            self.chase_due = false;
+        }
+
         // the MIDI FX and the regions' controllers for this block
         if !self.fx.chains.is_empty() || self.fx.controls.iter().any(|c| !c.is_empty()) {
             let audible: Vec<bool> = (0..self.tracks.len()).map(|i| self.audible(i)).collect();
@@ -564,6 +576,25 @@ impl Engine {
                     v.releasing = true;
                 }
             }
+            // chase: notes begun before a play start or locate sound from here (Chase ▸ Notes)
+            if (self.chase_due || !was) && self.chase_notes {
+                for i in 0..self.tracks.len() {
+                    if !self.audible(i) {
+                        continue;
+                    }
+                    let ch = self.tracks[i].channel;
+                    let under: Vec<(u32, u32, u8, u8)> = self.tracks[i].notes.iter().filter(|n| (n.0 as f64) < from && (n.1 as f64) > from + 1.0).copied().collect();
+                    for (_, e, pitch, vel) in under {
+                        if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                            ins.note_on(pitch, vel);
+                        } else if let Some(Some(sy)) = self.synths.get_mut(i) {
+                            sy.note_on(ch as i32, pitch as i32, vel as i32);
+                        }
+                        self.sounding.push((i, ch, pitch, e));
+                    }
+                }
+            }
+            self.chase_due = false;
             // notes starting in this block
             for i in 0..self.tracks.len() {
                 if !self.audible(i) || self.fx.active(i) {

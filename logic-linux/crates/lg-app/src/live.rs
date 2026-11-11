@@ -15,8 +15,9 @@ use lg_core::events::Note;
 use crate::app::App;
 use crate::look;
 
-/// A message from a MIDI input port: (status, data1, data2).
-pub type MidiMsg = (u8, u8, u8);
+/// A whole MIDI message and the input it came from (index in `input_names`; usize::MAX: the
+/// virtual input).
+pub type RawMsg = (usize, Vec<u8>);
 
 pub struct Live {
     pub typing_open: bool,
@@ -34,7 +35,7 @@ pub struct Live {
     pub all_ports: Vec<String>,
     #[cfg(unix)]
     _virtual: Option<midir::MidiInputConnection<()>>,
-    rx: Option<mpsc::Receiver<MidiMsg>>,
+    rx: Option<mpsc::Receiver<RawMsg>>,
     sustain: bool,
 }
 
@@ -61,9 +62,12 @@ impl Live {
             if crate::prefs::virtual_in(&virt) {
                 if let Ok(input) = midir::MidiInput::new("Bramble Studio") {
                     let (tx, ctx) = (tx.clone(), ctx.clone());
+                    let mut input = input;
+                    // (SysEx and time code too: MTC, MMC, control surfaces)
+                    input.ignore(midir::Ignore::ActiveSense);
                     self._virtual = input.create_virtual("Bramble Studio Virtual In", move |_, msg, _| {
-                        if msg.len() >= 2 {
-                            let _ = tx.send((msg[0], msg[1], msg.get(2).copied().unwrap_or(0)));
+                        if raw_wanted(msg) {
+                            let _ = tx.send((usize::MAX, msg.to_vec()));
                             ctx.request_repaint();
                         }
                     }, ()).ok();
@@ -72,7 +76,8 @@ impl Live {
         }
         let Ok(probe) = midir::MidiInput::new("Bramble Studio") else { return };
         for port in probe.ports() {
-            let Ok(input) = midir::MidiInput::new("Bramble Studio") else { continue };
+            let Ok(mut input) = midir::MidiInput::new("Bramble Studio") else { continue };
+            input.ignore(midir::Ignore::ActiveSense);
             let name = input.port_name(&port).unwrap_or_default();
             // (ALSA's own "Midi Through" port only echoes)
             if name.contains("Midi Through") || name.contains("Bramble Studio Virtual In") {
@@ -85,9 +90,10 @@ impl Live {
             }
             let tx = tx.clone();
             let ctx = ctx.clone();
+            let index = names.len();
             if let Ok(c) = input.connect(&port, "bramble-studio-in", move |_, msg, _| {
-                if msg.len() >= 2 {
-                    let _ = tx.send((msg[0], msg[1], msg.get(2).copied().unwrap_or(0)));
+                if raw_wanted(msg) {
+                    let _ = tx.send((index, msg.to_vec()));
                     ctx.request_repaint();
                 }
             }, ()) {
@@ -100,6 +106,18 @@ impl Live {
         self.input_names = names;
         self.all_ports = all;
         self.rx = Some(rx);
+    }
+}
+
+/// Messages worth passing on: channel messages, SysEx (MMC, MTC full frames, control surfaces),
+/// MTC quarter frames, Song Position (not clock ticks or active sensing: Logic can't receive
+/// MIDI Clock).
+fn raw_wanted(msg: &[u8]) -> bool {
+    match msg.first() {
+        Some(&s) if s < 0xF0 => msg.len() >= 2,
+        Some(0xF0) | Some(0xF1) | Some(0xF2) => true,
+        Some(0xFA) | Some(0xFB) | Some(0xFC) => true,
+        _ => false,
     }
 }
 
@@ -164,16 +182,38 @@ pub fn note(app: &mut App, pitch: u8, velocity: u8) {
 /// Each frame: MIDI messages in, and Musical Typing's keys when its window is open. Returns the
 /// keys it used (so they don't also run key commands).
 pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
-    let msgs: Vec<MidiMsg> = app.live.rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
+    let raw: Vec<RawMsg> = app.live.rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
     let t = app.selected_track.unwrap_or(0);
-    for (status, a, b) in msgs {
+    for (port, bytes) in raw {
+        // control surfaces, controller assignments, MTC / MMC: taken before the Environment
+        // (remote control events aren't passed on or recorded)
+        if crate::envhub::midi_raw(app, ctx, port, &bytes) {
+            continue;
+        }
+        let (status, a, b) = (bytes[0], bytes.get(1).copied().unwrap_or(0), bytes.get(2).copied().unwrap_or(0));
+        if status >= 0xF0 {
+            continue;
+        }
         // (a controller message learned in the Key Commands window runs its command)
         if crate::keycmds::midi_in(app, ctx, status, a, b) {
             continue;
         }
+        // the MIDI Environment: Physical Input → … → Sequencer Input (and anything else cabled)
+        crate::envwin::physical_in(app, ctx, port, status, a, b);
+    }
+    crate::envwin::tick(app, ctx);
+    keys_frame(app, ctx, t)
+}
+
+/// What reaches the Environment's Sequencer Input: the selected (or record-enabled) track plays
+/// and records it.
+pub fn sequencer_in(app: &mut App, ctx: &egui::Context, status: u8, a: u8, b: u8) {
+    let t = app.selected_track.unwrap_or(0);
+    let _ = ctx;
+    {
         // Project Settings ▸ MIDI ▸ Input Filter
         if !crate::projsettings::input_passes(&app.proj, status) {
-            continue;
+            return;
         }
         // MIDI ▸ General: CC 7 / 10 move the track's fader and pan
         if status & 0xF0 == 0xB0 && (a == 7 || a == 10) && crate::projsettings::cc_moves_strip(&app.proj) {
@@ -185,7 +225,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
                 }
                 app.sync_mix();
             }
-            continue;
+            return;
         }
         match status & 0xF0 {
             0x90 => note(app, a, b),
@@ -193,7 +233,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
             0xB0 => {
                 // (a controller learned or assigned to a Smart Control moves it)
                 if a != 64 && crate::smartcontrols::midi_cc(app, a, b) {
-                    continue;
+                    return;
                 }
                 if a == 64 {
                     let on = b >= 64;
@@ -214,6 +254,9 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
             _ => {}
         }
     }
+}
+
+fn keys_frame(app: &mut App, ctx: &egui::Context, t: usize) -> Vec<egui::Key> {
     let mut used = Vec::new();
     if !app.live.typing_open || ctx.egui_wants_keyboard_input() {
         return used;

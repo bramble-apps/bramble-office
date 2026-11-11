@@ -264,6 +264,11 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
                     ui.end_row();
                 }
             });
+            // Modes and Functions: Sync (syncmidi.rs; hidden by default)
+            ui.horizontal(|ui| {
+                ui.label("Modes and Functions:");
+                ui.checkbox(&mut app.hub.sync.show_button, "Sync");
+            });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button("Apply Defaults").clicked() {
