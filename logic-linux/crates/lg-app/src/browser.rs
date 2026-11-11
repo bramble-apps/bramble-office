@@ -1687,6 +1687,7 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             p.rect_filled(m, 3.0, mark_color(it));
             let glyph = match it.kind {
                 Kind::Patch if it.loop_type == LoopType::Audio => ph::FADERS,
+                Kind::Patch if it.category == "Drums & Percussion" => crate::glyphs::br::DRUM,
                 Kind::Patch => ph::PIANO_KEYS,
                 Kind::Loop => ph::REPEAT,
                 Kind::OneShot => ph::WAVEFORM,
@@ -2300,6 +2301,7 @@ fn soundfont_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             }
             let m = Rect::from_center_size(pos2(r.min.x + 24.0, r.center().y), vec2(17.0, 13.0));
             p.rect_filled(m, 3.0, if *bank == 128 { Color32::from_rgb(0xe3, 0xb3, 0x2b) } else { Color32::from_rgb(0x9b, 0x6c, 0xe6) });
+            crate::glyphs::paint(&p, m, if *bank == 128 { crate::glyphs::br::DRUM } else { ph::PIANO_KEYS }, 10.0, Color32::from_black_alpha(170));
             p.with_clip_rect(r).text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, name.trim(), look::regular(13.0), look::text());
             if resp.clicked() {
                 pick = Some((*prog, name.trim().to_string()));

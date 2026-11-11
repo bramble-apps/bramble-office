@@ -35,6 +35,11 @@
   "feature": "App icon: the gold record (data/icons, installed with the menu shortcut); the About window (record, version, credits, website)"
  },
  {
+  "area": "Look and suite parity",
+  "status": "Partial",
+  "feature": "Icons: every icon Studio drew by hand is now a glyph of the Bramble Icons font (Phosphor + Tabler at one line weight, plus Studio's own tuning fork, drum, MIDI port, Flex and Fade tools in tool/icons): control bar, transport, modes, right panes, track headers (keys, drums, guitar / bass, synth, strings, microphone or waveform, picked from the track's name and patch), tool menus, local bars, Settings tabs, New Track cards, Mixer / plug-in bypass, window buttons; filled symbols for lit buttons. Checked headless, dark and light. [ ] Logic's own pictures (Assign Track Icon\u2026, its icon set) aren't there; no bass-guitar or violin glyph (guitar and notes stand in)"
+ },
+ {
   "area": "Main window",
   "status": "Partial",
   "feature": "Control bar as Logic 13's: view buttons, transport (Stop / Go to Beginning with its Stop Button Options, Play, Record, Cycle; Capture as Recording, Replace and Autopunch when ticked in Customize Control Bar and Display\u2026), LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner (the Tuner window: the input's note, cents on a \u00b150 arc, Hz, reference pitch; pitch found by a YIN-style detector, tested), Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] the Tuner reads the audio input (LG_TEST_INPUT for checks), not a track's output as Logic's does; Logic's Tuner look not in the research (Studio's own)"

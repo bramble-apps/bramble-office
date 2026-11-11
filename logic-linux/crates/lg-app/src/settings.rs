@@ -636,76 +636,10 @@ fn popup(ui: &mut egui::Ui, p: &egui::Painter, pr: Rect, id: egui::Id, cur: usiz
     out
 }
 
-/// The tab icons, line glyphs as Logic's (gear, waveform, record, MIDI port, notes, film, the
-/// automation curve, faders, eye, person).
+/// The tab icons, as Logic's (gear, waveform, record, MIDI port, notes, film, the automation
+/// curve, faders, eye, person).
 fn tab_icon(p: &egui::Painter, m: egui::Pos2, i: usize, col: Color32) {
-    let s = Stroke::new(1.5, col);
-    match i {
-        0 => {
-            p.circle_stroke(m, 6.5, s);
-            p.circle_stroke(m, 2.5, s);
-            for k in 0..8 {
-                let a = k as f32 * std::f32::consts::FRAC_PI_4;
-                p.line_segment([m + vec2(a.cos(), a.sin()) * 6.5, m + vec2(a.cos(), a.sin()) * 9.5], Stroke::new(2.2, col));
-            }
-        }
-        1 => {
-            let hs = [2.0f32, 5.0, 9.0, 4.0, 10.0, 6.0, 3.0, 7.0, 2.0];
-            for (k, h) in hs.iter().enumerate() {
-                let x = m.x - 10.0 + k as f32 * 2.5;
-                p.vline(x, m.y - h..=m.y + h, Stroke::new(1.2, col));
-            }
-        }
-        2 => {
-            p.circle_stroke(m, 9.0, s);
-            p.circle_filled(m, 4.5, col);
-        }
-        3 => {
-            p.circle_stroke(m, 9.0, s);
-            for (dx, dy) in [(-5.0f32, 0.0f32), (-3.5, -3.5), (0.0, -5.0), (3.5, -3.5), (5.0, 0.0)] {
-                p.circle_filled(m + vec2(dx, dy), 1.2, col);
-            }
-            p.rect_filled(Rect::from_center_size(m + vec2(0.0, 5.0), vec2(4.0, 2.0)), 0.5, col);
-        }
-        4 => {
-            for dx in [-6.0f32, 0.0, 6.0] {
-                p.circle_filled(m + vec2(dx - 1.5, 6.0), 2.5, col);
-                p.vline(m.x + dx + 0.8, m.y - 7.0..=m.y + 6.0, s);
-            }
-            p.line_segment([m + vec2(0.8, -7.0), m + vec2(6.8, -8.0)], s);
-        }
-        5 => {
-            let r = Rect::from_center_size(m, vec2(22.0, 17.0));
-            p.rect_stroke(r, 2.0, s, egui::StrokeKind::Inside);
-            p.vline(r.min.x + 4.5, r.y_range(), s);
-            p.vline(r.max.x - 4.5, r.y_range(), s);
-        }
-        6 => {
-            p.line_segment([m + vec2(-10.0, 7.0), m + vec2(-4.0, 7.0)], s);
-            p.line_segment([m + vec2(-4.0, 7.0), m + vec2(4.0, -5.0)], s);
-            p.line_segment([m + vec2(4.0, -5.0), m + vec2(10.0, -5.0)], s);
-            p.circle_stroke(m + vec2(-4.0, 7.0), 2.0, s);
-            p.circle_stroke(m + vec2(4.0, -5.0), 2.0, s);
-        }
-        7 => {
-            for (k, kn) in [(-6.0f32, -3.0f32), (0.0, 3.0), (6.0, -1.0)] {
-                p.vline(m.x + k, m.y - 9.0..=m.y + 9.0, s);
-                p.circle_stroke(m + vec2(k, kn), 2.3, s);
-            }
-        }
-        8 => {
-            p.circle_stroke(m, 3.5, s);
-            let pts: Vec<egui::Pos2> = (0..=24).map(|k| {
-                let t = k as f32 / 24.0 * std::f32::consts::PI;
-                m + vec2(-12.0 * t.cos(), -7.5 * t.sin())
-            }).collect();
-            p.add(egui::Shape::line(pts.clone(), s));
-            p.add(egui::Shape::line(pts.iter().map(|q| pos2(q.x, 2.0 * m.y - q.y)).collect(), s));
-        }
-        _ => {
-            p.circle_stroke(m, 9.0, s);
-            p.circle_stroke(m + vec2(0.0, -2.5), 3.0, s);
-            p.line_segment([m + vec2(-5.5, 6.5), m + vec2(5.5, 6.5)], s);
-        }
-    }
+    use crate::glyphs::{br, ph};
+    let icon = [ph::GEAR_SIX, ph::WAVEFORM, ph::RECORD, br::MIDI, ph::MUSIC_NOTES, ph::FILM_STRIP, ph::LINE_SEGMENTS, ph::FADERS, ph::EYE, ph::USER_CIRCLE];
+    crate::glyphs::paint(p, Rect::from_center_size(m, vec2(26.0, 26.0)), icon[i.min(icon.len() - 1)], 24.0, col);
 }

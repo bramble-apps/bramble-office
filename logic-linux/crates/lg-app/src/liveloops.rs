@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use egui::{pos2, vec2, Align2, Color32, CursorIcon, Pos2, Rect, Sense, Shape, Stroke};
+use egui::{pos2, vec2, Align2, Color32, CursorIcon, Pos2, Rect, Sense, Stroke};
 use lg_core::events::Note;
 
 use crate::app::{App, Drag};
@@ -1568,11 +1568,11 @@ pub fn shown(app: &mut App) -> (bool, bool) {
 }
 
 fn play_glyph(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
-    p.add(Shape::convex_polygon(vec![pos2(c.x - size * 0.4, c.y - size * 0.55), pos2(c.x + size * 0.6, c.y), pos2(c.x - size * 0.4, c.y + size * 0.55)], col, Stroke::NONE));
+    crate::glyphs::paint(p, Rect::from_center_size(c + vec2(size * 0.1, 0.0), vec2(size * 2.0, size * 2.0)), crate::glyphs::ph_fill::PLAY, size * 1.5, col);
 }
 
 fn stop_glyph(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
-    p.rect_filled(Rect::from_center_size(c, vec2(size, size)), 1.0, col);
+    crate::glyphs::paint(p, Rect::from_center_size(c, vec2(size * 2.0, size * 2.0)), crate::glyphs::ph_fill::STOP, size * 1.5, col);
 }
 
 fn arc(c: Pos2, r: f32, from: f32, to: f32) -> Vec<Pos2> {
@@ -1767,11 +1767,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                     }
                 }
                 _ => {
-                    hp.line_segment([pos2(c.x - 8.0, c.y), pos2(c.x + 8.0, c.y)], Stroke::new(1.5, col));
-                    for s in [-1.0f32, 1.0] {
-                        hp.line_segment([pos2(c.x + 8.0 * s, c.y), pos2(c.x + 4.5 * s, c.y - 3.5)], Stroke::new(1.5, col));
-                        hp.line_segment([pos2(c.x + 8.0 * s, c.y), pos2(c.x + 4.5 * s, c.y + 3.5)], Stroke::new(1.5, col));
-                    }
+                    crate::glyphs::paint(&hp, Rect::from_center_size(c, vec2(20.0, 20.0)), crate::glyphs::ph::ARROWS_HORIZONTAL, 17.0, col);
                     if resp.on_hover_text("Toggle Grid Horizontal Zoom (⌃⌥Z)").clicked() {
                         command(app, "Toggle Grid Horizontal Zoom");
                     }
@@ -1782,8 +1778,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         let sr = Rect::from_min_max(pos2(stop_col.min.x, head.min.y), pos2(stop_col.max.x, head.max.y));
         hp.rect_filled(sr, 0.0, look::header_bg());
         let c = sr.center();
-        hp.add(Shape::closed_line(vec![pos2(c.x - 1.5, c.y - 4.0), pos2(c.x - 1.5, c.y + 4.0), pos2(c.x - 7.0, c.y)], Stroke::new(1.2, look::text())));
-        hp.add(Shape::convex_polygon(vec![pos2(c.x + 1.5, c.y - 4.0), pos2(c.x + 7.0, c.y), pos2(c.x + 1.5, c.y + 4.0)], look::text(), Stroke::NONE));
+        crate::glyphs::paint(&hp, Rect::from_center_size(c - vec2(4.5, 0.0), vec2(10.0, 12.0)), crate::glyphs::ph::CARET_LEFT, 11.0, look::text());
+        crate::glyphs::paint(&hp, Rect::from_center_size(c + vec2(4.5, 0.0), vec2(10.0, 12.0)), crate::glyphs::ph_fill::CARET_RIGHT, 11.0, look::text());
         let resp = ui.interact(sr, ui.scope_id().with("ll-split"), Sense::click()).on_hover_text("Show/Hide Tracks area");
         if resp.clicked() {
             command(app, "Show/Hide Tracks area");

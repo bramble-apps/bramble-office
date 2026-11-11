@@ -44,7 +44,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         ui.menu_button("…", |ui| crate::menus::show_items(app, ui, crate::menus::local("tracks-more")));
         for (cmd, label) in [(true, "⌘"), (false, "")] {
             let cur = if cmd { app.cmd_tool } else { app.tool };
-            ui.menu_button(format!("{label}{} ⌄", tool_glyph(cur)), |ui| {
+            ui.menu_button(format!("{label}{} ⌄", crate::glyphs::tool(cur)), |ui| {
                 for t in crate::edit::Tool::TRACKS {
                     if ui.add(egui::Button::selectable(cur == t, t.name()).shortcut_text(t.key())).clicked() {
                         if cmd {
@@ -77,14 +77,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let c = r.center();
         let col = if on { Color32::WHITE } else { look::text() };
         match i {
-            0 => {
-                p.hline(c.x - 6.0..=c.x + 6.0, c.y, Stroke::new(1.6, col));
-                p.vline(c.x, c.y - 6.0..=c.y + 6.0, Stroke::new(1.6, col));
-            }
-            1 => {
-                p.rect_stroke(Rect::from_center_size(c + vec2(2.0, 2.0), vec2(10.0, 9.0)), 2.0, Stroke::new(1.3, col), egui::StrokeKind::Inside);
-                p.rect_stroke(Rect::from_center_size(c + vec2(-2.0, -2.0), vec2(10.0, 9.0)), 2.0, Stroke::new(1.3, col), egui::StrokeKind::Inside);
-            }
+            0 => crate::glyphs::paint(&p, r, crate::glyphs::ph::PLUS, 17.0, col),
+            1 => crate::glyphs::paint(&p, r, crate::glyphs::ph::COPY, 17.0, col),
             _ => {
                 p.text(c, Align2::CENTER_CENTER, "S", look::bold(13.0), col);
             }
@@ -324,8 +318,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let icon = Rect::from_center_size(pos2(row.min.x + 30.0 + indent + stack_shift + isz / 2.0, row.min.y + rh.min(52.0) / 2.0 + if large { (rh.min(72.0) - 52.0).max(0.0) / 2.0 } else { 0.0 }), vec2(isz, isz));
         match t.extra.stack {
             Some(st) => crate::trackarea::stack_icon(&hp, icon, st.kind),
-            None if large => track_icon_large(&hp, icon, t.kind),
-            None => track_icon(&hp, icon, t.kind),
+            None if large => track_icon_large(&hp, icon, t),
+            None => track_icon(&hp, icon, t),
         }
         let name_x = icon.max.x + 6.0;
         // the name: double-click to rename (Return keeps it, Escape doesn't)
@@ -767,27 +761,13 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
         }
         let p = ui.painter();
         p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
-        let c = r.center();
         let col = if on { Color32::WHITE } else { look::text() };
-        match i {
-            0 => {
-                for dx in [-4.0f32, 0.0, 4.0] {
-                    for dy in [-3.5f32, 0.0, 3.5] {
-                        p.rect_filled(Rect::from_center_size(c + vec2(dx, dy), vec2(2.6, 2.2)), 0.5, col);
-                    }
-                }
-            }
-            1 => {
-                for dy in [-4.0f32, 0.0, 4.0] {
-                    p.hline(c.x - 7.0..=c.x + 7.0, c.y + dy, Stroke::new(2.0, col));
-                }
-            }
-            _ => {
-                p.line_segment([c + vec2(-6.0, -5.0), c + vec2(0.0, 5.0)], Stroke::new(1.4, col));
-                p.line_segment([c + vec2(6.0, -5.0), c + vec2(0.0, 5.0)], Stroke::new(1.4, col));
-                p.hline(c.x - 7.0..=c.x + 7.0, c.y, Stroke::new(1.0, col));
-            }
-        }
+        let glyph = match i {
+            0 => if on { crate::glyphs::ph_fill::DOTS_NINE } else { crate::glyphs::ph::DOTS_NINE },
+            1 => if on { crate::glyphs::ph_fill::ROWS } else { crate::glyphs::ph::ROWS },
+            _ => crate::glyphs::br::FLEX,
+        };
+        crate::glyphs::paint(p, r, glyph, 17.0, col);
         resp.on_hover_text(tip);
         ui.add_space(4.0);
     }
@@ -871,78 +851,26 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
     }
 }
 
-/// The large track icons (wide headers, as Logic's pictures): a keyboard with its keys, a drum
-/// kit, a waveform on a tape-like card.
-fn track_icon_large(p: &egui::Painter, r: Rect, kind: TrackKind) {
-    let c = look::region_color(kind);
+/// The large track icons (wide headers, as Logic's pictures): the instrument's icon big on a
+/// card in the track's colour.
+fn track_icon_large(p: &egui::Painter, r: Rect, t: &lg_core::Track) {
+    let c = look::region_color(t.kind);
     p.rect_filled(r, 8.0, look::mix(Color32::from_gray(0x2a), c, 0.18));
     p.rect_stroke(r, 8.0, Stroke::new(1.0, c.gamma_multiply(0.5)), egui::StrokeKind::Inside);
-    let m = r.center();
-    let s = r.width();
-    match kind {
-        TrackKind::Instrument => {
-            // white keys with the black ones over them
-            let k = Rect::from_center_size(m, vec2(s * 0.74, s * 0.42));
-            p.rect_filled(k, 2.0, Color32::from_gray(0xee));
-            let n = 7;
-            let w = k.width() / n as f32;
-            for i in 1..n {
-                p.vline(k.min.x + i as f32 * w, k.y_range(), Stroke::new(1.0, Color32::from_gray(0x70)));
-            }
-            for i in [0usize, 1, 3, 4, 5] {
-                let x = k.min.x + (i as f32 + 1.0) * w;
-                p.rect_filled(Rect::from_center_size(pos2(x, k.min.y + k.height() * 0.3), vec2(w * 0.55, k.height() * 0.6)), 1.0, Color32::from_gray(0x18));
-            }
-            p.rect_stroke(k, 2.0, Stroke::new(1.0, c), egui::StrokeKind::Outside);
-        }
-        TrackKind::Audio => {
-            let st = Stroke::new(2.0, c);
-            for i in 0..9 {
-                let x = m.x - s * 0.32 + i as f32 * s * 0.08;
-                let h = [0.12f32, 0.26, 0.18, 0.34, 0.22, 0.3, 0.14, 0.24, 0.1][i] * s;
-                p.vline(x, m.y - h..=m.y + h, st);
-            }
-        }
-        TrackKind::Drummer => {
-            let st = Stroke::new(1.6, c);
-            // bass drum, snare, cymbals
-            p.circle_stroke(m + vec2(0.0, s * 0.08), s * 0.22, st);
-            p.circle_stroke(m + vec2(-s * 0.28, -s * 0.02), s * 0.1, st);
-            p.line_segment([m + vec2(-s * 0.4, -s * 0.24), m + vec2(-s * 0.16, -s * 0.28)], st);
-            p.line_segment([m + vec2(s * 0.16, -s * 0.3), m + vec2(s * 0.4, -s * 0.22)], st);
-            p.vline(m.x + s * 0.28, m.y - s * 0.26..=m.y + s * 0.3, Stroke::new(1.0, c));
-        }
-    }
+    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), r.width() * 0.7, c);
 }
 
-fn track_icon(p: &egui::Painter, r: Rect, kind: TrackKind) {
-    let c = look::region_color(kind);
+/// A track's icon: what it plays (keys, drums, guitar, synth, a microphone or a waveform for
+/// audio) in the track's colour.
+fn track_icon(p: &egui::Painter, r: Rect, t: &lg_core::Track) {
+    let c = look::region_color(t.kind);
     p.rect_filled(r, 6.0, c.gamma_multiply(0.22));
-    let m = r.center();
-    let st = Stroke::new(1.5, c);
-    match kind {
-        TrackKind::Instrument => {
-            // a keyboard
-            let k = Rect::from_center_size(m, vec2(22.0, 14.0));
-            p.rect_stroke(k, 2.0, st, egui::StrokeKind::Middle);
-            for i in 1..4 {
-                let x = k.min.x + i as f32 * k.width() / 4.0;
-                p.vline(x, k.min.y..=k.max.y, Stroke::new(1.0, c));
-            }
-        }
-        TrackKind::Audio => {
-            for (i, h) in [4.0, 9.0, 6.0, 11.0, 5.0, 8.0].iter().enumerate() {
-                let x = m.x - 10.0 + i as f32 * 4.0;
-                p.vline(x, m.y - h..=m.y + h, st);
-            }
-        }
-        TrackKind::Drummer => {
-            p.circle_stroke(m, 9.0, st);
-            p.line_segment([m + vec2(-9.0, -2.0), m + vec2(9.0, -2.0)], st);
-            p.line_segment([m + vec2(-12.0, -13.0), m + vec2(-3.0, -5.0)], st);
-            p.line_segment([m + vec2(12.0, -13.0), m + vec2(3.0, -5.0)], st);
-        }
-    }
+    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), 24.0, icon_ink(c));
+}
+
+/// The icon in the track's colour, a shade darker on the light theme (to stand out on its card).
+fn icon_ink(c: Color32) -> Color32 {
+    if kn_ui::theme::is_light() { look::mix(c, Color32::BLACK, 0.3) } else { c }
 }
 
 pub fn ellipsize(s: &str, n: usize) -> String {
@@ -956,27 +884,6 @@ pub fn db_to_frac(db: f32) -> f32 {
 
 pub fn frac_to_db(f: f32) -> f32 {
     if f <= 0.001 { -96.0 } else { f.powf(1.0 / 1.6) * 66.0 - 60.0 }
-}
-
-fn tool_glyph(t: Tool) -> &'static str {
-    match t {
-        Tool::Pointer => "↖",
-        Tool::Pencil => "✎",
-        Tool::Eraser => "⌫",
-        Tool::Text => "T",
-        Tool::Scissors => "✂",
-        Tool::Glue => "⊃",
-        Tool::Solo => "S",
-        Tool::Mute => "M",
-        Tool::Zoom => "🔍",
-        Tool::Fade => "◢",
-        Tool::Automation => "⌇",
-        Tool::Marquee => "⌖",
-        Tool::Flex => "⋈",
-        Tool::Velocity => "V",
-        Tool::Quantize => "Q",
-        Tool::Brush => "⌁",
-    }
 }
 
 /// A click on a region with a tool other than the Pointer (Logic's Tracks-area tools). Returns
@@ -1068,7 +975,7 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_min_width(200.0);
             for t in tools {
-                if ui.add(egui::Button::selectable(cur == *t, format!("{}  {}", tool_glyph(*t), t.name())).shortcut_text(t.key())).clicked() {
+                if ui.add(egui::Button::selectable(cur == *t, format!("{}  {}", crate::glyphs::tool(*t), t.name())).shortcut_text(t.key())).clicked() {
                     if roll {
                         app.roll_tool = *t;
                     } else {
@@ -1118,8 +1025,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         // (+) at the right of each global track's header
         let plus = Rect::from_center_size(pos2(lanes_x - 18.0, row.min.y + GLOBAL_ROW / 2.0), vec2(18.0, 18.0));
         let presp = ui.interact(plus, ui.scope_id().with(("gplus", i)), Sense::click()).on_hover_text(format!("Add to the {n} track"));
-        p.circle_stroke(plus.center(), 7.5, Stroke::new(1.2, if presp.hovered() { look::text() } else { look::text_dim() }));
-        p.text(plus.center(), Align2::CENTER_CENTER, "+", look::regular(12.0), look::text_dim());
+        crate::glyphs::paint(&p, plus, crate::glyphs::ph::PLUS_CIRCLE, 17.0, if presp.hovered() { look::text() } else { look::text_dim() });
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
         let lp = ui.painter_at(lane);
         let i = match i {

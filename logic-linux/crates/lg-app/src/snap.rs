@@ -96,7 +96,24 @@ impl eframe::App for Snap {
         let Some(out) = std::env::var_os("LG_SNAP") else { return };
         self.frames += 1;
         let ctx = ui.ctx().clone();
+        if self.frames == 1 {
+            // (egui's "widget ID used twice" warnings, as debug builds show them)
+            ctx.options_mut(|o| o.warn_on_id_clash = true);
+        }
         if self.frames == 2 {
+            // LG_TRACKS="Steel String Acoustic:i;Lead Vocal:a": empty tracks added (i instrument,
+            // a audio, d drummer), to check the track icons
+            if let (Ok(v), Some(p)) = (std::env::var("LG_TRACKS"), self.app.project.as_mut()) {
+                for (name, k) in v.split(';').filter_map(|x| x.trim().rsplit_once(':')) {
+                    let kind = match k {
+                        "a" => lg_core::TrackKind::Audio,
+                        "d" => lg_core::TrackKind::Drummer,
+                        _ => lg_core::TrackKind::Instrument,
+                    };
+                    p.tracks.push(lg_core::Track::new(name, kind));
+                }
+                self.app.after_edit();
+            }
             if let Ok(s) = std::env::var("LG_SELECT") {
                 let v: Vec<usize> = s.split_whitespace().filter_map(|x| x.parse().ok()).collect();
                 if let [t, r] = v[..] {

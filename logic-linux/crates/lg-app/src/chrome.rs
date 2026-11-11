@@ -2,7 +2,7 @@
 //! area with the project's name and the desktop's window buttons; and the window's edges for
 //! resizing without system decorations.
 
-use egui::{pos2, vec2, Rect, Sense, Stroke};
+use egui::{pos2, vec2, Rect, Sense};
 use kn_ui::theme;
 
 use crate::app::App;
@@ -19,19 +19,12 @@ pub fn title_bar(app: &mut App, ui: &mut egui::Ui) {
         let c = r.center();
         let bg = if resp.hovered() { theme::gray(0x55) } else { theme::gray(0x3c) };
         ui.painter().circle_filled(c, 11.0, bg);
-        let st = Stroke::new(1.3, theme::TEXT());
-        match what {
-            "minimize" => {
-                ui.painter().line_segment([c + vec2(-4.0, 0.0), c + vec2(4.0, 0.0)], st);
-            }
-            "maximize" => {
-                ui.painter().rect_stroke(Rect::from_center_size(c, vec2(8.0, 8.0)), 1.0, st, egui::StrokeKind::Middle);
-            }
-            _ => {
-                ui.painter().line_segment([c + vec2(-3.5, -3.5), c + vec2(3.5, 3.5)], st);
-                ui.painter().line_segment([c + vec2(-3.5, 3.5), c + vec2(3.5, -3.5)], st);
-            }
-        }
+        let icon = match what {
+            "minimize" => crate::glyphs::ph::MINUS,
+            "maximize" => crate::glyphs::ph::SQUARE,
+            _ => crate::glyphs::ph::X,
+        };
+        crate::glyphs::paint(ui.painter(), Rect::from_center_size(c, vec2(16.0, 16.0)), icon, 14.0, theme::TEXT());
         if resp.clicked() {
             match what {
                 "minimize" => minimize(&ctx),

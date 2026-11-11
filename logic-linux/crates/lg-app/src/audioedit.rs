@@ -28,6 +28,7 @@ use lg_audio::peaks::Overview;
 use lg_audio::AudioFile;
 
 use crate::app::App;
+use crate::glyphs::{br, ph, tb};
 use crate::look;
 
 const TABS_H: f32 = 36.0;
@@ -597,157 +598,14 @@ fn icon_button(ui: &mut egui::Ui, r: Rect, id: egui::Id, on: bool, tip: &str, gl
     resp
 }
 
-fn chevron(p: &Painter, at: Pos2, c: Color32) {
-    p.line_segment([at + vec2(-3.5, -1.5), at + vec2(0.0, 2.0)], Stroke::new(1.3, c));
-    p.line_segment([at + vec2(0.0, 2.0), at + vec2(3.5, -1.5)], Stroke::new(1.3, c));
+/// An icon (Bramble Icons) centred at `c`.
+fn gl(p: &Painter, c: Pos2, icon: &str, col: Color32) {
+    crate::glyphs::paint(p, Rect::from_center_size(c, vec2(20.0, 20.0)), icon, 17.0, col);
 }
 
-fn updown(p: &Painter, at: Pos2, c: Color32) {
-    for s in [-1.0f32, 1.0] {
-        p.line_segment([at + vec2(-3.0, s * 1.5), at + vec2(0.0, s * 4.5)], Stroke::new(1.2, c));
-        p.line_segment([at + vec2(0.0, s * 4.5), at + vec2(3.0, s * 1.5)], Stroke::new(1.2, c));
-    }
-}
-
-fn arrow_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let pts = [c + vec2(-3.0, -7.0), c + vec2(-3.0, 5.0), c + vec2(0.0, 2.0), c + vec2(2.5, 7.0), c + vec2(4.0, 6.0), c + vec2(1.5, 1.0), c + vec2(5.5, 1.0)];
-    p.add(egui::Shape::convex_polygon(pts.to_vec(), col, Stroke::NONE));
-}
-
-fn tool_glyph(p: &Painter, c: Pos2, tool: crate::edit::Tool, col: Color32) {
-    use crate::edit::Tool;
-    let s = Stroke::new(1.5, col);
-    match tool {
-        Tool::Pointer => arrow_glyph(p, c, col),
-        Tool::Marquee => {
-            p.hline(c.x - 6.0..=c.x + 6.0, c.y, s);
-            p.vline(c.x, c.y - 6.0..=c.y + 6.0, s);
-        }
-        Tool::Pencil => {
-            p.line_segment([c + vec2(-5.0, 5.0), c + vec2(5.0, -5.0)], Stroke::new(2.5, col));
-        }
-        Tool::Eraser => {
-            p.rect_stroke(Rect::from_center_size(c, vec2(10.0, 7.0)), 1.5, s, egui::StrokeKind::Middle);
-        }
-        Tool::Scissors => {
-            p.circle_stroke(c + vec2(-3.0, 4.0), 2.2, s);
-            p.circle_stroke(c + vec2(3.0, 4.0), 2.2, s);
-            p.line_segment([c + vec2(-2.0, 2.0), c + vec2(3.0, -6.0)], s);
-            p.line_segment([c + vec2(2.0, 2.0), c + vec2(-3.0, -6.0)], s);
-        }
-        Tool::Fade => {
-            p.line_segment([c + vec2(-6.0, 5.0), c + vec2(6.0, -5.0)], s);
-            p.hline(c.x - 6.0..=c.x + 6.0, c.y + 5.0, s);
-        }
-        Tool::Flex => flex_glyph(p, c, col),
-        Tool::Zoom => {
-            p.circle_stroke(c + vec2(-1.0, -1.0), 4.5, s);
-            p.line_segment([c + vec2(2.5, 2.5), c + vec2(6.0, 6.0)], Stroke::new(2.0, col));
-        }
-        Tool::Mute => {
-            p.text(c, Align2::CENTER_CENTER, "M", look::semibold(11.0), col);
-        }
-        Tool::Solo => {
-            p.text(c, Align2::CENTER_CENTER, "S", look::semibold(11.0), col);
-        }
-        Tool::Text => {
-            p.text(c, Align2::CENTER_CENTER, "T", look::semibold(11.0), col);
-        }
-        Tool::Glue => {
-            p.rect_stroke(Rect::from_center_size(c, vec2(6.0, 11.0)), 2.0, s, egui::StrokeKind::Middle);
-        }
-        _ => arrow_glyph(p, c, col),
-    }
-}
-
-/// Logic's Flex icon (an hourglass on its side).
-fn flex_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.4, col);
-    p.line_segment([c + vec2(-7.0, -6.0), c + vec2(7.0, 6.0)], s);
-    p.line_segment([c + vec2(-7.0, 6.0), c + vec2(7.0, -6.0)], s);
-    p.vline(c.x - 7.0, c.y - 6.0..=c.y + 6.0, s);
-    p.vline(c.x + 7.0, c.y - 6.0..=c.y + 6.0, s);
-}
-
-fn automation_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let pts = vec![c + vec2(-8.0, 5.0), c + vec2(-3.0, 5.0), c + vec2(1.0, -4.0), c + vec2(8.0, -4.0)];
-    p.add(egui::Shape::line(pts, Stroke::new(1.5, col)));
-    p.circle_filled(c + vec2(-3.0, 5.0), 1.8, col);
-    p.circle_filled(c + vec2(1.0, -4.0), 1.8, col);
-}
-
-fn catch_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.4, col);
-    p.vline(c.x, c.y - 7.0..=c.y + 7.0, s);
-    for d in [-1.0f32, 1.0] {
-        p.line_segment([c + vec2(d * 2.0, 0.0), c + vec2(d * 8.0, 0.0)], s);
-        p.line_segment([c + vec2(d * 8.0, 0.0), c + vec2(d * 5.0, -3.0)], s);
-        p.line_segment([c + vec2(d * 8.0, 0.0), c + vec2(d * 5.0, 3.0)], s);
-    }
-}
-
-fn speaker_glyph(p: &Painter, c: Pos2, col: Color32, waves: usize) {
-    let pts = vec![c + vec2(-7.0, -2.5), c + vec2(-4.0, -2.5), c + vec2(0.0, -6.0), c + vec2(0.0, 6.0), c + vec2(-4.0, 2.5), c + vec2(-7.0, 2.5)];
-    p.add(egui::Shape::convex_polygon(pts, col, Stroke::NONE));
-    for w in 0..waves {
-        let rr = 4.0 + w as f32 * 3.0;
-        let arc: Vec<Pos2> = (0..=8).map(|k| {
-            let a = -0.8 + 1.6 * k as f32 / 8.0;
-            c + vec2(a.cos() * rr, a.sin() * rr)
-        }).collect();
-        p.add(egui::Shape::line(arc, Stroke::new(1.3, col)));
-    }
-}
-
-fn loop_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.5, col);
-    let r = Rect::from_center_size(c, vec2(15.0, 9.0));
-    p.rect_stroke(r, 4.0, s, egui::StrokeKind::Middle);
-    p.line_segment([pos2(r.max.x - 5.0, r.min.y - 3.0), pos2(r.max.x - 2.0, r.min.y)], s);
-    p.line_segment([pos2(r.min.x + 5.0, r.max.y + 3.0), pos2(r.min.x + 2.0, r.max.y)], s);
-}
-
-fn wave_glyph(p: &Painter, c: Pos2, col: Color32) {
-    for (i, h) in [3.0, 6.0, 9.0, 5.0, 8.0, 4.0, 2.0].iter().enumerate() {
-        p.vline(c.x - 9.0 + i as f32 * 3.0, c.y - h..=c.y + h, Stroke::new(1.3, col));
-    }
-}
-
-fn fit_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.4, col);
-    p.vline(c.x - 8.0, c.y - 6.0..=c.y + 6.0, s);
-    p.vline(c.x + 8.0, c.y - 6.0..=c.y + 6.0, s);
-    p.hline(c.x - 6.0..=c.x + 6.0, c.y, s);
-    for d in [-1.0f32, 1.0] {
-        p.line_segment([c + vec2(d * 6.0, 0.0), c + vec2(d * 3.5, -2.5)], s);
-        p.line_segment([c + vec2(d * 6.0, 0.0), c + vec2(d * 3.5, 2.5)], s);
-    }
-}
-
-fn hand_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.3, col);
-    p.rect_stroke(Rect::from_min_size(c + vec2(-5.0, -1.0), vec2(10.0, 8.0)), 3.0, s, egui::StrokeKind::Middle);
-    for i in 0..4 {
-        let x = c.x - 3.8 + i as f32 * 2.6;
-        p.vline(x, c.y - 6.0 + (i as f32 - 1.5).abs()..=c.y, s);
-    }
-}
-
-fn metronome_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.4, col);
-    let pts = vec![c + vec2(-6.0, 7.0), c + vec2(-2.5, -7.0), c + vec2(2.5, -7.0), c + vec2(6.0, 7.0), c + vec2(-6.0, 7.0)];
-    p.add(egui::Shape::line(pts, s));
-    p.line_segment([c + vec2(0.0, 4.0), c + vec2(5.0, -4.0)], s);
-}
-
-fn power_glyph(p: &Painter, c: Pos2, col: Color32) {
-    let s = Stroke::new(1.5, col);
-    let arc: Vec<Pos2> = (0..=14).map(|k| {
-        let a = -std::f32::consts::FRAC_PI_2 + 0.6 + (2.0 * std::f32::consts::PI - 1.2) * k as f32 / 14.0;
-        c + vec2(a.cos() * 6.0, a.sin() * 6.0)
-    }).collect();
-    p.add(egui::Shape::line(arc, s));
-    p.vline(c.x, c.y - 7.5..=c.y - 1.0, s);
+/// The small chevrons of pop-ups.
+fn caret(p: &Painter, c: Pos2, icon: &str, col: Color32) {
+    crate::glyphs::paint(p, Rect::from_center_size(c, vec2(12.0, 12.0)), icon, 10.0, col);
 }
 
 /// A small horizontal slider with a glyph before it (Logic's zoom and volume sliders).
@@ -771,8 +629,8 @@ fn mini_slider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, glyph: &st
 /// A tool pop-up: the tool's glyph and a chevron; the menu lists the tools.
 fn tool_popup(ui: &mut egui::Ui, r: Rect, id: egui::Id, tool: crate::edit::Tool, tools: &[crate::edit::Tool], tip: &str) -> Option<crate::edit::Tool> {
     let resp = icon_button(ui, r, id, false, tip, |p, r, c| {
-        tool_glyph(p, pos2(r.min.x + 13.0, r.center().y), tool, c);
-        chevron(p, pos2(r.max.x - 9.0, r.center().y), c);
+        gl(p, pos2(r.min.x + 13.0, r.center().y), crate::glyphs::tool(tool), c);
+        caret(p, pos2(r.max.x - 9.0, r.center().y), ph::CARET_DOWN, c);
     });
     let mut out = None;
     egui::Popup::menu(&resp).show(|ui| {
@@ -876,11 +734,11 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let cy = local.center().y;
     let b = |x: f32, w: f32| Rect::from_min_size(pos2(x, cy - 12.0), vec2(w, 24.0));
     let ae_id = ui.scope_id().with("ate");
-    if icon_button(ui, b(bx, 36.0), ae_id.with("auto"), app.audio_edit.show_automation, "Show/Hide Automation", |p, r, c| automation_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(bx, 36.0), ae_id.with("auto"), app.audio_edit.show_automation, "Show/Hide Automation", |p, r, c| gl(p, r.center(), ph::LINE_SEGMENTS, c)).clicked() {
         app.audio_edit.show_automation = !app.audio_edit.show_automation;
     }
     bx += 38.0;
-    if icon_button(ui, b(bx, 36.0), ae_id.with("flex"), app.audio_edit.show_flex, "Show/Hide Flex", |p, r, c| flex_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(bx, 36.0), ae_id.with("flex"), app.audio_edit.show_flex, "Show/Hide Flex", |p, r, c| gl(p, r.center(), br::FLEX, c)).clicked() {
         app.audio_edit.show_flex = !app.audio_edit.show_flex;
     }
     bx += 44.0;
@@ -898,7 +756,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         // (what room the tools and the right-hand controls leave)
         bx = crate::flex::editor_bar(app, ui, pos2(bx, cy), local.width() - 980.0, t, r) + 6.0;
     }
-    if icon_button(ui, b(bx, 36.0), ae_id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| catch_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(bx, 36.0), ae_id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| gl(p, r.center(), ph::ARROW_LINE_RIGHT, c)).clicked() {
         app.audio_edit.catch = !app.audio_edit.catch;
     }
     // the tools, centred
@@ -920,11 +778,11 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         app.audio_edit.t_scroll = (centre - main.width() as f64 / app.audio_edit.t_bar_w as f64 * bar_t / 2.0).max(0.0);
     }
     rx = zr.min.x - 8.0;
-    if icon_button(ui, b(rx - 36.0, 36.0), ae_id.with("fit"), false, "Zoom to Fit Region", |p, r, c| fit_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(rx - 36.0, 36.0), ae_id.with("fit"), false, "Zoom to Fit Region", |p, r, c| gl(p, r.center(), tb::ARROW_AUTOFIT_WIDTH, c)).clicked() {
         app.audio_edit.fitted = None;
     }
     rx -= 40.0;
-    let wz = icon_button(ui, b(rx - 36.0, 36.0), ae_id.with("wz"), app.audio_edit.wave_zoom > 1.0, "Waveform Zoom (drag up or down; click: 100 %)", |p, r, c| wave_glyph(p, r.center(), c));
+    let wz = icon_button(ui, b(rx - 36.0, 36.0), ae_id.with("wz"), app.audio_edit.wave_zoom > 1.0, "Waveform Zoom (drag up or down; click: 100 %)", |p, r, c| gl(p, r.center(), ph::WAVEFORM, c));
     if wz.dragged() {
         app.audio_edit.wave_zoom = (app.audio_edit.wave_zoom * (1.0 - wz.drag_delta().y * 0.02)).clamp(1.0, 32.0);
     } else if wz.clicked() {
@@ -937,7 +795,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         let sresp = ui.interact(sr, ae_id.with("snapm"), Sense::click());
         p.rect_filled(sr, 6.0, if sresp.hovered() { look::button_on() } else { look::group_bg() });
         p.text(pos2(sr.min.x + 10.0, cy), Align2::LEFT_CENTER, SNAPS[app.audio_edit.snap_mode.min(SNAPS.len() - 1)], look::regular(13.0), look::text());
-        updown(&p, pos2(sr.max.x - 11.0, cy), look::text());
+        caret(&p, pos2(sr.max.x - 11.0, cy), ph::CARET_UP_DOWN, look::text());
         egui::Popup::menu(&sresp).show(|ui| {
             for (k, n) in SNAPS.iter().enumerate() {
                 if ui.add(egui::Button::selectable(k == app.audio_edit.snap_mode, *n)).clicked() {
@@ -947,7 +805,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
             }
         });
         rx -= 124.0;
-        if icon_button(ui, b(rx - 32.0, 32.0), ae_id.with("snap"), app.audio_edit.snap_on, "Snap", |p, r, c| power_glyph(p, r.center(), c)).clicked() {
+        if icon_button(ui, b(rx - 32.0, 32.0), ae_id.with("snap"), app.audio_edit.snap_on, "Snap", |p, r, c| gl(p, r.center(), ph::POWER, c)).clicked() {
             app.audio_edit.snap_on = !app.audio_edit.snap_on;
         }
         p.text(pos2(rx - 38.0, cy), Align2::RIGHT_CENTER, "Snap:", look::regular(13.0), look::text());
@@ -1513,17 +1371,12 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
     let id = ui.scope_id().with("afe");
     let mut bx = local.min.x + 352.0;
     if icon_button(ui, b(bx, 36.0), id.with("trm"), app.audio_edit.transient_mode, "Transient Editing Mode", |p, r, c| {
-        let m = r.center();
-        p.vline(m.x, m.y - 7.0..=m.y + 7.0, Stroke::new(1.4, c));
-        p.line_segment([m + vec2(-3.0, -3.0), m + vec2(-6.0, 0.0)], Stroke::new(1.4, c));
-        p.line_segment([m + vec2(-6.0, 0.0), m + vec2(-3.0, 3.0)], Stroke::new(1.4, c));
-        p.line_segment([m + vec2(3.0, -3.0), m + vec2(6.0, 0.0)], Stroke::new(1.4, c));
-        p.line_segment([m + vec2(6.0, 0.0), m + vec2(3.0, 3.0)], Stroke::new(1.4, c));
+        gl(p, r.center(), ph::ARROWS_OUT_LINE_HORIZONTAL, c);
     }).clicked() {
         app.audio_edit.transient_mode = !app.audio_edit.transient_mode;
     }
     bx += 40.0;
-    if icon_button(ui, b(bx, 36.0), id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| catch_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(bx, 36.0), id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| gl(p, r.center(), ph::ARROW_LINE_RIGHT, c)).clicked() {
         app.audio_edit.catch = !app.audio_edit.catch;
     }
     // the tools and prelisten group, centred where there's room
@@ -1537,15 +1390,15 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
             app.audio_edit.file_tool = tools.iter().position(|x| *x == tl).unwrap_or(0);
         }
         let hr = icon_button(ui, b(tcx - 60.0, 56.0), id.with("hand"), false, "Command-click Tool: Hand (drag to scroll)", |p, r, c| {
-            hand_glyph(p, pos2(r.min.x + 14.0, r.center().y), c);
-            chevron(p, pos2(r.max.x - 9.0, r.center().y), c);
+            gl(p, pos2(r.min.x + 14.0, r.center().y), ph::HAND, c);
+            caret(p, pos2(r.max.x - 9.0, r.center().y), ph::CARET_DOWN, c);
         });
         let _ = hr;
     }
-    if icon_button(ui, b(tcx + 4.0, 36.0), id.with("pre"), false, "Prelisten (the selection, else the region)", |p, r, c| speaker_glyph(p, r.center() + vec2(2.0, 0.0), c, 1)).clicked() {
+    if icon_button(ui, b(tcx + 4.0, 36.0), id.with("pre"), false, "Prelisten (the selection, else the region)", |p, r, c| gl(p, r.center(), ph::SPEAKER_SIMPLE_LOW, c)).clicked() {
         prelisten(app, file);
     }
-    if icon_button(ui, b(tcx + 44.0, 36.0), id.with("cyc"), app.audio_edit.prelisten_cycle, "Cycle (prelisten repeats)", |p, r, c| loop_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(tcx + 44.0, 36.0), id.with("cyc"), app.audio_edit.prelisten_cycle, "Cycle (prelisten repeats)", |p, r, c| gl(p, r.center(), ph::REPEAT, c)).clicked() {
         app.audio_edit.prelisten_cycle = !app.audio_edit.prelisten_cycle;
     }
     let vr = b(tcx + 86.0, 110.0);
@@ -1553,8 +1406,8 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
     if mini_slider(ui, vr, id.with("vol"), &mut vol, "") {
         app.audio_edit.prelisten_vol = vol;
     }
-    speaker_glyph(&p, pos2(vr.min.x + 8.0, cy), look::text(), 0);
-    speaker_glyph(&p, pos2(vr.max.x + 10.0, cy), look::text(), 2);
+    gl(&p, pos2(vr.min.x + 8.0, cy), ph::SPEAKER_SIMPLE_NONE, look::text());
+    gl(&p, pos2(vr.max.x + 10.0, cy), ph::SPEAKER_SIMPLE_HIGH, look::text());
     // the selection's start and length (else the region's) in the ruler's units
     let (s0, slen) = match app.audio_edit.sel {
         Some((a, b2)) => (a.min(b2), a.abs_diff(b2)),
@@ -2089,20 +1942,12 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let resp = ui.interact(sr, id.with("scope"), Sense::click()).on_hover_text(if scope { "Edit the selected region" } else { "Edit the track" });
     p.rect_filled(sr, 6.0, if scope { orange() } else { look::group_bg() });
     {
-        let c = sr.center();
-        let col = Color32::WHITE;
-        p.vline(c.x - 5.0, c.y - 6.0..=c.y + 6.0, Stroke::new(1.3, col));
-        p.vline(c.x + 5.0, c.y - 6.0..=c.y + 6.0, Stroke::new(1.3, col));
-        p.hline(c.x - 3.0..=c.x + 3.0, c.y, Stroke::new(1.3, col));
-        p.line_segment([c + vec2(-3.0, 0.0), c + vec2(-1.0, -2.0)], Stroke::new(1.3, col));
-        p.line_segment([c + vec2(-3.0, 0.0), c + vec2(-1.0, 2.0)], Stroke::new(1.3, col));
-        p.line_segment([c + vec2(3.0, 0.0), c + vec2(1.0, -2.0)], Stroke::new(1.3, col));
-        p.line_segment([c + vec2(3.0, 0.0), c + vec2(1.0, 2.0)], Stroke::new(1.3, col));
+        gl(&p, sr.center(), ph::ARROWS_OUT_LINE_HORIZONTAL, Color32::WHITE);
     }
     if resp.clicked() {
         app.audio_edit.st.region_scope = !scope;
     }
-    if icon_button(ui, b(local.min.x + 192.0, 36.0), id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| catch_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(local.min.x + 192.0, 36.0), id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| gl(p, r.center(), ph::ARROW_LINE_RIGHT, c)).clicked() {
         app.audio_edit.catch = !app.audio_edit.catch;
     }
     // the readouts: BAR BEAT | TEMPO | x2 /2 | SIGNATURE
@@ -2174,7 +2019,7 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let modes = if modes.is_empty() { vec!["Constant", "Variable"] } else { modes };
     let mresp = ui.interact(mr, id.with("mode"), Sense::click());
     p.text(pos2(mr.min.x + 10.0, cy), Align2::LEFT_CENTER, if map.variable { "Variable" } else { "Constant" }, look::regular(13.0), look::text());
-    updown(&p, pos2(mr.max.x - 11.0, cy), look::text());
+    caret(&p, pos2(mr.max.x - 11.0, cy), ph::CARET_UP_DOWN, look::text());
     egui::Popup::menu(&mresp).show(|ui| {
         for m in &modes {
             let on = (*m == "Variable") == map.variable;
@@ -2195,14 +2040,14 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         app.audio_edit.st.sec_per_px = (secs / 600.0).max(1e-4) * 200f64.powf(1.0 - zv as f64);
         app.audio_edit.st.view_start = (centre - app.audio_edit.st.sec_per_px * w / 2.0).max(0.0);
     }
-    if icon_button(ui, b(hz.min.x - 44.0, 36.0), id.with("listen"), app.audio_edit.st.listen, "Listen", |p, r, c| speaker_glyph(p, r.center() + vec2(2.0, 0.0), c, 1)).clicked() {
+    if icon_button(ui, b(hz.min.x - 44.0, 36.0), id.with("listen"), app.audio_edit.st.listen, "Listen", |p, r, c| gl(p, r.center(), ph::SPEAKER_SIMPLE_LOW, c)).clicked() {
         app.audio_edit.st.listen = !app.audio_edit.st.listen;
         if app.audio_edit.st.listen {
             prelisten(app, file);
             app.audio_edit.st.listen = false;
         }
     }
-    if icon_button(ui, b(hz.min.x - 84.0, 36.0), id.with("click"), app.audio_edit.st.click, "Metronome Click", |p, r, c| metronome_glyph(p, r.center(), c)).clicked() {
+    if icon_button(ui, b(hz.min.x - 84.0, 36.0), id.with("click"), app.audio_edit.st.click, "Metronome Click", |p, r, c| gl(p, r.center(), tb::METRONOME, c)).clicked() {
         crate::smarttempo::command(app, "Toggle Metronome Click - Smart Tempo Editor");
     }
     p.hline(local.x_range(), local.max.y, Stroke::new(1.0, look::line()));

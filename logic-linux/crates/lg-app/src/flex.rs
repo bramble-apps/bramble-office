@@ -976,7 +976,7 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
     let br = Rect::from_min_size(r.min, vec2(22.0, r.height()));
     let resp = ui.interact(br, ui.scope_id().with(("flexon", t)), Sense::click()).on_hover_text("Flex On/Off");
     p.rect_filled(br, 4.0, if f.on { Color32::from_rgb(0x9b, 0x6b, 0xe8) } else { look::group_bg() });
-    flex_glyph(&p, br.center(), if f.on { Color32::WHITE } else { look::text_dim() });
+    crate::glyphs::paint(&p, br, crate::glyphs::br::FLEX, 15.0, if f.on { Color32::WHITE } else { look::text_dim() });
     if resp.clicked() {
         checkpoint(app, "Flex On/Off");
         app.flex.tracks.insert(t, TrackFlex { on: !f.on, ..f });
@@ -989,15 +989,6 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
     if let Some(k) = crate::widgets::choice_slot(ui, mr, ui.scope_id().with(("flexmode", t)), k, &names) {
         set_mode(app, t, Mode::ALL[k]);
     }
-}
-
-pub fn flex_glyph(p: &egui::Painter, c: Pos2, col: Color32) {
-    // Logic's flex glyph: an hourglass on its side
-    let s = Stroke::new(1.4, col);
-    p.line_segment([c + vec2(-6.0, -4.0), c + vec2(6.0, 4.0)], s);
-    p.line_segment([c + vec2(-6.0, 4.0), c + vec2(6.0, -4.0)], s);
-    p.line_segment([c + vec2(-6.0, -4.0), c + vec2(-6.0, 4.0)], s);
-    p.line_segment([c + vec2(6.0, -4.0), c + vec2(6.0, 4.0)], s);
 }
 
 /// On an audio region in the tracks area (Show Flex on): its flex markers, and Flex Pitch

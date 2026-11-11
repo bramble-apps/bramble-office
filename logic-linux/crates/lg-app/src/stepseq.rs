@@ -712,7 +712,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         p.rect_filled(add, 6.0, look::group_bg());
         ui.scope_builder(egui::UiBuilder::new().max_rect(add), |ui| {
             plain(ui);
-            chevron(ui.painter(), pos2(add.max.x - 12.0, add.center().y + 1.0), 8.0, false, look::text());
+            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(add.max.x - 12.0, add.center().y + 1.0), vec2(12.0, 12.0)), crate::glyphs::ph::CARET_DOWN, 10.0, look::text());
             ui.menu_button(egui::RichText::new("+     ").size(17.0).color(look::text()), |ui| {
                 ui.set_min_width(140.0);
                 let used: Vec<u8> = pat.rows.iter().map(|r| r.pitch).collect();
@@ -1405,45 +1405,18 @@ enum Glyph {
     Clear,
 }
 
-fn chevron(p: &egui::Painter, c: egui::Pos2, w: f32, up: bool, col: Color32) {
-    let h = w * 0.5 * if up { -1.0 } else { 1.0 };
-    let st = Stroke::new(1.4, col);
-    p.line_segment([pos2(c.x - w / 2.0, c.y - h / 2.0), pos2(c.x, c.y + h / 2.0)], st);
-    p.line_segment([pos2(c.x, c.y + h / 2.0), pos2(c.x + w / 2.0, c.y - h / 2.0)], st);
-}
-
 fn glyph(p: &egui::Painter, r: Rect, g: Glyph, col: Color32) {
-    let c = r.center();
-    let st = Stroke::new(1.3, col);
-    match g {
-        Glyph::Up => chevron(p, c, 10.0, true, col),
-        Glyph::Down => chevron(p, c, 10.0, false, col),
-        Glyph::UpDown => {
-            chevron(p, c - vec2(0.0, 3.5), 6.0, true, col);
-            chevron(p, c + vec2(0.0, 3.5), 6.0, false, col);
-        }
-        Glyph::RotLeft | Glyph::RotRight => {
-            let s = if g == Glyph::RotLeft { 1.0 } else { -1.0 };
-            let b = Rect::from_center_size(c + vec2(2.5 * s, 0.0), vec2(6.0, 10.0));
-            p.rect_stroke(b, 1.5, st, egui::StrokeKind::Middle);
-            let tip = c + vec2(-5.0 * s, 0.0);
-            p.add(egui::Shape::convex_polygon(vec![tip, tip + vec2(3.5 * s, -3.0), tip + vec2(3.5 * s, 3.0)], col, Stroke::NONE));
-        }
-        Glyph::Dice => {
-            let b = Rect::from_center_size(c, vec2(13.0, 13.0));
-            p.rect_stroke(b, 3.0, st, egui::StrokeKind::Middle);
-            for (dx, dy) in [(-3.0, -3.0), (3.0, -3.0), (0.0, 0.0), (-3.0, 3.0), (3.0, 3.0)] {
-                p.circle_filled(c + vec2(dx, dy), 1.2, col);
-            }
-        }
-        Glyph::Clear => {
-            let b = Rect::from_center_size(c, vec2(12.0, 12.0));
-            p.rect_stroke(b, 2.0, Stroke::new(1.0, col), egui::StrokeKind::Middle);
-            let q = b.shrink(3.0);
-            p.line_segment([q.left_top(), q.right_bottom()], st);
-            p.line_segment([q.left_bottom(), q.right_top()], st);
-        }
-    }
+    use crate::glyphs::ph;
+    let (icon, size) = match g {
+        Glyph::Up => (ph::CARET_UP, 12.0),
+        Glyph::Down => (ph::CARET_DOWN, 12.0),
+        Glyph::UpDown => (ph::CARET_UP_DOWN, 12.0),
+        Glyph::RotLeft => (ph::ARROW_ARC_LEFT, 15.0),
+        Glyph::RotRight => (ph::ARROW_ARC_RIGHT, 15.0),
+        Glyph::Dice => (ph::DICE_FIVE, 15.0),
+        Glyph::Clear => (ph::X_SQUARE, 15.0),
+    };
+    crate::glyphs::paint(p, r, icon, size, col);
 }
 
 fn small_button(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str) -> bool {

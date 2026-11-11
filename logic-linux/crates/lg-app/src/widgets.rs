@@ -167,13 +167,7 @@ pub fn disclosure(ui: &mut egui::Ui, r: Rect, id: egui::Id, label: &str, value: 
     p.with_clip_rect(r.shrink2(vec2(8.0, 0.0))).text(pos2(r.min.x + 16.0 + lw, r.center().y), Align2::LEFT_CENTER, value, look::regular(13.0), look::text_dim());
     let m = pos2(r.max.x - 18.0, r.center().y);
     let col = if resp.hovered() { look::text() } else { look::text_dim() };
-    if open {
-        p.line_segment([m + vec2(-4.5, -2.0), m + vec2(0.0, 2.5)], Stroke::new(1.6, col));
-        p.line_segment([m + vec2(0.0, 2.5), m + vec2(4.5, -2.0)], Stroke::new(1.6, col));
-    } else {
-        p.line_segment([m + vec2(-2.0, -4.5), m + vec2(2.5, 0.0)], Stroke::new(1.6, col));
-        p.line_segment([m + vec2(2.5, 0.0), m + vec2(-2.0, 4.5)], Stroke::new(1.6, col));
-    }
+    crate::glyphs::paint(&p, Rect::from_center_size(m, vec2(14.0, 14.0)), if open { crate::glyphs::ph::CARET_DOWN } else { crate::glyphs::ph::CARET_RIGHT }, 13.0, col);
     p.hline(r.x_range(), r.max.y, Stroke::new(1.0, look::line()));
     resp.clicked()
 }

@@ -11,6 +11,7 @@
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 
 use crate::app::{App, Bottom, RightPane};
+use crate::glyphs::{br, ph, ph_fill, tb};
 use crate::look;
 
 const BTN: f32 = 34.0;
@@ -66,31 +67,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // ---- views
     let (b, c) = run(x, cy, &[BTN; 4]);
     caps.push(c);
-    if button(ui, b[0], "browser", app.show_browser, true, "Browser (B)", |p, r, c| icon_browser(p, r, c)).clicked() {
+    if button(ui, b[0], "browser", app.show_browser, true, "Browser (B)", |p, r, c| icon(p, r, if app.show_browser { ph_fill::SIDEBAR } else { ph::SIDEBAR }, c)).clicked() {
         app.show_browser = !app.show_browser;
     }
-    if button(ui, b[1], "inspector", app.show_inspector, true, "Inspector (I)", |p, r, c| icon_inspector(p, r, c)).clicked() {
+    if button(ui, b[1], "inspector", app.show_inspector, true, "Inspector (I)", |p, r, c| icon(p, r, if app.show_inspector { ph_fill::SLIDERS_HORIZONTAL } else { ph::SLIDERS_HORIZONTAL }, c)).clicked() {
         app.show_inspector = !app.show_inspector;
     }
-    if button(ui, b[2], "quick-help", app.quick_help, true, "Quick Help (⇧/)", |p, r, c| icon_help(p, r, c)).clicked() {
+    if button(ui, b[2], "quick-help", app.quick_help, true, "Quick Help (⇧/)", |p, r, c| icon(p, r, if app.quick_help { ph_fill::QUESTION } else { ph::QUESTION }, c)).clicked() {
         app.quick_help = !app.quick_help;
     }
-    if button(ui, b[3], "toolbar", app.show_toolbar, true, "Toolbar (⌃⌥⌘T)", |p, r, c| icon_toolbar(p, r, c)).clicked() {
+    if button(ui, b[3], "toolbar", app.show_toolbar, true, "Toolbar (⌃⌥⌘T)", |p, r, c| icon(p, r, if app.show_toolbar { ph_fill::TRAY_ARROW_DOWN } else { ph::TRAY_ARROW_DOWN }, c)).clicked() {
         app.show_toolbar = !app.show_toolbar;
     }
     x = c.max.x + 8.0;
     let (b, c) = run(x, cy, &[BTN; 3]);
     caps.push(c);
     let editors_on = matches!(app.bottom, Bottom::PianoRoll);
-    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| icon_pencil(p, r, c)).clicked() {
+    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| icon(p, r, if editors_on { ph_fill::PENCIL_SIMPLE } else { ph::PENCIL_SIMPLE }, c)).clicked() {
         app.bottom = if editors_on { Bottom::None } else { Bottom::PianoRoll };
     }
     let smart_on = app.bottom == Bottom::SmartControls;
-    if button(ui, b[1], "smart", smart_on, true, "Smart Controls (B)", |p, r, c| icon_dial(p, r, c)).clicked() {
+    if button(ui, b[1], "smart", smart_on, true, "Smart Controls (B)", |p, r, c| icon(p, r, if smart_on { ph_fill::GAUGE } else { ph::GAUGE }, c)).clicked() {
         app.bottom = if smart_on { Bottom::None } else { Bottom::SmartControls };
     }
     let mixer_on = app.bottom == Bottom::Mixer;
-    if button(ui, b[2], "mixer", mixer_on, true, "Mixer (X)", |p, r, c| icon_mixer(p, r, c)).clicked() {
+    if button(ui, b[2], "mixer", mixer_on, true, "Mixer (X)", |p, r, c| icon(p, r, if mixer_on { ph_fill::FADERS } else { ph::FADERS }, c)).clicked() {
         app.bottom = if mixer_on { Bottom::None } else { Bottom::Mixer };
     }
     let left_end = c.max.x;
@@ -110,29 +111,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let playing = app.playing();
     // (stopped, Logic's Stop button shows Go to Beginning: a bar and a triangle)
     let stop = button(ui, b[0], "stop", false, true, if playing { "Stop (Space)" } else { "Go to Beginning (Return)" }, |p, r, c| {
-        if playing {
-            p.rect_filled(Rect::from_center_size(r.center(), vec2(12.0, 12.0)), 1.5, c);
-        } else {
-            let m = r.center();
-            p.rect_filled(Rect::from_min_size(m + vec2(-7.0, -7.0), vec2(2.4, 14.0)), 0.6, c);
-            p.add(egui::Shape::convex_polygon(vec![m + vec2(7.0, -7.0), m + vec2(7.0, 7.0), m + vec2(-3.5, 0.0)], c, Stroke::NONE));
-        }
+        icon(p, r, if playing { ph_fill::STOP } else { ph_fill::SKIP_BACK }, c);
     });
     if stop.clicked() {
         app.stop();
     }
     stop.context_menu(|ui| crate::stopbutton::context_menu(app, ui));
     if button(ui, b[1], "play", playing, true, "Play (Space)", |p, r, c| {
-        let m = r.center();
-        let col = if playing { Color32::from_rgb(0x4c, 0xd9, 0x64) } else { c };
-        p.add(egui::Shape::convex_polygon(vec![m + vec2(-5.0, -7.5), m + vec2(8.5, 0.0), m + vec2(-5.0, 7.5)], col, Stroke::NONE));
+        icon(p, r, ph_fill::PLAY, if playing { Color32::from_rgb(0x4c, 0xd9, 0x64) } else { c });
     })
     .clicked()
     {
         app.play_stop();
     }
     if button(ui, b[2], "record", app.recording(), true, "Record (R)", |p, r, _| {
-        p.circle_filled(r.center(), 8.0, look::record_red());
+        icon(p, r, ph_fill::CIRCLE, look::record_red());
     })
     .clicked()
     {
@@ -142,8 +135,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     if !narrow {
         let mut slot = 3;
         if app.cb_show.capture && button(ui, b[slot], "capture", false, true, "Capture as Recording (⇧R)", |p, r, _| {
-            p.circle_stroke(r.center(), 8.0, Stroke::new(1.6, look::record_red()));
-            p.circle_filled(r.center(), 4.0, look::record_red());
+            icon(p, r, ph::RECORD, look::record_red());
         })
         .clicked()
         {
@@ -151,9 +143,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         }
         slot += usize::from(app.cb_show.capture);
         if app.cb_show.replace && button(ui, b[slot], "replace", app.replace_mode, true, "Replace", |p, r, c| {
-            let q = Rect::from_center_size(r.center(), vec2(15.0, 15.0));
-            p.rect_stroke(q, 3.0, Stroke::new(1.5, c), egui::StrokeKind::Inside);
-            p.rect_filled(q.shrink(4.0), 1.0, if app.replace_mode { look::record_red() } else { c.gamma_multiply(0.6) });
+            icon(p, r, tb::REPLACE, if app.replace_mode { look::record_red() } else { c });
         })
         .clicked()
         {
@@ -163,11 +153,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         // Autopunch (its locators: the red strip in the ruler)
         let ap = app.autopunch;
         if app.cb_show.autopunch && button(ui, b[slot], "autopunch", ap, true, "Autopunch (⌃⌥⌘P)", |p, r, c| {
-            let m = r.center();
-            let col = if ap { look::record_red() } else { c };
-            p.vline(m.x - 7.0, m.y - 6.0..=m.y + 6.0, Stroke::new(1.6, c));
-            p.vline(m.x + 7.0, m.y - 6.0..=m.y + 6.0, Stroke::new(1.6, c));
-            p.rect_filled(Rect::from_center_size(m, vec2(10.0, 5.0)), 1.5, col);
+            icon(p, r, tb::BRACKETS_CONTAIN, if ap { look::record_red() } else { c });
         })
         .clicked()
         {
@@ -177,7 +163,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         cyc_i = slot;
     }
     let cycle_on = app.cycle_on();
-    if button(ui, b[cyc_i], "cycle", cycle_on, true, "Cycle (C)", |p, r, c| icon_cycle(p, r, if cycle_on { look::cycle() } else { c })).clicked() {
+    if button(ui, b[cyc_i], "cycle", cycle_on, true, "Cycle (C)", |p, r, c| if cycle_on { icon(p, r, ph_fill::REPEAT, look::cycle()) } else { icon(p, r, ph::REPEAT, c) }).clicked() {
         app.toggle_cycle();
     }
 
@@ -191,17 +177,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     if room > 3.0 * BTN + 2.0 * BTN + 30.0 {
         let (b, c) = run(x, cy, &[BTN; 3]);
         caps.push(c);
-        if button(ui, b[0], "low-latency", app.low_latency, true, "Low Latency Mode", |p, r, c| icon_low_latency(p, r, if app.low_latency { look::accent() } else { c })).clicked() {
+        if button(ui, b[0], "low-latency", app.low_latency, true, "Low Latency Mode", |p, r, c| if app.low_latency { icon(p, r, ph_fill::LIGHTNING, look::accent()) } else { icon(p, r, ph::LIGHTNING, c) }).clicked() {
             app.low_latency = !app.low_latency;
         }
-        if button(ui, b[1], "tuner", app.show_tuner, true, "Tuner", |p, r, c| icon_tuner(p, r, c)).clicked() {
+        if button(ui, b[1], "tuner", app.show_tuner, true, "Tuner", |p, r, c| icon(p, r, br::TUNING_FORK, c)).clicked() {
             app.show_tuner = !app.show_tuner;
         }
         if button(ui, b[2], "solo", app.solo_mode, true, "Solo (⌃S)", |p, r, c| {
-            let q = Rect::from_center_size(r.center(), vec2(16.0, 16.0));
-            let col = if app.solo_mode { look::cycle() } else { c };
-            p.rect_stroke(q, 3.0, Stroke::new(1.4, col), egui::StrokeKind::Inside);
-            p.text(q.center(), Align2::CENTER_CENTER, "S", look::semibold(11.0), col);
+            icon(p, r, tb::SQUARE_ROUNDED_LETTER_S, if app.solo_mode { look::cycle() } else { c });
         })
         .clicked()
         {
@@ -225,7 +208,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             if i == 0 {
                 p.text(b[i].center(), Align2::CENTER_CENTER, "1234", look::semibold(10.0), col);
             } else {
-                icon_metronome(&p, b[i], col);
+                icon(&p, b[i], tb::METRONOME, col);
             }
             if resp.clicked() {
                 if i == 0 {
@@ -250,10 +233,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     for (i, (pane, tip)) in panes.into_iter().enumerate() {
         let on = app.right_pane == Some(pane);
         if button(ui, b[i], tip, on, true, tip, |p, r, c| match pane {
-            RightPane::Lists => icon_lists(p, r, c),
-            RightPane::Notes => icon_notes(p, r, c),
-            RightPane::Loops => icon_loops(p, r, c),
-            RightPane::Files => icon_files(p, r, c),
+            RightPane::Lists => icon(p, r, if on { ph_fill::LIST_BULLETS } else { ph::LIST_BULLETS }, c),
+            RightPane::Notes => icon(p, r, if on { ph_fill::NOTEPAD } else { ph::NOTEPAD }, c),
+            RightPane::Loops => icon(p, r, ph::ARROW_CLOCKWISE, c),
+            RightPane::Files => icon(p, r, if on { ph_fill::FOLDER } else { ph::FOLDER }, c),
         })
         .clicked()
         {
@@ -322,8 +305,7 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
     let resp = ui.interact(menu_r, ui.scope_id().with("lcd-menu"), Sense::click());
     let m = menu_r.center();
     let col = if resp.hovered() { look::lcd_text() } else { look::lcd_dim() };
-    p.line_segment([m + vec2(-4.5, -2.0), m + vec2(0.0, 2.5)], Stroke::new(1.6, col));
-    p.line_segment([m + vec2(0.0, 2.5), m + vec2(4.5, -2.0)], Stroke::new(1.6, col));
+    crate::glyphs::paint(p, Rect::from_center_size(m, vec2(14.0, 14.0)), ph::CARET_DOWN, 13.0, col);
     egui::Popup::menu(&resp).show(|ui| {
         ui.set_min_width(220.0);
         for (mode, label) in [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Time, "Time")] {
@@ -461,133 +443,9 @@ fn short_key(k: &str) -> String {
     format!("{root}{}", if q.starts_with("min") { "min" } else { "maj" })
 }
 
-// ---- the glyphs (drawn, so they follow the theme; shapes after Logic 13's)
-
-fn st(c: Color32) -> Stroke {
-    Stroke::new(1.5, c)
-}
-
-fn icon_browser(p: &egui::Painter, r: Rect, c: Color32) {
-    // a window with a sidebar
-    let q = Rect::from_center_size(r.center(), vec2(18.0, 15.0));
-    p.rect_stroke(q, 3.0, st(c), egui::StrokeKind::Inside);
-    p.rect_filled(Rect::from_min_size(q.min + vec2(2.0, 2.0), vec2(5.0, q.height() - 4.0)), 1.0, c);
-}
-
-fn icon_inspector(p: &egui::Painter, r: Rect, c: Color32) {
-    // two horizontal sliders
-    let m = r.center();
-    for (dy, k) in [(-3.5f32, 3.0f32), (3.5, -3.0)] {
-        p.line_segment([m + vec2(-8.0, dy), m + vec2(8.0, dy)], st(c));
-        p.circle_filled(m + vec2(k, dy), 2.8, c);
-    }
-}
-
-fn icon_help(p: &egui::Painter, r: Rect, c: Color32) {
-    p.circle_stroke(r.center(), 8.0, st(c));
-    p.text(r.center() + vec2(0.0, 0.5), Align2::CENTER_CENTER, "?", look::semibold(11.0), c);
-}
-
-fn icon_toolbar(p: &egui::Painter, r: Rect, c: Color32) {
-    // a tray with an arrow down into it
-    let m = r.center();
-    let q = Rect::from_center_size(m + vec2(0.0, 2.0), vec2(17.0, 12.0));
-    p.rect_stroke(q, 3.0, st(c), egui::StrokeKind::Inside);
-    p.line_segment([m + vec2(0.0, -7.0), m + vec2(0.0, 3.0)], st(c));
-    p.line_segment([m + vec2(-3.0, 0.0), m + vec2(0.0, 3.0)], st(c));
-    p.line_segment([m + vec2(3.0, 0.0), m + vec2(0.0, 3.0)], st(c));
-}
-
-fn icon_pencil(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    p.line_segment([m + vec2(-6.0, 6.0), m + vec2(6.0, -6.0)], Stroke::new(2.2, c));
-    p.line_segment([m + vec2(-7.5, 7.5), m + vec2(-5.0, 7.5)], st(c));
-}
-
-fn icon_dial(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    p.circle_stroke(m, 6.0, st(c));
-    p.line_segment([m, m + vec2(-3.0, -4.0)], st(c));
-    for a in [-2.4f32, -1.6, -0.8, 0.0, 0.8, 1.6, 2.4] {
-        let d = vec2(a.sin(), -a.cos());
-        p.line_segment([m + d * 8.0, m + d * 9.5], Stroke::new(1.0, c));
-    }
-}
-
-fn icon_mixer(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    for (i, k) in [-0.3f32, 0.4, -0.1].iter().enumerate() {
-        let x = m.x - 6.0 + i as f32 * 6.0;
-        p.line_segment([pos2(x, m.y - 8.0), pos2(x, m.y + 8.0)], Stroke::new(1.4, c));
-        p.rect_filled(Rect::from_center_size(pos2(x, m.y + k * 10.0), vec2(5.0, 3.0)), 1.0, c);
-    }
-}
-
-fn icon_cycle(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    let s = Stroke::new(1.8, c);
-    p.line_segment([m + vec2(-7.0, -3.0), m + vec2(6.0, -3.0)], s);
-    p.line_segment([m + vec2(6.0, 3.0), m + vec2(-7.0, 3.0)], s);
-    p.line_segment([m + vec2(3.0, -6.0), m + vec2(6.0, -3.0)], s);
-    p.line_segment([m + vec2(-4.0, 6.0), m + vec2(-7.0, 3.0)], s);
-}
-
-fn icon_low_latency(p: &egui::Painter, r: Rect, c: Color32) {
-    let q = Rect::from_center_size(r.center(), vec2(16.0, 16.0));
-    p.rect_stroke(q, 3.0, st(c), egui::StrokeKind::Inside);
-    let m = q.center();
-    p.line_segment([m + vec2(-4.0, -4.0), m + vec2(4.0, 4.0)], st(c));
-    p.line_segment([m + vec2(4.0, -4.0), m + vec2(-4.0, 4.0)], st(c));
-}
-
-fn icon_tuner(p: &egui::Painter, r: Rect, c: Color32) {
-    // a tuning fork, tilted
-    let m = r.center();
-    let s = st(c);
-    p.line_segment([m + vec2(-6.0, 7.0), m + vec2(-1.0, 2.0)], s);
-    p.line_segment([m + vec2(-1.0, 2.0), m + vec2(5.0, -6.0)], s);
-    p.line_segment([m + vec2(-3.0, 0.0), m + vec2(3.0, -8.0)], s);
-}
-
-fn icon_metronome(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    let pts = vec![m + vec2(-4.0, -8.0), m + vec2(4.0, -8.0), m + vec2(7.5, 7.0), m + vec2(-7.5, 7.0), m + vec2(-4.0, -8.0)];
-    p.add(egui::Shape::line(pts, st(c)));
-    p.line_segment([m + vec2(0.0, 4.0), m + vec2(5.0, -6.0)], st(c));
-    p.line_segment([m + vec2(-6.0, 3.0), m + vec2(6.0, 3.0)], Stroke::new(1.0, c));
-}
-
-fn icon_lists(p: &egui::Painter, r: Rect, c: Color32) {
-    let m = r.center();
-    for dy in [-5.0f32, 0.0, 5.0] {
-        p.circle_filled(m + vec2(-7.0, dy), 1.3, c);
-        p.line_segment([m + vec2(-4.0, dy), m + vec2(8.0, dy)], st(c));
-    }
-}
-
-fn icon_notes(p: &egui::Painter, r: Rect, c: Color32) {
-    let q = Rect::from_center_size(r.center(), vec2(18.0, 15.0));
-    p.rect_stroke(q, 2.5, st(c), egui::StrokeKind::Inside);
-    p.line_segment([q.left_top() + vec2(0.0, 4.0), q.right_top() + vec2(0.0, 4.0)], st(c));
-    for dy in [7.5f32, 10.5] {
-        p.line_segment([q.left_top() + vec2(4.0, dy), q.right_top() + vec2(-4.0, dy)], Stroke::new(1.0, c));
-    }
-}
-
-fn icon_loops(p: &egui::Painter, r: Rect, c: Color32) {
-    // a loop arrow over a wave
-    let m = r.center();
-    p.circle_stroke(m + vec2(-1.0, -1.0), 6.0, st(c));
-    p.add(egui::Shape::convex_polygon(vec![m + vec2(5.0, -5.0), m + vec2(9.0, -1.0), m + vec2(2.0, -1.0)], c, Stroke::NONE));
-    p.line_segment([m + vec2(-8.0, 7.5), m + vec2(8.0, 7.5)], Stroke::new(1.0, c));
-}
-
-fn icon_files(p: &egui::Painter, r: Rect, c: Color32) {
-    // a folder
-    let m = r.center();
-    let q = Rect::from_center_size(m + vec2(0.0, 1.0), vec2(18.0, 13.0));
-    p.rect_stroke(q, 2.5, st(c), egui::StrokeKind::Inside);
-    p.line_segment([q.left_top() + vec2(1.0, 0.0), q.left_top() + vec2(6.0, 0.0)], Stroke::new(2.5, c));
+/// A control-bar icon (Bramble Icons), centred in its button.
+fn icon(p: &egui::Painter, r: Rect, icon: &str, c: Color32) {
+    crate::glyphs::paint(p, r, icon, 19.0, c);
 }
 
 /// The transport's optional buttons (Customize Control Bar and Display…); Logic shows none of

@@ -711,21 +711,11 @@ pub fn large_icons(app: &App) -> bool {
 
 /// A stack main track's icon (stacked layers), or a folder's.
 pub fn stack_icon(p: &egui::Painter, r: Rect, kind: StackKind) {
+    use crate::glyphs::ph;
     let c = if kind == StackKind::Summing { Color32::from_rgb(0x6c, 0xc4, 0xd8) } else { Color32::from_rgb(0xa8, 0xae, 0xbc) };
     p.rect_filled(r, 6.0, c.gamma_multiply(0.2));
-    let m = r.center();
-    let w = r.width() * 0.6;
-    if kind == StackKind::PackedFolder {
-        let body = Rect::from_center_size(m + vec2(0.0, 2.0), vec2(w, w * 0.65));
-        p.rect_stroke(body, 2.0, Stroke::new(1.5, c), egui::StrokeKind::Middle);
-        p.line_segment([body.left_top() + vec2(0.0, 0.0), body.left_top() + vec2(w * 0.35, 0.0)], Stroke::new(3.0, c));
-        return;
-    }
-    for k in 0..3 {
-        let d = (k as f32 - 1.0) * r.height() * 0.16;
-        let l = Rect::from_center_size(m + vec2(-d * 0.6, d), vec2(w, w * 0.32));
-        p.rect_stroke(l, 2.0, Stroke::new(1.3, c), egui::StrokeKind::Middle);
-    }
+    let icon = if kind == StackKind::PackedFolder { ph::FOLDER_SIMPLE } else { ph::STACK };
+    crate::glyphs::paint(p, r, icon, r.width() * 0.7, c);
 }
 
 /// The Transposition global track: a stepped line of semitones; click adds a point (the value

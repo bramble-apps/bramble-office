@@ -5,7 +5,7 @@
 //! and the Stereo Out). An effect's settings can be saved and recalled (Save Setting As…, the
 //! list in the pop-up, ‹ › and Next / Previous Plug-in Setting), reset, copied and pasted.
 
-use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
+use egui::{pos2, vec2, Align2, Color32, Rect, Sense};
 
 use crate::app::App;
 use crate::look;
@@ -93,8 +93,7 @@ pub(crate) fn control_rows(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: 
 /// The header's bypass button (a power symbol); true when clicked.
 fn bypass_button(ui: &mut egui::Ui, p: &egui::Painter, hr: Rect, on: bool, salt: &str) -> bool {
     let bypass = Rect::from_center_size(pos2(hr.min.x + 18.0, hr.center().y), vec2(22.0, 22.0));
-    p.circle_stroke(bypass.center(), 7.5, Stroke::new(1.6, if on { look::accent() } else { look::text_dim() }));
-    p.vline(bypass.center().x, bypass.center().y - 9.0..=bypass.center().y - 2.0, Stroke::new(1.6, if on { look::accent() } else { look::text_dim() }));
+    crate::glyphs::paint(p, bypass, crate::glyphs::ph::POWER, 19.0, if on { look::accent() } else { look::text_dim() });
     ui.interact(bypass, ui.scope_id().with((salt, "pw-bypass")), Sense::click()).on_hover_text("Bypass").clicked()
 }
 

@@ -68,12 +68,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if strips.height() > 260.0 {
         p.vline(strips.center().x, strips.y_range(), Stroke::new(1.0, look::line()));
         let w = strips.width() / 2.0;
-        if let Some(t) = app.selected_track.filter(|t| app.project.as_ref().is_some_and(|p| *t < p.tracks.len())) {
-            let left = Rect::from_min_size(strips.min + vec2(4.0, 0.0), vec2(w - 8.0, strips.height()));
-            crate::mixer::track_strip(app, ui, left, t);
-        }
-        let right = Rect::from_min_size(strips.min + vec2(w + 4.0, 0.0), vec2(w - 8.0, strips.height()));
-        crate::mixer::output_strip(app, ui, right);
+        // (in a scope of their own: the Mixer shows the same strips, with the same ids)
+        ui.scope_builder(egui::UiBuilder::new().id_salt("inspector-strips").max_rect(strips), |ui| {
+            if let Some(t) = app.selected_track.filter(|t| app.project.as_ref().is_some_and(|p| *t < p.tracks.len())) {
+                let left = Rect::from_min_size(strips.min + vec2(4.0, 0.0), vec2(w - 8.0, strips.height()));
+                crate::mixer::track_strip(app, ui, left, t);
+            }
+            let right = Rect::from_min_size(strips.min + vec2(w + 4.0, 0.0), vec2(w - 8.0, strips.height()));
+            crate::mixer::output_strip(app, ui, right);
+        });
     }
 }
 

@@ -435,8 +435,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             None => {
                 // (the output's stereo link)
                 p.rect_filled(ir, 4.0, look::group_bg());
-                p.circle_stroke(ir.center() - vec2(3.0, 0.0), 4.0, Stroke::new(1.2, look::text_dim()));
-                p.circle_stroke(ir.center() + vec2(3.0, 0.0), 4.0, Stroke::new(1.2, look::text_dim()));
+                crate::glyphs::paint(&p, ir, crate::glyphs::ph::INTERSECT, 14.0, look::text_dim());
             }
         }
         let resp = ui.interact(ir, id.with("input"), Sense::click());
@@ -522,9 +521,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             if hover {
                 // the power button and the menu arrow appear on hover, as Logic's
                 p.rect_filled(bypass_r.shrink(1.0), 3.0, fill);
-                p.circle_stroke(bypass_r.center(), 4.5, Stroke::new(1.3, if u.bypass { look::text_dim() } else { Color32::WHITE }));
+                crate::glyphs::paint(&p, bypass_r, crate::glyphs::ph::POWER, 11.0, if u.bypass { look::text_dim() } else { Color32::WHITE });
                 p.rect_filled(arrow_r.shrink(1.0), 3.0, fill);
-                p.text(arrow_r.center(), Align2::CENTER_CENTER, "⌄", look::regular(10.0), Color32::WHITE);
+                crate::glyphs::paint(&p, arrow_r, crate::glyphs::ph::CARET_DOWN, 10.0, Color32::WHITE);
             }
             let toggle_bypass = |app: &mut App| {
                 mixstate::checkpoint(app, "Bypass Plug-in");

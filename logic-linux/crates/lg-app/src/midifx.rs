@@ -286,7 +286,7 @@ pub fn strip_slots(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, r: Rect,
         let byp = Rect::from_min_size(sr.min, vec2(16.0, sr.height()));
         if resp.hovered() {
             // the bypass button at the label's left
-            p.circle_stroke(byp.center(), 5.0, Stroke::new(1.2, Color32::WHITE));
+            crate::glyphs::paint(&p, byp, crate::glyphs::ph::POWER, 11.0, Color32::WHITE);
         }
         if resp.drag_started() {
             app.mfx.drag_from = Some((t, k));

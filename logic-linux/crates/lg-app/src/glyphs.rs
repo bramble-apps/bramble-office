@@ -1,6 +1,7 @@
 //! Studio's icon set: Bramble Icons, one font made from Phosphor (regular and fill) and Tabler
 //! (outline, drawn at Phosphor's line weight so the two match), MIT licences in
-//! data/icons. Rebuilt by tool/make_icon_font.py.
+//! data/icons, plus Studio's own few that neither has (`br`: tuning fork, drum, MIDI port, the
+//! Flex and Fade tools; tool/icons). Rebuilt by tool/make_icon_font.py.
 //!
 //! Each icon is a character: `glyphs::ph::PIANO_KEYS`, `glyphs::ph_fill::PLAY`,
 //! `glyphs::tb::METRONOME`. Draw one with [`paint`] (centred in a rectangle, any colour) or put
@@ -40,9 +41,111 @@ pub fn paint(p: &egui::Painter, r: egui::Rect, icon: &str, size: f32, color: egu
     p.text(r.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::new(size, fam), color);
 }
 
+/// A Logic tool's icon (the tool menus and pop-ups).
+pub fn tool(t: crate::edit::Tool) -> &'static str {
+    use crate::edit::Tool;
+    match t {
+        Tool::Pointer => ph::CURSOR,
+        Tool::Pencil => ph::PENCIL_SIMPLE,
+        Tool::Eraser => ph::ERASER,
+        Tool::Text => ph::TEXT_T,
+        Tool::Scissors => ph::SCISSORS,
+        Tool::Glue => tb::DROPLET,
+        Tool::Solo => tb::LETTER_S,
+        Tool::Mute => tb::LETTER_M,
+        Tool::Zoom => ph::MAGNIFYING_GLASS,
+        Tool::Fade => br::FADE,
+        Tool::Automation => ph::LINE_SEGMENTS,
+        Tool::Marquee => ph::CROSSHAIR_SIMPLE,
+        Tool::Flex => br::FLEX,
+        Tool::Velocity => ph::CHART_BAR,
+        Tool::Quantize => ph::MAGNET,
+        Tool::Brush => ph::PAINT_BRUSH,
+    }
+}
+
+/// What a track plays, as its header icon shows it (Logic picks the icon from the patch).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrackIcon {
+    Keys,
+    Drums,
+    Guitar,
+    Bass,
+    Synth,
+    Strings,
+    Voice,
+    Wave,
+}
+
+impl TrackIcon {
+    /// From the track's kind, its name and its instrument's name and patch.
+    pub fn of(t: &lg_core::Track) -> TrackIcon {
+        use lg_core::TrackKind;
+        let mut s = format!(" {} ", t.name.to_lowercase());
+        for p in &t.plugins {
+            s.push_str(&format!(" {} {} ", p.name.to_lowercase(), p.preset.to_lowercase()));
+        }
+        let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
+        if t.kind == TrackKind::Drummer || has(&["drum", " kit", "beat", "percussion", "808", "909", "conga", "bongo", "cajon", "snare", "hi-hat", "cymbal"]) {
+            return TrackIcon::Drums;
+        }
+        if has(&["vocal", "voice", " vox", "choir", "singer", " mic "]) {
+            return TrackIcon::Voice;
+        }
+        if t.kind == TrackKind::Audio {
+            return if has(&["bass"]) {
+                TrackIcon::Bass
+            } else if has(&["guitar", "gtr", "acoustic"]) {
+                TrackIcon::Guitar
+            } else {
+                TrackIcon::Wave
+            };
+        }
+        if has(&["synth", " pad", "lead", "alchemy", "retro", " es2", " es1", "sculpture", "pluck", "analog", "sweep", " saw"]) {
+            TrackIcon::Synth
+        } else if has(&["bass"]) {
+            TrackIcon::Bass
+        } else if has(&["guitar", "gtr", "strum", "steel string", "nylon"]) {
+            TrackIcon::Guitar
+        } else if has(&["string", "violin", "viola", "cello", "orchestra", "ensemble", "harp"]) {
+            TrackIcon::Strings
+        } else {
+            TrackIcon::Keys
+        }
+    }
+
+    pub fn glyph(self) -> &'static str {
+        match self {
+            TrackIcon::Keys => ph::PIANO_KEYS,
+            TrackIcon::Drums => br::DRUM,
+            // (neither library has a bass guitar: the guitar; the track colour tells them apart)
+            TrackIcon::Guitar | TrackIcon::Bass => ph::GUITAR,
+            TrackIcon::Synth => ph::WAVE_SAWTOOTH,
+            TrackIcon::Strings => ph::MUSIC_NOTES,
+            TrackIcon::Voice => ph::MICROPHONE,
+            TrackIcon::Wave => ph::WAVEFORM,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn track_icons_follow_the_instrument() {
+        use lg_core::{Track, TrackKind};
+        let icon = |n: &str, k| TrackIcon::of(&Track::new(n, k));
+        assert_eq!(icon("SoCal", TrackKind::Drummer), TrackIcon::Drums);
+        assert_eq!(icon("Fingerstyle Bass", TrackKind::Instrument), TrackIcon::Bass);
+        assert_eq!(icon("Deluxe Classic", TrackKind::Instrument), TrackIcon::Keys);
+        assert_eq!(icon("Synth Bass", TrackKind::Instrument), TrackIcon::Synth);
+        assert_eq!(icon("Steel String Acoustic", TrackKind::Instrument), TrackIcon::Guitar);
+        assert_eq!(icon("Lead Vocal", TrackKind::Audio), TrackIcon::Voice);
+        assert_eq!(icon("Audio 3", TrackKind::Audio), TrackIcon::Wave);
+        assert_eq!(icon("Studio Strings", TrackKind::Instrument), TrackIcon::Strings);
+        assert_eq!(icon("Trap Kit", TrackKind::Instrument), TrackIcon::Drums);
+    }
 
     #[test]
     fn font_and_names_line_up() {

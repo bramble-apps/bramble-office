@@ -145,43 +145,16 @@ fn make(app: &mut App, kind: Kind) {
 }
 
 fn card_icon(p: &egui::Painter, r: Rect, kind: Kind) {
-    let c = r.center();
-    let col = look::text();
-    let s = Stroke::new(1.6, col);
-    match kind {
-        Kind::Instrument => {
-            let k = Rect::from_center_size(c, vec2(32.0, 20.0));
-            p.rect_filled(k, 3.0, Color32::from_rgb(0x52, 0xc0, 0x3c));
-            for i in 1..6 {
-                p.vline(k.min.x + i as f32 * 5.3, k.min.y + 2.0..=k.max.y - 2.0, Stroke::new(1.0, Color32::from_black_alpha(150)));
-            }
-        }
-        Kind::Pattern => {
-            for (i, on) in [true, false, true, true, false, true, false, true].iter().enumerate() {
-                let x = c.x - 16.0 + (i % 4) as f32 * 8.5;
-                let y = c.y - 8.0 + (i / 4) as f32 * 9.0;
-                p.rect_filled(Rect::from_min_size(pos2(x, y), vec2(7.0, 7.0)), 1.5, if *on { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::line() });
-            }
-        }
-        Kind::Drummer => {
-            p.circle_filled(c, 14.0, Color32::from_rgb(0xe3, 0xb3, 0x2b));
-            p.circle_stroke(c, 9.0, Stroke::new(1.5, Color32::from_black_alpha(120)));
-        }
-        Kind::Bass | Kind::Guitar => {
-            p.line_segment([c + vec2(-12.0, 12.0), c + vec2(10.0, -10.0)], Stroke::new(3.0, col));
-            p.circle_filled(c + vec2(-10.0, 10.0), 7.0, if kind == Kind::Bass { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { Color32::from_rgb(0x3d, 0x8f, 0xe0) });
-        }
-        Kind::Keys => {
-            let k = Rect::from_center_size(c, vec2(34.0, 18.0));
-            p.rect_stroke(k, 2.0, s, egui::StrokeKind::Inside);
-            for i in 1..7 {
-                p.vline(k.min.x + i as f32 * 4.85, k.min.y..=k.max.y, Stroke::new(1.0, col));
-            }
-        }
-        Kind::Audio => {
-            p.rect_stroke(Rect::from_center_size(c - vec2(0.0, 4.0), vec2(10.0, 18.0)), 5.0, s, egui::StrokeKind::Inside);
-            p.vline(c.x, c.y + 6.0..=c.y + 13.0, s);
-            p.hline(c.x - 5.0..=c.x + 5.0, c.y + 13.0, s);
-        }
-    }
+    use crate::glyphs::{br, ph};
+    let (green, yellow, blue) = (Color32::from_rgb(0x52, 0xc0, 0x3c), Color32::from_rgb(0xe3, 0xb3, 0x2b), Color32::from_rgb(0x3d, 0x8f, 0xe0));
+    let (icon, col) = match kind {
+        Kind::Instrument => (ph::PIANO_KEYS, green),
+        Kind::Pattern => (ph::SQUARES_FOUR, green),
+        Kind::Drummer => (br::DRUM, yellow),
+        Kind::Bass => (ph::GUITAR, yellow),
+        Kind::Keys => (ph::PIANO_KEYS, yellow),
+        Kind::Audio => (ph::MICROPHONE, blue),
+        Kind::Guitar => (ph::GUITAR, blue),
+    };
+    crate::glyphs::paint(p, r, icon, 34.0, col);
 }
