@@ -99,11 +99,25 @@ pub fn draw_loops(app: &App, p: &egui::Painter, rr: Rect, t: usize, r: usize, x_
     let col = look::region_color(kind).gamma_multiply(0.45);
     let mut at = rg.start + rg.length;
     let mut k = 0;
-    while at < until && k < 512 {
+    // (skip straight to the first repetition in view: scrolled far right, the early ones are off)
+    let left = p.clip_rect().min.x;
+    if x_of(until as f32) > left && x_of(at as f32) < left {
+        let px_per_tick = (x_of(until as f32) - x_of(at as f32)) / (until - at).max(1) as f32;
+        if px_per_tick > 0.0 {
+            let skip = (((left - x_of(at as f32)) / px_per_tick) as u32 / rg.length).saturating_sub(1);
+            at += skip * rg.length;
+        }
+    }
+    while at < until && k < 4096 {
         let b = (at + rg.length).min(until);
         let g = Rect::from_min_max(pos2(x_of(at as f32), rr.min.y), pos2(x_of(b as f32), rr.max.y));
         if g.min.x > p.clip_rect().max.x {
             break;
+        }
+        if g.max.x < left {
+            at += rg.length;
+            k += 1;
+            continue;
         }
         p.rect_filled(g.shrink2(vec2(0.5, 0.0)), 4.0, col);
         // Logic's ▾ at each repetition's start

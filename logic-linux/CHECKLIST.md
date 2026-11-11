@@ -90,13 +90,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 191 | 594 | 32% |
+| Menu bar | 197 | 594 | 33% |
 | Local menus | 460 | 1191 | 38% |
 | Right-click menus | 1201 | 2575 | 46% |
-| Key commands | 571 | 2207 | 25% |
+| Key commands | 573 | 2207 | 25% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 191 of 594
+## Menu bar: 197 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -463,7 +463,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Navigate — 7/56</summary>
+<details><summary>Navigate — 13/56</summary>
 
 - [ ] Go To
   - [ ] Position…  `/`
@@ -509,12 +509,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Play From Last Locate Position
 - [ ] Stop Button Options
   - [x] Stop
-  - [ ] Stop and Go to Left Locator
-  - [ ] Stop and Go to Last Locate Position
-  - [ ] Jump between Marquee- and Project Start if stopped
-  - [ ] Jump between Cycle- and Project Start if stopped
-  - [ ] Jump between Selected Region- and Project Start if stopped
-  - [ ] Jump between Last Locate Position and Project Start if stopped
+  - [x] Stop and Go to Left Locator
+  - [x] Stop and Go to Last Locate Position
+  - [x] Jump between Marquee- and Project Start if stopped
+  - [x] Jump between Cycle- and Project Start if stopped
+  - [x] Jump between Selected Region- and Project Start if stopped
+  - [x] Jump between Last Locate Position and Project Start if stopped
 - [ ] Auto Set Locators
   - [ ] By Marquee Selection
   - [ ] By Region Selection
@@ -4910,7 +4910,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 571 of 2207
+## Key commands: 573 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4919,7 +4919,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 145/679</summary>
+<details><summary>Global Commands — 147/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -4965,8 +4965,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Go to Left Locator  `⌃⇧,`
 - [x] Go to Right Locator  `⌃⇧.`
 - [ ] Go to Last Locate Position
-- [ ] Stop and Go to Last Locate Position
-- [ ] Stop and Go to Left Locator
+- [x] Stop and Go to Last Locate Position
+- [x] Stop and Go to Left Locator
 - [ ] Stop and Go to Beginning
 - [ ] Go to Position…  `/`
 - [ ] Set Left Locator numerically…

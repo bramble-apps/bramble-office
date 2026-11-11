@@ -244,6 +244,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 }
 
 fn checked(app: &App, label: &str) -> bool {
+    if let Some(c) = crate::stopbutton::checked(app, label) {
+        return c;
+    }
     if let Some(c) = crate::audioedit::checked(app, label) {
         return c;
     }

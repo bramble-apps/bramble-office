@@ -97,7 +97,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
 
     // ---- the LCD, centred; the transport before it
     let lcd_w = 310.0;
-    let tw = if narrow { 4 } else { 7 };
+    // (Logic's default transport: Go to Beginning / Stop, Play, Record, Cycle; Capture as
+    // Recording, Replace and Autopunch only once ticked in Customize Control Bar)
+    let extras = [app.cb_show.capture, app.cb_show.replace, app.cb_show.autopunch];
+    let tw = if narrow { 4 } else { 4 + extras.iter().filter(|&&on| on).count() };
     let widths = vec![BTN + 6.0; tw];
     let total_t = widths.iter().sum::<f32>() + 2.0 * PAD;
     let center = bar.center().x.max(left_end + 12.0 + total_t + lcd_w / 2.0 - 40.0);
@@ -105,13 +108,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let (b, c) = run(lcd.min.x - total_t - 12.0, cy, &widths);
     caps.push(c);
     let playing = app.playing();
-    if button(ui, b[0], "stop", false, true, "Stop (Space)", |p, r, c| {
-        p.rect_filled(Rect::from_center_size(r.center(), vec2(12.0, 12.0)), 1.5, c);
-    })
-    .clicked()
-    {
+    // (stopped, Logic's Stop button shows Go to Beginning: a bar and a triangle)
+    let stop = button(ui, b[0], "stop", false, true, if playing { "Stop (Space)" } else { "Go to Beginning (Return)" }, |p, r, c| {
+        if playing {
+            p.rect_filled(Rect::from_center_size(r.center(), vec2(12.0, 12.0)), 1.5, c);
+        } else {
+            let m = r.center();
+            p.rect_filled(Rect::from_min_size(m + vec2(-7.0, -7.0), vec2(2.4, 14.0)), 0.6, c);
+            p.add(egui::Shape::convex_polygon(vec![m + vec2(7.0, -7.0), m + vec2(7.0, 7.0), m + vec2(-3.5, 0.0)], c, Stroke::NONE));
+        }
+    });
+    if stop.clicked() {
         app.stop();
     }
+    stop.context_menu(|ui| crate::stopbutton::context_menu(app, ui));
     if button(ui, b[1], "play", playing, true, "Play (Space)", |p, r, c| {
         let m = r.center();
         let col = if playing { Color32::from_rgb(0x4c, 0xd9, 0x64) } else { c };
@@ -130,7 +140,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     }
     let mut cyc_i = 3;
     if !narrow {
-        if button(ui, b[3], "capture", false, true, "Capture as Recording (⇧R)", |p, r, _| {
+        let mut slot = 3;
+        if app.cb_show.capture && button(ui, b[slot], "capture", false, true, "Capture as Recording (⇧R)", |p, r, _| {
             p.circle_stroke(r.center(), 8.0, Stroke::new(1.6, look::record_red()));
             p.circle_filled(r.center(), 4.0, look::record_red());
         })
@@ -138,7 +149,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         {
             app.key_command(ui.ctx(), "Capture as Recording");
         }
-        if button(ui, b[4], "replace", app.replace_mode, true, "Replace", |p, r, c| {
+        slot += usize::from(app.cb_show.capture);
+        if app.cb_show.replace && button(ui, b[slot], "replace", app.replace_mode, true, "Replace", |p, r, c| {
             let q = Rect::from_center_size(r.center(), vec2(15.0, 15.0));
             p.rect_stroke(q, 3.0, Stroke::new(1.5, c), egui::StrokeKind::Inside);
             p.rect_filled(q.shrink(4.0), 1.0, if app.replace_mode { look::record_red() } else { c.gamma_multiply(0.6) });
@@ -147,9 +159,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         {
             app.replace_mode = !app.replace_mode;
         }
+        slot += usize::from(app.cb_show.replace);
         // Autopunch (its locators: the red strip in the ruler)
         let ap = app.autopunch;
-        if button(ui, b[5], "autopunch", ap, true, "Autopunch (⌃⌥⌘P)", |p, r, c| {
+        if app.cb_show.autopunch && button(ui, b[slot], "autopunch", ap, true, "Autopunch (⌃⌥⌘P)", |p, r, c| {
             let m = r.center();
             let col = if ap { look::record_red() } else { c };
             p.vline(m.x - 7.0, m.y - 6.0..=m.y + 6.0, Stroke::new(1.6, c));
@@ -160,7 +173,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         {
             app.autopunch = !app.autopunch;
         }
-        cyc_i = 6;
+        slot += usize::from(app.cb_show.autopunch);
+        cyc_i = slot;
     }
     let cycle_on = app.cycle_on();
     if button(ui, b[cyc_i], "cycle", cycle_on, true, "Cycle (C)", |p, r, c| icon_cycle(p, r, if cycle_on { look::cycle() } else { c })).clicked() {
@@ -571,4 +585,13 @@ fn icon_files(p: &egui::Painter, r: Rect, c: Color32) {
     let q = Rect::from_center_size(m + vec2(0.0, 1.0), vec2(18.0, 13.0));
     p.rect_stroke(q, 2.5, st(c), egui::StrokeKind::Inside);
     p.line_segment([q.left_top() + vec2(1.0, 0.0), q.left_top() + vec2(6.0, 0.0)], Stroke::new(2.5, c));
+}
+
+/// The transport's optional buttons (Customize Control Bar and Display…); Logic shows none of
+/// them by default.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Shown {
+    pub capture: bool,
+    pub replace: bool,
+    pub autopunch: bool,
 }

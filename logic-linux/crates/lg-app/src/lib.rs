@@ -39,6 +39,7 @@ pub mod settings;
 pub mod smarttempo;
 pub mod takes;
 mod smartcontrols;
+mod stopbutton;
 mod trackarea;
 mod tracks;
 pub mod units;
