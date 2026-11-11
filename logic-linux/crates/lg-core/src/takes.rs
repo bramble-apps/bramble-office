@@ -331,7 +331,7 @@ mod tests {
     use crate::events::Note;
 
     fn region(start: u32, length: u32) -> Region {
-        Region { name: "Audio".into(), start, length, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() }
+        Region { name: "Audio".into(), start, length, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
     }
 
     fn folder(n: usize) -> TakeFolder {
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn midi_pieces_keep_their_notes() {
         let mut r = region(0, 3840);
-        r.notes = vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 960 }, Note { channel: 0, pitch: 62, velocity: 100, pos: 1920, len: 2000 }];
+        r.notes = vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 960, muted: false }, Note { channel: 0, pitch: 62, velocity: 100, pos: 1920, len: 2000, muted: false }];
         let f = TakeFolder::new(0, "Keys", r);
         let x = f.midi_region(Section { start: 1920, end: 3000, take: 0 }, "Take 1");
         assert_eq!(x.notes.len(), 1);

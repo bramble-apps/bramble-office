@@ -226,6 +226,8 @@ impl App {
                                 b.start = c;
                                 b.length = pc.start + pc.length - c;
                                 b.notes.retain(|n| n.pos >= c);
+                                // controllers (kept from the region's start) split with it
+                                lg_core::regions::split_events(&mut a.ext, &mut b.ext, c - pc.start);
                                 b.origin = pc.source.or(pc.origin);
                                 b.source = None;
                                 if let Some(au) = b.audio.as_mut() {
@@ -438,7 +440,7 @@ impl App {
             "Join Regions/Notes" | "Join Regions per Tracks / Fill Cell" | "Join" | "Join Regions" => self.join(),
             "Mute Notes/Regions/Cells/Folders On/Off" | "Mute Regions/Cells" | "Mute" => {
                 if self.bottom == Bottom::PianoRoll && !self.selected_notes.is_empty() {
-                    self.tell("Muting notes isn't available yet");
+                    crate::arranging::mute_notes(self);
                 } else {
                     self.each_region("Mute", |rg, _| rg.muted = !rg.muted);
                 }

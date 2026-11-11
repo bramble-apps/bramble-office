@@ -131,7 +131,7 @@ fn enter(app: &mut App, ctx: &egui::Context, pitch: u8, velocity: Option<u8>) ->
         if at + len > rg.start + rg.length {
             rg.length = at + len - rg.start;
         }
-        rg.notes.push(Note { channel: st.channel, pitch, velocity: vel, pos: at, len });
+        rg.notes.push(Note { channel: st.channel, pitch, velocity: vel, pos: at, len, muted: false });
         rg.notes.sort_by_key(|n| (n.pos, n.pitch));
         idx = rg.notes.iter().position(|n| n.pos == at && n.pitch == pitch).unwrap_or(0);
     }

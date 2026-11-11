@@ -224,6 +224,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         let selected = app.selected_notes.contains(&k);
         let c = note_color(app.midi.note_color, n, base);
+        // (muted notes grey, as Logic's)
+        let c = if n.muted { Color32::from_gray(120) } else { c };
         gp.rect_filled(r, 2.0, if selected { look::mix(c, Color32::WHITE, 0.45) } else { c });
         gp.rect_stroke(r, 2.0, Stroke::new(if selected { 1.6 } else { 1.0 }, if selected { Color32::WHITE } else { look::mix(c, Color32::BLACK, 0.45) }), egui::StrokeKind::Inside);
         // the velocity bar inside, as Logic draws it; or the note's name (View ▸ Note Labels)
@@ -395,7 +397,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let at = ((tick_at(pp.x) / sixteenth).floor() * sixteenth).max(0.0) as u32;
                 let (len, vel) = app.midi.default_note;
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
-                    rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len });
+                    rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len, muted: false });
                     app.selected_notes = vec![rg.notes.len() - 1];
                     app.midi.roll_drag = Some(RollDrag::Pencil { index: rg.notes.len() - 1, start: at });
                 }
@@ -422,7 +424,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
                             if pattern.is_empty() {
                                 if !rg.notes.iter().any(|n| n.pos == at && n.pitch == pitch) {
-                                    rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len: (step * 3 / 4).max(1) });
+                                    rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len: (step * 3 / 4).max(1), muted: false });
                                 }
                             } else {
                                 // the pattern repeats every span (rounded to the step), its first
@@ -454,7 +456,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let pitch = rows.pitch_at(pp.y);
             app.checkpoint("Create Note");
             if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
-                rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: 80, pos: tick.max(0.0) as u32, len: sixteenth as u32 });
+                rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: 80, pos: tick.max(0.0) as u32, len: sixteenth as u32, muted: false });
                 app.selected_notes = vec![rg.notes.len() - 1];
             }
             app.load_engine();
@@ -466,7 +468,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let pitch = rows.pitch_at(pp.y);
                 let (len, vel) = app.midi.default_note;
                 crate::midifunc::edit(app, "Create Note", |notes, sel, _| {
-                    notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len });
+                    notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len, muted: false });
                     *sel = vec![notes.len() - 1];
                 });
             }
@@ -639,10 +641,17 @@ fn note_color(by: crate::midifunc::NoteColor, n: &lg_core::events::Note, region:
 /// lane sets the velocities under the pointer (the selected notes only, when some are).
 #[allow(clippy::too_many_arguments)]
 fn velocity_lane(app: &mut App, ui: &mut egui::Ui, lane: Rect, ti: usize, ri: usize, x_of: &dyn Fn(f32) -> f32, tick_at: &dyn Fn(f32) -> f32, left: f32) {
+    // another MIDI Draw lane chosen: controllers, pitch bend, pressure, program (arranging.rs)
+    if app.arr.lane.is_some() {
+        crate::arranging::event_lane(app, ui, lane, ti, ri, x_of, tick_at, left);
+        return;
+    }
     let p = ui.painter_at(Rect::from_min_max(pos2(left, lane.min.y), lane.max));
     p.rect_filled(Rect::from_min_max(pos2(left, lane.min.y), lane.max), 0.0, look::pane_bg());
     p.hline(left..=lane.max.x, lane.min.y, Stroke::new(1.0, look::line()));
-    p.text(pos2(left + 6.0, lane.min.y + 10.0), Align2::LEFT_CENTER, "Velocity", look::semibold(10.5), look::text());
+    p.text(pos2(left + 6.0, lane.min.y + 10.0), Align2::LEFT_CENTER, "Velocity ▾", look::semibold(10.5), look::text());
+    let tr = ui.interact(Rect::from_min_size(pos2(left + 4.0, lane.min.y + 2.0), vec2(70.0, 16.0)), ui.scope_id().with("lane-title-vel"), Sense::click());
+    egui::Popup::menu(&tr).show(|ui| crate::arranging::lane_menu(app, ui));
     p.text(pos2(left + 6.0, lane.min.y + 24.0), Align2::LEFT_CENTER, "127", look::regular(9.0), look::text_dim());
     p.text(pos2(left + 6.0, lane.max.y - 8.0), Align2::LEFT_CENTER, "1", look::regular(9.0), look::text_dim());
     let inner = lane.shrink2(vec2(0.0, 6.0));

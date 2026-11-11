@@ -739,7 +739,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                 }
                 let a = g.tick_of(app, g.map.dst(s as f64));
                 let b = g.tick_of(app, g.map.dst(e as f64));
-                Some(lg_core::events::Note { channel: 0, pitch: key, velocity: vel, pos: a.round().max(0.0) as u32, len: (b - a).round().max(1.0) as u32 })
+                Some(lg_core::events::Note { channel: 0, pitch: key, velocity: vel, pos: a.round().max(0.0) as u32, len: (b - a).round().max(1.0) as u32, muted: false })
             }).collect();
             if notes.is_empty() {
                 app.tell("No Flex Pitch notes in the region");
@@ -750,7 +750,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                 let row = p.tracks.len() as u32 + 1;
                 let mut tr = lg_core::Track::new("Deluxe Classic", TrackKind::Instrument);
                 tr.row = row;
-                tr.regions.push(lg_core::Region { name: g.rg.name.clone(), start: g.rg.start, length: g.rg.length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() });
+                tr.regions.push(lg_core::Region { name: g.rg.name.clone(), start: g.rg.start, length: g.rg.length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
                 p.tracks.push(tr);
                 app.programs.push(4);
                 let nt = p.tracks.len() - 1;

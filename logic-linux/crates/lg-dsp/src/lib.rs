@@ -7,6 +7,7 @@
 //!   block, the GAMETSPP state) so a project's settings and presets carry over.
 //! - `registry` maps Logic's plug-in codes and names to ours (the matched-sounds idea).
 
+pub mod midifx;
 pub mod registry;
 pub mod routing;
 

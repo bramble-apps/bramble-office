@@ -273,6 +273,10 @@ pub struct App {
     pub eq_window: Option<usize>,
     /// The instrument plug-in window open (by track); bypassed instruments; Copy / Compare.
     pub plugin_window: Option<usize>,
+    /// The MIDI FX windows (midifx.rs).
+    pub mfx: crate::midifx::Ui,
+    /// Snap and Drag modes, the tempo and signature editors (arranging.rs).
+    pub arr: crate::arranging::State,
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
@@ -462,6 +466,8 @@ impl App {
             eqs: std::collections::HashMap::new(),
             eq_window: None,
             plugin_window: None,
+            mfx: Default::default(),
+            arr: Default::default(),
             mix: Default::default(),
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
@@ -550,6 +556,10 @@ impl App {
 
     /// The song as the engine plays it (audio files read in the background).
     pub fn load_engine(&mut self) {
+        // aliases and clones follow their originals (lg-core regions)
+        if let Some(p) = self.project.as_mut() {
+            lg_core::regions::sync_aliases(&mut p.tracks);
+        }
         let Some(p) = &self.project else { return };
         let mut tracks = Vec::new();
         let mut next_ch = 0u8;
@@ -576,7 +586,8 @@ impl App {
                 }
                 let mut offset = 0u32;
                 loop {
-                    for n in &r.notes {
+                    // (muted notes and notes past the region's end don't play)
+                    for n in r.notes.iter().filter(|n| !n.muted && n.pos < r.start + r.length) {
                         let mut n = r.props.apply(n, r.start);
                         let tp = self.track_props.get(&i).copied().unwrap_or_default();
                         if !tp.no_transpose {
@@ -618,6 +629,8 @@ impl App {
             e.param_auto = param_auto;
             crate::mixstate::to_engine(self, &mut e);
             crate::arp::to_engine(self, &mut e);
+            e.timeline = lg_core::timeline::Map::of(p);
+            crate::midifx::to_engine(self, &mut e);
             e.cycle = Some(self.cycle);
             e.program_changes();
         }
@@ -696,7 +709,7 @@ impl App {
                 let title = if tname.is_empty() { if n > 1 { format!("{name} {}", i + 1) } else { name.clone() } } else { tname };
                 let drums = ch == 9;
                 let row = p.tracks.len() as u32 + 1;
-                let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() };
+                let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
                 p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                 self.programs.push(if drums { 0 } else { program_for(&title, TrackKind::Instrument) });
             }
@@ -726,7 +739,7 @@ impl App {
                 p.tracks.len() - 1
             }
         };
-        p.tracks[t].regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.to_path_buf(), seconds }), muted: false, source: None, origin: None, props: Default::default() });
+        p.tracks[t].regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.to_path_buf(), seconds }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         self.selected_track = Some(t);
         self.after_edit();
     }
@@ -1024,7 +1037,7 @@ impl App {
         let at = (self.position() as u32 / bar) * bar;
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
-        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
+        let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
         p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
@@ -1261,7 +1274,7 @@ impl App {
         if crate::instwin::command(self, ctx, name) || crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
             return true;
         }
-        if crate::flex::command(self, ctx, name) || crate::hosting::command(self, name) {
+        if crate::flex::command(self, ctx, name) || crate::hosting::command(self, name) || crate::arranging::command(self, name) {
             return true;
         }
         if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
@@ -1748,6 +1761,8 @@ impl App {
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
+        crate::midifx::window(self, &ctx);
+        crate::arranging::windows(self, &ctx);
         crate::hosting::manager(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projaudio::window(self, &ctx);

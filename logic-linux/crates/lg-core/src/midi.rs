@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn writes_a_type_1_file() {
         let mut p = Project { name: "T".into(), tempo: 120.0, signature: (3, 4), ..Default::default() };
-        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480 }], audio: None, muted: false, source: None, origin: None, props: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
+        p.tracks.push(Track { name: "Keys".into(), kind: TrackKind::Instrument, channel: 0, row: 1, regions: vec![Region { name: "r".into(), start: 0, length: 3840, notes: vec![Note { channel: 0, pitch: 60, velocity: 100, pos: 0, len: 480, muted: false }], audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         let b = write(&p);
         assert_eq!(&b[..4], b"MThd");
         assert_eq!(u16::from_be_bytes([b[10], b[11]]), 2, "tempo track + one track");
@@ -213,7 +213,7 @@ pub fn read(data: &[u8]) -> Option<Imported> {
                         }
                         0x80 | 0x90 => {
                             if let Some((s, vel)) = open.remove(&(ch, a)) {
-                                notes.push(crate::events::Note { channel: ch, pitch: a, velocity: vel, pos: s as u32, len: (t - s).max(1) as u32 });
+                                notes.push(crate::events::Note { channel: ch, pitch: a, velocity: vel, pos: s as u32, len: (t - s).max(1) as u32, muted: false });
                             }
                         }
                         _ => {}
@@ -234,8 +234,8 @@ mod read_tests {
     #[test]
     fn reads_back_what_it_writes() {
         let mut p = crate::project::Project { tempo: 97.0, signature: (3, 4), ..Default::default() };
-        let notes = vec![crate::events::Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 480 }, crate::events::Note { channel: 0, pitch: 64, velocity: 70, pos: 960, len: 960 }];
-        p.tracks.push(crate::project::Track { name: "Keys".into(), kind: crate::project::TrackKind::Instrument, channel: 0, row: 1, regions: vec![crate::project::Region { name: "Keys".into(), start: 0, length: 3840, notes: notes.clone(), audio: None, muted: false, source: None, origin: None, props: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
+        let notes = vec![crate::events::Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 480, muted: false }, crate::events::Note { channel: 0, pitch: 64, velocity: 70, pos: 960, len: 960, muted: false }];
+        p.tracks.push(crate::project::Track { name: "Keys".into(), kind: crate::project::TrackKind::Instrument, channel: 0, row: 1, regions: vec![crate::project::Region { name: "Keys".into(), start: 0, length: 3840, notes: notes.clone(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         let back = super::read(&super::write(&p)).expect("reads");
         assert_eq!(back.tempo.map(|t| t.round()), Some(97.0));
         assert_eq!(back.signature, Some((3, 4)));

@@ -109,6 +109,8 @@ fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
         return;
     };
     let Some(region) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return };
+    // controllers, pitch bend, pressure, program changes below the notes (arranging.rs)
+    let body = crate::arranging::event_list_extras(app, ui, body, t, r);
     let w = body.width() - 16.0;
     // the Event Editor's view options (eventedit.rs): Relative Position, Length as Absolute Position
     let ev = crate::eventedit::state(ui.ctx());
@@ -226,59 +228,13 @@ fn markers(app: &mut App, ui: &mut egui::Ui, body: Rect) {
 }
 
 fn tempo_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
-    let p = ui.painter().clone();
-    let w = body.width() - 16.0;
-    let cols = [("Position", w * 0.5), ("Tempo", w * 0.5)];
-    let hr = Rect::from_min_size(body.min, vec2(body.width(), ROW));
-    header_row(&p, hr, &cols);
-    let Some(proj) = app.project.clone() else { return };
-    let mut events: Vec<(u32, f64)> = vec![(0, proj.tempo)];
-    events.extend(proj.tempo_map.iter().copied().filter(|(t, _)| *t > 0));
-    let mut y = hr.max.y + 1.0;
-    let mut change: Option<(usize, f64)> = None;
-    for (i, (pos, bpm)) in events.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(body.min.x, y), vec2(body.width(), ROW));
-        if i % 2 == 1 {
-            p.rect_filled(row, 0.0, look::lane_alt());
-        }
-        p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, bbdt(app, *pos), look::regular(12.0), look::text());
-        let mut v = *bpm as f32;
-        let cell = Rect::from_min_size(pos2(row.min.x + 8.0 + cols[0].1 - 4.0, row.min.y + 1.0), vec2(cols[1].1, ROW - 2.0));
-        if widgets::value_slot(ui, cell, ui.scope_id().with(("tempo-ev", i)), &mut v, 5.0, 990.0, *bpm as f32, 1.0, &|v| format!("{v:.4}")) {
-            change = Some((i, v as f64));
-        }
-        y += ROW;
-    }
-    if let Some((i, v)) = change {
-        app.checkpoint("Change Tempo");
-        if i == 0 {
-            app.set_tempo(v);
-        } else if let Some(pr) = app.project.as_mut() {
-            let pos = events[i].0;
-            if let Some(e) = pr.tempo_map.iter_mut().find(|e| e.0 == pos) {
-                e.1 = v;
-            }
-            app.after_edit();
-        }
-    }
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body.shrink2(vec2(8.0, 2.0))));
+    crate::arranging::tempo_list(app, &mut child);
 }
 
 fn signature_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
-    let p = ui.painter().clone();
-    let w = body.width() - 16.0;
-    let cols = [("Position", w * 0.5), ("Value", w * 0.5)];
-    let hr = Rect::from_min_size(body.min, vec2(body.width(), ROW));
-    header_row(&p, hr, &cols);
-    let Some(proj) = app.project.as_ref() else { return };
-    let rows = [(0u32, format!("Time Signature {}/{}", proj.signature.0, proj.signature.1)), (0, format!("Key Signature {}", proj.key))];
-    let mut y = hr.max.y + 1.0;
-    for (pos, v) in rows {
-        let row = Rect::from_min_size(pos2(body.min.x, y), vec2(body.width(), ROW));
-        p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, bbdt(app, pos), look::regular(12.0), look::text());
-        p.text(pos2(row.min.x + 8.0 + cols[0].1, row.center().y), Align2::LEFT_CENTER, v, look::regular(12.0), look::text());
-        y += ROW;
-    }
-    let _ = ui;
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body.shrink2(vec2(8.0, 2.0))));
+    crate::arranging::signature_list(app, &mut child);
 }
 
 // ---- Notes

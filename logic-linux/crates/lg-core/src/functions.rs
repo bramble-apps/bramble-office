@@ -581,7 +581,7 @@ mod tests {
     use super::*;
 
     fn n(pos: u32, len: u32, pitch: u8) -> Note {
-        Note { channel: 0, pitch, velocity: 80, pos, len }
+        Note { channel: 0, pitch, velocity: 80, pos, len, muted: false }
     }
 
     #[test]

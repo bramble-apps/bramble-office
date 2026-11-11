@@ -65,9 +65,12 @@ pub struct Note {
     pub velocity: u8,
     pub pos: u32,
     pub len: u32,
+    /// Mute Notes: kept in the region, not played.
+    pub muted: bool,
 }
 
-/// A controller change, pitch bend or channel pressure (kind 0xB, 0xE, 0xD), its value(s).
+/// A controller change, pitch bend, channel or poly pressure or program change (kind 0xB, 0xE,
+/// 0xD, 0xA, 0xC), its value(s). Pitch bend: number = LSB, value = MSB (unverified in Logic).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Control {
     pub kind: u8,
@@ -78,11 +81,11 @@ pub struct Control {
 }
 
 pub fn note(r: &Record) -> Option<Note> {
-    (r.kind & 0xF0 == 0x90 && r.units() >= 2).then(|| Note { channel: r.kind & 0x0F, pitch: r.u8_at(12), velocity: r.u8_at(11), pos: r.pos, len: r.u32_at(28) })
+    (r.kind & 0xF0 == 0x90 && r.units() >= 2).then(|| Note { channel: r.kind & 0x0F, pitch: r.u8_at(12), velocity: r.u8_at(11), pos: r.pos, len: r.u32_at(28), muted: false })
 }
 
 pub fn control(r: &Record) -> Option<Control> {
-    matches!(r.kind & 0xF0, 0xB0 | 0xD0 | 0xE0).then(|| Control { kind: r.kind & 0xF0, channel: r.kind & 0x0F, pos: r.pos, number: r.u8_at(12), value: r.u8_at(11) })
+    matches!(r.kind & 0xF0, 0xA0 | 0xB0 | 0xC0 | 0xD0 | 0xE0).then(|| Control { kind: r.kind & 0xF0, channel: r.kind & 0x0F, pos: r.pos, number: r.u8_at(12), value: r.u8_at(11) })
 }
 
 /// A time signature (kind 0x30): numerator, denominator.
@@ -253,7 +256,7 @@ mod tests {
         p.extend(unit(&[(0, 0xF1), (4, 0xff), (5, 0xff), (6, 0xff), (7, 0x3f)], false));
         let r = records(&p);
         assert_eq!(r.len(), 2);
-        assert_eq!(note(&r[0]), Some(Note { channel: 0, pitch: 61, velocity: 80, pos: 40080, len: 240 }));
+        assert_eq!(note(&r[0]), Some(Note { channel: 0, pitch: 61, velocity: 80, pos: 40080, len: 240, muted: false }));
         assert_eq!(control(&r[1]).map(|c| (c.channel, c.number, c.value)), Some((1, 7, 100)));
     }
 

@@ -465,7 +465,7 @@ pub fn generate(params: &DrummerParams, region: &RegionSpec, follow: Option<&[u3
         let mean = 80.0;
         let vv = mean + (hit.vel - mean) * dyn_ + hr.normal() * vsd;
         let vv = if hit.vel < 40.0 { vv.min(39.0) } else { vv };
-        out.push(Note { channel: params.channel, pitch: kit.note(hit.piece), velocity: vel(vv), pos, len: hit.len });
+        out.push(Note { channel: params.channel, pitch: kit.note(hit.piece), velocity: vel(vv), pos, len: hit.len, muted: false });
     }
     finish(out, region)
 }

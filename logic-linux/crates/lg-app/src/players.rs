@@ -92,7 +92,7 @@ pub fn new_track(app: &mut App, keys: bool) {
     let (name, patch) = if keys { ("Keyboard Player", "Steinway Grand Piano") } else { ("Bass Player", "Fingerstyle Bass") };
     let Some(p) = app.project.as_mut() else { return };
     let row = p.tracks.len() as u32 + 1;
-    let region = lg_core::Region { name: player.style_name(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
+    let region = lg_core::Region { name: player.style_name(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
     p.tracks.push(lg_core::Track { name: name.into(), kind: TrackKind::Instrument, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
     let t = p.tracks.len() - 1;
     app.programs.push(if keys { 0 } else { 33 });

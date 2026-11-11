@@ -56,6 +56,8 @@ pub struct Project {
     pub markers: Vec<(u32, String)>,
     /// Arrangement markers: (ticks from bar 1, length in ticks, name).
     pub arrangement: Vec<(u32, u32, String)>,
+    /// Tempo curves and sets, signature and key changes, beat mappings (timeline.rs).
+    pub global: crate::timeline::Global,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,6 +121,8 @@ pub struct Region {
     pub origin: Option<Source>,
     /// The Region inspector's playback parameters (Logic's: applied as it plays, the notes kept).
     pub props: RegionProps,
+    /// MIDI events other than notes, aliases and clones (arrange.rs).
+    pub ext: crate::regions::RegionExt,
 }
 
 /// Logic's MIDI region parameters (Region inspector): played through, never written into the
@@ -521,7 +525,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     let mut by_row: BTreeMap<u32, Track> = BTreeMap::new();
     for (pl, seq, folder) in placed {
         let channel_name = channels.get(&pl.channel).cloned().unwrap_or_else(|| format!("Track {}", pl.row));
-        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }), origin: None, props: Default::default() };
+        let mut region = Region { name: String::new(), start: pl.pos.saturating_sub(events::BAR_ONE), length: 0, notes: Vec::new(), audio: None, muted: pl.muted, source: Some(Source { folder, pos: pl.pos, seq, audio_region: pl.audio_region }), origin: None, props: Default::default(), ext: Default::default() };
         let mut kind = TrackKind::Instrument;
         if pl.audio {
             kind = TrackKind::Audio;
@@ -541,9 +545,16 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             region.props.transpose = pl.transpose;
             region.name = names.get(&s).cloned().unwrap_or_default();
             if let Some(ev) = evs.get(&s) {
-                region.notes = events::records(ev).iter().filter_map(events::note).map(|mut n| {
+                let recs = events::records(ev);
+                region.notes = recs.iter().filter_map(events::note).map(|mut n| {
                     n.pos = n.pos.saturating_sub(events::BAR_ONE);
                     n
+                }).collect();
+                // controllers, pitch bend, pressure, program changes: from the region's start
+                let at = pl.pos;
+                region.ext.events = recs.iter().filter_map(events::control).map(|mut c| {
+                    c.pos = c.pos.saturating_sub(at);
+                    c
                 }).collect();
             }
             if has_generator && region.name.starts_with("Drummer") {
@@ -654,6 +665,9 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
 impl Project {
     /// The tempo at a position (ticks from bar 1).
     pub fn tempo_at(&self, tick: u32) -> f64 {
+        if !self.global.tempo_curves.is_empty() {
+            return crate::timeline::Map::of(self).bpm_at(tick as f64);
+        }
         self.tempo_map.iter().rev().find(|t| t.0 <= tick).map_or(self.tempo, |t| t.1)
     }
 }

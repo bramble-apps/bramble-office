@@ -840,9 +840,9 @@ fn perform_to_tracks(app: &mut App, now: u32) {
         if to <= from {
             continue;
         }
-        let notes: Vec<Note> = loop_notes(&c, from, Some(to), from, to).into_iter().map(|(a, e, p, v)| Note { channel: 0, pitch: p, velocity: v, pos: a, len: e - a }).collect();
+        let notes: Vec<Note> = loop_notes(&c, from, Some(to), from, to).into_iter().map(|(a, e, p, v)| Note { channel: 0, pitch: p, velocity: v, pos: a, len: e - a, muted: false }).collect();
         if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-            tr.regions.push(lg_core::Region { name: c.name.clone(), start: from, length: to - from, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() });
+            tr.regions.push(lg_core::Region { name: c.name.clone(), start: from, length: to - from, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
             tr.regions.sort_by_key(|r| r.start);
         }
     }
@@ -940,7 +940,7 @@ pub fn scene_to_playhead(app: &mut App, scene: usize, insert: bool) {
         let Some(tr) = p.tracks.get_mut(t) else { continue };
         let notes = sounding(&c).into_iter().map(|n| Note { pos: n.pos + at, ..n }).collect();
         let audio = c.audio.clone().map(|f| lg_core::project::AudioRef { file: f, seconds: 0.0 });
-        tr.regions.push(lg_core::Region { name: c.name.clone(), start: at, length: c.length, notes, audio, muted: c.muted, source: None, origin: None, props: Default::default() });
+        tr.regions.push(lg_core::Region { name: c.name.clone(), start: at, length: c.length, notes, audio, muted: c.muted, source: None, origin: None, props: Default::default(), ext: Default::default() });
         tr.regions.sort_by_key(|r| r.start);
     }
     app.after_edit();
@@ -2103,7 +2103,7 @@ mod tests {
     use super::*;
 
     fn note(pos: u32, pitch: u8) -> Note {
-        Note { channel: 0, pitch, velocity: 100, pos, len: 240 }
+        Note { channel: 0, pitch, velocity: 100, pos, len: 240, muted: false }
     }
 
     fn cell(notes: Vec<Note>, length: u32) -> Cell {
@@ -2184,7 +2184,7 @@ mod tests {
 
     #[test]
     fn regions_become_cells_from_their_start() {
-        let r = lg_core::Region { name: "R".into(), start: 7680, length: 7680, notes: vec![note(7680, 60), note(9000, 62), note(20000, 64)], audio: None, muted: false, source: None, origin: None, props: Default::default() };
+        let r = lg_core::Region { name: "R".into(), start: 7680, length: 7680, notes: vec![note(7680, 60), note(9000, 62), note(20000, 64)], audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
         let c = cell_of_region(&r);
         assert_eq!(c.notes.iter().map(|n| n.pos).collect::<Vec<_>>(), vec![0, 1320]);
         assert_eq!((c.length, c.name.as_str(), c.looped), (7680, "R", true));

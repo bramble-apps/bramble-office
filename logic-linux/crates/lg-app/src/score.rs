@@ -894,7 +894,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 if selected(i) {
                     return sel_color;
                 }
-                let n = region.notes.get(i).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 0 });
+                let n = region.notes.get(i).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 0, muted: false });
                 note_color(st.colors, &n, voice_of(i), &score.attr(row.id, n.pos, n.pitch))
             };
             let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
@@ -1345,7 +1345,7 @@ pub fn insert_note(app: &mut App, t: usize, tick: u32, pitch: u8, len: u32, velo
     let Some(rix) = rix else { return false };
     app.checkpoint("Insert events");
     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(rix)) {
-        rg.notes.push(Note { channel: 0, pitch, velocity, pos: tick, len });
+        rg.notes.push(Note { channel: 0, pitch, velocity, pos: tick, len, muted: false });
         rg.notes.sort_by_key(|n| (n.pos, n.pitch));
         let idx = rg.notes.iter().position(|n| n.pos == tick && n.pitch == pitch).unwrap_or(0);
         app.selected_region = Some((t, rix));

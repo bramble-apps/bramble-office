@@ -518,7 +518,7 @@ fn flatten_merge(app: &mut App, fi: usize) {
             return;
         }
         let secs = joined.seconds();
-        Some((Region { name: name.clone(), start: a, length: b - a, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path, seconds: secs }), muted: false, source: None, origin: None, props: Default::default() }, 0))
+        Some((Region { name: name.clone(), start: a, length: b - a, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path, seconds: secs }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }, 0))
     };
     let Some((r, off)) = merged else { return };
     crate::audioedit::checkpoint(app, "Flatten and Merge Take Folder");

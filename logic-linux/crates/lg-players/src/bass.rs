@@ -353,7 +353,7 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 }
             };
             if tone == Tone::Dead {
-                notes.push(Note { channel: ch, pitch, velocity: vel(28.0 + 0.15 * i), pos: tick, len: 50 });
+                notes.push(Note { channel: ch, pitch, velocity: vel(28.0 + 0.15 * i), pos: tick, len: 50, muted: false });
                 continue;
             }
             // length: long notes released a little before the next beat, short ones nearly
@@ -373,14 +373,14 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
             if let (true, Some(pp)) = (on_change, prev_pitch) {
                 if pp != pitch && tick >= region.start + 70 && r.chance(params.slides.clamp(0.0, 1.0) * 0.2) {
                     let from = if pp < pitch { pitch - 2 } else { pitch + 2 };
-                    notes.push(Note { channel: ch, pitch: from, velocity: vel(v - 12.0), pos: tick - 60, len: 60 });
+                    notes.push(Note { channel: ch, pitch: from, velocity: vel(v - 12.0), pos: tick - 60, len: 60, muted: false });
                 }
             }
-            notes.push(Note { channel: ch, pitch, velocity: vel(v), pos: tick, len });
+            notes.push(Note { channel: ch, pitch, velocity: vel(v), pos: tick, len, muted: false });
             // double stops: a tenth (or fifth) above long notes
             if params.double_stops > 0.0 && span >= beat_t && r.chance(params.double_stops.clamp(0.0, 1.0) * 0.5) {
                 let up = if r.chance(0.6) { 12 + chord.third() } else { chord.fifth() };
-                notes.push(Note { channel: ch, pitch: pitch + up, velocity: vel(v - 10.0), pos: tick, len });
+                notes.push(Note { channel: ch, pitch: pitch + up, velocity: vel(v - 10.0), pos: tick, len, muted: false });
             }
             prev_pitch = Some(pitch);
         }
@@ -394,7 +394,7 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 let at = chg.pos - beat_t * 3 / 20;
                 let pitch = place(chg.chord.root, lowest);
                 notes.retain(|n| !(n.pos >= at && n.pos < chg.pos));
-                notes.push(Note { channel: ch, pitch, velocity: vel(base_vel + 34.0), pos: at, len: beat_t * 3 / 20 });
+                notes.push(Note { channel: ch, pitch, velocity: vel(base_vel + 34.0), pos: at, len: beat_t * 3 / 20, muted: false });
             }
         }
         // dead notes between the notes
@@ -404,7 +404,7 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 let at = t0 + (r.below(beats * 4) * 2 + 1) * beat_t / 8;
                 if at < region.end() && !notes.iter().any(|n| n.pos.abs_diff(at) < beat_t / 8) {
                     let p = place(chord_at(chords, at).map_or(0, |x| x.root), lowest);
-                    notes.push(Note { channel: ch, pitch: p, velocity: vel(26.0 + 0.15 * i), pos: at, len: 50 });
+                    notes.push(Note { channel: ch, pitch: p, velocity: vel(26.0 + 0.15 * i), pos: at, len: 50, muted: false });
                 }
             }
         }

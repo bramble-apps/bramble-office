@@ -566,7 +566,7 @@ mod tests {
     use super::*;
 
     fn note(pitch: u8, pos: u32) -> events::Note {
-        events::Note { channel: 0, pitch, velocity: 90, pos, len: 240 }
+        events::Note { channel: 0, pitch, velocity: 90, pos, len: 240, muted: false }
     }
 
     #[test]
@@ -574,7 +574,7 @@ mod tests {
         let b = note_record(None, &note(64, 960));
         let r = events::records(&b);
         assert_eq!(r.len(), 1, "one record of two units");
-        assert_eq!(events::note(&r[0]), Some(events::Note { channel: 0, pitch: 64, velocity: 90, pos: 960 + BAR_ONE, len: 240 }));
+        assert_eq!(events::note(&r[0]), Some(events::Note { channel: 0, pitch: 64, velocity: 90, pos: 960 + BAR_ONE, len: 240, muted: false }));
     }
 
     #[test]

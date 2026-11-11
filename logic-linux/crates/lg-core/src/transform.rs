@@ -455,7 +455,7 @@ mod tests {
     use super::*;
 
     fn n(pos: u32, len: u32, pitch: u8, velocity: u8) -> Note {
-        Note { channel: 0, pitch, velocity, pos, len }
+        Note { channel: 0, pitch, velocity, pos, len, muted: false }
     }
 
     fn run(name: &str, notes: &mut Vec<Note>, sel: &[usize]) {

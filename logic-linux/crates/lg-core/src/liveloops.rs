@@ -450,7 +450,7 @@ mod tests {
         let c = &g.cells[0];
         let mut notes = c.notes.clone();
         notes[0].velocity = 99;
-        notes.push(Note { channel: 0, pitch: 67, velocity: 80, pos: 960, len: 480 });
+        notes.push(Note { channel: 0, pitch: 67, velocity: 80, pos: 960, len: 480, muted: false });
         let out = write(&data, &[Edit::Notes { clip: c.clip, notes: notes.clone() }, Edit::Speed { clip: c.clip, speed: 2.0 }]).unwrap();
         assert!(chunks::walk(&out).is_ok());
         let g2 = read(&out, (4, 4)).unwrap();

@@ -62,6 +62,8 @@ pub struct TrackExtra {
     /// inactive ones.
     pub alt_name: String,
     pub alternatives: Vec<Alternative>,
+    /// The channel strip's MIDI FX slots, top to bottom (regions.rs, lg-dsp midifx).
+    pub midi_fx: Vec<crate::regions::MidiFxSlot>,
 }
 
 impl Track {
@@ -394,7 +396,7 @@ mod tests {
     #[test]
     fn alternatives_keep_and_swap_the_content() {
         let mut t = Track::new("Bass", TrackKind::Instrument);
-        t.regions.push(Region { name: "take".into(), start: 0, length: 3840, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() });
+        t.regions.push(Region { name: "take".into(), start: 0, length: 3840, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         new_alternative(&mut t, false);
         assert_eq!(t.extra.alt_name, "B");
         assert!(t.regions.is_empty());

@@ -176,7 +176,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             if let Some(region) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(r)) {
                 region.notes.retain(|n| n.pitch != p);
                 for &(pos, vel, len) in &clip {
-                    region.notes.push(Note { channel: 0, pitch: p, velocity: vel, pos: rg.start + pos, len });
+                    region.notes.push(Note { channel: 0, pitch: p, velocity: vel, pos: rg.start + pos, len, muted: false });
                 }
                 region.notes.sort_by_key(|n| (n.pos, n.pitch));
             }
@@ -345,7 +345,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         if let Some(region) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
             match vel {
                 Some(v) => {
-                    region.notes.push(Note { channel: 0, pitch, velocity: v, pos, len: grid });
+                    region.notes.push(Note { channel: 0, pitch, velocity: v, pos, len: grid, muted: false });
                     region.notes.sort_by_key(|n| (n.pos, n.pitch));
                 }
                 None => region.notes.retain(|n| !(n.pitch == pitch && n.pos >= pos && n.pos < pos + grid)),
@@ -424,7 +424,7 @@ mod tests {
         let d = gm_drums();
         assert_eq!(d.first().map(|l| l.pitch), Some(35));
         assert!(d.iter().any(|l| l.name == "Snare 1"));
-        let notes = [Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 10 }, Note { channel: 0, pitch: 64, velocity: 90, pos: 0, len: 10 }, Note { channel: 0, pitch: 60, velocity: 90, pos: 240, len: 10 }];
+        let notes = [Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 10, muted: false }, Note { channel: 0, pitch: 64, velocity: 90, pos: 0, len: 10, muted: false }, Note { channel: 0, pitch: 60, velocity: 90, pos: 240, len: 10, muted: false }];
         assert_eq!(current_lanes(&notes, false).iter().map(|l| l.pitch).collect::<Vec<_>>(), [64, 60]);
     }
 }

@@ -609,7 +609,7 @@ fn bounce_in_place(app: &mut App, whole_tracks: bool) -> bool {
         let secs = samples.len() as f64 / 2.0 / crate::audio::RATE as f64;
         let mut nt = lg_core::Track::new(&format!("{}_bip", tr.name), TrackKind::Audio);
         nt.extra.depth = tr.extra.depth;
-        nt.regions.push(Region { name: base, start: from, length: to - from, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path, seconds: secs }), muted: false, source: None, origin: None, props: Default::default() });
+        nt.regions.push(Region { name: base, start: from, length: to - from, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path, seconds: secs }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         if let Some(p) = app.project.as_mut() {
             for &r in &mine {
                 p.tracks[t].regions[r].muted = true;
@@ -781,9 +781,9 @@ mod tests {
     use super::*;
 
     fn midi(start: u32, len: u32) -> (Region, RegionAudio) {
-        let notes = (0..len / 480).map(|k| lg_core::events::Note { channel: 0, pitch: 60, velocity: 90, pos: start + k * 480, len: 240 }).collect();
+        let notes = (0..len / 480).map(|k| lg_core::events::Note { channel: 0, pitch: 60, velocity: 90, pos: start + k * 480, len: 240, muted: false }).collect();
         let src = lg_core::project::Source { folder: 0x40000, pos: start, seq: Some(0x100000), audio_region: 0 };
-        (Region { name: "r".into(), start, length: len, notes, audio: None, muted: false, source: Some(src), origin: None, props: Default::default() }, RegionAudio::default())
+        (Region { name: "r".into(), start, length: len, notes, audio: None, muted: false, source: Some(src), origin: None, props: Default::default(), ext: Default::default() }, RegionAudio::default())
     }
 
     #[test]
@@ -812,7 +812,7 @@ mod tests {
         let mut x = RegionAudio { offset: 1000, ..Default::default() };
         x.fades.in_ms = 50;
         x.fades.out_ms = 80;
-        let rg = Region { name: "a".into(), start: 0, length: 3840, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: "a.wav".into(), seconds: 2.0 }), muted: false, source: None, origin: None, props: Default::default() };
+        let rg = Region { name: "a".into(), start: 0, length: 3840, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: "a.wav".into(), seconds: 2.0 }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
         // 1 tick = 10 frames here
         let out = cut(&[(rg, x)], 960, 1920, Cut::Split, &|r: &Region, t: u32| ((t - r.start) * 10) as usize);
         assert_eq!(out.iter().map(|(_, x)| x.offset).collect::<Vec<_>>(), vec![1000, 10600, 20200]);

@@ -145,7 +145,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let first = scroll.floor() as i32;
     let visible = (ruler.width() / app.bar_w).ceil() as i32 + 1;
     let step = if app.bar_w < 18.0 { 8 } else if app.bar_w < 34.0 { 4 } else if app.bar_w < 60.0 { 2 } else { 1 };
+    // (signature changes: the bars from the signature map)
+    let sig_bars = crate::arranging::bar_lines(app, (first.max(0) as f32 * bar_t) as u32, ((first + visible).max(0) as f32 * bar_t) as u32);
+    if let Some(bars) = &sig_bars {
+        for &(t, n) in bars {
+            let x = x_of(t as f32, scroll);
+            if (n as i32 - 1) % step == 0 {
+                rp.vline(x, ruler.min.y + 2.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
+                rp.text(pos2(x + 3.0, ruler.min.y + 2.0), Align2::LEFT_TOP, format!("{n}"), look::semibold(11.0), look::text());
+            } else {
+                rp.vline(x, ruler.max.y - 6.0..=ruler.max.y, Stroke::new(1.0, look::text_dim().gamma_multiply(0.6)));
+            }
+        }
+    }
     for b in first..first + visible {
+        if sig_bars.is_some() {
+            break;
+        }
         let x = x_of(b as f32 * bar_t, scroll);
         if b % step == 0 {
             rp.vline(x, ruler.min.y + 2.0..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
@@ -487,18 +503,36 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if track == i {
                         let ri = region;
                         let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
-                        let free = ui.input(|i| i.modifiers.shift);
-                        let beat = bar_t / app.project.as_ref().map_or(4.0, |p| p.signature.0 as f32);
-                        let mut new = start as f32 + tick - from_tick;
-                        if !free {
-                            new = (new / beat).round() * beat;
+                        // Shift: no snapping (with Option-Shift: the alias's own drag)
+                        let free = ui.input(|i| i.modifiers.shift && !i.modifiers.alt);
+                        let new = crate::arranging::snap_region(app, start as f32 + tick - from_tick, start, px_per_tick, free);
+                        move_region(app, track, ri, new);
+                        // across tracks: shown on the track under the pointer, moved there on release
+                        let under = crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y).map(|r| r.t).filter(|&to| to != track);
+                        let mut tag = vec![("Position:".into(), crate::app::bbdt(new, sig))];
+                        if let Some(to) = under {
+                            if let Some(row) = rows.iter().find(|r| r.t == to) {
+                                let y = headers.min.y + row.y - app.scroll_y;
+                                let len = app.project.as_ref().and_then(|p| p.tracks.get(track)?.regions.get(ri)).map_or(0, |x| x.length);
+                                let ghost = Rect::from_min_max(pos2(x_of(new as f32, scroll), y + 2.0), pos2(x_of((new + len) as f32, scroll), y + row.h - 2.0));
+                                ui.painter_at(lanes).rect_stroke(ghost, 4.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
+                            }
+                            tag.push(("Track:".into(), app.project.as_ref().and_then(|p| p.tracks.get(to)).map_or(String::new(), |t| t.name.clone())));
                         }
-                        move_region(app, i, ri, new.max(0.0) as u32);
-                        app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(new.max(0.0) as u32, sig))]);
+                        app.help_tag = Some(tag);
                     }
                 }
             }
             if resp.drag_stopped() {
+                // the Drag mode (No Overlap, X-Fade, Shuffle…) on the track it ended on
+                if let Some(Drag::Region { track, region, .. }) = app.drag {
+                    let under = resp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()).and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
+                    let (t2, r2) = match under.filter(|&to| to != track).and_then(|to| crate::arranging::move_to_track(app, track, region, to).map(|k| (to, k))) {
+                        Some(x) => x,
+                        None => (track, region),
+                    };
+                    crate::arranging::after_move(app, t2, r2);
+                }
                 app.drag = None;
                 app.load_engine();
             }
@@ -519,11 +553,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
                     let beat = bar_t / app.project.as_ref().map_or(4.0, |p| p.signature.0 as f32);
                     let free = ui.input(|i| i.modifiers.shift);
-                    let mut end = tick;
-                    if !free {
-                        end = (end / beat).round() * beat;
-                    }
-                    let len = (end - r.start as f32).max(beat) as u32;
+                    let end = if free { tick } else { crate::arranging::snap_tick(app, tick, px_per_tick) };
+                    let len = (end - r.start as f32).max(if free { 10.0 } else { beat.min(crate::arranging::snap_grid(app, px_per_tick)) }) as u32;
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)).and_then(|t| t.regions.get_mut(ri)) {
                         rg.length = len;
                     }
@@ -531,6 +562,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             if eresp.drag_stopped() {
+                if let Some(Drag::RegionEnd { track, region, length }) = app.drag {
+                    crate::arranging::after_resize(app, track, region, length);
+                }
                 app.drag = None;
                 app.load_engine();
             }
@@ -580,7 +614,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.checkpoint("Create Region");
                 if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
                     let name = tr.name.clone();
-                    tr.regions.push(lg_core::Region { name, start, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() });
+                    tr.regions.push(lg_core::Region { name, start, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
                     let r = tr.regions.len() - 1;
                     app.selected_track = Some(t);
                     app.selected_region = Some((t, r));
@@ -643,9 +677,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if drag {
             // Option-drag: a copy moves, the original stays (Logic)
             let copy = ui.input(|i| i.modifiers.alt);
-            app.checkpoint(if copy { "Copy Region" } else { "Move Region" });
+            let alias = copy && ui.input(|i| i.modifiers.shift);
+            app.checkpoint(if alias { "Make Alias" } else if copy { "Copy Region" } else { "Move Region" });
             let mut r = r;
-            if copy {
+            if alias {
+                // Option-Shift: an alias (MIDI) or a clone (audio) moves (arranging.rs)
+                if let Some(k) = crate::arranging::alias_for_drag(app, t, r) {
+                    r = k;
+                    app.selected_region = Some((t, r));
+                }
+            } else if copy {
                 if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
                     if let Some(mut rg) = tr.regions.get(r).cloned() {
                         rg.origin = rg.source.or(rg.origin);
@@ -663,8 +704,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // bar lines over the lanes
-    for b in first..first + visible {
-        let x = x_of(b as f32 * bar_t, scroll);
+    let lines: Vec<f32> = match &sig_bars {
+        Some(bars) => bars.iter().map(|b| b.0 as f32).collect(),
+        None => (first..first + visible).map(|b| b as f32 * bar_t).collect(),
+    };
+    for t in lines {
+        let x = x_of(t, scroll);
         lp.vline(x, lanes.y_range(), Stroke::new(1.0, look::grid_line().gamma_multiply(0.7)));
     }
     // the playhead
@@ -764,7 +809,13 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
     let header = Rect::from_min_size(r.min, vec2(r.width(), 15.0));
     p.rect_filled(header, egui::CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 }, look::mix(body, Color32::WHITE, 0.35));
     if r.width() > 24.0 {
-        p.with_clip_rect(header).text(pos2(header.min.x + 4.0, header.center().y), Align2::LEFT_CENTER, &region.name, look::semibold(10.5), Color32::from_rgb(0x10, 0x20, 0x10));
+        // an alias (or clone) shows an arrow, and its parent's name under its own when zoomed in
+        let alias = region.ext.alias_of != 0;
+        let name = if alias { format!("↪ {}", if region.name.is_empty() { &region.ext.parent_name } else { &region.name }) } else { region.name.clone() };
+        p.with_clip_rect(header).text(pos2(header.min.x + 4.0, header.center().y), Align2::LEFT_CENTER, name, look::semibold(10.5), Color32::from_rgb(0x10, 0x20, 0x10));
+        if alias && r.height() > 40.0 && region.name != region.ext.parent_name && !region.ext.parent_name.is_empty() {
+            p.with_clip_rect(r).text(pos2(header.min.x + 4.0, header.max.y + 7.0), Align2::LEFT_CENTER, &region.ext.parent_name, look::regular(9.5), Color32::from_rgb(0x10, 0x20, 0x10).gamma_multiply(0.7));
+        }
     }
     let inner = Rect::from_min_max(pos2(r.min.x + 2.0, header.max.y + 2.0), pos2(r.max.x - 2.0, r.max.y - 3.0));
     let ink = look::mix(body, Color32::BLACK, 0.55);
@@ -1086,12 +1137,8 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                 0
             }
             2 => {
-                // the scale: 100 / 120 / 140 as Logic labels it
-                for bpm in [100.0f64, 120.0, 140.0] {
-                    let y = row.max.y - 6.0 - ((bpm - 80.0) / 80.0) as f32 * (h - 12.0);
-                    p.text(pos2(lanes_x - 34.0, y), Align2::RIGHT_CENTER, format!("{bpm:.0}"), look::regular(9.5), look::text_dim());
-                    lp.hline(lane.x_range(), y, Stroke::new(1.0, look::grid_line()));
-                }
+                // the scale: the range's ends and middle
+                crate::arranging::tempo_scale(app, &p, row, lanes_x);
                 1
             }
             3 => 2,
@@ -1186,39 +1233,8 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                     }
                 }
             }
-            1 => {
-                // the tempo line: 40..240 BPM over the lane's height
-                let tempo = app.tempo();
-                let y_of = |bpm: f64| row.max.y - 6.0 - ((bpm - 80.0) / 80.0).clamp(0.0, 1.0) as f32 * (row.height() - 12.0);
-                let mut pts = vec![pos2(lane.min.x, y_of(app.project.as_ref().map_or(tempo, |p| p.tempo)))];
-                if let Some(pr) = &app.project {
-                    for (t, b) in pr.tempo_map.iter().filter(|e| e.0 > 0) {
-                        let x = x_of(*t as f32);
-                        if let Some(last) = pts.last().copied() {
-                            pts.push(pos2(x, last.y));
-                        }
-                        pts.push(pos2(x, y_of(*b)));
-                    }
-                }
-                if let Some(last) = pts.last().copied() {
-                    pts.push(pos2(lane.max.x, last.y));
-                }
-                lp.add(egui::Shape::line(pts, Stroke::new(1.6, Color32::from_rgb(0x4c, 0xd9, 0x64))));
-                lp.text(pos2(lane.min.x + 6.0, row.min.y + 8.0), Align2::LEFT_CENTER, format!("{tempo:.2}"), look::regular(10.5), look::text_dim());
-                let resp = ui.interact(lane, ui.scope_id().with("tempo-lane"), Sense::drag()).on_hover_text("Tempo: drag up or down");
-                if resp.drag_started() {
-                    app.checkpoint("Change Tempo");
-                }
-                if resp.dragged() {
-                    let t = app.project.as_ref().map_or(120.0, |p| p.tempo);
-                    app.set_tempo((t - resp.drag_delta().y as f64 * 0.5).clamp(5.0, 990.0).round());
-                    app.help_tag = Some(vec![("Tempo".into(), format!("{:.0}", app.tempo()))]);
-                }
-            }
-            _ => {
-                let (sig, key) = app.project.as_ref().map_or(((4, 4), "C major".to_string()), |p| (p.signature, p.key.clone()));
-                lp.text(pos2(x_of(0.0) + 6.0, row.center().y), Align2::LEFT_CENTER, format!("{}/{}   {}", sig.0, sig.1, key), look::regular(12.0), look::text());
-            }
+            1 => crate::arranging::tempo_lane(app, ui, row, lane, &x_of, &tick_of),
+            _ => crate::arranging::signature_lane(app, ui, row, lane, &x_of, &tick_of),
         }
     }
 }

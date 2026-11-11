@@ -5,6 +5,7 @@
 pub mod allfiles;
 pub mod app;
 pub mod arp;
+pub mod arranging;
 pub mod audio;
 pub mod audioedit;
 mod automation;
@@ -22,6 +23,7 @@ mod inspector;
 pub mod keymap;
 mod live;
 pub mod midifunc;
+pub mod midifx;
 mod midiwin;
 pub mod liveloops;
 pub mod look;

@@ -706,7 +706,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             let (len, vel) = app.midi.default_note;
             edit(app, "Create Note", |notes, sel, i| {
                 let d = (i.beat / 4).max(1);
-                notes.push(Note { channel: 0, pitch, velocity: vel, pos: tick / d * d, len });
+                notes.push(Note { channel: 0, pitch, velocity: vel, pos: tick / d * d, len, muted: false });
                 *sel = vec![notes.len() - 1];
             })
         }

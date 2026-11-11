@@ -119,7 +119,7 @@ pub fn note(app: &mut App, pitch: u8, velocity: u8) {
         app.live.held.insert(pitch, (pos, velocity));
     } else if let Some((start, vel)) = app.live.held.remove(&pitch) {
         let len = (pos - start).max(30.0) as u32;
-        let n = Note { channel: 0, pitch, velocity: vel, pos: start.max(0.0) as u32, len };
+        let n = Note { channel: 0, pitch, velocity: vel, pos: start.max(0.0) as u32, len, muted: false };
         if app.recording() {
             app.recorded.push(n);
         } else if app.playing() {

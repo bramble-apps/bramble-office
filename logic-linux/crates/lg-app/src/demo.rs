@@ -9,7 +9,7 @@ const BEAT: u32 = 960;
 const BARS: u32 = 8;
 
 fn note(pitch: u8, velocity: u8, pos: u32, len: u32) -> Note {
-    Note { channel: 0, pitch, velocity, pos, len }
+    Note { channel: 0, pitch, velocity, pos, len, muted: false }
 }
 
 fn track(name: &str, kind: TrackKind, row: u32, regions: Vec<Region>) -> Track {
@@ -17,7 +17,7 @@ fn track(name: &str, kind: TrackKind, row: u32, regions: Vec<Region>) -> Track {
 }
 
 fn region(name: &str, start: u32, length: u32, notes: Vec<Note>) -> Region {
-    Region { name: name.into(), start, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() }
+    Region { name: name.into(), start, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
 }
 
 pub fn song() -> Project {

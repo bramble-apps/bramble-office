@@ -491,6 +491,18 @@ fn plugins(p: &Project, before: &Project, _data: &[u8], chunks: &[Chunk], e: &mu
 // --- signature, key ------------------------------------------------------------------------
 
 fn signature_and_key(p: &Project, before: &Project, _data: &[u8], chunks: &[Chunk], e: &mut Edits, left: &mut Vec<String>) {
+    if !p.global.signatures.is_empty() || !p.global.keys.is_empty() {
+        left.push("time / key signature changes after bar 1".into());
+    }
+    if p.global.tempo_sets.len() > 1 {
+        left.push("tempo sets other than the current one".into());
+    }
+    if p.tracks.iter().any(|t| !t.extra.midi_fx.is_empty()) {
+        left.push("MIDI FX slots".into());
+    }
+    if p.tracks.iter().flat_map(|t| t.regions.iter()).any(|r| r.ext.alias_of != 0) {
+        left.push("aliases (saved as copies)".into());
+    }
     let sig_changed = p.signature != before.signature;
     let key_changed = events::key_byte(&p.key) != events::key_byte(&before.key);
     if !sig_changed && !key_changed {
@@ -557,7 +569,8 @@ fn seconds_at(map: &[(u32, f64)], tick: u32) -> f64 {
 
 fn tempo_list(p: &Project, before: &Project, _data: &[u8], chunks: &[Chunk], e: &mut Edits, left: &mut Vec<String>) {
     let norm = |m: &[(u32, f64)]| m.iter().map(|&(t, b)| (t, (b * 10000.0).round() as u32)).collect::<Vec<_>>();
-    let mut now = p.tempo_map.clone();
+    // tempo curves go in as the tempo events they stand for (1/16 apart), as Logic keeps them
+    let mut now: Vec<(u32, f64)> = if p.global.tempo_curves.is_empty() { p.tempo_map.clone() } else { crate::timeline::Map::of(p).expanded(240).into_iter().map(|x| (x.0, x.1)).collect() };
     if now.is_empty() {
         now.push((0, p.tempo));
     }
@@ -1060,7 +1073,7 @@ mod tests {
         r.name = "Drawn".into();
         r.start = 3840 * 8;
         r.length = 3840;
-        r.notes = vec![events::Note { channel: 0, pitch: 72, velocity: 100, pos: 3840 * 8 + 480, len: 480 }];
+        r.notes = vec![events::Note { channel: 0, pitch: 72, velocity: 100, pos: 3840 * 8 + 480, len: 480, muted: false }];
         r.props.transpose = 2;
         e.tracks[t].regions.push(r.clone());
         let mut nt = e.tracks[t].clone();

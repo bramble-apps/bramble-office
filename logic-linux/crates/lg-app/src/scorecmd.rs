@@ -522,7 +522,7 @@ mod tests {
     use super::*;
 
     fn n(pos: u32, pitch: u8) -> Note {
-        Note { channel: 0, pitch, velocity: 80, pos, len: 240 }
+        Note { channel: 0, pitch, velocity: 80, pos, len: 240, muted: false }
     }
 
     #[test]

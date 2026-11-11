@@ -281,7 +281,7 @@ pub fn generate(params: &KeysParams, region: &RegionSpec, chords: &[ChordAt]) ->
                     let p = voicing[idx];
                     let accent = if at % beat_t == 0 { 6.0 } else { 0.0 };
                     let len = if params.style == KeysStyle::Arpeggiated { (span * 2).min(to_change - tick) } else { legato.max(span) };
-                    notes.push(Note { channel: ch, pitch: p, velocity: vel(base_v - 6.0 + accent + if idx == top { 6.0 } else { 0.0 }), pos: tick, len });
+                    notes.push(Note { channel: ch, pitch: p, velocity: vel(base_v - 6.0 + accent + if idx == top { 6.0 } else { 0.0 }), pos: tick, len, muted: false });
                 }
                 _ => {
                     // strike part of the chord (the top and some inner voices) on lighter hits
@@ -296,12 +296,12 @@ pub fn generate(params: &KeysParams, region: &RegionSpec, chords: &[ChordAt]) ->
                         let off = if roll { (j as u32) * (6 + (c * 6.0) as u32) } else { 0 };
                         let accent = if vi == top { 12.0 } else { -4.0 } + if at % beat_t == 0 { 3.0 } else { -6.0 };
                         let pos = (tick + off).min(region.end() - 1);
-                        notes.push(Note { channel: ch, pitch: voicing[vi], velocity: vel(base_v + accent), pos, len: legato.saturating_sub(off).max(30) });
+                        notes.push(Note { channel: ch, pitch: voicing[vi], velocity: vel(base_v + accent), pos, len: legato.saturating_sub(off).max(30), muted: false });
                     }
                     // grace notes: a quick step into the top voice
                     if params.grace_notes > 0.0 && part >= 0.75 && tick >= region.start + 50 && r.chance(params.grace_notes * 0.35) {
                         let g = voicing[top].saturating_sub(if r.chance(0.5) { 1 } else { 2 });
-                        notes.push(Note { channel: ch, pitch: g, velocity: vel(base_v - 16.0), pos: tick - 40, len: 40 });
+                        notes.push(Note { channel: ch, pitch: g, velocity: vel(base_v - 16.0), pos: tick - 40, len: 40, muted: false });
                     }
                 }
             }
@@ -327,7 +327,7 @@ pub fn generate(params: &KeysParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 }
                 for p in lh {
                     if !voicing.contains(&p) {
-                        notes.push(Note { channel: ch, pitch: p, velocity: lv, pos: tick, len });
+                        notes.push(Note { channel: ch, pitch: p, velocity: lv, pos: tick, len, muted: false });
                     }
                 }
             }
@@ -347,7 +347,7 @@ pub fn generate(params: &KeysParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 while !pcs.contains(&((p.rem_euclid(12)) as u8)) && p > 30 {
                     p -= 1;
                 }
-                notes.push(Note { channel: ch, pitch: p.clamp(21, 108) as u8, velocity: vel(base_v - 8.0 + k as f32 * 2.0), pos: at, len: step });
+                notes.push(Note { channel: ch, pitch: p.clamp(21, 108) as u8, velocity: vel(base_v - 8.0 + k as f32 * 2.0), pos: at, len: step, muted: false });
             }
         }
     }

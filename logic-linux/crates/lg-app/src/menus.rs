@@ -204,6 +204,9 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) && !crate::recording::COMMANDS.contains(&label) && !crate::takes::COMMANDS.contains(&label) {
         return false;
     }
+    if let Some(e) = crate::arranging::enabled(app, label) {
+        return e;
+    }
     if let Some(e) = crate::trackarea::enabled(app, label).or_else(|| crate::regionops::enabled(app, label)) {
         return e;
     }
@@ -221,7 +224,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     // (the Record menu's choice submenus: their items share names)
-    if crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
+    if crate::arranging::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {

@@ -120,7 +120,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         }
         "Create Event" => {
             let at = (app.position().max(0.0) as u32).clamp(rg.start, rg.start + rg.length.saturating_sub(1));
-            let like = cur.and_then(|i| rg.notes.get(i)).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 240 });
+            let like = cur.and_then(|i| rg.notes.get(i)).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 240, muted: false });
             app.checkpoint("Create Event");
             let mut idx = 0;
             if let Some(region) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {

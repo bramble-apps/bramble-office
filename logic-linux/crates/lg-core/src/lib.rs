@@ -15,9 +15,11 @@ pub mod package;
 pub mod mixer;
 pub mod plugin;
 pub mod project;
+pub mod regions;
 pub mod save;
 pub mod score;
 pub mod takes;
+pub mod timeline;
 pub mod transform;
 pub mod writeback;
 

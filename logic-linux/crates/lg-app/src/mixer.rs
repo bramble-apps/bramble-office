@@ -418,8 +418,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     let instrument = is_track.then(|| app.project.as_ref().and_then(|pr| pr.tracks.get(i)).and_then(|t| t.plugins.iter().find(|u| u.slot == 2)).map(|u| u.name.clone())).flatten();
     let inst_track = matches!(kind, Some(TrackKind::Instrument) | Some(TrackKind::Drummer));
     if inst_track && shown(app, "MIDI Effects") {
-        slot(&p, y, "MIDI FX", None);
-        y += 22.0;
+        y = crate::midifx::strip_slots(app, ui, &p, r, y, i);
     }
     // the input / instrument slot
     if shown(app, "Input / Instrument") && !is_vca {

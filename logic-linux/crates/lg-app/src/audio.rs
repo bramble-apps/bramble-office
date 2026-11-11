@@ -188,6 +188,11 @@ pub struct Engine {
     pub param_auto: Vec<Vec<crate::automation::ParamLane>>,
     /// The tracks' Arpeggiators for keys played live (arp.rs).
     pub arp: crate::arp::EngineArps,
+    /// The tracks' MIDI FX chains and the regions' controllers (midifx.rs).
+    pub fx: crate::midifx::EngineFx,
+    /// Tempo curves and signature changes (lg-core timeline): the tempo while playing, the
+    /// click's bars and beats.
+    pub timeline: lg_core::timeline::Map,
 }
 
 #[derive(Clone, Copy)]
@@ -204,7 +209,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default() }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -253,6 +258,11 @@ impl Engine {
         if track >= self.tracks.len() {
             return;
         }
+        // (through the track's MIDI FX when it has some)
+        if self.fx.active(track) {
+            self.fx.push_live(track, if velocity > 0 { lg_dsp::midifx::Msg::On { ch: 0, pitch, vel: velocity } } else { lg_dsp::midifx::Msg::Off { ch: 0, pitch } });
+            return;
+        }
         // (through the track's Arpeggiator when it's on)
         if self.arp.active(track) {
             if let Some(a) = self.arp.tracks.get_mut(&track) {
@@ -284,6 +294,16 @@ impl Engine {
 
     /// A controller played live (sustain pedal, mod wheel, pitch bend as cc 128).
     pub fn live_control(&mut self, track: usize, cc: u8, value: u16) {
+        if self.fx.active(track) {
+            let m = if cc == 128 { lg_dsp::midifx::Msg::Bend { ch: 0, val: (value as i32 - 8192) as i16 } } else { lg_dsp::midifx::Msg::Cc { ch: 0, num: cc, val: value.min(127) as u8 } };
+            self.fx.push_live(track, m);
+            return;
+        }
+        self.control_out(track, cc, value);
+    }
+
+    /// A controller to the track's instrument (after the MIDI FX).
+    pub fn control_out(&mut self, track: usize, cc: u8, value: u16) {
         let ch = self.tracks.get(track).map_or(0, |t| t.channel);
         if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
             if cc == 128 { ins.pitch_bend(value as i16 - 8192) } else { ins.controller(cc, value as u8) }
@@ -293,6 +313,18 @@ impl Engine {
             } else {
                 s.process_midi_message(ch as i32, 0xB0, cc as i32, value as i32);
             }
+        }
+    }
+
+    /// Another channel message to the track's sound (pressure, poly pressure, program change);
+    /// Studio's own instruments don't take these.
+    pub fn live_message(&mut self, track: usize, status: u8, d1: u8, d2: u8) {
+        let ch = self.tracks.get(track).map_or(0, |t| t.channel);
+        if self.units.get(track).is_some_and(|u| u.instrument.is_some()) {
+            return;
+        }
+        if let Some(Some(s)) = self.synths.get_mut(track) {
+            s.process_midi_message(ch as i32, status as i32 & 0xF0, d1 as i32, d2 as i32);
         }
     }
 
@@ -457,6 +489,7 @@ impl Engine {
             }
         }
         self.sounding.clear();
+        self.fx.reset_all();
         for v in &mut self.voices {
             v.releasing = true;
         }
@@ -480,7 +513,7 @@ impl Engine {
         if self.meters.len() != self.tracks.len() {
             self.meters = vec![0.0; self.tracks.len()];
         }
-        let bpm = self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1);
+        let bpm = if self.timeline.points.is_empty() { self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1) } else { self.timeline.bpm_at(self.pos) };
         let tps = bpm / 60.0 * PPQ as f64 / RATE as f64;
         // the Arpeggiators' steps for keys held live
         if !self.arp.tracks.is_empty() {
@@ -492,6 +525,12 @@ impl Engine {
         // recording: the input for this block; a count-in before bar 1 holds the playhead
         let input = self.rec.input(frames);
         let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
+        // the MIDI FX and the regions' controllers for this block
+        if !self.fx.chains.is_empty() || self.fx.controls.iter().any(|c| !c.is_empty()) {
+            let audible: Vec<bool> = (0..self.tracks.len()).map(|i| self.audible(i)).collect();
+            let span = (self.playing && !held).then(|| (self.pos, self.pos + tps * frames as f64));
+            crate::midifx::render(self, span, tps * frames as f64, bpm, &audible);
+        }
         if self.playing && !held {
             let from = self.pos;
             let to = from + tps * frames as f64;
@@ -517,7 +556,7 @@ impl Engine {
             }
             // notes starting in this block
             for i in 0..self.tracks.len() {
-                if !self.audible(i) {
+                if !self.audible(i) || self.fx.active(i) {
                     continue;
                 }
                 let t = &self.tracks[i];
@@ -537,11 +576,14 @@ impl Engine {
             }
             // the click: a beat line crossed in this block
             if self.metronome || self.rec.click_forced(from) {
-                let beat = PPQ as f64;
-                let next = (from / beat).ceil() * beat;
+                // beats of the signature in force; the accent on each bar's first
+                let (bar, bar_start, sig) = self.timeline.bar_of(from.max(0.0) as u32);
+                let beat = if self.timeline.points.is_empty() { PPQ as f64 } else { lg_core::timeline::Map::beat_len(sig) as f64 };
+                let next = bar_start as f64 + ((from - bar_start as f64) / beat).ceil() * beat;
+                let _ = bar;
                 if next < to {
                     let n = (next / beat).round() as u32;
-                    let accent = n % self.beats_per_bar.max(1) == 0;
+                    let accent = if self.timeline.points.is_empty() { n % self.beats_per_bar.max(1) == 0 } else { self.timeline.bar_of(next as u32).1 == next as u32 };
                     self.click = Some((if accent { 1760.0 } else { 1320.0 }, 0.0));
                 }
             }

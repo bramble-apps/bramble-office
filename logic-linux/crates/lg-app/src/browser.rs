@@ -560,7 +560,7 @@ fn place(app: &mut App, t: usize, d: &DragItem, at: u32) -> bool {
         let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(at + bar) - at;
         let bars = it.as_ref().and_then(|i| i.bars).unwrap_or_else(|| end.div_ceil(bar).max(1));
         let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return false };
-        tr.regions.push(lg_core::Region { name, start: at, length: bars * bar, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() });
+        tr.regions.push(lg_core::Region { name, start: at, length: bars * bar, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         return true;
     }
     let info = crate::projaudio::file_info(&path);
@@ -580,7 +580,7 @@ fn place(app: &mut App, t: usize, d: &DragItem, at: u32) -> bool {
         _ => ((played * tempo / 60.0 * lg_core::events::PPQ as f64) as u32).max(1),
     };
     let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return false };
-    tr.regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.clone(), seconds: file_secs }), muted: false, source: None, origin: None, props: Default::default() });
+    tr.regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.clone(), seconds: file_secs }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
     let r = tr.regions.len() - 1;
     let rate = info.as_ref().map_or(crate::audio::RATE, |i| i.rate) as f64;
     let mut x = crate::audioedit::RegionAudio { file: path.clone(), offset: (off * rate) as usize, ..Default::default() };

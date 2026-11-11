@@ -278,7 +278,7 @@ impl StepPattern {
                             break;
                         }
                         let l = (sub * s.gate.clamp(1, 100) as u32 / 100).max(1).min(len - pos);
-                        out.push(Note { channel: 0, pitch, velocity: s.velocity.clamp(1, 127), pos, len: l });
+                        out.push(Note { channel: 0, pitch, velocity: s.velocity.clamp(1, 127), pos, len: l, muted: false });
                     }
                     last = Some(out.len() - 1);
                 } else {
@@ -551,7 +551,7 @@ pub fn new_pattern_region(app: &mut App, ctx: &egui::Context, t: usize, at: u32)
     let Some(name) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()) else { return };
     app.checkpoint("Create Pattern Region");
     let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
-    tr.regions.push(lg_core::Region { name, start: at, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() });
+    tr.regions.push(lg_core::Region { name, start: at, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
     let r = tr.regions.len() - 1;
     with_store(ctx, |s| {
         // the default pattern template when one is stored (Store as Default Pattern Template)
@@ -2507,7 +2507,7 @@ mod tests {
         assert_eq!(q.rows.len(), 2);
         assert_eq!(q.render(3840, 0), notes);
         // a long note becomes tied steps, and plays back as one note
-        let long = [Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 720 }];
+        let long = [Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 720, muted: false }];
         let q = StepPattern::from_notes(&long, 3840, false);
         assert!(q.rows[0].steps[1].tie && q.rows[0].steps[2].tie);
         assert_eq!(q.render(3840, 0), long.to_vec());

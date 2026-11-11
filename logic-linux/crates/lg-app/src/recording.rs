@@ -851,7 +851,7 @@ pub fn finish(app: &mut App) {
             let start = f.start.round() as u32;
             let length = ((end - f.start).round() as u32).max(1);
             app.rec.recorded_at.insert(f.path.clone(), f.start);
-            regions.push(Region { name: tr.name.clone(), start, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: f.path.clone(), seconds: secs }), muted: false, source: None, origin: None, props: Default::default() });
+            regions.push(Region { name: tr.name.clone(), start, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: f.path.clone(), seconds: secs }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         }
         if !regions.is_empty() {
             audio.push((tr.track, regions));
@@ -924,7 +924,7 @@ pub fn midi_take(app: &mut App, from: u32, notes: Vec<Note>, what: &str) {
 }
 
 fn region_of(name: &str, (a, b): (u32, u32), notes: Vec<Note>) -> Region {
-    Region { name: name.to_string(), start: a, length: b - a, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() }
+    Region { name: name.to_string(), start: a, length: b - a, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
 }
 
 /// A new track like `t` (its kind, sound and instrument), at the end of the list.
