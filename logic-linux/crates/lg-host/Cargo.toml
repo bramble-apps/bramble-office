@@ -1,0 +1,42 @@
+[package]
+name = "lg-host"
+version = "0.4.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Bramble Studio's plug-in hosting: CLAP, VST3 and LV2 instruments and effects (scanned in a separate process), their parameters, state, latency and editor windows"
+
+[[bin]]
+name = "lg-plugscan"
+path = "src/bin/lg-plugscan.rs"
+
+[dependencies]
+lg-dsp = { path = "../lg-dsp" }
+# CLAP's C API (MIT / Apache-2.0)
+clap-sys = "0.5"
+# VST 3's COM API, generated from the SDK's headers (MIT / Apache-2.0)
+vst3 = "0.3"
+# loading the plug-ins' shared libraries, and the system's lilv for LV2 when it is there (ISC)
+libloading = "0.8"
+# poll() for the plug-ins' editor file descriptors
+libc = "0.2"
+# the editors' host windows (pure-Rust X11 protocol, MIT / Apache-2.0)
+x11rb = { version = "0.13", default-features = false }
+
+# tiny test plug-ins (one per format) built by `cargo test`, loaded by tests/hosting.rs
+[[example]]
+name = "test_clap"
+crate-type = ["cdylib"]
+path = "examples/test_clap.rs"
+
+[[example]]
+name = "test_vst3"
+crate-type = ["cdylib"]
+path = "examples/test_vst3.rs"
+
+[[example]]
+name = "test_lv2"
+crate-type = ["cdylib"]
+path = "examples/test_lv2.rs"
+
+[dev-dependencies]
+libloading = "0.8"

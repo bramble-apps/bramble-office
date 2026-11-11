@@ -8,11 +8,18 @@ pub fn instrument(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Instrument>> 
     if std::env::var_os("LG_SOUNDFONT_ONLY").is_some() {
         return None;
     }
+    // a hosted third-party plug-in: "Name (CLAP)", "Name (VST3)", "Name (LV2)"
+    if lg_host::parse_studio_name(name).is_some() {
+        return lg_host::open_by_name(name, rate).map(|i| Box::new(i) as Box<dyn lg_dsp::Instrument>);
+    }
     lg_synth::by_logic_name(name, rate).or_else(|| lg_synth::for_patch(name, rate))
 }
 
 /// An effect for a Logic plug-in name ("Compressor", "ChromaVerb").
 pub fn effect(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Effect>> {
+    if lg_host::parse_studio_name(name).is_some() {
+        return lg_host::open_by_name(name, rate).map(|i| Box::new(i) as Box<dyn lg_dsp::Effect>);
+    }
     lg_fx::by_logic_name(name, rate)
 }
 

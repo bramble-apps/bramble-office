@@ -52,6 +52,7 @@ mod stopbutton;
 mod trackarea;
 mod toolbar;
 mod tracks;
+mod hosting;
 pub mod units;
 mod widgets;
 mod windows;

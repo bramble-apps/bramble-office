@@ -30,6 +30,8 @@ lg-players = { path = "../lg-players" }
 lg-synth = { path = "../lg-synth" }
 lg-fx = { path = "../lg-fx" }
 lg-notation = { path = "../lg-notation" }
+# hosting third-party CLAP, VST3 and LV2 plug-ins
+lg-host = { path = "../lg-host" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)
 midir = "0.11"
 

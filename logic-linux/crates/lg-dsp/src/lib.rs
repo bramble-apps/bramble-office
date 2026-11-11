@@ -62,6 +62,16 @@ pub trait Plugin: Send {
     fn tail(&self) -> f32 {
         0.0
     }
+    /// The plug-in's own text for a value ("-6.0 dB", "Sawtooth"), when it has one (hosted
+    /// plug-ins); None: the plug-in window formats it by the parameter's unit.
+    fn value_text(&self, _id: u32, _value: f32) -> Option<String> {
+        None
+    }
+    /// A hosted third-party plug-in (lg-host's Instance) for its editor and state; None for
+    /// Studio's own units.
+    fn hosted(&mut self) -> Option<&mut dyn std::any::Any> {
+        None
+    }
     /// Sets parameters from Logic's saved float block (index = Param::id).
     fn load_floats(&mut self, floats: &[f32]) {
         let ids: Vec<u32> = self.params().iter().map(|p| p.id).collect();
@@ -83,6 +93,11 @@ pub trait Instrument: Plugin {
     fn pitch_bend(&mut self, _value: i16) {}
     /// Adds this block's sound into `left` and `right` (same length).
     fn render(&mut self, left: &mut [f32], right: &mut [f32]);
+    /// Samples of delay the instrument adds (hosted plug-ins report theirs), for latency
+    /// compensation.
+    fn latency(&self) -> usize {
+        0
+    }
 }
 
 /// An audio effect: processes the block in place.

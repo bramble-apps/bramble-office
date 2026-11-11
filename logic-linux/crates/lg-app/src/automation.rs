@@ -145,6 +145,11 @@ fn lane_mut(app: &mut App, t: usize, param: u8) -> Option<&mut AutoLane> {
 pub fn plugin_param(app: &App, t: usize, slot: u32, id: u32) -> Option<(String, String, f32, f32, f32)> {
     let tr = app.project.as_ref()?.tracks.get(t)?;
     let u = tr.plugins.iter().find(|u| u.slot == slot)?;
+    // a hosted plug-in: its list (made once), the value from the slot's floats (hosting.rs)
+    if let Some(params) = crate::hosting::params_of(&u.name) {
+        let p = params.iter().find(|p| p.id == id)?;
+        return Some((u.name.clone(), p.name.to_string(), p.min, p.max, u.params.get(id as usize).copied().unwrap_or(p.default)));
+    }
     let rate = crate::audio::RATE as f32;
     let (params, value): (Vec<lg_dsp::Param>, f32) = if slot == 2 {
         let mut ins = crate::units::instrument(&u.name, rate)?;
@@ -250,7 +255,9 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
         }
         let rate = crate::audio::RATE as f32;
         for (slot, plug) in plugins {
-            let params: Vec<lg_dsp::Param> = if slot == 2 { crate::units::instrument(&plug, rate).map(|i| i.params().to_vec()) } else { crate::units::effect(&plug, rate).map(|f| f.params().to_vec()) }.unwrap_or_default();
+            let params: Vec<lg_dsp::Param> = if let Some(p) = crate::hosting::params_of(&plug) {
+                Some(p)
+            } else if slot == 2 { crate::units::instrument(&plug, rate).map(|i| i.params().to_vec()) } else { crate::units::effect(&plug, rate).map(|f| f.params().to_vec()) }.unwrap_or_default();
             if params.is_empty() {
                 ui.add_enabled(false, egui::Button::new(&plug));
                 continue;

@@ -30,11 +30,12 @@ fn fmt(p: &lg_dsp::Param, v: f32) -> String {
 }
 
 /// The Controls view: a row per parameter; returns the parameters changed (id, value).
-fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &str) -> Vec<(u32, f32)> {
+/// `texts`: the plug-in's own text for a value when it has one (hosted plug-ins).
+fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], texts: &[Option<String>], salt: &str) -> Vec<(u32, f32)> {
     let mut set = Vec::new();
     egui::ScrollArea::vertical().id_salt(salt).auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
-        for (prm, &v) in params.iter().zip(values.iter()) {
+        for (n, (prm, &v)) in params.iter().zip(values.iter()).enumerate() {
             let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
             let p = ui.painter().clone();
             let name_w = (row.width() * 0.34).min(200.0);
@@ -69,7 +70,8 @@ fn controls(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: &[f32], salt: &
                     }
                 }
             }
-            p.text(pos2(row.max.x - 4.0, row.center().y), Align2::RIGHT_CENTER, fmt(prm, v), look::regular(12.0), look::text());
+            let shown = texts.get(n).cloned().flatten().unwrap_or_else(|| fmt(prm, v));
+            p.text(pos2(row.max.x - 4.0, row.center().y), Align2::RIGHT_CENTER, shown, look::regular(12.0), look::text());
         }
     });
     set
@@ -113,6 +115,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     };
     let track = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
     let patch = app.instrument_for(t).unwrap_or_default();
+    let texts = crate::hosting::texts(app, crate::hosting::Slot::Inst(t), &params, &values);
     let mut open = true;
     let mut set: Vec<(u32, f32)> = Vec::new();
     egui::Window::new(format!("{track} — {patch}")).id(egui::Id::unique("plugin-window")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 520.0)).show(ctx, |ui| {
@@ -151,13 +154,15 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             None => {}
         }
         ui.add_space(6.0);
-        set.extend(controls(ui, &params, &values, "inst"));
+        crate::hosting::view_row(app, ui, crate::hosting::Slot::Inst(t), &format!("{track} — {patch}"));
+        set.extend(controls(ui, &params, &values, &texts, "inst"));
     });
     if !set.is_empty() {
         if let Ok(mut e) = app.engine.lock() {
             for (id, v) in set {
                 e.set_instrument_param(t, id, v);
             }
+            crate::hosting::mark_changed(crate::hosting::Slot::Inst(t));
         }
         app.dirty = true;
     }
@@ -172,6 +177,10 @@ fn effect_state(app: &App, s: usize, k: usize) -> Option<(String, Vec<lg_dsp::Pa
     let u = crate::mixstate::inserts(app, s).get(k)?.clone();
     if let Some((params, values)) = app.engine.lock().ok().and_then(|e| e.effect_params(crate::mixer::fx_strip(s), k)) {
         return Some((u.name, params, values));
+    }
+    if lg_host::parse_studio_name(&u.name).is_some() {
+        // (a hosted plug-in the engine couldn't load: no window)
+        return None;
     }
     let mut fx = crate::units::effect(&u.name, crate::audio::RATE as f32)?;
     if !u.params.is_empty() {
@@ -238,6 +247,11 @@ fn write_setting(plugin: &str, name: &str, params: &[lg_dsp::Param], values: &[f
 }
 
 fn load_setting(app: &mut App, s: usize, k: usize, name: &str, path: &std::path::Path) {
+    // a hosted plug-in's preset carries its whole state
+    if let Some(f) = crate::hosting::preset_floats(path) {
+        apply_floats(app, s, k, f, Some(name.to_string()));
+        return;
+    }
     let Some((_, params, values)) = effect_state(app, s, k) else { return };
     let Some(pairs) = read_setting(path) else { return };
     let mut vals = values.clone();
@@ -285,6 +299,9 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     let mut reset = false;
     let mut save: Option<String> = None;
     let comparing = app.mix.compare.contains_key(&(s, k));
+    let hslot = crate::hosting::Slot::Fx(s, k);
+    let hosted = crate::hosting::hosted_info(app, hslot).is_some();
+    let texts = crate::hosting::texts(app, hslot, &params, &values);
     egui::Window::new(format!("{strip} — {name}")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(520.0, 460.0)).show(ctx, |ui| {
         let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
         let p = ui.painter().clone();
@@ -343,17 +360,26 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
         if let Some(a) = header_buttons(ui, &p, hr, "fx", comparing) {
             action = Some(a);
         }
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("View:").color(look::text_dim()));
-            ui.label("Controls");
-            if comparing {
-                ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
-            }
-        });
+        if hosted {
+            // (a hosted plug-in: its own editor beside the Controls view)
+            crate::hosting::view_row(app, ui, hslot, &format!("{strip} — {name}"));
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("View:").color(look::text_dim()));
+                ui.label("Controls");
+                if comparing {
+                    ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
+                }
+            });
+        }
         ui.add_space(4.0);
-        set.extend(controls(ui, &params, &values, "fx"));
+        set.extend(controls(ui, &params, &values, &texts, "fx"));
     });
-    let base = slot.params.clone();
+    // (a hosted plug-in's own state, fresh, for Copy, Compare and Save Setting As…)
+    if hosted && (matches!(action, Some(0) | Some(1)) || save.is_some()) {
+        crate::hosting::sync_slot(app, hslot);
+    }
+    let base = if hosted { crate::mixstate::inserts(app, s).get(k).map(|u| u.params.clone()).unwrap_or_default() } else { slot.params.clone() };
     if toggle_bypass {
         crate::mixstate::checkpoint(app, "Bypass Plug-in");
         crate::mixstate::edit_inserts(app, s, |v| {
@@ -389,6 +415,12 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     }
     if let Some(n) = save {
         if write_setting(&name, &n, &params, &values).is_some() {
+            if let (Some(extra), Some(dir)) = (crate::hosting::preset_extra(&name, &base), settings_dir(&name)) {
+                use std::io::Write as _;
+                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(dir.join(format!("{}.txt", n.replace('/', "-")))) {
+                    let _ = f.write_all(extra.as_bytes());
+                }
+            }
             crate::mixstate::edit_inserts(app, s, |v| {
                 if let Some(u) = v.get_mut(k) {
                     u.preset = n.clone();
