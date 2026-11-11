@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 296,
+  "done": 298,
   "total": 679,
-  "percent": 43.6
+  "percent": 43.9
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -25,15 +25,15 @@
  },
  {
   "group": "Windows Showing Audio Files",
-  "done": 1,
+  "done": 4,
   "total": 15,
-  "percent": 6.7
+  "percent": 26.7
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 163,
+  "done": 164,
   "total": 290,
-  "percent": 56.2
+  "percent": 56.6
  },
  {
   "group": "Various Editors",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 93,
+  "done": 109,
   "total": 249,
-  "percent": 37.3
+  "percent": 43.8
  },
  {
   "group": "Live Loops Grid",
@@ -109,21 +109,21 @@
  },
  {
   "group": "Project Audio",
-  "done": 1,
+  "done": 4,
   "total": 20,
-  "percent": 5.0
+  "percent": 20.0
  },
  {
   "group": "Audio File Editor",
-  "done": 1,
+  "done": 55,
   "total": 55,
-  "percent": 1.8
+  "percent": 100.0
  },
  {
   "group": "Smart Tempo Editor",
-  "done": 1,
+  "done": 32,
   "total": 32,
-  "percent": 3.1
+  "percent": 100.0
  },
  {
   "group": "Browser",

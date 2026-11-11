@@ -99,6 +99,8 @@ fn use_sfera(ctx: &egui::Context) {
     // Bravura (SIL OFL 1.1, Steinberg): the Score's music symbols, by their SMuFL code points
     static BRAVURA: &[u8] = include_bytes!("../fonts/Bravura.otf");
     ctx.add_font(FontInsert::new(&format!("lg-bravura-{g}"), egui::FontData::from_static(BRAVURA), vec![at(FontFamily::Name("bravura".into()))]));
+    // the icons (Phosphor + Tabler, MIT): glyphs.rs
+    crate::glyphs::add(ctx, g);
 }
 
 /// The music font (Bravura) at `size`: SMuFL's em is the staff's height, four staff spaces.

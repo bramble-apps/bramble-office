@@ -11,11 +11,17 @@
 //! - [`fade`]: audio region fades (Logic's lengths in ms and -99..99 curves);
 //! - [`record`]: recording: WAV files written as the audio comes in, comps joined into one file;
 //! - [`stretch`]: WSOLA time stretch, pitch shift and piecewise warping (Flex Time / Flex Pitch
-//!   groundwork), and a YIN pitch detector.
+//!   groundwork), and a YIN pitch detector;
+//! - [`flex`]: Flex Time's modes (phase vocoder, WSOLA, slicing, rhythmic, speed, tempophone)
+//!   played through flex markers, and Quantize by transients;
+//! - [`flexpitch`]: Flex Pitch: pitch tracking, notes, and their edits (pitch, drift, vibrato,
+//!   gain, formants) rendered by PSOLA; pitch correction to a scale.
 
 pub mod fade;
 mod fft;
 pub mod file;
+pub mod flex;
+pub mod flexpitch;
 pub mod ops;
 pub mod peaks;
 pub mod record;

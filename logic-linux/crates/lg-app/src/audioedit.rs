@@ -70,6 +70,10 @@ pub struct RegionAudio {
     pub flex: Vec<(usize, usize)>,
     /// Reverse (the region plays its audio backwards; the file is left as it is).
     pub reverse: bool,
+    /// Flex Pitch: the region's notes with their edits (frames of the file; empty: unedited).
+    pub pitch: Vec<lg_audio::flexpitch::Note>,
+    /// Flex & Follow: the file's Smart Tempo beats follow the project tempo (flex.rs).
+    pub follow: bool,
 }
 
 /// A decoded file: its samples at its own rate, the overview, its transients.
@@ -337,7 +341,7 @@ fn sync_undo(app: &mut App) {
 }
 
 /// The file decoded (cached; read again when it changed on disk).
-fn load<'a>(app: &'a mut App, path: &Path) -> Option<&'a Loaded> {
+pub(crate) fn load<'a>(app: &'a mut App, path: &Path) -> Option<&'a Loaded> {
     let stamp = std::fs::metadata(path).and_then(|m| m.modified()).ok();
     let fresh = app.audio_edit.files.get(path).is_some_and(|l| l.stamp == stamp);
     if !fresh {
@@ -451,10 +455,17 @@ pub struct Plan {
     pub fades: RegionFades,
     pub flex: Vec<(usize, usize)>,
     pub reverse: bool,
+    /// The track's Flex mode, and Flex Pitch's edited notes (frames of the file).
+    pub mode: lg_audio::flex::Mode,
+    pub notes: Vec<lg_audio::flexpitch::Note>,
 }
 
 impl Plan {
     pub fn render(&self) -> Option<Vec<f32>> {
+        crate::flex::cached(self, || self.render_now())
+    }
+
+    fn render_now(&self) -> Option<Vec<f32>> {
         let a = match AudioFile::read(&self.file) {
             Ok(a) => a,
             Err(_) => AudioFile::new(crate::audio::RATE, 2, crate::audio::load_audio(&self.file)?),
@@ -463,9 +474,25 @@ impl Plan {
         let out_frames = (self.seconds * rate).round() as usize;
         let src_frames = flex_src(&self.flex, out_frames as f64).ceil() as usize;
         let mut part = a.slice(self.offset..self.offset + src_frames);
+        if !self.notes.is_empty() {
+            // Flex Pitch: the notes' edits on this part (its own pitch track)
+            let c = part.channels.max(1);
+            let mono: Vec<f32> = part.data.chunks(c).map(|f| f.iter().sum::<f32>() / c as f32).collect();
+            let tr = lg_audio::flexpitch::track(&mono, part.rate);
+            let notes: Vec<lg_audio::flexpitch::Note> = self.notes.iter().filter(|n| n.end > self.offset).map(|n| {
+                let mut n = n.clone();
+                n.start = n.start.saturating_sub(self.offset);
+                n.end -= self.offset;
+                n
+            }).collect();
+            part.data = lg_audio::flexpitch::render(&part.data, c, &tr, &notes);
+        }
         if !self.flex.is_empty() {
-            let anchors: Vec<(usize, usize)> = self.flex.clone();
-            part.data = lg_audio::stretch::warp(&part.data, part.channels, part.rate, &anchors);
+            let trs = match self.mode {
+                lg_audio::flex::Mode::Slicing | lg_audio::flex::Mode::Rhythmic | lg_audio::flex::Mode::Polyphonic => lg_audio::transients::detect(&part.data, part.channels, part.rate, 0.5),
+                _ => Vec::new(),
+            };
+            part.data = lg_audio::flex::render(&part.data, part.channels, part.rate, &self.flex, out_frames, self.mode, &trs);
         }
         part.data.resize(out_frames.min(part.data.len() / part.channels) * part.channels, 0.0);
         if self.reverse {
@@ -494,7 +521,8 @@ pub fn playback(app: &App) -> Vec<(usize, u32, Plan)> {
             }
             let x = extras(app, t, r);
             let seconds = app.seconds_at((rg.start + rg.length) as f64) - app.seconds_at(rg.start as f64);
-            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex: x.flex, reverse: x.reverse }));
+            let (mode, flex, notes) = crate::flex::plan_for(app, t, rg, &x);
+            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex, reverse: x.reverse, mode, notes }));
         }
     }
     out
@@ -792,7 +820,6 @@ fn amp_scale(p: &Painter, col: Rect, lane: Rect, step: f32, percent: bool, zoom:
 // Audio Track Editor
 
 const SNAPS: [&str; 7] = ["Smart", "Bar", "Beat", "Division", "Ticks", "Frames", "Samples"];
-const FLEX_MODES: [&str; 7] = ["Slicing", "Rhythmic", "Monophonic", "Polyphonic", "Speed (FX)", "Tempophone (FX)", "Flex Pitch"];
 const TRACK_TOOLS: [crate::edit::Tool; 12] = {
     use crate::edit::Tool::*;
     [Pointer, Pencil, Eraser, Text, Scissors, Glue, Solo, Mute, Zoom, Fade, Marquee, Flex]
@@ -858,13 +885,18 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     }
     bx += 44.0;
     if app.audio_edit.show_flex {
+        // the track's Flex mode (flex.rs), then Follow Tempo / Pitch Correction
         let fr = b(bx, 128.0);
-        let names: Vec<&str> = FLEX_MODES.to_vec();
+        let names: Vec<&str> = lg_audio::flex::Mode::ALL.iter().map(|m| m.name()).collect();
+        let cur = crate::flex::track(app, t).mode;
         p.rect_filled(fr, 6.0, look::group_bg());
-        if let Some(k) = crate::widgets::choice_slot(ui, fr, ae_id.with("fmode"), app.audio_edit.flex_mode, &names) {
-            app.audio_edit.flex_mode = k;
+        let k = lg_audio::flex::Mode::ALL.iter().position(|m| *m == cur).unwrap_or(0);
+        if let Some(k) = crate::widgets::choice_slot(ui, fr, ae_id.with("fmode"), k, &names) {
+            crate::flex::set_mode(app, t, lg_audio::flex::Mode::ALL[k]);
         }
         bx += 136.0;
+        // (what room the tools and the right-hand controls leave)
+        bx = crate::flex::editor_bar(app, ui, pos2(bx, cy), local.width() - 980.0, t, r) + 6.0;
     }
     if icon_button(ui, b(bx, 36.0), ae_id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| catch_glyph(p, r.center(), c)).clicked() {
         app.audio_edit.catch = !app.audio_edit.catch;
@@ -1064,6 +1096,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         wp.hline(rbody.x_range(), y, Stroke::new(2.0, Color32::from_rgb(0xe8, 0xc8, 0x3a)));
         wp.text(pos2(rbody.min.x + 6.0, y - 8.0), Align2::LEFT_CENTER, format!("Gain {:+.1} dB", x.gain_db), look::regular(11.0), Color32::from_rgb(0xe8, 0xc8, 0x3a));
     }
+    let rate_of_file = rate_of(app, file).unwrap_or(48_000) as f64;
     // flex: the transients (grey) and the flex markers (orange)
     let mut flex_hits: Vec<(f32, usize, Option<usize>)> = Vec::new();
     if app.audio_edit.show_flex {
@@ -1096,6 +1129,9 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     }
     // ---- the region's gestures
     let area_resp = ui.interact(Rect::from_min_max(header.min, wave.max), ui.scope_id().with("atebody"), Sense::click_and_drag());
+    // Flex Pitch: the notes, over the region (their own gestures)
+    let dst_x = |d: f64| sec_x(d / rate_of_file);
+    crate::flex::pitch_view(app, ui, rbody, t, r, &dst_x);
     let on_region = area_resp.hover_pos().or(area_resp.interact_pointer_pos()).is_some_and(|h| reg.contains(h));
     if on_region {
         crate::menus::context_menu(app, &area_resp, "region-audio");
@@ -1402,7 +1438,9 @@ fn split(app: &mut App, t: usize, r: usize, tick: f64) {
     let mut rx = x.clone();
     rx.offset = x.offset + flex_src(&x.flex, dsec * rate) as usize;
     rx.fades.in_ms = 0;
-    rx.flex.clear();
+    // the markers after the cut, from the right part's start
+    let (cs, cd) = (flex_src(&x.flex, dsec * rate), dsec * rate);
+    rx.flex = x.flex.iter().filter(|m| m.0 as f64 > cs + 1.0).map(|m| ((m.0 as f64 - cs).round() as usize, (m.1 as f64 - cd).round().max(1.0) as usize)).collect();
     let mut lx = x;
     lx.fades.out_ms = 0;
     let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
@@ -2998,7 +3036,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
     true
 }
 
-fn transients_of(app: &mut App, file: &Path) -> Vec<usize> {
+pub fn transients_of(app: &mut App, file: &Path) -> Vec<usize> {
     transients(app, file)
 }
 
@@ -3142,7 +3180,7 @@ mod tests {
         let mut a = AudioFile::new(48_000, 1, vec![0.5; 48_000]);
         a.bits = 16;
         a.write(&path).unwrap();
-        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false };
+        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false, mode: Default::default(), notes: Vec::new() };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 48_000);
         assert_eq!(out[0], 0.0);

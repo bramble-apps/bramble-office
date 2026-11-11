@@ -92,7 +92,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)"
+  "feature": "Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [ ] Project Audio window (\u23188) and its 17 other commands"
  },
  {
   "area": "Main window",
@@ -146,8 +146,18 @@
  },
  {
   "area": "Editing",
-  "status": "Not started",
-  "feature": "Flex Time and Flex Pitch, Smart Tempo analysis"
+  "status": "Partial",
+  "feature": "Flex Time (lg-audio flex, flex.rs): per-track Flex on/off (\u2303F, header button with Show Flex Pitch/Time) and Logic's modes, each its own DSP: Polyphonic (phase vocoder, identity phase locking, phase reset at transients, stereo locked), Monophonic (WSOLA), Slicing (slices kept at speed, gaps silent), Rhythmic (gaps filled by looping the slice end), Speed (FX, pitch follows), Tempophone (FX, fixed grains); flex markers in the Audio Track Editor (drag transients, Flex tool, double-click deletes), Create Flex Marker at Playhead / Previous / Next Transient, Slice at Flex / Transient Markers, Quantize (Q) of audio by transients on Flex tracks, Time Stretch Region Length to Locators / Nearest Bar, Move Selection with First Transient to Nearest Beat, Trim Region Start / End to Previous / Next Transient, Rewind / Forward by Transient, Follow Tempo (needs the file's Smart Tempo analysis), Remove Silence\u2026 sheet; markers shown on regions in the tracks area; played through the engine (renders cached), undo. Tested on synthetic signals (pitch kept, markers land, slices / gaps). [ ] Automatic (Polyphonic) is plain Polyphonic (no auto-choice after analysis), mode settings (Slicing decay / length, Rhythmic, Tempophone grain), Flex tool in the tracks area, Time Stretch writes no new file (one end marker instead), flex data and modes not read from or written to the .logicx, Snap Flexed Regions by First Downbeat, listening quality not compared with Logic"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Flex Pitch (lg-audio flexpitch): pitch tracking (YIN, sub-sample refined, \u00b13 cents), notes cut by pitch steps / transients / gaps (vibrato and drift don't cut), the Audio Track Editor's pitch grid with the notes and their curve, drag a note (semitones), hotspots: Fine Pitch, Pitch Drift, Vibrato, Gain, Formant Shift; double-click = perfect pitch; Pitch Correction (amount, Chromatic / Project Key); rendered by TD-PSOLA (formants kept; Formant Shift resamples grains); Create MIDI Track from Flex Pitch Data; Analyze Audio for Flex Editing. [ ] Piano Roll display of flex pitch notes, Flex Pitch vibrato / velocity tools, note split / glue / move in time, one drift handle drives both ends, notes made in the tracks area, the Mac's look of the notes"
+ },
+ {
+  "area": "Editing",
+  "status": "Done",
+  "feature": "Smart Tempo analysis and its editor (smarttempo.rs, audioedit.rs): all 32 Smart Tempo Editor key commands run (checked headless with LG_RUN)"
  },
  {
   "area": "Audio",

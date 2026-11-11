@@ -168,6 +168,8 @@ pub struct App {
     pub live_loops: crate::liveloops::State,
     /// The audio editors (Track, File, Smart Tempo): their state and the regions' audio edits.
     pub audio_edit: crate::audioedit::AudioEdit,
+    /// Flex Time / Flex Pitch: the tracks' settings, pitch analyses (flex.rs).
+    pub flex: crate::flex::State,
     /// Automation shown on the tracks (A); each track's mode and the lane its header shows.
     pub show_automation: bool,
     pub auto_mode: std::collections::HashMap<usize, crate::automation::AutoMode>,
@@ -359,6 +361,7 @@ impl App {
             catch_off: false,
             live_loops: Default::default(),
             audio_edit: Default::default(),
+            flex: Default::default(),
             show_automation: false,
             auto_mode: Default::default(),
             auto_param: Default::default(),
@@ -1284,6 +1287,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::flex::command(self, ctx, name) {
+            return true;
+        }
         if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
             return true;
         }
@@ -1803,6 +1809,7 @@ impl eframe::App for App {
         crate::nav::frame(self);
         crate::liveloops::update(self);
         crate::recording::update(self);
+        crate::flex::update(self);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };

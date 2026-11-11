@@ -155,7 +155,7 @@ impl eframe::App for Snap {
                 }
             }
         }
-        if self.frames >= 8 && self.script.is_empty() && !self.shot {
+        if self.frames >= 8 && self.script.is_empty() && !crate::flex::busy(&self.app) && !self.shot {
             self.shot = true;
             if std::env::var_os("LG_DEBUG").is_some() {
                 if let Some(p) = &self.app.project {
