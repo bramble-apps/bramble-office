@@ -104,8 +104,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let tw = if narrow { 4 } else { 4 + extras.iter().filter(|&&on| on).count() };
     let widths = vec![BTN + 6.0; tw];
     let total_t = widths.iter().sum::<f32>() + 2.0 * PAD;
-    let center = bar.center().x.max(left_end + 12.0 + total_t + lcd_w / 2.0 - 40.0);
-    let lcd = Rect::from_center_size(pos2(center + total_t / 2.0 - 20.0, cy), vec2(lcd_w, 50.0));
+    // (as Logic: the LCD in the middle of the window, the transport to its left; pushed right
+    // only when the window is too narrow for the buttons before it)
+    let center = bar.center().x.max(left_end + 12.0 + total_t + 12.0 + lcd_w / 2.0);
+    let lcd = Rect::from_center_size(pos2(center, cy), vec2(lcd_w, 50.0));
     let (b, c) = run(lcd.min.x - total_t - 12.0, cy, &widths);
     caps.push(c);
     let playing = app.playing();

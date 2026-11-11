@@ -52,7 +52,22 @@ pub fn title_bar(app: &mut App, ui: &mut egui::Ui) {
     app.menu_bar_width = Some(used - row.min.x + 4.0);
     // the project's name in the middle, as Logic's window title ("Untitled.logicx - Tracks")
     let title = format!("{} - Tracks", app.project_title());
-    ui.painter().text(pos2(row.center().x.max(used + 120.0), row.center().y), egui::Align2::CENTER_CENTER, title, crate::look::semibold(13.0), theme::TEXT_DIM());
+    // centred in the window, but never over the menus or the window buttons: moved right, then
+    // shortened with "…" when there's no room
+    let (lo, hi) = (used + 24.0, buttons_left - 24.0);
+    let font = crate::look::semibold(13.0);
+    let mut text = title.clone();
+    let mut galley = ui.painter().layout_no_wrap(text.clone(), font.clone(), theme::TEXT_DIM());
+    while galley.size().x > (hi - lo).max(0.0) && text.chars().count() > 1 {
+        let n = text.trim_end_matches('…').chars().count();
+        text = title.chars().take(n.saturating_sub(1)).collect::<String>() + "…";
+        galley = ui.painter().layout_no_wrap(text.clone(), font.clone(), theme::TEXT_DIM());
+    }
+    if hi - lo > 20.0 {
+        let w = galley.size().x;
+        let left = (row.center().x - w / 2.0).max(lo).min(hi - w);
+        ui.painter().galley(pos2(left, row.center().y - galley.size().y / 2.0), galley, theme::TEXT_DIM());
+    }
     let drag_rect = Rect::from_min_max(pos2(used.min(buttons_left) + 8.0, row.min.y), pos2(buttons_left - 8.0, row.max.y));
     if drag_rect.width() > 10.0 {
         let drag = ui.interact(drag_rect, ui.scope_id().with("titlebar-drag"), Sense::click());

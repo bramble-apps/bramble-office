@@ -14,6 +14,9 @@ pub static FONT: &[u8] = include_bytes!("../data/icons/BrambleIcons.ttf");
 
 const KEY: &str = "bramble-icons";
 
+/// The icons' vertical correction, as a fraction of their size (negative: up).
+const ICON_LIFT: f32 = -0.05;
+
 /// The egui family holding only the icons.
 pub fn family() -> egui::FontFamily {
     egui::FontFamily::Name(KEY.into())
@@ -28,7 +31,10 @@ pub fn add(ctx: &egui::Context, g: u32) {
         InsertFontFamily { family: family(), priority: FontPriority::Highest },
         InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Lowest },
     ];
-    ctx.add_font(FontInsert::new(&format!("{KEY}-{g}"), egui::FontData::from_static(FONT), fams));
+    // (egui sets the row a little low for this font's metrics: lifted so an icon sits in the
+    // middle of its button, measured on snapshots)
+    let tweak = egui::FontTweak { y_offset_factor: ICON_LIFT, ..Default::default() };
+    ctx.add_font(FontInsert::new(&format!("{KEY}-{g}"), egui::FontData::from_static(FONT).tweak(tweak), fams));
 }
 
 /// Draws `icon` centred in `r`, `size` points tall, in `color`. (Draws nothing until the app's
