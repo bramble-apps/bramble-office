@@ -305,14 +305,87 @@ fn numbered(t: &str) -> Option<&str> {
     (d > 0).then(|| t[d..].strip_prefix(". ").or(t[d..].strip_prefix(") "))).flatten()
 }
 
-/// Markdown's inline styles as spans.
+/// The character style while reading Markdown's inline text (with the inline HTML that apps
+/// such as UpNote write for colours and underlines).
+#[derive(Clone, Default)]
+struct MdStyle {
+    bold: bool,
+    italic: bool,
+    strike: bool,
+    underline: bool,
+    color: Option<[f32; 4]>,
+    highlight: Option<u8>,
+    link: Option<String>,
+}
+
+/// A CSS colour ("#25b7c4", "#abc", "rgb(1, 2, 3)" or a basic name) as RGBA.
+fn css_color(v: &str) -> Option<[f32; 4]> {
+    let v = v.trim().trim_end_matches("!important").trim().to_ascii_lowercase();
+    if let Some(h) = v.strip_prefix('#') {
+        let h: String = if h.len() == 3 { h.chars().flat_map(|c| [c, c]).collect() } else { h.chars().take(6).collect() };
+        if h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit()) {
+            let n = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0) as f32 / 255.0;
+            return Some([n(0), n(2), n(4), 1.0]);
+        }
+        return None;
+    }
+    if let Some(inner) = v.strip_prefix("rgba(").or(v.strip_prefix("rgb(")).and_then(|r| r.strip_suffix(')')) {
+        let p: Vec<f32> = inner.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        return (p.len() >= 3).then(|| [p[0] / 255.0, p[1] / 255.0, p[2] / 255.0, 1.0]);
+    }
+    Some(match v.as_str() {
+        "red" => [0.93, 0.26, 0.21, 1.0],
+        "orange" => [0.96, 0.56, 0.13, 1.0],
+        "yellow" => [0.85, 0.68, 0.0, 1.0],
+        "green" => [0.2, 0.66, 0.33, 1.0],
+        "blue" => [0.16, 0.47, 0.96, 1.0],
+        "purple" => [0.6, 0.33, 0.83, 1.0],
+        "gray" | "grey" => [0.55, 0.55, 0.57, 1.0],
+        _ => return None,
+    })
+}
+
+/// One CSS property's value out of a style attribute.
+fn css_prop(style: &str, name: &str) -> Option<String> {
+    style.split(';').find_map(|d| {
+        let (k, v) = d.split_once(':')?;
+        (k.trim().eq_ignore_ascii_case(name)).then(|| v.trim().to_string())
+    })
+}
+
+/// An attribute's value in an HTML tag's text (`a href="…"`).
+fn html_attr(tag: &str, name: &str) -> Option<String> {
+    let low = tag.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(i) = low[from..].find(name).map(|i| i + from) {
+        let before_ok = i == 0 || low.as_bytes()[i - 1].is_ascii_whitespace();
+        let after = low[i + name.len()..].trim_start();
+        if before_ok && after.starts_with('=') {
+            let v = tag[tag.len() - after.len() + 1..].trim_start();
+            return Some(match v.chars().next() {
+                Some(q @ ('"' | '\'')) => v[1..].split(q).next().unwrap_or("").to_string(),
+                _ => v.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or("").to_string(),
+            });
+        }
+        from = i + name.len();
+    }
+    None
+}
+
+/// Markdown's inline styles as spans. Inline HTML (`<span style="color:#25b7c4">`, `<b>`,
+/// `<u>`, `<mark>`, `<a href>`, `<br>`…) becomes formatting: tags never stay as text, so a
+/// colour code inside one can't turn into a #tag.
 fn inline_md(t: &str) -> Vec<Span> {
     let mut out: Vec<Span> = Vec::new();
-    let (mut bold, mut italic, mut strike, mut mono) = (false, false, false, false);
+    let mut st = MdStyle::default();
+    let mut mono = false;
+    // the styles in effect before each open HTML tag, to restore at its closing tag
+    let mut open: Vec<(String, MdStyle)> = Vec::new();
     let mut cur = String::new();
-    let flush = |out: &mut Vec<Span>, cur: &mut String, b: bool, i: bool, s: bool, link: Option<String>| {
+    let flush = |out: &mut Vec<Span>, cur: &mut String, st: &MdStyle, link: Option<String>| {
         if !cur.is_empty() {
-            out.push(Span { text: std::mem::take(cur), bold: b, italic: i, strike: s, link, ..Span::default() });
+            let text = decode(&std::mem::take(cur));
+            out.push(Span { text, bold: st.bold, italic: st.italic, strike: st.strike, underline: st.underline, color: st.color, highlight: st.highlight, link: link.or(st.link.clone()), ..Span::default() });
         }
     };
     let c: Vec<char> = t.chars().collect();
@@ -321,7 +394,7 @@ fn inline_md(t: &str) -> Vec<Span> {
         let rest: String = c[k..].iter().take(2).collect();
         if mono {
             if c[k] == '`' {
-                flush(&mut out, &mut cur, bold, italic, strike, None);
+                flush(&mut out, &mut cur, &st, None);
                 mono = false;
             } else {
                 cur.push(c[k]);
@@ -329,23 +402,89 @@ fn inline_md(t: &str) -> Vec<Span> {
             k += 1;
             continue;
         }
+        if c[k] == '<' && c.get(k + 1).is_some_and(|n| n.is_ascii_alphabetic() || *n == '/' || *n == '!') {
+            // an HTML tag (or comment): never shown as text
+            let Some(close) = c[k..].iter().position(|&x| x == '>').map(|p| p + k) else {
+                cur.push('<');
+                k += 1;
+                continue;
+            };
+            let tag: String = c[k + 1..close].iter().collect();
+            k = close + 1;
+            if tag.starts_with('!') {
+                continue;
+            }
+            let closing = tag.starts_with('/');
+            let body = tag.trim_start_matches('/').trim_end_matches('/').trim();
+            let name: String = body.chars().take_while(|ch| ch.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+            if name == "br" {
+                cur.push(' ');
+                continue;
+            }
+            flush(&mut out, &mut cur, &st, None);
+            if closing {
+                if let Some(i) = open.iter().rposition(|(n, _)| *n == name) {
+                    st = open[i].1.clone();
+                    open.truncate(i);
+                }
+                continue;
+            }
+            if tag.ends_with('/') {
+                continue;
+            }
+            open.push((name.clone(), st.clone()));
+            match name.as_str() {
+                "b" | "strong" => st.bold = true,
+                "i" | "em" => st.italic = true,
+                "u" | "ins" => st.underline = true,
+                "s" | "del" | "strike" => st.strike = true,
+                "mark" => st.highlight = Some(3),
+                "code" => {}
+                "a" => st.link = html_attr(body, "href"),
+                _ => {}
+            }
+            if let Some(style) = html_attr(body, "style") {
+                if let Some(col) = css_prop(&style, "color").and_then(|v| css_color(&v)) {
+                    st.color = Some(col);
+                }
+                if css_prop(&style, "background-color").or(css_prop(&style, "background")).is_some() {
+                    st.highlight = Some(3);
+                }
+                if css_prop(&style, "font-weight").is_some_and(|w| w.contains("bold") || w.parse::<u32>().is_ok_and(|n| n >= 600)) {
+                    st.bold = true;
+                }
+                if css_prop(&style, "font-style").is_some_and(|v| v.contains("italic")) {
+                    st.italic = true;
+                }
+                if let Some(d) = css_prop(&style, "text-decoration") {
+                    st.underline |= d.contains("underline");
+                    st.strike |= d.contains("line-through");
+                }
+            }
+            if name == "font" {
+                if let Some(col) = html_attr(body, "color").and_then(|v| css_color(&v)) {
+                    st.color = Some(col);
+                }
+            }
+            continue;
+        }
         if c[k] == '\\' && k + 1 < c.len() {
             cur.push(c[k + 1]);
             k += 2;
         } else if rest == "**" || rest == "__" {
-            flush(&mut out, &mut cur, bold, italic, strike, None);
-            bold = !bold;
+            flush(&mut out, &mut cur, &st, None);
+            st.bold = !st.bold;
             k += 2;
         } else if rest == "~~" {
-            flush(&mut out, &mut cur, bold, italic, strike, None);
-            strike = !strike;
+            flush(&mut out, &mut cur, &st, None);
+            st.strike = !st.strike;
             k += 2;
-        } else if (c[k] == '*' || c[k] == '_') && (italic || c.get(k + 1).is_some_and(|n| !n.is_whitespace())) && (c[k] == '*' || k == 0 || !c[k - 1].is_alphanumeric()) {
-            flush(&mut out, &mut cur, bold, italic, strike, None);
-            italic = !italic;
+        } else if (c[k] == '*' || c[k] == '_') && (st.italic || c.get(k + 1).is_some_and(|n| !n.is_whitespace())) && (c[k] == '*' || k == 0 || !c[k - 1].is_alphanumeric()) {
+            flush(&mut out, &mut cur, &st, None);
+            st.italic = !st.italic;
             k += 1;
         } else if c[k] == '`' {
-            flush(&mut out, &mut cur, bold, italic, strike, None);
+            flush(&mut out, &mut cur, &st, None);
             mono = true;
             k += 1;
         } else if c[k] == '[' {
@@ -353,10 +492,10 @@ fn inline_md(t: &str) -> Vec<Span> {
             let close = c[k..].iter().position(|&x| x == ']').map(|p| p + k);
             match close.filter(|&e| c.get(e + 1) == Some(&'(')).and_then(|e| c[e..].iter().position(|&x| x == ')').map(|p| (e, p + e))) {
                 Some((e, end)) => {
-                    flush(&mut out, &mut cur, bold, italic, strike, None);
+                    flush(&mut out, &mut cur, &st, None);
                     let mut label: String = c[k + 1..e].iter().collect();
                     let url: String = c[e + 2..end].iter().collect();
-                    flush(&mut out, &mut label, bold, italic, strike, Some(url));
+                    flush(&mut out, &mut label, &st, Some(url));
                     k = end + 1;
                 }
                 None => {
@@ -369,7 +508,7 @@ fn inline_md(t: &str) -> Vec<Span> {
             k += 1;
         }
     }
-    flush(&mut out, &mut cur, bold, italic, strike, None);
+    flush(&mut out, &mut cur, &st, None);
     out
 }
 
@@ -904,6 +1043,19 @@ mod tests {
         for bad in ["", "soon", "2023", "2023-13-01", "2023-11-05T25", "é2023-11-05"] {
             assert_eq!(parse_date(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn markdown_inline_html_is_formatting_not_text() {
+        let b = markdown("Some <span style=\"color: #25b7c4\">blue</span> and <span style=\"background-color:#5FC3E4\">lit</span>, <u>under</u> &amp; a real #todo");
+        let p = &b.paragraphs[0];
+        let text: String = p.spans.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(text, "Some blue and lit, under & a real #todo");
+        assert!(!text.contains("#25b7c4") && !text.contains("<span"));
+        let blue = p.spans.iter().find(|s| s.text == "blue").unwrap();
+        assert!(blue.color.is_some_and(|c| (c[2] - 0xc4 as f32 / 255.0).abs() < 0.01));
+        assert!(p.spans.iter().find(|s| s.text == "lit").unwrap().highlight.is_some());
+        assert!(p.spans.iter().find(|s| s.text == "under").unwrap().underline);
     }
 
     #[test]
