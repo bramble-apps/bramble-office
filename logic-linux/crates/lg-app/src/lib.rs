@@ -29,6 +29,7 @@ mod mixercmd;
 mod nav;
 pub mod mixstate;
 mod pianoroll;
+pub mod projfile;
 pub mod recording;
 mod regionops;
 mod snap;

@@ -1,9 +1,9 @@
 [
  {
   "area": "Menu bar",
-  "done": 284,
+  "done": 295,
   "total": 594,
-  "percent": 47.8
+  "percent": 49.7
  },
  {
   "area": "Local menus",
@@ -19,8 +19,8 @@
  },
  {
   "area": "Key commands",
-  "done": 1165,
+  "done": 1184,
   "total": 2207,
-  "percent": 52.8
+  "percent": 53.6
  }
 ]
