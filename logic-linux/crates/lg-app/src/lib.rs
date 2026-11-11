@@ -24,6 +24,7 @@ pub mod look;
 pub mod menus;
 mod mixer;
 mod mixercmd;
+mod nav;
 pub mod mixstate;
 mod pianoroll;
 pub mod recording;
@@ -33,6 +34,7 @@ mod newtrack;
 mod pluginwin;
 mod players;
 mod rightpane;
+mod screensets;
 mod score;
 mod stepseq;
 pub mod settings;
@@ -40,9 +42,11 @@ pub mod smarttempo;
 pub mod takes;
 mod smartcontrols;
 mod trackarea;
+mod toolbar;
 mod tracks;
 pub mod units;
 mod widgets;
+mod windows;
 
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();

@@ -221,7 +221,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     // (the Record menu's choice submenus: their items share names)
-    if crate::recording::menu_ui(app, ui, it) {
+    if crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -259,6 +259,9 @@ fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::recording::checked(app, label) {
         return c;
     }
+    if let Some(c) = crate::nav::checked(app, label).or_else(|| crate::toolbar::checked(app, label)) {
+        return c;
+    }
     match label {
         "Cycle Mode" => app.cycle_on(),
         _ => false,
@@ -276,6 +279,7 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
             let app_menu = m.label == "Bramble Studio";
             let r = ui.menu_button(&m.label, |ui| {
                 ui.set_min_width(240.0);
+                crate::screensets::IN_WINDOW_MENU.with(|c| c.set(m.label == "Window"));
                 for c in &m.children {
                     item_ui(app, ui, c, &mut fired);
                     if app_menu && c.label == "About Bramble Studio" {
@@ -283,6 +287,7 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
                     }
                 }
             });
+            crate::screensets::IN_WINDOW_MENU.with(|c| c.set(false));
             if app_menu {
                 kn_ui::update::title_dot(ui, r.response.rect);
             }

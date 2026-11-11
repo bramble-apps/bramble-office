@@ -5,6 +5,7 @@
 pub mod arrange;
 pub mod automation;
 pub mod chunks;
+pub mod displaystate;
 pub mod events;
 pub mod functions;
 pub mod liveloops;

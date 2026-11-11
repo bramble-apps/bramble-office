@@ -21,7 +21,7 @@ const GLOBAL_ROW: f32 = 28.0;
 /// Logic 13's global tracks (G) and their heights: the Tempo lane is tall, with its scale.
 const GLOBAL_ROWS: [(&str, f32); 5] = [("Arrangement", GLOBAL_ROW), ("Marker", GLOBAL_ROW), ("Tempo", 64.0), ("Signature", GLOBAL_ROW), ("Chord", GLOBAL_ROW)];
 /// The arrangement markers the (+) adds, in Logic's order.
-const SECTIONS: [&str; 8] = ["Intro", "Verse", "Chorus", "Verse", "Chorus", "Bridge", "Chorus", "Outro"];
+pub const SECTIONS: [&str; 8] = ["Intro", "Verse", "Chorus", "Verse", "Chorus", "Bridge", "Chorus", "Outro"];
 pub const ROW_H: f32 = 52.0;
 /// The Transposition global track's height.
 const TRANSPOSITION_H: f32 = 44.0;
@@ -665,17 +665,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         full.vline(ph, ruler.min.y + 14.0..=area.max.y, Stroke::new(1.2, look::playhead()));
         full.add(egui::Shape::convex_polygon(vec![pos2(ph - 6.0, ruler.min.y + 14.0), pos2(ph + 6.0, ruler.min.y + 14.0), pos2(ph, ruler.min.y + 22.0)], look::playhead(), Stroke::NONE));
     }
-    // follow the playhead while playing (Logic's Catch)
-    if !app.playing() {
-        app.catch_off = false;
-    }
-    if app.playing() && !app.catch_off {
-        let bar_pos = app.position() as f32 / bar_t;
-        let visible_bars = lanes.width() / app.bar_w;
-        if bar_pos > app.scroll_x + visible_bars * 0.92 || bar_pos < app.scroll_x {
-            app.scroll_x = bar_pos.floor().max(0.0);
-        }
-    }
+    // follow the playhead while playing (Logic's Catch; Scroll in Play: nav.rs)
+    app.nav.lanes_h = lanes.height();
+    crate::windows::area(app, ruler, "ruler");
+    crate::windows::area(app, headers, "headers");
+    crate::windows::area(app, lanes, "lanes");
+    crate::nav::follow_playhead(app, lanes.width() / app.bar_w);
     if grid_w > 0.0 {
         crate::liveloops::show_grid(app, ui, Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(head.max.x + grid_w, area.max.y)), headers.min.y);
     }

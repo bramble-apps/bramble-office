@@ -283,6 +283,10 @@ pub struct App {
     /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
     /// automation selection (trackarea.rs, regionops.rs, automation.rs).
     pub ta: crate::trackarea::State,
+    /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
+    pub nav: crate::nav::State,
+    pub screens: crate::screensets::State,
+    pub bars: crate::toolbar::State,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -445,6 +449,9 @@ impl App {
             plugin_compare: Default::default(),
             midi: Default::default(),
             ta: Default::default(),
+            nav: Default::default(),
+            screens: Default::default(),
+            bars: crate::toolbar::State::load(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -1103,6 +1110,9 @@ impl App {
     }
 
     pub fn menu_label(&self, label: &str) -> String {
+        if let Some(l) = crate::nav::menu_label(self, label) {
+            return l;
+        }
         match label {
             "Hide Browser" if !self.show_browser => "Show Browser".into(),
             "Hide Inspector" if !self.show_inspector => "Show Inspector".into(),
@@ -1260,6 +1270,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
+            return true;
+        }
         if crate::mixercmd::run(self, ctx, name) {
             return true;
         }
@@ -1616,6 +1629,13 @@ impl App {
         if self.show_control_bar {
             let bar = Rect::from_min_size(pos2(window.min.x, top), vec2(window.width(), CONTROL_H));
             crate::controlbar::show(self, ui, bar);
+            crate::windows::area(self, bar, "control-bar");
+            top = bar.max.y;
+        }
+        if self.show_toolbar {
+            let bar = Rect::from_min_size(pos2(window.min.x, top), vec2(window.width(), crate::toolbar::H));
+            crate::toolbar::show(self, ui, bar);
+            crate::windows::area(self, bar, "toolbar");
             top = bar.max.y;
         }
         let body = Rect::from_min_max(pos2(window.min.x, top + 1.0), window.max);
@@ -1624,6 +1644,7 @@ impl App {
             let w = self.browser_w.min(body.width() - 360.0 - if self.show_inspector { INSPECTOR_W } else { 0.0 }).max(200.0);
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + w, body.max.y));
             crate::browser::show(self, ui, r);
+            crate::windows::area(self, r, "browser");
             left = r.max.x + 1.0;
             // its right edge: drag to resize; past the minimum it snaps closed; past the room left
             // the Inspector hides (Logic, RESIZING.txt)
@@ -1648,6 +1669,8 @@ impl App {
         if self.show_inspector {
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + INSPECTOR_W, body.max.y));
             crate::inspector::show(self, ui, r);
+            crate::windows::area(self, r, "inspector");
+            self.nav.inspector_rect = r;
             left = r.max.x + 1.0;
         }
         let mut right = body.max.x;
@@ -1655,6 +1678,7 @@ impl App {
             let w = RIGHT_W.min(body.width() - left - 360.0).max(220.0);
             let r = Rect::from_min_max(pos2(body.max.x - w, body.min.y), body.max);
             crate::rightpane::show(self, ui, r, pane);
+            crate::windows::area(self, r, "right-pane");
             right = r.min.x - 1.0;
         }
         let main = Rect::from_min_max(pos2(left, body.min.y), pos2(right, body.max.y));
@@ -1671,6 +1695,7 @@ impl App {
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
             self.editor_rect = ed;
+            crate::windows::area(self, ed, if self.bottom == Bottom::Mixer { "mixer" } else { "editor" });
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
@@ -1757,6 +1782,7 @@ impl eframe::App for App {
             self.open_path(p);
         }
         self.keys(&ctx);
+        crate::nav::frame(self);
         crate::liveloops::update(self);
         crate::recording::update(self);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
