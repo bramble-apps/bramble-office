@@ -68,6 +68,8 @@ pub struct RegionAudio {
     pub anchor: usize,
     /// Flex markers: (source frame, destination frame), both from the region's start.
     pub flex: Vec<(usize, usize)>,
+    /// Reverse (the region plays its audio backwards; the file is left as it is).
+    pub reverse: bool,
 }
 
 /// A decoded file: its samples at its own rate, the overview, its transients.
@@ -303,12 +305,12 @@ pub fn extras(app: &App, t: usize, r: usize) -> RegionAudio {
     app.audio_edit.regions.get(&(t, r)).filter(|x| x.file == file).cloned().unwrap_or(RegionAudio { file, ..Default::default() })
 }
 
-fn set_extras(app: &mut App, t: usize, r: usize, x: RegionAudio) {
+pub fn set_extras(app: &mut App, t: usize, r: usize, x: RegionAudio) {
     app.audio_edit.regions.insert((t, r), x);
 }
 
 /// Before an edit of the project or the extras: one undo step for both.
-pub(crate) fn checkpoint(app: &mut App, what: &str) {
+pub fn checkpoint(app: &mut App, what: &str) {
     let before = app.audio_edit.regions.clone();
     app.checkpoint(what);
     let n = app.undo.len();
@@ -448,6 +450,7 @@ pub struct Plan {
     pub gain_db: f32,
     pub fades: RegionFades,
     pub flex: Vec<(usize, usize)>,
+    pub reverse: bool,
 }
 
 impl Plan {
@@ -465,6 +468,11 @@ impl Plan {
             part.data = lg_audio::stretch::warp(&part.data, part.channels, part.rate, &anchors);
         }
         part.data.resize(out_frames.min(part.data.len() / part.channels) * part.channels, 0.0);
+        if self.reverse {
+            let c = part.channels.max(1);
+            let frames: Vec<Vec<f32>> = part.data.chunks(c).rev().map(|f| f.to_vec()).collect();
+            part.data = frames.concat();
+        }
         let g = 10f32.powf(self.gain_db / 20.0);
         if g != 1.0 {
             part.data.iter_mut().for_each(|s| *s *= g);
@@ -486,7 +494,7 @@ pub fn playback(app: &App) -> Vec<(usize, u32, Plan)> {
             }
             let x = extras(app, t, r);
             let seconds = app.seconds_at((rg.start + rg.length) as f64) - app.seconds_at(rg.start as f64);
-            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex: x.flex }));
+            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex: x.flex, reverse: x.reverse }));
         }
     }
     out
@@ -3134,7 +3142,7 @@ mod tests {
         let mut a = AudioFile::new(48_000, 1, vec![0.5; 48_000]);
         a.bits = 16;
         a.write(&path).unwrap();
-        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new() };
+        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 48_000);
         assert_eq!(out[0], 0.0);

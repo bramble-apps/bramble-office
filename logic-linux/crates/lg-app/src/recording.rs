@@ -924,7 +924,7 @@ pub fn new_track_like(app: &mut App, t: usize) -> Option<usize> {
     let p = app.project.as_mut()?;
     let src = p.tracks.get(t)?.clone();
     let row = p.tracks.len() as u32 + 1;
-    p.tracks.push(lg_core::Track { name: src.name.clone(), kind: src.kind, channel: 0, row, regions: Vec::new(), volume_db: src.volume_db, pan: src.pan, mute: false, solo: false, plugins: src.plugins.clone(), automation: Vec::new() });
+    p.tracks.push(lg_core::Track { name: src.name.clone(), kind: src.kind, channel: 0, row, regions: Vec::new(), volume_db: src.volume_db, pan: src.pan, mute: false, solo: false, plugins: src.plugins.clone(), automation: Vec::new(), extra: Default::default() });
     let n = p.tracks.len() - 1;
     let prog = app.programs.get(t).copied().unwrap_or(0);
     while app.programs.len() < n {

@@ -23,10 +23,13 @@ const GLOBAL_ROWS: [(&str, f32); 5] = [("Arrangement", GLOBAL_ROW), ("Marker", G
 /// The arrangement markers the (+) adds, in Logic's order.
 const SECTIONS: [&str; 8] = ["Intro", "Verse", "Chorus", "Verse", "Chorus", "Bridge", "Chorus", "Outro"];
 pub const ROW_H: f32 = 52.0;
+/// The Transposition global track's height.
+const TRANSPOSITION_H: f32 = 44.0;
 const LOCAL_H: f32 = 32.0;
 const RULER_H: f32 = 32.0;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    crate::trackarea::sync(app);
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::lane_bg());
     // ---- the local menu bar
@@ -98,7 +101,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
-    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() } else { 0.0 };
+    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() + if app.ta.show_transposition { TRANSPOSITION_H } else { 0.0 } } else { 0.0 };
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
@@ -128,8 +131,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if dx != 0.0 && app.playing() {
                 app.catch_off = true;
             }
-            let n = app.project.as_ref().map_or(0, |p| p.tracks.len()) as f32;
-            app.scroll_y = (app.scroll_y - dy).clamp(0.0, (n * ROW_H - lanes.height() + 40.0).max(0.0));
+            let total = crate::trackarea::total_h(&crate::trackarea::rows(app));
+            app.scroll_y = (app.scroll_y - dy).clamp(0.0, (total - lanes.height() + 40.0).max(0.0));
         }
     }
     let scroll = app.scroll_x;
@@ -214,41 +217,99 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
     // ---- rows: headers and lanes
     let Some(proj) = app.project.clone() else { return };
+    let rows = crate::trackarea::rows(app);
+    let rows_h = crate::trackarea::total_h(&rows);
+    // Delete / Backspace over the tracks: the selection (regions, the marquee, automation points)
+    let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|h| Rect::from_min_max(headers.min, area.max).contains(h));
+    if over && !ui.ctx().egui_wants_keyboard_input() && !app.live_loops.focused && ui.input(|i| (i.key_pressed(egui::Key::Backspace) || i.key_pressed(egui::Key::Delete)) && i.modifiers.is_none()) {
+        let ctx = ui.ctx().clone();
+        app.edit_command(&ctx, "Delete");
+    }
     let hp = ui.painter_at(headers);
     let lp = ui.painter_at(lanes);
     hp.rect_filled(headers, 0.0, look::track_header_bg());
     let mut region_pressed = None;
     // (registered first, so regions on top of it take their own clicks)
     let empty = ui.interact(lanes, ui.scope_id().with("lanes-bg"), Sense::click());
-    let below_tracks = empty.interact_pointer_pos().or(ui.ctx().pointer_hover_pos()).is_some_and(|pp| pp.y > headers.min.y + proj.tracks.len() as f32 * ROW_H - app.scroll_y);
+    let below_tracks = empty.interact_pointer_pos().or(ui.ctx().pointer_hover_pos()).is_some_and(|pp| pp.y > headers.min.y + rows_h - app.scroll_y);
     crate::menus::context_menu(app, &empty, if below_tracks { "tracks-empty-below" } else { "tracks-area-empty-lane" });
-    for (i, t) in proj.tracks.iter().enumerate() {
-        let y = headers.min.y + i as f32 * ROW_H - app.scroll_y;
-        if y + ROW_H < headers.min.y || y > headers.max.y {
+    // a header being dragged: where it would land (the others slide to make room; the lanes
+    // follow on release, as Logic's)
+    let reorder = app.ta.reorder.and_then(|(t, y0)| {
+        let from = rows.iter().position(|r| r.t == t)?;
+        let py = ui.input(|i| i.pointer.hover_pos())?.y;
+        let rel = py - headers.min.y + app.scroll_y;
+        let to = rows.iter().position(|r| rel < r.y + r.h / 2.0).unwrap_or(rows.len());
+        Some((from, to, py - y0))
+    });
+    for (vis, row_info) in rows.iter().enumerate() {
+        let i = row_info.t;
+        let t = &proj.tracks[i];
+        let rh = row_info.h;
+        let y = headers.min.y + row_info.y - app.scroll_y;
+        if y + rh < headers.min.y || y > headers.max.y {
             continue;
         }
-        let row = Rect::from_min_size(pos2(headers.min.x, y), vec2(hw, ROW_H));
-        let lane = Rect::from_min_max(pos2(lanes.min.x, y), pos2(lanes.max.x, y + ROW_H));
-        let selected = app.selected_track == Some(i);
+        // (while a header is dragged: its row floats with the pointer, the others slide)
+        let slide = match reorder {
+            Some((from, to, _)) if vis != from && to > from && vis > from && vis < to => -rows[from].h,
+            Some((from, to, _)) if vis != from && to < from && vis >= to && vis < from => rows[from].h,
+            Some((from, _, dy)) if vis == from => dy,
+            _ => 0.0,
+        };
+        let row = Rect::from_min_size(pos2(headers.min.x, y + slide), vec2(hw, rh));
+        let lane = Rect::from_min_max(pos2(lanes.min.x, y), pos2(lanes.max.x, y + rh));
+        let selected = app.selected_track == Some(i) || app.ta.selected.contains(&i);
         if selected {
             hp.rect_filled(row, 0.0, look::track_selected());
             lp.rect_filled(lane, 0.0, look::track_selected().gamma_multiply(0.35));
-        } else if i % 2 == 1 {
+        } else if vis % 2 == 1 {
             lp.rect_filled(lane, 0.0, look::lane_alt());
+        }
+        if reorder.is_some_and(|r| r.0 == vis) {
+            hp.rect_filled(row, 0.0, look::track_selected().gamma_multiply(1.3));
         }
         hp.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
         lp.hline(lane.x_range(), lane.max.y, Stroke::new(1.0, look::grid_line()));
-        // the header: number, icon, name, M S, volume
-        let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click());
-        if row_resp.clicked() || row_resp.secondary_clicked() {
+        // the header: number, icon, name, M S, volume (press on it and drag up or down: the
+        // track moves)
+        let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click_and_drag());
+        if row_resp.clicked() {
+            let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
+            crate::trackarea::click_track(app, i, shift, cmd);
+        }
+        if row_resp.secondary_clicked() && !app.ta.selected.contains(&i) {
+            crate::trackarea::click_track(app, i, false, false);
+        }
+        if row_resp.drag_started() && ui.input(|i| i.pointer.press_origin()).is_some_and(|o| o.x > row.min.x + 60.0 && o.y < row.min.y + 27.0) {
+            app.ta.reorder = Some((i, ui.input(|i| i.pointer.press_origin()).map_or(row.min.y, |o| o.y)));
             app.selected_track = Some(i);
         }
+        if row_resp.drag_stopped() {
+            if let (Some((t, _)), Some((_, to, _))) = (app.ta.reorder.take(), reorder) {
+                crate::trackarea::move_track(app, t, to);
+            }
+        }
+        if row_resp.dragged() && app.ta.reorder.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+        }
         crate::menus::context_menu(app, &row_resp, "track-header");
-        hp.text(pos2(row.min.x + 14.0, row.center().y), Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), look::text_dim());
-        let icon = Rect::from_center_size(pos2(row.min.x + 46.0, row.center().y), vec2(34.0, 34.0));
-        track_icon(&hp, icon, t.kind);
+        let large = crate::trackarea::large_icons(app) && rh >= 44.0;
+        let dim = t.extra.hidden;
+        hp.text(pos2(row.min.x + 14.0, row.center().y), Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), if dim { look::text_dim().gamma_multiply(0.5) } else { look::text_dim() });
+        let indent = crate::trackarea::header_extras(app, ui, row, i);
+        let stack_shift = if t.extra.stack.is_some() { 12.0 } else { 0.0 };
+        let isz = if large { (rh - 8.0).clamp(34.0, 64.0) } else { 34.0 };
+        let icon = Rect::from_center_size(pos2(row.min.x + 30.0 + indent + stack_shift + isz / 2.0, row.min.y + rh.min(52.0) / 2.0 + if large { (rh.min(72.0) - 52.0).max(0.0) / 2.0 } else { 0.0 }), vec2(isz, isz));
+        match t.extra.stack {
+            Some(st) => crate::trackarea::stack_icon(&hp, icon, st.kind),
+            None if large => track_icon_large(&hp, icon, t.kind),
+            None => track_icon(&hp, icon, t.kind),
+        }
+        let name_x = icon.max.x + 6.0;
         // the name: double-click to rename (Return keeps it, Escape doesn't)
-        let name_r = Rect::from_min_size(pos2(row.min.x + 70.0, row.min.y + 5.0), vec2(hw - 80.0, 20.0));
+        let alt_w = if app.ta.show_alternatives || !t.extra.alternatives.is_empty() { 74.0 } else { 34.0 };
+        let name_r = Rect::from_min_size(pos2(name_x - 2.0, row.min.y + 5.0), vec2((row.max.x - name_x - alt_w).max(40.0), 20.0));
         match app.renaming.as_mut() {
             Some((ti, text)) if *ti == i => {
                 let te = ui.put(name_r, egui::TextEdit::singleline(text).font(look::semibold(13.0)));
@@ -265,7 +326,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             _ => {
-                hp.text(pos2(row.min.x + 72.0, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, 22), look::semibold(13.0), look::text());
+                hp.text(pos2(name_x, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, (((row.max.x - name_x - alt_w) / 7.5) as usize).clamp(6, 40)), look::semibold(13.0), if dim { look::text_dim() } else { look::text() });
                 if ui.interact(name_r, ui.scope_id().with(("trackname", i)), Sense::click()).double_clicked() {
                     app.renaming = Some((i, t.name.clone()));
                 }
@@ -286,17 +347,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             resp.clicked()
         };
         let by = row.min.y + 29.0;
-        if ms(ui, Rect::from_min_size(pos2(row.min.x + 72.0, by), vec2(20.0, 17.0)), "M", mute, Color32::from_rgb(0x4f, 0xa8, 0xe8), ("mute", i)) {
+        let bx = name_x;
+        if ms(ui, Rect::from_min_size(pos2(bx, by), vec2(20.0, 17.0)), "M", mute, Color32::from_rgb(0x4f, 0xa8, 0xe8), ("mute", i)) {
             mute = !mute;
             changed = true;
         }
-        if ms(ui, Rect::from_min_size(pos2(row.min.x + 95.0, by), vec2(20.0, 17.0)), "S", solo, Color32::from_rgb(0xe8, 0xc8, 0x3c), ("solo", i)) {
+        if ms(ui, Rect::from_min_size(pos2(bx + 23.0, by), vec2(20.0, 17.0)), "S", solo, Color32::from_rgb(0xe8, 0xc8, 0x3c), ("solo", i)) {
             solo = !solo;
             changed = true;
         }
         // R (record enable) and I (input monitoring), as Logic's headers show them
         let armed = app.armed.contains(&i);
-        if ms(ui, Rect::from_min_size(pos2(row.min.x + 118.0, by), vec2(20.0, 17.0)), "R", armed, look::record_red(), ("rec", i)) {
+        if ms(ui, Rect::from_min_size(pos2(bx + 46.0, by), vec2(20.0, 17.0)), "R", armed, look::record_red(), ("rec", i)) {
             if armed {
                 app.armed.remove(&i);
             } else {
@@ -304,7 +366,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         let mon = app.monitoring.contains(&i);
-        if ms(ui, Rect::from_min_size(pos2(row.min.x + 141.0, by), vec2(20.0, 17.0)), "I", mon, Color32::from_rgb(0xe8, 0x9a, 0x2c), ("mon", i)) {
+        if ms(ui, Rect::from_min_size(pos2(bx + 69.0, by), vec2(20.0, 17.0)), "I", mon, Color32::from_rgb(0xe8, 0x9a, 0x2c), ("mon", i)) {
             if mon {
                 app.monitoring.remove(&i);
             } else {
@@ -335,7 +397,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         // volume: a small slider (dB)
         let mut vol = t.volume_db;
-        let vr = Rect::from_min_size(pos2(row.min.x + 170.0, by + 1.0), vec2((hw - 210.0).max(30.0), 15.0));
+        let vr = Rect::from_min_size(pos2(bx + 98.0, by + 1.0), vec2((row.max.x - bx - 138.0).max(30.0), 15.0));
         let vresp = ui.interact(vr, ui.scope_id().with(("vol", i)), Sense::click_and_drag()).on_hover_text(format!("Volume {vol:.1} dB"));
         let frac = db_to_frac(vol);
         hp.rect_filled(Rect::from_center_size(pos2(vr.center().x, vr.center().y), vec2(vr.width(), 4.0)), 2.0, look::group_bg());
@@ -363,7 +425,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         // automation shown: the mode and parameter pop-ups in place of the volume slider
         if app.show_automation {
-            let ar = Rect::from_min_size(pos2(row.min.x + 170.0, by), vec2((hw - 210.0).max(90.0), 17.0));
+            let ar = Rect::from_min_size(pos2(bx + 98.0, by), vec2((row.max.x - bx - 138.0).max(90.0), 17.0));
             hp.rect_filled(ar.expand(2.0), 0.0, if selected { look::track_selected() } else { look::track_header_bg() });
             crate::automation::header(app, ui, ar, i);
         }
@@ -374,8 +436,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if x1 < lanes.min.x || x0 > lanes.max.x {
                 continue;
             }
-            let rr = Rect::from_min_max(pos2(x0, y + 3.0), pos2(x1.max(x0 + 4.0), y + ROW_H - 3.0));
-            let sel = app.selected_region == Some((i, ri));
+            let rr = Rect::from_min_max(pos2(x0, y + 3.0), pos2(x1.max(x0 + 4.0), y + rh - 3.0));
+            let sel = app.selected_region == Some((i, ri)) || app.selected_regions.contains(&(i, ri));
+            if r.props.looped {
+                let xo = move |tick: f32| x_of(tick, scroll);
+                crate::regionops::draw_loops(app, &lp, rr, i, ri, &xo);
+            }
             draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted || crate::liveloops::takes_over(app, i), app);
             if let Some((rt, rri, text)) = app.renaming_region.as_mut().filter(|x| x.0 == i && x.1 == ri) {
                 let (rt, rri) = (*rt, *rri);
@@ -427,8 +493,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.drag = None;
                 app.load_engine();
             }
-            // the right edge: drag to change the length (snaps to beats; Shift: free)
-            let edge = Rect::from_min_max(pos2(rr.max.x - 6.0, rr.min.y + 15.0), pos2(rr.max.x + 2.0, rr.max.y)).intersect(lanes);
+            // the right edge's lower half: drag to change the length (snaps to beats; Shift:
+            // free); its upper half loops the region (Logic's loop cursor)
+            let edge = Rect::from_min_max(pos2(rr.max.x - 6.0, rr.center().y), pos2(rr.max.x + 2.0, rr.max.y)).intersect(lanes);
             let eresp = ui.interact(edge, ui.scope_id().with(("region-end", i, ri)), Sense::drag());
             if eresp.hovered() || eresp.dragged() {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
@@ -458,6 +525,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.drag = None;
                 app.load_engine();
             }
+            {
+                let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
+                let xo = move |tick: f32| x_of(tick, scroll);
+                crate::regionops::loop_handle(app, ui, rr, lanes, i, ri, &to);
+                let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
+                if !app.show_automation {
+                    crate::regionops::fades(app, ui, rr, lanes, i, ri, tool, &xo, &to);
+                }
+            }
+        }
+        // a stack's main track: its subtracks' regions (closed), a folder's region
+        if t.extra.stack.is_some() {
+            let xo = move |tick: f32| x_of(tick, scroll);
+            crate::trackarea::stack_lane(app, ui, lane, lanes, i, &xo);
         }
         // what's being recorded onto the track, its take folders
         if lane.intersects(lanes) {
@@ -470,14 +551,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::automation::lane(app, ui, lane.intersect(lanes), i, &xo, &to);
         }
     }
+    // the Marquee tool (or a marquee already made): a time range over tracks
+    {
+        let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
+        let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
+        let xo = move |tick: f32| x_of(tick, scroll);
+        crate::regionops::marquee(app, ui, lanes, headers.min.y, &rows, &to, &xo, tool == Tool::Marquee);
+    }
     // click on an empty lane: nothing selected; with the Pencil, a new empty region of a bar
     if empty.clicked() && region_pressed.is_none() {
         let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
         let pp = empty.interact_pointer_pos();
-        let row = pp.map(|pp| ((pp.y - headers.min.y + app.scroll_y) / ROW_H).floor() as i64);
-        let n = proj.tracks.len() as i64;
-        if let (Tool::Pencil, Some(pp), Some(row)) = (tool, pp, row.filter(|r| *r >= 0 && *r < n)) {
-            let t = row as usize;
+        let row = pp.and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
+        if let (Tool::Pencil, Some(pp), Some(t)) = (tool, pp, row.filter(|&t| proj.tracks[t].extra.stack.is_none())) {
             if proj.tracks[t].kind != TrackKind::Audio {
                 let tick = ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32;
                 let bar = bar_t as u32;
@@ -494,12 +580,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         } else {
             app.selected_region = None;
+            app.selected_regions.clear();
             app.selected_notes.clear();
+            app.ta.auto.sel = None;
+            app.ta.regions.marquee = None;
         }
     }
     tool_menu(app, ui);
+    // inside a packed folder: its name over the headers; click to go out (Logic's folder level)
+    if let Some(f) = crate::trackarea::inside(app) {
+        let name = app.project.as_ref().map_or(String::new(), |p| p.tracks[f].name.clone());
+        let r = Rect::from_min_size(pos2(head.min.x + 110.0, head.min.y + 4.0), vec2((hw - 120.0).max(60.0), RULER_H - 8.0));
+        let resp = ui.interact(r, ui.scope_id().with("folder-up"), Sense::click()).on_hover_text("Go Out of Folder");
+        p.rect_filled(r, 6.0, if resp.hovered() { look::button_on() } else { look::group_bg() });
+        p.with_clip_rect(r).text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, format!("‹  {name}"), look::semibold(11.5), look::text());
+        if resp.clicked() {
+            crate::trackarea::command(app, "Go Out of Folder or Region");
+        }
+    }
+    crate::trackarea::dialogs(app, ui.ctx());
+    crate::regionops::dialogs(app, ui.ctx());
     if let Some((t, r, double, drag, pp)) = region_pressed {
         app.selected_track = Some(t);
+        if !app.ta.selected.contains(&t) {
+            app.ta.selected = vec![t];
+        }
         // Shift-click adds or removes a region from the selection (Logic)
         if ui.input(|i| i.modifiers.shift) && !drag {
             if let Some(k) = app.selected_regions.iter().position(|x| *x == (t, r)) {
@@ -698,6 +803,50 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
     }
 }
 
+/// The large track icons (wide headers, as Logic's pictures): a keyboard with its keys, a drum
+/// kit, a waveform on a tape-like card.
+fn track_icon_large(p: &egui::Painter, r: Rect, kind: TrackKind) {
+    let c = look::region_color(kind);
+    p.rect_filled(r, 8.0, look::mix(Color32::from_gray(0x2a), c, 0.18));
+    p.rect_stroke(r, 8.0, Stroke::new(1.0, c.gamma_multiply(0.5)), egui::StrokeKind::Inside);
+    let m = r.center();
+    let s = r.width();
+    match kind {
+        TrackKind::Instrument => {
+            // white keys with the black ones over them
+            let k = Rect::from_center_size(m, vec2(s * 0.74, s * 0.42));
+            p.rect_filled(k, 2.0, Color32::from_gray(0xee));
+            let n = 7;
+            let w = k.width() / n as f32;
+            for i in 1..n {
+                p.vline(k.min.x + i as f32 * w, k.y_range(), Stroke::new(1.0, Color32::from_gray(0x70)));
+            }
+            for i in [0usize, 1, 3, 4, 5] {
+                let x = k.min.x + (i as f32 + 1.0) * w;
+                p.rect_filled(Rect::from_center_size(pos2(x, k.min.y + k.height() * 0.3), vec2(w * 0.55, k.height() * 0.6)), 1.0, Color32::from_gray(0x18));
+            }
+            p.rect_stroke(k, 2.0, Stroke::new(1.0, c), egui::StrokeKind::Outside);
+        }
+        TrackKind::Audio => {
+            let st = Stroke::new(2.0, c);
+            for i in 0..9 {
+                let x = m.x - s * 0.32 + i as f32 * s * 0.08;
+                let h = [0.12f32, 0.26, 0.18, 0.34, 0.22, 0.3, 0.14, 0.24, 0.1][i] * s;
+                p.vline(x, m.y - h..=m.y + h, st);
+            }
+        }
+        TrackKind::Drummer => {
+            let st = Stroke::new(1.6, c);
+            // bass drum, snare, cymbals
+            p.circle_stroke(m + vec2(0.0, s * 0.08), s * 0.22, st);
+            p.circle_stroke(m + vec2(-s * 0.28, -s * 0.02), s * 0.1, st);
+            p.line_segment([m + vec2(-s * 0.4, -s * 0.24), m + vec2(-s * 0.16, -s * 0.28)], st);
+            p.line_segment([m + vec2(s * 0.16, -s * 0.3), m + vec2(s * 0.4, -s * 0.22)], st);
+            p.vline(m.x + s * 0.28, m.y - s * 0.26..=m.y + s * 0.3, Stroke::new(1.0, c));
+        }
+    }
+}
+
 fn track_icon(p: &egui::Painter, r: Rect, kind: TrackKind) {
     let c = look::region_color(kind);
     p.rect_filled(r, 6.0, c.gamma_multiply(0.22));
@@ -728,7 +877,7 @@ fn track_icon(p: &egui::Painter, r: Rect, kind: TrackKind) {
     }
 }
 
-fn ellipsize(s: &str, n: usize) -> String {
+pub fn ellipsize(s: &str, n: usize) -> String {
     if s.chars().count() <= n { s.to_string() } else { format!("{}…", s.chars().take(n - 1).collect::<String>()) }
 }
 
@@ -872,6 +1021,22 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
 fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::header_bg());
+    // the headers' right-click menu: which global tracks show (Studio adds Transposition)
+    let heads = Rect::from_min_max(area.min, pos2(lanes_x, area.max.y));
+    let hresp = ui.interact(heads, ui.scope_id().with("global-heads"), Sense::click());
+    hresp.context_menu(|ui| {
+        crate::menus::show_items(app, ui, crate::menus::context("global-track-header"));
+        ui.separator();
+        let on = app.ta.show_transposition;
+        if ui.button(if on { "✓ Transposition" } else { "Transposition" }).clicked() {
+            app.ta.show_transposition = !on;
+            ui.close();
+        }
+    });
+    if app.ta.show_transposition {
+        let tr = Rect::from_min_max(pos2(area.min.x, area.max.y - TRANSPOSITION_H), area.max);
+        crate::trackarea::transposition_lane(app, ui, tr, lanes_x);
+    }
     let bar_t = app.bar_ticks() as f32;
     let (scroll, bw) = (app.scroll_x, app.bar_w);
     let x_of = |tick: f32| lanes_x + (tick / bar_t - scroll) * bw;

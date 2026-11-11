@@ -2,6 +2,8 @@
 //! research: the container (chunks), event lists (events), the song as tracks / regions / notes
 //! (project) and plug-in settings (plugin).
 
+pub mod arrange;
+pub mod automation;
 pub mod chunks;
 pub mod events;
 pub mod functions;

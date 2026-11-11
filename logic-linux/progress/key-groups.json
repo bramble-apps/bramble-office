@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 33,
+  "done": 36,
   "total": 110,
-  "percent": 30.0
+  "percent": 32.7
  },
  {
   "group": "Windows Showing Audio Files",
@@ -31,9 +31,9 @@
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 150,
+  "done": 163,
   "total": 290,
-  "percent": 51.7
+  "percent": 56.2
  },
  {
   "group": "Various Editors",
@@ -49,15 +49,15 @@
  },
  {
   "group": "Views Showing Automation",
-  "done": 0,
+  "done": 6,
   "total": 22,
-  "percent": 0.0
+  "percent": 27.3
  },
  {
   "group": "Main Window Tracks",
-  "done": 53,
+  "done": 92,
   "total": 249,
-  "percent": 21.3
+  "percent": 36.9
  },
  {
   "group": "Live Loops Grid",
