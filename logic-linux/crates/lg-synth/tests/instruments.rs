@@ -91,6 +91,8 @@ fn all_instruments() -> Vec<(String, Box<dyn Instrument>)> {
         "Drum Machine Designer",
         "Studio Strings",
         "Studio Horns",
+        "Studio Bass",
+        "Studio Piano",
     ] {
         v.push((name.to_string(), by_logic_name(name, RATE).unwrap()));
     }

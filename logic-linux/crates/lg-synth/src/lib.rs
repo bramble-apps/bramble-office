@@ -38,6 +38,8 @@ pub mod sampler_synth;
 pub mod sculpture;
 pub mod string;
 pub mod studio;
+pub mod studio_bass;
+pub mod studio_piano;
 pub mod wav;
 
 pub use patches::{Engine, PatchSpec, patch};
@@ -224,6 +226,8 @@ pub fn by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>
     match plugin_name.trim() {
         "Studio Strings" => return Some(Box::new(studio::StudioSection::strings(rate))),
         "Studio Horns" => return Some(Box::new(studio::StudioSection::horns(rate))),
+        "Studio Bass" => return Some(Box::new(studio_bass::StudioBassInst::new(rate))),
+        "Studio Piano" => return Some(Box::new(studio_piano::StudioPianoInst::new(rate))),
         _ => {}
     }
     if let Some(s) = sampled::for_plugin(plugin_name, rate) {
@@ -235,6 +239,8 @@ pub fn by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>
 /// The synthesized stand-in for a Logic plug-in name (never the sampled one).
 pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>> {
     let inst: Box<dyn Instrument> = match plugin_name.trim() {
+        "Studio Bass" => Box::new(studio_bass::StudioBassInst::with_samples(rate, false)),
+        "Studio Piano" => Box::new(studio_piano::StudioPianoInst::with_samples(rate, false)),
         "Vintage Electric Piano" | "Electric Piano" | "E-Piano" | NAME_EP => {
             Box::new(ep::VintageKeysEp::new(rate))
         }
@@ -256,13 +262,13 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         "EFM1" | NAME_EFM1 => Box::new(es_small::efm1(rate)),
         "Sculpture" | NAME_SCULPTURE => Box::new(sculpture::Sculpture::new(rate)),
         "Retro Synth" | NAME_RETRO => Box::new(retro::RetroSynth::new(rate)),
-        "Piano" | "Studio Piano" | NAME_PIANO => Box::new(piano::StudioPiano::new(rate)),
+        "Piano" | NAME_PIANO => Box::new(piano::StudioPiano::new(rate)),
         "Drum Kit Designer" | "Drum Kits" | "Drum Kit" | NAME_DRUMS => {
             Box::new(drums::StudioDrumKit::new(rate))
         }
         "Drum Machine Designer" | NAME_DMD => Box::new(dmd::DrumMachineDesigner::new(rate)),
         "Ultrabeat" | "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
-        "Bass" | NAME_BASS => Box::new(bass::StudioBass::new(rate)),
+        "Bass" => Box::new(bass::StudioBass::new(rate)),
         "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),
         "Studio Strings" => Box::new(studio::StudioSection::with_samples(studio::Kind::Strings, rate, false)),
         "Horns" => with(Engine::Ensemble, &[(0, 3.0)], rate),

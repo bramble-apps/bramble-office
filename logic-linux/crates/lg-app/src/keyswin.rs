@@ -11,8 +11,6 @@ use crate::app::App;
 use crate::instwin;
 use crate::look;
 
-pub const COMMANDS: &[&str] = &[];
-
 /// Opens the track's instrument window when it is one of these instruments.
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
     #[derive(Clone, Copy)]
@@ -22,7 +20,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
         Clav,
         Mellotron,
         Piano,
-        Ensemble,
+        Section,
         Bass,
     }
     let kind = {
@@ -36,11 +34,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
             K::Clav
         } else if any.is::<lg_synth::mellotron::VintageMellotron>() {
             K::Mellotron
-        } else if any.is::<lg_synth::piano::StudioPiano>() {
+        } else if any.is::<lg_synth::studio_piano::StudioPianoInst>() {
             K::Piano
-        } else if any.is::<lg_synth::ensemble::StudioEnsemble>() {
-            K::Ensemble
-        } else if any.is::<lg_synth::bass::StudioBass>() {
+        } else if any.is::<lg_synth::studio::StudioSection>() {
+            K::Section
+        } else if any.is::<lg_synth::studio_bass::StudioBassInst>() {
             K::Bass
         } else {
             return false;
@@ -52,24 +50,10 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
         K::Clav => crate::clavwin::window(app, ctx, t),
         K::Mellotron => crate::mellotronwin::window(app, ctx, t),
         K::Piano => crate::studiowin::piano(app, ctx, t),
-        K::Ensemble => crate::studiowin::ensemble(app, ctx, t),
+        K::Section => crate::studiowin::section(app, ctx, t),
         K::Bass => crate::studiowin::bass(app, ctx, t),
     }
     true
-}
-
-/// A plain window (header and the Controls view) for an instrument without its own layout yet.
-pub fn generic(app: &mut App, ctx: &egui::Context, t: usize, title: &str, plugin: &str) {
-    let Some((params, vals)) = instwin::values(app, t) else { return };
-    let mut pane = Pane::new(t, &params, &vals);
-    let mut open = true;
-    let resp = egui::Window::new(title).id(egui::Id::unique(("keys-generic", t))).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 520.0)).show(ctx, |ui| {
-        header(app, ui, &mut pane, plugin);
-        let set = crate::pluginwin::controls(ui, &params, &vals, &[], "keys-generic");
-        pane.set.extend(set);
-    });
-    let set = std::mem::take(&mut pane.set);
-    finish(app, ctx, t, resp.map(|r| r.response.rect), set, "Instrument Setting", open);
 }
 
 /// A value as its unit reads.

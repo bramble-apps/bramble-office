@@ -1253,6 +1253,12 @@ impl Instrument for TonewheelB3 {
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);
     }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let rate = self.rate;
