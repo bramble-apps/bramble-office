@@ -4,10 +4,12 @@
 
 pub mod chunks;
 pub mod events;
+pub mod functions;
 pub mod liveloops;
 pub mod midi;
 pub mod plugin;
 pub mod project;
 pub mod save;
+pub mod transform;
 
 pub use project::{open, Project, Region, Track, TrackKind};

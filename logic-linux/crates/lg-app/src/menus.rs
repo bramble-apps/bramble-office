@@ -117,7 +117,11 @@ pub fn context_menu(app: &mut App, resp: &egui::Response, place: &str) {
     if items.is_empty() {
         return;
     }
-    resp.context_menu(|ui| show_items(app, ui, items));
+    resp.context_menu(|ui| {
+        app.midi.menu_roll = place.starts_with("pianoroll");
+        show_items(app, ui, items);
+        app.midi.menu_roll = false;
+    });
 }
 
 /// The commands Studio runs (menu labels; "Menu > Item" where a label is ambiguous).
@@ -221,6 +225,9 @@ fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::audioedit::checked(app, label) {
         return c;
     }
+    if let Some(c) = crate::midifunc::checked(app, label) {
+        return c;
+    }
     match label {
         "Cycle Mode" => app.cycle_on(),
         _ => false,
@@ -270,7 +277,11 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
             if i > 0 {
                 seps.push(ui.cursor().min.x);
             }
-            ui.menu_button(format!("{title} ⌄"), |ui| show_items(app, ui, local(name)));
+            ui.menu_button(format!("{title} ⌄"), |ui| {
+                app.midi.menu_roll = name.starts_with("pianoroll");
+                show_items(app, ui, local(name));
+                app.midi.menu_roll = false;
+            });
         }
     });
     let end = ui.min_rect().max.x;

@@ -271,6 +271,8 @@ pub struct App {
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
+    /// MIDI editing: the Piano Roll's focus, note clipboard, MIDI Transform window, View options.
+    pub midi: crate::midifunc::Midi,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -429,6 +431,7 @@ impl App {
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
             plugin_compare: Default::default(),
+            midi: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -1244,6 +1247,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::midifunc::command(self, ctx, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
@@ -1703,6 +1709,7 @@ impl App {
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
+        crate::midiwin::windows(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
