@@ -83,17 +83,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 p.text(c, Align2::CENTER_CENTER, "S", look::bold(13.0), col);
             }
         }
+        if i == 1 {
+            crate::trackhdr::duplicate_button(app, ui, &resp);
+        }
         if resp.clicked() {
-            let ctx = ui.ctx().clone();
             match i {
-                0 => app.new_track_open = true,
-                1 => {
-                    app.edit_command(&ctx, "New Track with Duplicate Settings");
-                }
+                0 => crate::trackhdr::add_clicked(app, ui),
+                1 => {}
                 _ => app.global_tracks = !app.global_tracks,
             }
         }
     }
+    // (Clear/Recall Solo and the Hide button, once they are in use)
+    crate::trackhdr::top_row(app, ui, head);
     // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
     let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() + if app.ta.show_transposition { TRANSPOSITION_H } else { 0.0 } + crate::movie::track_height(app) } else { 0.0 };
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
@@ -290,7 +292,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::trackarea::click_track(app, i, shift, cmd);
             // (Settings ▸ Select regions on track selection; Option-click always)
             if !shift && !cmd {
-                crate::prefs::track_clicked(app, i, ui.input(|i| i.modifiers.alt));
+                // (Option-click: the track alone, the region selection stays)
+                if !ui.input(|i| i.modifiers.alt) {
+                    crate::prefs::track_clicked(app, i, false);
+                }
             }
         }
         if row_resp.secondary_clicked() && !app.ta.selected.contains(&i) {
@@ -311,17 +316,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         crate::menus::context_menu(app, &row_resp, "track-header");
         let large = crate::trackarea::large_icons(app) && rh >= 44.0;
         let dim = t.extra.hidden;
-        hp.text(pos2(row.min.x + 14.0, row.center().y), Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), if dim { look::text_dim().gamma_multiply(0.5) } else { look::text_dim() });
-        let indent = crate::trackarea::header_extras(app, ui, row, i);
+        // (the colour bar, the groove track's star, the zoom corner; the number: trackhdr.rs)
+        let edge = crate::trackhdr::left_edge(app, ui, &hp, row, i);
+        crate::trackhdr::number(app, ui, &hp, row, i, edge, dim);
+        let indent = crate::trackarea::header_extras(app, ui, row, i) + edge;
         let stack_shift = if t.extra.stack.is_some() { 12.0 } else { 0.0 };
         let isz = if large { (rh - 8.0).clamp(34.0, 64.0) } else { 34.0 };
         let icon = Rect::from_center_size(pos2(row.min.x + 30.0 + indent + stack_shift + isz / 2.0, row.min.y + rh.min(52.0) / 2.0 + if large { (rh.min(72.0) - 52.0).max(0.0) / 2.0 } else { 0.0 }), vec2(isz, isz));
-        match t.extra.stack {
-            Some(st) => crate::trackarea::stack_icon(&hp, icon, st.kind),
-            None if large => track_icon_large(&hp, icon, t),
-            None => track_icon(&hp, icon, t),
+        // (Track Icons off: none; an icon chosen in the Icon palette over the patch's own)
+        let drew = crate::trackhdr::icon(app, ui, &hp, icon, i, large);
+        if drew == Some(false) {
+            match t.extra.stack {
+                Some(st) => crate::trackarea::stack_icon(&hp, icon, st.kind),
+                None if large => track_icon_large(&hp, icon, t),
+                None => track_icon(&hp, icon, t),
+            }
         }
-        let name_x = icon.max.x + 6.0;
+        let name_x = if drew.is_some() { icon.max.x + 6.0 } else { icon.min.x };
         // the name: double-click to rename (Return keeps it, Escape doesn't)
         let alt_w = if app.ta.show_alternatives || !t.extra.alternatives.is_empty() { 74.0 } else { 34.0 };
         let name_r = Rect::from_min_size(pos2(name_x - 2.0, row.min.y + 5.0), vec2((row.max.x - name_x - alt_w).max(40.0), 20.0));
@@ -334,61 +345,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     app.renaming = None;
                     if !cancel && !new.is_empty() {
                         app.checkpoint("Rename Track");
-                        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
-                            tr.name = new;
-                        }
+                        // (several selected tracks take the name: trackops.rs)
+                        crate::trackops::renamed(app, i, &new);
                     }
                 }
             }
             _ => {
                 hp.text(pos2(name_x, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, (((row.max.x - name_x - alt_w) / 7.5) as usize).clamp(6, 40)), look::semibold(13.0), if dim { look::text_dim() } else { look::text() });
+                if let Some(extra) = crate::trackhdr::name_column(app, i) {
+                    hp.text(pos2(row.max.x - alt_w - 2.0, row.min.y + 15.0), Align2::RIGHT_CENTER, ellipsize(&extra, 16), look::regular(10.5), look::text_dim());
+                }
                 if ui.interact(name_r, ui.scope_id().with(("trackname", i)), Sense::click()).double_clicked() {
                     app.renaming = Some((i, t.name.clone()));
                 }
             }
         }
-        let mut changed = false;
-        let mut mute = t.mute;
-        let mut solo = t.solo;
-        // (Logic's header buttons: M and S light up filled; R and I show their letter in red and
-        // orange until they're on)
-        let ms = |ui: &mut egui::Ui, r: Rect, label: &str, on: bool, col: Color32, id: (&str, usize)| {
-            let resp = ui.interact(r, ui.scope_id().with(id), Sense::click());
-            let p = ui.painter();
-            let lettered = label == "R" || label == "I";
-            p.rect_filled(r, 4.0, if on { col } else { look::group_bg() });
-            let text = if on { if lettered { Color32::WHITE } else { Color32::BLACK } } else if lettered { col } else { look::text() };
-            p.text(r.center(), Align2::CENTER_CENTER, label, look::bold(11.0), text);
-            resp.clicked()
-        };
+        // the header's buttons, as its configuration shows them (trackhdr.rs): On/Off, M, S,
+        // Protect, Freeze, R, I
         let by = row.min.y + 29.0;
-        let bx = name_x;
-        if ms(ui, Rect::from_min_size(pos2(bx, by), vec2(20.0, 17.0)), "M", mute, Color32::from_rgb(0x4f, 0xa8, 0xe8), ("mute", i)) {
-            mute = !mute;
-            changed = true;
-        }
-        if ms(ui, Rect::from_min_size(pos2(bx + 23.0, by), vec2(20.0, 17.0)), "S", solo, Color32::from_rgb(0xe8, 0xc8, 0x3c), ("solo", i)) {
-            solo = !solo;
-            changed = true;
-        }
-        // R (record enable) and I (input monitoring), as Logic's headers show them
-        let armed = app.armed.contains(&i);
-        if ms(ui, Rect::from_min_size(pos2(bx + 46.0, by), vec2(20.0, 17.0)), "R", armed, look::record_red(), ("rec", i)) {
-            if armed {
-                app.armed.remove(&i);
-            } else {
-                app.armed.insert(i);
-            }
-        }
-        let mon = app.monitoring.contains(&i);
-        if ms(ui, Rect::from_min_size(pos2(bx + 69.0, by), vec2(20.0, 17.0)), "I", mon, Color32::from_rgb(0xe8, 0x9a, 0x2c), ("mon", i)) {
-            if mon {
-                app.monitoring.remove(&i);
-            } else {
-                app.monitoring.insert(i);
-            }
-        }
-        // the pan knob at the right
+        let pressed = crate::trackhdr::buttons(app, ui, row, i, name_x, by);
+        let mut changed = pressed.changed;
+        let (mute, solo) = (pressed.mute, pressed.solo);
+        // (the controls after the buttons start where they end)
+        let bx = pressed.end_x - 98.0;
+        // the pan knob at the right (or the send it is set to)
+        if app.tm.hdr.pan && !crate::trackhdr::send_knob(app, ui, &hp, row, by, i) {
         let mut pan = t.pan;
         let kc = pos2(row.max.x - 18.0, by + 8.5);
         let kresp = ui.interact(Rect::from_center_size(kc, vec2(20.0, 20.0)), ui.scope_id().with(("hpan", i)), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
@@ -410,12 +391,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             app.dirty = true;
             app.sync_mix();
         }
+        kresp.context_menu(|ui| crate::trackhdr::knob_menu(app, ui));
+        }
         // volume: a small slider (dB)
         let mut vol = t.volume_db;
+        if app.tm.hdr.volume {
         let vr = Rect::from_min_size(pos2(bx + 98.0, by + 1.0), vec2((row.max.x - bx - 138.0).max(30.0), 15.0));
         let vresp = ui.interact(vr, ui.scope_id().with(("vol", i)), Sense::click_and_drag()).on_hover_text(format!("Volume {vol:.1} dB"));
         let frac = db_to_frac(vol);
         hp.rect_filled(Rect::from_center_size(pos2(vr.center().x, vr.center().y), vec2(vr.width(), 4.0)), 2.0, look::group_bg());
+        crate::trackhdr::volume_meter(app, &hp, vr, i);
         hp.circle_filled(pos2(vr.min.x + frac * vr.width(), vr.center().y), 6.5, look::text_dim());
         if let Some(pp) = vresp.interact_pointer_pos() {
             if vresp.dragged() || vresp.clicked() {
@@ -423,9 +408,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 changed = true;
             }
         }
-        if vresp.double_clicked() {
+        if vresp.double_clicked() || (vresp.clicked() && ui.input(|i| i.modifiers.alt)) {
             vol = 0.0;
             changed = true;
+        }
         }
         if changed {
             if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
@@ -592,6 +578,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::automation::lane(app, ui, lane.intersect(lanes), i, &xo, &to);
         }
     }
+    // the empty header area under the tracks (double-click: a track like the selected one)
+    crate::trackhdr::below_headers(app, ui, Rect::from_min_max(pos2(headers.min.x, (headers.min.y + rows_h - app.scroll_y).max(headers.min.y)), headers.max));
     // the Marquee tool (or a marquee already made): a time range over tracks
     {
         let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
@@ -609,8 +597,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let tick = ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32;
                 let bar = bar_t as u32;
                 let start = (tick / bar) * bar;
-                app.checkpoint("Create Region");
-                if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                // (the track's Default Region Type: a pattern region on a Pattern track)
+                if proj.tracks[t].extra.set.default_region == lg_core::trackmix::RegionType::Pattern {
+                    crate::stepseq::new_pattern_region(app, &ui.ctx().clone(), t, start);
+                } else if let Some(tr) = {
+                    app.checkpoint("Create Region");
+                    app.project.as_mut().and_then(|p| p.tracks.get_mut(t))
+                } {
                     let name = tr.name.clone();
                     tr.regions.push(lg_core::Region { name, start, length: bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
                     let r = tr.regions.len() - 1;

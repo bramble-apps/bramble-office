@@ -70,7 +70,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let on = !app.mix.hidden.contains(&k);
                 let b = egui::Button::new(egui::RichText::new(label).size(11.0).color(if on { Color32::WHITE } else { look::text_dim() })).fill(if on { look::button_on() } else { look::group_bg() }).corner_radius(4.0);
                 if ui.add(b).clicked() {
-                    crate::mixercmd::toggle_kind(app, k);
+                    // (Option-click: only this type; again: all of them)
+                    if ui.input(|i| i.modifiers.alt) {
+                        crate::mixext::solo_kind(app, k);
+                    } else {
+                        crate::mixercmd::toggle_kind(app, k);
+                    }
                 }
             }
         }
@@ -108,6 +113,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         strips.extend((0..app.mix.vcas.len()).map(|v| VCA + v));
     }
     strips.retain(|s| !app.mix.hidden.contains(&mixstate::kind_of(app, *s)));
+    // (Follow Hide, Follow Track Stacks, Channels with Sends only…: mixext.rs)
+    crate::mixext::filter_strips(app, &mut strips);
     let w = if app.mix.narrow { NARROW_W } else { STRIP_W };
     // the strips scroll sideways (the wheel, a trackpad), the Stereo Out stays at the right
     let room = body.max.x - w - 16.0;
@@ -215,6 +222,11 @@ pub fn vca_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, v: usize) {
 /// A track's channel strip (the Mixer's, and the Inspector's left one).
 pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
     let Some(t) = app.project.as_ref().and_then(|p| p.tracks.get(i)).cloned() else { return };
+    // (an External MIDI track: a MIDI channel strip)
+    if t.extra.set.external.is_some() {
+        crate::mixwin::midi_strip(app, ui, r, i);
+        return;
+    }
     let meter = app.engine.lock().map(|e| e.meters.get(i).copied().unwrap_or(0.0)).unwrap_or(0.0);
     let sel = app.selected_track == Some(i) || app.mix.selected.contains(&i);
     // Sends on Faders: the fader is the send's level to that bus
@@ -274,6 +286,10 @@ fn effect_names() -> &'static std::collections::HashSet<&'static str> {
 fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String>> {
     let mut picked = None;
     ui.set_min_width(200.0);
+    // (the search field at the menu's top: mixext.rs)
+    if let Some(n) = crate::mixext::plugin_search(ui) {
+        picked = Some(Some(n));
+    }
     if current.is_some() && ui.button("No Plug-in").clicked() {
         picked = Some(None);
         ui.close();
@@ -318,35 +334,15 @@ fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String
 }
 
 fn bus_menu(ui: &mut egui::Ui, app: &App, current: Option<usize>) -> Option<usize> {
-    let mut out = None;
-    let mut row = |ui: &mut egui::Ui, b: usize| {
-        let used = app.auxes.iter().find(|a| a.bus == b).map(|a| a.name.clone());
-        let label = match used { Some(n) => format!("Bus {} → {n}", b + 1), None => format!("Bus {}", b + 1) };
-        if ui.add(egui::Button::selectable(current == Some(b), label)).clicked() {
-            out = Some(b);
-            ui.close();
-        }
-    };
-    for b in 0..32 {
-        row(ui, b);
-    }
-    ui.separator();
-    for (lo, hi) in [(32usize, 64usize), (64, 96), (96, 128), (128, 160), (160, 192), (192, 224), (224, 256)] {
-        ui.menu_button(format!("{} - {}", lo + 1, hi), |ui| {
-            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                for b in lo..hi {
-                    row(ui, b);
-                }
-            });
-        });
-    }
-    out
+    // (with a search field, I/O labels and the aux strips' names: mixext.rs)
+    crate::mixext::bus_menu(ui, app, current)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &str, kind: Option<TrackKind>, vals: (f32, f32, bool, bool), meter: f32, selected: bool) -> Option<(f32, f32, bool, bool)> {
     let p = ui.painter_at(r);
     p.rect_filled(r, 6.0, if selected { look::track_selected() } else { look::header_bg() });
+    crate::mixext::strip_bg(app, ui, r, i);
     let mut out = None;
     let (mut vol, mut pan, mut mute, mut solo) = vals;
     let is_vca = i >= VCA && i != MASTER;
@@ -361,6 +357,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     };
     let slot_rect = |y: f32| Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 16.0, 20.0));
     let mut y = r.min.y + 8.0;
+    y = crate::mixext::top_rows(app, ui, &p, r, y, i);
     // Setting: the channel strip setting menu
     if shown(app, "Setting Menu") {
         slot(&p, y, "Setting", None);
@@ -374,6 +371,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                     ui.close();
                 }
             }
+            // (the saved settings, Next / Previous, Save as, performances: mixwin.rs)
+            crate::mixwin::setting_menu(app, ui, i);
         });
         y += 24.0;
     }
@@ -391,7 +390,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             let f = (gr / 30.0).sqrt().clamp(0.0, 1.0);
             p.rect_filled(Rect::from_min_max(pos2(gm.max.x - f * gm.width(), gm.min.y + 1.0), pos2(gm.max.x, gm.max.y - 1.0)), 1.0, Color32::from_rgb(0xf0, 0xb0, 0x30));
         }
-        ui.interact(gm, id.with("gr"), Sense::hover()).on_hover_text(format!("Gain Reduction: {gr:.1} dB"));
+        let gresp = ui.interact(gm.expand2(vec2(0.0, 2.0)), id.with("gr"), Sense::click()).on_hover_text(format!("Gain Reduction: {gr:.1} dB"));
+        crate::mixext::gr_clicked(app, ui, &gresp, i);
         y += 11.0;
     }
     // the EQ slot: a click opens the Channel EQ; with one on the strip, its curve
@@ -408,14 +408,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             }
             None => slot(&p, y, "EQ", None),
         }
-        if ui.interact(eq_r, id.with("eqslot"), Sense::click()).on_hover_text("Channel EQ").clicked() {
-            if !app.eqs.contains_key(&i) {
-                mixstate::checkpoint(app, "Insert Channel EQ");
-            }
-            app.eqs.entry(i).or_default();
-            app.eq_window = Some(i);
-            app.load_engine();
-        }
+        let eresp = ui.interact(eq_r, id.with("eqslot"), Sense::click()).on_hover_text("Channel EQ (Shift-click: Linear Phase EQ; Command-click: remove)");
+        crate::mixext::eq_clicked(app, ui, &eresp, i);
         y += 26.0;
     } else if shown(app, "EQ Thumbnail") {
         y += 26.0;
@@ -544,7 +538,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             }
             let body = ui.interact(body_r, id.with(("fxslot", k)), Sense::click_and_drag()).on_hover_text(crate::hosting::slot_tip(app, i, k, &u.name));
             if body.clicked() {
-                if ui.input(|i| i.modifiers.alt) {
+                if ui.input(|i| i.modifiers.command) {
+                    // Command-click: the plug-in goes
+                    crate::mixext::remove_insert(app, i, k);
+                } else if ui.input(|i| i.modifiers.alt) {
                     // Option-click: bypass (Logic's shortcut)
                     toggle_bypass(app);
                 } else {
@@ -607,13 +604,14 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             let sr = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 34.0, 20.0));
             let on_faders = app.sends_on_faders == Some(snd.bus);
             p.rect_filled(sr, 4.0, if on_faders { Color32::from_rgb(0x3c, 0x7c, 0xb0) } else { Color32::from_rgb(0x2a, 0x5a, 0x86) });
-            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, format!("Bus {}", snd.bus + 1), look::regular(11.0), Color32::WHITE);
+            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, crate::mixext::send_label(app, snd.bus), look::regular(11.0), Color32::WHITE);
             let kc = pos2(r.max.x - 16.0, y + 10.0);
             let kr = ui.interact(Rect::from_center_size(kc, vec2(18.0, 18.0)), id.with(("send", k)), Sense::click_and_drag()).on_hover_text(format!("Send to Bus {}: {:.1} dB{}", snd.bus + 1, snd.level_db, if snd.pre { " (pre fader)" } else { "" }));
             p.circle_filled(kc, 8.0, Color32::from_gray(0x55));
             let f = db_to_frac(snd.level_db);
             let ang = std::f32::consts::PI * (0.75 + 1.5 * f);
             p.line_segment([kc, kc + vec2(ang.cos(), ang.sin()) * 6.5], Stroke::new(1.6, Color32::WHITE));
+            crate::mixext::send_ring(app, &p, kc, i, k, snd.pre);
             let mut changed = None;
             if kr.drag_started() || kr.double_clicked() {
                 mixstate::checkpoint(app, "Send Level");
@@ -641,20 +639,20 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 app.load_engine();
             }
             let sresp = ui.interact(sr, id.with(("sendslot", k)), Sense::click());
+            // (Shift-click: its destination flashes; Command-click: the send goes)
+            if crate::mixext::send_click(app, ui, &sresp, i, k) {
+                y += 22.0;
+                continue;
+            }
             egui::Popup::menu(&sresp).show(|ui| {
                 ui.set_min_width(160.0);
                 let mut edit: Option<Box<dyn FnOnce(&mut Vec<crate::app::SendSlot>)>> = None;
-                if ui.add(egui::Button::selectable(!snd.pre, "Post Fader")).clicked() {
-                    edit = Some(Box::new(move |v| v[k].pre = false));
-                }
-                if ui.add(egui::Button::selectable(snd.pre, "Pre Fader")).clicked() {
-                    edit = Some(Box::new(move |v| v[k].pre = true));
-                }
-                ui.separator();
+                // (Independent Pan, Post Pan / Post Fader / Pre Fader, Copy Fader to Send…)
+                crate::mixext::send_menu(app, ui, i, k);
                 if ui.button("No Send").clicked() {
-                    edit = Some(Box::new(move |v| {
-                        v.remove(k);
-                    }));
+                    mixstate::checkpoint(app, "Send");
+                    crate::mixext::remove_send(app, i, k);
+                    ui.close();
                 }
                 ui.separator();
                 ui.menu_button("Bus", |ui| {
@@ -691,7 +689,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 // an aux can't send into the bus it takes in
                 if aux.is_none_or(|a| app.auxes.get(a).is_none_or(|x| x.bus != b)) {
                     mixstate::checkpoint(app, "Send");
-                    app.add_send(i, b);
+                    crate::mixext::add_send_selected(app, i, b);
                 }
             }
         });
@@ -739,7 +737,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                     }
                 });
                 if let Some(v) = pick {
-                    crate::surround::set_output(app, i, v);
+                    crate::mixext::set_output_selected(app, i, v);
                     ui.close();
                 }
             });
@@ -751,9 +749,18 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         // the group slot
         if shown(app, "Group") && !is_master {
             let g = app.mix.group_of.get(&i).copied();
-            let label = g.map_or("Group".into(), |g| app.mix.groups.get(g).map(|x| x.label(g)).unwrap_or_default());
-            slot(&p, y, &label, g.map(|_| Color32::from_rgb(0x6a, 0x4a, 0x9a)));
+            let label = crate::mixext::group_label(app, i).unwrap_or_else(|| "Group".into());
+            slot(&p, y, &label, g.map(|_| crate::mixext::group_color(app)));
             let resp = ui.interact(slot_rect(y), id.with("group"), Sense::click());
+            // (Option-click: the groups assigned last)
+            let resp = if resp.clicked() && ui.input(|x| x.modifiers.alt) {
+                mixstate::checkpoint(app, "Group");
+                let last = app.tm.mx.last_groups.clone();
+                crate::mixext::set_groups(app, i, &last);
+                ui.interact(Rect::NOTHING, id.with("group-none"), Sense::hover())
+            } else {
+                resp
+            };
             egui::Popup::menu(&resp).show(|ui| {
                 ui.set_min_width(180.0);
                 if ui.button("Open Group Settings…").clicked() {
@@ -767,12 +774,13 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 }
                 ui.separator();
                 for (k, grp) in app.mix.groups.iter().enumerate() {
-                    if ui.add(egui::Button::selectable(g == Some(k), grp.label(k))).clicked() {
+                    if ui.add(egui::Button::selectable(crate::mixext::groups_of(app, i).contains(&k), grp.label(k))).clicked() {
                         pick = Some(Some(k));
                     }
                 }
                 let n = app.mix.groups.len();
-                if ui.button(format!("Group {}: (new)", n + 1)).clicked() {
+                // (a project has 64 groups at most)
+                if n < 64 && ui.button(format!("Group {}: (new)", n + 1)).clicked() {
                     pick = Some(Some(n));
                 }
                 if let Some(choice) = pick {
@@ -780,14 +788,17 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                     match choice {
                         Some(k) => {
                             if k == app.mix.groups.len() {
-                                app.mix.groups.push(mixstate::Group::new());
+                                let mut ng = mixstate::Group::new();
+                                if let Some(m) = app.tm.mx.group_default {
+                                    ng.mask = m;
+                                }
+                                app.mix.groups.push(ng);
                                 app.mix.group_window = Some(k);
                             }
-                            app.mix.group_of.insert(i, k);
+                            // (Shift: one more group; a group the strip is in: out of it)
+                            crate::mixext::choose_group(app, i, k, ui.input(|x| x.modifiers.shift));
                         }
-                        None => {
-                            app.mix.group_of.remove(&i);
-                        }
+                        None => crate::mixext::set_groups(app, i, &[]),
                     }
                     app.dirty = true;
                     ui.close();
@@ -798,7 +809,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         if shown(app, "part:Automation") {
             let mode = if is_track { app.auto_mode.get(&i).copied().unwrap_or_default() } else { Default::default() };
             let on = !matches!(mode, crate::automation::AutoMode::Off);
-            slot(&p, y, &format!("{mode:?}"), on.then(|| Color32::from_rgb(0x3a, 0x6e, 0x3a)));
+            let label = if is_track { crate::mixext::auto_mode_label(app, i) } else { format!("{mode:?}") };
+            slot(&p, y, &label, on.then(|| Color32::from_rgb(0x3a, 0x6e, 0x3a)));
+            let aresp = ui.interact(slot_rect(y), id.with("automode"), Sense::click());
+            crate::mixext::auto_mode_menu(app, &aresp, i);
             y += 26.0;
         }
     }
@@ -807,23 +821,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         crate::surround_ui::pan_control(app, ui, &p, r, y, i);
         y += 40.0;
     } else if shown(app, "Pan Knob") && !is_vca && !is_master {
-        let kc = pos2(r.center().x, y + 16.0);
-        let kr = Rect::from_center_size(kc, vec2(34.0, 34.0));
-        let kresp = ui.interact(kr, id.with("pan"), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
-        p.circle_filled(kc, 15.0, Color32::from_gray(0x55));
-        p.circle_stroke(kc, 15.0, Stroke::new(1.0, Color32::from_gray(0x22)));
-        let ang = std::f32::consts::PI * (0.5 + 0.75 * pan) + std::f32::consts::PI;
-        let tip = kc + vec2(ang.cos(), ang.sin()) * 11.0;
-        p.line_segment([kc, tip], Stroke::new(2.0, Color32::WHITE));
-        if kresp.drag_started() || kresp.double_clicked() {
-            mixstate::checkpoint(app, "Pan");
-        }
-        if kresp.dragged() {
-            pan = (pan - kresp.drag_delta().y / 120.0).clamp(-1.0, 1.0);
-            out = Some(());
-        }
-        if kresp.double_clicked() || (kresp.clicked() && ui.input(|i| i.modifiers.alt)) {
-            pan = 0.0;
+        // (Pan / Balance, Stereo Pan, the Binaural Panner, the Channel Mode button: mixext.rs)
+        if crate::mixext::pan_control(app, ui, &p, r, y, i, &mut pan) {
             out = Some(());
         }
         y += 40.0;
@@ -868,8 +867,13 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     p.rect_filled(rv, 3.0, look::lcd_bg());
     p.rect_filled(rpk, 3.0, look::lcd_bg());
     p.text(rv.center(), Align2::CENTER_CENTER, if vol <= -90.0 { "-∞".into() } else { format!("{vol:.1}") }, look::regular(10.5), look::lcd_text());
-    let peak_db = if meter <= 1e-4 { -90.0 } else { 20.0 * meter.log10() };
-    p.text(rpk.center(), Align2::CENTER_CENTER, if peak_db <= -89.0 { "-∞".into() } else { format!("{peak_db:.1}") }, look::regular(10.5), Color32::from_rgb(0x4c, 0xd9, 0x64));
+    // (the held peak, its clipping colours, a click resets; typing a fader value: mixext.rs)
+    if !is_vca {
+        crate::mixext::peak_display(app, ui, &p, rpk, i);
+    }
+    if crate::mixext::typed_volume(app, ui, rv, i, &mut vol) {
+        out = Some(());
+    }
     y += 26.0;
     // the fader and meter (Sends on Faders: the send's level, greyed where there's none)
     let bottom_room = 62.0;
@@ -886,8 +890,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     if surround_master {
         crate::surround_ui::master_meters(app, ui, &p, Rect::from_min_max(pos2(meter_r.min.x, y), pos2(r.max.x - 6.0, y + fh)));
     } else if lv > 0.01 && !is_vca {
-        let mr = Rect::from_min_max(pos2(meter_r.min.x + 1.0, meter_r.max.y - lv * fh), pos2(meter_r.max.x - 1.0, meter_r.max.y));
-        p.rect_filled(mr, 1.0, if meter > 0.98 { look::record_red() } else { Color32::from_rgb(0x4c, 0xd9, 0x64) });
+        crate::mixext::meter(app, &p, meter_r.shrink2(vec2(1.0, 0.0)), i, meter);
     }
     // the scale between fader and meter, as Logic's: 0 at the top mark, down to 60
     if r.width() >= 80.0 && !surround_master {
@@ -908,8 +911,13 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             mixstate::checkpoint(app, if sof.is_some() { "Send Level" } else { "Volume" });
         }
         if fresp.dragged() {
-            let f = ((track.max.y - fresp.interact_pointer_pos().map_or(fy, |pp| pp.y)) / fh).clamp(0.0, 1.0);
-            vol = frac_to_db(f).min(6.0);
+            if ui.input(|i| i.modifiers.shift) {
+                // Shift: finer steps
+                vol = crate::mixext::fine_fader(vol, fresp.drag_delta().y, fh);
+            } else {
+                let f = ((track.max.y - fresp.interact_pointer_pos().map_or(fy, |pp| pp.y)) / fh).clamp(0.0, 1.0);
+                vol = frac_to_db(f).min(6.0);
+            }
             out = Some(());
         }
         if fresp.double_clicked() || (fresp.clicked() && ui.input(|i| i.modifiers.alt)) {
@@ -922,27 +930,18 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     let mr = Rect::from_min_size(pos2(r.center().x - 30.0, by), vec2(26.0, 20.0));
     let sr = Rect::from_min_size(pos2(r.center().x + 4.0, by), vec2(26.0, 20.0));
     if kind.is_some() || aux.is_some() || is_vca {
-        for (rr, label, on, col, which) in [(mr, "M", mute, Color32::from_rgb(0x4f, 0xa8, 0xe8), 0), (sr, "S", solo, Color32::from_rgb(0xe8, 0xc8, 0x3c), 1)] {
-            p.rect_filled(rr, 4.0, if on { col } else { look::group_bg() });
-            p.text(rr.center(), Align2::CENTER_CENTER, label, look::bold(11.0), if on { Color32::BLACK } else { look::text() });
-            if ui.interact(rr, id.with(("ms", which)), Sense::click()).clicked() {
-                mixstate::checkpoint(app, if which == 0 { "Mute" } else { "Solo" });
-                if which == 0 {
-                    mute = !mute;
-                } else {
-                    solo = !solo;
-                }
-                out = Some(());
-            }
+        // (slide over them, Command-click all, Option-click exclusive, solo-safe: mixext.rs)
+        if crate::mixext::ms_buttons(app, ui, &p, mr, sr, i, &mut mute, &mut solo) {
+            out = Some(());
         }
     }
+    crate::mixext::strip_buttons(app, ui, &p, r, by, mr, sr, i, kind);
     // the name: click selects (Shift / ⌘: adds), right-click: Logic's strip name menu
     if shown(app, "part:Track Name") {
         let nr = Rect::from_min_size(pos2(r.min.x + 4.0, r.max.y - 26.0), vec2(r.width() - 8.0, 20.0));
         let c = if is_vca { Color32::from_rgb(0xe0, 0xa8, 0x60) } else if aux.is_some() { Color32::from_rgb(0x5a, 0x9a, 0xd8) } else { kind.map_or(look::text_dim(), look::region_color) };
-        p.rect_filled(nr, 4.0, c.gamma_multiply(0.35));
-        p.with_clip_rect(nr).text(nr.center(), Align2::CENTER_CENTER, name, look::regular(11.0), look::text());
-        let nresp = ui.interact(nr, id.with("stripname"), Sense::click());
+        // (the colour, two lines, renaming by double-click, dragging to reorder: mixext.rs)
+        let nresp = crate::mixext::name_field(app, ui, &p, nr, i, name, c);
         if nresp.clicked() {
             let add = ui.input(|i| i.modifiers.shift || i.modifiers.command);
             mixstate::select(app, i, add);
@@ -956,11 +955,21 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 crate::mixercmd::run(app, &ui.ctx().clone(), "Create New VCA");
                 ui.close();
             }
-            ui.add_enabled(false, egui::Button::new("Assign Channel Strip Color…"));
-            ui.add_enabled(false, egui::Button::new("Rename Channel Strip…"));
+            for c in ["Assign Channel Strip Color…", "Rename Channel Strip…"] {
+                if ui.button(c).clicked() {
+                    app.mix.selected = [i].into_iter().collect();
+                    crate::mixext::command(app, &ui.ctx().clone(), c);
+                    ui.close();
+                }
+            }
             ui.separator();
-            let comps = crate::menus::context("mixer-strip-name").iter().find(|x| x.label == "Channel Strip Components").map_or(&[][..], |x| x.children.as_slice());
-            ui.menu_button("Channel Strip Components", |ui| crate::menus::show_items(app, ui, comps));
+            if let Some(c) = crate::menus::context("mixer-strip-name").iter().find(|x| x.label == "Channel Strip Components").cloned() {
+                crate::mixext::components_menu(app, ui, &c);
+            }
+            if ui.button("Configure Channel Strip Components…").clicked() {
+                app.tm.mx.win.components = true;
+                ui.close();
+            }
         });
     }
     out.map(|_| (vol, pan, mute, solo))

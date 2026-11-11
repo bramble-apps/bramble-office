@@ -10,7 +10,7 @@ use crate::app::App;
 use crate::look;
 use crate::widgets;
 
-const ROW: f32 = 22.0;
+pub(crate) const ROW: f32 = 22.0;
 
 pub const QUANTIZE: &[(&str, u32)] = &[
     ("Off", 0),
@@ -28,11 +28,11 @@ pub const QUANTIZE: &[(&str, u32)] = &[
     ("1/32 Triplet", 80),
 ];
 
-fn label(p: &egui::Painter, area: Rect, y: f32, text: &str) {
+pub(crate) fn label(p: &egui::Painter, area: Rect, y: f32, text: &str) {
     p.text(pos2(area.min.x + 14.0, y + ROW / 2.0), Align2::LEFT_CENTER, text, look::regular(12.0), look::text_dim());
 }
 
-fn slot_rect(area: Rect, y: f32) -> Rect {
+pub(crate) fn slot_rect(area: Rect, y: f32) -> Rect {
     Rect::from_min_max(pos2(area.min.x + area.width() * 0.48, y + 2.0), pos2(area.max.x - 8.0, y + ROW - 2.0))
 }
 
@@ -162,9 +162,7 @@ fn track_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize
     let audio = app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Audio);
     value(&p, y, format!("{} {}", if audio { "Audio" } else { "Inst" }, t + 1));
     y += ROW;
-    label(&p, area, y, "Freeze Mode");
-    value(&p, y, "Pre Fader".into());
-    y += ROW;
+    y = crate::trackops::inspector_rows(app, ui, area, y, t);
     let rows: [(&str, f32, f32, f32); 3] = [("Transpose", tp.transpose as f32, -96.0, 96.0), ("Velocity", tp.velocity as f32, -99.0, 99.0), ("Delay", tp.delay as f32, -3840.0, 3840.0)];
     for (i, (name, mut v, min, max)) in rows.into_iter().enumerate() {
         label(&p, area, y, name);

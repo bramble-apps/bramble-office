@@ -194,6 +194,10 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
         if status >= 0xF0 {
             continue;
         }
+        // (a program change: the performance saved under that number loads: mixwin.rs)
+        if status & 0xf0 == 0xc0 {
+            app.tm.mx.win.program_in = Some(a);
+        }
         // (a controller message learned in the Key Commands window runs its command)
         if crate::keycmds::midi_in(app, ctx, status, a, b) {
             continue;

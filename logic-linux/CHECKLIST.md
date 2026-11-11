@@ -31,7 +31,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Navigation (nav.rs, tested): Go to Position… / Marker Number… / Set Left and Right Locator numerically… sheets (bar beat division tick or minutes:seconds), rewind / forward by division, 1/8, 1/16, nudge value and frame, Play from Beginning / Previous Bar / Left or Right Locator / Left Window Edge, last locate position, Play Button Options and Auto Set Locators (Navigate menu), locators by playhead (rounded), by selection, and Play / Cycle Play, move by 1 bar, Go to Marker Number 1–20, Create Marker by Cycle Area, Create Arrangement Marker, division and nudge values, Tap Tempo (one undo step); zoom: ≈1.3× a key press (measured), Zoom to fit Selection (h, v, both), All Contents, Locators, Toggle Zoom to fit (again: back), Save as / Recall Zoom 1–3, navigation snapshots with Back / Forward (⌥Z, ⌥⇧Z). [ ] Shuttle and Scrub, Rewind / Forward by Transient, Toggle Cycle Preview, Horizontal / Vertical Auto Zoom, Cycle Through Window Views (Tab: keys follow the pointer here)
 - [~] Screensets (screensets.rs, tested): 1–9 and ⇧ + two digits for 11–99, made from the window as it is when a number is new; unlocked ones keep changes, locked come back as locked; the Window menu lists them (✓ the current one) with Duplicate…, Rename…, Delete, Lock / Unlock, Revert to Saved; Next / Previous Screenset. A project's own screensets are read from its DisplayState.plist (lg-core displaystate, tested on the research's samples: numbers, names, lock, Browser / Inspector / List Editors / control bar / toolbar / bottom editor and its height). [ ] screensets aren't written back into the .logicx (Studio keeps them for the session); floating windows aren't part of a screenset; the bare digit keys go to screensets (Logic's key list binds them to markers 1–9 too: Go to Marker Number n works from ⌥/ and other bindings)
 - [~] Window and View menus: Open Smart Controls / Score Editor / Step Sequencer / Audio Track, File and Smart Tempo Editors / Event List / Signature List / MIDI Transform, Show Play Surface, Minimize All, Zoom All, Fill, Center, Move & Resize halves and quarters, Return to Previous Size, Bring All to Front; Show Smart Controls / List Editors / Note Pads / Project Files with Show / Hide labels; Settings tab openers (Open General Settings… etc.); Help menu links (website, GitHub help, releases, issues, discussions). [ ] window placement depends on the desktop (Wayland ignores positions), Transport / Event / Region Inspector floats, Project Audio, Step Input Keyboard
-- [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (≥ 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack… sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track
+- [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (≥ 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack… sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track Track headers (trackhdr.rs, trackops.rs, freeze.rs, newtrack.rs; 2026-11-11): Configure Track Header popover and Track Header Components (On/Off, Protect, Freeze, colour bars, groove track, numbers, icons, Additional Name Column, Pan/Send knob function, Store/Apply User Configuration), slide activation and Command/Option clicks on the buttons, Clear/Recall Solo and Hide buttons, Color palette, Icon palette (glyph font + custom PNG icons), Search and Select Track, zoom corner, Protect (edits taken back), real Freeze (32-bit float freeze file rendered at play start, Source Only / Pre Fader), groove track (engine matches timing), New Tracks dialog with Details, External MIDI tracks (notes to a MIDI port), Track ▸ Other (same / next channel, for selected / overlapped regions), Reassign Track, Sort Tracks by, default patch per type, Replace or Double Drum Track, Bounce Track / Regions in Place and Bounce and Replace All dialogs, Export Tracks / Regions as Audio Files with the name Pattern. [ ] articulation sets, selection-based processing, drag zones onto headers, track settings live in a sidecar (not the .logicx)
 - [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
 - [~] Browser as Logic 13's (browser.rs, soundlib.rs): All / Loops & One-Shots (Loops / One-Shots buttons) / Instruments / Effects / Plug-in Presets (columns, path bar; Studio's saved settings and .pst files) / Sound Library / SoundFonts, Locations (user folders analysed for type, tempo, key, bars, instrument tags; >60 s not analysed) and Smart Searches; tags by category (genre, instrument with subtags, paired descriptors, group tags with values, sound packs, Your Sounds, Favorites) in All Filters; Name Contains / tag suggestions / "Sounds like" phrase search, chips, Find Similar (tag/tempo/key similarity, 1000 max); favourites; Link to Selection and Replace Mode; preview with volume and Auto Leveling; drag to the tracks (right track type, new tracks below, Add Selected Files to Tracks), New Track with / Place at Playhead, Create Track with Loop ▸ Quick Sampler / Sample Alchemy / Drum Machine Designer (real sampler instruments), Add to DMD; first loop sets tempo and key; audio loops stretched to the project tempo (flex), MIDI loops to the key; Save Patch for Selected Track (Your Patches), Patch Merging, Add to Browser… (regions as loops/one-shots, Your Loops); compact navigation, columns view; all 16 Browser key commands. Only Bramble Sounds' one-shots and the user's own loops: no Apple loops. [ ] Browser Focus triangle on channel-strip slots, Session Player / pattern / chord loops, audio previews of MIDI loops, loops following later tempo or key changes, DMD pad drops, audio-content analysis (tags come from names), region drag into the Browser, legacy/Splice loop import
@@ -43,7 +43,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Step Editor (stepedit.rs, Window ▸ Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project
 - [~] Event Editor (eventedit.rs, the List Editors' Events): ↑ ↓, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (notes have no articulation ID yet)
 - [ ] Drum Machine Designer key commands: no pad view in Studio yet
-- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only)
+- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only) Mixer additions (mixext.rs, mixwin.rs, mixengine.rs; 2026-11-11): Channel Mode button (mono / stereo / left / right in the engine), Pan Law wired, Stereo Pan, Binaural Panner (strip and window; a spherical-head model, not Apple's HRTF), Independent Pan / Post Pan / bypassed / Low Latency Safe sends, Low Latency Monitoring in the engine, solo-safe and exclusive solo, flashing mute / solo, held peak display with clip colours, segmented meters, typed fader and pan values, Shift fine fader, Toggle Level, Dim, output Bounce button, R / I on audio strips, rename / colour strips, several groups per strip, automation mode menu on strips, MIDI channel strips (program, bank, Assign 1-5 sent as MIDI), Studio channel strip settings (.cst text) with performances, I/O Labels window, Configure Channel Strip Components, Search and Add Plug-in and menu search, Follow Hide / Track Stacks / Autoscroll / Sends only view options, drag strips to reorder. [ ] multi-output instruments, side chain, plug-in window link modes, bus / input / output strips, Plug-in Manager for Logic's plug-ins
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, Project Files (Project Audio; All Files Browser with Back/Forward, Computer/Home/Project, List/Column view, name search with kind/format/length/date/size filters, Action menu, Play, drag to tracks)
@@ -115,13 +115,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 324 | 595 | 54% |
-| Local menus | 632 | 1191 | 53% |
-| Right-click menus | 1337 | 2575 | 51% |
-| Key commands | 1366 | 2207 | 61% |
+| Menu bar | 344 | 595 | 57% |
+| Local menus | 645 | 1191 | 54% |
+| Right-click menus | 1356 | 2575 | 52% |
+| Key commands | 1539 | 2207 | 69% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 324 of 595
+## Menu bar: 344 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -177,7 +177,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 42/81</summary>
+<details><summary>File — 47/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -236,23 +236,23 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Other…  `⌘I`
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
-  - [ ] Regions as Audio Files…
+  - [x] Regions as Audio Files…
   - [ ] Audio Files As…
   - [ ] Selection as Audio File…
   - [ ] Selection as MIDI File…  `⌥⌘E`
   - [ ] Selected Track(s) as MainStage Patch…
   - [ ] Selected Track(s) as MainStage Set…
   - [x] 1 Track as Audio File…  `⌘E`
-  - [ ] All Tracks as Audio Files…  `⇧⌘E`
+  - [x] All Tracks as Audio Files…  `⇧⌘E`
   - [x] All MIDI Tracks as MIDI File…
   - [ ] Project as AAF File…
   - [ ] Project to Final Cut Pro XML…
   - [x] Project as Spatial Audio…
   - [ ] Score as MusicXML…
 - [ ] Bounce
-  - [ ] Regions in Place…  `⌃B`
-  - [ ] Track in Place…  `⌃⌘B`
-  - [ ] And Replace All Tracks…
+  - [x] Regions in Place…  `⌃B`
+  - [x] Track in Place…  `⌃⌘B`
+  - [x] And Replace All Tracks…
   - [x] Project or Section…  `⌘B`
 - [ ] Share
   - [ ] Song to Music…
@@ -434,20 +434,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Track — 17/49</summary>
+<details><summary>Track — 29/49</summary>
 
 - [x] New Tracks…  `⌥⌘N`
 - [x] New Audio Track  `⌥⌘A`
 - [x] New Software Instrument Track  `⌥⌘S`
 - [x] New Session Player SI Track…  `⌥⌘P`
-- [ ] New External MIDI Track  `⌥⌘X`
+- [x] New External MIDI Track  `⌥⌘X`
 - [ ] Other
-  - [ ] New Track With Duplicate Settings  `⌘D`
-  - [ ] New Track With Duplicate Settings and Content  `⌥⇧⌘D`
-  - [ ] New Track With Next Instrument  `⌃↩`
-  - [ ] New Track With Same Instrument  `⌃⇧↩`
-  - [ ] New Track For Overlapped Regions
-  - [ ] New Track For Selected Regions
+  - [x] New Track With Duplicate Settings  `⌘D`
+  - [x] New Track With Duplicate Settings and Content  `⌥⇧⌘D`
+  - [x] New Track With Next Instrument  `⌃↩`
+  - [x] New Track With Same Instrument  `⌃⇧↩`
+  - [x] New Track For Overlapped Regions
+  - [x] New Track For Selected Regions
 - [x] Rename Track  `⇧↩`
 - [x] Delete Track  `⌘⌫`
 - [x] Delete Unused Tracks  `⇧⌘⌫`
@@ -467,9 +467,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Show Beat Mapping Track  `⇧⌘B`
 - [x] Show Track Alternatives
 - [ ] Show Output Track  `⇧⌘M`
-- [ ] Replace or Double Drum Track…  `⌃D`
+- [x] Replace or Double Drum Track…  `⌃D`
 - [ ] Convert Regions to New Sampler Track…  `⌃E`
-- [ ] Search and Select Track…  `⌃⌘T`
+- [x] Search and Select Track…  `⌃⌘T`
 - [x] Hide Selected Track  `⌃H`
 - [x] Hide Unselected Track
 - [x] Unhide All Tracks  `⌃⇧H`
@@ -482,9 +482,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Track Name
   - [ ] Used, Unused
   - [ ] Creation Date
-- [ ] Assign Track Color…
-- [ ] Assign Track Icon…
-- [ ] Configure Track Header…  `⌥T`
+- [x] Assign Track Color…
+- [x] Assign Track Icon…
+- [x] Configure Track Header…  `⌥T`
 
 </details>
 
@@ -610,7 +610,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Mix — 19/36</summary>
+<details><summary>Mix — 21/36</summary>
 
 - [x] Show Automation  `A`
 - [ ] Create Track Automation
@@ -642,16 +642,16 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Group Settings  `⌥⇧G`
 - [x] Groups Active  `⇧G`
 - [x] Create Group  `⌃⌘G`
-- [ ] I/O Labels…
+- [x] I/O Labels…
 - [ ] I/O Assignments…
 - [x] Pre-Fader Metering
-- [ ] Search and Add Plug-in…  `⌃⌘P`
+- [x] Search and Add Plug-in…  `⌃⌘P`
 - [x] Mastering Assistant…
 - [x] Dolby Atmos…
 
 </details>
 
-<details><summary>View — 14/18</summary>
+<details><summary>View — 15/18</summary>
 
 - [ ] Show Tab Bar
 - [ ] Show All Tabs  `⇧⌘\`
@@ -669,7 +669,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Show Toolbar  `⌃⌥⌘T`
 - [x] Customize Toolbar…
 - [x] Show Movie Window
-- [ ] Show Colors  `⌥C`
+- [x] Show Colors  `⌥C`
 - [x] Enter Full Screen  `⌃⌘F`
 
 </details>
@@ -769,7 +769,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 632 of 1191
+## Local menus (Edit / Functions / View in each area): 645 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -1170,7 +1170,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-Edit — 17/26</summary>
+<details><summary>mixer-Edit — 20/26</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1191,13 +1191,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Invert Selection  `⇧I`
 - [x] Select Audio Channel Strips  `⇧A`
 - [x] Select Instrument Channel Strips  `⇧S`
-- [ ] Select Summing Stack Channel Strips
+- [x] Select Summing Stack Channel Strips
 - [x] Select Auxiliary Channel Strips  `⇧F`
 - [x] Select Output Channel Strips  `⇧O`
-- [ ] Select MIDI Channel Strips  `⇧E`
+- [x] Select MIDI Channel Strips  `⇧E`
 - [x] Select Same-Colored Channel Strips  `⇧C`
 - [x] Select Muted Channel Strips  `⇧M`
-- [ ] Select Channel Strips with Same Panner Type
+- [x] Select Channel Strips with Same Panner Type
 
 </details>
 
@@ -1221,24 +1221,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-Options — 4/8</summary>
+<details><summary>mixer-Options — 6/8</summary>
 
 - [x] Create New Auxiliary Channel Strip  `⌃N`
 - [x] Create New VCA for Selected Channel Strips
 - [ ] Create Tracks for Selected Channel Strips  `⌃T`
 - [ ] Create Track Stack for Selected Channel Strips
 - [x] Flatten Stack
-- [ ] Send All MIDI Mixer Data
+- [x] Send All MIDI Mixer Data
 - [x] Enable Groups
-- [ ] I/O Labels…
+- [x] I/O Labels…
 
 </details>
 
-<details><summary>mixer-View — 18/52</summary>
+<details><summary>mixer-View — 26/52</summary>
 
 - [ ] Hide Legend  `⌥⇧I`
 - [ ] Link Control Surfaces
-- [ ] Autoscroll to Selection
+- [x] Autoscroll to Selection
 - [ ] Scroll To
   - [ ] Audio
   - [x] Instruments
@@ -1248,14 +1248,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Outputs
   - [x] Master/VCA
   - [x] MIDI Instruments
-- [ ] Signal Flow Channel Strips
-- [ ] Channels with Sends only
+- [x] Signal Flow Channel Strips
+- [x] Channels with Sends only
 - [ ] Folder Tracks
 - [ ] Other Tracks
-- [ ] All Tracks with Same Channel Strip/Instrument
-- [ ] Follow Track Stacks
-- [ ] Follow Hide
-- [ ] Long Faders  `⌃⇧L`
+- [x] All Tracks with Same Channel Strip/Instrument
+- [x] Follow Track Stacks
+- [x] Follow Hide
+- [x] Long Faders  `⌃⇧L`
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
@@ -1287,7 +1287,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Assign 3
   - [ ] Assign 4
   - [ ] Assign 5
-- [ ] Configure Channel Strip Components…  `⌥X`
+- [x] Configure Channel Strip Components…  `⌥X`
 
 </details>
 
@@ -2113,7 +2113,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1337 of 2575
+## Right-click menus: 1356 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2265,10 +2265,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>inspector-channelstrip — 11/21</summary>
+<details><summary>inspector-channelstrip — 13/21</summary>
 
-- [ ] Assign Channel Strip Color…
-- [ ] Long Faders
+- [x] Assign Channel Strip Color…
+- [x] Long Faders
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
@@ -3667,11 +3667,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-strip-name — 12/29</summary>
+<details><summary>mixer-strip-name — 18/29</summary>
 
 - [x] Create New VCA
-- [ ] Assign Channel Strip Color…
-- [ ] Rename Channel Strip…
+- [x] Assign Channel Strip Color…
+- [x] Rename Channel Strip…
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
@@ -3694,10 +3694,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Track Number
   - [ ] Control Surface Bars
   - [ ] Track Notes
-- [ ] Configure Channel Strip Components…  `⌥X`
-- [ ] Store as User Default
-- [ ] Apply User Default  `⌃⇧U`
-- [ ] Revert to Default
+- [x] Configure Channel Strip Components…  `⌥X`
+- [x] Store as User Default
+- [x] Apply User Default  `⌃⇧U`
+- [x] Revert to Default
 
 </details>
 
@@ -4826,19 +4826,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>track-alternatives-popup — 3/7</summary>
+<details><summary>track-alternatives-popup — 4/7</summary>
 
 - [x] New  `⌃⌥⌘N`
 - [x] Duplicate  `⌃⌥⌘D`
 - [x] Rename  `⌃⌥⌘↩`
-- [ ] Rename by Region
+- [x] Rename by Region
 - [ ] Delete Inactive  `⌃⌥⌘⌦`
 - [ ] Delete Unused
 - [ ] Show Inactive  `⌃⌥A`
 
 </details>
 
-<details><summary>track-header — 17/70</summary>
+<details><summary>track-header — 27/70</summary>
 
 - [ ] Reassign Track
   - [ ] Click & Ports
@@ -4851,12 +4851,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Software Instrument
       - [ ] Deluxe Classic (Inst 1)
   - [ ] MIDI Click
-  - [ ] Not Assigned
-  - [ ] (Folder)
+  - [x] Not Assigned
+  - [x] (Folder)
 - [x] New Audio Track  `⌥⌘A`
 - [x] New Software Instrument Track  `⌥⌘S`
 - [x] New Session Player SI Track…  `⌥⌘P`
-- [ ] New External MIDI Track  `⌥⌘X`
+- [x] New External MIDI Track  `⌥⌘X`
 - [x] New Track with Duplicate Settings  `⌘D`
 - [x] New Track with Duplicate Settings and Content  `⌥⇧⌘D`
 - [x] Rename Track  `⇧↩`
@@ -4869,8 +4869,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Hide Unselected Track
 - [x] Unhide All Tracks  `⌃⇧H`
 - [x] Toggle Hide View  `H`
-- [ ] Assign Track Color…
-- [ ] Assign Track Icon…
+- [x] Assign Track Color…
+- [x] Assign Track Icon…
 - [ ] Track Header Components
   - [ ] On/Off
   - [x] Mute
@@ -4904,11 +4904,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Groove Track
   - [ ] Track Icons
   - [x] Track Alternatives
-- [ ] Configure Track Header…  `⌥T`
-- [ ] Store User Configuration
-- [ ] Apply User Configuration
-- [ ] Revert to Defaults
-- [ ] Use as Default Patch for MIDI Tracks
+- [x] Configure Track Header…  `⌥T`
+- [x] Store User Configuration
+- [x] Apply User Configuration
+- [x] Revert to Defaults
+- [x] Use as Default Patch for MIDI Tracks
 - [ ] Save as Patch
 
 </details>
@@ -4936,7 +4936,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1366 of 2207
+## Key commands: 1539 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4945,7 +4945,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 350/679</summary>
+<details><summary>Global Commands — 506/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5096,7 +5096,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Autopunch Mode  `⌃⌥⌘P`
 - [x] Toggle Replace  `/`
 - [ ] Toggle Region Solo
-- [ ] Toggle Solo Tracks (Channel Strips) of Selected Regions/Cells
+- [x] Toggle Solo Tracks (Channel Strips) of Selected Regions/Cells
 - [x] Engage Solo Tracks (Channel Strips) of Selected Regions/Cells  `⌃S`
 - [ ] Set Solo Lock Mode
 - [ ] Reselect Solo-Locked Regions
@@ -5266,11 +5266,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Move Movie Region to Playhead
 - [x] Show Movie in Finder
 - [x] Open Environment Mixer…
-- [ ] Toggle Level of Input Channel Strips
-- [ ] Toggle Level of Audio Channel Strips
-- [ ] Toggle Level of Auxiliary Channel Strips
-- [ ] Toggle Level of Bus Channel Strips
-- [ ] Toggle Level of Output Channel Strips
+- [x] Toggle Level of Input Channel Strips
+- [x] Toggle Level of Audio Channel Strips
+- [x] Toggle Level of Auxiliary Channel Strips
+- [x] Toggle Level of Bus Channel Strips
+- [x] Toggle Level of Output Channel Strips
 - [x] Toggle Selected Tracks or Channel Strips Automation Off/Read  `⌃⌘O`
 - [ ] Set Selected Tracks or Channel Strips to Automation Read
 - [ ] Toggle Selected Tracks or Channel Strips Automation Touch/Read
@@ -5309,145 +5309,145 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Remove Selected Channel Strips from Selected Groups
 - [x] Copy Group Settings
 - [x] Paste Group Settings
-- [ ] Define Group Settings as Default
-- [ ] Select Members of Group 1
-- [ ] Select Members of Group 2
-- [ ] Select Members of Group 3
-- [ ] Select Members of Group 4
-- [ ] Select Members of Group 5
-- [ ] Select Members of Group 6
-- [ ] Select Members of Group 7
-- [ ] Select Members of Group 8
-- [ ] Select Members of Group 9
-- [ ] Select Members of Group 10
-- [ ] Select Members of Group 11
-- [ ] Select Members of Group 12
-- [ ] Select Members of Group 13
-- [ ] Select Members of Group 14
-- [ ] Select Members of Group 15
-- [ ] Select Members of Group 16
-- [ ] Select Members of Group 17
-- [ ] Select Members of Group 18
-- [ ] Select Members of Group 19
-- [ ] Select Members of Group 20
-- [ ] Select Members of Group 21
-- [ ] Select Members of Group 22
-- [ ] Select Members of Group 23
-- [ ] Select Members of Group 24
-- [ ] Select Members of Group 25
-- [ ] Select Members of Group 26
-- [ ] Select Members of Group 27
-- [ ] Select Members of Group 28
-- [ ] Select Members of Group 29
-- [ ] Select Members of Group 30
-- [ ] Select Members of Group 31
-- [ ] Select Members of Group 32
-- [ ] Select Members of Group 33
-- [ ] Select Members of Group 34
-- [ ] Select Members of Group 35
-- [ ] Select Members of Group 36
-- [ ] Select Members of Group 37
-- [ ] Select Members of Group 38
-- [ ] Select Members of Group 39
-- [ ] Select Members of Group 40
-- [ ] Select Members of Group 41
-- [ ] Select Members of Group 42
-- [ ] Select Members of Group 43
-- [ ] Select Members of Group 44
-- [ ] Select Members of Group 45
-- [ ] Select Members of Group 46
-- [ ] Select Members of Group 47
-- [ ] Select Members of Group 48
-- [ ] Select Members of Group 49
-- [ ] Select Members of Group 50
-- [ ] Select Members of Group 51
-- [ ] Select Members of Group 52
-- [ ] Select Members of Group 53
-- [ ] Select Members of Group 54
-- [ ] Select Members of Group 55
-- [ ] Select Members of Group 56
-- [ ] Select Members of Group 57
-- [ ] Select Members of Group 58
-- [ ] Select Members of Group 59
-- [ ] Select Members of Group 60
-- [ ] Select Members of Group 61
-- [ ] Select Members of Group 62
-- [ ] Select Members of Group 63
-- [ ] Select Members of Group 64
-- [ ] Toggle Hide Group 1  `⌃⇧1`
-- [ ] Toggle Hide Group 2  `⌃⇧2`
-- [ ] Toggle Hide Group 3  `⌃⇧3`
-- [ ] Toggle Hide Group 4  `⌃⇧4`
-- [ ] Toggle Hide Group 5  `⌃⇧5`
-- [ ] Toggle Hide Group 6  `⌃⇧6`
-- [ ] Toggle Hide Group 7  `⌃⇧7`
-- [ ] Toggle Hide Group 8  `⌃⇧8`
-- [ ] Toggle Hide Group 9  `⌃⇧9`
-- [ ] Toggle Hide Group 10
-- [ ] Toggle Hide Group 11
-- [ ] Toggle Hide Group 12
-- [ ] Toggle Hide Group 13
-- [ ] Toggle Hide Group 14
-- [ ] Toggle Hide Group 15
-- [ ] Toggle Hide Group 16
-- [ ] Toggle Hide Group 17
-- [ ] Toggle Hide Group 18
-- [ ] Toggle Hide Group 19
-- [ ] Toggle Hide Group 20
-- [ ] Toggle Hide Group 21
-- [ ] Toggle Hide Group 22
-- [ ] Toggle Hide Group 23
-- [ ] Toggle Hide Group 24
-- [ ] Toggle Hide Group 25
-- [ ] Toggle Hide Group 26
-- [ ] Toggle Hide Group 27
-- [ ] Toggle Hide Group 28
-- [ ] Toggle Hide Group 29
-- [ ] Toggle Hide Group 30
-- [ ] Toggle Hide Group 31
-- [ ] Toggle Hide Group 32
-- [ ] Toggle Hide Group 33
-- [ ] Toggle Hide Group 34
-- [ ] Toggle Hide Group 35
-- [ ] Toggle Hide Group 36
-- [ ] Toggle Hide Group 37
-- [ ] Toggle Hide Group 38
-- [ ] Toggle Hide Group 39
-- [ ] Toggle Hide Group 40
-- [ ] Toggle Hide Group 41
-- [ ] Toggle Hide Group 42
-- [ ] Toggle Hide Group 43
-- [ ] Toggle Hide Group 44
-- [ ] Toggle Hide Group 45
-- [ ] Toggle Hide Group 46
-- [ ] Toggle Hide Group 47
-- [ ] Toggle Hide Group 48
-- [ ] Toggle Hide Group 49
-- [ ] Toggle Hide Group 50
-- [ ] Toggle Hide Group 51
-- [ ] Toggle Hide Group 52
-- [ ] Toggle Hide Group 53
-- [ ] Toggle Hide Group 54
-- [ ] Toggle Hide Group 55
-- [ ] Toggle Hide Group 56
-- [ ] Toggle Hide Group 57
-- [ ] Toggle Hide Group 58
-- [ ] Toggle Hide Group 59
-- [ ] Toggle Hide Group 60
-- [ ] Toggle Hide Group 61
-- [ ] Toggle Hide Group 62
-- [ ] Toggle Hide Group 63
-- [ ] Toggle Hide Group 64
-- [ ] Refresh Freeze Files
+- [x] Define Group Settings as Default
+- [x] Select Members of Group 1
+- [x] Select Members of Group 2
+- [x] Select Members of Group 3
+- [x] Select Members of Group 4
+- [x] Select Members of Group 5
+- [x] Select Members of Group 6
+- [x] Select Members of Group 7
+- [x] Select Members of Group 8
+- [x] Select Members of Group 9
+- [x] Select Members of Group 10
+- [x] Select Members of Group 11
+- [x] Select Members of Group 12
+- [x] Select Members of Group 13
+- [x] Select Members of Group 14
+- [x] Select Members of Group 15
+- [x] Select Members of Group 16
+- [x] Select Members of Group 17
+- [x] Select Members of Group 18
+- [x] Select Members of Group 19
+- [x] Select Members of Group 20
+- [x] Select Members of Group 21
+- [x] Select Members of Group 22
+- [x] Select Members of Group 23
+- [x] Select Members of Group 24
+- [x] Select Members of Group 25
+- [x] Select Members of Group 26
+- [x] Select Members of Group 27
+- [x] Select Members of Group 28
+- [x] Select Members of Group 29
+- [x] Select Members of Group 30
+- [x] Select Members of Group 31
+- [x] Select Members of Group 32
+- [x] Select Members of Group 33
+- [x] Select Members of Group 34
+- [x] Select Members of Group 35
+- [x] Select Members of Group 36
+- [x] Select Members of Group 37
+- [x] Select Members of Group 38
+- [x] Select Members of Group 39
+- [x] Select Members of Group 40
+- [x] Select Members of Group 41
+- [x] Select Members of Group 42
+- [x] Select Members of Group 43
+- [x] Select Members of Group 44
+- [x] Select Members of Group 45
+- [x] Select Members of Group 46
+- [x] Select Members of Group 47
+- [x] Select Members of Group 48
+- [x] Select Members of Group 49
+- [x] Select Members of Group 50
+- [x] Select Members of Group 51
+- [x] Select Members of Group 52
+- [x] Select Members of Group 53
+- [x] Select Members of Group 54
+- [x] Select Members of Group 55
+- [x] Select Members of Group 56
+- [x] Select Members of Group 57
+- [x] Select Members of Group 58
+- [x] Select Members of Group 59
+- [x] Select Members of Group 60
+- [x] Select Members of Group 61
+- [x] Select Members of Group 62
+- [x] Select Members of Group 63
+- [x] Select Members of Group 64
+- [x] Toggle Hide Group 1  `⌃⇧1`
+- [x] Toggle Hide Group 2  `⌃⇧2`
+- [x] Toggle Hide Group 3  `⌃⇧3`
+- [x] Toggle Hide Group 4  `⌃⇧4`
+- [x] Toggle Hide Group 5  `⌃⇧5`
+- [x] Toggle Hide Group 6  `⌃⇧6`
+- [x] Toggle Hide Group 7  `⌃⇧7`
+- [x] Toggle Hide Group 8  `⌃⇧8`
+- [x] Toggle Hide Group 9  `⌃⇧9`
+- [x] Toggle Hide Group 10
+- [x] Toggle Hide Group 11
+- [x] Toggle Hide Group 12
+- [x] Toggle Hide Group 13
+- [x] Toggle Hide Group 14
+- [x] Toggle Hide Group 15
+- [x] Toggle Hide Group 16
+- [x] Toggle Hide Group 17
+- [x] Toggle Hide Group 18
+- [x] Toggle Hide Group 19
+- [x] Toggle Hide Group 20
+- [x] Toggle Hide Group 21
+- [x] Toggle Hide Group 22
+- [x] Toggle Hide Group 23
+- [x] Toggle Hide Group 24
+- [x] Toggle Hide Group 25
+- [x] Toggle Hide Group 26
+- [x] Toggle Hide Group 27
+- [x] Toggle Hide Group 28
+- [x] Toggle Hide Group 29
+- [x] Toggle Hide Group 30
+- [x] Toggle Hide Group 31
+- [x] Toggle Hide Group 32
+- [x] Toggle Hide Group 33
+- [x] Toggle Hide Group 34
+- [x] Toggle Hide Group 35
+- [x] Toggle Hide Group 36
+- [x] Toggle Hide Group 37
+- [x] Toggle Hide Group 38
+- [x] Toggle Hide Group 39
+- [x] Toggle Hide Group 40
+- [x] Toggle Hide Group 41
+- [x] Toggle Hide Group 42
+- [x] Toggle Hide Group 43
+- [x] Toggle Hide Group 44
+- [x] Toggle Hide Group 45
+- [x] Toggle Hide Group 46
+- [x] Toggle Hide Group 47
+- [x] Toggle Hide Group 48
+- [x] Toggle Hide Group 49
+- [x] Toggle Hide Group 50
+- [x] Toggle Hide Group 51
+- [x] Toggle Hide Group 52
+- [x] Toggle Hide Group 53
+- [x] Toggle Hide Group 54
+- [x] Toggle Hide Group 55
+- [x] Toggle Hide Group 56
+- [x] Toggle Hide Group 57
+- [x] Toggle Hide Group 58
+- [x] Toggle Hide Group 59
+- [x] Toggle Hide Group 60
+- [x] Toggle Hide Group 61
+- [x] Toggle Hide Group 62
+- [x] Toggle Hide Group 63
+- [x] Toggle Hide Group 64
+- [x] Refresh Freeze Files
 - [ ] Audio Hardware Setup
 - [ ] Apogee Control Panel
-- [ ] I/O Labels…
+- [x] I/O Labels…
 - [x] Mastering Assistant…
 - [ ] Toggle Varispeed
 - [x] Toggle Allow Quick Punch-in
 - [x] Toggle Auto Input Monitoring
-- [ ] Toggle Pre-Fader Metering
-- [ ] Clear Overload Flag in Audio Channel Display
+- [x] Toggle Pre-Fader Metering
+- [x] Clear Overload Flag in Audio Channel Display
 - [x] Close Project without Saving
 - [x] Close Window  `⌘W`
 - [ ] Cycle Through Windows  `⌥W`
@@ -5458,9 +5458,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select Previous Track  `↑`
 - [x] Select Next Track  `↓`
 - [ ] Select Tracks and Set Default Region/Cell Parameters by Region/Cell/Folder
-- [ ] Select Tracks of Selected Regions/Cells/Folders
+- [x] Select Tracks of Selected Regions/Cells/Folders
 - [ ] Set Default Region/Cell Parameters by Region/Cell/Folder
-- [ ] Select All Regions of Selected Tracks
+- [x] Select All Regions of Selected Tracks
 - [x] Hide Logic Pro  `⌘H`
 - [x] Hide Others  `⌥⌘H`
 - [x] Quit  `⌘Q`
@@ -5485,9 +5485,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Export All MIDI Tracks as MIDI File…
 - [ ] Export Score as MusicXML…
 - [ ] Export Selection as Audio File…
-- [ ] Export Regions as Audio Files…
+- [x] Export Regions as Audio Files…
 - [x] Export Tracks as Audio Files…  `⌘E`
-- [ ] Export All Tracks as Audio Files…  `⇧⌘E`
+- [x] Export All Tracks as Audio Files…  `⇧⌘E`
 - [ ] Export Selected Track(s) as MainStage Patch…
 - [ ] Export Selected Track(s) as MainStage Set…
 - [ ] Export Project as AAF File…
@@ -5520,32 +5520,32 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Previous Sampler Instrument
 - [x] Next Plug-in Setting or Sampler Instrument
 - [x] Previous Plug-in Setting or Sampler Instrument
-- [ ] Next Channel Strip Setting of focused Track  `⇧]`
-- [ ] Previous Channel Strip Setting of focused Track  `⇧[`
+- [x] Next Channel Strip Setting of focused Track  `⇧]`
+- [x] Previous Channel Strip Setting of focused Track  `⇧[`
 - [x] Copy Channel Strip Setting  `⌥⌘C`
 - [x] Paste Channel Strip Setting  `⌥⌘V`
 - [x] Paste Channel Strip Setting Plug-ins Only
 - [x] Paste Channel Strip Setting Sends Only
 - [x] Reset Channel Strip Setting
-- [ ] Remove Empty Insert Slots
+- [x] Remove Empty Insert Slots
 - [x] Remove Bypassed Plug-ins
-- [ ] Remove All Effect Plug-ins
-- [ ] Remove All Sends
-- [ ] Remove Bypassed Sends
+- [x] Remove All Effect Plug-ins
+- [x] Remove All Sends
+- [x] Remove Bypassed Sends
 - [x] Bypass All Effect Plug-ins
-- [ ] Save Channel Strip Setting as…
-- [ ] Save as Performance…
-- [ ] Delete Channel Strip Setting
+- [x] Save Channel Strip Setting as…
+- [x] Save as Performance…
+- [x] Delete Channel Strip Setting
 - [ ] Next Patch, Plug-in Setting or Sampler Instrument  `]`
 - [ ] Previous Patch, Plug-in Setting or Sampler Instrument  `[`
 - [x] Toggle Channel Strip Mute  `M`
 - [x] Toggle Channel Strip Solo  `S`
 - [x] Toggle Channel Strip Record Enable
 - [x] Toggle Channel Strip Input Monitoring  `⌃I`
-- [ ] Toggle Channel Strip Format (mono/stereo)  `⌃⇧S`
+- [x] Toggle Channel Strip Format (mono/stereo)  `⌃⇧S`
 - [x] Toggle Channel Strip Arpeggiator
-- [ ] Set Plug-in Latency Compensation Mode
-- [ ] Toggle Low Latency Monitoring Mode
+- [x] Set Plug-in Latency Compensation Mode
+- [x] Toggle Low Latency Monitoring Mode
 - [ ] Toggle Software Monitoring
 - [x] Show/Hide All Plug-in Windows  `V`
 - [ ] Close All Plug-in Windows
@@ -5622,7 +5622,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Play Previous Scene
 - [x] Play Next Scene
 - [x] Stop All Cells  `⌘↩`
-- [ ] Toggle Activation of All Tracks  `⌃⌥⇧A`
+- [x] Toggle Activation of All Tracks  `⌃⌥⇧A`
 - [ ] Live Loops: Keep Cells Squared When Zooming
 - [ ] Live Loops: Show Start Positions as Offset
 - [ ] Live Loops: Show Length as Position
@@ -5641,7 +5641,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 63/110</summary>
+<details><summary>Various Windows — 64/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5752,7 +5752,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Apply Control Bar and Display Defaults
 - [x] Save As Control Bar and Display Defaults
 - [ ] Preview  `⌥˽`
-- [ ] Search and Add Plug-in…  `⌃⌘P`
+- [x] Search and Add Plug-in…  `⌃⌘P`
 
 </details>
 
@@ -5776,7 +5776,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 169/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 171/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -5788,7 +5788,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] New Drummer SI Track
 - [ ] New Bass Player SI Track
 - [ ] New Keyboard Player SI Track
-- [ ] New External MIDI Track  `⌥⌘X`
+- [x] New External MIDI Track  `⌥⌘X`
 - [x] New Track with Duplicate Settings  `⌘D`
 - [x] New Track with Duplicate Settings and Content  `⌥⇧⌘D`
 - [x] New Track with Next Channel / Instrument  `⌃↩`
@@ -5796,7 +5796,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Append Track to Track List
 - [x] Delete Track  `⌘⌫`
 - [x] Delete unused Tracks  `⇧⌘⌫`
-- [ ] Search and Select Track…  `⌃⌘T`
+- [x] Search and Select Track…  `⌃⌘T`
 - [x] Import Audio File…  `⇧⌘I`
 - [ ] Create MIDI Region/Cell
 - [ ] Create Pattern Region/Cell
@@ -6255,7 +6255,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 113/249</summary>
+<details><summary>Main Window Tracks — 119/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6342,12 +6342,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Hide View  `H`
 - [ ] Hide/Show All Empty Tracks
 - [ ] Hide/Show Empty Tracks in Cycle
-- [ ] Toggle Track On  `⌥M`
+- [x] Toggle Track On  `⌥M`
 - [ ] Toggle Track On of all Tracks of Folder
 - [ ] Toggle Track On of all Tracks With Same Instrument of Project
 - [x] Toggle Track Solo
-- [ ] Toggle Track Protect
-- [ ] Toggle Track Freeze
+- [x] Toggle Track Protect
+- [x] Toggle Track Freeze
 - [x] Toggle Track Record Enable  `⌃R`
 - [ ] Toggle Automation Subtracks
 - [ ] Hide Automation Subtracks
@@ -6463,11 +6463,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Toggle Waveform Vertical Zoom
 - [x] Show/Hide Toolbar  `⌃⌥⌘T`
 - [x] Customize Toolbar…
-- [ ] Configure Track Header…  `⌥T`
+- [x] Configure Track Header…  `⌥T`
 - [ ] Use As Default Patch
 - [ ] Save as Patch
-- [ ] Assign Track Color…
-- [ ] Assign Track Icon…
+- [x] Assign Track Color…
+- [x] Assign Track Icon…
 - [ ] Store Track Header Configuration as User Default
 - [ ] Apply Track Header Configuration User Default
 - [ ] Revert to Track Header Configuration Default
@@ -6532,7 +6532,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Mixer — 46/86</summary>
+<details><summary>Mixer — 54/86</summary>
 
 - [x] Delete Mixer Undo History
 - [x] Include Mixer Undo Steps in Project Undo History
@@ -6547,12 +6547,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Narrow/Wide Channel Strips
 - [x] Select Audio Channel Strips  `⇧A`
 - [x] Select Instrument Channel Strips  `⇧S`
-- [ ] Select Summing Stack Channel Strips
+- [x] Select Summing Stack Channel Strips
 - [x] Select Auxiliary Channel Strips  `⇧F`
 - [x] Select Output Channel Strips  `⇧O`
-- [ ] Select MIDI Channel Strips  `⇧E`
+- [x] Select MIDI Channel Strips  `⇧E`
 - [x] Select Same-Colored Channel Strips  `⇧C`
-- [ ] Select Channel Strips with Same Panner Type
+- [x] Select Channel Strips with Same Panner Type
 - [x] Select Muted Channel Strips  `⇧M`
 - [x] Select Previous (Left) Channel Strip  `←`
 - [x] Select Next (Right) Channel Strip  `→`
@@ -6561,9 +6561,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Create Tracks for Selected Channel Strips  `⌃T`
 - [ ] Create Track Stack for Selected Channel Strips
 - [ ] Flatten Track Stack for Selected Channel Strips
-- [ ] Send All MIDI Mixer Data
+- [x] Send All MIDI Mixer Data
 - [ ] Toggle Link Control Surfaces
-- [ ] Autoscroll to Selection
+- [x] Autoscroll to Selection
 - [x] Scroll to Audio
 - [x] Scroll to Instruments
 - [x] Scroll to Auxiliaries
@@ -6573,10 +6573,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Scroll to Master/VCA
 - [x] Scroll to MIDI Instruments
 - [ ] Show/Hide Channels with Sends only
-- [ ] Show/Hide Signal Flow Channel Strips
+- [x] Show/Hide Signal Flow Channel Strips
 - [ ] Show/Hide Folder Tracks
 - [ ] Show/Hide Other Tracks
-- [ ] Show/Hide All Tracks with Same Channel Strip/Instrument
+- [x] Show/Hide All Tracks with Same Channel Strip/Instrument
 - [ ] Toggle Follow Track Stacks
 - [ ] Toggle Follow Hide
 - [ ] Show/Hide Long Faders  `⌃⇧L`
@@ -6609,7 +6609,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Track Number  `⌃⇧X`
 - [ ] Show/Hide Control Surface Bars
 - [ ] Show/Hide Notes  `⌃⇧N`
-- [ ] Configure Channel Strip Components…  `⌥X`
+- [x] Configure Channel Strip Components…  `⌥X`
 - [ ] Store Channel Strip Configuration as User Default
 - [ ] Apply Channel Strip Configuration User Default  `⌃⇧U`
 - [ ] Revert to Channel Strip Configuration Default

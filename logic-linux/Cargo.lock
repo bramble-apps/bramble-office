@@ -1800,6 +1800,7 @@ version = "0.4.2"
 dependencies = [
  "eframe",
  "egui",
+ "image",
  "kn-ui",
  "lg-audio",
  "lg-core",
