@@ -280,6 +280,10 @@ pub struct App {
     pub midi: crate::midifunc::Midi,
     /// Recording (audio and MIDI), its Record menu options, take folders' state.
     pub rec: crate::recording::Recording,
+    /// Stop Button Options and the last locate position (stopbutton.rs).
+    pub stopbtn: crate::stopbutton::Opts,
+    /// The control bar's optional transport buttons (Customize Control Bar).
+    pub cb_show: crate::controlbar::Shown,
     /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
     /// automation selection (trackarea.rs, regionops.rs, automation.rs).
     pub ta: crate::trackarea::State,
@@ -448,6 +452,8 @@ impl App {
             rec: Default::default(),
             plugin_compare: Default::default(),
             midi: Default::default(),
+            stopbtn: Default::default(),
+            cb_show: Default::default(),
             ta: Default::default(),
             nav: Default::default(),
             screens: Default::default(),
@@ -776,15 +782,21 @@ impl App {
                 }
             }
             e.playing = true;
+            // (Logic's last locate position: where playback started)
+            let at = e.pos;
+            drop(e);
+            self.stopbtn.last_pos = at;
         }
     }
 
+    /// The Stop button and command, as Stop Button Options say (stopbutton.rs).
     pub fn stop(&mut self) {
+        crate::stopbutton::press(self);
+    }
+
+    /// Stops playback where it is.
+    pub fn halt(&mut self) {
         let mut e = self.engine();
-        if !e.playing {
-            // stopped already: back to the start (Logic's second Stop)
-            e.locate(0.0);
-        }
         e.playing = false;
         e.all_off();
     }
@@ -1277,6 +1289,9 @@ impl App {
             return true;
         }
         if crate::midifunc::command(self, ctx, name) {
+            return true;
+        }
+        if crate::stopbutton::command(self, name) {
             return true;
         }
         if crate::recording::command(self, name) {

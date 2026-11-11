@@ -19,7 +19,7 @@ impl Snap {
     }
 }
 
-/// LG_SCRIPT="click x y; dclick x y; altdrag x y x2 y2; drag x y x2 y2; key Space; key cmd+Z;
+/// LG_SCRIPT="click x y; dclick x y; scroll x y dx dy; altdrag x y x2 y2; drag x y x2 y2; key Space; key cmd+Z;
 /// wait" (points in the window): each step becomes a few frames of events.
 fn parse_script(s: &str) -> std::collections::VecDeque<(egui::Modifiers, Vec<egui::Event>)> {
     use egui::{Event, Key, Modifiers, PointerButton, Pos2};
@@ -63,6 +63,13 @@ fn parse_script(s: &str) -> std::collections::VecDeque<(egui::Modifiers, Vec<egu
                 }
             }
             // "type 96": text typed into the focused field
+            ("scroll", [x, y, dx, dy]) => {
+                // a two-finger scroll of (dx, dy) points over (x, y), in a few steps
+                out.push_back((Modifiers::NONE, vec![Event::PointerMoved(Pos2::new(*x, *y))]));
+                for _ in 0..4 {
+                    out.push_back((Modifiers::NONE, vec![Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(*dx / 4.0, *dy / 4.0), phase: egui::TouchPhase::Move, modifiers: Modifiers::NONE, source: egui::MouseWheelSource::Trackpad }]));
+                }
+            }
             ("type", _) => out.push_back((Modifiers::NONE, vec![Event::Text(rest.to_string())])),
             _ => out.push_back((Modifiers::NONE, vec![])),
         }

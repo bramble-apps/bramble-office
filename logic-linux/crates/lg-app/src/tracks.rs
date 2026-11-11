@@ -433,7 +433,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         for (ri, r) in t.regions.iter().enumerate() {
             let x0 = x_of(r.start as f32, scroll);
             let x1 = x_of((r.start + r.length) as f32, scroll);
-            if x1 < lanes.min.x || x0 > lanes.max.x {
+            // (a looped region shows until its repetitions end, also once it has scrolled away)
+            let x_end = if r.props.looped { x_of(crate::regionops::loop_end(app, i, ri) as f32, scroll).max(x1) } else { x1 };
+            if x_end < lanes.min.x || x0 > lanes.max.x {
                 continue;
             }
             let rr = Rect::from_min_max(pos2(x0, y + 3.0), pos2(x1.max(x0 + 4.0), y + rh - 3.0));
