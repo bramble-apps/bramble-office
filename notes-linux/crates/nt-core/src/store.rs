@@ -116,8 +116,44 @@ impl Drop for Slow {
 /// How many opened notes [`Store::note`] keeps.
 const NOTE_CACHE: usize = 16;
 
-/// `$XDG_DATA_HOME/bramble-notes`, else `~/.local/share/bramble-notes`.
+/// The app's library: the folder picked in Settings (Library location: Change…), else
+/// [`standard_dir`].
 pub fn default_dir() -> PathBuf {
+    config_dir().and_then(|c| location_in(&c)).unwrap_or_else(standard_dir)
+}
+
+/// The app's settings folder (`$XDG_CONFIG_HOME/bramble-notes`, else `~/.config/bramble-notes`).
+pub fn config_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME").filter(|x| !x.is_empty()).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("bramble-notes"))
+}
+
+/// The library folder named in `config`'s library-location.txt, if one is.
+pub fn location_in(config: &Path) -> Option<PathBuf> {
+    let t = std::fs::read_to_string(config.join("library-location.txt")).ok()?;
+    let t = t.trim();
+    (!t.is_empty()).then(|| PathBuf::from(t)).filter(|p| p.is_absolute())
+}
+
+/// Names `dir` as the library in `config` (None: back to [`standard_dir`]).
+pub fn set_location_in(config: &Path, dir: Option<&Path>) -> Result<()> {
+    let f = config.join("library-location.txt");
+    match dir {
+        Some(d) => {
+            std::fs::create_dir_all(config)?;
+            native::write_atomic(&f, d.to_string_lossy().as_bytes())?;
+        }
+        None => {
+            if f.exists() {
+                std::fs::remove_file(&f)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `$XDG_DATA_HOME/bramble-notes`, else `~/.local/share/bramble-notes`.
+pub fn standard_dir() -> PathBuf {
     if let Some(x) = std::env::var_os("XDG_DATA_HOME").filter(|x| !x.is_empty()) {
         return PathBuf::from(x).join("bramble-notes");
     }

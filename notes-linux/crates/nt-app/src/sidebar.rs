@@ -92,6 +92,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, top_pad: f32) {
     let mut go: Option<Place> = None;
     let mut toggle: Option<String> = None;
     let mut ctx_action: Option<String> = None;
+    let mut tag_color: Option<String> = None;
     let mut sc = std::mem::take(&mut app.sidebar_scroll);
     // (each row as drawn, and whether it's the selected one: what the toolbar's strip blurs)
     let mut drawn: Vec<(Rect, bool)> = Vec::new();
@@ -247,7 +248,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, top_pad: f32) {
                     let p = ui.painter().clone();
                     for t in std::iter::once(String::new()).chain(tags.iter().cloned()) {
                         let label = if t.is_empty() { "All Tags".to_string() } else { format!("#{t}") };
-                        let tw = p.layout_no_wrap(label.clone(), look::regular(12.0), look::text()).size().x + 20.0;
+                        // (a coloured tag: its dot before the name)
+                        let dot = if t.is_empty() { 0.0 } else { crate::tagcolor::of(&t).map_or(0.0, |_| 14.0) };
+                        let tw = p.layout_no_wrap(label.clone(), look::regular(12.0), look::text()).size().x + 20.0 + dot;
                         if x + tw > w - 12.0 && x > x0 {
                             x = x0;
                             y += chip_h + 6.0;
@@ -269,7 +272,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, top_pad: f32) {
                         let fill = if on { look::accent() } else if kn_ui::theme::is_light() { egui::Color32::from_black_alpha(if resp.hovered() { 24 } else { 14 }) } else { egui::Color32::from_white_alpha(if resp.hovered() { 30 } else { 18 }) };
                         p.rect_filled(r, r.height() / 2.0, fill);
                         let col = if on { look::on_accent() } else { look::text() };
-                        p.text(r.center(), Align2::CENTER_CENTER, &label, look::regular(12.0), col);
+                        match (!t.is_empty()).then(|| crate::tagcolor::of(&t)).flatten() {
+                            Some(c) => {
+                                crate::tagcolor::dot(&p, pos2(r.min.x + 15.0, r.center().y), 4.5, c);
+                                p.text(pos2(r.center().x + 7.0, r.center().y), Align2::CENTER_CENTER, &label, look::regular(12.0), col);
+                            }
+                            None => {
+                                p.text(r.center(), Align2::CENTER_CENTER, &label, look::regular(12.0), col);
+                            }
+                        }
                         if excluded {
                             p.rect_stroke(r, r.height() / 2.0, egui::Stroke::new(1.5, look::accent()), egui::StrokeKind::Inside);
                             p.hline(r.min.x + 9.0..=r.max.x - 9.0, r.center().y, egui::Stroke::new(1.2, col));
@@ -320,6 +331,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, top_pad: f32) {
                                         ui.close();
                                     }
                                 }
+                                ui.separator();
+                                // the tag's colour: swatches with their names
+                                ui.menu_button("Tag Color", |ui| {
+                                    let cur = crate::tagcolor::name_of(&t);
+                                    if crate::tagcolor::swatch_button(ui, None, "None", cur.is_none()).clicked() {
+                                        tag_color = Some(format!("tagcolor:{t}|"));
+                                        ui.close();
+                                    }
+                                    for (name, _, _) in crate::tagcolor::PALETTE {
+                                        if crate::tagcolor::swatch_button(ui, crate::tagcolor::named(name), name, cur.as_deref() == Some(*name)).clicked() {
+                                            tag_color = Some(format!("tagcolor:{t}|{name}"));
+                                            ui.close();
+                                        }
+                                    }
+                                });
                             });
                             if picked.is_some() {
                                 go = picked;
@@ -357,7 +383,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, top_pad: f32) {
         app.focus = Focus::Sidebar;
         app.go(pl);
     }
-    if let Some(a) = ctx_action {
+    if let Some(a) = tag_color.or(ctx_action) {
         let ctx = ui.ctx().clone();
         crate::menus::menu_action(app, &ctx, &a);
     }

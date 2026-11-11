@@ -423,12 +423,20 @@ pub fn backup_library(dir: &Path) -> Result<PathBuf> {
         return backup(dir);
     }
     let to = backup_target(dir)?;
+    copy_native(dir, &to, true)?;
+    Ok(to)
+}
+
+/// A native library's files into `to` (made), its index's database copied consistently; `link`:
+/// attachment files hard-linked where they can be.
+fn copy_native(dir: &Path, to: &Path, link: bool) -> Result<()> {
+    std::fs::create_dir_all(to)?;
     for e in std::fs::read_dir(dir)?.flatten() {
         let n = e.file_name().to_string_lossy().into_owned();
         if matches!(n.as_str(), "index" | ".lock" | ".sync-cache") {
             continue;
         }
-        copy_tree(&e.path(), &to.join(&n), n == "files")?;
+        copy_tree(&e.path(), &to.join(&n), link && n == "files")?;
     }
     let idx = index_dir(dir);
     std::fs::create_dir_all(to.join("index"))?;
@@ -437,10 +445,62 @@ pub fn backup_library(dir: &Path) -> Result<PathBuf> {
         if n.starts_with("NoteStore.sqlite") || n.starts_with('.') {
             continue;
         }
-        copy_tree(&e.path(), &to.join("index").join(&n), n == "Accounts")?;
+        copy_tree(&e.path(), &to.join("index").join(&n), link && n == "Accounts")?;
     }
-    backup_db(&idx.join("NoteStore.sqlite"), &to.join("index/NoteStore.sqlite"))?;
-    Ok(to)
+    backup_db(&idx.join("NoteStore.sqlite"), &to.join("index/NoteStore.sqlite"))
+}
+
+/// Where a library moved to `chosen` goes: `chosen` itself when it's empty (or not there yet) or
+/// already a library, else a "Bramble Notes" folder inside it.
+pub fn library_target(chosen: &Path) -> PathBuf {
+    let empty = std::fs::read_dir(chosen).map(|mut d| d.next().is_none()).unwrap_or(true);
+    if empty || is_native(chosen) { chosen.to_path_buf() } else { chosen.join("Bramble Notes") }
+}
+
+/// Settings > Library location > Change…: the library at `dir` copied into `to` (which must be
+/// empty or not there yet), and the copy checked file by file. The original is left as it was.
+/// Returns how many files were copied.
+pub fn copy_library(dir: &Path, to: &Path) -> Result<usize> {
+    let (a, b) = (std::fs::canonicalize(dir)?, to.parent().and_then(|p| std::fs::canonicalize(p).ok()).map(|p| p.join(to.file_name().unwrap_or_default())).unwrap_or_else(|| to.to_path_buf()));
+    if b.starts_with(&a) || a.starts_with(&b) {
+        return Err(Error::Format("the new folder can't be inside the library, or hold it".into()));
+    }
+    if std::fs::read_dir(to).is_ok_and(|mut d| d.next().is_some()) {
+        return Err(Error::Format(format!("{} isn't empty", to.display())));
+    }
+    if !is_native(dir) {
+        return Err(Error::Format("the library hasn't been converted to its own format yet".into()));
+    }
+    copy_native(dir, to, false)?;
+    // (every file there, with its size: the index's database is compared by its notes instead)
+    fn files(root: &Path, at: &Path, out: &mut Vec<(PathBuf, u64)>) {
+        for e in std::fs::read_dir(at).into_iter().flatten().flatten() {
+            let p = e.path();
+            let rel = p.strip_prefix(root).unwrap_or(&p).to_path_buf();
+            let n = rel.to_string_lossy().replace('\\', "/");
+            if n == ".lock" || n.starts_with(".sync-cache") || n.starts_with("index/NoteStore.sqlite") || n.starts_with("index/.") {
+                continue;
+            }
+            if p.is_dir() {
+                files(root, &p, out);
+            } else {
+                out.push((rel, e.metadata().map(|m| m.len()).unwrap_or(0)));
+            }
+        }
+    }
+    let (mut want, mut got) = (Vec::new(), Vec::new());
+    files(dir, dir, &mut want);
+    files(to, to, &mut got);
+    want.sort();
+    got.sort();
+    if want != got {
+        return Err(Error::Format(format!("the copy doesn't match ({} files there, {} here)", got.len(), want.len())));
+    }
+    let count = |p: &Path| -> Result<i64> { Ok(rusqlite::Connection::open_with_flags(p, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?.query_row("SELECT COUNT(*) FROM ZICCLOUDSYNCINGOBJECT", [], |r| r.get(0))?) };
+    if count(&index_dir(dir).join("NoteStore.sqlite"))? != count(&index_dir(to).join("NoteStore.sqlite"))? {
+        return Err(Error::Format("the copy's index doesn't match".into()));
+    }
+    Ok(want.len() + 1)
 }
 
 /// `<library>-backup-<date and time>`, made.

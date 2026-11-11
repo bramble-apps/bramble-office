@@ -1,6 +1,8 @@
 //! File > Import to Notes… with files that aren't a Mac library: plain text, Markdown, HTML, RTF and
 //! Evernote's .enex (each of its notes, with their dates), or a folder of them (its tree kept). Read
-//! into notes here; dialogs.rs puts them in the account's "Imported Notes" folder.
+//! into notes here, each with its own dates (an .enex's, Markdown front matter's, an HTML export's
+//! <meta>, else the file's creation and change times); dialogs.rs puts them in the account's
+//! "Imported Notes" folder.
 
 use nt_core::model::{Body, ParaStyle, Paragraph, Span};
 use std::path::Path;
@@ -34,19 +36,175 @@ pub fn read_file(p: &Path) -> Result<Vec<Item>, String> {
     let text = String::from_utf8_lossy(&bytes).into_owned();
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let modified = std::fs::metadata(p).ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs_f64());
-    let mut items = match ext.as_str() {
-        "enex" => return Ok(enex(&text)),
-        "md" | "markdown" => vec![Item { body: titled(markdown(&text), &stem), ..Item::default() }],
-        "html" | "htm" => vec![Item { body: titled(html(&text), &stem), ..Item::default() }],
-        "rtf" => vec![Item { body: titled(rtf(&text), &stem), ..Item::default() }],
-        _ => vec![Item { body: plain(&text), ..Item::default() }],
-    };
-    for it in &mut items {
-        it.modified = modified;
-        it.created = modified;
+    if ext == "enex" {
+        return Ok(enex(&text));
     }
-    Ok(items)
+    // the dates: the file's own (front matter, an HTML export's <meta>), else the file's
+    let (mut created, mut modified) = (None, None);
+    let body = match ext.as_str() {
+        "md" | "markdown" => {
+            let (meta, rest) = front_matter(&text);
+            let get = |keys: &[&str]| meta.iter().find(|(k, _)| keys.contains(&k.as_str())).and_then(|(_, v)| parse_date(v));
+            created = get(&["created", "date", "created_at", "createdat", "creation_date", "date_created", "created_time"]);
+            modified = get(&["updated", "modified", "updated_at", "updatedat", "last_modified", "lastmod", "date_modified", "modified_at", "updated_time"]);
+            let mut b = markdown(rest);
+            // (a front-matter title when the text has none of its own)
+            if let Some((_, t)) = meta.iter().find(|(k, _)| k == "title").filter(|(_, t)| !t.is_empty()) {
+                if b.paragraphs.iter().find(|p| !p.text().trim().is_empty()).is_none_or(|p| p.style != ParaStyle::Title) {
+                    b.paragraphs.insert(0, Paragraph::plain(ParaStyle::Title, t));
+                }
+            }
+            titled(b, &stem)
+        }
+        "html" | "htm" => {
+            created = html_meta(&text, &["created", "date", "dcterms.created"]).and_then(|v| parse_date(&v));
+            modified = html_meta(&text, &["updated", "modified", "dcterms.modified", "last-modified"]).and_then(|v| parse_date(&v));
+            titled(html(&text), &stem)
+        }
+        "rtf" => titled(rtf(&text), &stem),
+        _ => plain(&text),
+    };
+    let (born, changed) = file_times(p);
+    let created = created.or(born).or(changed);
+    let modified = modified.or(changed).or(created).map(|m| created.map_or(m, |c| m.max(c)));
+    Ok(vec![Item { body, created, modified }])
+}
+
+/// A file's creation (birth) time where the system keeps one, and its last change, in Unix seconds.
+pub fn file_times(p: &Path) -> (Option<f64>, Option<f64>) {
+    let Ok(m) = std::fs::metadata(p) else { return (None, None) };
+    let secs = |t: std::io::Result<std::time::SystemTime>| t.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs_f64());
+    let changed = secs(m.modified());
+    // (a copied file's birth can be after its last change: then the change is the older date)
+    let born = secs(m.created()).map(|b| changed.map_or(b, |c| b.min(c)));
+    (born, changed)
+}
+
+/// Markdown's front matter (a leading `---` … `---` block of `key: value` lines, as Obsidian, Bear,
+/// Joplin and static-site exports write it): its keys (lower case) and values, and the text after it.
+pub fn front_matter(text: &str) -> (Vec<(String, String)>, &str) {
+    let t = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let Some(after) = t.strip_prefix("---\n").or_else(|| t.strip_prefix("---\r\n")) else { return (Vec::new(), text) };
+    let mut meta = Vec::new();
+    let mut at = 0;
+    for line in after.split_inclusive('\n') {
+        at += line.len();
+        let l = line.trim_end();
+        if l == "---" || l == "..." {
+            return (meta, &after[at..]);
+        }
+        if let Some((k, v)) = l.split_once(':').filter(|(k, _)| !k.starts_with(' ') && !k.starts_with('-')) {
+            let v = v.trim().trim_matches(|c| c == '"' || c == '\'');
+            meta.push((k.trim().to_ascii_lowercase(), v.to_string()));
+        }
+    }
+    // (no closing line: not front matter)
+    (Vec::new(), text)
+}
+
+/// `<meta name="created" content="…">` in an HTML file (Evernote's and other apps' HTML exports).
+fn html_meta(src: &str, names: &[&str]) -> Option<String> {
+    let lower = src.to_ascii_lowercase();
+    let head = &lower[..lower.find("</head>").unwrap_or(lower.len())];
+    let mut rest = 0;
+    while let Some(a) = head[rest..].find("<meta") {
+        let a = rest + a;
+        let e = head[a..].find('>').map_or(head.len(), |e| a + e);
+        rest = e;
+        let attr = |n: &str| -> Option<(usize, usize)> {
+            let k = head[a..e].find(&format!("{n}="))? + a + n.len() + 1;
+            let q = head.as_bytes().get(k).copied()?;
+            if q == b'"' || q == b'\'' {
+                let end = head[k + 1..e].find(q as char)? + k + 1;
+                Some((k + 1, end))
+            } else {
+                let end = head[k..e].find(|c: char| c.is_whitespace() || c == '/').map_or(e, |x| k + x);
+                Some((k, end))
+            }
+        };
+        let name = attr("name").or_else(|| attr("itemprop")).map(|(s, e)| &head[s..e]);
+        if name.is_some_and(|n| names.contains(&n)) {
+            // (the value from the original text: its case kept)
+            return attr("content").map(|(s, e)| decode(&src[s..e]));
+        }
+    }
+    None
+}
+
+/// A date as notes apps write them, in Unix seconds: ISO 8601 ("2023-11-05", "2023-11-05T14:22:33Z",
+/// "2023-11-05 14:22:33 +0000", with or without seconds, fractions or a zone: none = local time),
+/// Evernote's "20231105T142233Z", or Unix seconds or milliseconds.
+pub fn parse_date(s: &str) -> Option<f64> {
+    let s = s.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+    if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit() || b == b'.') && !s.contains('-') {
+        if s.len() == 8 {
+            // (a bare "20231105")
+            return parse_date(&format!("{}-{}-{}", &s[0..4], &s[4..6], &s[6..8]));
+        }
+        let n: f64 = s.parse().ok()?;
+        return (n > 1e8).then(|| if n > 1e11 { n / 1000.0 } else { n });
+    }
+    if s.len() >= 15 && s.as_bytes()[8] == b'T' && s.get(..8).is_some_and(|x| x.bytes().all(|b| b.is_ascii_digit())) {
+        return enex_date(s);
+    }
+    let b = s.as_bytes();
+    let num = |r: std::ops::Range<usize>| s.get(r).filter(|x| x.bytes().all(|c| c.is_ascii_digit())).and_then(|x| x.parse::<i64>().ok());
+    if b.len() < 10 || b[4] != b'-' || b[7] != b'-' || !s.is_char_boundary(10) {
+        return None;
+    }
+    let (y, m, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let mut rest = &s[10..];
+    let (mut hh, mut mm, mut ss, mut frac) = (0, 0, 0, 0.0);
+    if let Some(r) = rest.strip_prefix('T').or_else(|| rest.strip_prefix(' ')).filter(|r| r.len() >= 5 && r.as_bytes()[2] == b':') {
+        hh = r.get(0..2)?.parse().ok()?;
+        mm = r.get(3..5)?.parse().ok()?;
+        rest = r.get(5..)?;
+        if rest.len() >= 3 && rest.as_bytes()[0] == b':' {
+            ss = rest.get(1..3)?.parse().ok()?;
+            rest = rest.get(3..)?;
+            if let Some(f) = rest.strip_prefix('.').or_else(|| rest.strip_prefix(',')) {
+                let n = f.bytes().take_while(|c| c.is_ascii_digit()).count();
+                frac = format!("0.{}", &f[..n]).parse().unwrap_or(0.0);
+                rest = &f[n..];
+            }
+        }
+    }
+    let local = (days_from_civil(y, m, d) * 86400 + hh * 3600 + mm * 60 + ss) as f64 + frac;
+    let z = rest.trim();
+    let zone = if z.is_empty() {
+        None
+    } else if z.eq_ignore_ascii_case("z") || z.eq_ignore_ascii_case("utc") || z.eq_ignore_ascii_case("gmt") {
+        Some(0)
+    } else {
+        let sign = match z.as_bytes()[0] {
+            b'+' => 1,
+            b'-' => -1,
+            _ => return None,
+        };
+        let digits: String = z[1..].chars().filter(|c| c.is_ascii_digit()).collect();
+        let (h, mi) = match digits.len() {
+            2 => (digits.parse::<i64>().ok()?, 0),
+            4 => (digits[0..2].parse::<i64>().ok()?, digits[2..4].parse::<i64>().ok()?),
+            _ => return None,
+        };
+        Some(sign * (h * 3600 + mi * 60))
+    };
+    // (no zone: the computer's own, as the notes app that wrote it would have meant)
+    let off = zone.unwrap_or_else(|| crate::dates::offset(local) as i64);
+    Some(local - off as f64)
+}
+
+/// Days from 1970-01-01 (Howard Hinnant's civil algorithm).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y2 = if m <= 2 { y - 1 } else { y };
+    let era = y2.div_euclid(400);
+    let yoe = y2 - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
 }
 
 /// A folder's readable files and folders (hidden ones left out), sorted by name.
@@ -497,14 +655,7 @@ fn enex_date(s: &str) -> Option<f64> {
     let n = |r: std::ops::Range<usize>| s.get(r).and_then(|x| x.parse::<i64>().ok());
     let (y, m, d) = (n(0..4)?, n(4..6)?, n(6..8)?);
     let (hh, mm, ss) = (n(9..11)?, n(11..13)?, n(13..15)?);
-    // days from 1970-01-01 (Howard Hinnant's civil algorithm)
-    let y2 = if m <= 2 { y - 1 } else { y };
-    let era = y2.div_euclid(400);
-    let yoe = y2 - era * 400;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146097 + doe - 719468;
-    Some((days * 86400 + hh * 3600 + mm * 60 + ss) as f64)
+    Some((days_from_civil(y, m, d) * 86400 + hh * 3600 + mm * 60 + ss) as f64)
 }
 
 /// RTF: its text, paragraphs, bold, italic, underline and strike (fonts, colours and pictures left out).
@@ -719,5 +870,102 @@ mod tests {
         assert_eq!((b.paragraphs[3].style, b.paragraphs[3].indent), (ParaStyle::Bulleted, 1));
         assert_eq!(t[4], (ParaStyle::Numbered, "first".into()));
         assert_eq!(t[5], (ParaStyle::Monostyled, "code".into()));
+    }
+
+    /// A folder of its own for a test's files.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("nt-import-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// A file written with a given last-change time.
+    fn write_at(p: &Path, text: &str, mtime: f64) {
+        std::fs::write(p, text).unwrap();
+        let f = std::fs::File::options().write(true).open(p).unwrap();
+        f.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs_f64(mtime)).unwrap();
+    }
+
+    #[test]
+    fn dates_in_every_form() {
+        assert_eq!(parse_date("2023-11-05T14:22:33Z"), Some(1699194153.0));
+        assert_eq!(parse_date("2023-11-05 14:22:33 +0000"), Some(1699194153.0));
+        assert_eq!(parse_date("2023-11-05T16:22:33+02:00"), Some(1699194153.0));
+        assert_eq!(parse_date("2023-11-05T09:22:33.500-0500"), Some(1699194153.5));
+        assert_eq!(parse_date("\"2023-11-05T14:22Z\""), Some(1699194120.0));
+        assert_eq!(parse_date("20231105T142233Z"), Some(1699194153.0));
+        assert_eq!(parse_date("1699194153"), Some(1699194153.0));
+        assert_eq!(parse_date("1699194153000"), Some(1699194153.0));
+        // (no zone: the computer's own time)
+        let local = parse_date("2023-11-05 14:22:33").unwrap();
+        assert!((local - 1699194153.0).abs() <= 14.0 * 3600.0);
+        assert!(parse_date("2023-11-05").is_some());
+        for bad in ["", "soon", "2023", "2023-13-01", "2023-11-05T25", "é2023-11-05"] {
+            assert_eq!(parse_date(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn markdown_front_matter_gives_the_dates() {
+        let d = scratch("fm");
+        let p = d.join("trip.md");
+        write_at(&p, "---\ntitle: Trip\ncreated: 2021-03-04T05:06:07Z\nupdated: '2022-01-02T03:04:05Z'\ntags: [a, b]\n---\nPack light\n", 1_700_000_000.0);
+        let it = read_file(&p).unwrap().remove(0);
+        assert_eq!(it.created, Some(1614834367.0));
+        assert_eq!(it.modified, Some(1641092645.0));
+        // (the front matter isn't text in the note; its title is the note's)
+        let t = texts(&it.body);
+        assert_eq!(t[0], (ParaStyle::Title, "Trip".into()));
+        assert_eq!(t[1].1, "Pack light");
+        assert_eq!(t.len(), 2);
+        // `date:` (static sites, Obsidian) as the created date; no updated: the file's
+        write_at(&p, "---\ndate: 2020-05-06\n---\n# Plan\n", 1_700_000_000.0);
+        let it = read_file(&p).unwrap().remove(0);
+        assert!(it.created.is_some_and(|c| (c - 1588723200.0).abs() <= 14.0 * 3600.0));
+        assert_eq!(it.modified, Some(1_700_000_000.0));
+        // a "---" rule that isn't front matter stays text
+        let (meta, rest) = front_matter("---\nnot: closed\n");
+        assert!(meta.is_empty() && rest.starts_with("---"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn files_without_dates_keep_the_files_times_in_order() {
+        let d = scratch("times");
+        // three notes written years apart, named so their name order isn't their date order
+        for (name, t) in [("a.txt", 1_600_000_000.0), ("b.md", 1_400_000_000.0), ("c.html", 1_500_000_000.0), ("d.rtf", 1_300_000_000.0)] {
+            let body = if name.ends_with(".rtf") { r"{\rtf1\ansi Hello\par}".to_string() } else { format!("Note {name}") };
+            write_at(&d.join(name), &body, t);
+        }
+        let tree = read_dir(&d);
+        assert_eq!(tree.items.len(), 4);
+        for it in &tree.items {
+            // (created: the file's birth time where there is one, never after its last change)
+            let (c, m) = (it.created.unwrap(), it.modified.unwrap());
+            assert!(c <= m, "{c} {m}");
+        }
+        let m: Vec<f64> = tree.items.iter().map(|i| i.modified.unwrap()).collect();
+        assert_eq!(m, vec![1_600_000_000.0, 1_400_000_000.0, 1_500_000_000.0, 1_300_000_000.0]);
+        // sorted by date created, the oldest file first
+        let mut by: Vec<(f64, String)> = tree.items.iter().map(|i| (i.created.unwrap(), texts(&i.body)[0].1.clone())).collect();
+        by.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert_eq!(by.iter().map(|b| b.1.as_str()).collect::<Vec<_>>(), ["Hello", "Note b.md", "Note c.html", "Note a.txt"]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn html_and_enex_files_keep_their_own_dates() {
+        let d = scratch("meta");
+        let p = d.join("page.html");
+        write_at(&p, r#"<html><head><meta name="created" content="2019-02-03 04:05:06 +0000"/><META NAME='updated' CONTENT='2019-03-03T00:00:00Z'><title>x</title></head><body><h1>Hi</h1></body></html>"#, 1_700_000_000.0);
+        let it = read_file(&p).unwrap().remove(0);
+        assert_eq!(it.created, Some(1549166706.0));
+        assert_eq!(it.modified, Some(1551571200.0));
+        let p = d.join("book.enex");
+        write_at(&p, r#"<en-export><note><title>Old</title><content><![CDATA[<en-note>x</en-note>]]></content><created>20100101T000000Z</created></note></en-export>"#, 1_700_000_000.0);
+        let n = read_file(&p).unwrap();
+        assert_eq!((n[0].created, n[0].modified), (Some(1262304000.0), Some(1262304000.0)));
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
