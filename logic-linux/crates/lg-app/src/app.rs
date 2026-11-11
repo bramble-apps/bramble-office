@@ -312,6 +312,8 @@ pub struct App {
     /// Project Files pane's tab (0 Project, 1 All Files), the browsers' preview.
     pub br: crate::browser::State,
     pub sc: crate::smartcontrols::State,
+    /// Track headers and the Mixer beyond the first draft (tm.rs).
+    pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
     pub af: crate::allfiles::State,
     pub pf_tab: usize,
@@ -496,6 +498,7 @@ impl App {
             ta: Default::default(),
             br: Default::default(),
             sc: Default::default(),
+            tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
             pf_tab: 0,
@@ -642,6 +645,7 @@ impl App {
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
         crate::trackarea::stack_mix(self, &mut tracks);
+        crate::tm::engine_tracks(self, &mut tracks);
         let param_auto: Vec<Vec<crate::automation::ParamLane>> = (0..tracks.len()).map(|i| crate::automation::params_for_engine(self, i)).collect();
         let audio_files = crate::audioedit::playback(self);
         {
@@ -653,6 +657,7 @@ impl App {
             e.tracks = tracks;
             e.param_auto = param_auto;
             crate::mixstate::to_engine(self, &mut e);
+            crate::mixengine::to_engine(self, &mut e);
             crate::arp::to_engine(self, &mut e);
             e.timeline = lg_core::timeline::Map::of(p);
             crate::midifx::to_engine(self, &mut e);
@@ -1206,10 +1211,7 @@ impl App {
             }
             c if c.starts_with("Undo ") => self.undo(),
             c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
-            "1 Track as Audio File…" => {
-                let t = self.selected_track;
-                self.bounce(t);
-            }
+            "1 Track as Audio File…" => crate::freeze::open_export_selected(self),
             "All MIDI Tracks as MIDI File…" => self.export_midi(),
             "Show Musical Typing" => {
                 self.key_command(ctx, "Show/Hide Musical Typing");
@@ -1314,6 +1316,9 @@ impl App {
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
         if crate::envhub::command(self, ctx, name) {
+            return true;
+        }
+        if crate::tm::command(self, ctx, name) {
             return true;
         }
         if crate::instwin::command(self, ctx, name) || crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
@@ -1819,6 +1824,7 @@ impl App {
         crate::hosting::manager(self, &ctx);
         crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
+        crate::tm::windows(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);
         crate::browser::frame(self, &ctx);
@@ -1872,6 +1878,7 @@ impl eframe::App for App {
         crate::recording::update(self);
         crate::flex::update(self);
         crate::hosting::idle(self, &ctx);
+        crate::tm::frame(self, &ctx);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };

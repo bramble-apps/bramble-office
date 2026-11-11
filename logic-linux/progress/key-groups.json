@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 350,
+  "done": 506,
   "total": 679,
-  "percent": 51.5
+  "percent": 74.5
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 63,
+  "done": 64,
   "total": 110,
-  "percent": 57.3
+  "percent": 58.2
  },
  {
   "group": "Windows Showing Audio Files",
@@ -31,9 +31,9 @@
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 169,
+  "done": 171,
   "total": 290,
-  "percent": 58.3
+  "percent": 59.0
  },
  {
   "group": "Various Editors",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 113,
+  "done": 119,
   "total": 249,
-  "percent": 45.4
+  "percent": 47.8
  },
  {
   "group": "Live Loops Grid",
@@ -67,9 +67,9 @@
  },
  {
   "group": "Mixer",
-  "done": 46,
+  "done": 54,
   "total": 86,
-  "percent": 53.5
+  "percent": 62.8
  },
  {
   "group": "MIDI Environment",

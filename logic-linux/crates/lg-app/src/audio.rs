@@ -210,6 +210,8 @@ pub struct Engine {
     pub timeline: lg_core::timeline::Map,
     /// Surround and Spatial Audio (surround.rs): None in a stereo project.
     pub surround: Option<Box<crate::surround::EngineSurround>>,
+    /// Input formats, panners, solo-safe, frozen tracks, send modes, Dim, held peaks (mixengine.rs).
+    pub ext: crate::mixengine::EngineExt,
 }
 
 #[derive(Clone, Copy)]
@@ -226,7 +228,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false, surround: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false, surround: None, ext: Default::default() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -529,9 +531,7 @@ impl Engine {
     }
 
     fn audible(&self, i: usize) -> bool {
-        let any_solo = self.tracks.iter().any(|t| t.solo);
-        let t = &self.tracks[i];
-        !t.mute && (!any_solo || t.solo)
+        crate::mixengine::audible(self, i)
     }
 
     /// Renders one block of stereo frames into `out` (interleaved).
@@ -719,7 +719,7 @@ impl Engine {
         for node in order {
             l.fill(0.0);
             r.fill(0.0);
-            let (gl, gr, sends, output) = if node < n_tracks {
+            let (gl, gr, vol, sends, output) = if node < n_tracks {
                 let i = node;
                 if self.playing {
                     if let (Some(lanes), Some(u)) = (self.param_auto.get(i).filter(|l| !l.is_empty()), self.units.get_mut(i)) {
@@ -754,6 +754,10 @@ impl Engine {
                 if self.rec.monitor(i, input.as_deref(), &mut l, &mut r) {
                     any = true;
                 }
+                // (a frozen track's freeze file; the strip's input format, phase and gain)
+                if self.ext.source(i, self.playing && !held, start_tick, tps, &mut l, &mut r) {
+                    any = true;
+                }
                 if !any || !self.audible(i) {
                     continue;
                 }
@@ -772,6 +776,8 @@ impl Engine {
                     (None, slot) => *slot = None,
                 }
                 let bypass = self.track_bypass.get(i).cloned().unwrap_or_default();
+                let lat: Vec<(usize, usize)> = self.units.get(i).map(|u| u.inserts.iter().zip(u.insert_index.iter()).map(|(fx, k)| (*k, fx.latency())).collect()).unwrap_or_default();
+                let bypass = self.ext.bypass(i, bypass, &lat);
                 if let Some(u) = self.units.get_mut(i) {
                     let g = run_inserts(u, &bypass, &mut l, &mut r, at);
                     self.gr[i] = self.gr[i].max(g);
@@ -786,11 +792,12 @@ impl Engine {
                     }
                 }
                 // (to surround: the Surround Panner pans, the fader only sets the level)
-                if matches!(self.track_out.get(i), Some(Out::Surround | Out::Object)) {
+                let surround = matches!(self.track_out.get(i), Some(Out::Surround | Out::Object));
+                if surround {
                     pan = 0.0;
                 }
-                let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-                (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2, self.tracks[i].sends.clone(), self.track_out.get(i).copied().unwrap_or_default())
+                let (gl, gr) = self.ext.pan(i, n_tracks, vol, pan, surround, &mut l, &mut r);
+                (gl, gr, vol, self.tracks[i].sends.clone(), self.track_out.get(i).copied().unwrap_or_default())
             } else {
                 let ai = node - n_tracks;
                 let aux = self.auxes[ai].clone();
@@ -805,30 +812,40 @@ impl Engine {
                 if aux.mute {
                     continue;
                 }
-                let apan = if matches!(aux.output, Out::Surround | Out::Object) { 0.0 } else { aux.pan.clamp(-1.0, 1.0) };
-                let a = (apan + 1.0) * std::f32::consts::FRAC_PI_4;
-                (aux.volume * a.cos() * std::f32::consts::SQRT_2, aux.volume * a.sin() * std::f32::consts::SQRT_2, aux.sends, aux.output)
+                let surround = matches!(aux.output, Out::Surround | Out::Object);
+                let apan = if surround { 0.0 } else { aux.pan.clamp(-1.0, 1.0) };
+                if let Some(x) = self.ext.auxes.get(ai) {
+                    x.format.apply(&mut l, &mut r);
+                }
+                let (gl, gr) = self.ext.pan(node, n_tracks, aux.volume, apan, surround, &mut l, &mut r);
+                (gl, gr, aux.volume, aux.sends, aux.output)
             };
             // the connections, in route_nodes' order: the output (unless off), then the sends
-            let mut conns: Vec<(Option<usize>, f32, f32)> = Vec::new();
+            // (a send: Post Fader before the panner, Post Pan after it, Independent Pan with its
+            // own; a bypassed one keeps its place in the plan and stays silent)
+            let mut conns: Vec<(Option<usize>, f32, f32, bool)> = Vec::new();
             match output {
-                Out::Stereo => conns.push((None, gl, gr)),
-                Out::Bus(b) => conns.push((Some(b), gl, gr)),
+                Out::Stereo => conns.push((None, gl, gr, false)),
+                Out::Bus(b) => conns.push((Some(b), gl, gr, false)),
                 Out::Off => {}
-                Out::Surround | Out::Object => conns.push((Some(SURROUND), gl, gr)),
+                Out::Surround | Out::Object => conns.push((Some(SURROUND), gl, gr, false)),
             }
             let n_out = conns.len();
-            for snd in &sends {
-                conns.push((Some(snd.bus), if snd.pre { snd.gain } else { snd.gain * gl }, if snd.pre { snd.gain } else { snd.gain * gr }));
+            for (sk, snd) in sends.iter().enumerate() {
+                let c = self.ext.send(node, n_tracks, sk, snd, vol, gl, gr).unwrap_or(crate::mixengine::Conn { gl: 0.0, gr: 0.0, dry: false });
+                conns.push((Some(snd.bus), c.gl, c.gr, c.dry));
             }
             let mut peak = 0f32;
-            for (k, (dest, cl, cr)) in conns.into_iter().enumerate() {
+            for (k, (dest, cl, cr, dry)) in conns.into_iter().enumerate() {
                 if self.plan.delay.get(node).and_then(|v| v.get(k)).copied().flatten().is_none() {
                     continue;
                 }
-                for f in 0..frames {
-                    el[f] = l[f] * cl;
-                    er[f] = r[f] * cr;
+                {
+                    let (sl, sr) = self.ext.tap(dry, &l, &r);
+                    for f in 0..frames {
+                        el[f] = sl[f] * cl;
+                        er[f] = sr[f] * cr;
+                    }
                 }
                 if k < n_out {
                     let (ml, mr) = if self.pre_fader_meters { (&l, &r) } else { (&el, &er) };
@@ -865,6 +882,7 @@ impl Engine {
             if let Some(m) = m {
                 *m = m.max(peak);
             }
+            self.ext.meter(node, n_tracks, peak);
         }
         // the Stereo Out's own effects (Logic's master chain; deactivated in surround)
         if !self.master_units.inserts.is_empty() && self.surround.is_none() {
@@ -922,11 +940,15 @@ impl Engine {
             }
         }
         let mut peak = 0f32;
+        let mut over = 0f32;
+        let mg = self.master * self.ext.master_gain();
         for x in out.iter_mut() {
-            *x = (*x * self.master).clamp(-1.0, 1.0);
+            over = over.max((*x * mg).abs());
+            *x = (*x * mg).clamp(-1.0, 1.0);
             peak = peak.max(x.abs());
         }
         self.master_meter = self.master_meter.max(peak);
+        self.ext.master_peak = self.ext.master_peak.max(over);
         let fall = 0.985f32.powf(frames as f32 / 64.0);
         for m in self.meters.iter_mut().chain(self.aux_meters.iter_mut()).chain(self.gr.iter_mut()).chain(self.aux_gr.iter_mut()) {
             *m *= fall;
@@ -966,6 +988,34 @@ pub fn bounce(tracks: Vec<PlayTrack>, tempo: f64, tempo_map: Vec<(u32, f64)>, so
     for _ in 0..tail {
         e.render(&mut buf);
         out.extend_from_slice(&buf);
+    }
+    out
+}
+
+/// Renders a prepared engine offline from `from` to `to` (ticks), then its tail: `tail_secs`
+/// more at most, ending early once the sound has faded when `until_silent` (Bounce in Place,
+/// freeze files, exporting tracks and regions). Interleaved stereo at RATE.
+pub fn render_offline(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_silent: bool) -> Vec<f32> {
+    e.pos = from as f64;
+    e.playing = true;
+    let mut out = Vec::new();
+    let mut buf = vec![0f32; 2 * BLOCK];
+    while e.pos < to as f64 {
+        e.render(&mut buf);
+        out.extend_from_slice(&buf);
+    }
+    e.playing = false;
+    e.all_off();
+    let blocks = (tail_secs.max(0.0) * RATE as f32) as usize / BLOCK;
+    let mut quiet = 0;
+    for _ in 0..blocks {
+        e.render(&mut buf);
+        out.extend_from_slice(&buf);
+        quiet = if buf.iter().all(|x| x.abs() < 1e-4) { quiet + 1 } else { 0 };
+        // (a quarter second of silence: the tail is over)
+        if until_silent && quiet * BLOCK > RATE as usize / 4 {
+            break;
+        }
     }
     out
 }

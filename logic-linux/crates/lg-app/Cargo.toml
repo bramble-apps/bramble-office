@@ -36,6 +36,8 @@ lg-notation = { path = "../lg-notation" }
 lg-host = { path = "../lg-host" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)
 midir = "0.11"
+# custom track icons (PNG / JPEG pictures; the suite's kn-ui already builds this crate)
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

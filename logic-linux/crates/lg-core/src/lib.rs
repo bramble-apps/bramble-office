@@ -23,6 +23,7 @@ pub mod score;
 pub mod sync;
 pub mod takes;
 pub mod timeline;
+pub mod trackmix;
 pub mod transform;
 pub mod writeback;
 

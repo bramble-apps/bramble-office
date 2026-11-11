@@ -242,6 +242,10 @@ pub fn kind_of(app: &App, s: usize) -> Kind {
     if s >= AUX {
         return Kind::Aux;
     }
+    // (an External MIDI track's strip is a MIDI channel strip)
+    if app.project.as_ref().and_then(|p| p.tracks.get(s)).is_some_and(|t| t.extra.set.external.is_some()) {
+        return Kind::Midi;
+    }
     match app.project.as_ref().and_then(|p| p.tracks.get(s)).map(|t| t.kind) {
         Some(TrackKind::Audio) => Kind::Audio,
         _ => Kind::Inst,
@@ -354,13 +358,8 @@ pub fn active_group(app: &App, s: usize) -> Option<usize> {
 
 /// The other strips in `s`'s group that follow `link`.
 pub fn linked(app: &App, s: usize, link: (usize, u8)) -> Vec<usize> {
-    let Some(g) = active_group(app, s) else { return Vec::new() };
-    if !app.mix.groups[g].links(link) {
-        return Vec::new();
-    }
-    let mut v: Vec<usize> = app.mix.group_of.iter().filter(|(k, x)| **x == g && **k != s).map(|(k, _)| *k).collect();
-    v.sort();
-    v
+    // (a strip can be in several groups: mixext.rs)
+    crate::mixext::linked(app, s, link)
 }
 
 /// A strip's fader values: volume (dB), pan, mute, solo.

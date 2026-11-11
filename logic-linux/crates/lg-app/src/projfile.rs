@@ -112,6 +112,7 @@ pub fn after_open(app: &mut App, path: &Path) {
     crate::hosting::after_open(app);
     crate::projsettings::after_open(app);
     crate::arranging::after_open(app);
+    crate::tm::after_open(app);
     crate::envhub::after_open(app);
 }
 
@@ -310,6 +311,7 @@ fn report(app: &mut App, mut left: Vec<String>) {
     crate::hosting::save_sidecar(app);
     crate::arranging::saved_elsewhere(&mut left);
     crate::arranging::save_sidecar(app);
+    crate::tm::save_sidecar(app);
     left.dedup();
     app.pf.last_left_out = left.clone();
     if left.is_empty() {

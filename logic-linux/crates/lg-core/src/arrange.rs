@@ -64,6 +64,8 @@ pub struct TrackExtra {
     pub alternatives: Vec<Alternative>,
     /// The channel strip's MIDI FX slots, top to bottom (regions.rs, lg-dsp midifx).
     pub midi_fx: Vec<crate::regions::MidiFxSlot>,
+    /// The header's and channel strip's further settings (trackmix.rs).
+    pub set: crate::trackmix::TrackSet,
 }
 
 impl Track {
