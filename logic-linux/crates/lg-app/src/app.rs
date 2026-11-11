@@ -165,6 +165,9 @@ pub struct App {
     /// The open project's Project Settings and their window's state (projsettings.rs).
     pub proj: crate::projsettings::Values,
     pub ps_ui: crate::projsettings::Ui,
+    /// Surround and Spatial Audio (surround.rs) and its windows (surround_ui.rs).
+    pub sur: crate::surround::State,
+    pub sur_ui: crate::surround_ui::Ui,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
     /// Catch is off: the user scrolled while playing (back on at stop, or with `).
@@ -382,6 +385,8 @@ impl App {
             keycmds: crate::keycmds::State::load(),
             proj: Default::default(),
             ps_ui: Default::default(),
+            sur: Default::default(),
+            sur_ui: Default::default(),
             global_tracks: false,
             catch_off: false,
             live_loops: Default::default(),
@@ -978,6 +983,11 @@ impl App {
 
     /// Bounce: the song (the cycle area when cycling), or one track, to a WAV file.
     pub fn bounce(&mut self, only: Option<usize>) {
+        // (a surround or Spatial Audio project: the Bounce window with Surround Bounce)
+        if only.is_none() && crate::surround::active(self) {
+            crate::surround_ui::open_bounce(self);
+            return;
+        }
         let Some(p) = &self.project else { return };
         let name = match only.and_then(|t| p.tracks.get(t)) {
             Some(t) => format!("{} - {}.wav", p.name, t.name),
@@ -1308,6 +1318,9 @@ impl App {
         // the MIDI editors besides the Piano Roll: Score, Step Sequencer, Step Input, Step and
         // Event Editors
         if crate::scorecmd::command(self, ctx, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
+            return true;
+        }
+        if crate::surround_ui::command(self, ctx, name) {
             return true;
         }
         if crate::projfile::command(self, name) || crate::keycmds::command(self, name) || crate::prefs::command(self, name) || crate::projsettings::command(self, name) {
@@ -1798,6 +1811,7 @@ impl App {
         crate::smartcontrols::window(self, &ctx);
         crate::browser::frame(self, &ctx);
         crate::projfile::windows(self, &ctx);
+        crate::surround_ui::windows(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;

@@ -10,6 +10,7 @@
 pub mod midifx;
 pub mod registry;
 pub mod routing;
+pub mod surround;
 
 /// One parameter, as the plug-in window and automation see it.
 #[derive(Clone, Debug, PartialEq)]
@@ -146,6 +147,12 @@ pub trait Effect: Plugin {
     /// Assistant's analysis, an analyzer), by name.
     fn curve(&self, _name: &str) -> Vec<f32> {
         Vec::new()
+    }
+    /// Surround (a surround master or bus): processes one buffer per channel of `layout`
+    /// (Logic's channel order) and may change the layout (Down Mixer). False: the effect has no
+    /// surround version, and the engine runs it Multi Mono.
+    fn process_surround(&mut self, _chans: &mut Vec<Vec<f32>>, _layout: &mut Vec<surround::Ch>) -> bool {
+        false
     }
 }
 

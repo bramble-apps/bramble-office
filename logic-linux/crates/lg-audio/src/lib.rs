@@ -17,6 +17,7 @@
 //! - [`flexpitch`]: Flex Pitch: pitch tracking, notes, and their edits (pitch, drift, vibrato,
 //!   gain, formants) rendered by PSOLA; pitch correction to a scale.
 
+pub mod adm;
 pub mod fade;
 mod fft;
 pub mod file;

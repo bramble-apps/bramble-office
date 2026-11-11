@@ -249,12 +249,17 @@ pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
 
 /// The Stereo Out strip (the master level and the master chain).
 pub fn output_strip(app: &mut App, ui: &mut egui::Ui, r: Rect) {
-    let master = app.engine.lock().map(|e| e.master_meter).unwrap_or(0.0);
+    let master = app.engine.lock().map(|e| e.surround.as_ref().map_or(e.master_meter, |s| s.meters.iter().copied().fold(0.0, f32::max))).unwrap_or(0.0);
     let master_db = 20.0 * app.engine.lock().map(|e| e.master).unwrap_or(1.0).max(1e-5).log10();
-    if let Some((v, ..)) = strip(app, ui, r, MASTER, "Stereo Out", None, (master_db, 0.0, false, false), master, app.mix.selected.contains(&MASTER)) {
+    // (a surround project: the surround master channel strip)
+    let name = if crate::surround::active(app) { "Surround" } else { "Stereo Out" };
+    if let Some((v, ..)) = strip(app, ui, r, MASTER, name, None, (master_db, 0.0, false, false), master, app.mix.selected.contains(&MASTER)) {
         if let Ok(mut e) = app.engine.lock() {
             e.master = crate::app::db_to_gain(v);
         }
+    }
+    if crate::surround::active(app) {
+        crate::surround_ui::bounce_button(app, ui, r);
     }
 }
 
@@ -552,9 +557,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             }
             let arrow = ui.interact(arrow_r, id.with(("fxmenu", k)), Sense::click());
             let mut picked = None;
-            egui::Popup::menu(&arrow).show(|ui| picked = plugin_menu(ui, Some(&u.name)));
+            let sur_menu = is_master && crate::surround::active(app);
+            egui::Popup::menu(&arrow).show(|ui| picked = if sur_menu { crate::surround_ui::master_plugin_menu(app, ui, Some(&u.name)) } else { plugin_menu(ui, Some(&u.name)) });
             body.context_menu(|ui| {
-                if let Some(x) = plugin_menu(ui, Some(&u.name)) {
+                if let Some(x) = if sur_menu { crate::surround_ui::master_plugin_menu(app, ui, Some(&u.name)) } else { plugin_menu(ui, Some(&u.name)) } {
                     picked = Some(x);
                 }
             });
@@ -582,7 +588,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         slot(&p, y, "Audio FX", None);
         let eresp = ui.interact(er, id.with("fxadd"), Sense::click());
         let mut picked = None;
-        egui::Popup::menu(&eresp).show(|ui| picked = plugin_menu(ui, None));
+        let sur_menu = is_master && crate::surround::active(app);
+        egui::Popup::menu(&eresp).show(|ui| picked = if sur_menu { crate::surround_ui::master_plugin_menu(app, ui, None) } else { plugin_menu(ui, None) });
         if let Some(Some(n)) = picked {
             mixstate::checkpoint(app, "Insert Plug-in");
             mixstate::edit_inserts(app, i, |v| v.push(mixstate::new_plugin(&n)));
@@ -718,8 +725,12 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                     if ui.add(egui::Button::selectable(o == Out::Stereo, "Stereo Output")).clicked() {
                         pick = Some(Out::Stereo);
                     }
-                    ui.add_enabled(false, egui::Button::new("Surround"));
+                    if ui.add(egui::Button::selectable(o == Out::Surround, "Surround")).clicked() {
+                        pick = Some(Out::Surround);
+                    }
                 });
+                // (Spatial Audio: the 3D Object Panner, and Pan back to a bed track)
+                crate::surround_ui::output_items(app, ui, o, &mut pick);
                 ui.menu_button("Bus", |ui| {
                     if let Some(b) = bus_menu(ui, app, match o { Out::Bus(b) => Some(b), _ => None }) {
                         // an aux can't feed its own input
@@ -729,7 +740,7 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                     }
                 });
                 if let Some(v) = pick {
-                    mixstate::set_output(app, i, v);
+                    crate::surround::set_output(app, i, v);
                     ui.close();
                 }
             });
@@ -792,8 +803,11 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             y += 26.0;
         }
     }
-    // the pan knob
-    if shown(app, "Pan Knob") && !is_vca && !is_master {
+    // the pan knob (a Surround Panner / 3D Object Panner on strips routed to surround)
+    if !is_vca && !is_master && matches!(mixstate::output_of(app, i), Out::Surround | Out::Object) {
+        crate::surround_ui::pan_control(app, ui, &p, r, y, i);
+        y += 40.0;
+    } else if shown(app, "Pan Knob") && !is_vca && !is_master {
         let kc = pos2(r.center().x, y + 16.0);
         let kr = Rect::from_center_size(kc, vec2(34.0, 34.0));
         let kresp = ui.interact(kr, id.with("pan"), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
@@ -869,12 +883,15 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     let meter_r = Rect::from_min_size(pos2(r.center().x + 8.0, y), vec2(8.0, fh));
     p.rect_filled(meter_r, 2.0, look::lcd_bg());
     let lv = meter.clamp(0.0, 1.0).sqrt();
-    if lv > 0.01 && !is_vca {
+    let surround_master = is_master && crate::surround::active(app);
+    if surround_master {
+        crate::surround_ui::master_meters(app, ui, &p, Rect::from_min_max(pos2(meter_r.min.x, y), pos2(r.max.x - 6.0, y + fh)));
+    } else if lv > 0.01 && !is_vca {
         let mr = Rect::from_min_max(pos2(meter_r.min.x + 1.0, meter_r.max.y - lv * fh), pos2(meter_r.max.x - 1.0, meter_r.max.y));
         p.rect_filled(mr, 1.0, if meter > 0.98 { look::record_red() } else { Color32::from_rgb(0x4c, 0xd9, 0x64) });
     }
     // the scale between fader and meter, as Logic's: 0 at the top mark, down to 60
-    if r.width() >= 80.0 {
+    if r.width() >= 80.0 && !surround_master {
         for db in [0.0f32, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0] {
             let yy = track.max.y - db_to_frac(-db) * fh;
             p.hline(meter_r.max.x + 2.0..=meter_r.max.x + 5.0, yy, Stroke::new(1.0, look::text_dim()));
