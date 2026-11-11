@@ -47,7 +47,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord). [ ] large icons at wide headers, track zoom, automation lanes, folders and track stacks, take folders, flex, track alternatives, Transposition and Movie tracks"
+  "feature": "Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (\u2265 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack\u2026 sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track"
  },
  {
   "area": "Main window",
@@ -102,12 +102,12 @@
  {
   "area": "Editing",
   "status": "Partial",
-  "feature": "Loop (inspector), split, join, trims. [ ] loop by edge drag, crossfades, fades, gain, reverse, normalize"
+  "feature": "Loop (inspector and by dragging the region's upper right corner: repetitions drawn as ghosts, end where dropped), split, join, trims. Audio regions: fades (Fade tool, Pointer corner handles, Ctrl-Shift / Option-drag curve, drawn on the regions), crossfades (Fade tool across touching regions, Apply Default Crossfade; X / EqP / X S math, touching regions lengthened into each other from their files), Remove Fades / Fade-In / Fade-Out / Crossfade, Apply Last Edited Fade Again, Region Gain \u00b11 / \u00b10.1 dB, Normalize Region Gain\u2026 and Again, Reverse (non-destructive). Bounce in Place (regions or tracks \u2192 WAV in the project, new audio track, originals muted). [ ] Bounce in Place sheet options (tail, normalize, bypass effects), audio fades/gain/reverse still app-only (not written to the .logicx), crossfade of regions that don't touch"
  },
  {
   "area": "Editing",
   "status": "Partial",
-  "feature": "T tool menu, left / Command-click tools; Pencil, Eraser, Scissors, Join, Mute, Solo, Zoom, Text work. [ ] Marquee, Fade, Automation, Flex tools"
+  "feature": "T tool menu, left / Command-click tools; Pencil, Eraser, Scissors, Join, Mute, Solo, Zoom, Text, Fade, Marquee (range over tracks: Delete, Split, Crop, Set Locators, Set Marquee to Selection, automation range moves), Automation Select (rubber band) work. [ ] Flex, Gain, Slip, Rotate tools; the Automation Curve tool is the Automation tool + Option / Ctrl-Shift"
  },
  {
   "area": "Editing",
@@ -127,7 +127,7 @@
  {
   "area": "Editing",
   "status": "Partial",
-  "feature": "Automation: read from projects (Track Automation Root Folder), shown on the tracks (A) with the mode (Off, Read, Touch, Latch, Write) and parameter pop-ups; points added, dragged, removed; played back (volume, pan); Touch / Latch / Write record from the faders; Set All Tracks, Delete commands. [ ] plug-in parameters, region automation, curves, snapshot, saving automation back into the file"
+  "feature": "Automation: read from projects (Track Automation Root Folder), shown on the tracks (A) with the mode (Off, Read, Touch, Latch, Write) and parameter pop-ups; points added on the line, dragged (selected points together), removed; segment drag; curves (Option / Ctrl-Shift-drag the line, played curved); Automation Select rubber band, Delete, Nudge Automation; marquee ranges deleted or moved (border points added); points at region borders (1 / 2, every border, each for Volume and Pan, visible parameter); Delete Redundant / Orphaned / All; Cycle Through Used Parameters; plug-in parameter lanes (instrument and Audio FX parameters, played by the engine); Touch / Latch / Write record from the faders; Volume / Pan / other channel lanes saved back into the .logicx (byte-identical when unchanged; round-trip tested on E08). [ ] region automation (MIDI CC lanes), curves and plug-in lanes aren't written to the file (format not decoded; Save says so), sends automation, automation on tracks made here can't be saved (no sequence of their own)"
  },
  {
   "area": "Editing",
@@ -232,7 +232,7 @@
  {
   "area": "Interaction parity (interactions/ research)",
   "status": "Partial",
-  "feature": "Drags with modifiers: region move/copy, notes. Missing: the rest of DRAGS.txt (fades, velocity, automation, tempo points, track reorder, slot copy, Library to track, marquee, zoom)"
+  "feature": "Drags with modifiers: region move/copy, notes, region loop corner, fades (Ctrl-Shift / Option curve), automation points / segments / curves, track reorder, marquee (Shift: off the grid). Missing: velocity, tempo points, slot copy, Library to track, zoom; region drags with automation shown (Logic: automation marquee)"
  },
  {
   "area": "Interaction parity (interactions/ research)",

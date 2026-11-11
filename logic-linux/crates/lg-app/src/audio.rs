@@ -106,6 +106,8 @@ pub struct Engine {
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
+    /// Plug-in parameter automation by track (automation.rs).
+    pub param_auto: Vec<Vec<crate::automation::ParamLane>>,
 }
 
 #[derive(Clone, Copy)]
@@ -122,7 +124,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, param_auto: Vec::new() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -372,6 +374,11 @@ impl Engine {
         for i in 0..n_tracks {
             l.fill(0.0);
             r.fill(0.0);
+            if self.playing {
+                if let (Some(lanes), Some(u)) = (self.param_auto.get(i).filter(|l| !l.is_empty()), self.units.get_mut(i)) {
+                    crate::automation::apply_params(lanes, u, start_tick);
+                }
+            }
             let mut any = false;
             if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
                 ins.render(&mut l, &mut r);

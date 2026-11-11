@@ -185,6 +185,9 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) {
         return false;
     }
+    if let Some(e) = crate::trackarea::enabled(app, label).or_else(|| crate::regionops::enabled(app, label)) {
+        return e;
+    }
     match label {
         "Close Project" | "Close" | "Move Locators Forward by Cycle Length" | "Project or Section…" | "All MIDI Tracks as MIDI File…" => app.project.is_some(),
         "1 Track as Audio File…" => app.selected_track.is_some(),
@@ -219,6 +222,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 
 fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::audioedit::checked(app, label) {
+        return c;
+    }
+    if let Some(c) = crate::trackarea::checked(app, label).or_else(|| crate::regionops::checked(app, label)) {
         return c;
     }
     match label {

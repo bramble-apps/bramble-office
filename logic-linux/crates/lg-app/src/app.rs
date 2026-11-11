@@ -271,6 +271,9 @@ pub struct App {
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
+    /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
+    /// automation selection (trackarea.rs, regionops.rs, automation.rs).
+    pub ta: crate::trackarea::State,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -429,6 +432,7 @@ impl App {
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
             plugin_compare: Default::default(),
+            ta: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -475,6 +479,7 @@ impl App {
         // each track's Channel EQ as saved in the project (Bramble's Channel EQ stands in)
         self.eqs = p.tracks.iter().enumerate().filter_map(|(i, t)| t.plugins.iter().find(|u| u.name == "Channel EQ").and_then(|u| crate::eq::Params::from_logic(&u.params)).map(|e| (i, e))).collect();
         self.drum_params.clear();
+        crate::trackarea::reset(self);
         self.undo.clear();
         self.redo.clear();
         self.selected_track = (!p.tracks.is_empty()).then_some(0);
@@ -513,7 +518,11 @@ impl App {
             let song_end = p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start + r.length)).max().unwrap_or(0).max(64 * self.bar_ticks());
             let mut notes: Vec<(u32, u32, u8, u8)> = Vec::new();
             for r in t.regions.iter().filter(|r| !r.muted) {
-                let until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
+                let mut until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
+                // (a loop dragged out at the region's corner ends there)
+                if r.props.looped && r.props.loop_to > r.start + r.length {
+                    until = until.min(r.props.loop_to);
+                }
                 let mut offset = 0u32;
                 loop {
                     for n in &r.notes {
@@ -531,6 +540,8 @@ impl App {
                         if offset > 0 && at >= until {
                             continue;
                         }
+                        // the Transposition track
+                        n.pitch = (n.pitch as i16 + crate::trackarea::transposition(self, i, at)).clamp(0, 127) as u8;
                         notes.push((at, at + n.len.max(1), n.pitch, n.velocity));
                     }
                     offset += r.length.max(1);
@@ -542,6 +553,8 @@ impl App {
             notes.sort_by_key(|n| n.0);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
+        crate::trackarea::stack_mix(self, &mut tracks);
+        let param_auto: Vec<Vec<crate::automation::ParamLane>> = (0..tracks.len()).map(|i| crate::automation::params_for_engine(self, i)).collect();
         let audio_files = crate::audioedit::playback(self);
         {
             let mut e = self.engine.lock().unwrap_or_else(|e| e.into_inner());
@@ -550,6 +563,7 @@ impl App {
             e.tempo_map = p.tempo_map.clone();
             e.beats_per_bar = p.signature.0.max(1) as u32;
             e.tracks = tracks;
+            e.param_auto = param_auto;
             let any_solo = self.auxes.iter().any(|a| a.solo);
             e.auxes = self.auxes.iter().map(|a| audio::AuxBus { bus: a.bus, volume: db_to_gain(a.volume_db), pan: a.pan, mute: a.mute || (any_solo && !a.solo), inserts: a.inserts.iter().map(|n| (n.clone(), Vec::new())).collect() }).collect();
             e.cycle = Some(self.cycle);
@@ -631,7 +645,7 @@ impl App {
                 let drums = ch == 9;
                 let row = p.tracks.len() as u32 + 1;
                 let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() };
-                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                 self.programs.push(if drums { 0 } else { program_for(&title, TrackKind::Instrument) });
             }
             if let Some(t) = m.tempo.filter(|_| p.tracks.len() == n) {
@@ -655,7 +669,7 @@ impl App {
             Some(t) => t,
             None => {
                 let row = p.tracks.len() as u32 + 1;
-                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                 self.programs.push(0);
                 p.tracks.len() - 1
             }
@@ -983,7 +997,9 @@ impl App {
                         let alt = alt.clone();
                         self.file = Some((alt, saved.data));
                         self.dirty = false;
-                        if saved.unsaved.is_empty() {
+                        if !saved.unsaved_automation.is_empty() {
+                            self.tell(format!("Saved — not in the Logic file yet: {}", saved.unsaved_automation.join(", ")));
+                        } else if saved.unsaved.is_empty() {
                             self.tell("Saved");
                         } else {
                             self.tell(format!("Saved — {} new region(s) without a model to copy (e.g. new Drummer regions) aren't in the Logic file yet", saved.unsaved.len()));
@@ -1036,7 +1052,7 @@ impl App {
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
         let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
-        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
         self.selected_track = Some(t);
@@ -1082,6 +1098,7 @@ impl App {
 
     /// After the song changed: selections still valid, the engine follows.
     pub fn after_edit(&mut self) {
+        crate::trackarea::sync(self);
         if let Some(p) = &self.project {
             if self.selected_track.is_some_and(|t| t >= p.tracks.len()) {
                 self.selected_track = None;

@@ -1687,7 +1687,6 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
     app.live_loops.grid_rect = Some(area);
     let now = ui.input(|i| i.time);
     let (pos, playing) = engine_pos(app);
-    let row_h = crate::tracks::ROW_H;
     let ruler_h = rows_top.min(area.max.y) - area.min.y;
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, grid_bg());
@@ -1799,7 +1798,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
     let cp = ui.painter_at(Rect::from_min_max(cells_r.min, pos2(cells_r.max.x, cells_r.max.y)));
     let audio_cache: HashMap<PathBuf, Option<Arc<Vec<f32>>>> = app.live_loops.audio.lock().map(|m| m.clone()).unwrap_or_default();
     for t in 0..n_tracks {
-        let y = rows_top + t as f32 * row_h - app.scroll_y;
+        // (rows as the tracks area draws them: their own heights, stacks and hidden tracks)
+        let Some((y, row_h)) = crate::trackarea::row_span(app, t, rows_top) else { continue };
         if y + row_h < cells_r.min.y || y > cells_r.max.y {
             continue;
         }
