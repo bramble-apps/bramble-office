@@ -101,7 +101,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
-    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() + if app.ta.show_transposition { TRANSPOSITION_H } else { 0.0 } } else { 0.0 };
+    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() + if app.ta.show_transposition { TRANSPOSITION_H } else { 0.0 } + crate::movie::track_height(app) } else { 0.0 };
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
@@ -1054,11 +1054,16 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         let tr = Rect::from_min_max(pos2(area.min.x, area.max.y - TRANSPOSITION_H), area.max);
         crate::trackarea::transposition_lane(app, ui, tr, lanes_x);
     }
+    // the Movie track (movie.rs) above the others
+    let movie_h = crate::movie::track_height(app);
+    if movie_h > 0.0 {
+        crate::movie::track_lane(app, ui, Rect::from_min_size(area.min, vec2(area.width(), movie_h)), lanes_x);
+    }
     let bar_t = app.bar_ticks() as f32;
     let (scroll, bw) = (app.scroll_x, app.bar_w);
     let x_of = |tick: f32| lanes_x + (tick / bar_t - scroll) * bw;
     let tick_of = |x: f32| ((x - lanes_x) / bw + scroll) * bar_t;
-    let mut top = area.min.y;
+    let mut top = area.min.y + movie_h;
     for (i, (n, h)) in GLOBAL_ROWS.iter().enumerate() {
         let row = Rect::from_min_size(pos2(area.min.x, top), vec2(area.width(), *h));
         top += h;

@@ -619,6 +619,8 @@
   ---
   Enter Full Screen  [⌃⌘F]
 === Window ===
+  Open MIDI Environment  [⌘0]
+  ---
   Minimize  [⌘M]
   Minimize All  [⌥⌘M]
   Zoom  [⌃⌘M]

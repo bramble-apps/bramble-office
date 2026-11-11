@@ -46,8 +46,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, Project Files (Project Audio; All Files Browser with Back/Forward, Computer/Home/Project, List/Column view, name search with kind/format/length/date/size filters, Action menu, Play, drag to tracks)
-- [~] Settings (settings.rs draws, prefs.rs wires): all 27 tabs drawn as Logic's (measured), values saved, popups with Logic's choices (devices, templates, threads from the system). Wired: Project Handling (Startup Action's seven choices, Default Template, Auto Backup count, Recent Items + File ▸ Open Recent / Clear Menu), Editing (Undo Steps, Double-Clicking a MIDI Region Opens Score / Event List / Piano Roll, Select regions on track selection incl. cycle area and Option-click, Select tracks on region selection), Catch (on play start / on locate), Audio ▸ Devices (Enabled, Output / Input Device lists, I/O Buffer Size, Resulting Latency, Apply when changed), Recording (Bit Depth, the overlapping-recording and Replace popups shared two-way with the Record menu, Recording Project Settings…), MIDI (Reset All MIDI Drivers, Reset Messages for software instruments on Stop-while-stopped and Send Reset Controllers, Inputs table with per-port On and Bramble Studio Virtual In, MIDI Sync Project Settings…), Score / Movie Project Settings… buttons, View (help tags, middle C, Wide playhead, Show animations, Display Time As / Zeros as spaces / Clock Format in the control bar), Mixer (Open plug-in window on insertion), Editors (Bright background), Reset All Settings Except Key Command Assignments…. [ ] control surfaces (no support: buttons say so), Sampler / Movie / Automation / Score tab rows, Audio ▸ General (overload message, compensation choice, Low Latency Mode, Dim, pre-roll), Audio ▸ Editing crossfades / scrub, File Editor rows, I/O Assignments and Bounce Extensions, Recording Delay, File Type (WAVE only), Auto Record Enable, Track / Region / Marker colour modes, Tracks background / grid / shaded loops / scroll numbers, meter Peak Hold and Return Time, Accessibility announcements, Notifications (Studio has no suppressible warnings), My Info, Sound Library
-- [~] Project Settings (projsettings.rs, File ▸ Project Settings ▸ / ⌥P): all of Logic's panes and sub-panes (General, Synchronization General / Audio / MIDI, Metronome, Recording, Tuning, Audio General / Channel Strips, MIDI General / Input Filter / Chase / Clip Length, Score, Movie, Smart Tempo, Assets), kept per project beside it (~/.config/bramble-studio/project-settings) and Import Project Settings… (pick a project, tick panes). Real effect: Use musical grid, frame rate and bar 1 SMPTE time (time display, drop-frame semicolon), Metronome (Simple mode, while recording, only during count-in, Bar / Beat / Division, Klopfgeist on/off, Tone, Volume in the engine), Count-in, Automatically erase duplicates, Audio Recording Path (Project / Set…), Tuning (Tune cents, Equal / six Fixed historic scales / User per semitone, Root Key, Copy to User, Reset, Stretch: every instrument tuning through lg_dsp::midi_hz), CC 7/10 move fader / pan, Input Filter, Smart Tempo Keep Project Tempo (loops), Copy audio files. [ ] not inside the .logicx (Logic's project-settings chunks undecoded), sync modes other than Internal, MTC / MMC / MIDI clock, Chase, Clip Length, Pan Law, HMT, MIDI click, plug-in loading options, movie
+- [~] Settings (settings.rs draws, prefs.rs wires): all 27 tabs drawn as Logic's (measured), values saved, popups with Logic's choices (devices, templates, threads from the system). Wired: Project Handling (Startup Action's seven choices, Default Template, Auto Backup count, Recent Items + File ▸ Open Recent / Clear Menu), Editing (Undo Steps, Double-Clicking a MIDI Region Opens Score / Event List / Piano Roll, Select regions on track selection incl. cycle area and Option-click, Select tracks on region selection), Catch (on play start / on locate), Audio ▸ Devices (Enabled, Output / Input Device lists, I/O Buffer Size, Resulting Latency, Apply when changed), Recording (Bit Depth, the overlapping-recording and Replace popups shared two-way with the Record menu, Recording Project Settings…), MIDI (Reset All MIDI Drivers, Reset Messages for software instruments on Stop-while-stopped and Send Reset Controllers, Inputs table with per-port On and Bramble Studio Virtual In, MIDI Sync Project Settings…), Score / Movie Project Settings… buttons, View (help tags, middle C, Wide playhead, Show animations, Display Time As / Zeros as spaces / Clock Format in the control bar), Mixer (Open plug-in window on insertion), Editors (Bright background), Reset All Settings Except Key Command Assignments…. [ ] Sampler / Movie / Automation / Score tab rows, Audio ▸ General (overload message, compensation choice, Low Latency Mode, Dim, pre-roll), Audio ▸ Editing crossfades / scrub, File Editor rows, I/O Assignments and Bounce Extensions, Recording Delay, File Type (WAVE only), Auto Record Enable, Track / Region / Marker colour modes, Tracks background / grid / shaded loops / scroll numbers, meter Peak Hold and Return Time, Accessibility announcements, Notifications (Studio has no suppressible warnings), My Info, Sound Library
+- [~] Project Settings (projsettings.rs, File ▸ Project Settings ▸ / ⌥P): all of Logic's panes and sub-panes (General, Synchronization General / Audio / MIDI, Metronome, Recording, Tuning, Audio General / Channel Strips, MIDI General / Input Filter / Chase / Clip Length, Score, Movie, Smart Tempo, Assets), kept per project beside it (~/.config/bramble-studio/project-settings) and Import Project Settings… (pick a project, tick panes). Real effect: Use musical grid, frame rate and bar 1 SMPTE time (time display, drop-frame semicolon), Metronome (Simple mode, while recording, only during count-in, Bar / Beat / Division, Klopfgeist on/off, Tone, Volume in the engine), Count-in, Automatically erase duplicates, Audio Recording Path (Project / Set…), Tuning (Tune cents, Equal / six Fixed historic scales / User per semitone, Root Key, Copy to User, Reset, Stretch: every instrument tuning through lg_dsp::midi_hz), CC 7/10 move fader / pan, Input Filter, Smart Tempo Keep Project Tempo (loops), Copy audio files. [ ] not inside the .logicx (Logic's project-settings chunks undecoded), Ableton Link / Manual sync (MTC, MMC, MIDI clock and Chase ▸ Notes: section 8), Clip Length, Pan Law, HMT, MIDI click, plug-in loading options, movie
 - [~] Key Commands window (keycmds.rs, ⌥K, Logic Pro ▸ Key Commands ▸ Edit Assignments…): Logic's layout (More menu, filter buttons All / Used / Key / Touch Bar / Unused / Customized / Multi-Used / Conflicts (n) / Pressed, search with recent searches, Command / Key / Touch Bar / Control Surface list grouped and collapsible by area, Keyboard / Touch Bar / Control Surface pane); all 2207 commands; Learn by Key Label / Position with the Cancel / Replace / OK conflict alert, Delete; Learn New Assignment from MIDI (note / CC / program; releases ignored) and Delete Assignment, the message then runs the command; Presets (U.S. + saved sets, ticked), Import / Import to Selection / Merge, Save / Save As… / Save Customized As… in Studio's .bskc format, Copy to Clipboard (only matches while searching), Expand / Collapse All, Scroll to Selection, Initialize All / Selection / Unused; the edited set drives every key press and the menus' shortcuts at once and is kept across launches; Ctrl-choosing a menu item opens it there. [ ] Touch Bar (none on Linux), Logic's .logikcs files and other language presets, keypad keys told apart
 
 ## 3. Editing
@@ -108,16 +108,16 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 303 | 594 | 51% |
+| Menu bar | 318 | 595 | 53% |
 | Local menus | 620 | 1191 | 52% |
-| Right-click menus | 1331 | 2575 | 51% |
-| Key commands | 1284 | 2207 | 58% |
+| Right-click menus | 1335 | 2575 | 51% |
+| Key commands | 1356 | 2207 | 61% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 303 of 594
+## Menu bar: 318 of 595
 
 
-<details><summary>Bramble Studio — 19/48</summary>
+<details><summary>Bramble Studio — 25/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -140,12 +140,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Plug-in Manager…
   - [ ] Chord Grid Library…
 - [ ] Control Surfaces
-  - [ ] Learn Assignment for “Solo”  `⌘L`
-  - [ ] Controller Assignments…  `⌥⇧K`
-  - [ ] Setup…
-  - [ ] Settings…
-  - [ ] Rebuild Defaults
-  - [ ] Bypass All Control Surfaces
+  - [x] Learn Assignment for “Solo”  `⌘L`
+  - [x] Controller Assignments…  `⌥⇧K`
+  - [x] Setup…
+  - [x] Settings…
+  - [x] Rebuild Defaults
+  - [x] Bypass All Control Surfaces
 - [x] Key Commands
   - [ ] Presets
     - [ ] Simplified Chinese
@@ -170,7 +170,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 34/81</summary>
+<details><summary>File — 40/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -203,20 +203,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] MIDI…
   - [x] Score…
   - [x] Movie…
-  - [ ] Synchronization…
+  - [x] Synchronization…
   - [ ] Metronome…
   - [ ] Tuning…
   - [ ] Assets…
   - [x] Import Project Settings…
 - [ ] Page Setup…
 - [ ] Print  `⌘P`
-- [ ] Movie
-  - [ ] Open Movie…  `⌥⌘O`
-  - [ ] Remove Movie
+- [x] Movie
+  - [x] Open Movie…  `⌥⌘O`
+  - [x] Remove Movie
   - [x] Show in Finder
   - [ ] Move Movie Files out of Project…
-  - [ ] Import Audio from Movie
-  - [ ] Export Audio to Movie…
+  - [x] Import Audio from Movie
+  - [x] Export Audio to Movie…
 - [x] Import
   - [x] Logic Projects…
   - [ ] Live Loops Grid…
@@ -427,7 +427,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Track — 16/49</summary>
+<details><summary>Track — 17/49</summary>
 
 - [x] New Tracks…  `⌥⌘N`
 - [x] New Audio Track  `⌥⌘A`
@@ -453,7 +453,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Show Single Global Track  `⌃⌥⌘G`
   - [ ] Show Arrangement Track  `⇧⌘A`
   - [ ] Show Marker Track  `⇧⌘K`
-  - [ ] Show Movie Track  `⇧⌘O`
+  - [x] Show Movie Track  `⇧⌘O`
   - [ ] Show Signature Track
   - [ ] Show Chord Track  `⇧⌘C`
   - [ ] Show Tempo Track  `⇧⌘T`
@@ -644,7 +644,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>View — 13/18</summary>
+<details><summary>View — 14/18</summary>
 
 - [ ] Show Tab Bar
 - [ ] Show All Tabs  `⇧⌘\`
@@ -661,14 +661,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Customize Control Bar and Display…
 - [x] Show Toolbar  `⌃⌥⌘T`
 - [x] Customize Toolbar…
-- [ ] Show Movie Window
+- [x] Show Movie Window
 - [ ] Show Colors  `⌥C`
 - [x] Enter Full Screen  `⌃⌘F`
 
 </details>
 
-<details><summary>Window — 42/68</summary>
+<details><summary>Window — 43/69</summary>
 
+- [x] Open MIDI Environment  `⌘0`
 - [x] Minimize  `⌘M`
 - [x] Minimize All  `⌥⌘M`
 - [x] Zoom  `⌃⌘M`
@@ -2105,7 +2106,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1331 of 2575
+## Right-click menus: 1335 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2198,16 +2199,16 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>environment-layer-popup — 0/8</summary>
+<details><summary>environment-layer-popup — 3/8</summary>
 
 - [ ] All Objects
 - [ ] Global Objects
 - [ ] Click & Ports
 - [ ] MIDI Instr.
 - [ ] Mixer
-- [ ] Rename Layer…
-- [ ] Delete Layer  `⌘⌫`
-- [ ] Create Layer
+- [x] Rename Layer…
+- [x] Delete Layer  `⌘⌫`
+- [x] Create Layer
 
 </details>
 
@@ -2243,12 +2244,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>global-track-header — 0/9</summary>
+<details><summary>global-track-header — 1/9</summary>
 
 - [ ] Single Global Track  `⌃⌥⌘G`
 - [ ] Arrangement
 - [ ] Marker
-- [ ] Movie
+- [x] Movie
 - [ ] Tempo
 - [ ] Beat Mapping
 - [ ] Signature
@@ -4928,7 +4929,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1284 of 2207
+## Key commands: 1356 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4937,7 +4938,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 331/679</summary>
+<details><summary>Global Commands — 348/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5095,7 +5096,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Clear/Recall Solo  `⌥S`
 - [x] Mute off for all  `⌃⇧M`
 - [x] Record off for all
-- [ ] Toggle Sync intern/extern
+- [x] Toggle Sync intern/extern
 - [x] Tap Tempo
 - [ ] Toggle MIDI Machine Control
 - [ ] Toggle Cycle Preview  `⌃C`
@@ -5120,7 +5121,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Send Maximum Volume
 - [ ] Send Used Instruments MIDI Settings
 - [ ] Send All Current Fader Values except Sysex
-- [ ] Send All Current Fader Values
+- [x] Send All Current Fader Values
 - [x] Duplicate Screenset…
 - [x] Rename Screenset…
 - [x] Delete Screenset
@@ -5184,7 +5185,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Step Editor…
 - [x] Open Piano Roll…  `⌘4`
 - [ ] Open Transport Float…
-- [ ] Open Environment…  `⌘0`
+- [x] Open Environment…  `⌘0`
 - [x] Open Project Audio…  `⌘8`
 - [ ] Note Repeat  `⌃⌥↩`
 - [ ] Spot Erase  `⌃⌥⌫`
@@ -5211,7 +5212,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Show/Hide Step Editor
 - [x] Show/Hide Piano Roll  `P`
 - [ ] Show/Hide Transport Float
-- [ ] Show/Hide Environment
+- [x] Show/Hide Environment
 - [x] Show/Hide Step Input Keyboard  `⌥⌘K`
 - [x] Show/Hide Project Audio
 - [x] Show/Hide Browser  `B`
@@ -5241,23 +5242,23 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Enter/Exit Full Screen  `⌃⌘F`
 - [x] Show/Hide Tuner
 - [ ] Toggle MIDI Remote for Articulation Switches
-- [ ] Open Movie…  `⌥⌘O`
-- [ ] Show/Hide Movie Window
-- [ ] Remove Movie
-- [ ] Import Audio from Movie
-- [ ] Export Audio to Movie…
-- [ ] Create Movie Scene Cut Markers (Auto Range)
-- [ ] Remove Movie Scene Cut Markers (Auto Range)
+- [x] Open Movie…  `⌥⌘O`
+- [x] Show/Hide Movie Window
+- [x] Remove Movie
+- [x] Import Audio from Movie
+- [x] Export Audio to Movie…
+- [x] Create Movie Scene Cut Markers (Auto Range)
+- [x] Remove Movie Scene Cut Markers (Auto Range)
 - [ ] Mute Movie Audio On/Off
 - [ ] Solo Movie Audio On/Off
 - [ ] Set Movie Region Start to Playhead
 - [ ] Set Movie Region End to Playhead
-- [ ] Reset Movie Region
-- [ ] Move Movie Region (and SMPTE Position) to Project Start
-- [ ] Move Movie Region (and SMPTE Position) to Playhead
-- [ ] Move Movie Region to Playhead
-- [ ] Show Movie in Finder
-- [ ] Open Environment Mixer…
+- [x] Reset Movie Region
+- [x] Move Movie Region (and SMPTE Position) to Project Start
+- [x] Move Movie Region (and SMPTE Position) to Playhead
+- [x] Move Movie Region to Playhead
+- [x] Show Movie in Finder
+- [x] Open Environment Mixer…
 - [ ] Toggle Level of Input Channel Strips
 - [ ] Toggle Level of Audio Channel Strips
 - [ ] Toggle Level of Auxiliary Channel Strips
@@ -5621,15 +5622,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Control Surfaces Commands — 0/7</summary>
+<details><summary>Global Control Surfaces Commands — 4/7</summary>
 
 - [ ] Open Setup
-- [ ] Open Controller Assignments  `⌥⇧K`
+- [x] Open Controller Assignments  `⌥⇧K`
 - [ ] Open Install
 - [ ] Scan All Models
-- [ ] Rebuild Defaults
-- [ ] Learn new Controller Assignment  `⌘L`
-- [ ] Toggle Bypass All Control Surfaces
+- [x] Rebuild Defaults
+- [x] Learn new Controller Assignment  `⌘L`
+- [x] Toggle Bypass All Control Surfaces
 
 </details>
 
@@ -5768,7 +5769,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 164/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 165/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -6021,7 +6022,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Unlock SMPTE Position  `⌘⇞`
 - [ ] Lock SMPTE Position  `⌘⇟`
 - [ ] Lock/Unlock SMPTE Position
-- [ ] Convert to Scene Marker
+- [x] Convert to Scene Marker
 - [ ] Convert to Standard Marker
 - [ ] Snap Mode: Smart
 - [ ] Snap Mode: Bar
@@ -6135,7 +6136,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Views Showing Time Ruler — 5/80</summary>
+<details><summary>Views Showing Time Ruler — 7/80</summary>
 
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show/Hide Grid Lines
@@ -6146,14 +6147,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Single Global Track On/Off  `⌃⌥⌘G`
 - [ ] Show/Hide Arrangement Track  `⇧⌘A`
 - [x] Show/Hide Marker Track  `⇧⌘K`
-- [ ] Show/Hide Movie Track  `⇧⌘O`
+- [x] Show/Hide Movie Track  `⇧⌘O`
 - [ ] Show/Hide Signature Track
 - [x] Show/Hide Tempo Track  `⇧⌘T`
 - [ ] Show/Hide Chord Track  `⇧⌘C`
 - [ ] Show/Hide Beat Mapping Track  `⇧⌘B`
 - [ ] Show/Hide Arrangement Track Only
 - [x] Show/Hide Marker Track Only  `'`
-- [ ] Show/Hide Movie Track Only
+- [x] Show/Hide Movie Track Only
 - [ ] Show/Hide Signature Track Only
 - [ ] Show/Hide Tempo Track Only
 - [ ] Show/Hide Chord Track Only
@@ -6615,58 +6616,58 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>MIDI Environment — 0/50</summary>
+<details><summary>MIDI Environment — 48/50</summary>
 
-- [ ] New MIDI Instrument
-- [ ] New Multi-Instrument
-- [ ] New Mapped Instrument
-- [ ] New Fader/Knobs/…
-- [ ] New Keyboard
-- [ ] New Monitor
-- [ ] New Arpeggiator
-- [ ] New Transformer
-- [ ] New Delay Line
-- [ ] New Voice Limiter
-- [ ] New Channel Splitter
-- [ ] New Chord Memorizer
+- [x] New MIDI Instrument
+- [x] New Multi-Instrument
+- [x] New Mapped Instrument
+- [x] New Fader/Knobs/…
+- [x] New Keyboard
+- [x] New Monitor
+- [x] New Arpeggiator
+- [x] New Transformer
+- [x] New Delay Line
+- [x] New Voice Limiter
+- [x] New Channel Splitter
+- [x] New Chord Memorizer
 - [ ] New Audio Channel Strip
-- [ ] Clear Cables only  `⌃⌫`
-- [ ] Clean Up Positions
-- [ ] Reset Sizes
-- [ ] Align Objects
-- [ ] Object move left  `⌥←`
-- [ ] Object move right  `⌥→`
-- [ ] Object move up  `⌥↑`
-- [ ] Object move down  `⌥↓`
-- [ ] Object Width -1 Pixel  `⌥⇧←`
-- [ ] Object Width +1 Pixel  `⌥⇧→`
-- [ ] Object Height -1 Pixel  `⌥⇧↑`
-- [ ] Object Height +1 Pixel  `⌥⇧↓`
-- [ ] Show/Hide Cables  `⌃C`
-- [ ] Protect Cabling/Positions  `⌃P`
-- [ ] Define Custom Bank Messages…  `⇧I`
+- [x] Clear Cables only  `⌃⌫`
+- [x] Clean Up Positions
+- [x] Reset Sizes
+- [x] Align Objects
+- [x] Object move left  `⌥←`
+- [x] Object move right  `⌥→`
+- [x] Object move up  `⌥↑`
+- [x] Object move down  `⌥↓`
+- [x] Object Width -1 Pixel  `⌥⇧←`
+- [x] Object Width +1 Pixel  `⌥⇧→`
+- [x] Object Height -1 Pixel  `⌥⇧↑`
+- [x] Object Height +1 Pixel  `⌥⇧↓`
+- [x] Show/Hide Cables  `⌃C`
+- [x] Protect Cabling/Positions  `⌃P`
+- [x] Define Custom Bank Messages…  `⇧I`
 - [ ] Toggle Channel Display Default of Multi-Instrument
-- [ ] Select Used Instruments
-- [ ] Select Unused Instruments  `⇧U`
-- [ ] Select Cable Destination  `⇧→`
-- [ ] Select Cable Origin  `⇧←`
-- [ ] Select Next Object Above  `↑`
-- [ ] Select Next Object Below  `↓`
-- [ ] Select Next Object Left  `←`
-- [ ] Select Next Object Right  `→`
-- [ ] Go to Layer of Object
-- [ ] Go to Previous Layer
-- [ ] Send Selected Fader Values  `⌃V`
-- [ ] Delete Layer  `⌘⌫`
-- [ ] Create Layer
-- [ ] Cable serially  `⌃S`
-- [ ] Apply Buffer Template to Position and Size
-- [ ] Apply Buffer Template to Position
-- [ ] Apply Buffer Template to Size
-- [ ] Apply Buffer Template to Definition
-- [ ] Apply Buffer Template to Definition, channel increment
-- [ ] Apply Buffer Template to Definition, number increment
-- [ ] Apply Buffer Template to Cables
+- [x] Select Used Instruments
+- [x] Select Unused Instruments  `⇧U`
+- [x] Select Cable Destination  `⇧→`
+- [x] Select Cable Origin  `⇧←`
+- [x] Select Next Object Above  `↑`
+- [x] Select Next Object Below  `↓`
+- [x] Select Next Object Left  `←`
+- [x] Select Next Object Right  `→`
+- [x] Go to Layer of Object
+- [x] Go to Previous Layer
+- [x] Send Selected Fader Values  `⌃V`
+- [x] Delete Layer  `⌘⌫`
+- [x] Create Layer
+- [x] Cable serially  `⌃S`
+- [x] Apply Buffer Template to Position and Size
+- [x] Apply Buffer Template to Position
+- [x] Apply Buffer Template to Size
+- [x] Apply Buffer Template to Definition
+- [x] Apply Buffer Template to Definition, channel increment
+- [x] Apply Buffer Template to Definition, number increment
+- [x] Apply Buffer Template to Cables
 
 </details>
 
