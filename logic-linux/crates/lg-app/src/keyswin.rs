@@ -204,11 +204,16 @@ impl<'a> Pane<'a> {
     }
     /// A MIDI controller choice (0 off, 1..119, 120 aftertouch, 121 Learn).
     pub fn controller_menu(&mut self, ui: &mut egui::Ui, id: u32, label: &str) {
+        self.source_menu(ui, id, label, false);
+    }
+    /// The same, with Velocity (122) when `velocity`.
+    pub fn source_menu(&mut self, ui: &mut egui::Ui, id: u32, label: &str, velocity: bool) {
         let cur = self.get(id).round() as i32;
         let name = |n: i32| match n {
             0 => "Off".to_string(),
             120 => "Aftertouch".to_string(),
             121 => "Learn…".to_string(),
+            122 => "Velocity".to_string(),
             1 => "1 Modulation".to_string(),
             2 => "2 Breath".to_string(),
             4 => "4 Foot".to_string(),
@@ -218,7 +223,10 @@ impl<'a> Pane<'a> {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(label).size(11.0).color(look::text_dim()));
             ui.menu_button(format!("{} ⌄", name(cur)), |ui| {
-                for n in [0, 121, 120] {
+                for n in [0, 121, 120, 122] {
+                    if n == 122 && !velocity {
+                        continue;
+                    }
                     if ui.add(egui::Button::selectable(n == cur, name(n))).clicked() {
                         self.set.push((id, n as f32));
                         ui.close();
@@ -249,6 +257,51 @@ pub fn toggle(ui: &mut egui::Ui, on: bool, label: &str) -> bool {
     p.circle_filled(pos2(if on { sw.max.x - 7.0 } else { sw.min.x + 7.0 }, sw.center().y), 5.5, Color32::WHITE);
     p.text(pos2(sw.max.x + 6.0, r.center().y), Align2::LEFT_CENTER, label, font, if resp.hovered() { look::text() } else { look::text_dim() });
     resp.clicked()
+}
+
+/// Names in a row that can be dragged onto each other to change their order (an effects
+/// chain); returns (from, to) when one was dropped on another.
+pub fn reorder(ui: &mut egui::Ui, id: egui::Id, names: &[&str]) -> Option<(usize, usize)> {
+    let mut dragging: Option<usize> = ui.data(|d| d.get_temp(id));
+    let mut drop = None;
+    let released = ui.input(|x| x.pointer.any_released());
+    for (i, n) in names.iter().enumerate() {
+        let resp = ui.add(egui::Button::new(egui::RichText::new(*n).size(11.0)).sense(Sense::click_and_drag())).on_hover_text("Drag to reorder the effects");
+        if resp.drag_started() {
+            dragging = Some(i);
+        }
+        if let Some(from) = dragging {
+            if released && from != i && ui.rect_contains_pointer(resp.rect) {
+                drop = Some((from, i));
+            }
+        }
+        if i + 1 < names.len() {
+            ui.label("›");
+        }
+    }
+    if released {
+        dragging = None;
+    }
+    ui.data_mut(|d| match dragging {
+        Some(v) => {
+            d.insert_temp(id, v);
+        }
+        None => d.remove::<usize>(id),
+    });
+    drop
+}
+
+/// The extended parameters behind the disclosure arrow at the lower left.
+pub fn extended(ui: &mut egui::Ui, id: egui::Id, body: impl FnOnce(&mut egui::Ui)) {
+    let mut open: bool = ui.data(|d| d.get_temp(id)).unwrap_or(false);
+    ui.add_space(4.0);
+    if ui.add(egui::Button::new(egui::RichText::new(if open { "▾ Extended Parameters" } else { "▸ Extended Parameters" }).size(11.0).color(look::text_dim())).frame(false)).clicked() {
+        open = !open;
+    }
+    if open {
+        egui::Frame::new().fill(look::group_bg()).corner_radius(6.0).inner_margin(8.0).show(ui, body);
+    }
+    ui.data_mut(|d| d.insert_temp(id, open));
 }
 
 /// A titled group of controls.

@@ -37,6 +37,7 @@ pub mod sampler_doc;
 pub mod sampler_synth;
 pub mod sculpture;
 pub mod string;
+pub mod studio;
 pub mod wav;
 
 pub use patches::{Engine, PatchSpec, patch};
@@ -219,6 +220,12 @@ fn with(engine: Engine, settings: &[(u32, f32)], rate: f32) -> Box<dyn Instrumen
 
 /// The stand-in for a Logic plug-in, by the name the project's AuCU chunk gives.
 pub fn by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn Instrument>> {
+    // the studio instruments: sections of sampled or modelled parts with articulations
+    match plugin_name.trim() {
+        "Studio Strings" => return Some(Box::new(studio::StudioSection::strings(rate))),
+        "Studio Horns" => return Some(Box::new(studio::StudioSection::horns(rate))),
+        _ => {}
+    }
     if let Some(s) = sampled::for_plugin(plugin_name, rate) {
         return Some(s);
     }
@@ -257,9 +264,9 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         "Ultrabeat" | "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
         "Bass" | NAME_BASS => Box::new(bass::StudioBass::new(rate)),
         "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),
-        "Studio Strings" => with(Engine::Ensemble, &[(0, 0.0), (15, 1.0)], rate),
+        "Studio Strings" => Box::new(studio::StudioSection::with_samples(studio::Kind::Strings, rate, false)),
         "Horns" => with(Engine::Ensemble, &[(0, 3.0)], rate),
-        "Studio Horns" => with(Engine::Ensemble, &[(0, 3.0), (15, 1.0)], rate),
+        "Studio Horns" => Box::new(studio::StudioSection::with_samples(studio::Kind::Horns, rate, false)),
         "Woodwind" => with(Engine::Ensemble, &[(0, 10.0)], rate),
         "Voice" => with(Engine::Ensemble, &[(0, 7.0)], rate),
         "Vintage Mellotron" | NAME_MELLOTRON => Box::new(mellotron::VintageMellotron::new(rate)),
