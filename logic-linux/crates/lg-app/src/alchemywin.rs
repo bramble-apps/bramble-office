@@ -3,7 +3,11 @@
 //! latch) with its 16-step sequencer (click a step to turn it on or off, drag its bar for the
 //! velocity), MSEG (drag the points; the loop between two points; amounts to the master
 //! filter, volume and pitch) and Effects (four slots of Studio's effects, mix, bypass, and each
-//! effect's own controls).
+//! effect's own controls). Sources: each source A–D's element (VA, Additive, Spectral, Granular)
+//! and its controls, and Import Audio… (or a file dropped on the window): the audio the sample
+//! elements play, tuned by its detected pitch. Mod Rack: eight routings from LFO 1 / 2, the MSEG,
+//! the mod wheel, aftertouch, pitch bend or the sequencer step to the filters, tune, volume and
+//! each source's volume, pan, pitch and position.
 
 use egui::{pos2, vec2, Color32, Rect, Sense, Stroke};
 use lg_synth::alchemy_extra::{self as ax, FX, FX_PARAM, FX_SLOTS, FX_TYPES};
@@ -25,10 +29,13 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         (p, v)
     })).flatten()).collect();
     let mut set: Vec<(u32, f32)> = Vec::new();
+    let mut import = false;
+    let audio_name = instwin::track_id(app, t).and_then(|id| app.inst.alch_audio.get(&id)).and_then(|(p, _)| p.file_name()).map(|s| s.to_string_lossy().into_owned());
+    let dropped = std::mem::take(&mut app.inst.dropped);
     let mut open = true;
     let resp = egui::Window::new(format!("{track} — Alchemy")).id(egui::Id::unique(("alchemy-window", t))).open(&mut open).collapsible(false).resizable(true).default_size(vec2(780.0, 600.0)).show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (k, n) in ["Main", "Arpeggiator", "MSEG", "Effects"].iter().enumerate() {
+            for (k, n) in ["Main", "Arpeggiator", "MSEG", "Effects", "Sources", "Mod Rack"].iter().enumerate() {
                 if ui.add(egui::Button::selectable(tab == k, *n)).clicked() {
                     tab = k;
                 }
@@ -37,6 +44,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         ui.separator();
         match tab {
             1 => arp_page(ui, &get, &mut set),
+            4 => sources_page(ui, t, &params, &get, &mut set, &mut import, audio_name.as_deref()),
+            5 => rack_page(ui, &get, &mut set),
             2 => mseg_page(ui, &get, &mut set),
             3 => fx_page(ui, &get, &fx_params, &mut set),
             _ => {
@@ -51,6 +60,25 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     if !set.is_empty() {
         instwin::checkpoint_once(app, ctx, t, "Alchemy Setting");
         instwin::set_params(app, t, &set);
+    }
+    let mut file = dropped.first().cloned();
+    if import {
+        file = kn_ui::files::FileDialog::new().set_title("Import Audio").add_filter("Audio", &["wav", "aif", "aiff", "caf", "flac", "WAV", "AIF", "AIFF"]).pick_file();
+    }
+    if let Some(f) = file {
+        match lg_synth::wav::read_audio(&f) {
+            Ok(a) => {
+                instwin::checkpoint(app, t, "Import Audio");
+                if let Some(id) = instwin::track_id(app, t) {
+                    app.inst.alch_audio.insert(id, (f.clone(), std::sync::Arc::new(a)));
+                }
+                // the source shown plays it (its Granular element on)
+                let src: u32 = ctx.data(|d| d.get_temp(egui::Id::unique(("alchemy-src", t)))).unwrap_or(0);
+                instwin::set_params(app, t, &[(277 + src, 1.0), (313 + src, 1.0)]);
+                instwin::bump(app, t);
+            }
+            Err(e) => app.tell(format!("Couldn't import {}: {e}", f.display())),
+        }
     }
     if !open {
         app.plugin_window = None;
@@ -238,4 +266,65 @@ fn fx_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, fx: &[Option<(Vec<lg_dsp
             });
         }
     });
+}
+
+/// Imported audio into the running Alchemy (mono, tuned by its detected pitch).
+pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
+    let n = a.frames();
+    let ch = a.channels.len().max(1) as f32;
+    let mono: Vec<f32> = (0..n).map(|i| a.channels.iter().map(|c| c.get(i).copied().unwrap_or(0.0)).sum::<f32>() / ch).collect();
+    let data = lg_synth::sampler::SampleData { rate: a.rate as f32, ch: vec![lg_synth::sampler::Pcm::F32(mono.clone())] };
+    let hz = lg_synth::sampler_doc::detect_pitch(&data).map(|(k, c)| lg_dsp::midi_hz(k as f32 + c / 100.0)).unwrap_or(261.63);
+    al.set_granular_sample(mono, a.rate as f32, hz);
+}
+
+fn sources_page(ui: &mut egui::Ui, t: usize, params: &[lg_dsp::Param], get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>, import: &mut bool, audio: Option<&str>) {
+    let sid = egui::Id::unique(("alchemy-src", t));
+    let mut src: u32 = ui.data(|d| d.get_temp(sid)).unwrap_or(0);
+    ui.horizontal(|ui| {
+        for (k, l) in ["A", "B", "C", "D"].iter().enumerate() {
+            if ui.add(egui::Button::selectable(src == k as u32, format!("Source {l}"))).clicked() {
+                src = k as u32;
+            }
+        }
+        ui.separator();
+        if ui.button("Import Audio…").on_hover_text("Or drop an audio file on the window").clicked() {
+            *import = true;
+        }
+        ui.label(egui::RichText::new(audio.unwrap_or("no audio imported")).color(look::text_dim()));
+    });
+    ui.data_mut(|d| d.insert_temp(sid, src));
+    let letter = ["A", "B", "C", "D"][src as usize];
+    ui.horizontal(|ui| {
+        check(ui, "On", 277 + src, get, set);
+        ui.label(egui::RichText::new("Element").color(look::text_dim()));
+        // one element at a time (the engine plays the first on of Granular, Spectral, Additive, VA)
+        let cur = if get(313 + src) >= 0.5 { 3 } else if get(309 + src) >= 0.5 { 2 } else if get(293 + src) >= 0.5 { 1 } else { 0 };
+        for (k, n) in ["VA", "Additive", "Spectral", "Granular"].iter().enumerate() {
+            if ui.add(egui::Button::selectable(cur == k, *n)).clicked() {
+                set.push((297 + src, if k == 0 { 1.0 } else { 0.0 }));
+                set.push((293 + src, if k == 1 { 1.0 } else { 0.0 }));
+                set.push((309 + src, if k == 2 { 1.0 } else { 0.0 }));
+                set.push((313 + src, if k == 3 { 1.0 } else { 0.0 }));
+            }
+        }
+    });
+    let suffix = format!(" {letter}");
+    let own: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000 && p.name.ends_with(&suffix) && !p.name.contains(" On ") && !p.name.starts_with("Source On") && !p.name.ends_with(&format!("On{suffix}"))).cloned().collect();
+    let vals: Vec<f32> = own.iter().map(|p| get(p.id)).collect();
+    set.extend(crate::pluginwin::controls(ui, &own, &vals, &format!("alch-src-{t}-{src}")));
+}
+
+fn rack_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
+    ui.label(egui::RichText::new("Each routing: a source moves a target by its depth").size(11.0).color(look::text_dim()));
+    for m in 0..ax::MOD_SLOTS {
+        let b = ax::MOD + m as u32 * 4;
+        ui.horizontal(|ui| {
+            ui.label(format!("{}", m + 1));
+            check(ui, "On", b, get, set);
+            menu(ui, "Source", b + 1, ax::MOD_SOURCES, get, set);
+            menu(ui, "Target", b + 2, ax::MOD_TARGETS, get, set);
+            row(ui, "Depth", b + 3, -1.0, 1.0, get, set);
+        });
+    }
 }

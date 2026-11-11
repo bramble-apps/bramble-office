@@ -21,6 +21,11 @@ pub const FX: u32 = 1200;
 pub const FX_SLOTS: usize = 4;
 /// An effect slot's own parameters: FX_PARAM + slot × 100 + the effect's parameter id.
 pub const FX_PARAM: u32 = 1300;
+/// The modulation rack: MOD + slot × 4 + [on, source, target, depth].
+pub const MOD: u32 = 1700;
+pub const MOD_SLOTS: usize = 8;
+pub const MOD_SOURCES: &[&str] = &["None", "LFO 1", "LFO 2", "MSEG", "Mod Wheel", "Aftertouch", "Pitch Bend", "Sequencer Step"];
+pub const MOD_TARGETS: &[&str] = &["None", "Filter 1 Cutoff", "Filter 1 Resonance", "Filter 1 Drive", "Filter 2 Cutoff", "Master Tune", "Master Volume", "Source A Volume", "Source B Volume", "Source C Volume", "Source D Volume", "Source A Pan", "Source B Pan", "Source C Pan", "Source D Pan", "Source A Pitch", "Source B Pitch", "Source C Pitch", "Source D Pitch", "Source A Position", "Source B Position", "Source C Position", "Source D Position"];
 
 /// The effects the rack offers (Studio's stand-ins by Logic's names).
 pub const FX_TYPES: &[&str] = &["Off", "Distortion", "Bitcrusher", "Compressor", "Channel EQ", "Chorus", "Flanger", "Phaser", "Tremolo", "AutoFilter", "Stereo Delay", "Tape Delay", "ChromaVerb"];
@@ -61,6 +66,13 @@ pub fn params() -> Vec<Param> {
         v.push(Param::new(MSEG_TIME + k as u32, leak(format!("MSEG Point {} Time", k + 1)), 0.0, 10.0, t, Unit::Seconds));
         v.push(Param::new(MSEG_LEVEL + k as u32, leak(format!("MSEG Point {} Level", k + 1)), -1.0, 1.0, l, Unit::None));
     }
+    for m in 0..MOD_SLOTS {
+        let b = MOD + m as u32 * 4;
+        v.push(Param::new(b, leak(format!("Mod {} On", m + 1)), 0.0, 1.0, 1.0, Unit::OnOff));
+        v.push(Param::menu(b + 1, leak(format!("Mod {} Source", m + 1)), MOD_SOURCES, 0.0));
+        v.push(Param::menu(b + 2, leak(format!("Mod {} Target", m + 1)), MOD_TARGETS, 0.0));
+        v.push(Param::new(b + 3, leak(format!("Mod {} Depth", m + 1)), -1.0, 1.0, 0.0, Unit::None));
+    }
     for s in 0..FX_SLOTS {
         let b = FX + s as u32 * 10;
         v.push(Param::menu(b, leak(format!("Effect {} Type", s + 1)), FX_TYPES, 0.0));
@@ -84,6 +96,9 @@ pub struct Extras {
     pub fx_mix: [f32; FX_SLOTS],
     pub fx_bypass: [bool; FX_SLOTS],
     pub bpm: f64,
+    /// The rack's routings in use: (source, target, depth).
+    pub mods: [(u8, u8, f32); MOD_SLOTS],
+    pub nmods: usize,
     rate: f32,
     dry: Vec<f32>,
     dry_r: Vec<f32>,
@@ -104,6 +119,8 @@ impl Extras {
             fx_mix: [1.0; FX_SLOTS],
             fx_bypass: [false; FX_SLOTS],
             bpm: 120.0,
+            mods: [(0, 0, 0.0); MOD_SLOTS],
+            nmods: 0,
             rate,
             dry: vec![0.0; 4096],
             dry_r: vec![0.0; 4096],
@@ -135,6 +152,15 @@ impl Extras {
         let looped = p(MSEG + 4) >= 0.5;
         self.mseg.loop_from = looped.then_some(p(MSEG + 5).round() as usize);
         self.mseg.loop_to = looped.then_some(p(MSEG + 6).round() as usize);
+        self.nmods = 0;
+        for m in 0..MOD_SLOTS {
+            let b = MOD + m as u32 * 4;
+            let (src, tg) = (p(b + 1).round().max(0.0) as u8, p(b + 2).round().max(0.0) as u8);
+            if p(b) >= 0.5 && src > 0 && tg > 0 {
+                self.mods[self.nmods] = (src, tg, p(b + 3));
+                self.nmods += 1;
+            }
+        }
         for s in 0..FX_SLOTS {
             let b = FX + s as u32 * 10;
             let kind = p(b).round().max(0.0) as u8;

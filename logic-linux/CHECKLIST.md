@@ -55,7 +55,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 ## 4. Audio
 - [x] Playback through our instruments and effects (SoundFont fallback), audio regions, bounce to WAV, metronome
-- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
+- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. Alchemy: Arpeggiator (7 modes, octaves, rate, length, swing, latch) with a 16-step sequencer (on / velocity / length), MSEG (16 points, loop; to cutoff, volume, pitch), an 8-slot mod rack (LFOs, MSEG, wheel, aftertouch, bend, step → filters, tune, volume, each source's volume / pan / pitch / position), a 4-slot effects rack of Studio's effects, per-source editors (element, controls) and Import Audio for the sample elements (tests/editors.rs). [ ] Alchemy's per-voice modulators (velocity, per-voice envelopes in the rack), its additive / spectral resynthesis editors, Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
 - [x] Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter
 - [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste); every lg-fx effect's window from its Audio FX slot on tracks, auxes and the Stereo Out: Controls view (sliders, menus, switches, Option-click default), bypass, Compare (edited / as it was), Copy / Paste, the setting pop-up (Copy / Paste / Reset Setting, Save Setting As…, saved settings listed, ‹ › and Next / Previous Plug-in Setting), Show/Hide All Plug-in Windows (V). [ ] Logic's custom editor views (Channel EQ and Compressor graphics included), Logic's own .pst presets in the pop-up, Plug-in Undo, Link, side chain, the window's View menu beyond Controls
 - [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace (Region Erase / Region Punch / Content Erase / Content Punch), the Record menu's Overlapping MIDI Recordings (Merge, Create Take Folder, Overlap, Overlap/Merge Selected, Create Track(s), Create Tracks and Mute, Merge Current Recording Only), cycle passes, Use Musical Grid. [ ] Create Track Alternative(s), Flashback Capture
@@ -69,7 +69,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 ## 5. Session Players
 - [x] Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM
 - [x] Bass Player and Keyboard Player: tracks from the New Track sheet, their editor (style, XY pad, knobs, Details), the Chord track drives them. [ ] Logic-measured styles beyond Pop Songwriter / Strummed
-- [ ] Drum Kit Designer and Drum Machine Designer kits
+- [~] Instrument editors (instwin.rs, plug-in undo with ⌘Z over the window, state kept by track id and re-applied when the engine rebuilds; the Mixer's instrument slot right-click picks Logic's instruments): **Sampler** (samplerwin, sampler_doc, sampler_synth): Navigation bar (LEDs, maximize, Option-click, Action menu, Chromatic / Optimized dropzones), Synth pane (two filters, 19 types, Series / Parallel, Blend, Drive, Details), Mod Matrix (20 routings, Via with Min / Max, filter, sort), Modulators (5 envelopes, 4 LFOs), Mapping (Key Mapping Editor with drags, splits, rubber band, files on keys; Group view and Zone view with every column, sorting, hide / show; Edit / Group / Zone / View menus: remaps, automaps, fill gaps, round robin, merge, loops, crop, retune, normalize), Zone pane (waveform, markers, Option-drags, loop area, auto-loop, snap, zoom), groups' keyswitches / articulations / controller / bend / tempo filters, release triggers, voices, exclusive classes, crossfades; Mono / Legato / Unison / Glide; instruments saved and opened as SFZ in ~/Music/Audio Music Apps/Sampler Instruments (SF2 / EXS there converted), key / output label sets; all 36 Sampler key commands. **Quick Sampler** (quickwin): modes, markers, manual slices, Open in Sampler. **Drum Machine Designer** (dmdwin): 4×4 pad grid (3 pages, 48 pads), pad menu, samples dropped on pads (each a Quick Sampler), mute / solo / exclusive groups / resample, all 16 key commands. **Drum Kit Designer** (dkdwin): kit stage, pieces from other kits, per-piece Tune / Damp / Gain, Mapping view. [ ] Convert Regions to New Sampler Track, Flex in Sampler / Quick Sampler, Quick Sampler Recorder, LFO and Mod Matrix panes, fades and settings menu, DMD pads as a real summing stack of tracks, Producer Kits and multi-output, editor state saved into the .logicx (the Sampler instrument is kept as an SFZ; the rest only for the session), drags of regions / Browser loops into the editors
 
 ## 6. Files
 - [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late)
@@ -98,7 +98,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 | Menu bar | 282 | 594 | 47% |
 | Local menus | 534 | 1191 | 44% |
 | Right-click menus | 1246 | 2575 | 48% |
-| Key commands | 870 | 2207 | 39% |
+| Key commands | 926 | 2207 | 41% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
 ## Menu bar: 282 of 594
@@ -4915,7 +4915,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 870 of 2207
+## Key commands: 926 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4924,7 +4924,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 298/679</summary>
+<details><summary>Global Commands — 302/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5495,10 +5495,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Previous Plug-in Setting for topmost Plug-in Window
 - [ ] Next Plug-in Setting
 - [ ] Previous Plug-in Setting
-- [ ] Next Sampler Instrument
-- [ ] Previous Sampler Instrument
-- [ ] Next Plug-in Setting or Sampler Instrument
-- [ ] Previous Plug-in Setting or Sampler Instrument
+- [x] Next Sampler Instrument
+- [x] Previous Sampler Instrument
+- [x] Next Plug-in Setting or Sampler Instrument
+- [x] Previous Plug-in Setting or Sampler Instrument
 - [ ] Next Channel Strip Setting of focused Track  `⇧]`
 - [ ] Previous Channel Strip Setting of focused Track  `⇧[`
 - [x] Copy Channel Strip Setting  `⌥⌘C`
@@ -7097,65 +7097,65 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Sampler — 0/36</summary>
+<details><summary>Sampler — 36/36</summary>
 
-- [ ] Load or Replace Audio File…  `⌃F`
-- [ ] New Zone  `⌃Z`
-- [ ] New Group  `⌃G`
-- [ ] Toggle Keyboard/Group/Zone View  `⌥V`
-- [ ] Switch to Keyboard View
-- [ ] Switch to Group View
-- [ ] Switch to Zone View
-- [ ] Show all List Columns
-- [ ] Restore Default List Columns
-- [ ] Shift selected Zones/Groups Left  `⌥←`
-- [ ] Shift selected Zones/Groups Right  `⌥→`
-- [ ] Shift selected Zones/Groups Left (Zones incl. Root Key)  `⌥⇧←`
-- [ ] Shift selected Zones/Groups Right (Zones incl. Root Key)  `⌥⇧→`
-- [ ] Load Multiple Audio Files…  `⌃O`
-- [ ] Open in Audio File Editor  `⌃W`
-- [ ] Select Zone of Last Played Key
-- [ ] New Mapping  `⌥⌘N`
-- [ ] Duplicate Group  `⌘D`
-- [ ] Crop Sample  `⌥⌘X`
-- [ ] Crop Loop  `⌥⇧⌘X`
-- [ ] Toggle Snap mode  `⌘G`
-- [ ] Vertical Autozoom  `⌃⌥⇧Z`
-- [ ] Horizontal Autozoom  `⌃⌥Z`
-- [ ] Automap using Current Root Note  `⌃⇧E`
-- [ ] Automap using Root Note from Audio File Names
-- [ ] Remap All Notes
-- [ ] Remap Evenly
-- [ ] Remap To Round Robin
-- [ ] Remap Notes…
-- [ ] Remap To Root Notes
-- [ ] Fill Gaps
-- [ ] Fill Gaps (Notes Only)
-- [ ] Fill Gaps (Vel Only)
-- [ ] Swap Zones
-- [ ] Always Move Root Key with Zone
-- [ ] Preview Selected Zone  `⌥˽`
+- [x] Load or Replace Audio File…  `⌃F`
+- [x] New Zone  `⌃Z`
+- [x] New Group  `⌃G`
+- [x] Toggle Keyboard/Group/Zone View  `⌥V`
+- [x] Switch to Keyboard View
+- [x] Switch to Group View
+- [x] Switch to Zone View
+- [x] Show all List Columns
+- [x] Restore Default List Columns
+- [x] Shift selected Zones/Groups Left  `⌥←`
+- [x] Shift selected Zones/Groups Right  `⌥→`
+- [x] Shift selected Zones/Groups Left (Zones incl. Root Key)  `⌥⇧←`
+- [x] Shift selected Zones/Groups Right (Zones incl. Root Key)  `⌥⇧→`
+- [x] Load Multiple Audio Files…  `⌃O`
+- [x] Open in Audio File Editor  `⌃W`
+- [x] Select Zone of Last Played Key
+- [x] New Mapping  `⌥⌘N`
+- [x] Duplicate Group  `⌘D`
+- [x] Crop Sample  `⌥⌘X`
+- [x] Crop Loop  `⌥⇧⌘X`
+- [x] Toggle Snap mode  `⌘G`
+- [x] Vertical Autozoom  `⌃⌥⇧Z`
+- [x] Horizontal Autozoom  `⌃⌥Z`
+- [x] Automap using Current Root Note  `⌃⇧E`
+- [x] Automap using Root Note from Audio File Names
+- [x] Remap All Notes
+- [x] Remap Evenly
+- [x] Remap To Round Robin
+- [x] Remap Notes…
+- [x] Remap To Root Notes
+- [x] Fill Gaps
+- [x] Fill Gaps (Notes Only)
+- [x] Fill Gaps (Vel Only)
+- [x] Swap Zones
+- [x] Always Move Root Key with Zone
+- [x] Preview Selected Zone  `⌥˽`
 
 </details>
 
-<details><summary>Drum Machine Designer — 0/16</summary>
+<details><summary>Drum Machine Designer — 16/16</summary>
 
-- [ ] Select Next Pad
-- [ ] Select Previous Pad
-- [ ] Preview Pad
-- [ ] Mute Pad
-- [ ] Solo Pad
-- [ ] Resample Pad
-- [ ] Assign To Exclusive Group: Off
-- [ ] Assign To Exclusive Group: 1
-- [ ] Assign To Exclusive Group: 2
-- [ ] Assign To Exclusive Group: 3
-- [ ] Assign To Exclusive Group: 4
-- [ ] Assign To Exclusive Group: 5
-- [ ] Assign To Exclusive Group: 6
-- [ ] Assign To Exclusive Group: 7
-- [ ] Assign To Exclusive Group: 8
-- [ ] Clear Pad
+- [x] Select Next Pad
+- [x] Select Previous Pad
+- [x] Preview Pad
+- [x] Mute Pad
+- [x] Solo Pad
+- [x] Resample Pad
+- [x] Assign To Exclusive Group: Off
+- [x] Assign To Exclusive Group: 1
+- [x] Assign To Exclusive Group: 2
+- [x] Assign To Exclusive Group: 3
+- [x] Assign To Exclusive Group: 4
+- [x] Assign To Exclusive Group: 5
+- [x] Assign To Exclusive Group: 6
+- [x] Assign To Exclusive Group: 7
+- [x] Assign To Exclusive Group: 8
+- [x] Clear Pad
 
 </details>
 

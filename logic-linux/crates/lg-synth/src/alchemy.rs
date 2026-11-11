@@ -585,6 +585,8 @@ pub struct Alchemy {
     pub extra: crate::alchemy_extra::Extras,
     base_cut: f32,
     base_tune: f32,
+    /// The settings before the modulation rack and MSEG move them (each block starts from it).
+    base_sh: AlchShared,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -608,14 +610,7 @@ impl Alchemy {
         for (k, &id) in PERFORM_IDS.iter().enumerate() {
             defaults[k] = params.get(id);
         }
-        let mut a = Alchemy {
-            params,
-            poly: Poly::new(24, || {
-                seed += 23;
-                AlchVoice::new(seed)
-            }),
-            ch: Channel::new(rate),
-            sh: AlchShared {
+        let sh0 = AlchShared {
                 rate,
                 src: [SourceCfg::default(); 4],
                 m_cut: 0.6,
@@ -634,7 +629,15 @@ impl Alchemy {
                 lfo1: 0.0,
                 lfo2: 0.0,
                 character: 0.0,
-            },
+            };
+        let mut a = Alchemy {
+            params,
+            poly: Poly::new(24, || {
+                seed += 23;
+                AlchVoice::new(seed)
+            }),
+            ch: Channel::new(rate),
+            sh: sh0,
             rate,
             lfo1: Lfo::default(),
             lfo2: Lfo::default(),
@@ -652,6 +655,7 @@ impl Alchemy {
             extra: crate::alchemy_extra::Extras::new(rate),
             base_cut: 0.6,
             base_tune: 0.0,
+            base_sh: sh0,
         };
         a.room.feedback = 0.82;
         a.update();
@@ -778,6 +782,7 @@ impl Alchemy {
         self.sh.tune = p(96) + p(97) / 100.0;
         self.base_cut = self.sh.m_cut;
         self.base_tune = self.sh.tune;
+        self.base_sh = self.sh;
         let params = &self.params;
         self.extra.read(&|i| params.get(i));
         self.poly.set_max(p(376).round() as usize);
@@ -869,13 +874,13 @@ impl Plugin for Alchemy {
         all_params()
     }
     fn get(&self, id: u32) -> f32 {
-        if id >= crate::alchemy_extra::FX_PARAM {
+        if (crate::alchemy_extra::FX_PARAM..crate::alchemy_extra::MOD).contains(&id) {
             return self.extra.fx_param(id).unwrap_or(0.0);
         }
         self.params.get(id)
     }
     fn set(&mut self, id: u32, v: f32) {
-        if id >= crate::alchemy_extra::FX_PARAM {
+        if (crate::alchemy_extra::FX_PARAM..crate::alchemy_extra::MOD).contains(&id) {
             self.extra.set_fx_param(id, v);
             return;
         }
@@ -981,14 +986,47 @@ impl Instrument for Alchemy {
                     }
                 }
             }
-            // the MSEG: the master filter, the pitch and (below) the volume
+            // the MSEG and the modulation rack move the settings from where the knobs put them
             let mseg = self.extra.mseg_level();
+            if self.extra.mseg_on || self.extra.nmods > 0 {
+                let (l1, l2) = (self.sh.lfo1, self.sh.lfo2);
+                self.sh = self.base_sh;
+                self.sh.lfo1 = l1;
+                self.sh.lfo2 = l2;
+            }
             if self.extra.mseg_on {
                 self.extra.mseg_t += dt;
                 self.sh.m_cut = (self.base_cut + self.extra.mseg_amt[0] * mseg * 0.5).clamp(0.0, 1.0);
                 self.sh.tune = self.base_tune + self.extra.mseg_amt[2] * mseg;
             }
-            let mvol = if self.extra.mseg_on { (1.0 + self.extra.mseg_amt[1] * mseg).max(0.0) } else { 1.0 };
+            let mut mvol = if self.extra.mseg_on { (1.0 + self.extra.mseg_amt[1] * mseg).max(0.0) } else { 1.0 };
+            for k in 0..self.extra.nmods {
+                let (src, tg, depth) = self.extra.mods[k];
+                let ctl = self.ch.ctl;
+                let x = match src {
+                    1 => self.sh.lfo1,
+                    2 => self.sh.lfo2,
+                    3 => mseg,
+                    4 => ctl.mod_wheel,
+                    5 => ctl.aftertouch,
+                    6 => ctl.bend / 12.0,
+                    _ => self.extra.arp_set.step_vel[self.extra.arp.current_step() % crate::arp::STEPS],
+                } * depth;
+                let sh = &mut self.sh;
+                match tg {
+                    1 => sh.m_cut = (sh.m_cut + x * 0.5).clamp(0.0, 1.0),
+                    2 => sh.m_res = (sh.m_res + x * 0.5).clamp(0.0, 1.0),
+                    3 => sh.m_drive = (sh.m_drive + x * 0.5).clamp(0.0, 1.0),
+                    4 => sh.f2_cut = (sh.f2_cut + x * 0.5).clamp(0.0, 1.0),
+                    5 => sh.tune += x * 12.0,
+                    6 => mvol *= (1.0 + x).max(0.0),
+                    7..=10 => sh.src[(tg - 7) as usize].vol = (sh.src[(tg - 7) as usize].vol * (1.0 + x)).max(0.0),
+                    11..=14 => sh.src[(tg - 11) as usize].pan = (sh.src[(tg - 11) as usize].pan + x).clamp(-1.0, 1.0),
+                    15..=18 => sh.src[(tg - 15) as usize].semis += x * 12.0,
+                    19..=22 => sh.src[(tg - 19) as usize].position = (sh.src[(tg - 19) as usize].position + x * 0.5).clamp(0.0, 1.0),
+                    _ => {}
+                }
+            }
             sl[..m].fill(0.0);
             sr[..m].fill(0.0);
             self.poly

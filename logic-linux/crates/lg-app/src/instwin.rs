@@ -128,6 +128,8 @@ pub struct State {
     pub search: (String, bool),
     /// A drag is going on (one undo step for the whole gesture).
     pub gesture: bool,
+    /// Alchemy's imported audio (granular / additive / spectral sources) by track id.
+    pub alch_audio: HashMap<u64, (PathBuf, std::sync::Arc<lg_synth::wav::Audio>)>,
     /// What each track's running instrument last got: (the instance, the revision).
     pub applied: HashMap<u64, (usize, u64)>,
 }
@@ -321,6 +323,10 @@ pub fn sync(app: &mut App) {
                     crate::dmdwin::apply(pads, d);
                 }
                 d.doc_rev = rev;
+            } else if let Some(a) = any.downcast_mut::<lg_synth::alchemy::Alchemy>() {
+                if let Some((_, au)) = app.inst.alch_audio.get(&id) {
+                    crate::alchemywin::apply(au, a);
+                }
             } else if let Some(q) = any.downcast_mut::<lg_synth::quick::QuickSampler>() {
                 if let Some(qd) = app.inst.quick.get(&id) {
                     crate::quickwin::apply(qd, q);

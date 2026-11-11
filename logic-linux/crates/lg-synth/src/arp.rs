@@ -118,6 +118,10 @@ impl Arp {
             self.norder -= 1;
         }
     }
+    /// The sequencer step playing now.
+    pub fn current_step(&self) -> usize {
+        self.step.saturating_sub(1)
+    }
     pub fn clear(&mut self) {
         self.nheld = 0;
         self.norder = 0;

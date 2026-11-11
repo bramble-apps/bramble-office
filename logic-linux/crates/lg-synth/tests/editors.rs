@@ -197,3 +197,19 @@ fn alchemy_arpeggiator_and_effects() {
     let (l, _) = render(&mut a, 0.5);
     assert!(l.iter().all(|x| x.is_finite()));
 }
+
+#[test]
+fn alchemy_mod_rack_moves_the_volume() {
+    use lg_synth::alchemy::Alchemy;
+    use lg_synth::alchemy_extra as ax;
+    let mut a = Alchemy::new(RATE);
+    a.set(ax::MOD + 1, 4.0); // Mod Wheel
+    a.set(ax::MOD + 2, 6.0); // Master Volume
+    a.set(ax::MOD + 3, -1.0);
+    a.note_on(60, 110);
+    let (l, _) = render(&mut a, 0.5);
+    a.controller(1, 127);
+    render(&mut a, 0.1);
+    let (q, _) = render(&mut a, 0.3);
+    assert!(rms(&l[12000..]) > 1e-3 && rms(&q) < rms(&l[12000..]) * 0.05, "the wheel turns the volume down: {} {}", rms(&l), rms(&q));
+}
