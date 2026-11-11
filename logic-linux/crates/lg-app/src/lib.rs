@@ -14,6 +14,7 @@ mod dialogs;
 pub mod drummer;
 pub mod edit;
 pub mod eq;
+pub mod flex;
 mod inspector;
 pub mod keymap;
 mod live;

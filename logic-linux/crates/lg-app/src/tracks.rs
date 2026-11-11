@@ -428,6 +428,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let ar = Rect::from_min_size(pos2(bx + 98.0, by), vec2((row.max.x - bx - 138.0).max(90.0), 17.0));
             hp.rect_filled(ar.expand(2.0), 0.0, if selected { look::track_selected() } else { look::track_header_bg() });
             crate::automation::header(app, ui, ar, i);
+        } else if app.flex.show {
+            // Show Flex Pitch/Time: the flex button and mode pop-up there
+            let ar = Rect::from_min_size(pos2(bx + 98.0, by), vec2((row.max.x - bx - 138.0).max(90.0), 17.0));
+            hp.rect_filled(ar.expand(2.0), 0.0, if selected { look::track_selected() } else { look::track_header_bg() });
+            crate::flex::header(app, ui, ar, i);
         }
         // regions
         for (ri, r) in t.regions.iter().enumerate() {
@@ -443,6 +448,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 crate::regionops::draw_loops(app, &lp, rr, i, ri, &xo);
             }
             draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted || crate::liveloops::takes_over(app, i), app);
+            crate::flex::draw_region(app, &lp, rr, i, ri);
             if let Some((rt, rri, text)) = app.renaming_region.as_mut().filter(|x| x.0 == i && x.1 == ri) {
                 let (rt, rri) = (*rt, *rri);
                 let er = Rect::from_min_size(rr.min, vec2(rr.width().max(120.0), 18.0));
