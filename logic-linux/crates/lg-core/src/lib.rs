@@ -4,6 +4,7 @@
 
 pub mod arrange;
 pub mod automation;
+pub mod bandsave;
 pub mod chunks;
 pub mod events;
 pub mod functions;
@@ -15,5 +16,6 @@ pub mod project;
 pub mod save;
 pub mod takes;
 pub mod transform;
+pub mod writeback;
 
 pub use project::{open, Project, Region, Track, TrackKind};

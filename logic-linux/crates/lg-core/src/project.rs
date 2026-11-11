@@ -50,6 +50,10 @@ pub struct Project {
     /// The Transposition global track: (ticks from bar 1, semitones), each holding until the
     /// next (MIDI regions on tracks that take transposition play shifted).
     pub transposition: Vec<(u32, i8)>,
+    /// Markers (the Marker track): (ticks from bar 1, name).
+    pub markers: Vec<(u32, String)>,
+    /// Arrangement markers: (ticks from bar 1, length in ticks, name).
+    pub arrangement: Vec<(u32, u32, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,11 +141,16 @@ pub struct RegionProps {
     /// Where the loop repetitions end when the loop was dragged out at the region's upper
     /// right corner (ticks from bar 1; 0: up to the next region or the project's end).
     pub loop_to: u32,
+    /// Audio regions: fade-in and fade-out (length in ms, curve -99..99), as Logic saves them
+    /// (format-analysis §8), and where the region starts in its file (samples, AuRg @0x06).
+    pub fade_in: (u16, i8),
+    pub fade_out: (u16, i8),
+    pub audio_offset: u32,
 }
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0 }
     }
 }
 
@@ -316,7 +325,7 @@ pub fn band_logic_model(archive: &plist::Value) -> Option<Vec<u8>> {
 }
 
 /// Audio regions' files: by name in the project's audio folder, with their lengths.
-fn attach_audio(p: &mut Project) {
+pub(crate) fn attach_audio(p: &mut Project) {
     let Some(dir) = p.audio_dir.clone() else { return };
     let tempo = p.tempo;
     for t in &mut p.tracks {
@@ -330,7 +339,10 @@ fn attach_audio(p: &mut Project) {
                     // (GarageBand keeps recordings in Media/ and Media/Recording/)
                     find_file(&dir, &name).unwrap_or(direct)
                 };
-                a.seconds = wav_seconds(&a.file).unwrap_or(a.seconds);
+                // (the region's own length from the project; else the whole file)
+                if a.seconds <= 0.0 {
+                    a.seconds = wav_seconds(&a.file).unwrap_or(a.seconds);
+                }
                 if a.seconds > 0.0 && tempo > 0.0 {
                     r.length = (a.seconds * tempo / 60.0 * events::PPQ as f64).round() as u32;
                 }
@@ -407,13 +419,13 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     }
     // the global events: signatures, key
     if let Some(global) = live.iter().find(|c| c.is("EvSq") && c.id == 0) {
-        for r in events::records(global.payload) {
-            if let Some(s) = events::signature(&r) {
-                p.signature = s;
-            }
-            if let Some(k) = events::key(&r) {
-                p.key = format!("{} major", events::key_name(k));
-            }
+        // (the song's own: the first of each; later ones are changes mid-song)
+        let recs = events::records(global.payload);
+        if let Some(s) = recs.iter().find_map(events::signature) {
+            p.signature = s;
+        }
+        if let Some(k) = recs.iter().find_map(events::key) {
+            p.key = events::key_string(k);
         }
     }
     // the tempo list: the second global event list (EvSq id 0), kind 0x60, BPM × 10000 in the
@@ -423,13 +435,12 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             if r.kind == 0x60 && r.units() >= 2 {
                 let bpm = r.u32_at(16) as f64 / 10000.0;
                 if (5.0..=990.0).contains(&bpm) {
-                    p.tempo_map.push((r.pos.saturating_sub(events::BAR_ONE), bpm));
+                    p.tempo_map.push((r.pos.saturating_sub(events::EVENT_BAR_ONE), bpm));
                 }
             }
         }
         p.tempo_map.sort_by_key(|t| t.0);
-        // (the list's first event sits a bar after the song's start in every sample, 38400: it is
-        // the song's opening tempo; where later changes fall is still being checked)
+        // (events count bar 1 from 38400: E23's change at bar 7 sits at 61440)
         if let Some(first) = p.tempo_map.first_mut() {
             first.0 = 0;
         }
@@ -466,6 +477,16 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
     // audio regions and files, in file order
     let audio_regions: Vec<String> = live.iter().filter(|c| c.is("AuRg")).filter_map(|c| audio_region_name(c.payload)).collect();
     let audio_files: Vec<String> = live.iter().filter(|c| c.is("AuFl")).filter_map(|c| audio_file_name(c.payload)).collect();
+    // (a placement names its file by the AuFl / AuRg header id >> 16 and its region by the
+    // AuRg's number among that file's, header u32 @12 >> 16)
+    let file_by_id: BTreeMap<u32, String> = live.iter().filter(|c| c.is("AuFl")).filter_map(|c| Some((c.id >> 16, audio_file_name(c.payload)?))).collect();
+    let rate_by_id: BTreeMap<u32, u32> = live.iter().filter(|c| c.is("AuFl")).filter_map(|c| Some((c.id >> 16, audio_file_format(c.payload)?.1))).collect();
+    // (name, offset and length in samples: AuRg payload @0x06 and @0x16, format-analysis §25)
+    let region_by_ref: BTreeMap<(u32, u32), (String, u32, u32)> = live
+        .iter()
+        .filter(|c| c.is("AuRg"))
+        .filter_map(|c| Some(((c.id >> 16, c.u32_at(12)? >> 16), (audio_region_name(c.payload)?, u32::from_le_bytes(c.payload.get(6..10)?.try_into().ok()?), u32::from_le_bytes(c.payload.get(0x16..0x1A)?.try_into().ok()?)))))
+        .collect();
     // the regions, from the top folder down (folders and track stacks hold more placements)
     let mut placed: Vec<(events::Placement, Option<u32>, u32)> = Vec::new();
     let mut stack = vec![0x40000u32];
@@ -495,11 +516,20 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
         let mut kind = TrackKind::Instrument;
         if pl.audio {
             kind = TrackKind::Audio;
-            let i = pl.audio_region.saturating_sub(1) as usize;
-            region.name = audio_regions.get(i).or(audio_regions.first()).cloned().unwrap_or_else(|| "Audio".into());
-            let file = audio_files.get(i).or(audio_files.first()).cloned().unwrap_or_default();
-            region.audio = Some(AudioRef { file: PathBuf::from(file), seconds: 0.0 });
+            let found = region_by_ref.get(&(pl.audio_file, pl.audio_index));
+            region.name = found.map(|f| f.0.clone()).or_else(|| audio_regions.first().cloned()).unwrap_or_else(|| "Audio".into());
+            let file = file_by_id.get(&pl.audio_file).or(audio_files.first()).cloned().unwrap_or_default();
+            // (the region's own length when the AuRg gives one; 3 marks a take folder's empty head)
+            let rate = rate_by_id.get(&pl.audio_file).copied().filter(|r| *r > 0).unwrap_or(48000) as f64;
+            let seconds = found.map(|f| f.2).filter(|l| *l > 3).map_or(0.0, |l| l as f64 / rate);
+            region.audio = Some(AudioRef { file: PathBuf::from(file), seconds });
+            region.props.audio_offset = found.map_or(0, |f| f.1);
+            region.props.fade_out = (pl.fade_out.0, pl.fade_out.1);
+            region.props.fade_in = (pl.fade_in.0, pl.fade_in.1);
         } else if let Some(s) = seq {
+            region.props.looped = pl.looped;
+            region.props.velocity = pl.velocity;
+            region.props.transpose = pl.transpose;
             region.name = names.get(&s).cloned().unwrap_or_default();
             if let Some(ev) = evs.get(&s) {
                 region.notes = events::records(ev).iter().filter_map(events::note).map(|mut n| {
@@ -510,6 +540,9 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             if has_generator && region.name.starts_with("Drummer") {
                 kind = TrackKind::Drummer;
             }
+        }
+        if let Some(a) = region.audio.as_ref().filter(|a| a.seconds > 0.0 && p.tempo > 0.0) {
+            region.length = (a.seconds * p.tempo / 60.0 * events::PPQ as f64).round() as u32;
         }
         // length: to the last note's end, whole bars, at least one bar (regions don't store a
         // length when it hasn't been changed — still being checked)
@@ -577,6 +610,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
         }
     }
     crate::mixer::read(&live, &mut p);
+    crate::writeback::read_markers(&live, &mut p);
     // track automation: the "Track Automation Root Folder" places each track's "*Automation"
     // sequence under its channel; that sequence's EvSq holds the points (0x5n records)
     let folder = live.iter().filter(|c| c.is("MSeq") && chunks::short_string(c.payload, 16).as_deref() == Some("Track Automation Root Folder")).map(|c| c.id).last();
@@ -639,7 +673,7 @@ fn audio_region_name(payload: &[u8]) -> Option<String> {
 }
 
 /// An AuFl's file name: u16 length (in characters) + UTF-16LE, near the start.
-fn audio_file_name(payload: &[u8]) -> Option<String> {
+pub fn audio_file_name(payload: &[u8]) -> Option<String> {
     for off in 0..payload.len().saturating_sub(4).min(64) {
         let n = u16::from_le_bytes([payload[off], payload[off + 1]]) as usize;
         if !(2..=255).contains(&n) {
@@ -655,6 +689,18 @@ fn audio_file_name(payload: &[u8]) -> Option<String> {
         }
     }
     None
+}
+
+/// The audio format an AuFl records after its name (format-analysis, S05/R01): u16 name length
+/// + UTF-16 name at 8, then from the name's end +456 the type ("EVAW" = WAVE), +464 the data
+/// offset in the file, +468 frames, +476 sample rate, +480 channels, +482 bits.
+/// (frames, rate, channels, bits)
+pub fn audio_file_format(payload: &[u8]) -> Option<(u32, u32, u16, u16)> {
+    let n = u16::from_le_bytes(payload.get(8..10)?.try_into().ok()?) as usize;
+    let e = 10 + 2 * n;
+    let u32_at = |o: usize| payload.get(e + o..e + o + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()));
+    let u16_at = |o: usize| payload.get(e + o..e + o + 2).map(|b| u16::from_le_bytes(b.try_into().unwrap()));
+    Some((u32_at(468)?, u32_at(476)?, u16_at(480)?, u16_at(482)?))
 }
 
 /// A WAV or AIFF file's length in seconds (from its header).
