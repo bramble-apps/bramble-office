@@ -214,6 +214,81 @@ pub fn import_mac(app: &mut App, p: &Path) {
     app.notify(msg);
 }
 
+/// The folder the app's library is in (None: the demo, or a store named on the command line).
+pub fn library_dir(app: &App) -> Option<std::path::PathBuf> {
+    app.db.as_ref().map(|st| st.dir().to_path_buf())
+}
+
+/// File > Show Notes Folder (and Settings' button): the library's folder in the file manager.
+pub fn show_folder(app: &mut App) {
+    match library_dir(app) {
+        Some(d) => kn_ui::open_url(&d.to_string_lossy()),
+        None => app.notify("These notes aren’t kept in a folder (the demo)."),
+    }
+}
+
+/// Settings > Library location > Change…: a folder picked, then asked first (Dialog::MoveLibrary).
+pub fn change_location(app: &mut App) {
+    if library_dir(app).is_none() {
+        return;
+    }
+    let Some(chosen) = crate::app::file_dialog(|d| d.set_title("Choose a Folder for Your Notes").pick_folder()) else { return };
+    ask_move(app, &chosen);
+}
+
+/// The library to go to `chosen` (or into a folder inside it), asked first.
+pub fn ask_move(app: &mut App, chosen: &Path) {
+    let Some(cur) = library_dir(app) else { return };
+    let to = nt_core::native::library_target(chosen);
+    if to == cur || std::fs::canonicalize(&to).ok() == std::fs::canonicalize(&cur).ok() {
+        app.notify("Your notes are already in that folder.");
+        return;
+    }
+    let existing = nt_core::native::is_native(&to);
+    app.dialog = Some(crate::app::Dialog::MoveLibrary { to, existing });
+}
+
+/// Moves the library to `to` (confirmed): a copy made and checked first (or, `existing`, the
+/// library already there used as it is), then the app switches to it and remembers it. The old
+/// folder is never deleted.
+pub fn move_library(app: &mut App, to: &Path, existing: bool) {
+    let Some(cur) = library_dir(app) else { return };
+    // (what's being typed saved first, so the copy has it)
+    let dirty: Vec<String> = app.dirty.keys().cloned().collect();
+    for id in dirty {
+        save_note(app, &id);
+    }
+    if !existing {
+        if let Err(e) = nt_core::native::copy_library(&cur, to) {
+            // (the library is unchanged; a partial copy is left for the user to look at)
+            app.dialog = Some(crate::app::Dialog::Alert("Couldn’t move your notes.".into(), format!("{e}. Your notes are still in “{}”.", cur.display())));
+            return;
+        }
+    }
+    let opened = Store::open_library(to).map_err(|e| e.to_string()).and_then(|st| st.library_meta().map(|lib| (st, lib)).map_err(|e| e.to_string()));
+    match opened {
+        Ok(v) => {
+            // (remembered for the next start; scripted runs only with a settings folder of their own)
+            if std::env::var_os("NT_SNAP").is_none() || std::env::var_os("NT_CONFIG").is_some() {
+                let standard = nt_core::store::standard_dir();
+                let at = (to != standard).then_some(to);
+                if let Some(c) = nt_core::store::config_dir() {
+                    if let Err(e) = nt_core::store::set_location_in(&c, at) {
+                        app.notify(format!("Couldn’t remember the new location: {e}"));
+                    }
+                }
+            }
+            app.disk = DiskWatch::default();
+            app.own_library_opened(Ok(v));
+            app.dialog = Some(crate::app::Dialog::Alert(
+                "Your notes are now in the new folder.".into(),
+                format!("Notes keeps its library in “{}”.\n\nThe old folder, “{}”, is still there with a copy of your notes; delete it yourself when you no longer need it.", to.display(), cur.display()),
+            ));
+        }
+        Err(e) => app.dialog = Some(crate::app::Dialog::Alert("Couldn’t open the new folder.".into(), format!("{e}. Your notes are still in “{}”.", cur.display()))),
+    }
+}
+
 #[cfg(test)]
 mod watch_tests {
     use super::*;

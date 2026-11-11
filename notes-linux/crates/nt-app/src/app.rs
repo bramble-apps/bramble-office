@@ -114,6 +114,9 @@ pub enum Dialog {
     Export(crate::export_sheet::Choices),
     /// Help > Keyboard Shortcuts
     Shortcuts,
+    /// Settings > Library location > Change…: asks before copying the library to `to` (or, when a
+    /// library is there already, switching to it)
+    MoveLibrary { to: PathBuf, existing: bool },
 }
 
 /// A folder whose name the sidebar is editing (inline, as Notes does).

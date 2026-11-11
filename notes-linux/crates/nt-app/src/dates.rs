@@ -29,7 +29,7 @@ pub fn now() -> f64 {
 }
 
 /// The local time zone's offset from UTC in seconds at `t`.
-fn offset(t: f64) -> i64 {
+pub(crate) fn offset(t: f64) -> i64 {
     #[cfg(unix)]
     {
         let secs = t as libc::time_t;

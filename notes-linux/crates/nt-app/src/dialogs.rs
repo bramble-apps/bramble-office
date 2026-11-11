@@ -100,6 +100,19 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 app.dialog = ok.then(|| Dialog::SetPassword { account, old: None, password: String::new(), verify: String::new(), hint: String::new(), then_lock: None });
             }
         }
+        Dialog::MoveLibrary { to, existing } => {
+            let (title, text, ok) = if existing {
+                ("Use the notes in this folder?", format!("“{}” already holds a Notes library. Notes will switch to it; the notes in the current folder stay where they are.", to.display()), "Switch")
+            } else {
+                ("Move your notes to this folder?", format!("Your notes will be copied to “{}” and Notes will keep them there from now on. The current folder isn’t deleted.", to.display()), "Copy and Switch")
+            };
+            if let Some(ok) = alert(ctx, "dlg-movelib", title, &text, "Cancel", ok, false) {
+                app.dialog = None;
+                if ok {
+                    crate::store::move_library(app, &to, existing);
+                }
+            }
+        }
         Dialog::Alert(title, text) => {
             if alert(ctx, "dlg-alert", &title, &text, "", "OK", false).is_some() {
                 app.dialog = None;
@@ -570,6 +583,11 @@ pub fn ask_import(app: &mut App, ctx: &egui::Context, paths: Vec<std::path::Path
     for b in bnotes {
         import_bnotes(app, ctx, b);
     }
+    // UpNote's library (its folder, upnote.sqlite3 or a .upnx backup): File > Import UpNote Library…'s
+    let (upnote, paths): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| is_upnote(p));
+    for u in upnote {
+        crate::menus::import_upnote(app, ctx, u);
+    }
     let (stores, rest): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| crate::store::is_store(p));
     for s in stores {
         app.import_store(&s);
@@ -578,6 +596,14 @@ pub fn ask_import(app: &mut App, ctx: &egui::Context, paths: Vec<std::path::Path
     if !rest.is_empty() {
         app.dialog = Some(Dialog::Import(rest));
     }
+}
+
+/// Whether `p` is UpNote's library: its folder (holding upnote.sqlite3), the database, or a .upnx backup.
+pub fn is_upnote(p: &std::path::Path) -> bool {
+    if p.is_dir() {
+        return p.join("upnote.sqlite3").is_file();
+    }
+    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("upnx") || e.eq_ignore_ascii_case("sqlite3"))
 }
 
 /// File > Import… with a .bnotes file (File > Export Library…'s): read into the library on a
@@ -651,54 +677,39 @@ pub fn imported(app: &mut App, tree: crate::import::Tree, failed: Vec<String>) {
     let mut first: Option<String> = None;
     let mut top: Option<String> = None;
     if app.db.is_some() {
-        // loose files: notes in Imported Notes (made now)
-        if !tree.items.is_empty() {
-            let existing = app.library.folders.iter().find(|f| f.name == "Imported Notes" && f.parent.is_none() && !App::is_smart(f)).map(|f| f.id.clone());
-            let fid = match existing {
-                Some(f) => Some(f),
-                None => crate::store::with_db(app, "Import to Notes", |st| st.create_folder("Imported Notes", None)),
-            };
-            let Some(fid) = fid else { return };
-            for it in tree.items {
-                let mut body = it.body;
-                let f2 = fid.clone();
-                if let Some(made) = crate::store::with_db(app, "Import to Notes", |st| st.create_note(Some(&f2), &mut body)) {
-                    first.get_or_insert(made.id.clone());
-                }
-            }
-            top = Some(fid);
-        }
-        // folders: a library of one account named Imported Notes, so they land inside it with their
-        // notes' dates
-        if !tree.folders.is_empty() {
-            // (our own account, with "Imported Notes" at its top, the one already there if it is: the
-            // store keeps a library's accounts as accounts and reuses folders by id)
-            let acct = nt_core::store::ACCOUNT_ID.to_string();
-            let acct_name = app.library.accounts.iter().find(|a| a.id == acct).map(|a| a.name.clone()).unwrap_or_default();
-            let top = app.library.folders.iter().find(|f| f.account == acct && f.name == "Imported Notes" && f.parent.is_none() && !App::is_smart(f)).map(|f| f.id.clone()).unwrap_or_else(nt_core::pb::new_uuid);
-            let mut lib = Library { accounts: vec![Account { id: acct.clone(), name: acct_name, kind: 3 }], ..Library::default() };
-            lib.folders.push(Folder { id: top.clone(), account: acct.clone(), name: "Imported Notes".into(), ..Default::default() });
-            fn add(lib: &mut Library, t: crate::import::Tree, parent: Option<String>, k: &mut usize, note_of: &dyn Fn(crate::import::Item, &str, usize) -> Note) {
+        // a library of one account with "Imported Notes" at its top (the one already there if it
+        // is: the store keeps a library's accounts as accounts and reuses folders by id): loose
+        // files are notes in it, folders (and .enex notebooks) folders inside it, every note with
+        // its own dates (so Sort By > Date Created shows them in their first order)
+        let acct = nt_core::store::ACCOUNT_ID.to_string();
+        let acct_name = app.library.accounts.iter().find(|a| a.id == acct).map(|a| a.name.clone()).unwrap_or_default();
+        let top_id = app.library.folders.iter().find(|f| f.account == acct && f.name == "Imported Notes" && f.parent.is_none() && !App::is_smart(f)).map(|f| f.id.clone()).unwrap_or_else(nt_core::pb::new_uuid);
+        let mut lib = Library { accounts: vec![Account { id: acct.clone(), name: acct_name, kind: 3 }], ..Library::default() };
+        lib.folders.push(Folder { id: top_id.clone(), account: acct.clone(), name: "Imported Notes".into(), ..Default::default() });
+        fn add(lib: &mut Library, t: crate::import::Tree, parent: Option<String>, k: &mut usize, note_of: &dyn Fn(crate::import::Item, &str, usize) -> Note) {
+            *k += 1;
+            let id = nt_core::pb::new_uuid();
+            lib.folders.push(Folder { id: id.clone(), account: nt_core::store::ACCOUNT_ID.into(), name: t.name, parent, ..Default::default() });
+            for it in t.items {
                 *k += 1;
-                let id = nt_core::pb::new_uuid();
-                let _ = k;
-                lib.folders.push(Folder { id: id.clone(), account: nt_core::store::ACCOUNT_ID.into(), name: t.name, parent, ..Default::default() });
-                for it in t.items {
-                    *k += 1;
-                    let n = note_of(it, &id, *k);
-                    lib.notes.push(n);
-                }
-                for f in t.folders {
-                    add(lib, f, Some(id.clone()), k, note_of);
-                }
+                let n = note_of(it, &id, *k);
+                lib.notes.push(n);
             }
-            let mut k = 0;
-            for f in tree.folders {
-                add(&mut lib, f, Some(top.clone()), &mut k, &note_of);
+            for f in t.folders {
+                add(lib, f, Some(id.clone()), k, note_of);
             }
-            if crate::store::with_db(app, "Import to Notes", |st| st.import_library(&lib)).is_some() {
-                first = first.or_else(|| lib.notes.first().map(|n| n.id.clone()));
-            }
+        }
+        let mut k = 0;
+        for it in tree.items {
+            k += 1;
+            lib.notes.push(note_of(it, &top_id, k));
+        }
+        for f in tree.folders {
+            add(&mut lib, f, Some(top_id.clone()), &mut k, &note_of);
+        }
+        if crate::store::with_db(app, "Import to Notes", |st| st.import_library(&lib)).is_some() {
+            first = lib.notes.first().map(|n| n.id.clone());
+            top = Some(top_id);
         }
         crate::store::reload(app);
         let top = top.or_else(|| app.library.folders.iter().find(|f| f.name == "Imported Notes" && f.parent.is_none()).map(|f| f.id.clone()));

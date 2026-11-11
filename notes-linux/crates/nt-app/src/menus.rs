@@ -239,11 +239,11 @@ fn editor_command(name: &str) -> bool {
 /// Commands that work; everything else in the menus is greyed.
 const IMPLEMENTED: &[&str] = &[
     "About Notes", "Settings…", "Quit Notes", "New Note", "New Folder", "New Smart Folder", "More > New Smart Folder with Tag Selection", "More > Convert Folder to Smart Folder", "Close", "Close All",
-    "Import to Notes…", "Import Markdown...", "Export To > Markdown", "Export To > PDF", "Print…", "Pin Note", "Lock Note", "Close All Locked Notes", "Duplicate Note", "Delete", "Rename", "Attach File…", "Find > Note List Search…", "as List", "as Gallery",
+    "Import to Notes…", "Import Folder to Notes…", "Import Markdown...", "Export To > Markdown", "Export To > PDF", "Print…", "Pin Note", "Lock Note", "Close All Locked Notes", "Duplicate Note", "Delete", "Rename", "Attach File…", "Find > Note List Search…", "as List", "as Gallery",
     "Recent Notes > Previous Note", "Recent Notes > Next Note", "Recent Notes > Clear Menu", "Sort By > Default (Date Edited)", "Sort By > Date Edited", "Sort By > Date Created", "Sort By > Title",
     "Sort By > Newest First", "Sort By > Oldest First", "Group By Date > Default (On)", "Group By Date > On", "Group By Date > Off", "Hide Sidebar", "Hide Note Count", "Zoom In", "Zoom Out", "Actual Size",
     "Hide Toolbar", "Customize Toolbar…", "Enter Full Screen", "Minimize", "Zoom", "Notes", "Notes Settings", "Notes Help", "Using Tags", "Using Smart Folders", "Toggle Full Screen",
-    "Show Attachments Browser", "Show in Note", "Open Note in New Window", "Float on Top", "Record Audio…", "Export…", "Export Library…", "Keyboard Shortcuts", "Import UpNote Library…",
+    "Show Attachments Browser", "Show in Note", "Open Note in New Window", "Float on Top", "Record Audio…", "Export…", "Export Library…", "Show Notes Folder", "Keyboard Shortcuts", "Import UpNote Library…",
 ];
 
 fn implemented(name: &str) -> bool {
@@ -297,7 +297,7 @@ pub fn enabled(app: &App, name: &str) -> bool {
         // (the note, or the list's notes)
         "Export…" => app.selected_note().is_some_and(|n| !n.deleted) || !app.ordered().is_empty(),
         // (the app's own library, whole: a .bnotes file)
-        "Export Library…" => app.db.is_some(),
+        "Export Library…" | "Show Notes Folder" => app.db.is_some(),
         "Zoom In" => app.zoom < 3.0,
         "Zoom Out" => app.zoom > 0.5,
         n if editor_command(n) => note_editable(app),
@@ -711,11 +711,21 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
             let md = name == "Import Markdown...";
             let picked = crate::app::file_dialog(|d| {
                 let d = d.set_title(if md { "Import Markdown" } else { "Import to Notes" });
-                let mut kinds = vec!["sqlite", "bnotes"];
+                let mut kinds = vec!["sqlite", "bnotes", "sqlite3", "upnx"];
                 kinds.extend_from_slice(crate::import::EXTENSIONS);
-                let d = if md { d.add_filter("Markdown", &["md", "markdown"]) } else { d.add_filter("Notes, Bramble library, text, Markdown, HTML, RTF, Evernote", &kinds) };
+                let d = if md { d.add_filter("Markdown", &["md", "markdown"]) } else { d.add_filter("Notes, Bramble library, UpNote, text, Markdown, HTML, RTF, Evernote", &kinds) };
                 d.pick_files()
             });
+            if let Some(ps) = picked {
+                crate::dialogs::ask_import(app, ctx, ps);
+            }
+        }
+        // the library's folder in the file manager
+        "Show Notes Folder" => crate::store::show_folder(app),
+        // a folder (the file panel can't pick one with files): its notes and folders, or a Mac's
+        // group.com.apple.notes, or UpNote's own folder
+        "Import Folder to Notes…" => {
+            let picked = crate::app::file_dialog(|d| d.set_title("Import Folder to Notes").pick_folder().map(|p| vec![p]));
             if let Some(ps) = picked {
                 crate::dialogs::ask_import(app, ctx, ps);
             }
@@ -916,6 +926,8 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
             let ps = other["Import Path:".len()..].split('|').map(|p| std::path::PathBuf::from(p.trim())).collect();
             crate::dialogs::ask_import(app, ctx, ps);
         }
+        // (not in the menus: Settings > Library location > Change… with a given folder, for scripted checks)
+        other if other.starts_with("Move Library Path:") => crate::store::ask_move(app, std::path::Path::new(other["Move Library Path:".len()..].trim())),
         // (not in the menus: File > Import UpNote Library… on a given path, for scripted checks)
         other if other.starts_with("Import UpNote Path:") => import_upnote(app, ctx, std::path::PathBuf::from(other["Import UpNote Path:".len()..].trim())),
         other => app.notify(format!("{other}: not available yet")),
@@ -925,7 +937,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
 
 /// File > Import UpNote Library…'s work, on a worker: the edits saved first, then nt-core's import
 /// into a Store of its own, and what it did said ("Imported 766 notes (70 to Recently Deleted)").
-fn import_upnote(app: &mut App, ctx: &egui::Context, path: std::path::PathBuf) {
+pub(crate) fn import_upnote(app: &mut App, ctx: &egui::Context, path: std::path::PathBuf) {
     let Some(dir) = app.db.as_ref().map(|st| st.dir().to_path_buf()) else { return };
     let dirty: Vec<String> = app.dirty.keys().cloned().collect();
     for id in dirty {
@@ -997,7 +1009,12 @@ pub fn show_items(ui: &mut egui::Ui, items: &[MItem]) -> Option<String> {
     for it in items {
         match it {
             MItem::Cmd { label, action, enabled, checked, glyph } => {
-                let r = ui.add_enabled(*enabled, egui::Button::new(if glyph.is_some() { format!("         {label}") } else { label.clone() }).selected(*checked));
+                // (a coloured tag, "#work": its colour's dot before it)
+                let dot = if glyph.is_none() { label.strip_prefix('#').and_then(crate::tagcolor::of) } else { None };
+                let r = ui.add_enabled(*enabled, egui::Button::new(if glyph.is_some() { format!("         {label}") } else if dot.is_some() { format!("       {label}") } else { label.clone() }).selected(*checked));
+                if let Some(c) = dot {
+                    crate::tagcolor::dot(ui.painter(), egui::pos2(r.rect.min.x + 14.0, r.rect.center().y), 5.0, c);
+                }
                 if let Some(g) = glyph {
                     let c = egui::pos2(r.rect.min.x + 18.0, r.rect.center().y);
                     crate::icons::draw(ui.painter(), egui::Rect::from_center_size(c, egui::vec2(13.0, 13.0)), *g, if *enabled { kn_ui::theme::TEXT() } else { kn_ui::theme::TEXT_DIM() });
@@ -1043,6 +1060,12 @@ pub fn menu_action(app: &mut App, ctx: &egui::Context, action: &str) {
             app.delete_notes(&ids);
         }
         "recover" => app.recover(rest),
+        // "tagcolor:<tag>|<colour name>" (empty: none)
+        "tagcolor" => {
+            if let Some((tag, c)) = rest.rsplit_once('|') {
+                app.settings.set_tag_color(tag, (!c.is_empty()).then_some(c));
+            }
+        }
         "move" => {
             if let Some((note, folder)) = rest.split_once('|') {
                 let ids = targets(app, note);

@@ -47,6 +47,8 @@ pub struct Settings {
     /// The sidebar's and the note list's widths (dragged at their dividers).
     pub sidebar_w: f32,
     pub list_w: f32,
+    /// Tags' colours ("work:Red,home:Blue": tagcolor.rs).
+    pub tag_colors: String,
 }
 
 impl Default for Settings {
@@ -78,6 +80,7 @@ impl Default for Settings {
             biometric_accounts: String::new(),
             sidebar_w: 220.0,
             list_w: 211.0,
+            tag_colors: String::new(),
         }
     }
 }
@@ -122,10 +125,25 @@ impl Settings {
                 "biometric_accounts" => s.biometric_accounts = v.to_string(),
                 "sidebar_w" => s.sidebar_w = v.parse().unwrap_or(220.0),
                 "list_w" => s.list_w = v.parse().unwrap_or(211.0),
+                "tag_colors" => s.tag_colors = v.to_string(),
                 _ => {}
             }
         }
+        crate::tagcolor::publish(&s.tag_colors);
         s
+    }
+
+    /// Gives `tag` a colour (by name), or none; saved.
+    pub fn set_tag_color(&mut self, tag: &str, color: Option<&str>) {
+        let mut m = crate::tagcolor::parse(&self.tag_colors);
+        let key = tag.trim_start_matches('#').to_lowercase();
+        match color {
+            Some(c) => m.insert(key, c.to_string()),
+            None => m.remove(&key),
+        };
+        self.tag_colors = crate::tagcolor::format(&m);
+        crate::tagcolor::publish(&self.tag_colors);
+        self.save();
     }
 
     /// Whether the account's locked notes open with the system's biometrics.
@@ -148,8 +166,8 @@ impl Settings {
         let Some(dir) = config_dir() else { return };
         let _ = std::fs::create_dir_all(&dir);
         let text = format!(
-            "sort={}\nnew_note_style={}\ndefault_account={}\ngroup_by_date={}\nresume_quick_note={}\nauto_sort_checked={}\nmention_notifications={}\non_my_mac={}\ntext_size={}\ndark_backgrounds={}\nlocked_account={}\ntoolbar_items={}\nui_scale={}\nspell_check={}\ngrammar={}\nautocorrect={}\nsmart_quotes={}\nsmart_dashes={}\ntext_replacement={}\nsmart_lists={}\nsmart_copy_paste={}\nsmart_links={}\nsmart_tags={}\nbiometric_accounts={}\nsidebar_w={}\nlist_w={}\n",
-            self.sort, self.new_note_style, self.default_account, self.group_by_date, self.resume_quick_note, self.auto_sort_checked, self.mention_notifications, self.on_my_mac, self.text_size, self.dark_backgrounds, self.locked_account, self.toolbar_items, self.ui_scale, self.spell_check, self.grammar, self.autocorrect, self.smart_quotes, self.smart_dashes, self.text_replacement, self.smart_lists, self.smart_copy_paste, self.smart_links, self.smart_tags, self.biometric_accounts, self.sidebar_w, self.list_w
+            "sort={}\nnew_note_style={}\ndefault_account={}\ngroup_by_date={}\nresume_quick_note={}\nauto_sort_checked={}\nmention_notifications={}\non_my_mac={}\ntext_size={}\ndark_backgrounds={}\nlocked_account={}\ntoolbar_items={}\nui_scale={}\nspell_check={}\ngrammar={}\nautocorrect={}\nsmart_quotes={}\nsmart_dashes={}\ntext_replacement={}\nsmart_lists={}\nsmart_copy_paste={}\nsmart_links={}\nsmart_tags={}\nbiometric_accounts={}\nsidebar_w={}\nlist_w={}\ntag_colors={}\n",
+            self.sort, self.new_note_style, self.default_account, self.group_by_date, self.resume_quick_note, self.auto_sort_checked, self.mention_notifications, self.on_my_mac, self.text_size, self.dark_backgrounds, self.locked_account, self.toolbar_items, self.ui_scale, self.spell_check, self.grammar, self.autocorrect, self.smart_quotes, self.smart_dashes, self.text_replacement, self.smart_lists, self.smart_copy_paste, self.smart_links, self.smart_tags, self.biometric_accounts, self.sidebar_w, self.list_w, self.tag_colors
         );
         let _ = std::fs::write(dir.join("settings.txt"), text);
     }
@@ -198,6 +216,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     let mut reset_password: Option<String> = None;
     let mut bio_toggle: Option<(String, bool)> = None;
     let mut sync_action: Option<&str> = None;
+    let mut library_action: Option<&str> = None;
+    let library_dir = crate::store::library_dir(app);
     // (always inside the main window: never over its outline or out in the shadow margin; when
     // the window is too short, the content scrolls instead of its last rows being cut off)
     let inner = kn_ui::winframe::inner_rect(ctx).shrink(8.0);
@@ -327,6 +347,27 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         bio_toggle = Some((acct, on));
                     }
                 });
+                // where the notes are kept: shown, opened in the file manager, or moved
+                if let Some(dir) = &library_dir {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        label(ui, lw, "Library location:");
+                        ui.add(egui::Label::new(RichText::new(dir.display().to_string()).font(look::regular(12.0)).color(look::text())).truncate());
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_space(lw + 8.0);
+                        if ui.add(egui::Button::new(RichText::new("Show in File Manager").font(look::regular(13.0))).min_size(vec2(130.0, 24.0))).clicked() {
+                            library_action = Some("show");
+                        }
+                        if ui.add(egui::Button::new(RichText::new("Change…").font(look::regular(13.0))).min_size(vec2(90.0, 24.0))).clicked() {
+                            library_action = Some("change");
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_space(lw + 14.0);
+                        ui.add(egui::Label::new(RichText::new("Change… copies your notes to another folder and keeps them there; the old folder isn’t deleted.").font(look::regular(11.5)).color(look::text_dim())).wrap());
+                    });
+                }
             } else if tab == 2 {
                 // Sync (not on the Mac, whose notes sync through iCloud): a WebDAV server
                 let sy = &mut app.sync;
@@ -486,6 +527,11 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
         });
     });
     app.settings_rect = shown.map(|r| r.response.rect);
+    match library_action {
+        Some("show") => crate::store::show_folder(app),
+        Some("change") => crate::store::change_location(app),
+        _ => {}
+    }
     match sync_action {
         Some("test") => crate::sync::test(app, ctx),
         Some("now") => crate::sync::start(app, ctx, nt_core::sync::Force::None),

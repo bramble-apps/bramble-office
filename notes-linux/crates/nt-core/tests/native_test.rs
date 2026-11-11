@@ -335,3 +335,44 @@ fn a_native_library_backs_up_whole() {
     std::fs::remove_dir_all(to.join("index")).unwrap();
     assert_eq!(everything(&Store::open_library(&to).unwrap()), want);
 }
+
+/// Settings > Library location > Change…: the library copied to a new folder, checked, opened
+/// there with everything in it; the old one left as it was; the new place remembered.
+#[test]
+fn a_library_moves_to_a_new_folder() {
+    let dir = common::scratch("native-move");
+    let lib = dir.join("bramble-notes");
+    let mut st = Store::open_library(&lib).unwrap();
+    fill(&mut st, &dir);
+    let want = everything(&st);
+    let to = dir.join("elsewhere/My Notes");
+    // (an empty or new folder is the library itself; a folder with other things gets a folder inside)
+    assert_eq!(native::library_target(&to), to);
+    std::fs::create_dir_all(dir.join("busy")).unwrap();
+    std::fs::write(dir.join("busy/other.txt"), "x").unwrap();
+    assert_eq!(native::library_target(&dir.join("busy")), dir.join("busy/Bramble Notes"));
+    // (never into itself, never over something)
+    assert!(native::copy_library(&lib, &lib.join("inside")).is_err());
+    assert!(native::copy_library(&lib, &dir.join("busy")).is_err());
+    assert!(std::fs::read_to_string(dir.join("busy/other.txt")).is_ok_and(|t| t == "x"));
+
+    // (copied while the library is open, as the app does)
+    let n = native::copy_library(&lib, &to).unwrap();
+    assert!(n > 5, "{n}");
+    drop(st);
+    let moved = Store::open_library(&to).unwrap();
+    assert_eq!(everything(&moved), want, "the same library in its new folder");
+    drop(moved);
+    // the old one is untouched
+    assert_eq!(everything(&Store::open_library(&lib).unwrap()), want);
+    // a library already there: the folder is the library
+    assert_eq!(native::library_target(&to), to);
+
+    // the location remembered in the settings folder, and forgotten again
+    let cfg = dir.join("config");
+    assert_eq!(nt_core::store::location_in(&cfg), None);
+    nt_core::store::set_location_in(&cfg, Some(&to)).unwrap();
+    assert_eq!(nt_core::store::location_in(&cfg), Some(to.clone()));
+    nt_core::store::set_location_in(&cfg, None).unwrap();
+    assert_eq!(nt_core::store::location_in(&cfg), None);
+}

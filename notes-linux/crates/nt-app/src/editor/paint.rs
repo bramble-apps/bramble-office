@@ -484,7 +484,12 @@ fn paint_complete(ed: &mut Editor, ui: &mut egui::Ui) {
                 p.rect_filled(rr, CornerRadius::same(6), layout::accent());
             }
             let label = if c.kind == '#' { format!("#{name}") } else { name.clone() };
-            p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::new(13.0, layout::family("Sfera-Regular")), if picked { Color32::WHITE } else { layout::text_color() });
+            // (a coloured tag: its dot, then its name)
+            let dot = if c.kind == '#' { crate::tagcolor::of(name) } else { None };
+            if let Some(col) = dot {
+                crate::tagcolor::dot(p, pos2(rr.min.x + 15.0, rr.center().y), 4.5, col);
+            }
+            p.text(pos2(rr.min.x + if dot.is_some() { 26.0 } else { 10.0 }, rr.center().y), Align2::LEFT_CENTER, label, FontId::new(13.0, layout::family("Sfera-Regular")), if picked { Color32::WHITE } else { layout::text_color() });
             if resp.clicked() {
                 chosen = Some(i);
             }

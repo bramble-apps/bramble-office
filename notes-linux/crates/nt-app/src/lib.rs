@@ -48,6 +48,7 @@ mod smart;
 mod store;
 mod swipe;
 mod sync;
+mod tagcolor;
 mod toolbar;
 mod undo;
 mod windows;
