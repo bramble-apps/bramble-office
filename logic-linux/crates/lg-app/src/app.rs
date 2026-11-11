@@ -160,6 +160,11 @@ pub struct App {
     pub settings_tab: String,
     pub settings_sub: String,
     pub logic_settings: crate::settings::Values,
+    /// The Key Commands window and the key command set in use (keycmds.rs).
+    pub keycmds: crate::keycmds::State,
+    /// The open project's Project Settings and their window's state (projsettings.rs).
+    pub proj: crate::projsettings::Values,
+    pub ps_ui: crate::projsettings::Ui,
     /// The global tracks shown (G): Arrangement, Marker, Tempo, Signature…
     pub global_tracks: bool,
     /// Catch is off: the user scrolled while playing (back on at stop, or with `).
@@ -374,6 +379,9 @@ impl App {
             settings_tab: "General".into(),
             settings_sub: String::new(),
             logic_settings: crate::settings::Values::load(),
+            keycmds: crate::keycmds::State::load(),
+            proj: Default::default(),
+            ps_ui: Default::default(),
             global_tracks: false,
             catch_off: false,
             live_loops: Default::default(),
@@ -489,9 +497,14 @@ impl App {
             bars: crate::toolbar::State::load(),
             pf: Default::default(),
         };
+        // (Settings: the saved values into the app, the audio device; Startup Action)
+        crate::prefs::apply_all(&mut app);
         match path {
             Some(p) => app.open_path(&p),
-            None => app.set_project(crate::demo::song(), true),
+            None => {
+                app.set_project(crate::demo::song(), true);
+                crate::prefs::startup(&mut app);
+            }
         }
         app
     }
@@ -509,6 +522,7 @@ impl App {
     }
 
     pub fn open_path(&mut self, p: &Path) {
+        crate::prefs::note_opened(p);
         match lg_core::open(p) {
             Ok(proj) => {
                 let n = proj.tracks.len();
@@ -531,6 +545,9 @@ impl App {
 
     /// Shows a project and hands it to the engine.
     pub fn set_project(&mut self, p: Project, demo: bool) {
+        // (a project's settings: Logic's defaults until projsettings::after_open reads its own)
+        self.proj = Default::default();
+        crate::projsettings::apply(self);
         self.programs = p.tracks.iter().map(|t| program_for(&t.name, t.kind)).collect();
         // each track's Channel EQ as saved in the project (Bramble's Channel EQ stands in)
         self.eqs = p.tracks.iter().enumerate().filter_map(|(i, t)| t.plugins.iter().find(|u| u.name == "Channel EQ").and_then(|u| crate::eq::Params::from_logic(&u.params)).map(|e| (i, e))).collect();
@@ -842,6 +859,10 @@ impl App {
     }
 
     pub fn locate(&mut self, ticks: f64) {
+        // (Settings ▸ Catch when moving playhead)
+        if crate::prefs::catch_on_move(self) {
+            self.catch_off = false;
+        }
         self.engine().locate(ticks);
     }
 
@@ -1194,8 +1215,8 @@ impl App {
             crate::live::frame(self, ctx);
             return;
         }
-        let presses: Vec<(egui::Key, egui::Modifiers)> = ctx.input(|i| i.events.iter().filter_map(|e| match e {
-            egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
+        let presses: Vec<(egui::Key, egui::Modifiers, Option<egui::Key>)> = ctx.input(|i| i.events.iter().filter_map(|e| match e {
+            egui::Event::Key { key, pressed: true, modifiers, physical_key, .. } => Some((*key, *modifiers, *physical_key)),
             _ => None,
         }).collect());
         let hover = ctx.input(|i| i.pointer.hover_pos());
@@ -1209,8 +1230,12 @@ impl App {
             _ => crate::keymap::Focus::Tracks,
         };
         let used = crate::live::frame(self, ctx);
-        for (key, m) in presses {
+        for (key, m, physical) in presses {
             if used.contains(&key) {
+                continue;
+            }
+            // the Key Commands window open: keys learn or list there instead of running commands
+            if crate::keycmds::key_press(self, key, m, physical) {
                 continue;
             }
             // the T menu open: a letter picks the tool (T again: the Pointer), Esc closes it
@@ -1285,7 +1310,7 @@ impl App {
         if crate::scorecmd::command(self, ctx, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
             return true;
         }
-        if crate::projfile::command(self, name) {
+        if crate::projfile::command(self, name) || crate::keycmds::command(self, name) || crate::prefs::command(self, name) || crate::projsettings::command(self, name) {
             return true;
         }
         if crate::mixercmd::run(self, ctx, name) {
@@ -1298,6 +1323,9 @@ impl App {
             return true;
         }
         if crate::recording::command(self, name) {
+            return true;
+        }
+        if crate::stemsplit::command(self, name) {
             return true;
         }
         let bar = self.bar_ticks() as f64;
@@ -1764,6 +1792,7 @@ impl App {
         crate::midifx::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::hosting::manager(self, &ctx);
+        crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);

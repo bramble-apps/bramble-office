@@ -420,6 +420,16 @@ enum PunchDrag {
     Move { from_tick: f32, start: (u32, u32) },
 }
 
+impl Recording {
+    /// Settings ▸ Audio ▸ Input Device changed: the next recording opens it.
+    pub fn reset_device(&mut self) {
+        if self.session.is_none() {
+            self.device = None;
+            self.device_failed = None;
+        }
+    }
+}
+
 impl Default for Recording {
     fn default() -> Self {
         Recording {
@@ -480,6 +490,10 @@ pub fn tick_at(app: &App, secs: f64) -> f64 {
 pub fn audio_dir(app: &App) -> PathBuf {
     if let Some(d) = std::env::var_os("LG_RECORD_DIR") {
         return PathBuf::from(d);
+    }
+    // (Project Settings ▸ Recording ▸ Audio Recording Path: a folder of its own)
+    if let Some(d) = crate::projsettings::recording_folder(&app.proj) {
+        return d;
     }
     let p = app.project.as_ref();
     if let Some(path) = p.map(|p| p.path.clone()).filter(|p| p.is_dir() && !app.demo) {
@@ -726,7 +740,7 @@ fn drain(app: &mut App) {
         return;
     }
     let dir = audio_dir(app);
-    let bits = match app.logic_settings.get("Recording / main / Bit Depth:").as_str() {
+    let bits = match app.logic_settings.get(crate::prefs::REC_BIT_DEPTH).as_str() {
         "16-bit" => 16,
         "32-bit Float" => 32,
         _ => 24,
@@ -920,6 +934,16 @@ pub fn midi_take(app: &mut App, from: u32, notes: Vec<Note>, what: &str) {
     let range = (start, start + end.saturating_sub(start).div_ceil(bar).max(1) * bar);
     crate::audioedit::checkpoint(app, what);
     place_midi(app, t, vec![notes], range, false);
+    // Project Settings ▸ Recording ▸ Automatically erase duplicates: the new note stays
+    if crate::projsettings::erase_duplicates(&app.proj) {
+        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+            for rg in tr.regions.iter_mut().filter(|r| r.start < range.1 && r.start + r.length > range.0) {
+                rg.notes.reverse();
+                lg_core::functions::delete_duplicates(&mut rg.notes, &mut Vec::new());
+                rg.notes.reverse();
+            }
+        }
+    }
     app.after_edit();
 }
 

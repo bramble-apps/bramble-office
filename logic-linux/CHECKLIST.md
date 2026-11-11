@@ -29,7 +29,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Toolbar (⌃⌥⌘T, View ▸ Show Toolbar, the control bar's button): a row of command buttons under the control bar; Customize Toolbar… (and its right-click) picks them, kept in ~/.config/bramble-studio/toolbar.txt. Customize Control Bar and Display… (View menu, the LCD's ⌄ menu): View panes, Capture as Recording / Replace / Autopunch (controlbar::Shown), the LCD's display; Apply / Save As Control Bar and Display Defaults. [ ] Logic's exact toolbar button set and icons (not in the research: Studio's labelled buttons; Section buttons are disabled until those commands exist), the sheet's other Logic options (Rewind / Forward buttons, Low Latency, Solo, Count-in, Master Level visibility), DisplayState's transportLayoutDict / actionBarLayoutDict IDs not decoded
 - [~] Navigation (nav.rs, tested): Go to Position… / Marker Number… / Set Left and Right Locator numerically… sheets (bar beat division tick or minutes:seconds), rewind / forward by division, 1/8, 1/16, nudge value and frame, Play from Beginning / Previous Bar / Left or Right Locator / Left Window Edge, last locate position, Play Button Options and Auto Set Locators (Navigate menu), locators by playhead (rounded), by selection, and Play / Cycle Play, move by 1 bar, Go to Marker Number 1–20, Create Marker by Cycle Area, Create Arrangement Marker, division and nudge values, Tap Tempo (one undo step); zoom: ≈1.3× a key press (measured), Zoom to fit Selection (h, v, both), All Contents, Locators, Toggle Zoom to fit (again: back), Save as / Recall Zoom 1–3, navigation snapshots with Back / Forward (⌥Z, ⌥⇧Z). [ ] Shuttle and Scrub, Rewind / Forward by Transient, Toggle Cycle Preview, Horizontal / Vertical Auto Zoom, Cycle Through Window Views (Tab: keys follow the pointer here)
 - [~] Screensets (screensets.rs, tested): 1–9 and ⇧ + two digits for 11–99, made from the window as it is when a number is new; unlocked ones keep changes, locked come back as locked; the Window menu lists them (✓ the current one) with Duplicate…, Rename…, Delete, Lock / Unlock, Revert to Saved; Next / Previous Screenset. A project's own screensets are read from its DisplayState.plist (lg-core displaystate, tested on the research's samples: numbers, names, lock, Browser / Inspector / List Editors / control bar / toolbar / bottom editor and its height). [ ] screensets aren't written back into the .logicx (Studio keeps them for the session); floating windows aren't part of a screenset; the bare digit keys go to screensets (Logic's key list binds them to markers 1–9 too: Go to Marker Number n works from ⌥/ and other bindings)
-- [~] Window and View menus: Open Smart Controls / Score Editor / Step Sequencer / Audio Track, File and Smart Tempo Editors / Event List / Signature List / MIDI Transform, Show Play Surface, Minimize All, Zoom All, Fill, Center, Move & Resize halves and quarters, Return to Previous Size, Bring All to Front; Show Smart Controls / List Editors / Note Pads / Project Files with Show / Hide labels; Settings tab openers (Open General Settings… etc.); Help menu links (website, GitHub help, releases, issues, discussions). [ ] window placement depends on the desktop (Wayland ignores positions), Project Settings window, Transport / Event / Region Inspector floats, Project Audio, Step Input Keyboard
+- [~] Window and View menus: Open Smart Controls / Score Editor / Step Sequencer / Audio Track, File and Smart Tempo Editors / Event List / Signature List / MIDI Transform, Show Play Surface, Minimize All, Zoom All, Fill, Center, Move & Resize halves and quarters, Return to Previous Size, Bring All to Front; Show Smart Controls / List Editors / Note Pads / Project Files with Show / Hide labels; Settings tab openers (Open General Settings… etc.); Help menu links (website, GitHub help, releases, issues, discussions). [ ] window placement depends on the desktop (Wayland ignores positions), Transport / Event / Region Inspector floats, Project Audio, Step Input Keyboard
 - [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (≥ 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack… sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track
 - [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
@@ -46,7 +46,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, Project Files (Project Audio; All Files Browser with Back/Forward, Computer/Home/Project, List/Column view, name search with kind/format/length/date/size filters, Action menu, Play, drag to tracks)
-- [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [~] Project Settings: a window with General (tempo, what the last Save left out), Audio, Recording, Assets basics (projfile.rs); not Logic's measured layout
+- [~] Settings (settings.rs draws, prefs.rs wires): all 27 tabs drawn as Logic's (measured), values saved, popups with Logic's choices (devices, templates, threads from the system). Wired: Project Handling (Startup Action's seven choices, Default Template, Auto Backup count, Recent Items + File ▸ Open Recent / Clear Menu), Editing (Undo Steps, Double-Clicking a MIDI Region Opens Score / Event List / Piano Roll, Select regions on track selection incl. cycle area and Option-click, Select tracks on region selection), Catch (on play start / on locate), Audio ▸ Devices (Enabled, Output / Input Device lists, I/O Buffer Size, Resulting Latency, Apply when changed), Recording (Bit Depth, the overlapping-recording and Replace popups shared two-way with the Record menu, Recording Project Settings…), MIDI (Reset All MIDI Drivers, Reset Messages for software instruments on Stop-while-stopped and Send Reset Controllers, Inputs table with per-port On and Bramble Studio Virtual In, MIDI Sync Project Settings…), Score / Movie Project Settings… buttons, View (help tags, middle C, Wide playhead, Show animations, Display Time As / Zeros as spaces / Clock Format in the control bar), Mixer (Open plug-in window on insertion), Editors (Bright background), Reset All Settings Except Key Command Assignments…. [ ] control surfaces (no support: buttons say so), Sampler / Movie / Automation / Score tab rows, Audio ▸ General (overload message, compensation choice, Low Latency Mode, Dim, pre-roll), Audio ▸ Editing crossfades / scrub, File Editor rows, I/O Assignments and Bounce Extensions, Recording Delay, File Type (WAVE only), Auto Record Enable, Track / Region / Marker colour modes, Tracks background / grid / shaded loops / scroll numbers, meter Peak Hold and Return Time, Accessibility announcements, Notifications (Studio has no suppressible warnings), My Info, Sound Library
+- [~] Project Settings (projsettings.rs, File ▸ Project Settings ▸ / ⌥P): all of Logic's panes and sub-panes (General, Synchronization General / Audio / MIDI, Metronome, Recording, Tuning, Audio General / Channel Strips, MIDI General / Input Filter / Chase / Clip Length, Score, Movie, Smart Tempo, Assets), kept per project beside it (~/.config/bramble-studio/project-settings) and Import Project Settings… (pick a project, tick panes). Real effect: Use musical grid, frame rate and bar 1 SMPTE time (time display, drop-frame semicolon), Metronome (Simple mode, while recording, only during count-in, Bar / Beat / Division, Klopfgeist on/off, Tone, Volume in the engine), Count-in, Automatically erase duplicates, Audio Recording Path (Project / Set…), Tuning (Tune cents, Equal / six Fixed historic scales / User per semitone, Root Key, Copy to User, Reset, Stretch: every instrument tuning through lg_dsp::midi_hz), CC 7/10 move fader / pan, Input Filter, Smart Tempo Keep Project Tempo (loops), Copy audio files. [ ] not inside the .logicx (Logic's project-settings chunks undecoded), sync modes other than Internal, MTC / MMC / MIDI clock, Chase, Clip Length, Pan Law, HMT, MIDI click, plug-in loading options, movie
+- [~] Key Commands window (keycmds.rs, ⌥K, Logic Pro ▸ Key Commands ▸ Edit Assignments…): Logic's layout (More menu, filter buttons All / Used / Key / Touch Bar / Unused / Customized / Multi-Used / Conflicts (n) / Pressed, search with recent searches, Command / Key / Touch Bar / Control Surface list grouped and collapsible by area, Keyboard / Touch Bar / Control Surface pane); all 2207 commands; Learn by Key Label / Position with the Cancel / Replace / OK conflict alert, Delete; Learn New Assignment from MIDI (note / CC / program; releases ignored) and Delete Assignment, the message then runs the command; Presets (U.S. + saved sets, ticked), Import / Import to Selection / Merge, Save / Save As… / Save Customized As… in Studio's .bskc format, Copy to Clipboard (only matches while searching), Expand / Collapse All, Scroll to Selection, Initialize All / Selection / Unused; the edited set drives every key press and the menus' shortcuts at once and is kept across launches; Ctrl-choosing a menu item opens it there. [ ] Touch Bar (none on Linux), Logic's .logikcs files and other language presets, keypad keys told apart
 
 ## 3. Editing
 - [x] Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo
@@ -68,6 +70,10 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. Alchemy: Arpeggiator (7 modes, octaves, rate, length, swing, latch) with a 16-step sequencer (on / velocity / length), MSEG (16 points, loop; to cutoff, volume, pitch), an 8-slot mod rack (LFOs, MSEG, wheel, aftertouch, bend, step → filters, tune, volume, each source's volume / pan / pitch / position), a 4-slot effects rack of Studio's effects, per-source editors (element, controls) and Import Audio for the sample elements (tests/editors.rs). [ ] Alchemy's per-voice modulators (velocity, per-voice envelopes in the rack), its additive / spectral resynthesis editors, Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
 - [x] Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter
 - [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste); every lg-fx effect's window from its Audio FX slot on tracks, auxes and the Stereo Out: Controls view (sliders, menus, switches, Option-click default), bypass, Compare (edited / as it was), Copy / Paste, the setting pop-up (Copy / Paste / Reset Setting, Save Setting As…, saved settings listed, ‹ › and Next / Previous Plug-in Setting), Show/Hide All Plug-in Windows (V). [ ] Logic's custom editor views (Channel EQ and Compressor graphics included), Logic's own .pst presets in the pop-up, Plug-in Undo, Link, side chain, the window's View menu beyond Controls
+- [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
+- [~] Real effects (lg-fx, 120 by Logic's names): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver (Space Designer: synthesized IRs plus Sampled IR mode with the user's own WAVs from ~/.config/bramble-studio/impulse-responses or ~/Music/Impulse Responses, Load IR…, IR Offset, Quality, LIN/EXP decay, density ramp, reflection shape, six-band Output EQ, Input mono/stereo, Predelay Sync, X-Over; no Apple IRs), Stereo/Tape Delay, Echo, Sample Delay, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, Modulation Delay, Scanner Vibrato, Spreader, Ringshifter (frequency shifter / ring mod, envelope, LFO, delay), Rotor Cabinet, AutoFilter, Fuzz-Wah, Spectral Gate, EVOC 20 Filterbank, EVOC 20 TrackOscillator (vocoder with a pitch-tracking FM oscillator), Distortion, Distortion II, Phase Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, SubBass, DeEsser 2, Gain, Enveloper, Expander, Single Band EQ, Linear Phase EQ (Channel EQ's bands as a symmetric FIR, latency reported), Match EQ (learn current / reference from playback or a file, Apply, smoothing, limits, ease-in/out, linear or minimal phase), Vintage Graphic / Tube / Console EQ, Chroma Saturator, Phat FX, Amp and Bass Amp Sculptor, Multipressor, Direction Mixer, Stereo Spread, Pitch Shifter, Pitch Correction (root, scales, Edit Scale / Bypass Notes keys, response, tolerance), Vocal Transformer (pitch, formant, robotize), EnVerb, SilverVerb, Quantec Room Simulator (QRS and YardStick, Freeze / Add / Clear), Test Oscillator, the meters (Level, Loudness with M/S/I and LRA after BS.1770, Correlation, MultiMeter analyzer and goniometer, BPM Counter, Tuner); every stompbox (Spring Box, Tie Dye Delay, Candy Fuzz, Double Dragon, Fuzz Machine, Grinder, Grit, Happy Face Fuzz, Hi-Drive, Monster Fuzz, OctaFuzz, Rawk!, Tube Burner, Squash Compressor, Auto-Funk, Classic / Modern Wah, Graphic EQ, Flange Factory, Heavenly Chorus, Phase Tripper, Phaze 2, Retro Chorus, Roswell Ringer, Roto Phase, Spin Box, The Vibe, Trem-O-Tone, Dr. Octave, Wham, plus Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape, Vintage Drive) alone or in Pedalboard (12 slots, Bus A / B with Splitter Split/Freq, Mixer A/Mix/B and pans, split point, eight Macro controls); Delay Designer with taps A–Z (filter, slope, reso, pitch, flip, pan, spread, mute, level), sync grid and swing, feedback tap, Tap pads; Remix FX (XY pads with Filter / Wobble / Orbit / Repeater / Reverb / Delay and FX Lock, Gater, Downsampler, Reverse / Scratch / Tape Stop with side variations, Reset); Beat Breaker (Logic 12/13: slices, Time / Repeat / Cutoff / Resonance / Volume / Pan with slope and curve, ten patterns, De-click, Bypass Below, Mix, Randomize current or multiple modes with probability / intensity / repeat values, snaps, Clear All Values, user patterns); Step FX (five reorderable processors, three 128-step modulators with gate mix/add, pan, any target, A/H/R envelope, ties, the Action menu, XY pad); Mastering Assistant (analysis of the rendered mix or cycle: Auto EQ curve, loudness to about −14 LUFS-I at the knob's centre, width; Clean / Valve / Punch / Transparent, Excite, custom EQ, −1 dBTP limiter, Bypass, Loudness Compensation, true peak / LUFS / LRA / correlation meters). Effects follow the song position (Transport). Tests with synthetic signals per effect (levels, frequency response, timing, pitch). [ ] parameter positions of the new effects are our own (Logic's float blocks for them aren't decoded, so a project's settings for these plug-ins load as defaults), Pedalboard read from projects only for the five decoded pedals (and not wired to project loading in the app), side chains (Match EQ reference, Ringshifter, EVOC side chain fall back to the track), surround parameters, Auto Sampler, I/O, Binaural Post-Processing, MIDI plug-ins (Arpeggiator, Chord Trigger, Modulator, Scripter, …), legacy effects (GoldVerb, PlatinumVerb, Guitar Amp Pro, Silver/DJ/Fat EQ, Denoiser …), no listening comparison with Logic for the new effects; Dual Mono instances
+- [~] Stem Splitter (stemsplit.rs, lg-audio stems): Processing ▸ Stem Splitter… on one audio region and the eight preset key commands; Vocals, Drums, Bass, Guitar, Piano, Other, Individual Kit Pieces (Kick, Snare, Tom, Hi-Hat, Cymbal, Other) and the submix of the unchecked stems; Apply writes the stems to the project's audio folder as a summing stack below the track and mutes the region (one undo step). Separation is DSP (harmonic/percussive median filtering, centre extraction, band and onset masks; stems always sum back to the original) — no trained model, so quality is far below Logic's; guitar / piano are heuristic. [ ] Stem Splitter on Live Loops cells, the More button's submix exclusions
+- [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste); every lg-fx effect's window from its Audio FX slot on tracks, auxes and the Stereo Out: Controls view (sliders, menus, switches, Option-click default), bypass, Compare (edited / as it was), Copy / Paste, the setting pop-up (Copy / Paste / Reset Setting, Save Setting As…, saved settings listed, ‹ › and Next / Previous Plug-in Setting), Show/Hide All Plug-in Windows (V). Editor views (View: Editor / Controls) for Remix FX, Beat Breaker, Step FX, Delay Designer, Pedalboard, Mastering Assistant, Space Designer, Match EQ, Pitch Correction and the meters (fxviews.rs; their state in hidden parameters, so Compare / Copy / settings cover it). [ ] the other plug-ins' custom views (Channel EQ and Compressor graphics included), the custom views' exact Logic look (unchecked against screenshots), Logic's own .pst presets in the pop-up, Plug-in Undo, Link, side chain, the window's View menu beyond Controls
 - [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace (Region Erase / Region Punch / Content Erase / Content Punch), the Record menu's Overlapping MIDI Recordings (Merge, Create Take Folder, Overlap, Overlap/Merge Selected, Create Track(s), Create Tracks and Mute, Merge Current Recording Only), cycle passes, Use Musical Grid. [ ] Create Track Alternative(s), Flashback Capture
 - [~] Audio recording (recording.rs): the system input (cpal, Settings ▸ Audio ▸ Input Device or the default), record-enabled audio tracks (or the selected one), input monitoring (I, Auto Input Monitoring), the input per track (Mixer input slot: Input 1 / 2 / 1-2), streamed to WAV in the project's Media/Audio Files (bit depth from Settings ▸ Recording), shown growing in red with its waveform, then regions; Count-in (Record ▸ Count-in bars / beats; before bar 1 the playhead waits while it clicks), Metronome during record, Autopunch, Replace (cuts the regions under it), cycle recording (a pass per cycle), Overlapping Audio Recordings (Create Take Folder, Create New Track, Create Tracks And Mute), Record Button Options (Record / Toggle / Repeat), Allow Quick Punch-In, Discard (⌘.), punch locator key commands, Move to Recorded Position (files recorded this session), one undo step. LG_TEST_INPUT=<wav> stands in for the input (checks; headless never opens the microphone). [ ] input latency compensation, Low Latency Monitoring, Create Track Alternative, recorded audio and take folders saved into the .logicx (new audio regions aren't written yet), file types other than WAV, Logic's Settings ▸ Recording popups don't drive the Record menu's choices yet
 - [~] Take folders (lg-core takes, takes.rs): made by cycle and overlapping recordings (audio and MIDI) and Pack Take Folder; header with disclosure triangle and the take number / comp letter (the take folder menu: takes, comps, commands); opened, the take lanes show as a drop-down over the tracks below (Logic pushes the tracks down: not yet); click a take to play it, Quick Swipe Comping (⌥Q, Snap) makes Comp A…; Create New Comp, Select Next / Previous, Rename (⇧T), Delete (⌥⇧⌫), Flatten, Flatten and Merge (a new crossfaded file), Export / Move Active Comp to New Track, Unpack to New Tracks (and mute inactive), Trim to Active Comp Sections, MIDI: New Empty / Duplicate take; undo. [ ] Slice at Comp Section Borders, Unpack to Existing Tracks / Track Alternatives, comp section edge drags, take folders read from Logic files, new tracks go at the end of the list (Logic: below)
@@ -87,7 +93,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Save .logicx (lg-core save.rs + writeback.rs, round-trip tested on E02/E23/E24/R01; every sample ProjectData byte-identical when unchanged): notes, regions moved/copied/deleted, new MIDI regions (modelled on the track's own), new audio regions incl. recorded WAVs (AuRg/AuFl modelled on the project's), region names and Loop / Velocity / Transpose, audio fades and file windows (offset, length), tempo and tempo changes, project signature and key, markers and arrangement markers, track names, track and aux fader / pan / mute / solo, group membership and group settings (existing groups), plug-in parameter values, channel automation lanes, MetaData.plist (tempo, signature, key, audio files). Save names what it leaves out. [ ] new / deleted tracks, track order, colours, plug-ins added / removed / bypassed, sends, outputs, new auxes / groups, group names, VCAs, region gain / fade type / other inspector values, mid-song signature and key changes (the app has none), sample rate. [ ] none of it checked in real Logic yet (MAC-QUESTIONS.md)
 - [~] Save .band (lg-core bandsave.rs): the same edits written into the archive's Logic model, Output/metadata.plist tempo / key / signature; untouched when unchanged. [ ] not opened in GarageBand yet
 - [~] Export MIDI, import MIDI and audio, bounce WAV. [ ] AAF/XML, more export formats, stems
-- [~] Project management (lg-app projfile.rs, lg-core package.rs, tested): New from Template… chooser (Empty Project and Studio's layouts, My Templates = Save as Template… copies, opened as an Untitled copy), Save As… / Save A Copy As…, Revert to ▸ Saved and Logic-style Project File Backups (10 slots, made on every save), Project Alternatives (New, Edit: rename / open / delete, Export as Project, switch from the submenu; the active one opens: ActiveVariant), Clean Up… (unused audio to the Trash), Consolidate…, Rename…, Show in Finder…, Project Settings window (General / Audio / Recording / Assets basics). [ ] layouts made here can't be saved as .logicx (no Logic-made base; Apple's template data isn't shipped), timed autosave, Import Project Settings…, the other Project Settings panes
+- [~] Project management (lg-app projfile.rs, lg-core package.rs, tested): New from Template… chooser (Empty Project and Studio's layouts, My Templates = Save as Template… copies, opened as an Untitled copy), Save As… / Save A Copy As…, Revert to ▸ Saved and Logic-style Project File Backups (Settings ▸ Auto Backup slots, 10 by default, made on every save), Project Alternatives (New, Edit: rename / open / delete, Export as Project, switch from the submenu; the active one opens: ActiveVariant), Clean Up… (unused audio to the Trash), Consolidate…, Rename…, Show in Finder…, Project Settings window (see Project Settings). [ ] layouts made here can't be saved as .logicx (no Logic-made base; Apple's template data isn't shipped), timed autosave
 
 ## 7. Interaction parity (interactions/ research)
 - [~] Resizable panes (Browser, header, editor, mixer). Missing: Inspector, Piano Roll keyboard, global tracks, Smart Controls, persistence (DisplayState)
@@ -105,16 +111,16 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 301 | 594 | 50% |
+| Menu bar | 306 | 594 | 51% |
 | Local menus | 632 | 1191 | 53% |
-| Right-click menus | 1268 | 2575 | 49% |
-| Key commands | 1281 | 2207 | 58% |
+| Right-click menus | 1333 | 2575 | 51% |
+| Key commands | 1293 | 2207 | 58% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 301 of 594
+## Menu bar: 306 of 594
 
 
-<details><summary>Bramble Studio — 15/48</summary>
+<details><summary>Bramble Studio — 19/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -133,7 +139,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Control Surfaces…
   - [x] View…
   - [x] My Info…
-  - [ ] Reset All Settings Except Key Command Assignments…
+  - [x] Reset All Settings Except Key Command Assignments…
   - [x] Plug-in Manager…
   - [ ] Chord Grid Library…
 - [ ] Control Surfaces
@@ -143,7 +149,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Settings…
   - [ ] Rebuild Defaults
   - [ ] Bypass All Control Surfaces
-- [ ] Key Commands
+- [x] Key Commands
   - [ ] Presets
     - [ ] Simplified Chinese
     - [ ] Spanish
@@ -151,10 +157,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] German
     - [ ] French
     - [ ] Japanese
-    - [ ] U.S.
+    - [x] U.S.
     - [ ] Swedish
     - [ ] Italian
-  - [ ] Edit Assignments…  `⌥K`
+  - [x] Edit Assignments…  `⌥K`
 - [ ] Sound Library…
 - [ ] Provide Bramble Studio Feedback
 - [ ] Privacy & Analytics
@@ -167,7 +173,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 33/81</summary>
+<details><summary>File — 34/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -204,7 +210,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Metronome…
   - [ ] Tuning…
   - [ ] Assets…
-  - [ ] Import Project Settings…
+  - [x] Import Project Settings…
 - [ ] Page Setup…
 - [ ] Print  `⌘P`
 - [ ] Movie
@@ -2102,7 +2108,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1268 of 2575
+## Right-click menus: 1333 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2529,7 +2535,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-audiofx-slot — 43/404</summary>
+<details><summary>mixer-audiofx-slot — 107/404</summary>
 
 - [ ] Amps and Pedals
   - [x] Amp Designer
@@ -2546,111 +2552,111 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [x] Blue Echo
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Spring Box
+      - [x] Spring Box
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Tie Dye Delay
+      - [x] Tie Dye Delay
         - [ ] Stereo
         - [ ] Dual Mono
       - [x] Tru-Tape Delay
         - [ ] Stereo
         - [ ] Dual Mono
     - [x] Distortion
-      - [ ] Candy Fuzz
+      - [x] Candy Fuzz
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Double Dragon
+      - [x] Double Dragon
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Fuzz Machine
+      - [x] Fuzz Machine
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Grinder
+      - [x] Grinder
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Grit
+      - [x] Grit
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Happy Face Fuzz
+      - [x] Happy Face Fuzz
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Hi-Drive
+      - [x] Hi-Drive
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Monster Fuzz
+      - [x] Monster Fuzz
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] OctaFuzz
+      - [x] OctaFuzz
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Rawk! Distortion
+      - [x] Rawk! Distortion
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Tube Burner
+      - [x] Tube Burner
         - [ ] Stereo
         - [ ] Dual Mono
       - [x] Vintage Drive
         - [ ] Stereo
         - [ ] Dual Mono
     - [ ] Dynamics
-      - [ ] Squash Compressor
+      - [x] Squash Compressor
         - [ ] Stereo
         - [ ] Dual Mono
     - [ ] Filter
-      - [ ] Auto-Funk
+      - [x] Auto-Funk
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Classic Wah
+      - [x] Classic Wah
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Graphic EQ
+      - [x] Graphic EQ
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Modern Wah
+      - [x] Modern Wah
         - [ ] Stereo
         - [ ] Dual Mono
     - [ ] Modulation
-      - [ ] Flange Factory
+      - [x] Flange Factory
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Heavenly Chorus
+      - [x] Heavenly Chorus
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Phase Tripper
+      - [x] Phase Tripper
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Phaze 2
+      - [x] Phaze 2
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Retro Chorus
+      - [x] Retro Chorus
         - [ ] Stereo
         - [ ] Dual Mono
       - [x] Robo Flanger
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Roswell Ringer
+      - [x] Roswell Ringer
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Roto Phase
+      - [x] Roto Phase
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Spin Box
+      - [x] Spin Box
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] The Vibe
+      - [x] The Vibe
         - [ ] Stereo
         - [ ] Dual Mono
       - [x] Total Tremolo
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Trem-O-Tone
+      - [x] Trem-O-Tone
         - [ ] Stereo
         - [ ] Dual Mono
     - [ ] Pitch
-      - [ ] Dr. Octave
+      - [x] Dr. Octave
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Wham
+      - [x] Wham
         - [ ] Stereo
         - [ ] Dual Mono
 - [ ] Delay
@@ -2660,7 +2666,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Echo
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Sample Delay
+  - [x] Sample Delay
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Stereo Delay
@@ -2682,13 +2688,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Distortion
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Distortion II
+  - [x] Distortion II
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Overdrive
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Phase Distortion
+  - [x] Phase Distortion
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Dynamics
@@ -2704,7 +2710,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Enveloper
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Expander
+  - [x] Expander
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Limiter
@@ -2720,13 +2726,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Channel EQ
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Linear Phase EQ
+  - [x] Linear Phase EQ
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Match EQ
+  - [x] Match EQ
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Single Band EQ
+  - [x] Single Band EQ
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Vintage EQ Collection
@@ -2743,35 +2749,35 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] AutoFilter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] EVOC 20 Filterbank
+  - [x] EVOC 20 Filterbank
     - [ ] Stereo
-  - [ ] EVOC 20 TrackOscillator
+  - [x] EVOC 20 TrackOscillator
     - [ ] Stereo
-  - [ ] Fuzz-Wah
+  - [x] Fuzz-Wah
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Spectral Gate
+  - [x] Spectral Gate
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Imaging
   - [ ] Binaural Post-Processing
     - [ ] Stereo
-  - [ ] Direction Mixer
+  - [x] Direction Mixer
     - [ ] Stereo
   - [ ] Stereo Spread
     - [ ] Stereo
 - [ ] Metering
-  - [ ] BPM Counter
+  - [x] BPM Counter
     - [ ] Stereo
-  - [ ] Correlation Meter
+  - [x] Correlation Meter
     - [ ] Stereo
-  - [ ] Level Meter
+  - [x] Level Meter
     - [ ] Stereo
-  - [ ] Loudness Meter
+  - [x] Loudness Meter
     - [ ] Stereo
-  - [ ] MultiMeter
+  - [x] MultiMeter
     - [ ] Stereo
-  - [ ] Tuner
+  - [x] Tuner
     - [ ] Stereo
 - [ ] Modulation
   - [x] Chorus
@@ -2786,59 +2792,59 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Microphaser
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Modulation Delay
+  - [x] Modulation Delay
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Phaser
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Ringshifter
+  - [x] Ringshifter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Rotor Cabinet
+  - [x] Rotor Cabinet
     - [ ] Stereo
-  - [ ] Scanner Vibrato
+  - [x] Scanner Vibrato
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Spreader
+  - [x] Spreader
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Tremolo
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Multi Effects
-  - [ ] Beat Breaker
+  - [x] Beat Breaker
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Phat FX
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Remix FX
+  - [x] Remix FX
     - [ ] Stereo
-  - [ ] Step FX
+  - [x] Step FX
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Pitch
-  - [ ] Pitch Correction
+  - [x] Pitch Correction
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Pitch Shifter
+  - [x] Pitch Shifter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Vocal Transformer
+  - [x] Vocal Transformer
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Reverb
   - [x] ChromaVerb
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] EnVerb
+  - [x] EnVerb
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Quantec Room Simulator
+  - [x] Quantec Room Simulator
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] SilverVerb
+  - [x] SilverVerb
     - [ ] Stereo
     - [ ] Dual Mono
   - [x] Space Designer
@@ -2848,7 +2854,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Exciter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] SubBass
+  - [x] SubBass
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Utility
@@ -2859,7 +2865,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Dual Mono
   - [ ] I/O
     - [ ] Stereo
-  - [ ] Test Oscillator
+  - [x] Test Oscillator
     - [ ] Stereo
     - [ ] Dual Mono
 - [x] Audio Units
@@ -2958,7 +2964,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-instrument-slot-menu — 2/116</summary>
+<details><summary>mixer-instrument-slot-menu — 3/116</summary>
 
 - [ ] Vintage Electric Piano
   - [ ] Stereo
@@ -3027,7 +3033,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Stereo
   - [ ] Klopfgeist
     - [ ] Mono
-  - [ ] Test Oscillator
+  - [x] Test Oscillator
     - [ ] Mono
     - [ ] Stereo
 - [ ] Vintage Keys
@@ -4925,7 +4931,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1281 of 2207
+## Key commands: 1293 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4934,7 +4940,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 328/679</summary>
+<details><summary>Global Commands — 332/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5112,7 +5118,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Set Division Value to 1/128 Triplet (1/192)
 - [x] Toggle Metronome Click  `K`
 - [x] Toggle Count-in  `⇧K`
-- [ ] Send Reset Controllers
+- [x] Send Reset Controllers
 - [ ] Send discrete Note Offs (Panic)
 - [ ] Send Maximum Volume
 - [ ] Send Used Instruments MIDI Settings
@@ -5144,7 +5150,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Recall Screenset 8x  `⇧8`
 - [x] Recall Screenset 9x  `⇧9`
 - [ ] Region Inspector Float  `⌥⇧R`
-- [ ] Import Project Settings…
+- [x] Import Project Settings…
 - [x] Open Synchronization Project Settings…
 - [x] Open Metronome Project Settings…
 - [ ] Open Smart Tempo Settings…
@@ -5168,7 +5174,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Control Surfaces Settings…
 - [x] Open My Info Settings…
 - [ ] Open Surround Settings…
-- [ ] Reset All Settings Except Key Command Assignments…
+- [x] Reset All Settings Except Key Command Assignments…
 - [x] Plug-in Manager…
 - [ ] Open Chord Grid Library…
 - [x] Open Event List…  `⌘7`
@@ -5233,7 +5239,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Tempo List…  `⌥⇧T`
 - [x] Open Tempo Operations…
 - [ ] Open Tempo Interpreter…
-- [ ] Open Key Command Assignments…  `⌥K`
+- [x] Open Key Command Assignments…  `⌥K`
 - [x] Show/Hide Colors  `⌥C`
 - [x] Enter/Exit Full Screen  `⌃⌘F`
 - [x] Show/Hide Tuner
@@ -5745,7 +5751,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Windows Showing Audio Files — 4/15</summary>
+<details><summary>Windows Showing Audio Files — 12/15</summary>
 
 - [x] Show Files in Finder  `⇧⌘R`
 - [x] Toggle Snap Edits to Zero Crossings  `⌃0`
@@ -5754,14 +5760,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Selection-Based Processing  `⌥⇧P`
 - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
 - [x] Stem Splitter…
-- [ ] Stem Splitter Preset 1 (Acapella)
-- [ ] Stem Splitter Preset 2 (Instrumental)
-- [ ] Stem Splitter Preset 3 (Vocals + Instrumental)
-- [ ] Stem Splitter Preset 4 (Vocals + Instruments + Drums)
-- [ ] Stem Splitter Preset 5 (Vocals + Instruments + Drums + Bass)
-- [ ] Stem Splitter Preset 6 (Drums)
-- [ ] Stem Splitter Preset 7 (Separate all Stems)
-- [ ] Stem Splitter Preset 8 (Drums, Individual Kit Pieces)
+- [x] Stem Splitter Preset 1 (Acapella)
+- [x] Stem Splitter Preset 2 (Instrumental)
+- [x] Stem Splitter Preset 3 (Vocals + Instrumental)
+- [x] Stem Splitter Preset 4 (Vocals + Instruments + Drums)
+- [x] Stem Splitter Preset 5 (Vocals + Instruments + Drums + Bass)
+- [x] Stem Splitter Preset 6 (Drums)
+- [x] Stem Splitter Preset 7 (Separate all Stems)
+- [x] Stem Splitter Preset 8 (Drums, Individual Kit Pieces)
 
 </details>
 

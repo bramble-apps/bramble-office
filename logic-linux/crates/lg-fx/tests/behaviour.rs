@@ -117,10 +117,18 @@ fn noise_gate_ducks_to_reduction() {
 #[test]
 fn default_levels_are_sensible() {
     let x = sine(220.0, 0.1, 96000);
+    let mut bad = Vec::new();
     for (logic, ours) in lg_fx::list() {
+        // the generators and meters: the Test Oscillator makes its own tone
+        if logic == "Test Oscillator" {
+            continue;
+        }
         let y = through(logic, &[], &x);
         let g = lg_dsp::gain_to_db(rms(&y[48000..]) / rms(&x[48000..]));
         eprintln!("{ours:>20}: {g:+6.1} dB");
-        assert!(g > -16.0 && g < 14.0, "{ours} {g}");
+        if !(g > -16.0 && g < 14.0) {
+            bad.push(format!("{ours} {g:.1}"));
+        }
     }
+    assert!(bad.is_empty(), "{bad:?}");
 }

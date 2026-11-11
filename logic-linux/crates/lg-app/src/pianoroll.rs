@@ -140,6 +140,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let key = app.project.as_ref().map(|pr| pr.key.clone()).unwrap_or_else(|| "C major".into());
     let scale = scale_of(&key);
     // rows: black-key rows darker; with the scale guides, the key's notes lighter
+    // (Settings ▸ View ▸ Editors ▸ Bright background: a light grid)
+    let bright = crate::prefs::bright_editors();
+    if bright {
+        gp.rect_filled(grid, 0.0, Color32::from_gray(0xd8));
+    }
     for (row, pitch) in rows.visible(grid.height()) {
         let y = rows.y_of_row(row);
         let row_r = Rect::from_min_max(pos2(grid.min.x, y - ROW), pos2(grid.max.x, y));
@@ -151,7 +156,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 gp.rect_filled(row_r, 0.0, look::lane_alt());
             }
         } else if black {
-            gp.rect_filled(row_r, 0.0, look::lane_alt());
+            gp.rect_filled(row_r, 0.0, if bright { Color32::from_gray(0xc6) } else { look::lane_alt() });
         }
         if pitch % 12 == 0 || rows.collapsed.is_some() {
             gp.hline(grid.x_range(), y, Stroke::new(1.0, if rows.collapsed.is_some() { look::grid_line() } else { look::line() }));
@@ -524,7 +529,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // the playhead
     let ph = x_of(app.position() as f32);
     if grid.x_range().contains(ph) {
-        gp.vline(ph, grid.y_range(), Stroke::new(1.2, look::playhead()));
+        gp.vline(ph, grid.y_range(), Stroke::new(crate::prefs::playhead_width(), look::playhead()));
     }
     p.vline(keys.max.x, keys.y_range(), Stroke::new(1.0, look::line()));
 }

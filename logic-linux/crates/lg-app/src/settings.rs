@@ -26,6 +26,9 @@ pub struct Row {
     pub choices: Vec<String>,
     /// "# heading" / "# small" before it.
     pub style: Option<&'static str>,
+    /// Its key in the settings file ("Tab / Sub / control"): unique in its section (a popup on
+    /// the line of another gets that one's label + " Audio", a repeated name " #2"…).
+    pub key: String,
 }
 
 #[derive(Clone, Debug)]
@@ -102,7 +105,21 @@ pub fn sections() -> &'static [Section] {
                 let f: Vec<&str> = rest.split('\t').collect();
                 let g = |i: usize| f.get(i).copied().unwrap_or("").to_string();
                 let choices = g(4).trim_start_matches('~').split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                sec.rows.push(Row { label: g(0), kind: g(1), text: g(2), default: g(3), choices, style: style.take() });
+                let mut row = Row { label: g(0), kind: g(1), text: g(2), default: g(3), choices, style: style.take(), key: String::new() };
+                let mut key = row_key(sec, &row);
+                if row.label == "^" && row.kind == "popup" {
+                    if let Some(prev) = sec.rows.iter().rev().find(|r| r.label != "^" && !r.label.is_empty()) {
+                        key = format!("{} / {} / {} Audio", sec.tab, sec.sub, prev.label);
+                    }
+                }
+                let mut n = 1;
+                let base = key.clone();
+                while sec.rows.iter().any(|r| r.key == key) {
+                    n += 1;
+                    key = format!("{base} #{n}");
+                }
+                row.key = key;
+                sec.rows.push(row);
             }
         }
         out
@@ -133,7 +150,7 @@ impl Values {
         Values(v)
     }
 
-    fn save(&self) {
+    pub fn save(&self) {
         let Some(p) = config() else { return };
         if let Some(d) = p.parent() {
             let _ = std::fs::create_dir_all(d);
@@ -151,7 +168,7 @@ impl Values {
         }
         for s in sections() {
             for r in &s.rows {
-                if row_key(s, r) == key {
+                if r.key == key {
                     return r.default.clone();
                 }
             }
@@ -271,13 +288,14 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         let mut last_y = y;
         let mut values = app.logic_settings.clone();
         let mut changed = false;
+        let mut touched: Vec<String> = Vec::new();
         let mut in_group = false;
         let mut last_right = ctrl_x;
         for (k, row) in sec.rows.iter().enumerate() {
             let same_line = row.label == "^";
             let ry = if same_line { last_y } else { y };
-            let key = row_key(sec, row);
-            let cur = values.get(&key);
+            let key = row.key.clone();
+            let cur = crate::prefs::live_get(app, &key).unwrap_or_else(|| values.get(&key));
             let id = ui.scope_id().with(("set-row", &sec.tab, &sec.sub, k));
             let pitch;
             if !row.label.is_empty() && !same_line {
@@ -285,7 +303,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             }
             let x0 = if same_line { last_right } else if row.label.is_empty() && matches!(row.kind.as_str(), "text" | "separator" | "table") { content_left } else { ctrl_x };
             let disabled = row.text.ends_with("(disabled)");
-            let text = row.text.trim_end_matches("(disabled)").trim();
+            let dyn_text = crate::prefs::dynamic_text(&values, &key);
+            let text = dyn_text.as_deref().unwrap_or(row.text.trim_end_matches("(disabled)").trim());
             let tcol = if disabled { c(0x61605f) } else { c(0xdfdfdf) };
             let mut right = x0;
             match row.kind.as_str() {
@@ -305,6 +324,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     if !disabled && ui.interact(hit, id, Sense::click()).clicked() {
                         values.0.insert(key.clone(), if on { "0".into() } else { "1".into() });
                         changed = true;
+                        touched.push(key.clone());
                     }
                     right = hit.max.x;
                     pitch = 22.0;
@@ -320,7 +340,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                         p.line_segment([m + vec2(-3.5, s * 1.5), m + vec2(0.0, s * 5.0)], Stroke::new(1.3, c(0xe1e1e1)));
                         p.line_segment([m + vec2(0.0, s * 5.0), m + vec2(3.5, s * 1.5)], Stroke::new(1.3, c(0xe1e1e1)));
                     }
-                    let mut choices = row.choices.clone();
+                    let mut choices = crate::prefs::choices(app, &key).unwrap_or_else(|| row.choices.clone());
                     if !choices.contains(&cur) {
                         choices.insert(0, cur.clone());
                     }
@@ -330,6 +350,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             if ui.add(egui::Button::selectable(*ch == cur, ch)).clicked() {
                                 values.0.insert(key.clone(), ch.clone());
                                 changed = true;
+                                touched.push(key.clone());
                                 ui.close();
                             }
                         }
@@ -405,12 +426,20 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     pitch = 26.0;
                 }
                 "button" => {
+                    // (Apply: on while the device settings differ from the running output's)
+                    let disabled = if text == "Apply" { !crate::prefs::apply_pending(&values) } else { disabled };
+                    let tcol = if disabled { c(0x61605f) } else { c(0xdfdfdf) };
                     let g = p.layout_no_wrap(text.to_string(), look::regular(13.0), tcol);
                     let br = Rect::from_min_size(pos2(x0, ry), vec2((g.size().x + 28.0).max(80.0), 24.0));
                     p.rect_filled(br, 5.0, if disabled { if boxed { c(0x353433) } else { c(0x2e2d2b) } } else { fill });
                     p.galley(br.center() - g.size() / 2.0, g, if disabled { c(0x676665) } else { c(0xe1e1e1) });
                     if !disabled && ui.interact(br, id, Sense::click()).clicked() {
-                        app.tell(format!("“{text}” isn't available yet"));
+                        // (the values so far first: Apply reads them)
+                        app.logic_settings = values.clone();
+                        let bkey = format!("{} / {} / {}", sec.tab, sec.sub, text);
+                        if !crate::prefs::button(app, &bkey) {
+                            app.tell(format!("“{text}” isn't available yet"));
+                        }
                     }
                     right = br.max.x;
                     pitch = 31.0;
@@ -433,7 +462,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 }
                 "table" => {
                     let rr = if boxed { r.max.x - 43.0 } else { r.max.x - 20.0 };
-                    let tr = Rect::from_min_max(pos2(x0, ry), pos2(rr, ry + 29.0 + 24.0 * 3.0));
+                    // (MIDI ▸ Inputs: a row per input port, its On checkbox)
+                    let ports: Vec<String> = if sec.tab == "MIDI" && sec.sub == "Inputs" { app.live.all_ports.clone() } else { Vec::new() };
+                    let nrows = ports.len().max(3);
+                    let tr = Rect::from_min_max(pos2(x0, ry), pos2(rr, ry + 29.0 + 24.0 * nrows as f32));
                     p.rect_stroke(tr, 0.0, Stroke::new(1.0, c(0x424140)), egui::StrokeKind::Inside);
                     let head = Rect::from_min_size(tr.min, vec2(tr.width(), 29.0));
                     p.rect_filled(head, 0.0, c(0x2e2d2c));
@@ -445,9 +477,26 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             p.vline(cx, head.y_range(), Stroke::new(0.5, c(0x525150)));
                         }
                     }
-                    for ri in 0..3 {
+                    for ri in 0..nrows {
                         let rrw = Rect::from_min_size(pos2(tr.min.x + 1.0, head.max.y + ri as f32 * 24.0), vec2(tr.width() - 2.0, 24.0));
                         p.rect_filled(rrw, 0.0, if ri % 2 == 0 { c(0x262524) } else { c(0x302f2e) });
+                        if let Some(port) = ports.get(ri) {
+                            let pk = crate::prefs::input_key(port);
+                            let on = values.get(&pk) != "0";
+                            let b = Rect::from_min_size(pos2(rrw.min.x + 8.0, rrw.center().y - 8.0), vec2(16.0, 16.0));
+                            p.rect_filled(b, 3.5, if on { c(0x397bf7) } else { c(0x424140) });
+                            if on {
+                                p.line_segment([b.center() + vec2(-4.0, 0.0), b.center() + vec2(-1.2, 3.2)], Stroke::new(2.0, Color32::WHITE));
+                                p.line_segment([b.center() + vec2(-1.2, 3.2), b.center() + vec2(4.5, -3.8)], Stroke::new(2.0, Color32::WHITE));
+                            }
+                            let cx = rrw.min.x + rrw.width() / n as f32;
+                            p.text(pos2(cx + 8.0, rrw.center().y), Align2::LEFT_CENTER, port, look::regular(13.0), c(0xdfdfdf));
+                            if ui.interact(b.expand(2.0), id.with(("port", ri)), Sense::click()).clicked() {
+                                values.0.insert(pk.clone(), if on { "0".into() } else { "1".into() });
+                                changed = true;
+                                touched.push(pk);
+                            }
+                        }
                     }
                     pitch = tr.height() + 8.0;
                 }
@@ -488,6 +537,9 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         if changed {
             values.save();
             app.logic_settings = values;
+            for k in touched {
+                crate::prefs::changed(app, &k);
+            }
         }
     });
     if !open {

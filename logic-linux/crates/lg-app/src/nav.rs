@@ -407,7 +407,10 @@ pub fn frame(app: &mut App) {
 /// Where the Tracks area scrolls to while playing (called by tracks.rs with the visible bars).
 pub fn follow_playhead(app: &mut App, visible_bars: f32) {
     if !app.playing() {
-        app.catch_off = false;
+        // (Settings ▸ Catch when starting playback)
+        if crate::prefs::catch_on_start(app) {
+            app.catch_off = false;
+        }
         return;
     }
     if app.catch_off && !app.nav.scroll_in_play {

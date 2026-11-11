@@ -112,12 +112,13 @@ fn build_inserts(list: &[(String, Vec<f32>)], tempo: f64) -> (Vec<Box<dyn lg_dsp
 }
 
 /// Runs a strip's effects (the bypassed ones skipped); the largest gain reduction (dB).
-fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32]) -> f32 {
+fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32], at: lg_dsp::Transport) -> f32 {
     let mut gr = 0f32;
     for (fx, k) in u.inserts.iter_mut().zip(u.insert_index.iter()) {
         if bypass.get(*k).copied().unwrap_or(false) {
             continue;
         }
+        fx.set_transport(at);
         fx.process(l, r);
         gr = gr.max(fx.gain_reduction());
     }
@@ -141,6 +142,8 @@ pub struct Engine {
     pub cycle_on: bool,
     /// The metronome click (K): on every beat, higher on the bar's first (Logic's Klopfgeist).
     pub metronome: bool,
+    /// Project Settings ▸ Metronome: what clicks and how it sounds.
+    pub click_cfg: ClickCfg,
     /// Beats per bar, for the click's accent.
     pub beats_per_bar: u32,
     click: Option<(f32, f32)>,
@@ -209,7 +212,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default() }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -284,7 +287,7 @@ impl Engine {
         } else if let Some(Some(s)) = self.synths.get_mut(track) {
             if velocity > 0 { s.note_on(ch as i32, pitch as i32, velocity as i32) } else { s.note_off(ch as i32, pitch as i32) }
         } else if velocity > 0 {
-            self.voices.push(Voice { track, pitch, phase: 0.0, freq: 440.0 * 2f32.powf((pitch as f32 - 69.0) / 12.0), amp: velocity as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum: ch == 9 });
+            self.voices.push(Voice { track, pitch, phase: 0.0, freq: lg_dsp::midi_hz(pitch as f32), amp: velocity as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum: ch == 9 });
         } else {
             for v in self.voices.iter_mut().filter(|v| v.track == track && v.pitch == pitch) {
                 v.releasing = true;
@@ -378,6 +381,13 @@ impl Engine {
         let params = fx.params().to_vec();
         let values = params.iter().map(|p| fx.get(p.id)).collect();
         Some((params, values))
+    }
+
+    /// The running effect's live readouts and one of its curves (for its window).
+    pub fn effect_readouts(&self, s: FxStrip, slot: usize, curve: &str) -> (Vec<(&'static str, f32)>, Vec<f32>) {
+        let Some(u) = self.units_of(s) else { return (Vec::new(), Vec::new()) };
+        let Some(k) = u.insert_index.iter().position(|x| *x == slot) else { return (Vec::new(), Vec::new()) };
+        (u.inserts[k].readouts(), if curve.is_empty() { Vec::new() } else { u.inserts[k].curve(curve) })
     }
 
     pub fn set_effect_param(&mut self, s: FxStrip, slot: usize, id: u32, v: f32) {
@@ -569,22 +579,52 @@ impl Engine {
                     } else if let Some(Some(sy)) = self.synths.get_mut(i) {
                         sy.note_on(ch as i32, pitch as i32, vel as i32);
                     } else {
-                        self.voices.push(Voice { track: i, pitch, phase: 0.0, freq: 440.0 * 2f32.powf((pitch as f32 - 69.0) / 12.0), amp: vel as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum });
+                        self.voices.push(Voice { track: i, pitch, phase: 0.0, freq: lg_dsp::midi_hz(pitch as f32), amp: vel as f32 / 127.0 * 0.25, env: 0.0, releasing: false, drum });
                     }
                     self.sounding.push((i, ch, pitch, e));
                 }
             }
-            // the click: a beat line crossed in this block
-            if self.metronome || self.rec.click_forced(from) {
-                // beats of the signature in force; the accent on each bar's first
-                let (bar, bar_start, sig) = self.timeline.bar_of(from.max(0.0) as u32);
-                let beat = if self.timeline.points.is_empty() { PPQ as f64 } else { lg_core::timeline::Map::beat_len(sig) as f64 };
-                let next = bar_start as f64 + ((from - bar_start as f64) / beat).ceil() * beat;
-                let _ = bar;
+            // the click: a bar, beat or division line crossed in this block (Project Settings ▸
+            // Metronome: Simple mode clicks as the Metronome button says everywhere; else Click
+            // while playing is the button, Click while recording / Only during count-in rule
+            // recording)
+            let cc = self.click_cfg;
+            let counting = self.rec.click_forced(from);
+            let want = if cc.simple {
+                self.metronome || counting
+            } else if counting {
+                cc.while_recording
+            } else if self.rec.capturing {
+                cc.while_recording && !cc.only_count_in
+            } else {
+                self.metronome
+            };
+            if want {
+                let div = PPQ as f64 / 4.0;
+                let next = (from / div).ceil() * div;
                 if next < to {
-                    let n = (next / beat).round() as u32;
-                    let accent = if self.timeline.points.is_empty() { n % self.beats_per_bar.max(1) == 0 } else { self.timeline.bar_of(next as u32).1 == next as u32 };
-                    self.click = Some((if accent { 1760.0 } else { 1320.0 }, 0.0));
+                    let n = (next / div).round() as u32;
+                    // (signature changes: beats and bars from the signature map)
+                    let (on_beat, bar) = if self.timeline.points.is_empty() {
+                        let on_beat = n % 4 == 0;
+                        (on_beat, on_beat && (n / 4) % self.beats_per_bar.max(1) == 0)
+                    } else {
+                        let (_, start, sig) = self.timeline.bar_of(next as u32);
+                        let beat = lg_core::timeline::Map::beat_len(sig);
+                        ((next as u32 - start) % beat == 0, start == next as u32)
+                    };
+                    let f = if bar && cc.bar {
+                        Some(1760.0)
+                    } else if on_beat && cc.beat {
+                        Some(1320.0)
+                    } else if !on_beat && cc.division {
+                        Some(990.0)
+                    } else {
+                        None
+                    };
+                    if let Some(f) = f {
+                        self.click = Some((f, 0.0));
+                    }
                 }
             }
             self.pos = to;
@@ -605,6 +645,7 @@ impl Engine {
         self.eqs.resize_with(n_tracks, || None);
         self.replan();
         let start_tick = if self.playing && !held { self.pos - tps * frames as f64 } else { self.pos };
+        let at = lg_dsp::Transport { beats: start_tick / PPQ as f64, bpm, playing: self.playing && !held };
         let n_aux = self.auxes.len();
         self.aux_meters.resize(n_aux, 0.0);
         self.gr.resize(n_tracks, 0.0);
@@ -686,7 +727,7 @@ impl Engine {
                 }
                 let bypass = self.track_bypass.get(i).cloned().unwrap_or_default();
                 if let Some(u) = self.units.get_mut(i) {
-                    let g = run_inserts(u, &bypass, &mut l, &mut r);
+                    let g = run_inserts(u, &bypass, &mut l, &mut r, at);
                     self.gr[i] = self.gr[i].max(g);
                 }
                 let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
@@ -708,7 +749,7 @@ impl Engine {
                     r.copy_from_slice(br);
                 }
                 if let Some(u) = self.aux_units.get_mut(ai) {
-                    let g = run_inserts(u, &aux.bypass, &mut l, &mut r);
+                    let g = run_inserts(u, &aux.bypass, &mut l, &mut r, at);
                     self.aux_gr[ai] = self.aux_gr[ai].max(g);
                 }
                 if aux.mute {
@@ -774,7 +815,7 @@ impl Engine {
                 l[f] = out[2 * f];
                 r[f] = out[2 * f + 1];
             }
-            let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r);
+            let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r, at);
             self.master_gr = self.master_gr.max(g);
             for f in 0..frames {
                 out[2 * f] = l[f];
@@ -805,9 +846,12 @@ impl Engine {
         }
         // the metronome's click: a short decaying sine
         if let Some((freq, ref mut t)) = self.click {
+            // (Tone: a short click → a pitched, longer woodblock; Volume: the level)
+            let decay = 90.0 - 60.0 * self.click_cfg.tone;
+            let gain = 0.35 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
             for k in 0..frames {
-                let env = (-*t * 60.0).exp();
-                let y = (std::f32::consts::TAU * freq * *t).sin() * env * 0.35;
+                let env = (-*t * decay).exp();
+                let y = (std::f32::consts::TAU * freq * *t).sin() * env * gain;
                 out[2 * k] += y;
                 out[2 * k + 1] += y;
                 *t += 1.0 / RATE as f32;
@@ -929,6 +973,26 @@ impl rodio::Source for Stream {
     }
 }
 
+/// Project Settings ▸ Metronome, as the engine plays it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClickCfg {
+    pub simple: bool,
+    pub while_recording: bool,
+    pub only_count_in: bool,
+    pub bar: bool,
+    pub beat: bool,
+    pub division: bool,
+    /// 0 (short click) … 1 (woodblock).
+    pub tone: f32,
+    pub volume_db: f32,
+}
+
+impl Default for ClickCfg {
+    fn default() -> ClickCfg {
+        ClickCfg { simple: true, while_recording: true, only_count_in: false, bar: true, beat: true, division: false, tone: 0.5, volume_db: 0.0 }
+    }
+}
+
 /// The audio output: opened once; the engine plays through it for the app's life.
 pub struct Output {
     pub engine: Arc<Mutex<Engine>>,
@@ -942,7 +1006,36 @@ impl Output {
         if std::env::var_os("LG_SNAP").is_some() || std::env::var_os("LG_NOAUDIO").is_some() {
             return Output { engine, _sink: None, error: None };
         }
-        match rodio::DeviceSinkBuilder::open_default_sink() {
+        Output::open_on(engine, None, None)
+    }
+
+    /// No output (Settings ▸ Audio ▸ Devices ▸ Enabled off, or while switching devices).
+    pub fn silent(engine: Arc<Mutex<Engine>>) -> Output {
+        Output { engine, _sink: None, error: None }
+    }
+
+    /// The output on a device by name (None: the system's default) with an I/O buffer size in
+    /// frames (None: the device's own): Settings ▸ Audio ▸ Devices.
+    pub fn open_on(engine: Arc<Mutex<Engine>>, device: Option<&str>, buffer: Option<u32>) -> Output {
+        if std::env::var_os("LG_SNAP").is_some() || std::env::var_os("LG_NOAUDIO").is_some() {
+            return Output { engine, _sink: None, error: None };
+        }
+        use rodio::cpal::traits::HostTrait;
+        let host = rodio::cpal::default_host();
+        let dev = device.and_then(|n| host.output_devices().ok()?.find(|d| rodio::cpal::traits::DeviceTrait::description(d).is_ok_and(|x| x.name() == n)));
+        let opened = if dev.is_none() && buffer.is_none() {
+            rodio::DeviceSinkBuilder::open_default_sink()
+        } else {
+            let builder = match dev {
+                Some(d) => rodio::DeviceSinkBuilder::from_device(d),
+                None => rodio::DeviceSinkBuilder::from_default_device(),
+            };
+            builder.and_then(|b| match buffer {
+                Some(n) => b.with_buffer_size(rodio::cpal::BufferSize::Fixed(n)).open_stream(),
+                None => b.open_stream(),
+            }).or_else(|_| rodio::DeviceSinkBuilder::open_default_sink())
+        };
+        match opened {
             Ok(mut s) => {
                 s.log_on_drop(false);
                 s.mixer().add(Stream { engine: engine.clone(), buf: vec![0.0; BLOCK * 2], at: BLOCK * 2 });

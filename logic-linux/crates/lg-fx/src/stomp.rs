@@ -462,29 +462,39 @@ impl Pedalboard {
         self.pedals.len()
     }
 
-    /// The pedal a float block most likely belongs to (see the module notes), as a plug-in.
-    pub fn pedal_for(floats: &[f32], rate: f32) -> Box<dyn Effect> {
+    /// The pedal a float block most likely belongs to (see the module notes): its name.
+    pub fn pedal_name_for(floats: &[f32]) -> &'static str {
         let f = |i: usize| floats.get(i).copied().unwrap_or(0.0);
-        let mut b: Box<dyn Effect> = if floats.len() >= 9 && f(5) > 300.0 && f(6) >= 20.0 && f(6) < 2000.0 {
-            Box::new(TruTapeDelay::new(rate))
+        if floats.len() >= 9 && f(5) > 300.0 && f(6) >= 20.0 && f(6) < 2000.0 {
+            "Tru-Tape Delay"
         } else if (100.0..20000.0).contains(&f(2)) && (-60.0..=12.0).contains(&f(3)) {
-            Box::new(VintageDrive::new(rate))
+            "Vintage Drive"
         } else if f(4) >= 0.0 && f(4).fract() == 0.0 && f(4) < 10.0 && f(3) <= 100.0 && floats.len() >= 7 && f(6) > -24.0 && f(6) < 12.0 && f(5) <= 100.0 && f(5) > 1.0 {
-            Box::new(TotalTremolo::new(rate))
+            "Total Tremolo"
         } else if f(5) > 0.0 && f(5) <= 10.0 && f(5).fract() != 0.0 {
-            Box::new(RoboFlanger::new(rate))
+            "Robo Flanger"
         } else {
-            Box::new(BlueEcho::new(rate))
+            "Blue Echo"
+        }
+    }
+
+    /// The pedal a float block most likely belongs to, as a plug-in.
+    pub fn pedal_for(floats: &[f32], rate: f32) -> Box<dyn Effect> {
+        let mut b: Box<dyn Effect> = match Pedalboard::pedal_name_for(floats) {
+            "Tru-Tape Delay" => Box::new(TruTapeDelay::new(rate)),
+            "Vintage Drive" => Box::new(VintageDrive::new(rate)),
+            "Total Tremolo" => Box::new(TotalTremolo::new(rate)),
+            "Robo Flanger" => Box::new(RoboFlanger::new(rate)),
+            _ => Box::new(BlueEcho::new(rate)),
         };
         b.load_floats(floats);
         b
     }
 
-    /// Builds the board from a Pedalboard AuCU payload: each 'xoBSH' record's GAMETSPP block
-    /// (block id, a zero word, then floats up to the '90PL' marker) becomes a pedal.
-    pub fn from_aucu(payload: &[u8], rate: f32) -> Pedalboard {
-        let mut board = Pedalboard::new(rate);
+    /// The pedal records of a Pedalboard AuCU payload: each 'xoBSH' record's GAMETSPP floats.
+    pub fn records(payload: &[u8]) -> Vec<Vec<f32>> {
         let find = |h: &[u8], n: &[u8], from: usize| h.get(from..).and_then(|t| t.windows(n.len()).position(|w| w == n)).map(|p| p + from);
+        let mut out = Vec::new();
         let mut at = 0;
         while let Some(rec) = find(payload, b"xoBSH", at) {
             let Some(tag) = find(payload, b"GAMETSPP", rec) else { break };
@@ -492,9 +502,19 @@ impl Pedalboard {
             let end = find(payload, b"90PL", start).unwrap_or(payload.len()).min(start + 4 * 64);
             let floats: Vec<f32> = payload[start..end].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
             if !floats.is_empty() {
-                board.push(Pedalboard::pedal_for(&floats, rate));
+                out.push(floats);
             }
             at = end;
+        }
+        out
+    }
+
+    /// Builds the board from a Pedalboard AuCU payload: each 'xoBSH' record's GAMETSPP block
+    /// (block id, a zero word, then floats up to the '90PL' marker) becomes a pedal.
+    pub fn from_aucu(payload: &[u8], rate: f32) -> Pedalboard {
+        let mut board = Pedalboard::new(rate);
+        for floats in Pedalboard::records(payload) {
+            board.push(Pedalboard::pedal_for(&floats, rate));
         }
         board
     }
