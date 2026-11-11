@@ -22,27 +22,42 @@
  {
   "area": "Look and suite parity",
   "status": "Partial",
-  "feature": "Help tags on region, cycle, note, pan, XY and master drags. [ ] the rest of Logic's, Quick Help panel"
- },
- {
-  "area": "Look and suite parity",
-  "status": "Not started",
-  "feature": "Animations: panes sliding, region drop, playhead catch, zoom (interactions/UI-ANIMATIONS)"
+  "feature": "Help tags on region, cycle, note, pan, XY and master drags; Show/Hide Help Tags. Quick Help (\u21e7/, Help menu, control-bar ?): the area under the pointer described (control bar, toolbar, Browser, Inspector, ruler, headers, tracks, editor, Mixer, right panes; Studio's own words) in the Inspector, a floating window or a bubble (Quick Help appears as). [ ] help tags for the rest of Logic's drags, Quick Help for single controls (it describes areas, not each button)"
  },
  {
   "area": "Look and suite parity",
   "status": "Partial",
-  "feature": "App icon: the gold record (data/icons, installed with the menu shortcut). [ ] About window"
+  "feature": "Animations: the research measured Logic's pane show/hide (Browser, Inspector, Editor) and key zoom as instant (one frame, UI-ANIMATIONS.txt, GESTURES-SCROLL.txt), and Studio does the same. [ ] region drop, playhead catch scrolling and Live Loops queue rings not measured in Logic yet"
+ },
+ {
+  "area": "Look and suite parity",
+  "status": "Done",
+  "feature": "App icon: the gold record (data/icons, installed with the menu shortcut); the About window (record, version, credits, website)"
  },
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, Autopunch (its locators: the ruler's red strip, dragged by its ends or middle), master volume, right-pane buttons. [ ] Customize Control Bar (Autopunch shows by default here; in Logic it's a customize option), the Tuner window"
+  "feature": "Control bar as Logic 13's: view buttons, transport (Stop / Go to Beginning with its Stop Button Options, Play, Record, Cycle; Capture as Recording, Replace and Autopunch when ticked in Customize Control Bar and Display\u2026), LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner (the Tuner window: the input's note, cents on a \u00b150 arc, Hz, reference pitch; pitch found by a YIN-style detector, tested), Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] the Tuner reads the audio input (LG_TEST_INPUT for checks), not a track's output as Logic's does; Logic's Tuner look not in the research (Studio's own)"
  },
  {
   "area": "Main window",
-  "status": "Not started",
-  "feature": "Toolbar (Ctrl-Option-Cmd-T) and Customize Control Bar and Display\u2026"
+  "status": "Partial",
+  "feature": "Toolbar (\u2303\u2325\u2318T, View \u25b8 Show Toolbar, the control bar's button): a row of command buttons under the control bar; Customize Toolbar\u2026 (and its right-click) picks them, kept in ~/.config/bramble-studio/toolbar.txt. Customize Control Bar and Display\u2026 (View menu, the LCD's \u2304 menu): View panes, Capture as Recording / Replace / Autopunch (controlbar::Shown), the LCD's display; Apply / Save As Control Bar and Display Defaults. [ ] Logic's exact toolbar button set and icons (not in the research: Studio's labelled buttons; Section buttons are disabled until those commands exist), the sheet's other Logic options (Rewind / Forward buttons, Low Latency, Solo, Count-in, Master Level visibility), DisplayState's transportLayoutDict / actionBarLayoutDict IDs not decoded"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Navigation (nav.rs, tested): Go to Position\u2026 / Marker Number\u2026 / Set Left and Right Locator numerically\u2026 sheets (bar beat division tick or minutes:seconds), rewind / forward by division, 1/8, 1/16, nudge value and frame, Play from Beginning / Previous Bar / Left or Right Locator / Left Window Edge, last locate position, Play Button Options and Auto Set Locators (Navigate menu), locators by playhead (rounded), by selection, and Play / Cycle Play, move by 1 bar, Go to Marker Number 1\u201320, Create Marker by Cycle Area, Create Arrangement Marker, division and nudge values, Tap Tempo (one undo step); zoom: \u22481.3\u00d7 a key press (measured), Zoom to fit Selection (h, v, both), All Contents, Locators, Toggle Zoom to fit (again: back), Save as / Recall Zoom 1\u20133, navigation snapshots with Back / Forward (\u2325Z, \u2325\u21e7Z). [ ] Shuttle and Scrub, Rewind / Forward by Transient, Toggle Cycle Preview, Horizontal / Vertical Auto Zoom, Cycle Through Window Views (Tab: keys follow the pointer here)"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Screensets (screensets.rs, tested): 1\u20139 and \u21e7 + two digits for 11\u201399, made from the window as it is when a number is new; unlocked ones keep changes, locked come back as locked; the Window menu lists them (\u2713 the current one) with Duplicate\u2026, Rename\u2026, Delete, Lock / Unlock, Revert to Saved; Next / Previous Screenset. A project's own screensets are read from its DisplayState.plist (lg-core displaystate, tested on the research's samples: numbers, names, lock, Browser / Inspector / List Editors / control bar / toolbar / bottom editor and its height). [ ] screensets aren't written back into the .logicx (Studio keeps them for the session); floating windows aren't part of a screenset; the bare digit keys go to screensets (Logic's key list binds them to markers 1\u20139 too: Go to Marker Number n works from \u2325/ and other bindings)"
+ },
+ {
+  "area": "Main window",
+  "status": "Partial",
+  "feature": "Window and View menus: Open Smart Controls / Score Editor / Step Sequencer / Audio Track, File and Smart Tempo Editors / Event List / Signature List / MIDI Transform, Show Play Surface, Minimize All, Zoom All, Fill, Center, Move & Resize halves and quarters, Return to Previous Size, Bring All to Front; Show Smart Controls / List Editors / Note Pads / Project Files with Show / Hide labels; Settings tab openers (Open General Settings\u2026 etc.); Help menu links (website, GitHub help, releases, issues, discussions). [ ] window placement depends on the desktop (Wayland ignores positions), Project Settings window, Transport / Event / Region Inspector floats, Project Audio, Step Input Keyboard"
  },
  {
   "area": "Main window",
@@ -62,7 +77,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview"
+  "feature": "Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts; Loops & One-Shots (the user's own loop folders, ~/Music/Loops and the like: click previews, double-click adds; no Apple loops), Plug-in Presets (the settings saved from plug-in windows, listed); drag a patch onto a track (or below the last for a new track) or a loop onto a track at a bar; its keys over the Browser (\u21a9 New Track with Selected Item, \u2318\u21a9 Replace Patch, \u2318\u232b Clear Applied Tags, View Info, Find Similar, Add to Favorites \u2605, Toggle All Filters) and Search in Browser (\u2318F), Show Loops / Instruments / Effects in Browser. [ ] patch preview (Play/Stop Preview), loading a plug-in preset from the Browser, Logic's tags, Toggle Columns View, Sound Library"
  },
  {
   "area": "Main window",
@@ -247,7 +262,7 @@
  {
   "area": "Interaction parity (interactions/ research)",
   "status": "Partial",
-  "feature": "Scroll and pinch: scroll, Option-scroll zoom. Missing: two-finger horizontal, pinch zoom per area, Shift-scroll, catch"
+  "feature": "Scroll and pinch: two-finger horizontal and vertical scroll, Shift-scroll sideways, \u2318-scroll and pinch zoom in the Tracks area, Piano Roll, Score and audio editors (each its own), Catch (off when you scroll while playing, back with ` or at stop), Scroll in Play (\u2303`: the playhead stays in the middle), page commands (Page Up / Down / Top / Bottom, 1/3 and 1/8 page, Left-Most / Right-Most). [ ] modifier + scroll in Logic unresolved in the research (GESTURES-SCROLL.txt); pinch untested on a real trackpad here"
  },
  {
   "area": "Interaction parity (interactions/ research)",

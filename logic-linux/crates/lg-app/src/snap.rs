@@ -148,6 +148,12 @@ impl eframe::App for Snap {
             if std::env::var_os("LG_MIXER").is_some() {
                 self.app.bottom = app::Bottom::Mixer;
             }
+            // LG_CMD="Show/Hide Toolbar;Recall Screenset 2": commands run by their Logic names
+            if let Ok(v) = std::env::var("LG_CMD") {
+                for c in v.split(';').map(str::trim).filter(|c| !c.is_empty()) {
+                    self.app.command(&ctx, c);
+                }
+            }
         }
         if self.frames >= 8 && self.script.is_empty() && !self.shot {
             self.shot = true;

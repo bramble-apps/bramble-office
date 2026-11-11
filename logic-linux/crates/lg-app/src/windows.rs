@@ -100,11 +100,19 @@ fn ask(app: &mut App, ctx: &egui::Context) {
         Ask::RightLocator(t) => ("Set Right Locator", "Right locator (bar beat division tick)", t),
         Ask::MarkerNumber(t) => ("Go to Marker Number", "Marker number", t),
     };
+    let sig0 = app.project.as_ref().map_or((4, 4), |p| p.signature);
+    // (the field starts empty, the current value shown greyed: type over it)
+    let now = match a {
+        Ask::GoToPosition(_) => crate::app::bbdt(app.position() as u32, sig0),
+        Ask::LeftLocator(_) => crate::app::bbdt(app.cycle.0, sig0),
+        Ask::RightLocator(_) => crate::app::bbdt(app.cycle.1, sig0),
+        Ask::MarkerNumber(_) => (app.markers.len().min(1)).to_string(),
+    };
     let mut ok = false;
     let mut cancel = false;
     egui::Window::new(title).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, vec2(0.0, 140.0)).show(ctx, |ui| {
         ui.label(label);
-        let te = ui.add(egui::TextEdit::singleline(&mut text).desired_width(260.0));
+        let te = ui.add(egui::TextEdit::singleline(&mut text).hint_text(now).desired_width(260.0));
         crate::widgets::focus_once(ui, &te);
         if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             ok = true;
@@ -220,6 +228,8 @@ fn screenset_sheet(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// The command names run here (build.rs and tool/checklist.py read this list).
+#[allow(dead_code)]
 pub const COMMANDS: &[&str] = &["Show/Hide Tuner", "Tuner…"];
 
 pub fn command(app: &mut App, name: &str) -> bool {

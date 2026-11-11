@@ -118,6 +118,8 @@ pub fn apply_defaults(app: &mut App) {
     set_bar_flags(app, f);
 }
 
+/// The command names run here (build.rs and tool/checklist.py read this list).
+#[allow(dead_code)]
 pub const COMMANDS: &[&str] = &[
     "Show/Hide Toolbar", "Show Toolbar", "Customize Toolbar…",
     "Customize Control Bar and Display…", "Apply Control Bar and Display Defaults", "Save As Control Bar and Display Defaults",
@@ -234,26 +236,32 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
         let mut open = true;
         let mut done = false;
         egui::Window::new("Customize Control Bar and Display").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, vec2(0.0, 90.0)).show(ctx, |ui| {
-            ui.columns(3, |cols| {
-                let ui = &mut cols[0];
-                ui.label(egui::RichText::new("View").font(look::bold(12.0)));
-                ui.checkbox(&mut app.show_browser, "Browser");
-                ui.checkbox(&mut app.show_inspector, "Inspector");
-                ui.checkbox(&mut app.quick_help, "Quick Help");
-                ui.checkbox(&mut app.show_toolbar, "Toolbar");
-                let ui = &mut cols[1];
-                ui.label(egui::RichText::new("Transport").font(look::bold(12.0)));
-                ui.add_enabled(false, egui::Checkbox::new(&mut true, "Go to Beginning / Stop, Play, Record, Cycle"));
-                ui.checkbox(&mut app.cb_show.capture, "Capture as Recording");
-                ui.checkbox(&mut app.cb_show.replace, "Replace");
-                ui.checkbox(&mut app.cb_show.autopunch, "Autopunch");
-                let ui = &mut cols[2];
-                ui.label(egui::RichText::new("Display").font(look::bold(12.0)));
-                use crate::controlbar::LcdMode;
-                for (m, label) in [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Time, "Time")] {
-                    if ui.radio(app.lcd_mode == m, label).clicked() {
-                        app.lcd_mode = m;
+            use crate::controlbar::LcdMode;
+            egui::Grid::new("cb-grid").num_columns(3).spacing([40.0, 6.0]).show(ui, |ui| {
+                for h in ["View", "Transport", "Display"] {
+                    ui.label(egui::RichText::new(h).font(look::bold(12.0)));
+                }
+                ui.end_row();
+                let modes = [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Time, "Time")];
+                for i in 0..4 {
+                    match i {
+                        0 => ui.checkbox(&mut app.show_browser, "Browser"),
+                        1 => ui.checkbox(&mut app.show_inspector, "Inspector"),
+                        2 => ui.checkbox(&mut app.quick_help, "Quick Help"),
+                        _ => ui.checkbox(&mut app.show_toolbar, "Toolbar"),
+                    };
+                    match i {
+                        0 => ui.checkbox(&mut app.cb_show.capture, "Capture as Recording"),
+                        1 => ui.checkbox(&mut app.cb_show.replace, "Replace"),
+                        2 => ui.checkbox(&mut app.cb_show.autopunch, "Autopunch"),
+                        _ => ui.add_enabled(false, egui::Checkbox::new(&mut true, "Stop, Play, Record, Cycle")),
+                    };
+                    if let Some((m, label)) = modes.get(i) {
+                        if ui.radio(app.lcd_mode == *m, *label).clicked() {
+                            app.lcd_mode = *m;
+                        }
                     }
+                    ui.end_row();
                 }
             });
             ui.add_space(8.0);

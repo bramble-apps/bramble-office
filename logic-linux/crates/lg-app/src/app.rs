@@ -1225,7 +1225,9 @@ impl App {
             egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
             _ => None,
         }).collect());
+        let over_browser = self.show_browser && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.nav.browser_rect.contains(p));
         let focus = match (self.bottom, ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.editor_rect.contains(p))) {
+            _ if over_browser => crate::keymap::Focus::Browser,
             (Bottom::Mixer, true) => crate::keymap::Focus::Mixer,
             (Bottom::PianoRoll, true) => crate::keymap::Focus::PianoRoll,
             _ => crate::keymap::Focus::Tracks,
@@ -1660,6 +1662,7 @@ impl App {
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + w, body.max.y));
             crate::browser::show(self, ui, r);
             crate::windows::area(self, r, "browser");
+            self.nav.browser_rect = r;
             left = r.max.x + 1.0;
             // its right edge: drag to resize; past the minimum it snaps closed; past the room left
             // the Inspector hides (Logic, RESIZING.txt)

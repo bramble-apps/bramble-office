@@ -89,7 +89,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.circle_stroke(pos2(sr.min.x + 13.0, sr.center().y - 1.0), 4.5, Stroke::new(1.4, look::text_dim()));
     p.line_segment([pos2(sr.min.x + 16.5, sr.center().y + 2.5), pos2(sr.min.x + 19.5, sr.center().y + 5.5)], Stroke::new(1.4, look::text_dim()));
     let field = Rect::from_min_max(pos2(sr.min.x + 26.0, sr.min.y + 3.0), pos2(sr.max.x - 6.0, sr.max.y - 3.0));
-    ui.put(field, egui::TextEdit::singleline(&mut app.browser_search).hint_text("Search").frame(egui::Frame::NONE).font(look::regular(13.0)));
+    let te = ui.put(field, egui::TextEdit::singleline(&mut app.browser_search).hint_text("Search").frame(egui::Frame::NONE).font(look::regular(13.0)));
+    if std::mem::take(&mut app.nav.browser_focus) {
+        te.request_focus();
+    }
     let fb = Rect::from_min_size(pos2(sr.max.x + 8.0, sr.min.y), vec2(26.0, 26.0));
     let fresp = ui.interact(fb, ui.scope_id().with("bfilter"), Sense::click()).on_hover_text("Filter");
     p.rect_filled(fb, 6.0, if app.browser_filter.is_some() { look::accent() } else { look::group_bg() });
@@ -159,15 +162,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         Cat::All | Cat::Instruments => patch_list(app, ui, list),
         Cat::SoundFonts => soundfont_list(app, ui, list),
         Cat::Effects => effect_list(app, ui, list),
+        Cat::Loops => loop_list(app, ui, list),
+        Cat::Presets => preset_list(app, ui, list),
         _ => {
-            p.text(pos2(list.center().x, list.min.y + 30.0), Align2::CENTER_CENTER, match cat {
-                Cat::Loops => "No loops installed",
-                Cat::Presets => "Select a plug-in to see its presets",
-                _ => "Logic's Sound Library isn't installed",
-            }, look::regular(12.0), look::text_dim());
+            p.text(pos2(list.center().x, list.min.y + 30.0), Align2::CENTER_CENTER, "Logic's Sound Library isn't installed", look::regular(12.0), look::text_dim());
             0
         }
     };
+    drag_to_tracks(app, ui);
     let foot = Rect::from_min_max(pos2(list.min.x, list.max.y), pos2(list.max.x, area.max.y));
     p.hline(foot.x_range(), foot.min.y, Stroke::new(1.0, look::line()));
     p.text(pos2(foot.min.x + 10.0, foot.min.y + 13.0), Align2::LEFT_CENTER, "Sorted by:", look::regular(11.0), look::text_dim());
@@ -204,7 +206,7 @@ fn thousands(n: usize) -> String {
 }
 
 fn row(ui: &mut egui::Ui, w: f32, selected: bool, name: &str, mark: Color32) -> egui::Response {
-    let (r, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::click());
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::click_and_drag());
     let p = ui.painter();
     if selected {
         p.rect_filled(r.shrink2(vec2(4.0, 1.0)), 5.0, look::accent().gamma_multiply(0.4));
@@ -244,11 +246,25 @@ fn patch_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
         for k in range {
             let (cat, _, name) = items[k];
             let mark = if cat == "Drums & Percussion" { Color32::from_rgb(0xe3, 0xb3, 0x2b) } else { Color32::from_rgb(0x52, 0xc0, 0x3c) };
-            if row(ui, list.width(), current.as_deref() == Some(name.as_str()), name, mark).clicked() {
+            let fav = app.nav.favorites.iter().any(|f| f == name);
+            let resp = row(ui, list.width(), current.as_deref() == Some(name.as_str()), name, mark);
+            if fav {
+                ui.painter().text(pos2(resp.rect.max.x - 14.0, resp.rect.center().y), Align2::CENTER_CENTER, "★", look::regular(11.0), look::text_dim());
+            }
+            if resp.drag_started() {
+                app.nav.browser_drag = Some((0, cat.clone(), name.clone()));
+            }
+            if resp.clicked() {
+                app.nav.browser_pick = Some((0, cat.clone(), name.clone()));
                 match app.selected_track {
-                    Some(t) => app.choose_patch(t, cat, name),
+                    Some(t) if app.browser_replace => app.choose_patch(t, cat, name),
+                    Some(_) => {}
                     None => app.tell("Select a track first"),
                 }
+            }
+            if resp.double_clicked() && !app.browser_replace {
+                let ctx = ui.ctx().clone();
+                command(app, &ctx, "New Track with Selected Item");
             }
         }
     });
@@ -369,4 +385,225 @@ fn add_soundfont(app: &mut App) {
         }
         SoundFontMode::Sampler => app.tell("Converting SoundFonts into Sampler instruments isn't available yet: switch to “Play natively” in Settings"),
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Loops & One-Shots (the user's own loop folders: ~/Music/Loops and the like; no Apple loops),
+// Plug-in Presets (settings saved from the plug-in windows), drags to the tracks, the commands
+
+fn loop_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
+    let q = app.browser_search.to_lowercase();
+    let mut files = Vec::new();
+    for f in crate::rightpane::loop_folders() {
+        crate::rightpane::walk(&f, &mut files, 3);
+    }
+    files.retain(|f| q.is_empty() || f.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().contains(&q)));
+    if files.is_empty() {
+        ui.painter_at(list).text(pos2(list.center().x, list.min.y + 30.0), Align2::CENTER_CENTER, "No loops found\n(put loops in ~/Music/Loops)", look::regular(12.0), look::text_dim());
+        return 0;
+    }
+    let n = files.len();
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    child.spacing_mut().item_spacing.y = 0.0;
+    egui::ScrollArea::vertical().id_salt("browser-loops").auto_shrink([false, false]).show_rows(&mut child, 24.0, n, |ui, range| {
+        for k in range {
+            let f = &files[k];
+            let name = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let midi = f.extension().is_some_and(|e| e.eq_ignore_ascii_case("mid") || e.eq_ignore_ascii_case("midi"));
+            let path = f.to_string_lossy().to_string();
+            let picked = app.nav.browser_pick.as_ref().is_some_and(|p| p.0 == 1 && p.2 == path);
+            let resp = row(ui, list.width(), picked, &name, if midi { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { Color32::from_rgb(0x3d, 0x8f, 0xe0) });
+            if resp.drag_started() {
+                app.nav.browser_drag = Some((1, String::new(), path.clone()));
+            }
+            if resp.clicked() {
+                app.nav.browser_pick = Some((1, String::new(), path.clone()));
+                if !midi {
+                    app.preview_file(f);
+                }
+            }
+            if resp.double_clicked() {
+                app.import_file(f);
+            }
+        }
+    });
+    n
+}
+
+fn preset_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
+    let q = app.browser_search.to_lowercase();
+    let mut rows: Vec<(String, String)> = Vec::new();
+    if let Some(dir) = crate::pluginwin::settings_dir("x").and_then(|d| d.parent().map(|p| p.to_path_buf())) {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            let mut plugins: Vec<String> = rd.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().to_string()).collect();
+            plugins.sort();
+            for pl in plugins {
+                for (name, _) in crate::pluginwin::saved_settings(&pl) {
+                    if q.is_empty() || name.to_lowercase().contains(&q) || pl.to_lowercase().contains(&q) {
+                        rows.push((pl.clone(), name));
+                    }
+                }
+            }
+        }
+    }
+    if rows.is_empty() {
+        ui.painter_at(list).text(pos2(list.center().x, list.min.y + 30.0), Align2::CENTER_CENTER, "No plug-in settings saved yet\n(a plug-in window's Save Setting As…)", look::regular(12.0), look::text_dim());
+        return 0;
+    }
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    child.spacing_mut().item_spacing.y = 0.0;
+    egui::ScrollArea::vertical().id_salt("browser-presets").auto_shrink([false, false]).show(&mut child, |ui| {
+        let mut last = String::new();
+        for (pl, name) in &rows {
+            if *pl != last {
+                ui.label(egui::RichText::new(pl).font(look::semibold(11.0)).color(look::text_dim()));
+                last = pl.clone();
+            }
+            row(ui, list.width(), false, name, Color32::from_rgb(0x3d, 0x8f, 0xe0)).on_hover_text("Load it from the plug-in window's setting menu");
+        }
+    });
+    rows.len()
+}
+
+/// A patch or a loop dragged out of the Browser: onto a track, the patch goes on that track (a
+/// loop goes there at the bar it's dropped on); below the last track, a new track.
+fn drag_to_tracks(app: &mut App, ui: &mut egui::Ui) {
+    let Some(item) = app.nav.browser_drag.clone() else { return };
+    let ctx = ui.ctx().clone();
+    let pos = ctx.input(|i| i.pointer.hover_pos());
+    if let Some(p) = pos {
+        egui::Area::new(egui::Id::unique("browser-drag")).order(egui::Order::Tooltip).fixed_pos(p + vec2(12.0, 8.0)).interactable(false).show(&ctx, |ui| {
+            let name = if item.0 == 1 { std::path::Path::new(&item.2).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default() } else { item.2.clone() };
+            egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
+        });
+    }
+    if !ctx.input(|i| i.pointer.any_released()) {
+        ctx.request_repaint();
+        return;
+    }
+    app.nav.browser_drag = None;
+    let Some(p) = pos.filter(|p| app.nav.tracks_rect.contains(*p)) else { return };
+    let rows = crate::trackarea::rows(app);
+    let target = crate::trackarea::row_at(&rows, p.y - app.nav.tracks_rect.min.y + app.scroll_y).map(|r| r.t);
+    match item.0 {
+        0 => {
+            let t = match target {
+                Some(t) => t,
+                None => {
+                    if !app.key_command(&ctx, "New Software Instrument Track") {
+                        return;
+                    }
+                    let Some(t) = app.selected_track else { return };
+                    t
+                }
+            };
+            app.selected_track = Some(t);
+            app.choose_patch(t, &item.1, &item.2);
+        }
+        _ => {
+            let bar = app.bar_ticks();
+            let tick = (((p.x - app.nav.lanes_x).max(0.0) / app.bar_w + app.scroll_x).floor() as u32) * bar;
+            let back = app.position();
+            app.selected_track = target;
+            app.locate(tick as f64);
+            app.import_file(std::path::Path::new(&item.2));
+            app.locate(back);
+        }
+    }
+}
+
+fn favorites_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+    Some(base.join("bramble-studio").join("browser-favorites.txt"))
+}
+
+pub fn load_favorites() -> Vec<String> {
+    if std::env::var_os("LG_SNAP").is_some() {
+        return Vec::new();
+    }
+    favorites_path().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| t.lines().filter(|l| !l.is_empty()).map(str::to_string).collect()).unwrap_or_default()
+}
+
+fn tab_of(cat: Cat) -> usize {
+    SIDEBAR.iter().position(|c| c.0 == cat).unwrap_or(2)
+}
+
+/// The command names run here (build.rs and tool/checklist.py read this list).
+#[allow(dead_code)]
+pub const COMMANDS: &[&str] = &[
+    "Search in Browser", "Search Patch", "Show Loops & One-Shots in Browser", "Show Instruments in Browser", "Show Effects in Browser",
+    "Clear Applied Tags", "Toggle All Filters", "New Track with Selected Item", "Replace Patch", "Find Similar", "Add to Favorites", "View Info",
+];
+
+pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
+    match name {
+        "Search in Browser" | "Search Patch" => {
+            app.show_browser = true;
+            if name == "Search Patch" {
+                app.browser_tab = tab_of(Cat::Instruments);
+            }
+            app.nav.browser_focus = true;
+        }
+        "Show Loops & One-Shots in Browser" | "Show Instruments in Browser" | "Show Effects in Browser" => {
+            app.show_browser = true;
+            app.browser_tab = tab_of(if name.contains("Loops") { Cat::Loops } else if name.contains("Effects") { Cat::Effects } else { Cat::Instruments });
+        }
+        "Clear Applied Tags" => {
+            app.browser_filter = None;
+            app.browser_search.clear();
+        }
+        "Toggle All Filters" => match app.browser_filter.take() {
+            Some(f) => app.nav.last_filter = Some(f),
+            None => app.browser_filter = app.nav.last_filter.take(),
+        },
+        "New Track with Selected Item" | "Replace Patch" => {
+            let Some((kind, cat, item)) = app.nav.browser_pick.clone() else { return false };
+            if kind == 1 {
+                if name.starts_with("New") {
+                    app.selected_track = None;
+                }
+                app.import_file(std::path::Path::new(&item));
+                return true;
+            }
+            if name.starts_with("New") && !app.key_command(ctx, "New Software Instrument Track") {
+                return false;
+            }
+            let Some(t) = app.selected_track else { return false };
+            app.choose_patch(t, &cat, &item);
+        }
+        "Find Similar" => {
+            let Some((0, cat, _)) = app.nav.browser_pick.clone() else { return false };
+            app.browser_filter = Some(cat);
+            app.browser_search.clear();
+            app.browser_tab = tab_of(Cat::Instruments);
+        }
+        "Add to Favorites" => {
+            let Some((_, _, item)) = app.nav.browser_pick.clone() else { return false };
+            let f = &mut app.nav.favorites;
+            if let Some(i) = f.iter().position(|x| *x == item) {
+                f.remove(i);
+            } else {
+                f.push(item);
+            }
+            if !app.automated {
+                if let Some(p) = favorites_path() {
+                    let _ = std::fs::create_dir_all(p.parent().unwrap_or(&p));
+                    let _ = std::fs::write(p, app.nav.favorites.join("\n"));
+                }
+            }
+        }
+        "View Info" => {
+            let Some((kind, cat, item)) = app.nav.browser_pick.clone() else { return false };
+            let info = if kind == 1 {
+                let secs = lg_core::project::wav_seconds(std::path::Path::new(&item));
+                format!("{item}{}", secs.map_or(String::new(), |s| format!(" — {s:.1} s")))
+            } else {
+                let sub = patches().iter().find(|p| p.2 == item).map(|p| p.1.clone()).unwrap_or_default();
+                format!("{item} — {cat}{}", if sub.is_empty() { String::new() } else { format!(" ▸ {sub}") })
+            };
+            app.tell(info);
+        }
+        _ => return false,
+    }
+    true
 }

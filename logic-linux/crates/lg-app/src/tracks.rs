@@ -672,6 +672,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     crate::windows::area(app, ruler, "ruler");
     crate::windows::area(app, headers, "headers");
     crate::windows::area(app, lanes, "lanes");
+    app.nav.tracks_rect = Rect::from_min_max(headers.min, lanes.max);
+    app.nav.lanes_x = lanes.min.x;
     crate::nav::follow_playhead(app, lanes.width() / app.bar_w);
     if grid_w > 0.0 {
         crate::liveloops::show_grid(app, ui, Rect::from_min_max(pos2(head.max.x, local.max.y), pos2(head.max.x + grid_w, area.max.y)), headers.min.y);

@@ -20,17 +20,20 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Liquid glass and the suite's capsules (kn_ui::capsule: glass / classic / dark rimmed) on the control bar
 - [x] Appearance, colour theme, liquid glass and title bar in Settings ▸ View (per-app look file)
 - [x] Window frame, title bar, resize edges, HiDPI pointer, Wayland pinch: from kn-ui's winframe and the patched winit
-- [~] Help tags on region, cycle, note, pan, XY and master drags. [ ] the rest of Logic's, Quick Help panel
-- [ ] Animations: panes sliding, region drop, playhead catch, zoom (interactions/UI-ANIMATIONS)
-- [~] App icon: the gold record (data/icons, installed with the menu shortcut). [ ] About window
+- [~] Help tags on region, cycle, note, pan, XY and master drags; Show/Hide Help Tags. Quick Help (⇧/, Help menu, control-bar ?): the area under the pointer described (control bar, toolbar, Browser, Inspector, ruler, headers, tracks, editor, Mixer, right panes; Studio's own words) in the Inspector, a floating window or a bubble (Quick Help appears as). [ ] help tags for the rest of Logic's drags, Quick Help for single controls (it describes areas, not each button)
+- [~] Animations: the research measured Logic's pane show/hide (Browser, Inspector, Editor) and key zoom as instant (one frame, UI-ANIMATIONS.txt, GESTURES-SCROLL.txt), and Studio does the same. [ ] region drop, playhead catch scrolling and Live Loops queue rings not measured in Logic yet
+- [x] App icon: the gold record (data/icons, installed with the menu shortcut); the About window (record, version, credits, website)
 
 ## 2. Main window
-- [~] Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, Autopunch (its locators: the ruler's red strip, dragged by its ends or middle), master volume, right-pane buttons. [ ] Customize Control Bar (Autopunch shows by default here; in Logic it's a customize option), the Tuner window
-- [ ] Toolbar (Ctrl-Option-Cmd-T) and Customize Control Bar and Display…
+- [~] Control bar as Logic 13's: view buttons, transport (Stop / Go to Beginning with its Stop Button Options, Play, Record, Cycle; Capture as Recording, Replace and Autopunch when ticked in Customize Control Bar and Display…), LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner (the Tuner window: the input's note, cents on a ±50 arc, Hz, reference pitch; pitch found by a YIN-style detector, tested), Solo, Count-in, Metronome, master volume, right-pane buttons. [ ] the Tuner reads the audio input (LG_TEST_INPUT for checks), not a track's output as Logic's does; Logic's Tuner look not in the research (Studio's own)
+- [~] Toolbar (⌃⌥⌘T, View ▸ Show Toolbar, the control bar's button): a row of command buttons under the control bar; Customize Toolbar… (and its right-click) picks them, kept in ~/.config/bramble-studio/toolbar.txt. Customize Control Bar and Display… (View menu, the LCD's ⌄ menu): View panes, Capture as Recording / Replace / Autopunch (controlbar::Shown), the LCD's display; Apply / Save As Control Bar and Display Defaults. [ ] Logic's exact toolbar button set and icons (not in the research: Studio's labelled buttons; Section buttons are disabled until those commands exist), the sheet's other Logic options (Rewind / Forward buttons, Low Latency, Solo, Count-in, Master Level visibility), DisplayState's transportLayoutDict / actionBarLayoutDict IDs not decoded
+- [~] Navigation (nav.rs, tested): Go to Position… / Marker Number… / Set Left and Right Locator numerically… sheets (bar beat division tick or minutes:seconds), rewind / forward by division, 1/8, 1/16, nudge value and frame, Play from Beginning / Previous Bar / Left or Right Locator / Left Window Edge, last locate position, Play Button Options and Auto Set Locators (Navigate menu), locators by playhead (rounded), by selection, and Play / Cycle Play, move by 1 bar, Go to Marker Number 1–20, Create Marker by Cycle Area, Create Arrangement Marker, division and nudge values, Tap Tempo (one undo step); zoom: ≈1.3× a key press (measured), Zoom to fit Selection (h, v, both), All Contents, Locators, Toggle Zoom to fit (again: back), Save as / Recall Zoom 1–3, navigation snapshots with Back / Forward (⌥Z, ⌥⇧Z). [ ] Shuttle and Scrub, Rewind / Forward by Transient, Toggle Cycle Preview, Horizontal / Vertical Auto Zoom, Cycle Through Window Views (Tab: keys follow the pointer here)
+- [~] Screensets (screensets.rs, tested): 1–9 and ⇧ + two digits for 11–99, made from the window as it is when a number is new; unlocked ones keep changes, locked come back as locked; the Window menu lists them (✓ the current one) with Duplicate…, Rename…, Delete, Lock / Unlock, Revert to Saved; Next / Previous Screenset. A project's own screensets are read from its DisplayState.plist (lg-core displaystate, tested on the research's samples: numbers, names, lock, Browser / Inspector / List Editors / control bar / toolbar / bottom editor and its height). [ ] screensets aren't written back into the .logicx (Studio keeps them for the session); floating windows aren't part of a screenset; the bare digit keys go to screensets (Logic's key list binds them to markers 1–9 too: Go to Marker Number n works from ⌥/ and other bindings)
+- [~] Window and View menus: Open Smart Controls / Score Editor / Step Sequencer / Audio Track, File and Smart Tempo Editors / Event List / Signature List / MIDI Transform, Show Play Surface, Minimize All, Zoom All, Fill, Center, Move & Resize halves and quarters, Return to Previous Size, Bring All to Front; Show Smart Controls / List Editors / Note Pads / Project Files with Show / Hide labels; Settings tab openers (Open General Settings… etc.); Help menu links (website, GitHub help, releases, issues, discussions). [ ] window placement depends on the desktop (Wayland ignores positions), Project Settings window, Transport / Event / Region Inspector floats, Project Audio, Step Input Keyboard
 - [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (≥ 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack… sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track
 - [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
-- [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
+- [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts; Loops & One-Shots (the user's own loop folders, ~/Music/Loops and the like: click previews, double-click adds; no Apple loops), Plug-in Presets (the settings saved from plug-in windows, listed); drag a patch onto a track (or below the last for a new track) or a loop onto a track at a bar; its keys over the Browser (↩ New Track with Selected Item, ⌘↩ Replace Patch, ⌘⌫ Clear Applied Tags, View Info, Find Similar, Add to Favorites ★, Toggle All Filters) and Search in Browser (⌘F), Show Loops / Instruments / Effects in Browser. [ ] patch preview (Play/Stop Preview), loading a plug-in preset from the Browser, Logic's tags, Toggle Columns View, Sound Library
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
@@ -77,7 +80,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 ## 7. Interaction parity (interactions/ research)
 - [~] Resizable panes (Browser, header, editor, mixer). Missing: Inspector, Piano Roll keyboard, global tracks, Smart Controls, persistence (DisplayState)
 - [~] Drags with modifiers: region move/copy, notes, region loop corner, fades (Ctrl-Shift / Option curve), automation points / segments / curves, track reorder, marquee (Shift: off the grid). Missing: velocity, tempo points, slot copy, Library to track, zoom; region drags with automation shown (Logic: automation marquee)
-- [~] Scroll and pinch: scroll, Option-scroll zoom. Missing: two-finger horizontal, pinch zoom per area, Shift-scroll, catch
+- [~] Scroll and pinch: two-finger horizontal and vertical scroll, Shift-scroll sideways, ⌘-scroll and pinch zoom in the Tracks area, Piano Roll, Score and audio editors (each its own), Catch (off when you scroll while playing, back with ` or at stop), Scroll in Play (⌃`: the playhead stays in the middle), page commands (Page Up / Down / Top / Bottom, 1/3 and 1/8 page, Left-Most / Right-Most). [ ] modifier + scroll in Logic unresolved in the research (GESTURES-SCROLL.txt); pinch untested on a real trackpad here
 - [ ] Clipboard behaviour per area (keyboard-and-modifiers.txt)
 - [x] Musical Typing window and MIDI keyboards (all inputs). [ ] Caps Lock keyboard
 
@@ -90,16 +93,16 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 197 | 594 | 33% |
-| Local menus | 460 | 1191 | 38% |
-| Right-click menus | 1201 | 2575 | 46% |
-| Key commands | 573 | 2207 | 25% |
+| Menu bar | 271 | 594 | 45% |
+| Local menus | 469 | 1191 | 39% |
+| Right-click menus | 1211 | 2575 | 47% |
+| Key commands | 760 | 2207 | 34% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 197 of 594
+## Menu bar: 271 of 594
 
 
-<details><summary>Bramble Studio — 13/48</summary>
+<details><summary>Bramble Studio — 14/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -146,13 +149,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Services
   - [ ] <per-user entries removed>
 - [x] Hide Bramble Studio  `⌘H`
-- [ ] Hide Others  `⌥⌘H`
+- [x] Hide Others  `⌥⌘H`
 - [ ] Show All
 - [x] Quit Bramble Studio  `⌘Q`
 
 </details>
 
-<details><summary>File — 20/81</summary>
+<details><summary>File — 21/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -175,7 +178,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Project Management
   - [ ] Clean Up…
   - [ ] Consolidate…
-  - [ ] Rename…
+  - [x] Rename…
   - [ ] Show in Finder…
 - [ ] Project Settings
   - [x] General…
@@ -238,7 +241,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 58/166</summary>
+<details><summary>Edit — 59/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -405,7 +408,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Tempo Operations…
   - [ ] Tempo Interpreter…
 - [ ] Open in External Sample Editor  `⇧W`
-- [ ] Open Smart Tempo Editor
+- [x] Open Smart Tempo Editor
 
 </details>
 
@@ -463,26 +466,26 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Navigate — 13/56</summary>
+<details><summary>Navigate — 35/56</summary>
 
 - [ ] Go To
-  - [ ] Position…  `/`
-  - [ ] Left Locator  `⌃⇧,`
-  - [ ] Right Locator  `⌃⇧.`
-  - [ ] Selection Start  `⌃↖Home`
-  - [ ] Selection End  `⌃↘End`
-  - [ ] Next Marker
-  - [ ] Previous Marker
-  - [ ] Marker Number…  `⌥/`
+  - [x] Position…  `/`
+  - [x] Left Locator  `⌃⇧,`
+  - [x] Right Locator  `⌃⇧.`
+  - [x] Selection Start  `⌃↖Home`
+  - [x] Selection End  `⌃↘End`
+  - [x] Next Marker
+  - [x] Previous Marker
+  - [x] Marker Number…  `⌥/`
 - [x] Scroll to Selection  `⇧``
 - [x] Set Locators by Selection and Enable Cycle  `⌘U`
 - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
 - [x] Move Locators Forward by Cycle Length  `⇧⌘.`
-- [ ] Move Locators Backwards by Cycle Length  `⇧⌘,`
+- [x] Move Locators Backwards by Cycle Length  `⇧⌘,`
 - [x] Create Marker  `⌥'`
 - [ ] Other
-  - [ ] Create Marker for Region Selection  `⌥⇧'`
-  - [ ] Create Without Rounding  `⌃⌥'`
+  - [x] Create Marker for Region Selection  `⌥⇧'`
+  - [x] Create Without Rounding  `⌃⌥'`
   - [ ] Import Marker from Audio File
   - [ ] Export Marker to Audio File
   - [ ] Remove Marker from Audio File
@@ -499,14 +502,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Selected Regions
     - [ ] All Scene Markers
 - [x] Rename Marker  `⇧'`
-- [ ] Delete Marker at Playhead Position  `⌥⌫`
-- [ ] Open Marker List
+- [x] Delete Marker at Playhead Position  `⌥⌫`
+- [x] Open Marker List
 - [ ] Open Marker Text
 - [ ] Play Button Options
-  - [ ] Play from Marquee Selection
-  - [ ] Play from Cycle Start
-  - [ ] Play From Selected Region
-  - [ ] Play From Last Locate Position
+  - [x] Play from Marquee Selection
+  - [x] Play from Cycle Start
+  - [x] Play From Selected Region
+  - [x] Play From Last Locate Position
 - [ ] Stop Button Options
   - [x] Stop
   - [x] Stop and Go to Left Locator
@@ -516,11 +519,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Jump between Selected Region- and Project Start if stopped
   - [x] Jump between Last Locate Position and Project Start if stopped
 - [ ] Auto Set Locators
-  - [ ] By Marquee Selection
-  - [ ] By Region Selection
-  - [ ] By Marker/Chord Selection
-  - [ ] By Note Selection
-  - [ ] Enable Auto Set Locators
+  - [x] By Marquee Selection
+  - [x] By Region Selection
+  - [x] By Marker/Chord Selection
+  - [x] By Note Selection
+  - [x] Enable Auto Set Locators
 
 </details>
 
@@ -626,48 +629,48 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>View — 6/18</summary>
+<details><summary>View — 13/18</summary>
 
 - [ ] Show Tab Bar
 - [ ] Show All Tabs  `⇧⌘\`
 - [x] Hide Browser  `B`
 - [x] Hide Inspector  `I`
 - [x] Show Mixer  `X`
-- [ ] Show Smart Controls  `Y`
+- [x] Show Smart Controls  `Y`
 - [x] Show Editor  `E`
-- [ ] Show List Editors  `D`
-- [ ] Show Note Pads  `⌃⇧P`
-- [ ] Show Project Files  `O`
+- [x] Show List Editors  `D`
+- [x] Show Note Pads  `⌃⇧P`
+- [x] Show Project Files  `O`
 - [ ] Show Assistant  `⌥⌘/`
 - [x] Hide Control Bar
-- [ ] Customize Control Bar and Display…
-- [ ] Show Toolbar  `⌃⌥⌘T`
-- [ ] Customize Toolbar…
+- [x] Customize Control Bar and Display…
+- [x] Show Toolbar  `⌃⌥⌘T`
+- [x] Customize Toolbar…
 - [ ] Show Movie Window
 - [ ] Show Colors  `⌥C`
 - [x] Enter Full Screen  `⌃⌘F`
 
 </details>
 
-<details><summary>Window — 9/68</summary>
+<details><summary>Window — 39/68</summary>
 
 - [x] Minimize  `⌘M`
-- [ ] Minimize All  `⌥⌘M`
+- [x] Minimize All  `⌥⌘M`
 - [x] Zoom  `⌃⌘M`
-- [ ] Zoom All  `⌃⌥⌘M`
-- [ ] Fill  `⌃F`
-- [ ] Center  `⌃C`
+- [x] Zoom All  `⌃⌥⌘M`
+- [x] Fill  `⌃F`
+- [x] Center  `⌃C`
 - [ ] Move & Resize
   - [ ] Halves
-  - [ ] Left  `⌃vk123`
+  - [x] Left  `⌃vk123`
   - [x] Right  `⌃vk124`
-  - [ ] Top  `⌃vk126`
-  - [ ] Bottom  `⌃vk125`
+  - [x] Top  `⌃vk126`
+  - [x] Bottom  `⌃vk125`
   - [ ] Quarters
-  - [ ] Top Left
-  - [ ] Top Right
-  - [ ] Bottom Left
-  - [ ] Bottom Right
+  - [x] Top Left
+  - [x] Top Right
+  - [x] Bottom Left
+  - [x] Bottom Right
   - [ ] Arrange
   - [ ] Left & Right  `⌃⇧vk123`
   - [ ] Left & Quarters  `⌃⌥⇧vk123`
@@ -678,72 +681,72 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Bottom & Top  `⌃⇧vk125`
   - [ ] Bottom & Quarters  `⌃⌥⇧vk125`
   - [ ] Quarters
-  - [ ] Return to Previous Size  `⌃R`
+  - [x] Return to Previous Size  `⌃R`
 - [ ] Full Screen Tile
-  - [ ] Left of Screen
-  - [ ] Right of Screen
+  - [x] Left of Screen
+  - [x] Right of Screen
 - [ ] Move to iPad Pro
 - [ ] Cycle Through Windows  `⌘``
 - [ ] Show Previous Tab  `⌃⇧⇥`
 - [ ] Show Next Tab  `⌃⇥`
 - [ ] Move Tab to New Window
 - [ ] Merge All Windows
-- [ ] Bring All to Front
-- [ ] Arrange in Front
+- [x] Bring All to Front
+- [x] Arrange in Front
 - [ ] Remove Window from Set
 - [x] Open Main Window  `⌘1`
 - [x] Open Mixer  `⌘2`
-- [ ] Open Smart Controls
+- [x] Open Smart Controls
 - [x] Open Piano Roll  `⌘4`
-- [ ] Open Score Editor  `⌘5`
-- [ ] Open Step Sequencer  `⌘3`
+- [x] Open Score Editor  `⌘5`
+- [x] Open Step Sequencer  `⌘3`
 - [ ] Open Step Editor
-- [ ] Open Audio Track Editor
-- [ ] Open Audio File Editor  `⌘6`
-- [ ] Open Smart Tempo Editor
-- [ ] Open Event List  `⌘7`
-- [ ] Open Signature List
+- [x] Open Audio Track Editor
+- [x] Open Audio File Editor  `⌘6`
+- [x] Open Smart Tempo Editor
+- [x] Open Event List  `⌘7`
+- [x] Open Signature List
 - [ ] Open Project Audio  `⌘8`
-- [ ] Open MIDI Transform  `⌘9`
+- [x] Open MIDI Transform  `⌘9`
 - [ ] Open Transport Float
 - [ ] Show Event Float  `⌥E`
 - [ ] Show Region Inspector Float  `⌥⇧R`
-- [ ] Show Play Surface  `⌘K`
+- [x] Show Play Surface  `⌘K`
 - [x] Show Musical Typing
 - [ ] Show Step Input Keyboard  `⌥⌘K`
 - [x] Hide All Plug-in Windows  `V`
 - [ ] Untitled.logicx - Tracks
 - [ ] Screenset 1 (Tracks/Browser)  `1`
-- [ ] Duplicate…
-- [ ] Rename…
+- [x] Duplicate…
+- [x] Rename…
 - [x] Delete
-- [ ] Lock
-- [ ] Revert to Saved
+- [x] Lock
+- [x] Revert to Saved
 
 </details>
 
-<details><summary>Help — 0/16</summary>
+<details><summary>Help — 12/16</summary>
 
 - [ ] Send Bramble Studio Feedback
-- [ ] Quick Help
+- [x] Quick Help
 - [ ] Quick Help appears as
-  - [ ] Inspector Pane
-  - [ ] Floating Window
-  - [ ] Bubbles at Pointer Location
-- [ ] Bramble Studio Help
-- [ ] Bramble Studio Instruments
-- [ ] Bramble Studio Effects
+  - [x] Inspector Pane
+  - [x] Floating Window
+  - [x] Bubbles at Pointer Location
+- [x] Bramble Studio Help
+- [x] Bramble Studio Instruments
+- [x] Bramble Studio Effects
 - [ ] Bramble Studio Control Surfaces Support
-- [ ] What’s New in Bramble Studio
-- [ ] Release Notes
-- [ ] Bramble Studio Support
-- [ ] Bramble Studio on the Web
-- [ ] Bramble Studio Discussions
+- [x] What’s New in Bramble Studio
+- [x] Release Notes
+- [x] Bramble Studio Support
+- [x] Bramble Studio on the Web
+- [x] Bramble Studio Discussions
 - [ ] Create Support Profile…
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 460 of 1191
+## Local menus (Edit / Functions / View in each area): 469 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -758,7 +761,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiofile-Edit — 8/36</summary>
+<details><summary>audiofile-Edit — 10/36</summary>
 
 - [x] Undo  `⌘Z`
 - [x] Redo  `⇧⌘Z`
@@ -776,8 +779,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Selection -> Sample Loop
 - [ ] Write Sample Loop to Audio File
 - [x] Go to
-  - [ ] Selection Start  `⌃↖Home`
-  - [ ] Selection End  `⌃↘End`
+  - [x] Selection Start  `⌃↖Home`
+  - [x] Selection End  `⌃↘End`
   - [ ] Region Start  `⌃⌥←`
   - [ ] Region End  `⌃⌥→`
   - [ ] Region Anchor  `⌃⌥↓`
@@ -818,7 +821,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiofile-View — 0/10</summary>
+<details><summary>audiofile-View — 1/10</summary>
 
 - [ ] Samples
 - [ ] Min:Sec:Ms
@@ -828,7 +831,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Amplitude Percentage
 - [ ] Amplitude Sample Value
 - [ ] Show as Sample & Hold
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 - [ ] Show File in Finder  `⇧⌘R`
 
 </details>
@@ -972,7 +975,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-View — 0/7</summary>
+<details><summary>audiotrack-View — 1/7</summary>
 
 - [ ] Show Local Inspector  `⌥⇧I`
 - [ ] Secondary Ruler  `⌃⌥⇧R`
@@ -980,7 +983,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Region Transpose
 - [ ] Grid Lines
 - [ ] Marker Lines
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 
 </details>
 
@@ -1404,7 +1407,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-View — 4/16</summary>
+<details><summary>pianoroll-View — 5/16</summary>
 
 - [ ] Link
 - [ ] One Track
@@ -1417,7 +1420,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] By Region Color
   - [x] By Velocity
   - [x] By MIDI Channel
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show Global Tracks
 - [ ] Configure Global Tracks…
@@ -1627,7 +1630,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-View — 4/38</summary>
+<details><summary>score-View — 5/38</summary>
 
 - [ ] Link
   - [x] Off
@@ -1661,7 +1664,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] All Objects
 - [ ] Explode Folders  `⌃F`
 - [ ] Explode Polyphony  `⌃X`
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show Global Tracks
 - [ ] Configure Global Tracks…
@@ -1693,9 +1696,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>smarttempo-View — 0/3</summary>
+<details><summary>smarttempo-View — 1/3</summary>
 
-- [ ] Scroll in Play
+- [x] Scroll in Play
 - [ ] Show Tempo Curve Overlay
 - [ ] Show Transients
 
@@ -1768,7 +1771,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 57/168</summary>
+<details><summary>tracks-Edit — 58/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1937,7 +1940,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Tempo Operations…
   - [ ] Tempo Interpreter…
 - [ ] Open in External Sample Editor  `⇧W`
-- [ ] Open Smart Tempo Editor
+- [x] Open Smart Tempo Editor
 
 </details>
 
@@ -2057,7 +2060,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 4/25</summary>
+<details><summary>tracks-View — 5/25</summary>
 
 - [ ] Link
   - [x] Off
@@ -2079,7 +2082,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Marquee Ruler
 - [ ] Grid Lines
 - [ ] Marker Lines
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 - [ ] Regions
 - [ ] Chords
 - [ ] Show Creation Date
@@ -2087,7 +2090,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1201 of 2575
+## Right-click menus: 1211 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2134,7 +2137,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>automation-lane — 6/12</summary>
+<details><summary>automation-lane — 7/12</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -2147,7 +2150,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Empty Regions
 - [ ] Select Overlapped Regions  `⇧O`
 - [ ] Select Muted Regions  `⇧M`
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 
 </details>
 
@@ -2157,7 +2160,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>browser-loop-item — 2/12</summary>
+<details><summary>browser-loop-item — 5/12</summary>
 
 - [ ] New Track with Loop
 - [ ] Place Loop at Playhead
@@ -2165,12 +2168,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Quick Sampler
   - [ ] Sample Alchemy
   - [ ] Drum Machine Designer
-- [ ] Find Similar
-- [ ] Add to Favorites
+- [x] Find Similar
+- [x] Add to Favorites
 - [x] Rename
 - [x] Delete
 - [ ] Show in Finder
-- [ ] View Info
+- [x] View Info
 
 </details>
 
@@ -3675,7 +3678,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-empty-grid — 9/11</summary>
+<details><summary>pianoroll-empty-grid — 10/11</summary>
 
 - [x] Create Note
 - [x] Paste  `⌘V`
@@ -3687,7 +3690,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Region Colors
 - [x] Velocity Colors
 - [x] MIDI Channel Colors
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 
 </details>
 
@@ -4038,7 +4041,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 80/172</summary>
+<details><summary>region-audio — 81/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4074,7 +4077,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
-  - [ ] Toggle Auto Set Locators
+  - [x] Toggle Auto Set Locators
 - [x] Folder
   - [x] Pack Folder  `⌃⌥⇧F`
   - [x] Pack Take Folder  `⌃⌥⌘F`
@@ -4215,7 +4218,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 106/212</summary>
+<details><summary>region-midi — 107/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4251,7 +4254,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
-  - [ ] Toggle Auto Set Locators
+  - [x] Toggle Auto Set Locators
 - [x] Quantize
   - [x] Off
   - [x] 1/1 Note
@@ -4432,10 +4435,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>ruler — 6/16</summary>
+<details><summary>ruler — 7/16</summary>
 
 - [x] Move Locators Forward by Cycle Length  `⇧⌘.`
-- [ ] Move Locators Backwards by Cycle Length  `⇧⌘,`
+- [x] Move Locators Backwards by Cycle Length  `⇧⌘,`
 - [x] Skip Cycle  `=`
 - [x] Set Locators by Selection and Enable Cycle  `⌘U`
 - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
@@ -4529,7 +4532,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 106/212</summary>
+<details><summary>take-folder-region — 107/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4565,7 +4568,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Reverse  `⌃⇧R`
   - [x] Set Locators by Selection and Enable Cycle  `⌘U`
   - [x] Set Rounded Locators by Selection and Enable Cycle  `U`
-  - [ ] Toggle Auto Set Locators
+  - [x] Toggle Auto Set Locators
 - [x] Quantize
   - [x] Off
   - [x] 1/1 Note
@@ -4887,7 +4890,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-area-empty-lane — 6/12</summary>
+<details><summary>tracks-area-empty-lane — 7/12</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -4900,7 +4903,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Empty Regions
 - [ ] Select Overlapped Regions  `⇧O`
 - [ ] Select Muted Regions  `⇧M`
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 
 </details>
 
@@ -4910,7 +4913,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 573 of 2207
+## Key commands: 760 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4919,7 +4922,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 147/679</summary>
+<details><summary>Global Commands — 296/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -4935,57 +4938,57 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Stop  `0`
 - [x] Play or Stop  `˽`
 - [ ] Preview Selection-Based Processing  `⌥⇧˽`
-- [ ] Stop or Play From Last Position
-- [ ] Play or Stop and Go to Last Locate Position
+- [x] Stop or Play From Last Position
+- [x] Play or Stop and Go to Last Locate Position
 - [x] Rewind  `,`
 - [x] Forward  `.`
 - [x] Fast Rewind  `⇧,`
 - [x] Fast Forward  `⇧.`
 - [ ] Rewind by Transient  `⌃,`
 - [ ] Forward by Transient  `⌃.`
-- [ ] Rewind one Frame
-- [ ] Forward one Frame
-- [ ] Rewind by Division Value
-- [ ] Forward by Division Value
-- [ ] Rewind one 1/8 Note
-- [ ] Forward one 1/8 Note
-- [ ] Rewind one 1/16 Note
-- [ ] Forward one 1/16 Note
-- [ ] Rewind by Nudge Value
-- [ ] Forward by Nudge Value
+- [x] Rewind one Frame
+- [x] Forward one Frame
+- [x] Rewind by Division Value
+- [x] Forward by Division Value
+- [x] Rewind one 1/8 Note
+- [x] Forward one 1/8 Note
+- [x] Rewind one 1/16 Note
+- [x] Forward one 1/16 Note
+- [x] Rewind by Nudge Value
+- [x] Forward by Nudge Value
 - [ ] Shuttle Rewind
 - [ ] Shuttle Forward
 - [ ] Scrub Rewind
 - [ ] Scrub Forward
-- [ ] Play from Beginning
-- [ ] Play from Previous Bar
-- [ ] Play from Left Locator
-- [ ] Play from Right Locator
-- [ ] Play from Left Window Edge  `⇧⌅`
+- [x] Play from Beginning
+- [x] Play from Previous Bar
+- [x] Play from Left Locator
+- [x] Play from Right Locator
+- [x] Play from Left Window Edge  `⇧⌅`
 - [x] Go to Left Locator  `⌃⇧,`
 - [x] Go to Right Locator  `⌃⇧.`
-- [ ] Go to Last Locate Position
+- [x] Go to Last Locate Position
 - [x] Stop and Go to Last Locate Position
 - [x] Stop and Go to Left Locator
-- [ ] Stop and Go to Beginning
-- [ ] Go to Position…  `/`
-- [ ] Set Left Locator numerically…
-- [ ] Set Right Locator numerically…
-- [ ] Set Left Locator by Playhead
-- [ ] Set Left Locator by Rounded Playhead
+- [x] Stop and Go to Beginning
+- [x] Go to Position…  `/`
+- [x] Set Left Locator numerically…
+- [x] Set Right Locator numerically…
+- [x] Set Left Locator by Playhead
+- [x] Set Left Locator by Rounded Playhead
 - [x] Set Punch In Locator by Playhead  `⌃⌥⌘I`
 - [x] Set Punch In Locator by Rounded Playhead  `⌃⌥⇧⌘I`
-- [ ] Set Right Locator by Playhead
-- [ ] Set Right Locator by Rounded Playhead
+- [x] Set Right Locator by Playhead
+- [x] Set Right Locator by Rounded Playhead
 - [x] Set Punch Out Locator by Playhead  `⌃⌥⌘O`
 - [x] Set Punch Out Locator Point by Rounded Playhead  `⌃⌥⇧⌘O`
-- [ ] Set Locators/Loop by Regions/Events/Marquee
+- [x] Set Locators/Loop by Regions/Events/Marquee
 - [x] Set Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop  `⌘U`
-- [ ] Set Rounded Locators/Loop by Regions/Events/Marquee
+- [x] Set Rounded Locators/Loop by Regions/Events/Marquee
 - [x] Set Rounded Locators/Loop by Regions/Events/Marquee and Enable Cycle/Loop  `U`
-- [ ] Set Locators and Play
-- [ ] Set Rounded Locators and Play
-- [ ] Set Rounded Locators and Cycle Play
+- [x] Set Locators and Play
+- [x] Set Rounded Locators and Play
+- [x] Set Rounded Locators and Cycle Play
 - [x] Set Rounded Locators and Record
 - [x] Set Rounded Locators and Cycle Record
 - [x] Play from Selection  `⇧˽`
@@ -4995,24 +4998,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Skip Cycle  `=`
 - [x] Move Locators Forward by Cycle Length / Loop Forward by Loop Length  `⇧⌘.`
 - [x] Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length  `⇧⌘,`
-- [ ] Move Locators/Loop Forward by 1 Bar
-- [ ] Move Locators/Loop Backwards by 1 Bar
+- [x] Move Locators/Loop Forward by 1 Bar
+- [x] Move Locators/Loop Backwards by 1 Bar
 - [x] Double Cycle/Loop Length  `⌥⇧⌘.`
 - [x] Halve Cycle/Loop Length  `⌥⇧⌘,`
-- [ ] Toggle Auto Set Locators
+- [x] Toggle Auto Set Locators
 - [x] Go to Selection Start  `⌃⤒`
 - [x] Go to Selection End  `⌃⤓`
-- [ ] Go to Beginning of First Region
+- [x] Go to Beginning of First Region
 - [x] Go to End of Last Region  `⌥↩`
 - [x] Go to Beginning  `↩`
-- [ ] Go to End
+- [x] Go to End
 - [ ] Select Previous Section for Realtime Comping
 - [x] Create Marker  `⌥'`
 - [x] Create Marker without rounding  `⌃⌥'`
 - [x] Create Marker for Region/Marquee Selection  `⌥⇧'`
-- [ ] Create Marker by Cycle Area
+- [x] Create Marker by Cycle Area
 - [x] Delete Marker  `⌥⌫`
-- [ ] Open Marker List
+- [x] Open Marker List
 - [ ] Open Marker Text
 - [x] Set Locators by Marker and Enable Cycle  `⌃⌥C`
 - [x] Set Locators by Previous Marker and Enable Cycle  `⌃⌥,`
@@ -5021,29 +5024,29 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Go to Next Marker
 - [x] Go to Previous Marker And Set Locators  `⌥,`
 - [x] Go to Next Marker And Set Locators  `⌥.`
-- [ ] Go to Marker Number…  `⌥/`
+- [x] Go to Marker Number…  `⌥/`
 - [x] Rename Marker  `⇧'`
-- [ ] Go to Marker Number 1  `1`
-- [ ] Go to Marker Number 2  `2`
-- [ ] Go to Marker Number 3  `3`
-- [ ] Go to Marker Number 4  `4`
-- [ ] Go to Marker Number 5  `5`
-- [ ] Go to Marker Number 6  `6`
-- [ ] Go to Marker Number 7  `7`
-- [ ] Go to Marker Number 8  `8`
-- [ ] Go to Marker Number 9  `9`
-- [ ] Go to Marker Number 10  `⌃0`
-- [ ] Go to Marker Number 11  `⌃1`
-- [ ] Go to Marker Number 12  `⌃2`
-- [ ] Go to Marker Number 13  `⌃3`
-- [ ] Go to Marker Number 14  `⌃4`
-- [ ] Go to Marker Number 15  `⌃5`
-- [ ] Go to Marker Number 16  `⌃6`
-- [ ] Go to Marker Number 17  `⌃7`
-- [ ] Go to Marker Number 18  `⌃8`
-- [ ] Go to Marker Number 19  `⌃9`
-- [ ] Go to Marker Number 20
-- [ ] Create Arrangement Marker
+- [x] Go to Marker Number 1  `1`
+- [x] Go to Marker Number 2  `2`
+- [x] Go to Marker Number 3  `3`
+- [x] Go to Marker Number 4  `4`
+- [x] Go to Marker Number 5  `5`
+- [x] Go to Marker Number 6  `6`
+- [x] Go to Marker Number 7  `7`
+- [x] Go to Marker Number 8  `8`
+- [x] Go to Marker Number 9  `9`
+- [x] Go to Marker Number 10  `⌃0`
+- [x] Go to Marker Number 11  `⌃1`
+- [x] Go to Marker Number 12  `⌃2`
+- [x] Go to Marker Number 13  `⌃3`
+- [x] Go to Marker Number 14  `⌃4`
+- [x] Go to Marker Number 15  `⌃5`
+- [x] Go to Marker Number 16  `⌃6`
+- [x] Go to Marker Number 17  `⌃7`
+- [x] Go to Marker Number 18  `⌃8`
+- [x] Go to Marker Number 19  `⌃9`
+- [x] Go to Marker Number 20
+- [x] Create Arrangement Marker
 - [ ] Select Previous Project
 - [ ] Select Next Project
 - [ ] Select Project 1
@@ -5078,23 +5081,23 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Mute off for all  `⌃⇧M`
 - [x] Record off for all
 - [ ] Toggle Sync intern/extern
-- [ ] Tap Tempo
+- [x] Tap Tempo
 - [ ] Toggle MIDI Machine Control
 - [ ] Toggle Cycle Preview  `⌃C`
-- [ ] Set Next Higher Division
-- [ ] Set Next Lower Division
-- [ ] Set Division Value to 1/4 Note
-- [ ] Set Division Value to 1/8 Note
-- [ ] Set Division Value to 1/16 Note
-- [ ] Set Division Value to 1/32 Note
-- [ ] Set Division Value to 1/64 Note
-- [ ] Set Division Value to 1/128 Note
-- [ ] Set Division Value to 1/4 Triplet (1/6)
-- [ ] Set Division Value to 1/8 Triplet (1/12)
-- [ ] Set Division Value to 1/16 Triplet (1/24)
-- [ ] Set Division Value to 1/32 Triplet (1/48)
-- [ ] Set Division Value to 1/64 Triplet (1/96)
-- [ ] Set Division Value to 1/128 Triplet (1/192)
+- [x] Set Next Higher Division
+- [x] Set Next Lower Division
+- [x] Set Division Value to 1/4 Note
+- [x] Set Division Value to 1/8 Note
+- [x] Set Division Value to 1/16 Note
+- [x] Set Division Value to 1/32 Note
+- [x] Set Division Value to 1/64 Note
+- [x] Set Division Value to 1/128 Note
+- [x] Set Division Value to 1/4 Triplet (1/6)
+- [x] Set Division Value to 1/8 Triplet (1/12)
+- [x] Set Division Value to 1/16 Triplet (1/24)
+- [x] Set Division Value to 1/32 Triplet (1/48)
+- [x] Set Division Value to 1/64 Triplet (1/96)
+- [x] Set Division Value to 1/128 Triplet (1/192)
 - [x] Toggle Metronome Click  `K`
 - [x] Toggle Count-in  `⇧K`
 - [ ] Send Reset Controllers
@@ -5103,31 +5106,31 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Send Used Instruments MIDI Settings
 - [ ] Send All Current Fader Values except Sysex
 - [ ] Send All Current Fader Values
-- [ ] Duplicate Screenset…
-- [ ] Rename Screenset…
-- [ ] Delete Screenset
-- [ ] Lock/Unlock Current Screenset
-- [ ] Revert to Saved Screenset
-- [ ] Next Screenset
-- [ ] Previous Screenset
-- [ ] Recall Screenset 1  `1`
-- [ ] Recall Screenset 2  `2`
-- [ ] Recall Screenset 3  `3`
-- [ ] Recall Screenset 4  `4`
-- [ ] Recall Screenset 5  `5`
-- [ ] Recall Screenset 6  `6`
-- [ ] Recall Screenset 7  `7`
-- [ ] Recall Screenset 8  `8`
-- [ ] Recall Screenset 9  `9`
-- [ ] Recall Screenset 1x  `⇧1`
-- [ ] Recall Screenset 2x  `⇧2`
-- [ ] Recall Screenset 3x  `⇧3`
-- [ ] Recall Screenset 4x  `⇧4`
-- [ ] Recall Screenset 5x  `⇧5`
-- [ ] Recall Screenset 6x  `⇧6`
-- [ ] Recall Screenset 7x  `⇧7`
-- [ ] Recall Screenset 8x  `⇧8`
-- [ ] Recall Screenset 9x  `⇧9`
+- [x] Duplicate Screenset…
+- [x] Rename Screenset…
+- [x] Delete Screenset
+- [x] Lock/Unlock Current Screenset
+- [x] Revert to Saved Screenset
+- [x] Next Screenset
+- [x] Previous Screenset
+- [x] Recall Screenset 1  `1`
+- [x] Recall Screenset 2  `2`
+- [x] Recall Screenset 3  `3`
+- [x] Recall Screenset 4  `4`
+- [x] Recall Screenset 5  `5`
+- [x] Recall Screenset 6  `6`
+- [x] Recall Screenset 7  `7`
+- [x] Recall Screenset 8  `8`
+- [x] Recall Screenset 9  `9`
+- [x] Recall Screenset 1x  `⇧1`
+- [x] Recall Screenset 2x  `⇧2`
+- [x] Recall Screenset 3x  `⇧3`
+- [x] Recall Screenset 4x  `⇧4`
+- [x] Recall Screenset 5x  `⇧5`
+- [x] Recall Screenset 6x  `⇧6`
+- [x] Recall Screenset 7x  `⇧7`
+- [x] Recall Screenset 8x  `⇧8`
+- [x] Recall Screenset 9x  `⇧9`
 - [ ] Region Inspector Float  `⌥⇧R`
 - [ ] Import Project Settings…
 - [ ] Open Synchronization Project Settings…
@@ -5142,16 +5145,16 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Movie Project Settings…
 - [ ] Open Assets Project Settings…
 - [x] Open Settings…  `⌘,`
-- [ ] Open General Settings…
-- [ ] Open Audio Settings…
+- [x] Open General Settings…
+- [x] Open Audio Settings…
 - [x] Open Recording Settings…
-- [ ] Open MIDI Settings…
-- [ ] Open View Settings…
-- [ ] Open Score Settings…
-- [ ] Open Movie Settings…
-- [ ] Open Automation Settings…  `⌥A`
-- [ ] Open Control Surfaces Settings…
-- [ ] Open My Info Settings…
+- [x] Open MIDI Settings…
+- [x] Open View Settings…
+- [x] Open Score Settings…
+- [x] Open Movie Settings…
+- [x] Open Automation Settings…  `⌥A`
+- [x] Open Control Surfaces Settings…
+- [x] Open My Info Settings…
 - [ ] Open Surround Settings…
 - [ ] Reset All Settings Except Key Command Assignments…
 - [ ] Plug-in Manager…
@@ -5159,7 +5162,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Event List…  `⌘7`
 - [x] Open Main Window…  `⌘1`
 - [x] Open Mixer…  `⌘2`
-- [ ] Open Smart Controls…
+- [x] Open Smart Controls…
 - [x] Open Score Editor…  `⌘5`
 - [x] Open Step Sequencer…  `⌘3`
 - [x] Open Transform…  `⌘9`
@@ -5170,15 +5173,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Project Audio…  `⌘8`
 - [ ] Note Repeat  `⌃⌥↩`
 - [ ] Spot Erase  `⌃⌥⌫`
-- [ ] Open Audio File Editor…  `⌘6`
-- [ ] Open Smart Tempo Editor…
-- [ ] Open Audio Track Editor
-- [ ] Open Signature List…
+- [x] Open Audio File Editor…  `⌘6`
+- [x] Open Smart Tempo Editor…
+- [x] Open Audio Track Editor
+- [x] Open Signature List…
 - [x] Show/Hide Play Surface  `⌘K`
 - [ ] Show/Hide Graphic Keyboard
 - [x] Show/Hide Musical Typing
 - [ ] Show/Hide Event Float  `⌥E`
-- [ ] Show/Hide Event List
+- [x] Show/Hide Event List
 - [ ] Show/Hide Main Window
 - [x] Show/Hide Mixer  `X`
 - [x] Show/Hide Smart Controls  `Y`
@@ -5197,22 +5200,22 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Step Input Keyboard  `⌥⌘K`
 - [ ] Show/Hide Project Audio
 - [x] Show/Hide Browser  `B`
-- [ ] Search in Browser  `⌘F`
-- [ ] Show Loops & One-Shots in Browser
-- [ ] Show Instruments in Browser
-- [ ] Show Effects in Browser
+- [x] Search in Browser  `⌘F`
+- [x] Show Loops & One-Shots in Browser
+- [x] Show Instruments in Browser
+- [x] Show Effects in Browser
 - [ ] Show/Hide Assistant  `⌥⌘/`
-- [ ] Search Patch
-- [ ] Show/Hide All Files
-- [ ] Show/Hide Audio Track Editor
-- [ ] Show/Hide Audio File Editor  `W`
-- [ ] Show/Hide Marker List
-- [ ] Show/Hide Tempo List
-- [ ] Show/Hide Signature List
+- [x] Search Patch
+- [x] Show/Hide All Files
+- [x] Show/Hide Audio Track Editor
+- [x] Show/Hide Audio File Editor  `W`
+- [x] Show/Hide Marker List
+- [x] Show/Hide Tempo List
+- [x] Show/Hide Signature List
 - [x] Show/Hide Quick Help  `⇧/`
-- [ ] Switch Quick Help Appearance between Bubbles and Inspector Pane/Float Window
-- [ ] Show Detailed Help  `⌘/`
-- [ ] Show/Hide Help Tags
+- [x] Switch Quick Help Appearance between Bubbles and Inspector Pane/Float Window
+- [x] Show Detailed Help  `⌘/`
+- [x] Show/Hide Help Tags
 - [ ] Open in External Sample Editor  `⇧W`
 - [ ] Show/Hide Performance Meter
 - [x] Open Tempo List…  `⌥⇧T`
@@ -5221,7 +5224,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Key Command Assignments…  `⌥K`
 - [x] Show/Hide Colors  `⌥C`
 - [x] Enter/Exit Full Screen  `⌃⌘F`
-- [ ] Show/Hide Tuner
+- [x] Show/Hide Tuner
 - [ ] Toggle MIDI Remote for Articulation Switches
 - [ ] Open Movie…  `⌥⌘O`
 - [ ] Show/Hide Movie Window
@@ -5422,7 +5425,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Auto Input Monitoring
 - [ ] Toggle Pre-Fader Metering
 - [ ] Clear Overload Flag in Audio Channel Display
-- [ ] Close Project without Saving
+- [x] Close Project without Saving
 - [x] Close Window  `⌘W`
 - [ ] Cycle Through Windows  `⌥W`
 - [ ] Cycle Through Windows (counter-clockwise)  `⌥⇧W`
@@ -5436,7 +5439,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Default Region/Cell Parameters by Region/Cell/Folder
 - [ ] Select All Regions of Selected Tracks
 - [x] Hide Logic Pro  `⌘H`
-- [ ] Hide Others  `⌥⌘H`
+- [x] Hide Others  `⌥⌘H`
 - [x] Quit  `⌘Q`
 - [x] New Empty Project  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -5484,7 +5487,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Cycle Through Window Views  `⇥`
 - [ ] Cycle Through Window Views (counter-clockwise)  `⇧⇥`
 - [x] Minimize Window  `⌘M`
-- [ ] Minimize All Windows  `⌥⌘M`
+- [x] Minimize All Windows  `⌥⌘M`
 - [x] Zoom Window  `⌃⌘M`
 - [x] Next Plug-in Setting for topmost Plug-in Window
 - [x] Previous Plug-in Setting for topmost Plug-in Window
@@ -5564,26 +5567,26 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Set Nudge Value to Bar  `⌃⌥M`
 - [x] Set Nudge Value to Beat  `⌃⌥B`
 - [x] Set Nudge Value to Division  `⌃⌥D`
-- [ ] Set Nudge Value to 10 Ticks
+- [x] Set Nudge Value to 10 Ticks
 - [x] Set Nudge Value to Tick  `⌃⌥T`
 - [ ] Set Nudge Value to Step Input
-- [ ] Set Nudge Value to 1/1 Note
-- [ ] Set Nudge Value to 1/2 Note
-- [ ] Set Nudge Value to 1/4 Note
-- [ ] Set Nudge Value to 1/8 Note
-- [ ] Set Nudge Value to 1/16 Note
-- [ ] Set Nudge Value to 1/32 Note
-- [ ] Set Nudge Value to 1/64 Note
-- [ ] Set Nudge Value to 1/2 Triplet (1/3)
-- [ ] Set Nudge Value to 1/4 Triplet (1/6)
-- [ ] Set Nudge Value to 1/8 Triplet (1/12)
-- [ ] Set Nudge Value to 1/16 Triplet (1/24)
-- [ ] Set Nudge Value to 1/32 Triplet (1/48)
-- [ ] Set Nudge Value to 1/64 Triplet (1/96)
-- [ ] Set Nudge Value to 5 SMPTE Frame
+- [x] Set Nudge Value to 1/1 Note
+- [x] Set Nudge Value to 1/2 Note
+- [x] Set Nudge Value to 1/4 Note
+- [x] Set Nudge Value to 1/8 Note
+- [x] Set Nudge Value to 1/16 Note
+- [x] Set Nudge Value to 1/32 Note
+- [x] Set Nudge Value to 1/64 Note
+- [x] Set Nudge Value to 1/2 Triplet (1/3)
+- [x] Set Nudge Value to 1/4 Triplet (1/6)
+- [x] Set Nudge Value to 1/8 Triplet (1/12)
+- [x] Set Nudge Value to 1/16 Triplet (1/24)
+- [x] Set Nudge Value to 1/32 Triplet (1/48)
+- [x] Set Nudge Value to 1/64 Triplet (1/96)
+- [x] Set Nudge Value to 5 SMPTE Frame
 - [x] Set Nudge Value to SMPTE Frame  `⌃⌥F`
 - [x] Set Nudge Value to 0.5 SMPTE Frame  `⌃⌥H`
-- [ ] Set Nudge Value to SMPTE Bit
+- [x] Set Nudge Value to SMPTE Bit
 - [x] Set Nudge Value to 10 ms  `⌃⌥0`
 - [x] Set Nudge Value to 1 ms  `⌃⌥1`
 - [x] Set Nudge Value to Sample  `⌃⌥S`
@@ -5615,7 +5618,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 36/110</summary>
+<details><summary>Various Windows — 63/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5667,40 +5670,40 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Zoom Horizontal In  `⌘→`
 - [x] Zoom Vertical Out  `⌘↑`
 - [x] Zoom Vertical In  `⌘↓`
-- [ ] Recall Zoom 1  `⌃⌥⌘1`
-- [ ] Recall Zoom 2  `⌃⌥⌘2`
-- [ ] Recall Zoom 3  `⌃⌥⌘3`
-- [ ] Save as Zoom 1  `⌃⌥⇧⌘1`
-- [ ] Save as Zoom 2  `⌃⌥⇧⌘2`
-- [ ] Save as Zoom 3  `⌃⌥⇧⌘3`
-- [ ] Zoom to fit Selection vertically and horizontally, store Navigation Snapshot
-- [ ] Zoom to fit Selection horizontally, store Navigation Snapshot
-- [ ] Zoom to fit Selection vertically, store Navigation Snapshot
+- [x] Recall Zoom 1  `⌃⌥⌘1`
+- [x] Recall Zoom 2  `⌃⌥⌘2`
+- [x] Recall Zoom 3  `⌃⌥⌘3`
+- [x] Save as Zoom 1  `⌃⌥⇧⌘1`
+- [x] Save as Zoom 2  `⌃⌥⇧⌘2`
+- [x] Save as Zoom 3  `⌃⌥⇧⌘3`
+- [x] Zoom to fit Selection vertically and horizontally, store Navigation Snapshot
+- [x] Zoom to fit Selection horizontally, store Navigation Snapshot
+- [x] Zoom to fit Selection vertically, store Navigation Snapshot
 - [x] Zoom to fit Locators, store Navigation Snapshot  `⌃⇧Z`
-- [ ] Zoom to fit All Contents, store Navigation Snapshot
+- [x] Zoom to fit All Contents, store Navigation Snapshot
 - [x] Toggle Zoom to fit Selection or All Contents  `Z`
-- [ ] Store Navigation Snapshot  `⇧Z`
-- [ ] Navigation: Back  `⌥Z`
-- [ ] Navigation: Forward  `⌥⇧Z`
+- [x] Store Navigation Snapshot  `⇧Z`
+- [x] Navigation: Back  `⌥Z`
+- [x] Navigation: Forward  `⌥⇧Z`
 - [ ] Toggle Horizontal Auto Zoom
 - [ ] Zoom to Horizontal Auto Zoom
 - [ ] Toggle Vertical Auto Zoom
 - [ ] Zoom to Vertical Auto Zoom
 - [x] Toggle Zoom Focused Track or Row  `⌃Z`
-- [ ] Page Up  `⇞`
-- [ ] Page Down  `⇟`
+- [x] Page Up  `⇞`
+- [x] Page Down  `⇟`
 - [x] Page Left  `⤒`
 - [x] Page Right  `⤓`
-- [ ] 1/3 Page Left
-- [ ] 1/3 Page Right
-- [ ] 1/8 Page Left
-- [ ] 1/8 Page Right
-- [ ] Page Top
-- [ ] Page Bottom
-- [ ] Page Left-Most
-- [ ] Page Right-Most
+- [x] 1/3 Page Left
+- [x] 1/3 Page Right
+- [x] 1/8 Page Left
+- [x] 1/8 Page Right
+- [x] Page Top
+- [x] Page Bottom
+- [x] Page Left-Most
+- [x] Page Right-Most
 - [x] Catch Playhead Position  ```
-- [ ] Show/Hide Control Bar
+- [x] Show/Hide Control Bar
 - [x] Show/Hide Inspector  `I`
 - [ ] Collapse/Expand All Inspector Tiles
 - [ ] Show/Hide Local Inspector  `⌥⇧I`
@@ -5722,9 +5725,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Decrease Last Clicked Parameter by 1  `-`
 - [ ] Increase Last Clicked Parameter by 10  `⇧=`
 - [ ] Decrease Last Clicked Parameter by 10  `⇧-`
-- [ ] Customize Control Bar and Display…
-- [ ] Apply Control Bar and Display Defaults
-- [ ] Save As Control Bar and Display Defaults
+- [x] Customize Control Bar and Display…
+- [x] Apply Control Bar and Display Defaults
+- [x] Save As Control Bar and Display Defaults
 - [ ] Preview  `⌥˽`
 - [ ] Search and Add Plug-in…  `⌃⌘P`
 
@@ -6117,12 +6120,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Views Showing Time Ruler — 4/80</summary>
+<details><summary>Views Showing Time Ruler — 5/80</summary>
 
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show/Hide Grid Lines
 - [ ] Show/Hide Chords
-- [ ] Scroll in Play  `⌃``
+- [x] Scroll in Play  `⌃``
 - [x] Show/Hide Global Tracks  `G`
 - [ ] Configure Global Tracks…  `⌥G`
 - [ ] Show Single Global Track On/Off  `⌃⌥⌘G`
@@ -6229,7 +6232,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 92/249</summary>
+<details><summary>Main Window Tracks — 93/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6436,7 +6439,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Waveform Vertical Zoom In  `⌘=`
 - [ ] Toggle Waveform Vertical Zoom
 - [x] Show/Hide Toolbar  `⌃⌥⌘T`
-- [ ] Customize Toolbar…
+- [x] Customize Toolbar…
 - [ ] Configure Track Header…  `⌥T`
 - [ ] Use As Default Patch
 - [ ] Save as Patch
@@ -6949,13 +6952,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Project Audio — 0/20</summary>
+<details><summary>Project Audio — 1/20</summary>
 
 - [ ] Select Previous Audio File  `↑`
 - [ ] Select Next Audio File  `↓`
 - [ ] Show Audio File Details
 - [ ] Hide Audio File Details
-- [ ] Rename…  `⇧↩`
+- [x] Rename…  `⇧↩`
 - [ ] Add Audio File…  `⌃F`
 - [ ] Add Region  `⌃R`
 - [ ] Delete Files  `⌘⌫`
@@ -7034,7 +7037,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Smart Tempo Editor — 0/32</summary>
+<details><summary>Smart Tempo Editor — 1/32</summary>
 
 - [ ] Tap Tempo - Smart Tempo Editor  `T`
 - [ ] Tap Tempo (Downbeat)  `D`
@@ -7043,7 +7046,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Scroll Right  `→`
 - [ ] Select from Start to Playhead  `⇧←`
 - [ ] Select from Playhead to End  `⇧→`
-- [ ] Zoom All  `↑`
+- [x] Zoom All  `↑`
 - [ ] Center around Playhead  `↓`
 - [ ] Half Tempo  `5`
 - [ ] Double Tempo  `2`
@@ -7071,20 +7074,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Browser — 2/16</summary>
+<details><summary>Browser — 9/16</summary>
 
-- [ ] View Info  `⌘I`
+- [x] View Info  `⌘I`
 - [ ] Play/Stop Preview  `⌥˽`
-- [ ] Clear Applied Tags  `⌘⌫`
-- [ ] Toggle All Filters
+- [x] Clear Applied Tags  `⌘⌫`
+- [x] Toggle All Filters
 - [ ] Save Patch for Selected Track…
 - [ ] Enable Patch Merging
 - [ ] Add Location
 - [ ] Add Smart Search
-- [ ] New Track with Selected Item  `↩`
-- [ ] Replace Patch  `⌘↩`
-- [ ] Find Similar
-- [ ] Add to Favorites
+- [x] New Track with Selected Item  `↩`
+- [x] Replace Patch  `⌘↩`
+- [x] Find Similar
+- [x] Add to Favorites
 - [x] Rename
 - [x] Delete
 - [ ] Show in Finder

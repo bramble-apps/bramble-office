@@ -267,7 +267,7 @@ fn notes(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 const AUDIO_EXT: &[&str] = &["wav", "aif", "aiff", "caf", "mp3", "flac", "ogg", "m4a"];
 const MIDI_EXT: &[&str] = &["mid", "midi", "smf", "kar"];
 
-fn loop_folders() -> Vec<PathBuf> {
+pub(crate) fn loop_folders() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     let mut v = vec![home.join("Music/Loops"), home.join("Music/Apple Loops"), home.join("Music/Audio Music Apps/Apple Loops"), home.join("Library/Audio/Apple Loops"), PathBuf::from("/Library/Audio/Apple Loops"), home.join("Music/Samples")];
     v.retain(|p| p.is_dir());
@@ -374,7 +374,7 @@ fn list_dir(d: &Path) -> Vec<(PathBuf, bool)> {
     v
 }
 
-fn walk(d: &Path, out: &mut Vec<PathBuf>, depth: u32) {
+pub(crate) fn walk(d: &Path, out: &mut Vec<PathBuf>, depth: u32) {
     let Ok(rd) = std::fs::read_dir(d) else { return };
     for e in rd.flatten() {
         let p = e.path();

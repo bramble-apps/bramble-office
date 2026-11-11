@@ -63,10 +63,6 @@ pub enum Ask {
 
 /// Navigation's state (App::nav).
 pub struct State {
-    /// Where the playhead was last put while stopped, or where playback last started.
-    pub last_locate: f64,
-    was_playing: bool,
-    prev_pos: f64,
     /// The division (LCD, Rewind / Forward by Division Value), ticks.
     pub division: u32,
     /// Play Button Options (Navigate menu), in Logic's priority order.
@@ -98,14 +94,22 @@ pub struct State {
     /// The window's parts this frame (Quick Help), and the Inspector's place.
     pub help_areas: Vec<(egui::Rect, &'static str)>,
     pub inspector_rect: egui::Rect,
+    /// The Tracks area (headers and lanes) and its lanes' left edge, for drops from the Browser.
+    pub tracks_rect: egui::Rect,
+    pub lanes_x: f32,
+    pub browser_rect: egui::Rect,
+    /// The Browser: the item picked last (its kind, category, name), favourites, the search
+    /// field to focus, a drag from it, the filter before Toggle All Filters.
+    pub browser_pick: Option<(u8, String, String)>,
+    pub favorites: Vec<String>,
+    pub browser_focus: bool,
+    pub browser_drag: Option<(u8, String, String)>,
+    pub last_filter: Option<String>,
 }
 
 impl Default for State {
     fn default() -> State {
         State {
-            last_locate: 0.0,
-            was_playing: false,
-            prev_pos: 0.0,
             division: PPQ / 4,
             play_marquee: true,
             play_cycle: true,
@@ -127,6 +131,14 @@ impl Default for State {
             quick_help_as: 1,
             help_areas: Vec::new(),
             inspector_rect: egui::Rect::NOTHING,
+            tracks_rect: egui::Rect::NOTHING,
+            browser_rect: egui::Rect::NOTHING,
+            lanes_x: 0.0,
+            browser_pick: None,
+            favorites: crate::browser::load_favorites(),
+            browser_focus: false,
+            browser_drag: None,
+            last_filter: None,
         }
     }
 }
@@ -145,9 +157,11 @@ pub const DIVISIONS: [u32; 12] = [960, 640, 480, 320, 240, 160, 120, 80, 60, 40,
 
 /// The next finer (`higher`) or coarser division.
 pub fn division_step(cur: u32, higher: bool) -> u32 {
-    let i = DIVISIONS.iter().position(|&d| d <= cur).unwrap_or(DIVISIONS.len() - 1);
-    let i = if DIVISIONS[i] != cur && !higher { i.saturating_sub(1) } else { i };
-    if higher { DIVISIONS[(i + 1).min(DIVISIONS.len() - 1)] } else if DIVISIONS[i] == cur { DIVISIONS[i.saturating_sub(1)] } else { DIVISIONS[i] }
+    if higher {
+        DIVISIONS.iter().copied().find(|&d| d < cur).unwrap_or(DIVISIONS[DIVISIONS.len() - 1])
+    } else {
+        DIVISIONS.iter().rev().copied().find(|&d| d > cur).unwrap_or(DIVISIONS[0])
+    }
 }
 
 /// A position typed as Logic writes it: "bar beat division tick", any of them left out (from
@@ -292,9 +306,7 @@ fn play(app: &mut App) {
 }
 
 fn halt(app: &mut App) {
-    if app.playing() {
-        app.play_stop();
-    }
+    app.halt();
 }
 
 fn locators_by_selection(app: &mut App, round: bool) -> bool {
@@ -366,18 +378,9 @@ fn now() -> f64 {
 // ---------------------------------------------------------------------------------------------
 // every frame
 
-/// Follows the transport (the last locate position) and Auto Set Locators.
+/// The project's screensets once it opens, and Auto Set Locators.
 pub fn frame(app: &mut App) {
     crate::screensets::frame(app);
-    let playing = app.playing();
-    let pos = app.position();
-    if playing && !app.nav.was_playing {
-        app.nav.last_locate = app.nav.prev_pos;
-    } else if !playing && !app.nav.was_playing && (pos - app.nav.prev_pos).abs() > 0.5 {
-        app.nav.last_locate = pos;
-    }
-    app.nav.was_playing = playing;
-    app.nav.prev_pos = pos;
     if app.nav.auto_locators {
         let sel = app.region_selection();
         let mq = marquee(app);
@@ -417,6 +420,8 @@ pub fn follow_playhead(app: &mut App, visible_bars: f32) {
 // ---------------------------------------------------------------------------------------------
 // the commands
 
+/// The command names run here (build.rs and tool/checklist.py read this list).
+#[allow(dead_code)]
 pub const COMMANDS: &[&str] = &[
     // transport
     "Play or Stop", "Play",
@@ -462,7 +467,7 @@ pub const COMMANDS: &[&str] = &[
     // windows and views
     "Show Smart Controls", "Show List Editors", "Show Note Pads", "Show Project Files",
     "Open Smart Controls", "Open Smart Controls…", "Open Score Editor", "Open Step Sequencer", "Open Event List", "Show/Hide Event List", "Open Signature List", "Open Signature List…", "Show/Hide Signature List", "Show/Hide Tempo List",
-    "Show/Hide All Files", "Show Play Surface", "Open Audio Track Editor", "Show/Hide Audio Track Editor", "Open Audio File Editor", "Open Audio File Editor…", "Show/Hide Audio File Editor", "Open Smart Tempo Editor", "Open Smart Tempo Editor…",
+    "Show/Hide All Files", "Show Play Surface", "Open MIDI Transform", "Open Audio Track Editor", "Show/Hide Audio Track Editor", "Open Audio File Editor", "Open Audio File Editor…", "Show/Hide Audio File Editor", "Open Smart Tempo Editor", "Open Smart Tempo Editor…",
     "Minimize All", "Minimize All Windows", "Zoom All", "Fill", "Center", "Left", "Top", "Bottom", "Top Left", "Top Right", "Bottom Left", "Bottom Right", "Return to Previous Size", "Bring All to Front", "Arrange in Front", "Left of Screen", "Right of Screen",
     "Hide Others", "Close Project without Saving",
     // settings tabs
@@ -495,7 +500,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             let n = &app.nav;
             // (cycle on: Logic starts at the cycle start anyway)
             let cyc = (app.cycle_on() && n.play_cycle).then_some(app.cycle.0);
-            if let Some(at) = play_start((n.play_marquee, false, n.play_region, n.play_last), marquee(app).map(|m| m.0), None, reg, n.last_locate).or(cyc.map(|c| c as f64)) {
+            if let Some(at) = play_start((n.play_marquee, false, n.play_region, n.play_last), marquee(app).map(|m| m.0), None, reg, app.stopbtn.last_pos).or(cyc.map(|c| c as f64)) {
                 if !app.cycle_on() || (at >= app.cycle.0 as f64 && at < app.cycle.1 as f64) {
                     app.locate(at);
                 }
@@ -506,7 +511,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             if app.playing() {
                 halt(app);
             } else {
-                let at = app.nav.last_locate;
+                let at = app.stopbtn.last_pos;
                 app.locate(at);
                 play(app);
             }
@@ -514,7 +519,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Play or Stop and Go to Last Locate Position" => {
             if app.playing() {
                 halt(app);
-                let at = app.nav.last_locate;
+                let at = app.stopbtn.last_pos;
                 app.locate(at);
             } else {
                 play(app);
@@ -559,14 +564,14 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             play(app);
         }
         "Go to Last Locate Position" => {
-            let at = app.nav.last_locate;
+            let at = app.stopbtn.last_pos;
             app.locate(at);
         }
         "Stop and Go to Beginning" => {
             halt(app);
             app.locate(0.0);
         }
-        "Go to Position…" | "Position…" => app.nav.ask = Some(Ask::GoToPosition(crate::app::bbdt(pos as u32, sig))),
+        "Go to Position…" | "Position…" => app.nav.ask = Some(Ask::GoToPosition(String::new())),
         "Go to Beginning of First Region" => {
             let a = app.project.as_ref().and_then(|p| p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start)).min()).unwrap_or(0);
             app.locate(a as f64);
@@ -582,8 +587,8 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Next Marker" => return app.key_command(ctx, "Go to Next Marker"),
         "Previous Marker" => return app.key_command(ctx, "Go to Previous Marker"),
         // ---- locators
-        "Set Left Locator numerically…" => app.nav.ask = Some(Ask::LeftLocator(crate::app::bbdt(app.cycle.0, sig))),
-        "Set Right Locator numerically…" => app.nav.ask = Some(Ask::RightLocator(crate::app::bbdt(app.cycle.1, sig))),
+        "Set Left Locator numerically…" => app.nav.ask = Some(Ask::LeftLocator(String::new())),
+        "Set Right Locator numerically…" => app.nav.ask = Some(Ask::RightLocator(String::new())),
         "Set Left Locator by Playhead" | "Set Left Locator by Rounded Playhead" | "Set Right Locator by Playhead" | "Set Right Locator by Rounded Playhead" => {
             let mut at = pos as u32;
             if name.contains("Rounded") {
@@ -807,6 +812,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Open Signature List" | "Open Signature List…" => open_list(app, 3, false),
         "Show/Hide Signature List" => open_list(app, 3, true),
         "Show Play Surface" => return app.key_command(ctx, "Show/Hide Musical Typing"),
+        "Open MIDI Transform" => return app.key_command(ctx, "Open Transform…"),
         "Open Audio Track Editor" | "Show/Hide Audio Track Editor" | "Open Audio File Editor" | "Open Audio File Editor…" | "Show/Hide Audio File Editor" | "Open Smart Tempo Editor" | "Open Smart Tempo Editor…" => {
             if !crate::audioedit::is_audio_region(app) {
                 app.tell("Select an audio region first");
@@ -878,7 +884,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Bramble Studio Support" => kn_ui::open_url(&format!("{REPO}/issues")),
         "Bramble Studio Discussions" => kn_ui::open_url(&format!("{REPO}/discussions")),
         "Bramble Studio on the Web" => kn_ui::open_url(WEB),
-        _ => return false,
+        _ => return crate::browser::command(app, ctx, name),
     }
     let _ = beat;
     true
@@ -1047,5 +1053,21 @@ mod tests {
         assert_eq!(play_start((false, false, true, false), Some(100), Some(200), Some(300), 400.0), Some(300.0));
         assert_eq!(play_start((false, false, false, true), None, None, None, 400.0), Some(400.0));
         assert_eq!(play_start((false, false, false, false), Some(1), Some(2), Some(3), 4.0), None);
+    }
+}
+
+#[cfg(test)]
+mod names {
+    /// Every command here is spelled as Logic's (key commands, menus) or is one of Studio's own.
+    #[test]
+    fn commands_are_logics() {
+        let data = [include_str!("../data/commands.txt"), include_str!("../data/menus.txt"), include_str!("../data/local-menus.txt"), include_str!("../data/context-menus.txt")].concat();
+        let own = ["Tuner…", "Show Toolbar"];
+        for list in [super::COMMANDS, crate::screensets::COMMANDS, crate::toolbar::COMMANDS, crate::windows::COMMANDS] {
+            for c in list {
+                let found = own.contains(c) || data.lines().any(|l| l.split('\t').nth(1).is_some_and(|x| x == *c) || l.trim().trim_start_matches("✓ ").split("  ").next().is_some_and(|x| x.trim_end_matches(" ▸") == *c));
+                assert!(found, "{c:?} isn't one of Logic's names");
+            }
+        }
     }
 }

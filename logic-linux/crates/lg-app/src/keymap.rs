@@ -92,6 +92,7 @@ pub fn areas(focus: Focus) -> &'static [&'static str] {
     match focus {
         Focus::PianoRoll => &["Piano Roll", "Various Editors", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Various Windows", "Global Commands"],
         Focus::Mixer => &["Mixer", "Various Windows", "Global Commands"],
+        Focus::Browser => &["Browser", "Various Windows", "Global Commands"],
         Focus::Tracks => &["Main Window Tracks", "Main Window Tracks and Various Editors", "Views Showing Time Ruler", "Views Showing Automation", "Windows Showing Audio Files", "Various Windows", "Global Commands"],
     }
 }
@@ -101,6 +102,8 @@ pub enum Focus {
     Tracks,
     PianoRoll,
     Mixer,
+    /// The pointer over the Browser: its own keys (↩ New Track with Selected Item…) first.
+    Browser,
 }
 
 /// The Tool Menu's letter for a tool (T, then the letter).

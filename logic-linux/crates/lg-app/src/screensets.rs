@@ -235,6 +235,8 @@ pub fn title(s: &Set) -> String {
     format!("Screenset {} ({})", s.slot, parts.join("/"))
 }
 
+/// The command names run here (build.rs and tool/checklist.py read this list).
+#[allow(dead_code)]
 pub const COMMANDS: &[&str] = &[
     "Recall Screenset 1", "Recall Screenset 2", "Recall Screenset 3", "Recall Screenset 4", "Recall Screenset 5", "Recall Screenset 6", "Recall Screenset 7", "Recall Screenset 8", "Recall Screenset 9",
     "Recall Screenset 1x", "Recall Screenset 2x", "Recall Screenset 3x", "Recall Screenset 4x", "Recall Screenset 5x", "Recall Screenset 6x", "Recall Screenset 7x", "Recall Screenset 8x", "Recall Screenset 9x",

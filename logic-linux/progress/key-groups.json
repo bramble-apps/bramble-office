@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 147,
+  "done": 296,
   "total": 679,
-  "percent": 21.6
+  "percent": 43.6
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 36,
+  "done": 63,
   "total": 110,
-  "percent": 32.7
+  "percent": 57.3
  },
  {
   "group": "Windows Showing Audio Files",
@@ -43,9 +43,9 @@
  },
  {
   "group": "Views Showing Time Ruler",
-  "done": 4,
+  "done": 5,
   "total": 80,
-  "percent": 5.0
+  "percent": 6.2
  },
  {
   "group": "Views Showing Automation",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 92,
+  "done": 93,
   "total": 249,
-  "percent": 36.9
+  "percent": 37.3
  },
  {
   "group": "Live Loops Grid",
@@ -109,9 +109,9 @@
  },
  {
   "group": "Project Audio",
-  "done": 0,
+  "done": 1,
   "total": 20,
-  "percent": 0.0
+  "percent": 5.0
  },
  {
   "group": "Audio File Editor",
@@ -121,15 +121,15 @@
  },
  {
   "group": "Smart Tempo Editor",
-  "done": 0,
+  "done": 1,
   "total": 32,
-  "percent": 0.0
+  "percent": 3.1
  },
  {
   "group": "Browser",
-  "done": 2,
+  "done": 9,
   "total": 16,
-  "percent": 12.5
+  "percent": 56.2
  },
  {
   "group": "Sampler",
