@@ -324,11 +324,13 @@ fn project_path(app: &App) -> Option<PathBuf> {
 pub fn after_open(app: &mut App) {
     app.proj = project_path(app).and_then(|p| file_for(&p)).and_then(|f| std::fs::read_to_string(f).ok()).map(|t| Values::from_text(&t)).unwrap_or_default();
     apply(app);
+    crate::surround::after_open(app);
 }
 
 /// The project saved: its settings beside it.
 pub fn save(app: &mut App) {
     read_back(app);
+    crate::surround::store(app);
     if app.automated {
         return;
     }
@@ -428,6 +430,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
                 if let Some(p) = &app.project {
                     ui.label(format!("Sample Rate: {:.1} kHz (the project's; Studio plays at {} kHz)", p.sample_rate as f64 / 1000.0, crate::audio::RATE / 1000));
                 }
+                crate::surround_ui::project_settings(app, ui);
             }
             "Recording" if sub == "Audio Recording Path" => {
                 let cur = app.proj.get("Recording / Audio Recording Path / Folder:");

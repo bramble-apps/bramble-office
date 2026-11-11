@@ -292,6 +292,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         let mut in_group = false;
         let mut last_right = ctrl_x;
         for (k, row) in sec.rows.iter().enumerate() {
+            // (I/O Assignments: surround_ui draws the Output / Bounce Extensions / Input panes)
+            if crate::surround_ui::skip_setting_row(&sec.tab, &sec.sub, &row.kind) {
+                continue;
+            }
             let same_line = row.label == "^";
             let ry = if same_line { last_y } else { y };
             let key = row.key.clone();
@@ -595,6 +599,7 @@ fn bramble_extra(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, tab: &str,
                 app.look.save();
             }
         }
+        ("Audio", "I/O Assignments") => crate::surround_ui::io_assignments(app, ui, left, label_right, y),
         ("Audio", "General") => {
             p.hline(left..=right_edge, y, Stroke::new(1.0, c(0x424140)));
             y += 10.0;

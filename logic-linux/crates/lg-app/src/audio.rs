@@ -10,6 +10,8 @@ use lg_core::events::PPQ;
 
 /// The output rate the engine renders at (rodio's mixer converts to the device's).
 pub const RATE: u32 = 48_000;
+/// A connection to the surround master (Out::Surround / Out::Object), in the render's bus slot.
+const SURROUND: usize = usize::MAX;
 const BLOCK: usize = 64;
 
 /// One track as the engine plays it.
@@ -70,6 +72,11 @@ pub enum Out {
     Stereo,
     Bus(usize),
     Off,
+    /// Output ▸ Surround: the strip's Surround Panner into the surround master (a bed track
+    /// with Dolby Atmos).
+    Surround,
+    /// The 3D Object Panner: an object track straight to the Dolby Atmos plug-in.
+    Object,
 }
 
 /// Which strip a plug-in is on (the plug-in windows' handle into the engine).
@@ -201,6 +208,8 @@ pub struct Engine {
     /// Tempo curves and signature changes (lg-core timeline): the tempo while playing, the
     /// click's bars and beats.
     pub timeline: lg_core::timeline::Map,
+    /// Surround and Spatial Audio (surround.rs): None in a stereo project.
+    pub surround: Option<Box<crate::surround::EngineSurround>>,
 }
 
 #[derive(Clone, Copy)]
@@ -217,7 +226,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false, surround: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -366,7 +375,7 @@ impl Engine {
         match s {
             FxStrip::Track(t) => self.units.get(t),
             FxStrip::Aux(a) => self.aux_units.get(a),
-            FxStrip::Master => Some(&self.master_units),
+            FxStrip::Master => Some(self.surround.as_ref().map_or(&self.master_units, |s| &s.units)),
         }
     }
 
@@ -374,7 +383,10 @@ impl Engine {
         match s {
             FxStrip::Track(t) => self.units.get_mut(t),
             FxStrip::Aux(a) => self.aux_units.get_mut(a),
-            FxStrip::Master => Some(&mut self.master_units),
+            FxStrip::Master => Some(match self.surround.as_mut() {
+                Some(s) => &mut s.units,
+                None => &mut self.master_units,
+            }),
         }
     }
 
@@ -421,7 +433,7 @@ impl Engine {
     fn route_nodes(&self) -> Vec<lg_dsp::routing::Node> {
         use lg_dsp::routing::{Dest, Node};
         let dest = |o: Out| match o {
-            Out::Stereo => Some(Dest::Master),
+            Out::Stereo | Out::Surround | Out::Object => Some(Dest::Master),
             Out::Bus(b) => Some(Dest::Bus(b)),
             Out::Off => None,
         };
@@ -696,6 +708,9 @@ impl Engine {
             br.clear();
             br.resize(frames, 0.0);
         }
+        if let Some(s) = self.surround.as_mut() {
+            s.begin(frames, start_tick, tps, self.playing && !held, &self.tracks);
+        }
         let mut l = vec![0f32; frames];
         let mut r = vec![0f32; frames];
         let mut el = vec![0f32; frames];
@@ -770,6 +785,10 @@ impl Engine {
                         pan = v.clamp(-1.0, 1.0);
                     }
                 }
+                // (to surround: the Surround Panner pans, the fader only sets the level)
+                if matches!(self.track_out.get(i), Some(Out::Surround | Out::Object)) {
+                    pan = 0.0;
+                }
                 let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
                 (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2, self.tracks[i].sends.clone(), self.track_out.get(i).copied().unwrap_or_default())
             } else {
@@ -786,7 +805,8 @@ impl Engine {
                 if aux.mute {
                     continue;
                 }
-                let a = (aux.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+                let apan = if matches!(aux.output, Out::Surround | Out::Object) { 0.0 } else { aux.pan.clamp(-1.0, 1.0) };
+                let a = (apan + 1.0) * std::f32::consts::FRAC_PI_4;
                 (aux.volume * a.cos() * std::f32::consts::SQRT_2, aux.volume * a.sin() * std::f32::consts::SQRT_2, aux.sends, aux.output)
             };
             // the connections, in route_nodes' order: the output (unless off), then the sends
@@ -795,6 +815,7 @@ impl Engine {
                 Out::Stereo => conns.push((None, gl, gr)),
                 Out::Bus(b) => conns.push((Some(b), gl, gr)),
                 Out::Off => {}
+                Out::Surround | Out::Object => conns.push((Some(SURROUND), gl, gr)),
             }
             let n_out = conns.len();
             for snd in &sends {
@@ -819,6 +840,11 @@ impl Engine {
                     d.process(&mut el, &mut er);
                 }
                 match dest {
+                    Some(SURROUND) => {
+                        if let Some(s) = self.surround.as_mut() {
+                            s.add(node, &el, &er);
+                        }
+                    }
                     None => {
                         for f in 0..frames {
                             out[2 * f] += el[f];
@@ -840,8 +866,8 @@ impl Engine {
                 *m = m.max(peak);
             }
         }
-        // the Stereo Out's own effects (Logic's master chain)
-        if !self.master_units.inserts.is_empty() {
+        // the Stereo Out's own effects (Logic's master chain; deactivated in surround)
+        if !self.master_units.inserts.is_empty() && self.surround.is_none() {
             for f in 0..frames {
                 l[f] = out[2 * f];
                 r[f] = out[2 * f + 1];
@@ -852,6 +878,10 @@ impl Engine {
                 out[2 * f] = l[f];
                 out[2 * f + 1] = r[f];
             }
+        }
+        // surround: the surround master (and the Dolby Atmos renderer), folded for the device
+        if let Some(s) = self.surround.as_mut() {
+            s.finish(out, frames, at, self.master);
         }
         if self.sf.is_none() {
             for v in &mut self.voices {

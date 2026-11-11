@@ -52,7 +52,7 @@ pub fn param_name(p: u8) -> &'static str {
     match p {
         VOLUME => "Volume",
         PAN => "Pan",
-        _ => "Parameter",
+        p => crate::surround::param_name(p).unwrap_or("Parameter"),
     }
 }
 
@@ -239,7 +239,8 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
     egui::Popup::menu(&presp).show(|ui| {
         ui.set_min_width(200.0);
         let used = |app: &App, k: Key| lane_of(app, t, k).is_some_and(|l| !l.points.is_empty());
-        for x in [VOLUME, PAN] {
+        // (the Main parameters: volume, pan, and a surround strip's panner)
+        for x in [VOLUME, PAN].into_iter().chain(crate::surround::auto_params(app, t)) {
             let k = Key { param: x, plugin: None };
             let label = if used(app, k) { format!("{} •", param_name(x)) } else { param_name(x).to_string() };
             if ui.add(egui::Button::selectable(key == k, label)).clicked() {

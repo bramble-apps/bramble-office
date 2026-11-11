@@ -85,7 +85,7 @@ pub struct State {
     pub band: Option<PathBuf>,
     /// The app's mixer as opened (sends, outputs): Save tells when they changed.
     opened_sends: String,
-    opened_outputs: String,
+    pub(crate) opened_outputs: String,
     /// What the last save couldn't write.
     pub last_left_out: Vec<String>,
 }
@@ -135,6 +135,11 @@ fn take_from_project(app: &mut App) {
         app.audio_edit.regions.insert(k, v);
     }
     app.pf.opened_sends = format!("{:?}", sorted(&app.sends));
+    app.pf.opened_outputs = format!("{:?}", sorted(&app.mix.outputs));
+}
+
+/// The outputs as opened (surround.rs sets surround outputs after reading the project).
+pub fn outputs_opened(app: &mut App) {
     app.pf.opened_outputs = format!("{:?}", sorted(&app.mix.outputs));
 }
 

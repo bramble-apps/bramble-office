@@ -41,6 +41,8 @@ mod mixer;
 mod mixercmd;
 mod nav;
 pub mod mixstate;
+pub mod surround;
+pub mod surround_ui;
 mod pianoroll;
 mod preview;
 mod projaudio;

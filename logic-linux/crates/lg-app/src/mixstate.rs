@@ -122,6 +122,8 @@ pub struct Snap {
     pub inputs: HashMap<usize, Input>,
     pub master: Vec<Plugin>,
     pub eqs: HashMap<usize, crate::eq::Params>,
+    /// Surround panners, objects, the surround master and the Dolby Atmos plug-in (surround.rs).
+    pub surround: crate::surround::State,
 }
 
 pub struct Mix {
@@ -189,6 +191,10 @@ pub fn track_inserts(t: &lg_core::Track) -> Vec<usize> {
 /// A strip's Audio FX (the list the Mixer shows and the engine runs), by strip id.
 pub fn inserts(app: &App, s: usize) -> Vec<Plugin> {
     if s == MASTER {
+        // (the surround master's chain in a surround project)
+        if crate::surround::active(app) {
+            return app.sur.master.clone();
+        }
         return app.mix.master.clone();
     }
     if (AUX..VCA).contains(&s) {
@@ -202,7 +208,11 @@ pub fn inserts(app: &App, s: usize) -> Vec<Plugin> {
 /// instrument and EQ where they are).
 pub fn edit_inserts(app: &mut App, s: usize, f: impl FnOnce(&mut Vec<Plugin>)) {
     if s == MASTER {
-        f(&mut app.mix.master);
+        if crate::surround::active(app) {
+            f(&mut app.sur.master);
+        } else {
+            f(&mut app.mix.master);
+        }
     } else if (AUX..VCA).contains(&s) {
         if let Some(a) = app.auxes.get_mut(s - AUX) {
             f(&mut a.inserts);
@@ -275,6 +285,7 @@ pub fn snapshot(app: &App) -> Snap {
         inputs: m.inputs.clone(),
         master: m.master.clone(),
         eqs: app.eqs.clone(),
+        surround: app.sur.clone(),
     }
 }
 
@@ -299,6 +310,7 @@ fn restore(app: &mut App, s: Snap) {
     m.outputs = s.outputs;
     m.inputs = s.inputs;
     m.master = s.master;
+    app.sur = s.surround;
     app.dirty = true;
     app.load_engine();
 }
@@ -492,6 +504,8 @@ pub fn out_label(o: Out) -> String {
         Out::Stereo => "Stereo Out".into(),
         Out::Bus(b) => format!("Bus {}", b + 1),
         Out::Off => "No Output".into(),
+        Out::Surround => "Surround".into(),
+        Out::Object => "Object".into(),
     }
 }
 
@@ -513,6 +527,7 @@ pub fn from_project(app: &mut App) {
     (app.mix.hidden, app.mix.narrow, app.mix.hidden_parts, app.mix.compensate, app.mix.clipboard) = keep;
     app.auxes.clear();
     app.sends.clear();
+    app.sur = Default::default();
     let Some(p) = app.project.as_ref() else { return };
     let m = p.mixer.clone();
     let mut aux_of: HashMap<usize, usize> = HashMap::new();
@@ -576,6 +591,7 @@ pub fn to_engine(app: &App, e: &mut audio::Engine) {
     e.compensate = app.mix.compensate;
     e.pre_fader_meters = app.mix.pre_fader_meters;
     apply_vcas(app, e);
+    crate::surround::to_engine(app, e);
 }
 
 /// The tracks' engine volume and mute through their VCAs (after the tracks' own were set).
