@@ -113,7 +113,7 @@ static GRIT: [Param; 4] = [ON, pct(1, "Volume", 50.0), pct(2, "Filter", 50.0), p
 static HAPPY: [Param; 3] = [ON, pct(1, "Fuzz", 55.0), lvl(2, "Volume", -18.0)];
 static HIDRIVE: [Param; 3] = [ON, lvl(1, "Level", -3.0), Param::menu(2, "Treble/Full", &["Treble", "Full"], 0.0)];
 static MONSTER: [Param; 7] = [ON, pct(1, "Roar", 60.0), pct(2, "Growl", 50.0), pct(3, "Tone", 50.0), pct(4, "Texture", 30.0), pct(5, "Grain", 30.0), lvl(6, "Level", -10.0)];
-static OCTA: [Param; 4] = [ON, pct(1, "Fuzz", 60.0), lvl(2, "Level", -8.0), pct(3, "Tone", 30.0)];
+static OCTA: [Param; 4] = [ON, pct(1, "Fuzz", 60.0), lvl(2, "Level", -20.0), pct(3, "Tone", 30.0)];
 static RAWK: [Param; 4] = [ON, pct(1, "Crunch", 60.0), lvl(2, "Level", -10.0), pct(3, "Tone", 55.0)];
 static TUBE: [Param; 11] = [
     ON,
@@ -325,7 +325,8 @@ fn clip(kind: u8, x: f32, bias: f32) -> f32 {
             }
             y
         }
-        4 => (x.abs() * 1.4 - 0.4).tanh() + 0.3 * x.tanh(),
+        // rectified (octave up), with the rectifier's DC at rest taken out
+        4 => (x.abs() * 1.4 - 0.4).tanh() - (-0.4f32).tanh() + 0.3 * x.tanh(),
         _ => {
             let y = x + bias * 0.5;
             let s = if y >= 0.0 { 1.0 - (-y).exp() } else { -(1.0 - y.exp()) * 0.9 };
@@ -891,8 +892,11 @@ impl Effect for Pedal {
                         }
                         self.line[s].push(y);
                         let d = self.line[s].read_lin(lens[s] * rate);
-                        let d = bqs(&mut self.bq[s], &[0, 1, 2], d);
-                        self.fb[s] = flush(d);
+                        // the tone filters in the loop; the Style colour only on the way out
+                        // (a resonant peak inside the feedback would run away)
+                        let d = bqs(&mut self.bq[s], &[0, 1], d);
+                        self.fb[s] = flush(d * 0.98);
+                        let d = self.bq[s][2].run(d);
                         *x = dry * (1.0 - 0.5 * mix) + d * mix * 1.4;
                     }
                 }
