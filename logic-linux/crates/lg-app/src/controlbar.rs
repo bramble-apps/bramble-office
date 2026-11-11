@@ -331,7 +331,7 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
         }
         ui.separator();
         if ui.button("Customize Control Bar and Display…").clicked() {
-            app.tell("Customize Control Bar and Display isn't available yet");
+            app.bars.customize_bar = true;
             ui.close();
         }
     });
