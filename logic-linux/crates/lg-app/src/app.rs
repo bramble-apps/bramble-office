@@ -1287,6 +1287,9 @@ impl App {
         if crate::recording::command(self, name) {
             return true;
         }
+        if crate::stemsplit::command(self, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
@@ -1749,6 +1752,7 @@ impl App {
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::hosting::manager(self, &ctx);
+        crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);

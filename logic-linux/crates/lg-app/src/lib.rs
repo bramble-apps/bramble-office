@@ -45,6 +45,8 @@ mod dmdwin;
 mod quickwin;
 mod dkdwin;
 mod alchemywin;
+mod fxviews;
+mod stemsplit;
 mod players;
 mod rightpane;
 mod screensets;

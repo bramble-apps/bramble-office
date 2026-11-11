@@ -112,12 +112,13 @@ fn build_inserts(list: &[(String, Vec<f32>)], tempo: f64) -> (Vec<Box<dyn lg_dsp
 }
 
 /// Runs a strip's effects (the bypassed ones skipped); the largest gain reduction (dB).
-fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32]) -> f32 {
+fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32], at: lg_dsp::Transport) -> f32 {
     let mut gr = 0f32;
     for (fx, k) in u.inserts.iter_mut().zip(u.insert_index.iter()) {
         if bypass.get(*k).copied().unwrap_or(false) {
             continue;
         }
+        fx.set_transport(at);
         fx.process(l, r);
         gr = gr.max(fx.gain_reduction());
     }
@@ -348,6 +349,13 @@ impl Engine {
         Some((params, values))
     }
 
+    /// The running effect's live readouts and one of its curves (for its window).
+    pub fn effect_readouts(&self, s: FxStrip, slot: usize, curve: &str) -> (Vec<(&'static str, f32)>, Vec<f32>) {
+        let Some(u) = self.units_of(s) else { return (Vec::new(), Vec::new()) };
+        let Some(k) = u.insert_index.iter().position(|x| *x == slot) else { return (Vec::new(), Vec::new()) };
+        (u.inserts[k].readouts(), if curve.is_empty() { Vec::new() } else { u.inserts[k].curve(curve) })
+    }
+
     pub fn set_effect_param(&mut self, s: FxStrip, slot: usize, id: u32, v: f32) {
         if let Some(u) = self.units_of_mut(s) {
             if let Some(k) = u.insert_index.iter().position(|x| *x == slot) {
@@ -563,6 +571,7 @@ impl Engine {
         self.eqs.resize_with(n_tracks, || None);
         self.replan();
         let start_tick = if self.playing && !held { self.pos - tps * frames as f64 } else { self.pos };
+        let at = lg_dsp::Transport { beats: start_tick / PPQ as f64, bpm, playing: self.playing && !held };
         let n_aux = self.auxes.len();
         self.aux_meters.resize(n_aux, 0.0);
         self.gr.resize(n_tracks, 0.0);
@@ -644,7 +653,7 @@ impl Engine {
                 }
                 let bypass = self.track_bypass.get(i).cloned().unwrap_or_default();
                 if let Some(u) = self.units.get_mut(i) {
-                    let g = run_inserts(u, &bypass, &mut l, &mut r);
+                    let g = run_inserts(u, &bypass, &mut l, &mut r, at);
                     self.gr[i] = self.gr[i].max(g);
                 }
                 let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
@@ -666,7 +675,7 @@ impl Engine {
                     r.copy_from_slice(br);
                 }
                 if let Some(u) = self.aux_units.get_mut(ai) {
-                    let g = run_inserts(u, &aux.bypass, &mut l, &mut r);
+                    let g = run_inserts(u, &aux.bypass, &mut l, &mut r, at);
                     self.aux_gr[ai] = self.aux_gr[ai].max(g);
                 }
                 if aux.mute {
@@ -732,7 +741,7 @@ impl Engine {
                 l[f] = out[2 * f];
                 r[f] = out[2 * f + 1];
             }
-            let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r);
+            let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r, at);
             self.master_gr = self.master_gr.max(g);
             for f in 0..frames {
                 out[2 * f] = l[f];
