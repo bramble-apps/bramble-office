@@ -31,8 +31,8 @@
  },
  {
   "area": "Look and suite parity",
-  "status": "Not started",
-  "feature": "App icon final; About window"
+  "status": "Partial",
+  "feature": "App icon: the gold record (data/icons, installed with the menu shortcut). [ ] About window"
  },
  {
   "area": "Main window",

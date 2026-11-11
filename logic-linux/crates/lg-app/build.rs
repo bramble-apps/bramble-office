@@ -21,7 +21,21 @@ fn main() {
         s.find("pub const COMMANDS").map(|i| s[i..i + s[i..].find("];").unwrap_or(0)].to_string()).unwrap_or_default()
     };
     let edit = std::fs::read_to_string("src/edit.rs").unwrap_or_default() + &std::fs::read_to_string("src/liveloops.rs").unwrap_or_default() + &std::fs::read_to_string("src/midifunc.rs").unwrap_or_default() + &std::fs::read_to_string("src/mixercmd.rs").unwrap_or_default() + &list("src/recording.rs") + &list("src/takes.rs");
-    let body = format!("{body}\n{edit}");
+    // (any other file's `pub const COMMANDS` list: new areas add theirs without touching this)
+    println!("cargo:rerun-if-changed=src");
+    let mut more = String::new();
+    if let Ok(dir) = std::fs::read_dir("src") {
+        let mut files: Vec<_> = dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "rs")).collect();
+        files.sort();
+        for p in files {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if ["recording.rs", "takes.rs", "audioedit.rs"].contains(&name) {
+                continue;
+            }
+            more += &list(p.to_str().unwrap_or(""));
+        }
+    }
+    let body = format!("{body}\n{edit}\n{more}");
     let body = body.as_str();
     let mut names: Vec<String> = Vec::new();
     let mut chars = body.char_indices().peekable();

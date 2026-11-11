@@ -22,7 +22,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Window frame, title bar, resize edges, HiDPI pointer, Wayland pinch: from kn-ui's winframe and the patched winit
 - [~] Help tags on region, cycle, note, pan, XY and master drags. [ ] the rest of Logic's, Quick Help panel
 - [ ] Animations: panes sliding, region drop, playhead catch, zoom (interactions/UI-ANIMATIONS)
-- [ ] App icon final; About window
+- [~] App icon: the gold record (data/icons, installed with the menu shortcut). [ ] About window
 
 ## 2. Main window
 - [~] Control bar as Logic 13's: view buttons, transport with Capture and Replace, LCD with Beats & Project / Beats & Time / Time and its menus, Low Latency, Tuner, Solo, Count-in, Metronome, Autopunch (its locators: the ruler's red strip, dragged by its ends or middle), master volume, right-pane buttons. [ ] Customize Control Bar (Autopunch shows by default here; in Logic it's a customize option), the Tuner window

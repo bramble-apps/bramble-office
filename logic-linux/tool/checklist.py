@@ -29,6 +29,10 @@ def handled_keys():
     names = set(re.findall(r'"((?:[^"\\]|\\.)*)"', t[i:j]))
     # recording.rs and takes.rs: their COMMANDS lists (and the Record menu's choices)
     names |= const_list(src('recording.rs'), 'pub const COMMANDS') | const_list(src('recording.rs'), 'pub const CHOICES') | const_list(src('takes.rs'), 'pub const COMMANDS')
+    # any other file's COMMANDS list (new areas add theirs there)
+    for f in sorted(os.listdir(os.path.join(APP, 'src'))):
+        if f.endswith('.rs') and f not in ('recording.rs', 'takes.rs', 'audioedit.rs'):
+            names |= const_list(src(f), 'pub const COMMANDS')
     return names | set(re.findall(r'"((?:[^"\\]|\\.)*)"', src('edit.rs') + src('liveloops.rs') + src('midifunc.rs') + src('mixercmd.rs')))
 
 def menu_tree(path):
