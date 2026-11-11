@@ -1,5 +1,5 @@
 //! A plucked/struck string as a digital waveguide (extended Karplus-Strong): fractional-delay
-//! loop with a loss filter, dispersion-free; used by the clav, basses, guitars, harp and harpsichord.
+//! loop with a loss filter and optional dispersion all-passes (stiffness); used by the clav, basses, guitars, harp and harpsichord.
 
 use crate::dsp::{self, Delay, Rng};
 
@@ -19,6 +19,20 @@ pub struct WaveString {
     exc: [f32; 2048],
     exc_len: usize,
     exc_pos: usize,
+    /// Dispersion (a stiff string's stretched overtones): all-pass stages in the loop.
+    disp: [dsp::Allpass1; 4],
+    disp_a: f32,
+    disp_n: usize,
+    /// The stages in use at the current pitch.
+    disp_use: usize,
+}
+
+/// Phase delay in samples of one dispersion all-pass at angular frequency `w`.
+fn allpass_delay(a: f32, w: f32) -> f32 {
+    // H(z) = (c + z^-1) / (1 + c z^-1), c = -a
+    let c = -a;
+    let ph = (-w.sin()).atan2(c + w.cos()) - (-c * w.sin()).atan2(1.0 + c * w.cos());
+    -ph / w
 }
 
 impl WaveString {
@@ -36,12 +50,37 @@ impl WaveString {
             exc: [0.0; 2048],
             exc_len: 0,
             exc_pos: 0,
+            disp: [dsp::Allpass1::default(); 4],
+            disp_a: 0.0,
+            disp_n: 0,
+            disp_use: 0,
         }
+    }
+
+    /// Stiffness: `amount` 0..1 stretches the overtones upward, `stages` (0..=4) how low in the
+    /// harmonic series the stretching begins. The fundamental keeps its pitch (call before
+    /// `tune`).
+    pub fn set_dispersion(&mut self, amount: f32, stages: usize) {
+        self.disp_a = amount.clamp(0.0, 1.0) * 0.72;
+        self.disp_n = if amount > 0.0 { stages.min(4) } else { 0 };
+    }
+
+    fn disp_delay(&mut self, hz: f32) -> f32 {
+        if self.disp_n == 0 {
+            self.disp_use = 0;
+            return 0.0;
+        }
+        let w = std::f32::consts::TAU * hz / self.rate;
+        // (short strings: only as many stages as fit in the loop)
+        let per = allpass_delay(self.disp_a, w);
+        self.disp_use = self.disp_n.min((self.rate / hz * 0.5 / per.max(0.01)) as usize);
+        per * self.disp_use as f32
     }
 
     pub fn clear(&mut self) {
         self.dl.clear();
         self.z = 0.0;
+        self.disp = [dsp::Allpass1::default(); 4];
         self.exc_len = 0;
         self.exc_pos = 0;
     }
@@ -62,7 +101,7 @@ impl WaveString {
             ph / w
         };
         let max = (self.dl.len() - 8) as f32;
-        self.len = (rate / hz - 1.0 - lp_delay).clamp(2.0, max);
+        self.len = (rate / hz - 1.0 - lp_delay - self.disp_delay(hz)).clamp(2.0, max);
         // loop gain for the wanted decay, compensating the filter's loss at f0
         let lp_mag = (1.0 - a) / (1.0 + a * a - 2.0 * a * w.cos()).sqrt();
         let per_period = dsp::t60_coef(t60.max(0.005), hz);
@@ -77,7 +116,7 @@ impl WaveString {
         let a = self.a;
         let ph = (a * w.sin()).atan2(1.0 - a * w.cos()) / w;
         let max = (self.dl.len() - 8) as f32;
-        self.len = (rate / hz - 1.0 - ph).clamp(2.0, max);
+        self.len = (rate / hz - 1.0 - ph - self.disp_delay(hz)).clamp(2.0, max);
     }
 
     /// Sets a new decay (e.g. dampers) without touching tuning.
@@ -132,6 +171,11 @@ impl WaveString {
             self.exc_pos += 1;
         }
         let y = self.dl.read_cubic(self.len);
+        let mut f = y;
+        for ap in self.disp.iter_mut().take(self.disp_use) {
+            f = ap.run(f, self.disp_a);
+        }
+        let y = f;
         self.z = dsp::flush((1.0 - self.a) * y + self.a * self.z);
         self.dl.push(self.z * self.g + x);
         self.dc.run(y)

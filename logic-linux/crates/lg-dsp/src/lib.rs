@@ -110,6 +110,16 @@ pub trait Instrument: Plugin {
     }
     /// The project tempo (tempo-synced LFOs, arpeggiators, sequencers).
     fn set_tempo(&mut self, _bpm: f64) {}
+    /// A note with the MIDI channel it came in on (0..15), for instruments that play different
+    /// parts per channel (the organ's manuals and pedals); the others ignore the channel.
+    fn note_on_ch(&mut self, _channel: u8, pitch: u8, velocity: u8) {
+        self.note_on(pitch, velocity)
+    }
+    fn note_off_ch(&mut self, _channel: u8, pitch: u8) {
+        self.note_off(pitch)
+    }
+    /// Channel aftertouch (0..127).
+    fn pressure(&mut self, _value: u8) {}
     /// The instrument itself, for editors that change more than parameters (a Sampler's zones,
     /// a Drum Machine Designer's pads): downcast to the concrete type.
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {

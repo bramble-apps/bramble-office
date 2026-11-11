@@ -194,6 +194,8 @@ pub struct Engine {
     /// locate start sounding (syncmidi.rs sets it); and whether the next block must chase.
     pub chase_notes: bool,
     chase_due: bool,
+    /// The MIDI channel (0..15) of the live input being played (instruments with a part per channel).
+    pub live_channel: u8,
     was_playing: bool,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
@@ -226,7 +228,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, was_playing: false, surround: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, live_channel: 0, was_playing: false, surround: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -297,7 +299,9 @@ impl Engine {
         }
         let ch = self.tracks[track].channel;
         if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
-            if velocity > 0 { ins.note_on(pitch, velocity) } else { ins.note_off(pitch) }
+            // (with the channel it came in on: the organ's manuals and pedals)
+            let lc = self.live_channel;
+            if velocity > 0 { ins.note_on_ch(lc, pitch, velocity) } else { ins.note_off_ch(lc, pitch) }
         } else if let Some(Some(s)) = self.synths.get_mut(track) {
             if velocity > 0 { s.note_on(ch as i32, pitch as i32, velocity as i32) } else { s.note_off(ch as i32, pitch as i32) }
         } else if velocity > 0 {
@@ -337,7 +341,10 @@ impl Engine {
     /// Studio's own instruments don't take these.
     pub fn live_message(&mut self, track: usize, status: u8, d1: u8, d2: u8) {
         let ch = self.tracks.get(track).map_or(0, |t| t.channel);
-        if self.units.get(track).is_some_and(|u| u.instrument.is_some()) {
+        if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
+            if status & 0xF0 == 0xD0 {
+                ins.pressure(d1);
+            }
             return;
         }
         if let Some(Some(s)) = self.synths.get_mut(track) {

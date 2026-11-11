@@ -227,6 +227,14 @@ pub fn sequencer_in(app: &mut App, ctx: &egui::Context, status: u8, a: u8, b: u8
             }
             return;
         }
+        if matches!(status & 0xF0, 0x80 | 0x90 | 0xD0) {
+            if let Ok(mut e) = app.engine.lock() {
+                e.live_channel = status & 0x0F;
+                if status & 0xF0 == 0xD0 {
+                    e.live_message(t, 0xD0, a, 0);
+                }
+            }
+        }
         match status & 0xF0 {
             0x90 => note(app, a, b),
             0x80 => note(app, a, 0),
