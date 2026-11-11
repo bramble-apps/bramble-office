@@ -72,7 +72,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (\u2318Z over the Mixer, Include \u2026 in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)"
+  "feature": "Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (\u2318Z over the Mixer, Include \u2026 in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only)"
  },
  {
   "area": "Main window",
@@ -92,7 +92,7 @@
  {
   "area": "Main window",
   "status": "Done",
-  "feature": "Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings"
+  "feature": "Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [~] Project Settings: a window with General (tempo, what the last Save left out), Audio, Recording, Assets basics (projfile.rs); not Logic's measured layout"
  },
  {
   "area": "Editing",
@@ -207,7 +207,7 @@
  {
   "area": "Files",
   "status": "Done",
-  "feature": "Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late)"
+  "feature": "Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late); tempo changes and markers now read and written at 38400 (\u00a710, \u00a711), regions at 34560 (\u00a725). [x] audio regions name their own file and region (placement @44 / @40, was always the first AuRg); Region inspector values, fades, minor keys, markers read"
  },
  {
   "area": "Files",
@@ -217,12 +217,12 @@
  {
   "area": "Files",
   "status": "Partial",
-  "feature": "Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes"
+  "feature": "Save .logicx (lg-core save.rs + writeback.rs, round-trip tested on E02/E23/E24/R01; every sample ProjectData byte-identical when unchanged): notes, regions moved/copied/deleted, new MIDI regions (modelled on the track's own), new audio regions incl. recorded WAVs (AuRg/AuFl modelled on the project's), region names and Loop / Velocity / Transpose, audio fades and file windows (offset, length), tempo and tempo changes, project signature and key, markers and arrangement markers, track names, track and aux fader / pan / mute / solo, group membership and group settings (existing groups), plug-in parameter values, channel automation lanes, MetaData.plist (tempo, signature, key, audio files). Save names what it leaves out. [ ] new / deleted tracks, track order, colours, plug-ins added / removed / bypassed, sends, outputs, new auxes / groups, group names, VCAs, region gain / fade type / other inspector values, mid-song signature and key changes (the app has none), sample rate. [ ] none of it checked in real Logic yet (MAC-QUESTIONS.md)"
  },
  {
   "area": "Files",
-  "status": "Not started",
-  "feature": "Save .band"
+  "status": "Partial",
+  "feature": "Save .band (lg-core bandsave.rs): the same edits written into the archive's Logic model, Output/metadata.plist tempo / key / signature; untouched when unchanged. [ ] not opened in GarageBand yet"
  },
  {
   "area": "Files",
@@ -231,8 +231,8 @@
  },
  {
   "area": "Files",
-  "status": "Not started",
-  "feature": "Project templates (the chooser), alternatives, backups, consolidate"
+  "status": "Partial",
+  "feature": "Project management (lg-app projfile.rs, lg-core package.rs, tested): New from Template\u2026 chooser (Empty Project and Studio's layouts, My Templates = Save as Template\u2026 copies, opened as an Untitled copy), Save As\u2026 / Save A Copy As\u2026, Revert to \u25b8 Saved and Logic-style Project File Backups (10 slots, made on every save), Project Alternatives (New, Edit: rename / open / delete, Export as Project, switch from the submenu; the active one opens: ActiveVariant), Clean Up\u2026 (unused audio to the Trash), Consolidate\u2026, Rename\u2026, Show in Finder\u2026, Project Settings window (General / Audio / Recording / Assets basics). [ ] layouts made here can't be saved as .logicx (no Logic-made base; Apple's template data isn't shipped), timed autosave, Import Project Settings\u2026, the other Project Settings panes"
  },
  {
   "area": "Interaction parity (interactions/ research)",

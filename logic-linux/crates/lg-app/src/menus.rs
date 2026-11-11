@@ -210,7 +210,7 @@ pub fn enabled(app: &App, label: &str) -> bool {
     match label {
         "Close Project" | "Close" | "Move Locators Forward by Cycle Length" | "Project or Section…" | "All MIDI Tracks as MIDI File…" => app.project.is_some(),
         "1 Track as Audio File…" => app.selected_track.is_some(),
-        "Save" | "Save As…" | "Save A Copy As…" => app.file.is_some(),
+        "Save" | "Save As…" | "Save A Copy As…" | "Revert to Saved" | "Save as Template…" | "Clean Up…" | "Consolidate…" | "Rename…" | "Show in Finder…" | "New Alternative…" | "Edit Alternatives…" | "Export Alternative as Project…" => app.file.is_some() && !app.demo,
         _ => true,
     }
 }
@@ -221,7 +221,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     // (the Record menu's choice submenus: their items share names)
-    if crate::recording::menu_ui(app, ui, it) {
+    if crate::recording::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {

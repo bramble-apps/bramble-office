@@ -10,6 +10,7 @@ pub mod events;
 pub mod functions;
 pub mod liveloops;
 pub mod midi;
+pub mod package;
 pub mod mixer;
 pub mod plugin;
 pub mod project;

@@ -874,7 +874,7 @@ mod tests {
             let pkg = f.parent().and_then(|a| a.parent()).and_then(|a| a.parent()).unwrap();
             if pkg.extension().is_some_and(|e| e == "logicx") && f.parent().unwrap().parent().unwrap().ends_with("Alternatives") {
                 if let Ok(q) = crate::project::open(pkg) {
-                    if f.parent().unwrap().ends_with("000") || crate::project::alternatives(pkg).first().is_some_and(|a| a.1 == f.parent().unwrap()) {
+                    if crate::package::active(pkg).is_some_and(|a| a.dir == f.parent().unwrap()) {
                         let s2 = crate::save::save(&q, &orig).unwrap();
                         assert!(s2.data == orig, "{} (opened) changed when saved unchanged: {:?}", f.display(), s2.left_out);
                     }

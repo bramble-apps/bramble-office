@@ -35,6 +35,11 @@ fn model_slot(archive: &plist::Value) -> Option<(usize, bool)> {
     }
 }
 
+/// The Logic ProjectData inside a .band's projectData archive.
+pub fn model_bytes(pkg: &Path) -> Option<Vec<u8>> {
+    project::band_logic_model(&plist::Value::from_file(pkg.join("projectData")).ok()?)
+}
+
 /// Writes `p` (opened from the .band at `pkg`) back into it.
 pub fn save(p: &Project, pkg: &Path) -> Result<Saved, String> {
     let file = pkg.join("projectData");

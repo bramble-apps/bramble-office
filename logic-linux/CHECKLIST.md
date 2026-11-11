@@ -32,11 +32,11 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
 - [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
-- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)
+- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only)
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
-- [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
+- [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [~] Project Settings: a window with General (tempo, what the last Save left out), Audio, Recording, Assets basics (projfile.rs); not Logic's measured layout
 
 ## 3. Editing
 - [x] Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo
@@ -67,12 +67,12 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Drum Kit Designer and Drum Machine Designer kits
 
 ## 6. Files
-- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late)
+- [x] Open .logicx (47 samples plus templates): tracks, regions, notes, tempo map, signature, key, mixer, plug-in names and settings, audio. [ ] E24 shows one region twice on a track (take folder or a duplicate read: check) [ ] check note timing origin: the Live Loops reader found sequence notes count from 38400, project.rs uses 34560 (E23 notes may be a bar late); tempo changes and markers now read and written at 38400 (§10, §11), regions at 34560 (§25). [x] audio regions name their own file and region (placement @44 / @40, was always the first AuRg); Region inspector values, fades, minor keys, markers read
 - [x] Open GarageBand .band (iOS); [ ] macOS GarageBand sample
-- [~] Save .logicx: notes, regions moved/copied/deleted, tempo; byte-identical when unchanged. Missing: Logic's check of B01/B02, new tracks, plug-in settings, mixer, automation, markers, signature/key changes
-- [ ] Save .band
+- [~] Save .logicx (lg-core save.rs + writeback.rs, round-trip tested on E02/E23/E24/R01; every sample ProjectData byte-identical when unchanged): notes, regions moved/copied/deleted, new MIDI regions (modelled on the track's own), new audio regions incl. recorded WAVs (AuRg/AuFl modelled on the project's), region names and Loop / Velocity / Transpose, audio fades and file windows (offset, length), tempo and tempo changes, project signature and key, markers and arrangement markers, track names, track and aux fader / pan / mute / solo, group membership and group settings (existing groups), plug-in parameter values, channel automation lanes, MetaData.plist (tempo, signature, key, audio files). Save names what it leaves out. [ ] new / deleted tracks, track order, colours, plug-ins added / removed / bypassed, sends, outputs, new auxes / groups, group names, VCAs, region gain / fade type / other inspector values, mid-song signature and key changes (the app has none), sample rate. [ ] none of it checked in real Logic yet (MAC-QUESTIONS.md)
+- [~] Save .band (lg-core bandsave.rs): the same edits written into the archive's Logic model, Output/metadata.plist tempo / key / signature; untouched when unchanged. [ ] not opened in GarageBand yet
 - [~] Export MIDI, import MIDI and audio, bounce WAV. [ ] AAF/XML, more export formats, stems
-- [ ] Project templates (the chooser), alternatives, backups, consolidate
+- [~] Project management (lg-app projfile.rs, lg-core package.rs, tested): New from Template… chooser (Empty Project and Studio's layouts, My Templates = Save as Template… copies, opened as an Untitled copy), Save As… / Save A Copy As…, Revert to ▸ Saved and Logic-style Project File Backups (10 slots, made on every save), Project Alternatives (New, Edit: rename / open / delete, Export as Project, switch from the submenu; the active one opens: ActiveVariant), Clean Up… (unused audio to the Trash), Consolidate…, Rename…, Show in Finder…, Project Settings window (General / Audio / Recording / Assets basics). [ ] layouts made here can't be saved as .logicx (no Logic-made base; Apple's template data isn't shipped), timed autosave, Import Project Settings…, the other Project Settings panes
 
 ## 7. Interaction parity (interactions/ research)
 - [~] Resizable panes (Browser, header, editor, mixer). Missing: Inspector, Piano Roll keyboard, global tracks, Smart Controls, persistence (DisplayState)
@@ -90,13 +90,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 191 | 594 | 32% |
+| Menu bar | 205 | 594 | 34% |
 | Local menus | 460 | 1191 | 38% |
 | Right-click menus | 1201 | 2575 | 46% |
-| Key commands | 571 | 2207 | 25% |
+| Key commands | 591 | 2207 | 26% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 191 of 594
+## Menu bar: 205 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -152,7 +152,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 20/81</summary>
+<details><summary>File — 32/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -164,20 +164,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Save  `⌘S`
 - [x] Save As…  `⇧⌘S`
 - [x] Save A Copy As…
-- [ ] Save as Template…
-- [ ] Revert to
+- [x] Save as Template…
+- [x] Revert to
   - [ ] Saved
-- [ ] Project Alternatives
-  - [ ] New Alternative…
-  - [ ] Edit Alternatives…
-  - [ ] Export Alternative as Project…
+- [x] Project Alternatives
+  - [x] New Alternative…
+  - [x] Edit Alternatives…
+  - [x] Export Alternative as Project…
   - [ ] Untitled
-- [ ] Project Management
-  - [ ] Clean Up…
-  - [ ] Consolidate…
-  - [ ] Rename…
-  - [ ] Show in Finder…
-- [ ] Project Settings
+- [x] Project Management
+  - [x] Clean Up…
+  - [x] Consolidate…
+  - [x] Rename…
+  - [x] Show in Finder…
+- [x] Project Settings
   - [x] General…
   - [x] Audio…
   - [x] Recording…
@@ -649,7 +649,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 9/68</summary>
+<details><summary>Window — 11/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -715,10 +715,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Untitled.logicx - Tracks
 - [ ] Screenset 1 (Tracks/Browser)  `1`
 - [ ] Duplicate…
-- [ ] Rename…
+- [x] Rename…
 - [x] Delete
 - [ ] Lock
-- [ ] Revert to Saved
+- [x] Revert to Saved
 
 </details>
 
@@ -4910,7 +4910,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 571 of 2207
+## Key commands: 591 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4919,7 +4919,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 145/679</summary>
+<details><summary>Global Commands — 164/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5130,17 +5130,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Recall Screenset 9x  `⇧9`
 - [ ] Region Inspector Float  `⌥⇧R`
 - [ ] Import Project Settings…
-- [ ] Open Synchronization Project Settings…
-- [ ] Open Metronome Project Settings…
+- [x] Open Synchronization Project Settings…
+- [x] Open Metronome Project Settings…
 - [ ] Open Smart Tempo Settings…
-- [ ] Open Recording Project Settings…
-- [ ] Open Tuning Project Settings…
-- [ ] Open Audio Project Settings…
-- [ ] Open MIDI Project Settings…
+- [x] Open Recording Project Settings…
+- [x] Open Tuning Project Settings…
+- [x] Open Audio Project Settings…
+- [x] Open MIDI Project Settings…
 - [ ] Open Chase Events Project Settings…
-- [ ] Open Score Project Settings…
-- [ ] Open Movie Project Settings…
-- [ ] Open Assets Project Settings…
+- [x] Open Score Project Settings…
+- [x] Open Movie Project Settings…
+- [x] Open Assets Project Settings…
 - [x] Open Settings…  `⌘,`
 - [ ] Open General Settings…
 - [ ] Open Audio Settings…
@@ -5441,17 +5441,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] New Empty Project  `⇧⌘N`
 - [x] New from Template…  `⌘N`
 - [x] Open…  `⌘O`
-- [ ] Project Settings…  `⌥P`
-- [ ] Clean Up Project…
-- [ ] Consolidate Project…
+- [x] Project Settings…  `⌥P`
+- [x] Clean Up Project…
+- [x] Consolidate Project…
 - [ ] Rename Project…
 - [x] Close Project  `⌥⌘W`
 - [x] Save  `⌘S`
 - [x] Save Project as…  `⇧⌘S`
-- [ ] Save A Copy As…
-- [ ] Save and Clean Up Project
-- [ ] Save as Template…
-- [ ] Revert to Saved…
+- [x] Save A Copy As…
+- [x] Save and Clean Up Project
+- [x] Save as Template…
+- [x] Revert to Saved…
 - [ ] Page Setup…
 - [ ] Print  `⌘P`
 - [x] Import…  `⌘I`
@@ -5588,9 +5588,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Set Nudge Value to 1 ms  `⌃⌥1`
 - [x] Set Nudge Value to Sample  `⌃⌥S`
 - [ ] Sustain inserted notes  `-`
-- [ ] New Project Alternative…
-- [ ] Edit Project Alternatives
-- [ ] Export Alternative as Project…
+- [x] New Project Alternative…
+- [x] Edit Project Alternatives
+- [x] Export Alternative as Project…
 - [x] Mixer Undo
 - [x] Mixer Redo
 - [x] Play Previous Scene
@@ -6949,13 +6949,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Project Audio — 0/20</summary>
+<details><summary>Project Audio — 1/20</summary>
 
 - [ ] Select Previous Audio File  `↑`
 - [ ] Select Next Audio File  `↓`
 - [ ] Show Audio File Details
 - [ ] Hide Audio File Details
-- [ ] Rename…  `⇧↩`
+- [x] Rename…  `⇧↩`
 - [ ] Add Audio File…  `⌃F`
 - [ ] Add Region  `⌃R`
 - [ ] Delete Files  `⌘⌫`

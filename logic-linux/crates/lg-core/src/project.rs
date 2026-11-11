@@ -365,19 +365,26 @@ fn find_file(dir: &Path, name: &std::ffi::OsStr) -> Option<PathBuf> {
     None
 }
 
-/// Reads a project: a .logicx package, a project folder holding one (the first alternative), or a
+/// Reads a project: a .logicx package, a project folder holding one (the alternative that was
+/// open when it was saved: ProjectInformation.plist ActiveVariant, else the first), or a
 /// GarageBand .band.
 pub fn open(path: &Path) -> Result<Project, Error> {
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("band")) || path.join("projectData").is_file() {
         return open_band(path);
     }
     let pkg = package_of(path);
-    let alts = alternatives(&pkg);
-    let Some((_, alt)) = alts.first() else {
+    let Some(alt) = crate::package::active(&pkg).map(|a| a.dir) else {
         return Err(Error::NotAProject(format!("{} has no project data (Alternatives/…/ProjectData)", pkg.display())));
     };
     let data = std::fs::read(alt.join("ProjectData"))?;
-    let mut p = read_project_data(&data)?;
+    open_alternative(path, &alt, &data)
+}
+
+/// Reads one alternative of a package (its folder), from `data` (its ProjectData, or a backup
+/// of it).
+pub fn open_alternative(path: &Path, alt: &Path, data: &[u8]) -> Result<Project, Error> {
+    let pkg = package_of(path);
+    let mut p = read_project_data(data)?;
     p.path = path.to_path_buf();
     p.name = pkg.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     // the summary plist: tempo and the rest as Logic shows them
