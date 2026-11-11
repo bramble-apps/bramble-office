@@ -301,12 +301,15 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
             let h = (secs / 3600.0).floor();
             let m = ((secs % 3600.0) / 60.0).floor();
             let s = secs % 60.0;
-            let time = format!("{:02}:{:02}:{:06.3}", h as u32, m as u32, s);
+            let _ = (h, m, s);
+            // (Settings ▸ View ▸ Display Time As, the project's frame rate and SMPTE start)
+            let time = crate::prefs::time_text(&app.logic_settings, &app.proj, secs);
             let div_t = beat_t / 4.0;
             let div = ((pos % beat_t) / div_t).floor() as i64 + 1;
             let tick = (pos % div_t).floor() as i64 + 1;
             let half = Rect::from_min_size(lcd.min, vec2(lcd.width() * 0.62, lcd.height()));
-            let (top, bottom) = if app.lcd_mode == LcdMode::Time { (time, format!("{bar_n}  {beat_n}  {div}  {tick:>3}")) } else { (format!("{bar_n}  {beat_n}  {div}  {tick:>3}"), time) };
+            let beats = crate::prefs::beats_text(&app.logic_settings, bar_n as i64, beat_n as i64, div, tick);
+            let (top, bottom) = if app.lcd_mode == LcdMode::Time { (time, beats) } else { (beats, time) };
             p.text(pos2(half.center().x, half.min.y + 17.0), Align2::CENTER_CENTER, top, look::regular(19.0), look::lcd_text());
             p.text(pos2(half.center().x, half.min.y + 37.0), Align2::CENTER_CENTER, bottom, look::regular(13.0), look::lcd_dim());
             let rest = Rect::from_min_max(pos2(half.max.x, lcd.min.y), lcd.max);

@@ -165,6 +165,23 @@ pub fn gain_to_db(g: f32) -> f32 {
     20.0 * g.max(1e-9).log10()
 }
 
+/// The project's software-instrument tuning (Project Settings ▸ Tuning): cents per MIDI note,
+/// added to equal temperament (all zero: A = 440 Hz equal tempered).
+static TUNING: [std::sync::atomic::AtomicU32; 128] = [const { std::sync::atomic::AtomicU32::new(0) }; 128];
+
+/// Sets the tuning table (cents per note, the global Tune included).
+pub fn set_tuning(cents: &[f32; 128]) {
+    for (k, c) in cents.iter().enumerate() {
+        TUNING[k].store(c.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The tuning table's offset for a (possibly fractional) note, in cents.
+pub fn tuning_cents(pitch: f32) -> f32 {
+    let k = pitch.round().clamp(0.0, 127.0) as usize;
+    f32::from_bits(TUNING[k].load(std::sync::atomic::Ordering::Relaxed))
+}
+
 pub fn midi_hz(pitch: f32) -> f32 {
-    440.0 * 2f32.powf((pitch - 69.0) / 12.0)
+    440.0 * 2f32.powf((pitch + tuning_cents(pitch) / 100.0 - 69.0) / 12.0)
 }

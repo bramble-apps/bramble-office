@@ -48,14 +48,14 @@
 === General / Project Handling ===
 # window: 750x388 points
 # label column right edge x≈192.5, controls at x≈202; popups 309 wide (top) / 223 wide (the rest)
-row	Startup Action:	popup	Open Most Recent Project	Open Most Recent Project	
-row	Default Template:	button	Select Template (disabled)		
+row	Startup Action:	popup	Open Most Recent Project	Open Most Recent Project	~Do Nothing|Open Most Recent Project|Open Existing Project|Create New Empty Project|Create New Project Using Default Template|Select a Template|Ask
+row	Default Template:	popup	Empty Project	Empty Project	
 # the "Default Template:" label is also disabled in the dump (StaticText ... (disabled)), though it reads near-normal on screen; button is 223 wide
-row	When Opening a Project:	popup	Close current Project	Close current Project	
+row	When Opening a Project:	popup	Close current Project	Close current Project	~Close current Project|Keep current Project open|Ask
 row		check	Export MIDI File command saves single MIDI region as format 0.	1	
 row		check	Save undo history with project	1	
-row	Auto Backup:	popup	Last 10 Alternative Versions	Last 10 Alternative Versions	
-row	Recent Items:	popup	System Default	System Default	
+row	Auto Backup:	popup	Last 10 Alternative Versions	Last 10 Alternative Versions	~None|Last Alternative Version|Last 5 Alternative Versions|Last 10 Alternative Versions|Last 25 Alternative Versions|Last 50 Alternative Versions|Last 100 Alternative Versions
+row	Recent Items:	popup	System Default	System Default	~System Default|5|10|15|20|30|50
 
 === General / Editing ===
 # window: 750x539 points
@@ -73,13 +73,13 @@ row		check	Marquee tool click zones	0
 row		check	Quick Swipe and Take Editing click zones	0	
 row	Limit Dragging to One Direction In:	check	Piano Roll Editor and Score Editor	0	
 row		check	Tracks area	0	
-row	Double-Clicking a MIDI Region Opens:	popup	Piano Roll Editor	Piano Roll Editor	
+row	Double-Clicking a MIDI Region Opens:	popup	Piano Roll Editor	Piano Roll Editor	~Score Editor|Event List|Piano Roll Editor
 row	Piano Roll Editor:	check	Region border trimming	1	
 
 === General / Cycle ===
 # window: 750x539 points
 # label column right edge x≈175.5, controls at x≈185.5; popup 91 wide; rest of the box empty
-row	Cycle Pre-Processing:	popup	Off	Off	
+row	Cycle Pre-Processing:	popup	Off	Off	~Off|Short|Medium|Long
 row		check	Smooth Cycle Algorithm	0	
 
 === General / Catch ===
@@ -130,11 +130,11 @@ row	Resulting Latency:	text	37.0 ms Roundtrip (5.6 ms Output)
 row	Recording Delay:	slider		0	
 # Recording Delay slider is 246 wide with 11 tick dots; 0 sits in the middle (blue fill from the left end to the knob)
 row	^	text	Samples		
-row	Processing Threads:	popup	Automatic (Recommended)	Automatic (Recommended)	
+row	Processing Threads:	popup	Automatic (Recommended)	Automatic (Recommended)	~Automatic (Recommended)|1|2|4|8
 row	^	stepper		0	
 row	Process Buffer Range:	popup	Medium	Medium	~Small|Medium|Large
 row	Multithreading:	popup	Playback & Live Tracks	Playback & Live Tracks	~Playback Tracks|Playback & Live Tracks
-row	Summing:	popup	High Precision (64-bit)	High Precision (64-bit)	
+row	Summing:	popup	High Precision (64-bit)	High Precision (64-bit)	~High Precision (64-bit)|Standard (32-bit)
 row		button	Apply (disabled)		
 # Apply: 100 wide, bottom-right corner of the box (inside it)
 
@@ -143,7 +143,7 @@ row		button	Apply (disabled)
 # label column right edge x≈241.5, controls at x≈251.5; popups 291 wide
 row		check	Display audio engine overload message	1	
 row	Sample Accurate Automation:	popup	Volume, Pan, Sends, Plug-in Parameters	Volume, Pan, Sends, Plug-in Parameters	~Off|Volume|Volume, Pan|Volume, Pan, Sends|Volume, Pan, Sends, Plug-in Parameters
-row	Automatic Bus Assignment Uses:	popup	All Busses	All Busses	
+row	Automatic Bus Assignment Uses:	popup	All Busses	All Busses	~All Busses|Busses 9 and above|Busses 17 and above|Busses 33 and above|Busses 65 and above
 row		check	Software monitoring (disabled)	1	
 row		check	Input monitoring only for the focused track, and only when input monitoring is enabled (as in GarageBand)	1	
 # that label wraps to 2 lines (box is top-aligned with the first line); its text is from the PNG (unnamed in the dump)
@@ -156,7 +156,7 @@ row	^	text	dB
 row		separator			
 # heading
 row		text	Plug-in Latency		
-row	Compensation:	popup	All (recommended)	All (recommended)	
+row	Compensation:	popup	All (recommended)	All (recommended)	~Off|Audio and Software Instrument Tracks|All (recommended)
 row		check	Playback pre-roll	1	
 row		check	Low Latency Monitoring Mode	0	
 row	Limit:	slider	(disabled)	5	
@@ -170,10 +170,10 @@ row	^	text	ms
 row		radio	Misc | Virtual Memory	Misc	Misc|Virtual Memory
 # ^ drawn as a segmented control (24 tall) centred on the nested box's top border, not as radio buttons
 row		group Misc			
-row	Sample Storage:	popup	Original	Original	
-row	Search Samples On:	popup	Local Volumes	Local Volumes	
-row	Read Root Key From:	popup	File/Analysis	File/Analysis	
-row	Root Key at File Name Position:	popup	Auto	Auto	
+row	Sample Storage:	popup	Original	Original	~Original|32-bit Float
+row	Search Samples On:	popup	Local Volumes	Local Volumes	~Local Volumes|External Volumes|All Volumes
+row	Read Root Key From:	popup	File/Analysis	File/Analysis	~File/Analysis|Filename/Analysis|Filename Only|File Only|Analysis Only
+row	Root Key at File Name Position:	popup	Auto	Auto	~Auto|1|2|3|4|5|6|7|8|9|10
 row		check	Keep common samples in memory when switching projects	1	
 row		endgroup			
 # Virtual Memory pane was not captured
@@ -193,8 +193,8 @@ row		separator
 # heading
 row		text	Scrubbing		
 row		check	Scrubbing with audio in Tracks area	0	
-row	Maximum Scrub Speed:	popup	Normal	Normal	
-row	Scrub Response:	popup	Normal	Normal	
+row	Maximum Scrub Speed:	popup	Normal	Normal	~Normal|Double
+row	Scrub Response:	popup	Normal	Normal	~Slow|Normal|Fast|Faster
 
 === Audio / I/O Assignments ===
 # window: unknown (no screenshot; built from the control dump only, so order is accessibility order, not visual)
@@ -205,7 +205,7 @@ row		radio	Output | Bounce Extensions | Input	Output	Output|Bounce Extensions|In
 # ^ drawn as a segmented control
 # heading
 row		text	Stereo		
-row	Output:	popup	1/2	1/2	
+row	Output:	popup	1/2	1/2	~1/2|3/4|5/6|7/8
 row		check	Mirroring (disabled)	0	
 # heading
 row		text	Surround		
@@ -257,7 +257,7 @@ row	Bit Depth:	popup	24-bit	24-bit	~16-bit|24-bit|32-bit Float
 row		separator			
 # heading
 row		text	MIDI Recording		
-row	Auto Record Enable:	popup	The Focused Track	The Focused Track	
+row	Auto Record Enable:	popup	The Focused Track	The Focused Track	~The Focused Track|All Selected Tracks
 row		separator			
 # heading
 row		text	Overlapping Track Recordings		
@@ -268,7 +268,7 @@ row	Cycle Off:	popup	Merge	Merge
 row	^	popup	Create Take Folder	Create Take Folder	
 row	Cycle On:	popup	Merge	Merge	
 row	^	popup	Create Take Folder	Create Take Folder	
-row	Replace:	popup	Region Erase	Region Erase	
+row	Replace:	popup	Region Erase	Region Erase	~Region Erase|Region Punch|Content Erase|Content Punch
 # the "Cycle Off:/Cycle On:/Replace:" labels are from the PNG; the dump names the popups "MIDI, Cycle Off", "Audio, Cycle Off", etc.
 row		button	Recording Project Settings…		
 # right-aligned at the bottom (right edge x=730), 196 wide
@@ -284,11 +284,11 @@ row		separator
 row		text	Articulation Switches		
 # column title "Set" (13pt regular) sits over the second popup column (x≈233), not at the control column
 row		text	Set		
-row	MIDI Remote:	popup	Off	Off	
+row	MIDI Remote:	popup	Off	Off	~Off|On
 row	^	popup	Global	Global	
-row	MIDI Channel:	popup	All	All	
+row	MIDI Channel:	popup	All	All	~All|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16
 row	^	popup	Global	Global	
-row	Octave Offset:	popup	0 (disabled)	0	
+row	Octave Offset:	popup	0 (disabled)	0	~-3|-2|-1|0|1|2|3
 row	^	popup	Per Channel Strip	Per Channel Strip	
 
 === MIDI / Reset Messages ===
@@ -332,7 +332,7 @@ row	^	text	ms
 row		separator			
 # heading
 row		text	MIDI Machine Control (MMC)		
-row	MMC Uses:	popup	MMC Standard Messages	MMC Standard Messages	
+row	MMC Uses:	popup	MMC Standard Messages	MMC Standard Messages	~MMC Standard Messages|Old Fostex Format
 row	Output ID (Transport):	check	All (disabled)	1	
 row	^	stepper	(disabled)	127	
 row	Input ID (Transport):	check	All (disabled)	1	
@@ -358,7 +358,7 @@ row		check	Logic Pro Virtual In	1
 row		text	Display		
 row		check	Show region selection in color	1	
 row		check	Display distance values in inches	0	
-row	Double-Click to Open:	popup	Note Attributes	Note Attributes	
+row	Double-Click to Open:	popup	Note Attributes	Note Attributes	~Note Attributes|Event List|Piano Roll Editor|Step Editor
 row	Selection Color:	button			
 # ^ colour well (capsule, green swatch #80b066), see look
 row	^	button	Reset		
@@ -389,7 +389,7 @@ row	^	text	Quarter Frames
 row		separator			
 # heading
 row		text	Movie Track		
-row	Cache Resolution:	popup	Medium	Medium	
+row	Cache Resolution:	popup	Medium	Medium	~Low|Medium|High
 row	Maximum Cache Size:	slider		40	
 row	^	stepper		40	
 row	^	text	MB		
@@ -404,7 +404,7 @@ row		button	Movie Project Settings…
 row	Move Track Automation with Regions:	popup	Ask	Ask	~Never|Always|Ask
 row		check	Include trails, if possible	1	
 row	Region Automation:	check	Create Node when cutting at constant values	1	
-row	Pencil Tool:	popup	Hold Option for Stepped Editing	Hold Option for Stepped Editing	
+row	Pencil Tool:	popup	Hold Option for Stepped Editing	Hold Option for Stepped Editing	~Hold Option for Stepped Editing|Hold Option for Curved Editing
 row	Snap Offset:	stepper		-5	
 row	^	text	Ticks		
 row	Ramp Time:	stepper		200	
@@ -440,7 +440,7 @@ row		check	Control surface follows focused view	0
 row		check	Jog resolution depends on horizontal zoom	0	
 row		check	Pickup mode	1	
 row		check	Flash Mute and Solo buttons	1	
-row	Multiple Controls per Parameter:	popup	2	2	
+row	Multiple Controls per Parameter:	popup	2	2	~1|2|4|8
 # popup 56 wide
 # small (sub-heading for the next checkbox, at the control column)
 row		text	For Longer Labels and Value Displays		
@@ -495,12 +495,12 @@ row		separator
 row		text	Displays		
 row	Display Middle C As:	popup	C3 (Yamaha)	C3 (Yamaha)	~C3 (Yamaha)|C4 (Roland)
 # the dump's label has a leading space (" Display Middle C As:")
-row	Display Time As:	popup	SMPTE/EBU with Subframes	SMPTE/EBU with Subframes	
+row	Display Time As:	popup	SMPTE/EBU with Subframes	SMPTE/EBU with Subframes	~SMPTE/EBU without Subframes|SMPTE/EBU with Subframes|SMPTE/EBU with Bits|SMPTE/EBU Feet|Feet/Frames|Seconds and Milliseconds
 row	^	check	Zeros as spaces	0	
-row	Display Tempo As:	popup	Beats per Minute (BPM, Maelzel)	Beats per Minute (BPM, Maelzel)	
-row	Clock Format:	popup	1  1  1  1	1  1  1  1	
+row	Display Tempo As:	popup	Beats per Minute (BPM, Maelzel)	Beats per Minute (BPM, Maelzel)	~Beats per Minute (BPM, Maelzel)|Frames per Click with Eighths (Film)|Frames per Click with Decimals (Film)
+row	Clock Format:	popup	1  1  1  1	1  1  1  1	~1  1  1  1|1.1.1.1|1 1 1 1
 # Clock Format value has two spaces between the 1s (as in the dump)
-row	Display MIDI Data As:	popup	MIDI 1.0	MIDI 1.0	
+row	Display MIDI Data As:	popup	MIDI 1.0	MIDI 1.0	~MIDI 1.0|0.0 - 127.9|Percent
 
 === View / Tracks ===
 # window: 750x663 points
@@ -509,14 +509,14 @@ row		check	Show track or bar number while scrolling	0
 row		separator			
 # heading
 row		text	Appearance		
-row	Track Color:	popup	Static	Static	
-row	Region Color:	popup	Individual	Individual	
-row	Marker Color:	popup	Static	Static	
-row	Background:	popup	Dark	Dark	
+row	Track Color:	popup	Static	Static	~Static|Auto-assign 24 Colors|Auto-assign 96 Colors
+row	Region Color:	popup	Individual	Individual	~Individual|As Track Color
+row	Marker Color:	popup	Static	Static	~Static|Auto-assign 24 Colors|Auto-assign 96 Colors
+row	Background:	popup	Dark	Dark	~Dark|Light|Custom
 row		separator			
 # heading
 row		text	Grid Lines		
-row	Placement:	popup	Foreground	Foreground	
+row	Placement:	popup	Foreground	Foreground	~Foreground|Background
 row	Color:	check	Automatic	1	
 row		separator			
 # heading
@@ -536,9 +536,9 @@ row		check	Show recent plug-in list in plug-in menu	1
 row		separator			
 # heading
 row		text	Level Meters		
-row	Peak Hold Time:	popup	800 ms	800 ms	
-row	Return Time:	popup	IEC Type I (11.8 dB/s)—Recommended	IEC Type I (11.8 dB/s)—Recommended	
-row	Channel Order:	popup	Clockwise (Ls L C R Rs LFE)	Clockwise (Ls L C R Rs LFE)	
+row	Peak Hold Time:	popup	800 ms	800 ms	~800 ms|2 s|4 s|Infinite
+row	Return Time:	popup	IEC Type I (11.8 dB/s)—Recommended	IEC Type I (11.8 dB/s)—Recommended	~Very Slow (4 dB/s)|EBU Slow (6.3 dB/s)|IEC Type II/EBU Normal (8.6 dB/s)|IEC Type I (11.8 dB/s)—Recommended|Fast (20 dB/s)|Faster (30 dB/s)|Very Fast (50 dB/s)
+row	Channel Order:	popup	Clockwise (Ls L C R Rs LFE)	Clockwise (Ls L C R Rs LFE)	~DTS (L R Ls Rs C LFE)|SMPTE/ITU (L R C LFE Ls Rs)|Clockwise (Ls L C R Rs LFE)|Film (L C R Ls Rs LFE)
 
 === View / Editors ===
 # window: 750x663 points

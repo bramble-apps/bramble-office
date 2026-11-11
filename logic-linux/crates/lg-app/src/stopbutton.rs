@@ -74,6 +74,8 @@ pub fn press(app: &mut App) {
         }
         return;
     }
+    // Stop while stopped: Settings ▸ MIDI ▸ Reset Messages go out
+    crate::prefs::send_reset(app);
     let marquee = app.ta.regions.marquee.as_ref().map(|m| m.from);
     let cycle = if app.cycle_on() { Some(app.cycle.0) } else { None };
     let region = app.selected_region.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r).map(|g| g.start));
