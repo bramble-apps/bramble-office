@@ -15,7 +15,7 @@ pub static FONT: &[u8] = include_bytes!("../data/icons/BrambleIcons.ttf");
 const KEY: &str = "bramble-icons";
 
 /// The icons' vertical correction, as a fraction of their size (negative: up).
-const ICON_LIFT: f32 = -0.05;
+const ICON_LIFT: f32 = 0.0;
 
 /// The egui family holding only the icons.
 pub fn family() -> egui::FontFamily {
@@ -31,8 +31,7 @@ pub fn add(ctx: &egui::Context, g: u32) {
         InsertFontFamily { family: family(), priority: FontPriority::Highest },
         InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Lowest },
     ];
-    // (egui sets the row a little low for this font's metrics: lifted so an icon sits in the
-    // middle of its button, measured on snapshots)
+    // (no lift: paint() centres each icon by its drawn shape)
     let tweak = egui::FontTweak { y_offset_factor: ICON_LIFT, ..Default::default() };
     ctx.add_font(FontInsert::new(&format!("{KEY}-{g}"), egui::FontData::from_static(FONT).tweak(tweak), fams));
 }
@@ -44,7 +43,23 @@ pub fn paint(p: &egui::Painter, r: egui::Rect, icon: &str, size: f32, color: egu
     if !p.ctx().fonts(|f| f.families().contains(&fam)) {
         return;
     }
-    p.text(r.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::new(size, fam), color);
+    let galley = p.layout_no_wrap(icon.to_string(), egui::FontId::new(size, fam), color);
+    // centred by the shape actually drawn (the glyph's rendered bounds), not by the font's line
+    // box: icons' outlines don't fill their em square the same way, and the line box is rounded
+    // to pixels differently at each scale
+    let ink = galley.rows.iter().flat_map(|row| row.row.glyphs.iter().map(move |g| (row.pos, g))).fold(egui::Rect::NOTHING, |acc, (rp, g)| {
+        if g.uv_rect.is_nothing() {
+            acc
+        } else {
+            acc.union(egui::Rect::from_min_size(rp + g.pos.to_vec2() + g.uv_rect.offset, g.uv_rect.size))
+        }
+    });
+    let ink = if ink.is_positive() { ink } else { egui::Rect::from_min_size(egui::Pos2::ZERO, galley.size()) };
+    // (snapped to the physical pixel grid so the edges stay crisp)
+    let ppp = p.ctx().pixels_per_point();
+    let at = r.center() - ink.center().to_vec2();
+    let at = egui::pos2((at.x * ppp).round() / ppp, (at.y * ppp).round() / ppp);
+    p.galley(at, galley, color);
 }
 
 /// A Logic tool's icon (the tool menus and pop-ups).
