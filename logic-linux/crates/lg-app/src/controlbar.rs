@@ -97,7 +97,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
 
     // ---- the LCD, centred; the transport before it
     let lcd_w = 310.0;
-    let tw = if narrow { 4 } else { 6 };
+    let tw = if narrow { 4 } else { 7 };
     let widths = vec![BTN + 6.0; tw];
     let total_t = widths.iter().sum::<f32>() + 2.0 * PAD;
     let center = bar.center().x.max(left_end + 12.0 + total_t + lcd_w / 2.0 - 40.0);
@@ -147,7 +147,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         {
             app.replace_mode = !app.replace_mode;
         }
-        cyc_i = 5;
+        // Autopunch (its locators: the red strip in the ruler)
+        let ap = app.autopunch;
+        if button(ui, b[5], "autopunch", ap, true, "Autopunch (⌃⌥⌘P)", |p, r, c| {
+            let m = r.center();
+            let col = if ap { look::record_red() } else { c };
+            p.vline(m.x - 7.0, m.y - 6.0..=m.y + 6.0, Stroke::new(1.6, c));
+            p.vline(m.x + 7.0, m.y - 6.0..=m.y + 6.0, Stroke::new(1.6, c));
+            p.rect_filled(Rect::from_center_size(m, vec2(10.0, 5.0)), 1.5, col);
+        })
+        .clicked()
+        {
+            app.autopunch = !app.autopunch;
+        }
+        cyc_i = 6;
     }
     let cycle_on = app.cycle_on();
     if button(ui, b[cyc_i], "cycle", cycle_on, true, "Cycle (C)", |p, r, c| icon_cycle(p, r, if cycle_on { look::cycle() } else { c })).clicked() {

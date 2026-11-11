@@ -182,7 +182,7 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if label.starts_with("Can’t Redo") || label.starts_with("Redo") {
         return !app.redo.is_empty();
     }
-    if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) {
+    if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) && !crate::recording::COMMANDS.contains(&label) && !crate::takes::COMMANDS.contains(&label) {
         return false;
     }
     match label {
@@ -196,6 +196,10 @@ pub fn enabled(app: &App, label: &str) -> bool {
 fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<String>) {
     if it.separator {
         ui.separator();
+        return;
+    }
+    // (the Record menu's choice submenus: their items share names)
+    if crate::recording::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -219,6 +223,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 
 fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::audioedit::checked(app, label) {
+        return c;
+    }
+    if let Some(c) = crate::recording::checked(app, label) {
         return c;
     }
     match label {

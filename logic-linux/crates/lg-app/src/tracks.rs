@@ -210,6 +210,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if r_resp.drag_stopped() {
         app.drag = None;
     }
+    // Autopunch's punch locators (the red strip)
+    crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
     // ---- rows: headers and lanes
     let Some(proj) = app.project.clone() else { return };
     let hp = ui.painter_at(headers);
@@ -456,6 +458,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.drag = None;
                 app.load_engine();
             }
+        }
+        // what's being recorded onto the track, its take folders
+        if lane.intersects(lanes) {
+            crate::recording::lane(app, ui, lane.intersect(lanes), i, lanes.min.x, scroll * bar_t, px_per_tick);
         }
         // the automation lane over the row (it takes the clicks while it shows, as Logic's)
         if app.show_automation && lane.intersects(lanes) {

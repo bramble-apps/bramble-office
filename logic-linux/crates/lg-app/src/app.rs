@@ -271,6 +271,8 @@ pub struct App {
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
+    /// Recording (audio and MIDI), its Record menu options, take folders' state.
+    pub rec: crate::recording::Recording,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -428,6 +430,7 @@ impl App {
             plugin_window: None,
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
+            rec: Default::default(),
             plugin_compare: Default::default(),
         };
         match path {
@@ -668,9 +671,7 @@ impl App {
     /// Ends recording: the notes played become a region on the selected track (Logic: from the
     /// bar recording began to the bar after the last note).
     pub fn finish_recording(&mut self) {
-        let Some(from) = self.record_from.take() else { return };
-        let notes = std::mem::take(&mut self.recorded);
-        self.make_take(from as u32, notes, "Record");
+        crate::recording::finish(self);
     }
 
     /// Capture as Recording: the notes just played while not recording, as a region.
@@ -681,28 +682,8 @@ impl App {
     }
 
     fn make_take(&mut self, from: u32, notes: Vec<lg_core::events::Note>, what: &str) {
-        if notes.is_empty() {
-            return;
-        }
-        let bar = self.bar_ticks();
-        let start = (from / bar) * bar;
-        let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(start + bar);
-        let length = (end.saturating_sub(start)).div_ceil(bar).max(1) * bar;
-        self.checkpoint(what);
-        let t = self.armed.iter().min().copied().or(self.selected_track).unwrap_or(0);
-        let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
-        if tr.kind == TrackKind::Audio {
-            return;
-        }
-        let name = tr.name.clone();
-        let props = Default::default();
-        if self.replace_mode {
-            tr.regions.retain(|r| r.start + r.length <= start || r.start >= start + length);
-        }
-        tr.regions.push(lg_core::Region { name, start, length, notes, audio: None, muted: false, source: None, origin: None, props });
-        let r = tr.regions.len() - 1;
-        self.selected_region = Some((t, r));
-        self.after_edit();
+        // (placed as the Record menu's overlap and Replace choices say)
+        crate::recording::midi_take(self, from, notes, what);
     }
 
     /// Sends a track to `bus`: Logic makes an aux strip for a bus that has none, with a reverb on
@@ -1244,6 +1225,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::recording::command(self, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
@@ -1334,25 +1318,9 @@ impl App {
                     self.locate(t as f64);
                 }
             }
-            "Record" | "Record / Record Toggle" => {
-                if self.recording() {
-                    self.finish_recording();
-                } else {
-                    self.record_from = Some(self.position());
-                    self.recorded.clear();
-                    if !self.playing() {
-                        self.play_stop();
-                    }
-                }
-            }
+            "Record" | "Record / Record Toggle" => crate::recording::record_pressed(self, name),
             "Capture as Recording" => self.capture_recording(),
-            "Discard Recording and Return to Last Play Position" => {
-                self.recorded.clear();
-                if let Some(from) = self.record_from.take() {
-                    self.stop();
-                    self.locate(from);
-                }
-            }
+            "Discard Recording and Return to Last Play Position" => crate::recording::discard(self),
             "Toggle Metronome Click" => {
                 let on = {
                     let mut e = self.engine();
@@ -1748,6 +1716,7 @@ impl eframe::App for App {
         }
         self.keys(&ctx);
         crate::liveloops::update(self);
+        crate::recording::update(self);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };
