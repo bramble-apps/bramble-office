@@ -319,6 +319,10 @@ fn distort(kind: usize, x: f32) -> f32 {
 }
 
 impl lg_dsp::Effect for Compressor {
+    fn gain_reduction(&self) -> f32 {
+        self.reduction
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let sum = self.p.idx(SC_DETECT) == 1;

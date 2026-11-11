@@ -164,6 +164,15 @@ pub const IMPLEMENTED: &[&str] = &[
     "Save A Copy As…",
     "1 Track as Audio File…",
     "All MIDI Tracks as MIDI File…",
+    // the Mixer's slot menus (mixer.rs): Audio FX plug-ins Studio has, sends, outputs, groups
+    "Channel EQ", "Compressor", "Limiter", "Adaptive Limiter", "Noise Gate", "ChromaVerb", "Space Designer", "Stereo Delay", "Tape Delay", "Echo", "Chorus", "Ensemble", "Flanger", "Phaser", "Microphaser", "Tremolo", "AutoFilter", "Distortion", "Overdrive", "Bitcrusher", "Clip Distortion", "Exciter", "DeEsser 2", "Gain", "Enveloper", "Vintage Graphic EQ", "Vintage Tube EQ", "Vintage Console EQ", "ChromaGlow", "Phat FX", "Amp Designer", "Bass Amp Designer", "Multipressor", "Pedalboard", "Robo Flanger", "Total Tremolo", "Blue Echo", "Tru-Tape Delay", "Vintage Drive", "Delay Designer", "Mastering Assistant",
+    "Post Fader",
+    "Pre Fader",
+    "No Send",
+    "No Group",
+    "Group 1: (new)",
+    "Mixer Undo Deluxe Classic: Solo",
+    "Bus 1", "Bus 2", "Bus 3", "Bus 4", "Bus 5", "Bus 6", "Bus 7", "Bus 8", "Bus 9", "Bus 10", "Bus 11", "Bus 12", "Bus 13", "Bus 14", "Bus 15", "Bus 16", "Bus 17", "Bus 18", "Bus 19", "Bus 20", "Bus 21", "Bus 22", "Bus 23", "Bus 24", "Bus 25", "Bus 26", "Bus 27", "Bus 28", "Bus 29", "Bus 30", "Bus 31", "Bus 32", "Bus 33", "Bus 34", "Bus 35", "Bus 36", "Bus 37", "Bus 38", "Bus 39", "Bus 40", "Bus 41", "Bus 42", "Bus 43", "Bus 44", "Bus 45", "Bus 46", "Bus 47", "Bus 48", "Bus 49", "Bus 50", "Bus 51", "Bus 52", "Bus 53", "Bus 54", "Bus 55", "Bus 56", "Bus 57", "Bus 58", "Bus 59", "Bus 60", "Bus 61", "Bus 62", "Bus 63", "Bus 64", "Bus 65", "Bus 66", "Bus 67", "Bus 68", "Bus 69", "Bus 70", "Bus 71", "Bus 72", "Bus 73", "Bus 74", "Bus 75", "Bus 76", "Bus 77", "Bus 78", "Bus 79", "Bus 80", "Bus 81", "Bus 82", "Bus 83", "Bus 84", "Bus 85", "Bus 86", "Bus 87", "Bus 88", "Bus 89", "Bus 90", "Bus 91", "Bus 92", "Bus 93", "Bus 94", "Bus 95", "Bus 96", "Bus 97", "Bus 98", "Bus 99", "Bus 100", "Bus 101", "Bus 102", "Bus 103", "Bus 104", "Bus 105", "Bus 106", "Bus 107", "Bus 108", "Bus 109", "Bus 110", "Bus 111", "Bus 112", "Bus 113", "Bus 114", "Bus 115", "Bus 116", "Bus 117", "Bus 118", "Bus 119", "Bus 120", "Bus 121", "Bus 122", "Bus 123", "Bus 124", "Bus 125", "Bus 126", "Bus 127", "Bus 128", "Bus 129", "Bus 130", "Bus 131", "Bus 132", "Bus 133", "Bus 134", "Bus 135", "Bus 136", "Bus 137", "Bus 138", "Bus 139", "Bus 140", "Bus 141", "Bus 142", "Bus 143", "Bus 144", "Bus 145", "Bus 146", "Bus 147", "Bus 148", "Bus 149", "Bus 150", "Bus 151", "Bus 152", "Bus 153", "Bus 154", "Bus 155", "Bus 156", "Bus 157", "Bus 158", "Bus 159", "Bus 160", "Bus 161", "Bus 162", "Bus 163", "Bus 164", "Bus 165", "Bus 166", "Bus 167", "Bus 168", "Bus 169", "Bus 170", "Bus 171", "Bus 172", "Bus 173", "Bus 174", "Bus 175", "Bus 176", "Bus 177", "Bus 178", "Bus 179", "Bus 180", "Bus 181", "Bus 182", "Bus 183", "Bus 184", "Bus 185", "Bus 186", "Bus 187", "Bus 188", "Bus 189", "Bus 190", "Bus 191", "Bus 192", "Bus 193", "Bus 194", "Bus 195", "Bus 196", "Bus 197", "Bus 198", "Bus 199", "Bus 200", "Bus 201", "Bus 202", "Bus 203", "Bus 204", "Bus 205", "Bus 206", "Bus 207", "Bus 208", "Bus 209", "Bus 210", "Bus 211", "Bus 212", "Bus 213", "Bus 214", "Bus 215", "Bus 216", "Bus 217", "Bus 218", "Bus 219", "Bus 220", "Bus 221", "Bus 222", "Bus 223", "Bus 224", "Bus 225", "Bus 226", "Bus 227", "Bus 228", "Bus 229", "Bus 230", "Bus 231", "Bus 232", "Bus 233", "Bus 234", "Bus 235", "Bus 236", "Bus 237", "Bus 238", "Bus 239", "Bus 240", "Bus 241", "Bus 242", "Bus 243", "Bus 244", "Bus 245", "Bus 246", "Bus 247", "Bus 248", "Bus 249", "Bus 250", "Bus 251", "Bus 252", "Bus 253", "Bus 254", "Bus 255", "Bus 256",
 ];
 
 mod generated {
@@ -181,6 +190,12 @@ pub fn enabled(app: &App, label: &str) -> bool {
     }
     if label.starts_with("Can’t Redo") || label.starts_with("Redo") {
         return !app.redo.is_empty();
+    }
+    if label.starts_with("Mixer Undo") {
+        return !app.mix.undo.is_empty();
+    }
+    if label == "Mixer Redo" {
+        return !app.mix.redo.is_empty();
     }
     if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) {
         return false;
@@ -219,6 +234,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 
 fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::audioedit::checked(app, label) {
+        return c;
+    }
+    if let Some(c) = crate::mixercmd::checked(app, label) {
         return c;
     }
     match label {

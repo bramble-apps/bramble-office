@@ -8,6 +8,7 @@
 //! - `registry` maps Logic's plug-in codes and names to ours (the matched-sounds idea).
 
 pub mod registry;
+pub mod routing;
 
 /// One parameter, as the plug-in window and automation see it.
 #[derive(Clone, Debug, PartialEq)]
@@ -93,6 +94,11 @@ pub trait Effect: Plugin {
     /// compensation.
     fn latency(&self) -> usize {
         0
+    }
+    /// How much the effect is turning the level down right now, in dB (≥ 0): the Mixer's gain
+    /// reduction meter (compressors, limiters).
+    fn gain_reduction(&self) -> f32 {
+        0.0
     }
 }
 

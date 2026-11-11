@@ -21,6 +21,8 @@ pub mod liveloops;
 pub mod look;
 pub mod menus;
 mod mixer;
+mod mixercmd;
+pub mod mixstate;
 mod pianoroll;
 mod snap;
 mod newtrack;

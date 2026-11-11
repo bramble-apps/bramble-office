@@ -6,6 +6,7 @@ pub mod chunks;
 pub mod events;
 pub mod liveloops;
 pub mod midi;
+pub mod mixer;
 pub mod plugin;
 pub mod project;
 pub mod save;

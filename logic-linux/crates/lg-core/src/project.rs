@@ -43,6 +43,8 @@ pub struct Project {
     pub audio_dir: Option<PathBuf>,
     /// Things read in a way still being checked (shown in the app's project info).
     pub notes: Vec<String>,
+    /// The mixer: channel strips, sends, auxes, outputs, groups (lg-core mixer).
+    pub mixer: crate::mixer::Mixer,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -557,6 +559,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             }
         }
     }
+    crate::mixer::read(&live, &mut p);
     // track automation: the "Track Automation Root Folder" places each track's "*Automation"
     // sequence under its channel; that sequence's EvSq holds the points (0x5n records)
     let folder = live.iter().filter(|c| c.is("MSeq") && chunks::short_string(c.payload, 16).as_deref() == Some("Track Automation Root Folder")).map(|c| c.id).last();

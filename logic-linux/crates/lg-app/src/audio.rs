@@ -49,7 +49,8 @@ pub struct Send {
     pub pre: bool,
 }
 
-/// An aux channel strip: what it takes in (a bus), its effects, its fader.
+/// An aux channel strip: what it takes in (a bus), its effects (and which are bypassed), its
+/// fader, where its output goes and its own sends.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AuxBus {
     pub bus: usize,
@@ -57,6 +58,26 @@ pub struct AuxBus {
     pub pan: f32,
     pub mute: bool,
     pub inserts: Vec<(String, Vec<f32>)>,
+    pub bypass: Vec<bool>,
+    pub output: Out,
+    pub sends: Vec<Send>,
+}
+
+/// Where a channel strip's output goes (Logic's Output slot).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Out {
+    #[default]
+    Stereo,
+    Bus(usize),
+    Off,
+}
+
+/// Which strip a plug-in is on (the plug-in windows' handle into the engine).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FxStrip {
+    Track(usize),
+    Aux(usize),
+    Master,
 }
 
 /// A track's own plug-ins as the engine runs them (built from PlayTrack::instrument).
@@ -68,6 +89,43 @@ pub struct Units {
     pub inserts: Vec<Box<dyn lg_dsp::Effect>>,
     /// What `inserts` were built from.
     pub inserts_for: Vec<String>,
+    /// Each built insert's place in the strip's insert list (names without a stand-in are
+    /// skipped, so the two can differ).
+    pub insert_index: Vec<usize>,
+}
+
+/// Builds a strip's effects from (Logic name, saved floats); returns them and their places.
+fn build_inserts(list: &[(String, Vec<f32>)], tempo: f64) -> (Vec<Box<dyn lg_dsp::Effect>>, Vec<usize>) {
+    let mut fx = Vec::new();
+    let mut at = Vec::new();
+    for (k, (n, floats)) in list.iter().enumerate() {
+        if let Some(mut e) = crate::units::effect(n, RATE as f32) {
+            if !floats.is_empty() {
+                e.load_floats(floats);
+            }
+            e.set_tempo(tempo);
+            fx.push(e);
+            at.push(k);
+        }
+    }
+    (fx, at)
+}
+
+/// Runs a strip's effects (the bypassed ones skipped); the largest gain reduction (dB).
+fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32]) -> f32 {
+    let mut gr = 0f32;
+    for (fx, k) in u.inserts.iter_mut().zip(u.insert_index.iter()) {
+        if bypass.get(*k).copied().unwrap_or(false) {
+            continue;
+        }
+        fx.process(l, r);
+        gr = gr.max(fx.gain_reduction());
+    }
+    gr
+}
+
+fn strip_latency(u: &Units, bypass: &[bool]) -> usize {
+    u.inserts.iter().zip(u.insert_index.iter()).filter(|(_, k)| !bypass.get(**k).copied().unwrap_or(false)).map(|(fx, _)| fx.latency()).sum()
 }
 
 pub struct Engine {
@@ -103,6 +161,23 @@ pub struct Engine {
     aux_units: Vec<Units>,
     pub aux_meters: Vec<f32>,
     buses: Vec<(Vec<f32>, Vec<f32>)>,
+    /// Routing set by the Mixer: each track's output and which of its effects are bypassed;
+    /// the Stereo Out's own effects; gain reduction meters (dB); latency compensation on, and
+    /// the plan (order, compensating delays) for the current routing.
+    pub track_out: Vec<Out>,
+    pub track_bypass: Vec<Vec<bool>>,
+    pub master_inserts: Vec<(String, Vec<f32>)>,
+    pub master_bypass: Vec<bool>,
+    master_units: Units,
+    pub gr: Vec<f32>,
+    pub aux_gr: Vec<f32>,
+    pub master_gr: f32,
+    pub compensate: bool,
+    /// Meters show the level before the fader (Mix ▸ Pre-Fader Metering).
+    pub pre_fader_meters: bool,
+    plan_for: Vec<lg_dsp::routing::Node>,
+    plan: lg_dsp::routing::Plan,
+    edge_delays: Vec<Vec<lg_dsp::routing::StereoDelay>>,
     sounding: Vec<(usize, u8, u8, u32)>,
     pub soundfont: Option<PathBuf>,
     pub error: Option<String>,
@@ -122,7 +197,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -159,14 +234,7 @@ impl Engine {
             }
             let names: Vec<String> = t.inserts.iter().map(|x| x.0.clone()).collect();
             if u.inserts_for != names {
-                u.inserts = t.inserts.iter().filter_map(|(n, floats)| {
-                    let mut fx = crate::units::effect(n, RATE as f32)?;
-                    if !floats.is_empty() {
-                        fx.load_floats(floats);
-                    }
-                    fx.set_tempo(self.tempo);
-                    Some(fx)
-                }).collect();
+                (u.inserts, u.insert_index) = build_inserts(&t.inserts, self.tempo);
                 u.inserts_for = names;
             }
         }
@@ -212,16 +280,98 @@ impl Engine {
         for (a, u) in self.auxes.iter().zip(self.aux_units.iter_mut()) {
             let names: Vec<String> = a.inserts.iter().map(|x| x.0.clone()).collect();
             if u.inserts_for != names {
-                u.inserts = a.inserts.iter().filter_map(|(n, floats)| {
-                    let mut fx = crate::units::effect(n, RATE as f32)?;
-                    if !floats.is_empty() {
-                        fx.load_floats(floats);
-                    }
-                    Some(fx)
-                }).collect();
+                (u.inserts, u.insert_index) = build_inserts(&a.inserts, self.tempo);
                 u.inserts_for = names;
             }
         }
+        let names: Vec<String> = self.master_inserts.iter().map(|x| x.0.clone()).collect();
+        if self.master_units.inserts_for != names {
+            (self.master_units.inserts, self.master_units.insert_index) = build_inserts(&self.master_inserts, self.tempo);
+            self.master_units.inserts_for = names;
+        }
+    }
+
+    fn units_of(&self, s: FxStrip) -> Option<&Units> {
+        match s {
+            FxStrip::Track(t) => self.units.get(t),
+            FxStrip::Aux(a) => self.aux_units.get(a),
+            FxStrip::Master => Some(&self.master_units),
+        }
+    }
+
+    fn units_of_mut(&mut self, s: FxStrip) -> Option<&mut Units> {
+        match s {
+            FxStrip::Track(t) => self.units.get_mut(t),
+            FxStrip::Aux(a) => self.aux_units.get_mut(a),
+            FxStrip::Master => Some(&mut self.master_units),
+        }
+    }
+
+    /// The running effect in insert `slot` of a strip: its parameters and their values now.
+    pub fn effect_params(&self, s: FxStrip, slot: usize) -> Option<(Vec<lg_dsp::Param>, Vec<f32>)> {
+        let u = self.units_of(s)?;
+        let k = u.insert_index.iter().position(|x| *x == slot)?;
+        let fx = &u.inserts[k];
+        let params = fx.params().to_vec();
+        let values = params.iter().map(|p| fx.get(p.id)).collect();
+        Some((params, values))
+    }
+
+    pub fn set_effect_param(&mut self, s: FxStrip, slot: usize, id: u32, v: f32) {
+        if let Some(u) = self.units_of_mut(s) {
+            if let Some(k) = u.insert_index.iter().position(|x| *x == slot) {
+                u.inserts[k].set(id, v);
+            }
+        }
+    }
+
+    /// Re-reads an effect's saved floats (Paste, Compare, a setting loaded) without rebuilding.
+    pub fn load_effect(&mut self, s: FxStrip, slot: usize, floats: &[f32]) {
+        if let Some(u) = self.units_of_mut(s) {
+            if let Some(k) = u.insert_index.iter().position(|x| *x == slot) {
+                u.inserts[k].load_floats(floats);
+            }
+        }
+    }
+
+    /// The whole mix's plug-in delay (samples) with compensation on.
+    pub fn latency(&self) -> usize {
+        self.plan.total
+    }
+
+    /// The routing as nodes for the planner: tracks first, then the auxes.
+    fn route_nodes(&self) -> Vec<lg_dsp::routing::Node> {
+        use lg_dsp::routing::{Dest, Node};
+        let dest = |o: Out| match o {
+            Out::Stereo => Some(Dest::Master),
+            Out::Bus(b) => Some(Dest::Bus(b)),
+            Out::Off => None,
+        };
+        let mut nodes = Vec::with_capacity(self.tracks.len() + self.auxes.len());
+        for (i, t) in self.tracks.iter().enumerate() {
+            let mut outs: Vec<Dest> = dest(self.track_out.get(i).copied().unwrap_or_default()).into_iter().collect();
+            outs.extend(t.sends.iter().map(|s| Dest::Bus(s.bus)));
+            let latency = self.units.get(i).map_or(0, |u| strip_latency(u, self.track_bypass.get(i).map_or(&[], |v| v.as_slice())));
+            nodes.push(Node { latency, input: None, outs });
+        }
+        for (a, x) in self.auxes.iter().enumerate() {
+            let mut outs: Vec<Dest> = dest(x.output).into_iter().collect();
+            outs.extend(x.sends.iter().map(|s| Dest::Bus(s.bus)));
+            let latency = self.aux_units.get(a).map_or(0, |u| strip_latency(u, &x.bypass));
+            nodes.push(Node { latency, input: Some(x.bus), outs });
+        }
+        nodes
+    }
+
+    /// Plans the routing again when it changed (new delays start silent).
+    fn replan(&mut self) {
+        let nodes = self.route_nodes();
+        if nodes == self.plan_for && self.plan.delay.len() == nodes.len() {
+            return;
+        }
+        self.plan = lg_dsp::routing::plan(&nodes, self.compensate);
+        self.edge_delays = self.plan.delay.iter().map(|v| v.iter().map(|d| lg_dsp::routing::StereoDelay::new(d.unwrap_or(0))).collect()).collect();
+        self.plan_for = nodes;
     }
 
     /// The track's instrument parameters and values (Smart Controls, the plug-in window).
@@ -362,130 +512,181 @@ impl Engine {
                 }
             }
         }
-        // each track: its synthesizer and audio regions into its own buffer, through its EQ, then
-        // its volume and pan (equal power) into the mix; its meter
+        // each strip in the routing's order (lg_dsp::routing): a track makes its sound (its
+        // synthesizer and audio regions) and runs its EQ, an aux takes its bus; then the effects
+        // (bypassed ones skipped), the fader and pan (equal power); then each connection (the
+        // output, the sends) through its compensating delay into its bus or the Stereo Out
         let n_tracks = self.tracks.len();
         self.eqs.resize_with(n_tracks, || None);
+        self.replan();
         let start_tick = if self.playing { self.pos - tps * frames as f64 } else { self.pos };
+        let n_aux = self.auxes.len();
+        self.aux_meters.resize(n_aux, 0.0);
+        self.gr.resize(n_tracks, 0.0);
+        self.aux_gr.resize(n_aux, 0.0);
+        let top_bus = self.plan_for.iter().flat_map(|n| n.input.into_iter().chain(n.outs.iter().filter_map(|d| match d {
+            lg_dsp::routing::Dest::Bus(b) => Some(*b),
+            lg_dsp::routing::Dest::Master => None,
+        }))).max();
+        if let Some(b) = top_bus {
+            if self.buses.len() <= b {
+                self.buses.resize_with(b + 1, || (Vec::new(), Vec::new()));
+            }
+        }
+        for (bl, br) in &mut self.buses {
+            bl.clear();
+            bl.resize(frames, 0.0);
+            br.clear();
+            br.resize(frames, 0.0);
+        }
         let mut l = vec![0f32; frames];
         let mut r = vec![0f32; frames];
-        for i in 0..n_tracks {
+        let mut el = vec![0f32; frames];
+        let mut er = vec![0f32; frames];
+        let order = self.plan.order.clone();
+        for node in order {
             l.fill(0.0);
             r.fill(0.0);
-            let mut any = false;
-            if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
-                ins.render(&mut l, &mut r);
-                any = true;
-            } else if let Some(Some(sy)) = self.synths.get_mut(i) {
-                sy.render(&mut l, &mut r);
-                any = true;
-            }
-            if self.playing {
-                for (at, samples) in &self.tracks[i].audio {
-                    for k in 0..frames {
-                        let tick = start_tick + k as f64 * tps - *at as f64;
-                        if tick < 0.0 {
-                            continue;
+            let (gl, gr, sends, output) = if node < n_tracks {
+                let i = node;
+                let mut any = false;
+                if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                    ins.render(&mut l, &mut r);
+                    any = true;
+                } else if let Some(Some(sy)) = self.synths.get_mut(i) {
+                    sy.render(&mut l, &mut r);
+                    any = true;
+                }
+                if self.playing {
+                    for (at, samples) in &self.tracks[i].audio {
+                        for k in 0..frames {
+                            let tick = start_tick + k as f64 * tps - *at as f64;
+                            if tick < 0.0 {
+                                continue;
+                            }
+                            let frame = (tick / tps) as usize;
+                            if 2 * frame + 1 >= samples.len() {
+                                break;
+                            }
+                            l[k] += samples[2 * frame];
+                            r[k] += samples[2 * frame + 1];
+                            any = true;
                         }
-                        let frame = (tick / tps) as usize;
-                        if 2 * frame + 1 >= samples.len() {
-                            break;
-                        }
-                        l[k] += samples[2 * frame];
-                        r[k] += samples[2 * frame + 1];
-                        any = true;
                     }
                 }
-            }
-            if !any || !self.audible(i) {
-                continue;
-            }
-            match (&self.tracks[i].eq, &mut self.eqs[i]) {
-                (Some(p), Some(e)) => {
-                    if e.params != *p {
-                        e.set(*p);
+                if !any || !self.audible(i) {
+                    continue;
+                }
+                match (&self.tracks[i].eq, &mut self.eqs[i]) {
+                    (Some(p), Some(e)) => {
+                        if e.params != *p {
+                            e.set(*p);
+                        }
+                        e.process(&mut l, &mut r);
                     }
-                    e.process(&mut l, &mut r);
+                    (Some(p), slot) => {
+                        let mut e = crate::eq::Eq::new(*p);
+                        e.process(&mut l, &mut r);
+                        *slot = Some(e);
+                    }
+                    (None, slot) => *slot = None,
                 }
-                (Some(p), slot) => {
-                    let mut e = crate::eq::Eq::new(*p);
-                    e.process(&mut l, &mut r);
-                    *slot = Some(e);
+                let bypass = self.track_bypass.get(i).cloned().unwrap_or_default();
+                if let Some(u) = self.units.get_mut(i) {
+                    let g = run_inserts(u, &bypass, &mut l, &mut r);
+                    self.gr[i] = self.gr[i].max(g);
                 }
-                (None, slot) => *slot = None,
+                let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
+                if self.playing {
+                    if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_volume, start_tick) {
+                        vol = v;
+                    }
+                    if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_pan, start_tick) {
+                        pan = v.clamp(-1.0, 1.0);
+                    }
+                }
+                let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2, self.tracks[i].sends.clone(), self.track_out.get(i).copied().unwrap_or_default())
+            } else {
+                let ai = node - n_tracks;
+                let aux = self.auxes[ai].clone();
+                if let Some((bl, br)) = self.buses.get(aux.bus) {
+                    l.copy_from_slice(bl);
+                    r.copy_from_slice(br);
+                }
+                if let Some(u) = self.aux_units.get_mut(ai) {
+                    let g = run_inserts(u, &aux.bypass, &mut l, &mut r);
+                    self.aux_gr[ai] = self.aux_gr[ai].max(g);
+                }
+                if aux.mute {
+                    continue;
+                }
+                let a = (aux.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+                (aux.volume * a.cos() * std::f32::consts::SQRT_2, aux.volume * a.sin() * std::f32::consts::SQRT_2, aux.sends, aux.output)
+            };
+            // the connections, in route_nodes' order: the output (unless off), then the sends
+            let mut conns: Vec<(Option<usize>, f32, f32)> = Vec::new();
+            match output {
+                Out::Stereo => conns.push((None, gl, gr)),
+                Out::Bus(b) => conns.push((Some(b), gl, gr)),
+                Out::Off => {}
             }
-            if let Some(u) = self.units.get_mut(i) {
-                for fx in u.inserts.iter_mut() {
-                    fx.process(&mut l, &mut r);
-                }
-            }
-            let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
-            if self.playing {
-                if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_volume, start_tick) {
-                    vol = v;
-                }
-                if let Some(v) = crate::automation::curve_at(&self.tracks[i].auto_pan, start_tick) {
-                    pan = v.clamp(-1.0, 1.0);
-                }
-            }
-            let a = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-            let (gl, gr) = (vol * a.cos() * std::f32::consts::SQRT_2, vol * a.sin() * std::f32::consts::SQRT_2);
-            // the sends: into their buses, before the fader or after it (with the pan)
-            for s in self.tracks[i].sends.clone() {
-                if self.buses.len() <= s.bus {
-                    self.buses.resize_with(s.bus + 1, || (Vec::new(), Vec::new()));
-                }
-                let (bl, br) = &mut self.buses[s.bus];
-                bl.resize(frames, 0.0);
-                br.resize(frames, 0.0);
-                let (sl, sr) = if s.pre { (s.gain, s.gain) } else { (s.gain * gl, s.gain * gr) };
-                for k in 0..frames {
-                    bl[k] += l[k] * sl;
-                    br[k] += r[k] * sr;
-                }
+            let n_out = conns.len();
+            for snd in &sends {
+                conns.push((Some(snd.bus), if snd.pre { snd.gain } else { snd.gain * gl }, if snd.pre { snd.gain } else { snd.gain * gr }));
             }
             let mut peak = 0f32;
-            for k in 0..frames {
-                let (x, y) = (l[k] * gl, r[k] * gr);
-                out[2 * k] += x;
-                out[2 * k + 1] += y;
-                peak = peak.max(x.abs()).max(y.abs());
+            for (k, (dest, cl, cr)) in conns.into_iter().enumerate() {
+                if self.plan.delay.get(node).and_then(|v| v.get(k)).copied().flatten().is_none() {
+                    continue;
+                }
+                for f in 0..frames {
+                    el[f] = l[f] * cl;
+                    er[f] = r[f] * cr;
+                }
+                if k < n_out {
+                    let (ml, mr) = if self.pre_fader_meters { (&l, &r) } else { (&el, &er) };
+                    for f in 0..frames {
+                        peak = peak.max(ml[f].abs()).max(mr[f].abs());
+                    }
+                }
+                if let Some(d) = self.edge_delays.get_mut(node).and_then(|v| v.get_mut(k)) {
+                    d.process(&mut el, &mut er);
+                }
+                match dest {
+                    None => {
+                        for f in 0..frames {
+                            out[2 * f] += el[f];
+                            out[2 * f + 1] += er[f];
+                        }
+                    }
+                    Some(b) => {
+                        if let Some((bl, br)) = self.buses.get_mut(b) {
+                            for f in 0..frames {
+                                bl[f] += el[f];
+                                br[f] += er[f];
+                            }
+                        }
+                    }
+                }
             }
-            if let Some(m) = self.meters.get_mut(i) {
+            let m = if node < n_tracks { self.meters.get_mut(node) } else { self.aux_meters.get_mut(node - n_tracks) };
+            if let Some(m) = m {
                 *m = m.max(peak);
             }
         }
-        // the aux strips: each takes its bus, runs its effects, then its fader into the mix
-        self.aux_meters.resize(self.auxes.len(), 0.0);
-        for (ai, aux) in self.auxes.clone().iter().enumerate() {
-            let Some((bl, br)) = self.buses.get_mut(aux.bus) else { continue };
-            if bl.len() != frames {
-                continue;
+        // the Stereo Out's own effects (Logic's master chain)
+        if !self.master_units.inserts.is_empty() {
+            for f in 0..frames {
+                l[f] = out[2 * f];
+                r[f] = out[2 * f + 1];
             }
-            l.copy_from_slice(bl);
-            r.copy_from_slice(br);
-            if let Some(u) = self.aux_units.get_mut(ai) {
-                for fx in u.inserts.iter_mut() {
-                    fx.process(&mut l, &mut r);
-                }
+            let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r);
+            self.master_gr = self.master_gr.max(g);
+            for f in 0..frames {
+                out[2 * f] = l[f];
+                out[2 * f + 1] = r[f];
             }
-            if aux.mute {
-                continue;
-            }
-            let a = (aux.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
-            let (gl, gr) = (aux.volume * a.cos() * std::f32::consts::SQRT_2, aux.volume * a.sin() * std::f32::consts::SQRT_2);
-            let mut peak = 0f32;
-            for k in 0..frames {
-                let (x, y) = (l[k] * gl, r[k] * gr);
-                out[2 * k] += x;
-                out[2 * k + 1] += y;
-                peak = peak.max(x.abs()).max(y.abs());
-            }
-            self.aux_meters[ai] = self.aux_meters[ai].max(peak);
-        }
-        for (bl, br) in &mut self.buses {
-            bl.fill(0.0);
-            br.fill(0.0);
         }
         if self.sf.is_none() {
             for v in &mut self.voices {
@@ -529,9 +730,10 @@ impl Engine {
         }
         self.master_meter = self.master_meter.max(peak);
         let fall = 0.985f32.powf(frames as f32 / 64.0);
-        for m in self.meters.iter_mut().chain(self.aux_meters.iter_mut()) {
+        for m in self.meters.iter_mut().chain(self.aux_meters.iter_mut()).chain(self.gr.iter_mut()).chain(self.aux_gr.iter_mut()) {
             *m *= fall;
         }
+        self.master_gr *= fall;
         self.master_meter *= fall;
     }
 }
@@ -693,6 +895,90 @@ pub fn load_audio(path: &Path) -> Option<Vec<f32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A track playing one click (an audio region) at frame `at`.
+    fn click_track(at: usize, inserts: &[&str]) -> PlayTrack {
+        let mut a = vec![0f32; 2 * 4096];
+        a[2 * at] = 0.5;
+        a[2 * at + 1] = 0.5;
+        PlayTrack { channel: 0, program: 0, notes: Vec::new(), audio: vec![(0, Arc::new(a))], volume: 1.0, pan: 0.0, mute: false, solo: false, eq: None, instrument: None, instrument_floats: Vec::new(), inserts: inserts.iter().map(|n| (n.to_string(), Vec::new())).collect(), sends: Vec::new(), auto_volume: Vec::new(), auto_pan: Vec::new() }
+    }
+
+    fn run(e: &mut Engine, blocks: usize) -> Vec<f32> {
+        e.playing = true;
+        e.program_changes();
+        let mut out = Vec::new();
+        let mut buf = vec![0f32; 2 * BLOCK];
+        for _ in 0..blocks {
+            e.render(&mut buf);
+            out.extend_from_slice(&buf);
+        }
+        out
+    }
+
+    fn peaks(out: &[f32]) -> Vec<usize> {
+        (0..out.len() / 2).filter(|&f| out[2 * f].abs() > 0.05).collect()
+    }
+
+    #[test]
+    fn latency_compensation_lines_tracks_up() {
+        // a Limiter's look-ahead on one track: with compensation both clicks land together
+        let mut e = Engine::new();
+        e.tracks = vec![click_track(200, &["Limiter"]), click_track(200, &[])];
+        let out = run(&mut e, 40);
+        let lat = e.latency();
+        assert!(lat > 0, "the limiter reports its look-ahead");
+        let pk = peaks(&out);
+        assert!(!pk.is_empty());
+        assert!(pk.iter().all(|f| f.abs_diff(200 + lat) <= 2), "one click at {}: {pk:?}", 200 + lat);
+        // without, the plain track comes first
+        let mut e = Engine::new();
+        e.compensate = false;
+        e.tracks = vec![click_track(200, &["Limiter"]), click_track(200, &[])];
+        let pk = peaks(&run(&mut e, 40));
+        assert!(pk.iter().any(|f| f.abs_diff(200) <= 1) && pk.iter().any(|f| *f > 200 + 4), "{pk:?}");
+    }
+
+    #[test]
+    fn outputs_and_sends_reach_the_stereo_out_through_auxes() {
+        // track → Bus 2 (output) → aux → Stereo Out; a pre-fader send to Bus 1 → aux
+        let mut e = Engine::new();
+        let mut t = click_track(100, &[]);
+        t.volume = 0.0;
+        t.sends = vec![Send { bus: 0, gain: 1.0, pre: true }];
+        e.tracks = vec![t, click_track(300, &[])];
+        e.track_out = vec![Out::Off, Out::Bus(1)];
+        let aux = |bus| AuxBus { bus, volume: 1.0, pan: 0.0, mute: false, inserts: Vec::new(), bypass: Vec::new(), output: Out::Stereo, sends: Vec::new() };
+        e.auxes = vec![aux(0), aux(1)];
+        let pk = peaks(&run(&mut e, 40));
+        assert!(pk.contains(&100), "the pre-fader send is heard with the fader down: {pk:?}");
+        assert!(pk.contains(&300), "the output to Bus 2 comes back through its aux: {pk:?}");
+        // a muted aux silences what it carries
+        e.auxes[1].mute = true;
+        e.locate(0.0);
+        let pk = peaks(&run(&mut e, 40));
+        assert!(pk.contains(&100) && !pk.contains(&300), "{pk:?}");
+    }
+
+    #[test]
+    fn feedback_is_cut_and_bypass_skips() {
+        // an aux sending into its own bus doesn't run away
+        let mut e = Engine::new();
+        let mut t = click_track(100, &[]);
+        t.sends = vec![Send { bus: 0, gain: 1.0, pre: false }];
+        e.tracks = vec![t];
+        e.track_out = vec![Out::Off];
+        e.auxes = vec![AuxBus { bus: 0, volume: 1.0, pan: 0.0, mute: false, inserts: Vec::new(), bypass: Vec::new(), output: Out::Stereo, sends: vec![Send { bus: 0, gain: 1.0, pre: false }] }];
+        let out = run(&mut e, 40);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        assert_eq!(peaks(&out), vec![100]);
+        // a bypassed Limiter adds no latency
+        let mut e = Engine::new();
+        e.tracks = vec![click_track(200, &["Limiter"]), click_track(200, &[])];
+        e.track_bypass = vec![vec![true], vec![]];
+        run(&mut e, 4);
+        assert_eq!(e.latency(), 0);
+    }
 
     #[test]
     fn bounces_the_demo_with_the_soundfont() {

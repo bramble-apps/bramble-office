@@ -72,7 +72,7 @@
  {
   "area": "Main window",
   "status": "Partial",
-  "feature": "Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, Single / Tracks / All), strips with fader, pan, meters, scale, slots, sends to buses (level knob, pre/post, No Send) and aux strips (input bus, effects, fader) mixed by the engine. [ ] filters, groups, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA, reading sends and auxes from projects"
+  "feature": "Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: inputs, stereo pairs, buses; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (\u2318Z over the Mixer, Include \u2026 in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)"
  },
  {
   "area": "Main window",
@@ -152,7 +152,7 @@
  {
   "area": "Audio",
   "status": "Partial",
-  "feature": "Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views"
+  "feature": "Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste); every lg-fx effect's window from its Audio FX slot on tracks, auxes and the Stereo Out: Controls view (sliders, menus, switches, Option-click default), bypass, Compare (edited / as it was), Copy / Paste, the setting pop-up (Copy / Paste / Reset Setting, Save Setting As\u2026, saved settings listed, \u2039 \u203a and Next / Previous Plug-in Setting), Show/Hide All Plug-in Windows (V). [ ] Logic's custom editor views (Channel EQ and Compressor graphics included), Logic's own .pst presets in the pop-up, Plug-in Undo, Link, side chain, the window's View menu beyond Controls"
  },
  {
   "area": "Audio",
@@ -161,8 +161,8 @@
  },
  {
   "area": "Audio",
-  "status": "Not started",
-  "feature": "Sends, buses, aux strips, master chain; latency compensation"
+  "status": "Partial",
+  "feature": "Signal flow (lg-dsp routing + engine): tracks and auxes routed by output (Stereo Out, Bus N, none) and sends (pre / post fader) into buses, auxes reading buses in dependency order (aux into aux chains), feedback cut, bypassed effects skipped, Stereo Out effects (master chain, Mastering Assistant\u2026), VCAs, plug-in delay compensation (each connection delayed so tracks, sends and aux returns line up at buses and the Stereo Out; tested with the Limiter's look-ahead). Read from .logicx (lg-core mixer): strips' volume / pan / mute / solo, aux strips with their input bus, output bus and effects, track outputs to buses (summing stacks, Drum Machine Designer kits), sends to buses (E07, E22, E23), groups (membership and link mask, E24). [ ] send level and pre/post read from the file are unchecked (every sample is a new send: 0 dB read from a guessed float), aux names only when the aux tracks line up, input and Bus strips, latency compensation of instruments, sidechains, Low Latency mode bypassing, writing any of it back on Save"
  },
  {
   "area": "Audio",

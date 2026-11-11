@@ -32,7 +32,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
 - [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
-- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, Single / Tracks / All), strips with fader, pan, meters, scale, slots, sends to buses (level knob, pre/post, No Send) and aux strips (input bus, effects, fader) mixed by the engine. [ ] filters, groups, input/output menus, plug-in slot drag/copy/bypass, gain reduction meters, VCA, reading sends and auxes from projects
+- [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: inputs, stereo pairs, buses; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
@@ -52,9 +52,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Playback through our instruments and effects (SoundFont fallback), audio regions, bounce to WAV, metronome
 - [x] Real instruments (lg-synth): Vintage Keys EP (≈2 dB from Logic's Deluxe Classic), Tonewheel B3, Pickup Clav, Retro Poly, Studio Grand, Studio Drum Kit, Studio Bass, Studio Ensemble (Studio Strings / Horns articulations and keyswitches), Studio Plucks & Mallets, Alchemist (Alchemy: VA, additive, spectral, granular, Transform pad), Trio Synth (ES2, 10-slot router), Mono One / Bass Mono / Poly Six / Ensemble Synth / FM Two (ES1, ES M, ES P, ES E, EFM1), Sculptor (Sculpture), Tape Keys (Mellotron, 10 sets), Quick Sampler (4 modes), Drum Machine (48 pads), Sampler (SFZ, SF2 native or converted, EXS unverified); every Logic patch name maps to one. [ ] Alchemy's arpeggiator, sequencer, MSEG and effects; Logic's per-patch Perform mappings; SF3 (needs an Ogg decoder); Mac checks of ES2 and Alchemy parameter order
 - [x] Real effects (lg-fx, 44): Channel EQ (0.09 dB from Logic), Compressor (7 circuits, ≤0.3 dB), Limiter, Adaptive Limiter, Noise Gate, Chroma Hall Verb, Space Convolver, Stereo/Tape Delay, Echo, Chorus, Ensemble, Flanger, Phaser, Microphaser, Tremolo, AutoFilter, Distortion, Overdrive, Bitcrusher, Clip Distortion, Exciter, DeEsser 2, Gain, Enveloper, Vintage Graphic / Tube / Console EQ, Chroma Saturator (ChromaGlow), Phat FX, Amp and Bass Amp Sculptor, Multipressor, Robo Flanger, Total Tremolo, Blue Echo, Tru-Tape Delay, Stomp Board (Pedalboard, serial), Delay Designer (tap A), Mastering Chain; look-ahead latency reported. [ ] many new parameter positions to confirm on the Mac, Pedalboard buses, Delay Designer taps B+, Mastering Assistant Auto EQ, Beat Breaker, Step FX, Remix FX, Space Designer IRs, Stem Splitter
-- [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste). [ ] effects' windows, Logic's custom editor views
+- [~] Plug-in windows: instruments' Controls view (bypass, Compare, Copy/Paste); every lg-fx effect's window from its Audio FX slot on tracks, auxes and the Stereo Out: Controls view (sliders, menus, switches, Option-click default), bypass, Compare (edited / as it was), Copy / Paste, the setting pop-up (Copy / Paste / Reset Setting, Save Setting As…, saved settings listed, ‹ › and Next / Previous Plug-in Setting), Show/Hide All Plug-in Windows (V). [ ] Logic's custom editor views (Channel EQ and Compressor graphics included), Logic's own .pst presets in the pop-up, Plug-in Undo, Link, side chain, the window's View menu beyond Controls
 - [~] MIDI recording from keyboards and Musical Typing, Capture as Recording, Replace. [ ] audio recording, count-in on record, takes, punch
-- [ ] Sends, buses, aux strips, master chain; latency compensation
+- [~] Signal flow (lg-dsp routing + engine): tracks and auxes routed by output (Stereo Out, Bus N, none) and sends (pre / post fader) into buses, auxes reading buses in dependency order (aux into aux chains), feedback cut, bypassed effects skipped, Stereo Out effects (master chain, Mastering Assistant…), VCAs, plug-in delay compensation (each connection delayed so tracks, sends and aux returns line up at buses and the Stereo Out; tested with the Limiter's look-ahead). Read from .logicx (lg-core mixer): strips' volume / pan / mute / solo, aux strips with their input bus, output bus and effects, track outputs to buses (summing stacks, Drum Machine Designer kits), sends to buses (E07, E22, E23), groups (membership and link mask, E24). [ ] send level and pre/post read from the file are unchecked (every sample is a new send: 0 dB read from a guessed float), aux names only when the aux tracks line up, input and Bus strips, latency compensation of instruments, sidechains, Low Latency mode bypassing, writing any of it back on Save
 - [ ] Hosting third-party CLAP/VST3/LV2 plug-ins
 - [~] Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont
 - [~] Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops
@@ -88,13 +88,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 114 | 594 | 19% |
-| Local menus | 186 | 1191 | 15% |
-| Right-click menus | 486 | 2575 | 18% |
-| Key commands | 259 | 2207 | 11% |
+| Menu bar | 120 | 594 | 20% |
+| Local menus | 225 | 1191 | 18% |
+| Right-click menus | 1075 | 2575 | 41% |
+| Key commands | 327 | 2207 | 14% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 114 of 594
+## Menu bar: 120 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -583,7 +583,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Mix — 3/36</summary>
+<details><summary>Mix — 8/36</summary>
 
 - [x] Show Automation  `A`
 - [ ] Create Track Automation
@@ -612,14 +612,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Enable Automation Quick Access  `⌃⌥⌘A`
 - [ ] Autoselect Automation Parameter in Read Mode
 - [ ] Automation Settings…
-- [ ] Group Settings  `⌥⇧G`
-- [ ] Groups Active  `⇧G`
-- [ ] Create Group  `⌃⌘G`
+- [x] Group Settings  `⌥⇧G`
+- [x] Groups Active  `⇧G`
+- [x] Create Group  `⌃⌘G`
 - [ ] I/O Labels…
 - [ ] I/O Assignments…
-- [ ] Pre-Fader Metering
+- [x] Pre-Fader Metering
 - [ ] Search and Add Plug-in…  `⌃⌘P`
-- [ ] Mastering Assistant…
+- [x] Mastering Assistant…
 - [ ] Dolby Atmos…
 
 </details>
@@ -647,7 +647,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 8/68</summary>
+<details><summary>Window — 9/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -709,7 +709,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Play Surface  `⌘K`
 - [x] Show Musical Typing
 - [ ] Show Step Input Keyboard  `⌥⌘K`
-- [ ] Hide All Plug-in Windows  `V`
+- [x] Hide All Plug-in Windows  `V`
 - [ ] Untitled.logicx - Tracks
 - [ ] Screenset 1 (Tracks/Browser)  `1`
 - [ ] Duplicate…
@@ -741,7 +741,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 186 of 1191
+## Local menus (Edit / Functions / View in each area): 225 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -1142,18 +1142,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-Edit — 7/26</summary>
+<details><summary>mixer-Edit — 17/26</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…  `⌃⌥⌘Z`
 - [ ] Delete Undo History
-- [ ] Mixer Undo Deluxe Classic: Solo
-- [ ] Mixer Redo
+- [x] Mixer Undo Deluxe Classic: Solo
+- [x] Mixer Redo
 - [ ] Undo selected Channel Strips
 - [ ] Redo selected Channel Strips
-- [ ] Delete Mixer Undo History
-- [ ] Include Mixer Undo Steps in Project Undo History
+- [x] Delete Mixer Undo History
+- [x] Include Mixer Undo Steps in Project Undo History
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
@@ -1161,65 +1161,65 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select All  `⌘A`
 - [x] Deselect All  `⇧D`
 - [x] Invert Selection  `⇧I`
-- [ ] Select Audio Channel Strips  `⇧A`
-- [ ] Select Instrument Channel Strips  `⇧S`
+- [x] Select Audio Channel Strips  `⇧A`
+- [x] Select Instrument Channel Strips  `⇧S`
 - [ ] Select Summing Stack Channel Strips
-- [ ] Select Auxiliary Channel Strips  `⇧F`
-- [ ] Select Output Channel Strips  `⇧O`
+- [x] Select Auxiliary Channel Strips  `⇧F`
+- [x] Select Output Channel Strips  `⇧O`
 - [ ] Select MIDI Channel Strips  `⇧E`
-- [ ] Select Same-Colored Channel Strips  `⇧C`
-- [ ] Select Muted Channel Strips  `⇧M`
+- [x] Select Same-Colored Channel Strips  `⇧C`
+- [x] Select Muted Channel Strips  `⇧M`
 - [ ] Select Channel Strips with Same Panner Type
 
 </details>
 
-<details><summary>mixer-more — 2/15</summary>
+<details><summary>mixer-more — 10/15</summary>
 
 - [ ] Sends on Faders
   - [x] Off
-- [ ] Single
+- [x] Single
 - [ ] Tracks
 - [x] All
 - [ ] Audio
-- [ ] Inst
+- [x] Inst
 - [ ] Aux
-- [ ] Bus
-- [ ] Input
-- [ ] Output
-- [ ] Master/VCA
+- [x] Bus
+- [x] Input
+- [x] Output
+- [x] Master/VCA
 - [ ] MIDI
-- [ ] Narrow Channel Strips
-- [ ] Wide Channel Strips
+- [x] Narrow Channel Strips
+- [x] Wide Channel Strips
 
 </details>
 
-<details><summary>mixer-Options — 0/8</summary>
+<details><summary>mixer-Options — 3/8</summary>
 
-- [ ] Create New Auxiliary Channel Strip  `⌃N`
-- [ ] Create New VCA for Selected Channel Strips
+- [x] Create New Auxiliary Channel Strip  `⌃N`
+- [x] Create New VCA for Selected Channel Strips
 - [ ] Create Tracks for Selected Channel Strips  `⌃T`
 - [ ] Create Track Stack for Selected Channel Strips
 - [ ] Flatten Stack
 - [ ] Send All MIDI Mixer Data
-- [ ] Enable Groups
+- [x] Enable Groups
 - [ ] I/O Labels…
 
 </details>
 
-<details><summary>mixer-View — 0/52</summary>
+<details><summary>mixer-View — 18/52</summary>
 
 - [ ] Hide Legend  `⌥⇧I`
 - [ ] Link Control Surfaces
 - [ ] Autoscroll to Selection
 - [ ] Scroll To
   - [ ] Audio
-  - [ ] Instruments
-  - [ ] Auxiliaries
-  - [ ] Buses
-  - [ ] Inputs
-  - [ ] Outputs
-  - [ ] Master/VCA
-  - [ ] MIDI Instruments
+  - [x] Instruments
+  - [x] Auxiliaries
+  - [x] Buses
+  - [x] Inputs
+  - [x] Outputs
+  - [x] Master/VCA
+  - [x] MIDI Instruments
 - [ ] Signal Flow Channel Strips
 - [ ] Channels with Sends only
 - [ ] Folder Tracks
@@ -1231,19 +1231,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
-  - [ ] Setting Menu
-  - [ ] Gain Reduction Meter
-  - [ ] EQ Thumbnail
-  - [ ] MIDI Effects
-  - [ ] Input / Instrument
-  - [ ] Audio Effects
-  - [ ] Sends
-  - [ ] Output
-  - [ ] Group  `⌃⇧G`
+  - [x] Setting Menu
+  - [x] Gain Reduction Meter
+  - [x] EQ Thumbnail
+  - [x] MIDI Effects
+  - [x] Input / Instrument
+  - [x] Audio Effects
+  - [x] Sends
+  - [x] Output
+  - [x] Group  `⌃⇧G`
   - [ ] Automation
   - [ ] Track Icon  `⌃⇧I`
-  - [ ] Pan Knob
-  - [ ] VCA  `⌃⇧V`
+  - [x] Pan Knob
+  - [x] VCA  `⌃⇧V`
   - [ ] Track Color
   - [ ] Track Stacks
   - [ ] Track Name
@@ -2085,7 +2085,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 486 of 2575
+## Right-click menus: 1075 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2237,26 +2237,26 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>inspector-channelstrip — 0/21</summary>
+<details><summary>inspector-channelstrip — 11/21</summary>
 
 - [ ] Assign Channel Strip Color…
 - [ ] Long Faders
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
-  - [ ] Setting Menu
-  - [ ] Gain Reduction Meter
-  - [ ] EQ Thumbnail
-  - [ ] MIDI Effects
-  - [ ] Input / Instrument
-  - [ ] Audio Effects
-  - [ ] Sends
-  - [ ] Output
-  - [ ] Group
+  - [x] Setting Menu
+  - [x] Gain Reduction Meter
+  - [x] EQ Thumbnail
+  - [x] MIDI Effects
+  - [x] Input / Instrument
+  - [x] Audio Effects
+  - [x] Sends
+  - [x] Output
+  - [x] Group
   - [ ] Automation
   - [ ] Icon
-  - [ ] Pan Knob
-  - [ ] VCA
+  - [x] Pan Knob
+  - [x] VCA
   - [ ] Track Color
   - [ ] Track Name
   - [ ] Track Notes
@@ -2512,21 +2512,21 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-audiofx-slot — 0/404</summary>
+<details><summary>mixer-audiofx-slot — 42/404</summary>
 
 - [ ] Amps and Pedals
-  - [ ] Amp Designer
+  - [x] Amp Designer
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Bass Amp Designer
+  - [x] Bass Amp Designer
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Pedalboard
+  - [x] Pedalboard
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Stompboxes
     - [ ] Delay
-      - [ ] Blue Echo
+      - [x] Blue Echo
         - [ ] Stereo
         - [ ] Dual Mono
       - [ ] Spring Box
@@ -2535,10 +2535,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [ ] Tie Dye Delay
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Tru-Tape Delay
+      - [x] Tru-Tape Delay
         - [ ] Stereo
         - [ ] Dual Mono
-    - [ ] Distortion
+    - [x] Distortion
       - [ ] Candy Fuzz
         - [ ] Stereo
         - [ ] Dual Mono
@@ -2572,7 +2572,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [ ] Tube Burner
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Vintage Drive
+      - [x] Vintage Drive
         - [ ] Stereo
         - [ ] Dual Mono
     - [ ] Dynamics
@@ -2608,7 +2608,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [ ] Retro Chorus
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Robo Flanger
+      - [x] Robo Flanger
         - [ ] Stereo
         - [ ] Dual Mono
       - [ ] Roswell Ringer
@@ -2623,7 +2623,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
       - [ ] The Vibe
         - [ ] Stereo
         - [ ] Dual Mono
-      - [ ] Total Tremolo
+      - [x] Total Tremolo
         - [ ] Stereo
         - [ ] Dual Mono
       - [ ] Trem-O-Tone
@@ -2637,70 +2637,70 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
         - [ ] Stereo
         - [ ] Dual Mono
 - [ ] Delay
-  - [ ] Delay Designer
+  - [x] Delay Designer
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Echo
+  - [x] Echo
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Sample Delay
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Stereo Delay
+  - [x] Stereo Delay
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Tape Delay
+  - [x] Tape Delay
     - [ ] Stereo
     - [ ] Dual Mono
-- [ ] Distortion
-  - [ ] Bitcrusher
+- [x] Distortion
+  - [x] Bitcrusher
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] ChromaGlow
+  - [x] ChromaGlow
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Clip Distortion
+  - [x] Clip Distortion
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Distortion
+  - [x] Distortion
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Distortion II
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Overdrive
+  - [x] Overdrive
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Phase Distortion
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Dynamics
-  - [ ] Adaptive Limiter
+  - [x] Adaptive Limiter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Compressor
+  - [x] Compressor
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] DeEsser 2
+  - [x] DeEsser 2
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Enveloper
+  - [x] Enveloper
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Expander
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Limiter
+  - [x] Limiter
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Multipressor
+  - [x] Multipressor
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Noise Gate
+  - [x] Noise Gate
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] EQ
-  - [ ] Channel EQ
+  - [x] Channel EQ
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Linear Phase EQ
@@ -2713,17 +2713,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Vintage EQ Collection
-    - [ ] Vintage Console EQ
+    - [x] Vintage Console EQ
       - [ ] Stereo
       - [ ] Dual Mono
-    - [ ] Vintage Graphic EQ
+    - [x] Vintage Graphic EQ
       - [ ] Stereo
       - [ ] Dual Mono
-    - [ ] Vintage Tube EQ
+    - [x] Vintage Tube EQ
       - [ ] Stereo
       - [ ] Dual Mono
 - [ ] Filter
-  - [ ] AutoFilter
+  - [x] AutoFilter
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] EVOC 20 Filterbank
@@ -2757,22 +2757,22 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Tuner
     - [ ] Stereo
 - [ ] Modulation
-  - [ ] Chorus
+  - [x] Chorus
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Ensemble
+  - [x] Ensemble
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Flanger
+  - [x] Flanger
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Microphaser
+  - [x] Microphaser
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Modulation Delay
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Phaser
+  - [x] Phaser
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Ringshifter
@@ -2786,14 +2786,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Spreader
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Tremolo
+  - [x] Tremolo
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Multi Effects
   - [ ] Beat Breaker
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Phat FX
+  - [x] Phat FX
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] Remix FX
@@ -2812,7 +2812,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Reverb
-  - [ ] ChromaVerb
+  - [x] ChromaVerb
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] EnVerb
@@ -2824,11 +2824,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] SilverVerb
     - [ ] Stereo
     - [ ] Dual Mono
-  - [ ] Space Designer
+  - [x] Space Designer
     - [ ] Stereo
     - [ ] Dual Mono
 - [ ] Specialized
-  - [ ] Exciter
+  - [x] Exciter
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] SubBass
@@ -2837,7 +2837,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Utility
   - [ ] Auto Sampler
     - [ ] Stereo
-  - [ ] Gain
+  - [x] Gain
     - [ ] Stereo
     - [ ] Dual Mono
   - [ ] I/O
@@ -2927,11 +2927,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-group-slot — 0/3</summary>
+<details><summary>mixer-group-slot — 3/3</summary>
 
-- [ ] Open Group Settings…
-- [ ] No Group
-- [ ] Group 1: (new)
+- [x] Open Group Settings…
+- [x] No Group
+- [x] Group 1: (new)
 
 </details>
 
@@ -3080,277 +3080,277 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-output-slot — 0/272</summary>
+<details><summary>mixer-output-slot — 261/272</summary>
 
-- [ ] Stereo Output
-- [ ] No Output
-- [ ] Output
-  - [ ] Stereo Output
+- [x] Stereo Output
+- [x] No Output
+- [x] Output
+  - [x] Stereo Output
   - [ ] Surround
-- [ ] Bus
-  - [ ] Bus 1
-  - [ ] Bus 2
-  - [ ] Bus 3
-  - [ ] Bus 4
-  - [ ] Bus 5
-  - [ ] Bus 6
-  - [ ] Bus 7
-  - [ ] Bus 8
-  - [ ] Bus 9
-  - [ ] Bus 10
-  - [ ] Bus 11
-  - [ ] Bus 12
-  - [ ] Bus 13
-  - [ ] Bus 14
-  - [ ] Bus 15
-  - [ ] Bus 16
-  - [ ] Bus 17
-  - [ ] Bus 18
-  - [ ] Bus 19
-  - [ ] Bus 20
-  - [ ] Bus 21
-  - [ ] Bus 22
-  - [ ] Bus 23
-  - [ ] Bus 24
-  - [ ] Bus 25
-  - [ ] Bus 26
-  - [ ] Bus 27
-  - [ ] Bus 28
-  - [ ] Bus 29
-  - [ ] Bus 30
-  - [ ] Bus 31
-  - [ ] Bus 32
+- [x] Bus
+  - [x] Bus 1
+  - [x] Bus 2
+  - [x] Bus 3
+  - [x] Bus 4
+  - [x] Bus 5
+  - [x] Bus 6
+  - [x] Bus 7
+  - [x] Bus 8
+  - [x] Bus 9
+  - [x] Bus 10
+  - [x] Bus 11
+  - [x] Bus 12
+  - [x] Bus 13
+  - [x] Bus 14
+  - [x] Bus 15
+  - [x] Bus 16
+  - [x] Bus 17
+  - [x] Bus 18
+  - [x] Bus 19
+  - [x] Bus 20
+  - [x] Bus 21
+  - [x] Bus 22
+  - [x] Bus 23
+  - [x] Bus 24
+  - [x] Bus 25
+  - [x] Bus 26
+  - [x] Bus 27
+  - [x] Bus 28
+  - [x] Bus 29
+  - [x] Bus 30
+  - [x] Bus 31
+  - [x] Bus 32
   - [ ] 33 - 64
-    - [ ] Bus 33
-    - [ ] Bus 34
-    - [ ] Bus 35
-    - [ ] Bus 36
-    - [ ] Bus 37
-    - [ ] Bus 38
-    - [ ] Bus 39
-    - [ ] Bus 40
-    - [ ] Bus 41
-    - [ ] Bus 42
-    - [ ] Bus 43
-    - [ ] Bus 44
-    - [ ] Bus 45
-    - [ ] Bus 46
-    - [ ] Bus 47
-    - [ ] Bus 48
-    - [ ] Bus 49
-    - [ ] Bus 50
-    - [ ] Bus 51
-    - [ ] Bus 52
-    - [ ] Bus 53
-    - [ ] Bus 54
-    - [ ] Bus 55
-    - [ ] Bus 56
-    - [ ] Bus 57
-    - [ ] Bus 58
-    - [ ] Bus 59
-    - [ ] Bus 60
-    - [ ] Bus 61
-    - [ ] Bus 62
-    - [ ] Bus 63
-    - [ ] Bus 64
+    - [x] Bus 33
+    - [x] Bus 34
+    - [x] Bus 35
+    - [x] Bus 36
+    - [x] Bus 37
+    - [x] Bus 38
+    - [x] Bus 39
+    - [x] Bus 40
+    - [x] Bus 41
+    - [x] Bus 42
+    - [x] Bus 43
+    - [x] Bus 44
+    - [x] Bus 45
+    - [x] Bus 46
+    - [x] Bus 47
+    - [x] Bus 48
+    - [x] Bus 49
+    - [x] Bus 50
+    - [x] Bus 51
+    - [x] Bus 52
+    - [x] Bus 53
+    - [x] Bus 54
+    - [x] Bus 55
+    - [x] Bus 56
+    - [x] Bus 57
+    - [x] Bus 58
+    - [x] Bus 59
+    - [x] Bus 60
+    - [x] Bus 61
+    - [x] Bus 62
+    - [x] Bus 63
+    - [x] Bus 64
   - [ ] 65 - 96
-    - [ ] Bus 65
-    - [ ] Bus 66
-    - [ ] Bus 67
-    - [ ] Bus 68
-    - [ ] Bus 69
-    - [ ] Bus 70
-    - [ ] Bus 71
-    - [ ] Bus 72
-    - [ ] Bus 73
-    - [ ] Bus 74
-    - [ ] Bus 75
-    - [ ] Bus 76
-    - [ ] Bus 77
-    - [ ] Bus 78
-    - [ ] Bus 79
-    - [ ] Bus 80
-    - [ ] Bus 81
-    - [ ] Bus 82
-    - [ ] Bus 83
-    - [ ] Bus 84
-    - [ ] Bus 85
-    - [ ] Bus 86
-    - [ ] Bus 87
-    - [ ] Bus 88
-    - [ ] Bus 89
-    - [ ] Bus 90
-    - [ ] Bus 91
-    - [ ] Bus 92
-    - [ ] Bus 93
-    - [ ] Bus 94
-    - [ ] Bus 95
-    - [ ] Bus 96
+    - [x] Bus 65
+    - [x] Bus 66
+    - [x] Bus 67
+    - [x] Bus 68
+    - [x] Bus 69
+    - [x] Bus 70
+    - [x] Bus 71
+    - [x] Bus 72
+    - [x] Bus 73
+    - [x] Bus 74
+    - [x] Bus 75
+    - [x] Bus 76
+    - [x] Bus 77
+    - [x] Bus 78
+    - [x] Bus 79
+    - [x] Bus 80
+    - [x] Bus 81
+    - [x] Bus 82
+    - [x] Bus 83
+    - [x] Bus 84
+    - [x] Bus 85
+    - [x] Bus 86
+    - [x] Bus 87
+    - [x] Bus 88
+    - [x] Bus 89
+    - [x] Bus 90
+    - [x] Bus 91
+    - [x] Bus 92
+    - [x] Bus 93
+    - [x] Bus 94
+    - [x] Bus 95
+    - [x] Bus 96
   - [ ] 97 - 128
-    - [ ] Bus 97
-    - [ ] Bus 98
-    - [ ] Bus 99
-    - [ ] Bus 100
-    - [ ] Bus 101
-    - [ ] Bus 102
-    - [ ] Bus 103
-    - [ ] Bus 104
-    - [ ] Bus 105
-    - [ ] Bus 106
-    - [ ] Bus 107
-    - [ ] Bus 108
-    - [ ] Bus 109
-    - [ ] Bus 110
-    - [ ] Bus 111
-    - [ ] Bus 112
-    - [ ] Bus 113
-    - [ ] Bus 114
-    - [ ] Bus 115
-    - [ ] Bus 116
-    - [ ] Bus 117
-    - [ ] Bus 118
-    - [ ] Bus 119
-    - [ ] Bus 120
-    - [ ] Bus 121
-    - [ ] Bus 122
-    - [ ] Bus 123
-    - [ ] Bus 124
-    - [ ] Bus 125
-    - [ ] Bus 126
-    - [ ] Bus 127
-    - [ ] Bus 128
+    - [x] Bus 97
+    - [x] Bus 98
+    - [x] Bus 99
+    - [x] Bus 100
+    - [x] Bus 101
+    - [x] Bus 102
+    - [x] Bus 103
+    - [x] Bus 104
+    - [x] Bus 105
+    - [x] Bus 106
+    - [x] Bus 107
+    - [x] Bus 108
+    - [x] Bus 109
+    - [x] Bus 110
+    - [x] Bus 111
+    - [x] Bus 112
+    - [x] Bus 113
+    - [x] Bus 114
+    - [x] Bus 115
+    - [x] Bus 116
+    - [x] Bus 117
+    - [x] Bus 118
+    - [x] Bus 119
+    - [x] Bus 120
+    - [x] Bus 121
+    - [x] Bus 122
+    - [x] Bus 123
+    - [x] Bus 124
+    - [x] Bus 125
+    - [x] Bus 126
+    - [x] Bus 127
+    - [x] Bus 128
   - [ ] 129 - 160
-    - [ ] Bus 129
-    - [ ] Bus 130
-    - [ ] Bus 131
-    - [ ] Bus 132
-    - [ ] Bus 133
-    - [ ] Bus 134
-    - [ ] Bus 135
-    - [ ] Bus 136
-    - [ ] Bus 137
-    - [ ] Bus 138
-    - [ ] Bus 139
-    - [ ] Bus 140
-    - [ ] Bus 141
-    - [ ] Bus 142
-    - [ ] Bus 143
-    - [ ] Bus 144
-    - [ ] Bus 145
-    - [ ] Bus 146
-    - [ ] Bus 147
-    - [ ] Bus 148
-    - [ ] Bus 149
-    - [ ] Bus 150
-    - [ ] Bus 151
-    - [ ] Bus 152
-    - [ ] Bus 153
-    - [ ] Bus 154
-    - [ ] Bus 155
-    - [ ] Bus 156
-    - [ ] Bus 157
-    - [ ] Bus 158
-    - [ ] Bus 159
-    - [ ] Bus 160
+    - [x] Bus 129
+    - [x] Bus 130
+    - [x] Bus 131
+    - [x] Bus 132
+    - [x] Bus 133
+    - [x] Bus 134
+    - [x] Bus 135
+    - [x] Bus 136
+    - [x] Bus 137
+    - [x] Bus 138
+    - [x] Bus 139
+    - [x] Bus 140
+    - [x] Bus 141
+    - [x] Bus 142
+    - [x] Bus 143
+    - [x] Bus 144
+    - [x] Bus 145
+    - [x] Bus 146
+    - [x] Bus 147
+    - [x] Bus 148
+    - [x] Bus 149
+    - [x] Bus 150
+    - [x] Bus 151
+    - [x] Bus 152
+    - [x] Bus 153
+    - [x] Bus 154
+    - [x] Bus 155
+    - [x] Bus 156
+    - [x] Bus 157
+    - [x] Bus 158
+    - [x] Bus 159
+    - [x] Bus 160
   - [ ] 161 - 192
-    - [ ] Bus 161
-    - [ ] Bus 162
-    - [ ] Bus 163
-    - [ ] Bus 164
-    - [ ] Bus 165
-    - [ ] Bus 166
-    - [ ] Bus 167
-    - [ ] Bus 168
-    - [ ] Bus 169
-    - [ ] Bus 170
-    - [ ] Bus 171
-    - [ ] Bus 172
-    - [ ] Bus 173
-    - [ ] Bus 174
-    - [ ] Bus 175
-    - [ ] Bus 176
-    - [ ] Bus 177
-    - [ ] Bus 178
-    - [ ] Bus 179
-    - [ ] Bus 180
-    - [ ] Bus 181
-    - [ ] Bus 182
-    - [ ] Bus 183
-    - [ ] Bus 184
-    - [ ] Bus 185
-    - [ ] Bus 186
-    - [ ] Bus 187
-    - [ ] Bus 188
-    - [ ] Bus 189
-    - [ ] Bus 190
-    - [ ] Bus 191
-    - [ ] Bus 192
+    - [x] Bus 161
+    - [x] Bus 162
+    - [x] Bus 163
+    - [x] Bus 164
+    - [x] Bus 165
+    - [x] Bus 166
+    - [x] Bus 167
+    - [x] Bus 168
+    - [x] Bus 169
+    - [x] Bus 170
+    - [x] Bus 171
+    - [x] Bus 172
+    - [x] Bus 173
+    - [x] Bus 174
+    - [x] Bus 175
+    - [x] Bus 176
+    - [x] Bus 177
+    - [x] Bus 178
+    - [x] Bus 179
+    - [x] Bus 180
+    - [x] Bus 181
+    - [x] Bus 182
+    - [x] Bus 183
+    - [x] Bus 184
+    - [x] Bus 185
+    - [x] Bus 186
+    - [x] Bus 187
+    - [x] Bus 188
+    - [x] Bus 189
+    - [x] Bus 190
+    - [x] Bus 191
+    - [x] Bus 192
   - [ ] 193 - 224
-    - [ ] Bus 193
-    - [ ] Bus 194
-    - [ ] Bus 195
-    - [ ] Bus 196
-    - [ ] Bus 197
-    - [ ] Bus 198
-    - [ ] Bus 199
-    - [ ] Bus 200
-    - [ ] Bus 201
-    - [ ] Bus 202
-    - [ ] Bus 203
-    - [ ] Bus 204
-    - [ ] Bus 205
-    - [ ] Bus 206
-    - [ ] Bus 207
-    - [ ] Bus 208
-    - [ ] Bus 209
-    - [ ] Bus 210
-    - [ ] Bus 211
-    - [ ] Bus 212
-    - [ ] Bus 213
-    - [ ] Bus 214
-    - [ ] Bus 215
-    - [ ] Bus 216
-    - [ ] Bus 217
-    - [ ] Bus 218
-    - [ ] Bus 219
-    - [ ] Bus 220
-    - [ ] Bus 221
-    - [ ] Bus 222
-    - [ ] Bus 223
-    - [ ] Bus 224
+    - [x] Bus 193
+    - [x] Bus 194
+    - [x] Bus 195
+    - [x] Bus 196
+    - [x] Bus 197
+    - [x] Bus 198
+    - [x] Bus 199
+    - [x] Bus 200
+    - [x] Bus 201
+    - [x] Bus 202
+    - [x] Bus 203
+    - [x] Bus 204
+    - [x] Bus 205
+    - [x] Bus 206
+    - [x] Bus 207
+    - [x] Bus 208
+    - [x] Bus 209
+    - [x] Bus 210
+    - [x] Bus 211
+    - [x] Bus 212
+    - [x] Bus 213
+    - [x] Bus 214
+    - [x] Bus 215
+    - [x] Bus 216
+    - [x] Bus 217
+    - [x] Bus 218
+    - [x] Bus 219
+    - [x] Bus 220
+    - [x] Bus 221
+    - [x] Bus 222
+    - [x] Bus 223
+    - [x] Bus 224
   - [ ] 225 - 256
-    - [ ] Bus 225
-    - [ ] Bus 226
-    - [ ] Bus 227
-    - [ ] Bus 228
-    - [ ] Bus 229
-    - [ ] Bus 230
-    - [ ] Bus 231
-    - [ ] Bus 232
-    - [ ] Bus 233
-    - [ ] Bus 234
-    - [ ] Bus 235
-    - [ ] Bus 236
-    - [ ] Bus 237
-    - [ ] Bus 238
-    - [ ] Bus 239
-    - [ ] Bus 240
-    - [ ] Bus 241
-    - [ ] Bus 242
-    - [ ] Bus 243
-    - [ ] Bus 244
-    - [ ] Bus 245
-    - [ ] Bus 246
-    - [ ] Bus 247
-    - [ ] Bus 248
-    - [ ] Bus 249
-    - [ ] Bus 250
-    - [ ] Bus 251
-    - [ ] Bus 252
-    - [ ] Bus 253
-    - [ ] Bus 254
-    - [ ] Bus 255
-    - [ ] Bus 256
+    - [x] Bus 225
+    - [x] Bus 226
+    - [x] Bus 227
+    - [x] Bus 228
+    - [x] Bus 229
+    - [x] Bus 230
+    - [x] Bus 231
+    - [x] Bus 232
+    - [x] Bus 233
+    - [x] Bus 234
+    - [x] Bus 235
+    - [x] Bus 236
+    - [x] Bus 237
+    - [x] Bus 238
+    - [x] Bus 239
+    - [x] Bus 240
+    - [x] Bus 241
+    - [x] Bus 242
+    - [x] Bus 243
+    - [x] Bus 244
+    - [x] Bus 245
+    - [x] Bus 246
+    - [x] Bus 247
+    - [x] Bus 248
+    - [x] Bus 249
+    - [x] Bus 250
+    - [x] Bus 251
+    - [x] Bus 252
+    - [x] Bus 253
+    - [x] Bus 254
+    - [x] Bus 255
+    - [x] Bus 256
 - [ ] Stereo Pan
 - [ ] Balance
 - [ ] Binaural Panner
@@ -3365,301 +3365,301 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-sends-slot — 0/269</summary>
+<details><summary>mixer-sends-slot — 260/269</summary>
 
 - [ ] Independent Pan
 - [ ] Post Pan
-- [ ] Post Fader
-- [ ] Pre Fader
-- [ ] No Send
-- [ ] Bus
-  - [ ] Bus 1
-  - [ ] Bus 2
-  - [ ] Bus 3
-  - [ ] Bus 4
-  - [ ] Bus 5
-  - [ ] Bus 6
-  - [ ] Bus 7
-  - [ ] Bus 8
-  - [ ] Bus 9
-  - [ ] Bus 10
-  - [ ] Bus 11
-  - [ ] Bus 12
-  - [ ] Bus 13
-  - [ ] Bus 14
-  - [ ] Bus 15
-  - [ ] Bus 16
-  - [ ] Bus 17
-  - [ ] Bus 18
-  - [ ] Bus 19
-  - [ ] Bus 20
-  - [ ] Bus 21
-  - [ ] Bus 22
-  - [ ] Bus 23
-  - [ ] Bus 24
-  - [ ] Bus 25
-  - [ ] Bus 26
-  - [ ] Bus 27
-  - [ ] Bus 28
-  - [ ] Bus 29
-  - [ ] Bus 30
-  - [ ] Bus 31
-  - [ ] Bus 32
+- [x] Post Fader
+- [x] Pre Fader
+- [x] No Send
+- [x] Bus
+  - [x] Bus 1
+  - [x] Bus 2
+  - [x] Bus 3
+  - [x] Bus 4
+  - [x] Bus 5
+  - [x] Bus 6
+  - [x] Bus 7
+  - [x] Bus 8
+  - [x] Bus 9
+  - [x] Bus 10
+  - [x] Bus 11
+  - [x] Bus 12
+  - [x] Bus 13
+  - [x] Bus 14
+  - [x] Bus 15
+  - [x] Bus 16
+  - [x] Bus 17
+  - [x] Bus 18
+  - [x] Bus 19
+  - [x] Bus 20
+  - [x] Bus 21
+  - [x] Bus 22
+  - [x] Bus 23
+  - [x] Bus 24
+  - [x] Bus 25
+  - [x] Bus 26
+  - [x] Bus 27
+  - [x] Bus 28
+  - [x] Bus 29
+  - [x] Bus 30
+  - [x] Bus 31
+  - [x] Bus 32
   - [ ] 33 - 64
-    - [ ] Bus 33
-    - [ ] Bus 34
-    - [ ] Bus 35
-    - [ ] Bus 36
-    - [ ] Bus 37
-    - [ ] Bus 38
-    - [ ] Bus 39
-    - [ ] Bus 40
-    - [ ] Bus 41
-    - [ ] Bus 42
-    - [ ] Bus 43
-    - [ ] Bus 44
-    - [ ] Bus 45
-    - [ ] Bus 46
-    - [ ] Bus 47
-    - [ ] Bus 48
-    - [ ] Bus 49
-    - [ ] Bus 50
-    - [ ] Bus 51
-    - [ ] Bus 52
-    - [ ] Bus 53
-    - [ ] Bus 54
-    - [ ] Bus 55
-    - [ ] Bus 56
-    - [ ] Bus 57
-    - [ ] Bus 58
-    - [ ] Bus 59
-    - [ ] Bus 60
-    - [ ] Bus 61
-    - [ ] Bus 62
-    - [ ] Bus 63
-    - [ ] Bus 64
+    - [x] Bus 33
+    - [x] Bus 34
+    - [x] Bus 35
+    - [x] Bus 36
+    - [x] Bus 37
+    - [x] Bus 38
+    - [x] Bus 39
+    - [x] Bus 40
+    - [x] Bus 41
+    - [x] Bus 42
+    - [x] Bus 43
+    - [x] Bus 44
+    - [x] Bus 45
+    - [x] Bus 46
+    - [x] Bus 47
+    - [x] Bus 48
+    - [x] Bus 49
+    - [x] Bus 50
+    - [x] Bus 51
+    - [x] Bus 52
+    - [x] Bus 53
+    - [x] Bus 54
+    - [x] Bus 55
+    - [x] Bus 56
+    - [x] Bus 57
+    - [x] Bus 58
+    - [x] Bus 59
+    - [x] Bus 60
+    - [x] Bus 61
+    - [x] Bus 62
+    - [x] Bus 63
+    - [x] Bus 64
   - [ ] 65 - 96
-    - [ ] Bus 65
-    - [ ] Bus 66
-    - [ ] Bus 67
-    - [ ] Bus 68
-    - [ ] Bus 69
-    - [ ] Bus 70
-    - [ ] Bus 71
-    - [ ] Bus 72
-    - [ ] Bus 73
-    - [ ] Bus 74
-    - [ ] Bus 75
-    - [ ] Bus 76
-    - [ ] Bus 77
-    - [ ] Bus 78
-    - [ ] Bus 79
-    - [ ] Bus 80
-    - [ ] Bus 81
-    - [ ] Bus 82
-    - [ ] Bus 83
-    - [ ] Bus 84
-    - [ ] Bus 85
-    - [ ] Bus 86
-    - [ ] Bus 87
-    - [ ] Bus 88
-    - [ ] Bus 89
-    - [ ] Bus 90
-    - [ ] Bus 91
-    - [ ] Bus 92
-    - [ ] Bus 93
-    - [ ] Bus 94
-    - [ ] Bus 95
-    - [ ] Bus 96
+    - [x] Bus 65
+    - [x] Bus 66
+    - [x] Bus 67
+    - [x] Bus 68
+    - [x] Bus 69
+    - [x] Bus 70
+    - [x] Bus 71
+    - [x] Bus 72
+    - [x] Bus 73
+    - [x] Bus 74
+    - [x] Bus 75
+    - [x] Bus 76
+    - [x] Bus 77
+    - [x] Bus 78
+    - [x] Bus 79
+    - [x] Bus 80
+    - [x] Bus 81
+    - [x] Bus 82
+    - [x] Bus 83
+    - [x] Bus 84
+    - [x] Bus 85
+    - [x] Bus 86
+    - [x] Bus 87
+    - [x] Bus 88
+    - [x] Bus 89
+    - [x] Bus 90
+    - [x] Bus 91
+    - [x] Bus 92
+    - [x] Bus 93
+    - [x] Bus 94
+    - [x] Bus 95
+    - [x] Bus 96
   - [ ] 97 - 128
-    - [ ] Bus 97
-    - [ ] Bus 98
-    - [ ] Bus 99
-    - [ ] Bus 100
-    - [ ] Bus 101
-    - [ ] Bus 102
-    - [ ] Bus 103
-    - [ ] Bus 104
-    - [ ] Bus 105
-    - [ ] Bus 106
-    - [ ] Bus 107
-    - [ ] Bus 108
-    - [ ] Bus 109
-    - [ ] Bus 110
-    - [ ] Bus 111
-    - [ ] Bus 112
-    - [ ] Bus 113
-    - [ ] Bus 114
-    - [ ] Bus 115
-    - [ ] Bus 116
-    - [ ] Bus 117
-    - [ ] Bus 118
-    - [ ] Bus 119
-    - [ ] Bus 120
-    - [ ] Bus 121
-    - [ ] Bus 122
-    - [ ] Bus 123
-    - [ ] Bus 124
-    - [ ] Bus 125
-    - [ ] Bus 126
-    - [ ] Bus 127
-    - [ ] Bus 128
+    - [x] Bus 97
+    - [x] Bus 98
+    - [x] Bus 99
+    - [x] Bus 100
+    - [x] Bus 101
+    - [x] Bus 102
+    - [x] Bus 103
+    - [x] Bus 104
+    - [x] Bus 105
+    - [x] Bus 106
+    - [x] Bus 107
+    - [x] Bus 108
+    - [x] Bus 109
+    - [x] Bus 110
+    - [x] Bus 111
+    - [x] Bus 112
+    - [x] Bus 113
+    - [x] Bus 114
+    - [x] Bus 115
+    - [x] Bus 116
+    - [x] Bus 117
+    - [x] Bus 118
+    - [x] Bus 119
+    - [x] Bus 120
+    - [x] Bus 121
+    - [x] Bus 122
+    - [x] Bus 123
+    - [x] Bus 124
+    - [x] Bus 125
+    - [x] Bus 126
+    - [x] Bus 127
+    - [x] Bus 128
   - [ ] 129 - 160
-    - [ ] Bus 129
-    - [ ] Bus 130
-    - [ ] Bus 131
-    - [ ] Bus 132
-    - [ ] Bus 133
-    - [ ] Bus 134
-    - [ ] Bus 135
-    - [ ] Bus 136
-    - [ ] Bus 137
-    - [ ] Bus 138
-    - [ ] Bus 139
-    - [ ] Bus 140
-    - [ ] Bus 141
-    - [ ] Bus 142
-    - [ ] Bus 143
-    - [ ] Bus 144
-    - [ ] Bus 145
-    - [ ] Bus 146
-    - [ ] Bus 147
-    - [ ] Bus 148
-    - [ ] Bus 149
-    - [ ] Bus 150
-    - [ ] Bus 151
-    - [ ] Bus 152
-    - [ ] Bus 153
-    - [ ] Bus 154
-    - [ ] Bus 155
-    - [ ] Bus 156
-    - [ ] Bus 157
-    - [ ] Bus 158
-    - [ ] Bus 159
-    - [ ] Bus 160
+    - [x] Bus 129
+    - [x] Bus 130
+    - [x] Bus 131
+    - [x] Bus 132
+    - [x] Bus 133
+    - [x] Bus 134
+    - [x] Bus 135
+    - [x] Bus 136
+    - [x] Bus 137
+    - [x] Bus 138
+    - [x] Bus 139
+    - [x] Bus 140
+    - [x] Bus 141
+    - [x] Bus 142
+    - [x] Bus 143
+    - [x] Bus 144
+    - [x] Bus 145
+    - [x] Bus 146
+    - [x] Bus 147
+    - [x] Bus 148
+    - [x] Bus 149
+    - [x] Bus 150
+    - [x] Bus 151
+    - [x] Bus 152
+    - [x] Bus 153
+    - [x] Bus 154
+    - [x] Bus 155
+    - [x] Bus 156
+    - [x] Bus 157
+    - [x] Bus 158
+    - [x] Bus 159
+    - [x] Bus 160
   - [ ] 161 - 192
-    - [ ] Bus 161
-    - [ ] Bus 162
-    - [ ] Bus 163
-    - [ ] Bus 164
-    - [ ] Bus 165
-    - [ ] Bus 166
-    - [ ] Bus 167
-    - [ ] Bus 168
-    - [ ] Bus 169
-    - [ ] Bus 170
-    - [ ] Bus 171
-    - [ ] Bus 172
-    - [ ] Bus 173
-    - [ ] Bus 174
-    - [ ] Bus 175
-    - [ ] Bus 176
-    - [ ] Bus 177
-    - [ ] Bus 178
-    - [ ] Bus 179
-    - [ ] Bus 180
-    - [ ] Bus 181
-    - [ ] Bus 182
-    - [ ] Bus 183
-    - [ ] Bus 184
-    - [ ] Bus 185
-    - [ ] Bus 186
-    - [ ] Bus 187
-    - [ ] Bus 188
-    - [ ] Bus 189
-    - [ ] Bus 190
-    - [ ] Bus 191
-    - [ ] Bus 192
+    - [x] Bus 161
+    - [x] Bus 162
+    - [x] Bus 163
+    - [x] Bus 164
+    - [x] Bus 165
+    - [x] Bus 166
+    - [x] Bus 167
+    - [x] Bus 168
+    - [x] Bus 169
+    - [x] Bus 170
+    - [x] Bus 171
+    - [x] Bus 172
+    - [x] Bus 173
+    - [x] Bus 174
+    - [x] Bus 175
+    - [x] Bus 176
+    - [x] Bus 177
+    - [x] Bus 178
+    - [x] Bus 179
+    - [x] Bus 180
+    - [x] Bus 181
+    - [x] Bus 182
+    - [x] Bus 183
+    - [x] Bus 184
+    - [x] Bus 185
+    - [x] Bus 186
+    - [x] Bus 187
+    - [x] Bus 188
+    - [x] Bus 189
+    - [x] Bus 190
+    - [x] Bus 191
+    - [x] Bus 192
   - [ ] 193 - 224
-    - [ ] Bus 193
-    - [ ] Bus 194
-    - [ ] Bus 195
-    - [ ] Bus 196
-    - [ ] Bus 197
-    - [ ] Bus 198
-    - [ ] Bus 199
-    - [ ] Bus 200
-    - [ ] Bus 201
-    - [ ] Bus 202
-    - [ ] Bus 203
-    - [ ] Bus 204
-    - [ ] Bus 205
-    - [ ] Bus 206
-    - [ ] Bus 207
-    - [ ] Bus 208
-    - [ ] Bus 209
-    - [ ] Bus 210
-    - [ ] Bus 211
-    - [ ] Bus 212
-    - [ ] Bus 213
-    - [ ] Bus 214
-    - [ ] Bus 215
-    - [ ] Bus 216
-    - [ ] Bus 217
-    - [ ] Bus 218
-    - [ ] Bus 219
-    - [ ] Bus 220
-    - [ ] Bus 221
-    - [ ] Bus 222
-    - [ ] Bus 223
-    - [ ] Bus 224
+    - [x] Bus 193
+    - [x] Bus 194
+    - [x] Bus 195
+    - [x] Bus 196
+    - [x] Bus 197
+    - [x] Bus 198
+    - [x] Bus 199
+    - [x] Bus 200
+    - [x] Bus 201
+    - [x] Bus 202
+    - [x] Bus 203
+    - [x] Bus 204
+    - [x] Bus 205
+    - [x] Bus 206
+    - [x] Bus 207
+    - [x] Bus 208
+    - [x] Bus 209
+    - [x] Bus 210
+    - [x] Bus 211
+    - [x] Bus 212
+    - [x] Bus 213
+    - [x] Bus 214
+    - [x] Bus 215
+    - [x] Bus 216
+    - [x] Bus 217
+    - [x] Bus 218
+    - [x] Bus 219
+    - [x] Bus 220
+    - [x] Bus 221
+    - [x] Bus 222
+    - [x] Bus 223
+    - [x] Bus 224
   - [ ] 225 - 256
-    - [ ] Bus 225
-    - [ ] Bus 226
-    - [ ] Bus 227
-    - [ ] Bus 228
-    - [ ] Bus 229
-    - [ ] Bus 230
-    - [ ] Bus 231
-    - [ ] Bus 232
-    - [ ] Bus 233
-    - [ ] Bus 234
-    - [ ] Bus 235
-    - [ ] Bus 236
-    - [ ] Bus 237
-    - [ ] Bus 238
-    - [ ] Bus 239
-    - [ ] Bus 240
-    - [ ] Bus 241
-    - [ ] Bus 242
-    - [ ] Bus 243
-    - [ ] Bus 244
-    - [ ] Bus 245
-    - [ ] Bus 246
-    - [ ] Bus 247
-    - [ ] Bus 248
-    - [ ] Bus 249
-    - [ ] Bus 250
-    - [ ] Bus 251
-    - [ ] Bus 252
-    - [ ] Bus 253
-    - [ ] Bus 254
-    - [ ] Bus 255
-    - [ ] Bus 256
+    - [x] Bus 225
+    - [x] Bus 226
+    - [x] Bus 227
+    - [x] Bus 228
+    - [x] Bus 229
+    - [x] Bus 230
+    - [x] Bus 231
+    - [x] Bus 232
+    - [x] Bus 233
+    - [x] Bus 234
+    - [x] Bus 235
+    - [x] Bus 236
+    - [x] Bus 237
+    - [x] Bus 238
+    - [x] Bus 239
+    - [x] Bus 240
+    - [x] Bus 241
+    - [x] Bus 242
+    - [x] Bus 243
+    - [x] Bus 244
+    - [x] Bus 245
+    - [x] Bus 246
+    - [x] Bus 247
+    - [x] Bus 248
+    - [x] Bus 249
+    - [x] Bus 250
+    - [x] Bus 251
+    - [x] Bus 252
+    - [x] Bus 253
+    - [x] Bus 254
+    - [x] Bus 255
+    - [x] Bus 256
 
 </details>
 
-<details><summary>mixer-strip-name — 0/29</summary>
+<details><summary>mixer-strip-name — 12/29</summary>
 
-- [ ] Create New VCA
+- [x] Create New VCA
 - [ ] Assign Channel Strip Color…
 - [ ] Rename Channel Strip…
 - [ ] Channel Strip Components
   - [ ] Audio Device Controls
   - [ ] Type and Number Label
-  - [ ] Setting Menu
-  - [ ] Gain Reduction Meter
-  - [ ] EQ Thumbnail
-  - [ ] MIDI Effects
-  - [ ] Input / Instrument
-  - [ ] Audio Effects
-  - [ ] Sends
-  - [ ] Output
-  - [ ] Group
+  - [x] Setting Menu
+  - [x] Gain Reduction Meter
+  - [x] EQ Thumbnail
+  - [x] MIDI Effects
+  - [x] Input / Instrument
+  - [x] Audio Effects
+  - [x] Sends
+  - [x] Output
+  - [x] Group
   - [ ] Automation
   - [ ] Icon
-  - [ ] Pan Knob
-  - [ ] VCA
+  - [x] Pan Knob
+  - [x] VCA
   - [ ] Track Color
   - [ ] Track Stacks
   - [ ] Track Name
@@ -4908,7 +4908,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 259 of 2207
+## Key commands: 327 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4917,7 +4917,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 101/679</summary>
+<details><summary>Global Commands — 125/679</summary>
 
 - [x] Record  `R`
 - [ ] Record / Record Repeat
@@ -5270,17 +5270,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Include Track Automation Region Trails, if possible
 - [ ] Move Track Automation with Regions
 - [ ] Toggle Autoselect Automation Parameter in Read Mode
-- [ ] Enable/Disable Groups  `⇧G`
-- [ ] Open Group Settings…
-- [ ] Show/Hide Groups Window  `⌥⇧G`
-- [ ] Create Group for Selected Channel Strips / Tracks  `⌃⌘G`
-- [ ] Delete Selected Groups
-- [ ] Delete Unused Groups
-- [ ] Select Members of Selected Groups
-- [ ] Add Selected Channel Strips to Selected Groups
-- [ ] Remove Selected Channel Strips from Selected Groups
-- [ ] Copy Group Settings
-- [ ] Paste Group Settings
+- [x] Enable/Disable Groups  `⇧G`
+- [x] Open Group Settings…
+- [x] Show/Hide Groups Window  `⌥⇧G`
+- [x] Create Group for Selected Channel Strips / Tracks  `⌃⌘G`
+- [x] Delete Selected Groups
+- [x] Delete Unused Groups
+- [x] Select Members of Selected Groups
+- [x] Add Selected Channel Strips to Selected Groups
+- [x] Remove Selected Channel Strips from Selected Groups
+- [x] Copy Group Settings
+- [x] Paste Group Settings
 - [ ] Define Group Settings as Default
 - [ ] Select Members of Group 1
 - [ ] Select Members of Group 2
@@ -5414,7 +5414,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Audio Hardware Setup
 - [ ] Apogee Control Panel
 - [ ] I/O Labels…
-- [ ] Mastering Assistant…
+- [x] Mastering Assistant…
 - [ ] Toggle Varispeed
 - [ ] Toggle Allow Quick Punch-in
 - [ ] Toggle Auto Input Monitoring
@@ -5484,8 +5484,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Minimize Window  `⌘M`
 - [ ] Minimize All Windows  `⌥⌘M`
 - [x] Zoom Window  `⌃⌘M`
-- [ ] Next Plug-in Setting for topmost Plug-in Window
-- [ ] Previous Plug-in Setting for topmost Plug-in Window
+- [x] Next Plug-in Setting for topmost Plug-in Window
+- [x] Previous Plug-in Setting for topmost Plug-in Window
 - [ ] Next Plug-in Setting
 - [ ] Previous Plug-in Setting
 - [ ] Next Sampler Instrument
@@ -5494,17 +5494,17 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Previous Plug-in Setting or Sampler Instrument
 - [ ] Next Channel Strip Setting of focused Track  `⇧]`
 - [ ] Previous Channel Strip Setting of focused Track  `⇧[`
-- [ ] Copy Channel Strip Setting  `⌥⌘C`
-- [ ] Paste Channel Strip Setting  `⌥⌘V`
-- [ ] Paste Channel Strip Setting Plug-ins Only
-- [ ] Paste Channel Strip Setting Sends Only
-- [ ] Reset Channel Strip Setting
+- [x] Copy Channel Strip Setting  `⌥⌘C`
+- [x] Paste Channel Strip Setting  `⌥⌘V`
+- [x] Paste Channel Strip Setting Plug-ins Only
+- [x] Paste Channel Strip Setting Sends Only
+- [x] Reset Channel Strip Setting
 - [ ] Remove Empty Insert Slots
-- [ ] Remove Bypassed Plug-ins
+- [x] Remove Bypassed Plug-ins
 - [ ] Remove All Effect Plug-ins
 - [ ] Remove All Sends
 - [ ] Remove Bypassed Sends
-- [ ] Bypass All Effect Plug-ins
+- [x] Bypass All Effect Plug-ins
 - [ ] Save Channel Strip Setting as…
 - [ ] Save as Performance…
 - [ ] Delete Channel Strip Setting
@@ -5519,7 +5519,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Plug-in Latency Compensation Mode
 - [ ] Toggle Low Latency Monitoring Mode
 - [ ] Toggle Software Monitoring
-- [ ] Show/Hide All Plug-in Windows  `V`
+- [x] Show/Hide All Plug-in Windows  `V`
 - [ ] Close All Plug-in Windows
 - [ ] Open/Close Instrument Plug-in Window of focused Track
 - [ ] Open/Close Audio Insert 1 Plug-in Window of focused Track
@@ -5589,8 +5589,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] New Project Alternative…
 - [ ] Edit Project Alternatives
 - [ ] Export Alternative as Project…
-- [ ] Mixer Undo
-- [ ] Mixer Redo
+- [x] Mixer Undo
+- [x] Mixer Redo
 - [x] Play Previous Scene
 - [x] Play Next Scene
 - [x] Stop All Cells  `⌘↩`
@@ -6504,46 +6504,46 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Mixer — 2/86</summary>
+<details><summary>Mixer — 46/86</summary>
 
-- [ ] Delete Mixer Undo History
-- [ ] Include Mixer Undo Steps in Project Undo History
-- [ ] Show/Hide MIDI Instruments
-- [ ] Show/Hide Input Channel Strips
-- [ ] Show/Hide Audio Channel Strips
-- [ ] Show/Hide Instrument Channel Strips
-- [ ] Show/Hide Auxiliary Channel Strips
-- [ ] Show/Hide Bus Channel Strips
-- [ ] Show/Hide Output Channel Strips
-- [ ] Cycle Through Mixer Modes (Single, Tracks, All)  `⇧X`
-- [ ] Toggle Narrow/Wide Channel Strips
-- [ ] Select Audio Channel Strips  `⇧A`
-- [ ] Select Instrument Channel Strips  `⇧S`
+- [x] Delete Mixer Undo History
+- [x] Include Mixer Undo Steps in Project Undo History
+- [x] Show/Hide MIDI Instruments
+- [x] Show/Hide Input Channel Strips
+- [x] Show/Hide Audio Channel Strips
+- [x] Show/Hide Instrument Channel Strips
+- [x] Show/Hide Auxiliary Channel Strips
+- [x] Show/Hide Bus Channel Strips
+- [x] Show/Hide Output Channel Strips
+- [x] Cycle Through Mixer Modes (Single, Tracks, All)  `⇧X`
+- [x] Toggle Narrow/Wide Channel Strips
+- [x] Select Audio Channel Strips  `⇧A`
+- [x] Select Instrument Channel Strips  `⇧S`
 - [ ] Select Summing Stack Channel Strips
-- [ ] Select Auxiliary Channel Strips  `⇧F`
-- [ ] Select Output Channel Strips  `⇧O`
+- [x] Select Auxiliary Channel Strips  `⇧F`
+- [x] Select Output Channel Strips  `⇧O`
 - [ ] Select MIDI Channel Strips  `⇧E`
-- [ ] Select Same-Colored Channel Strips  `⇧C`
+- [x] Select Same-Colored Channel Strips  `⇧C`
 - [ ] Select Channel Strips with Same Panner Type
-- [ ] Select Muted Channel Strips  `⇧M`
+- [x] Select Muted Channel Strips  `⇧M`
 - [x] Select Previous (Left) Channel Strip  `←`
 - [x] Select Next (Right) Channel Strip  `→`
-- [ ] Create New Auxiliary Channel Strip  `⌃N`
-- [ ] Create New VCA Fader
+- [x] Create New Auxiliary Channel Strip  `⌃N`
+- [x] Create New VCA Fader
 - [ ] Create Tracks for Selected Channel Strips  `⌃T`
 - [ ] Create Track Stack for Selected Channel Strips
 - [ ] Flatten Track Stack for Selected Channel Strips
 - [ ] Send All MIDI Mixer Data
 - [ ] Toggle Link Control Surfaces
 - [ ] Autoscroll to Selection
-- [ ] Scroll to Audio
-- [ ] Scroll to Instruments
-- [ ] Scroll to Auxiliaries
-- [ ] Scroll to Buses
-- [ ] Scroll to Inputs
-- [ ] Scroll to Outputs
-- [ ] Scroll to Master/VCA
-- [ ] Scroll to MIDI Instruments
+- [x] Scroll to Audio
+- [x] Scroll to Instruments
+- [x] Scroll to Auxiliaries
+- [x] Scroll to Buses
+- [x] Scroll to Inputs
+- [x] Scroll to Outputs
+- [x] Scroll to Master/VCA
+- [x] Scroll to MIDI Instruments
 - [ ] Show/Hide Channels with Sends only
 - [ ] Show/Hide Signal Flow Channel Strips
 - [ ] Show/Hide Folder Tracks
@@ -6562,22 +6562,22 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Assign 5
 - [ ] Show/Hide Audio Device Controls
 - [ ] Show/Hide Type and Number Label
-- [ ] Show/Hide Setting Menu
-- [ ] Show/Hide EQ Thumbnails
-- [ ] Show/Hide Gain Reduction Meter
-- [ ] Show/Hide MIDI Effects
-- [ ] Show/Hide Input / Instrument
-- [ ] Show/Hide Audio Effects
-- [ ] Show/Hide Sends
-- [ ] Show/Hide Output
-- [ ] Show/Hide Grouping  `⌃⇧G`
-- [ ] Show/Hide Automation Mode Menu
+- [x] Show/Hide Setting Menu
+- [x] Show/Hide EQ Thumbnails
+- [x] Show/Hide Gain Reduction Meter
+- [x] Show/Hide MIDI Effects
+- [x] Show/Hide Input / Instrument
+- [x] Show/Hide Audio Effects
+- [x] Show/Hide Sends
+- [x] Show/Hide Output
+- [x] Show/Hide Grouping  `⌃⇧G`
+- [x] Show/Hide Automation Mode Menu
 - [ ] Show/Hide Track Icon  `⌃⇧I`
-- [ ] Show/Hide Pan Knob
-- [ ] Show/Hide VCA  `⌃⇧V`
+- [x] Show/Hide Pan Knob
+- [x] Show/Hide VCA  `⌃⇧V`
 - [ ] Show/Hide Track Color
 - [ ] Show/Hide Track Stacks
-- [ ] Show/Hide Track Name
+- [x] Show/Hide Track Name
 - [ ] Show/Hide Track Number  `⌃⇧X`
 - [ ] Show/Hide Control Surface Bars
 - [ ] Show/Hide Notes  `⌃⇧N`
@@ -6587,10 +6587,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Revert to Channel Strip Configuration Default
 - [ ] Mixer Undo for selected Channel Strips
 - [ ] Mixer Redo for selected Channel Strips
-- [ ] Sends on Faders - On/Off
-- [ ] Sends on Faders - Next Send
-- [ ] Sends on Faders - Previous Send
-- [ ] Sends on Faders - Cycle Through Sends  `⌃⌥⌘S`
+- [x] Sends on Faders - On/Off
+- [x] Sends on Faders - Next Send
+- [x] Sends on Faders - Previous Send
+- [x] Sends on Faders - Cycle Through Sends  `⌃⌥⌘S`
 - [ ] Sends on Faders - Cycle Through Returns
 
 </details>

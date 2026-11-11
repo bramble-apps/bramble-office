@@ -11,7 +11,8 @@ fn main() {
     }).unwrap_or("");
     // (edit.rs: Logic's editing commands, all of it)
     println!("cargo:rerun-if-changed=src/liveloops.rs");
-    let edit = std::fs::read_to_string("src/edit.rs").unwrap_or_default() + &std::fs::read_to_string("src/liveloops.rs").unwrap_or_default();
+    println!("cargo:rerun-if-changed=src/mixercmd.rs");
+    let edit = std::fs::read_to_string("src/edit.rs").unwrap_or_default() + &std::fs::read_to_string("src/liveloops.rs").unwrap_or_default() + &std::fs::read_to_string("src/mixercmd.rs").unwrap_or_default();
     let body = format!("{body}\n{edit}");
     let body = body.as_str();
     let mut names: Vec<String> = Vec::new();

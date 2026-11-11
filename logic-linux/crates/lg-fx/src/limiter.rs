@@ -228,6 +228,10 @@ impl Limiter {
 }
 
 impl lg_dsp::Effect for Limiter {
+    fn gain_reduction(&self) -> f32 {
+        self.reduction
+    }
+
     fn latency(&self) -> usize {
         self.latency_samples()
     }
@@ -377,6 +381,10 @@ impl AdaptiveLimiter {
 }
 
 impl lg_dsp::Effect for AdaptiveLimiter {
+    fn gain_reduction(&self) -> f32 {
+        self.env.max(self.slow * 0.8) * 0.85 + if self.p.idx(3) == 1 { self.inner.reduction } else { 0.0 }
+    }
+
     fn latency(&self) -> usize {
         self.latency_samples()
     }

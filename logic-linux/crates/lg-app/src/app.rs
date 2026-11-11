@@ -55,7 +55,10 @@ pub struct AuxStrip {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
-    pub inserts: Vec<String>,
+    /// Its Audio FX (Logic's plug-in name and settings, bypass).
+    pub inserts: Vec<lg_core::plugin::Plugin>,
+    /// Where its output goes.
+    pub output: crate::audio::Out,
 }
 
 /// One send on a channel strip: the bus, its level (dB), before the fader or after it.
@@ -271,6 +274,8 @@ pub struct App {
     pub plugin_bypass: std::collections::HashSet<usize>,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
+    /// The Mixer's groups, VCAs, routing, master chain, filters, selection and undo (mixstate).
+    pub mix: crate::mixstate::Mix,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -426,6 +431,7 @@ impl App {
             eqs: std::collections::HashMap::new(),
             eq_window: None,
             plugin_window: None,
+            mix: Default::default(),
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
             plugin_compare: Default::default(),
@@ -486,6 +492,7 @@ impl App {
         self.scroll_y = 0.0;
         self.demo = demo;
         self.project = Some(p);
+        crate::mixstate::from_project(self);
         self.load_engine();
         if let Some((t, r)) = self.selected_region {
             self.center_roll(t, r);
@@ -550,8 +557,7 @@ impl App {
             e.tempo_map = p.tempo_map.clone();
             e.beats_per_bar = p.signature.0.max(1) as u32;
             e.tracks = tracks;
-            let any_solo = self.auxes.iter().any(|a| a.solo);
-            e.auxes = self.auxes.iter().map(|a| audio::AuxBus { bus: a.bus, volume: db_to_gain(a.volume_db), pan: a.pan, mute: a.mute || (any_solo && !a.solo), inserts: a.inserts.iter().map(|n| (n.clone(), Vec::new())).collect() }).collect();
+            crate::mixstate::to_engine(self, &mut e);
             e.cycle = Some(self.cycle);
             e.program_changes();
         }
@@ -710,7 +716,7 @@ impl App {
     pub fn add_send(&mut self, track: usize, bus: usize) {
         if !self.auxes.iter().any(|a| a.bus == bus) {
             let n = self.auxes.len() + 1;
-            self.auxes.push(AuxStrip { name: format!("Aux {n}"), bus, volume_db: 0.0, pan: 0.0, mute: false, solo: false, inserts: vec!["ChromaVerb".into()] });
+            self.auxes.push(AuxStrip { name: format!("Aux {n}"), bus, volume_db: 0.0, pan: 0.0, mute: false, solo: false, inserts: vec![crate::mixstate::new_plugin("ChromaVerb")], output: Default::default() });
         }
         let list = self.sends.entry(track).or_default();
         if !list.iter().any(|s| s.bus == bus) {
@@ -869,6 +875,7 @@ impl App {
             t.volume = v;
             t.pan = pan;
         }
+        crate::mixstate::apply_vcas(self, &mut e);
     }
 
     pub fn center_roll(&mut self, track: usize, region: usize) {
@@ -1109,6 +1116,10 @@ impl App {
                 Some((w, ..)) => format!("Redo {w}"),
                 None => "Can’t Redo".into(),
             },
+            l if l.starts_with("Mixer Undo") => match self.mix.undo.last() {
+                Some((w, _)) => format!("Mixer Undo {w}"),
+                None => "Mixer Undo".into(),
+            },
             _ => label.to_string(),
         }
     }
@@ -1220,6 +1231,10 @@ impl App {
                 continue;
             }
             if m.command && key == egui::Key::Z {
+                // over the Mixer, its own history first (Include Mixer Undo Steps in Project Undo)
+                if focus == crate::keymap::Focus::Mixer && self.mix.include_in_project_undo && (if m.shift { crate::mixstate::redo(self) } else { crate::mixstate::undo(self) }) {
+                    continue;
+                }
                 if m.shift { self.redo() } else { self.undo() }
                 continue;
             }
@@ -1244,6 +1259,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::mixercmd::run(self, ctx, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {

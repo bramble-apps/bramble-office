@@ -13,6 +13,8 @@ pub struct Plugin {
     /// instrument, 3 on the Audio FX in order).
     pub channel: u32,
     pub slot: u32,
+    /// Bypassed in the Mixer (the slot's power button).
+    pub bypass: bool,
 }
 
 fn printable_runs(b: &[u8], min: usize) -> Vec<String> {
@@ -87,7 +89,7 @@ pub fn read_unit(payload: &[u8]) -> Option<Plugin> {
     let params = params_after(payload, None).unwrap_or_default();
     let runs = printable_runs(&payload[..at.unwrap_or(payload.len().min(0x78))], 3);
     let preset = runs.iter().find(|r| r.ends_with(".pst")).map(|r| r.rfind('#').map_or(r.as_str(), |i| &r[i..]).to_string()).unwrap_or_default();
-    Some(Plugin { name, preset, params, channel: 0, slot: 0 })
+    Some(Plugin { name, preset, params, channel: 0, slot: 0, bypass: false })
 }
 
 /// A .pst preset file: u32 file size, u32 1, u32 parameter count, then the parameter block.
