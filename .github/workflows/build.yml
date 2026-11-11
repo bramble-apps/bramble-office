@@ -25,7 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Libraries
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxrender1 libxfixes3 libgtk-3-dev libasound2-dev libdbus-1-dev
+        # (GitHub's Azure Ubuntu mirror sometimes stops resolving: use Ubuntu's own servers and
+        # retry, so one bad minute doesn't fail a release)
+        timeout-minutes: 20
+        run: |
+          sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list
+          sudo rm -f /etc/apt/apt-mirrors.txt
+          sudo sed -i 's#mirror+file:/etc/apt/apt-mirrors.txt#http://archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update && \
+            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install -y --fix-missing libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxrender1 libxfixes3 libgtk-3-dev libasound2-dev libdbus-1-dev && exit 0
+            echo "attempt $i failed; retrying in 30 s"; sleep 30
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
