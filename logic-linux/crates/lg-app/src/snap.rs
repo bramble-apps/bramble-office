@@ -1,5 +1,6 @@
 //! LG_SNAP=/path.png (checks and screenshots): draw a few frames, save the window as a PNG,
-//! quit. LG_SELECT="track region" selects a region first; LG_MIXER=1 shows the Mixer.
+//! quit. LG_SELECT="track region" selects a region first; LG_MIXER=1 shows the Mixer;
+//! LG_EDITOR=roll the Piano Roll.
 
 use crate::app;
 
@@ -117,7 +118,21 @@ impl eframe::App for Snap {
                     }
                     self.app.bottom = app::Bottom::PianoRoll;
                 }
+                Ok("roll") => self.app.bottom = app::Bottom::PianoRoll,
                 _ => {}
+            }
+            // LG_MIDI="lane,collapse,scale,handles,labels": the Piano Roll's views; "all": every note selected
+            if let Ok(v) = std::env::var("LG_MIDI") {
+                let m = &mut self.app.midi;
+                m.velocity_lane = v.contains("lane");
+                m.collapse = v.contains("collapse");
+                m.scale_guides = v.contains("scale");
+                m.time_handles = v.contains("handles");
+                m.note_labels = v.contains("labels");
+                if v.contains("all") {
+                    let n = self.app.selected_region.and_then(|(t, r)| self.app.project.as_ref()?.tracks.get(t)?.regions.get(r).map(|x| x.notes.len())).unwrap_or(0);
+                    self.app.selected_notes = (0..n).collect();
+                }
             }
             if std::env::var_os("LG_SEND").is_some() {
                 self.app.add_send(1, 0);

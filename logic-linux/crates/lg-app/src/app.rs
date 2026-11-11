@@ -276,6 +276,13 @@ pub struct App {
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
     /// The Mixer's groups, VCAs, routing, master chain, filters, selection and undo (mixstate).
     pub mix: crate::mixstate::Mix,
+    /// MIDI editing: the Piano Roll's focus, note clipboard, MIDI Transform window, View options.
+    pub midi: crate::midifunc::Midi,
+    /// Recording (audio and MIDI), its Record menu options, take folders' state.
+    pub rec: crate::recording::Recording,
+    /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
+    /// automation selection (trackarea.rs, regionops.rs, automation.rs).
+    pub ta: crate::trackarea::State,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -434,7 +441,10 @@ impl App {
             mix: Default::default(),
             plugin_bypass: Default::default(),
             plugin_clipboard: None,
+            rec: Default::default(),
             plugin_compare: Default::default(),
+            midi: Default::default(),
+            ta: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -481,6 +491,7 @@ impl App {
         // each track's Channel EQ as saved in the project (Bramble's Channel EQ stands in)
         self.eqs = p.tracks.iter().enumerate().filter_map(|(i, t)| t.plugins.iter().find(|u| u.name == "Channel EQ").and_then(|u| crate::eq::Params::from_logic(&u.params)).map(|e| (i, e))).collect();
         self.drum_params.clear();
+        crate::trackarea::reset(self);
         self.undo.clear();
         self.redo.clear();
         self.selected_track = (!p.tracks.is_empty()).then_some(0);
@@ -520,7 +531,11 @@ impl App {
             let song_end = p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start + r.length)).max().unwrap_or(0).max(64 * self.bar_ticks());
             let mut notes: Vec<(u32, u32, u8, u8)> = Vec::new();
             for r in t.regions.iter().filter(|r| !r.muted) {
-                let until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
+                let mut until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
+                // (a loop dragged out at the region's corner ends there)
+                if r.props.looped && r.props.loop_to > r.start + r.length {
+                    until = until.min(r.props.loop_to);
+                }
                 let mut offset = 0u32;
                 loop {
                     for n in &r.notes {
@@ -538,6 +553,8 @@ impl App {
                         if offset > 0 && at >= until {
                             continue;
                         }
+                        // the Transposition track
+                        n.pitch = (n.pitch as i16 + crate::trackarea::transposition(self, i, at)).clamp(0, 127) as u8;
                         notes.push((at, at + n.len.max(1), n.pitch, n.velocity));
                     }
                     offset += r.length.max(1);
@@ -549,6 +566,8 @@ impl App {
             notes.sort_by_key(|n| n.0);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
+        crate::trackarea::stack_mix(self, &mut tracks);
+        let param_auto: Vec<Vec<crate::automation::ParamLane>> = (0..tracks.len()).map(|i| crate::automation::params_for_engine(self, i)).collect();
         let audio_files = crate::audioedit::playback(self);
         {
             let mut e = self.engine.lock().unwrap_or_else(|e| e.into_inner());
@@ -557,6 +576,7 @@ impl App {
             e.tempo_map = p.tempo_map.clone();
             e.beats_per_bar = p.signature.0.max(1) as u32;
             e.tracks = tracks;
+            e.param_auto = param_auto;
             crate::mixstate::to_engine(self, &mut e);
             e.cycle = Some(self.cycle);
             e.program_changes();
@@ -637,7 +657,7 @@ impl App {
                 let drums = ch == 9;
                 let row = p.tracks.len() as u32 + 1;
                 let region = lg_core::Region { name: title.clone(), start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default() };
-                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+                p.tracks.push(lg_core::Track { name: title.clone(), kind: if drums { TrackKind::Drummer } else { TrackKind::Instrument }, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                 self.programs.push(if drums { 0 } else { program_for(&title, TrackKind::Instrument) });
             }
             if let Some(t) = m.tempo.filter(|_| p.tracks.len() == n) {
@@ -661,7 +681,7 @@ impl App {
             Some(t) => t,
             None => {
                 let row = p.tracks.len() as u32 + 1;
-                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+                p.tracks.push(lg_core::Track { name: "Audio".into(), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                 self.programs.push(0);
                 p.tracks.len() - 1
             }
@@ -674,9 +694,7 @@ impl App {
     /// Ends recording: the notes played become a region on the selected track (Logic: from the
     /// bar recording began to the bar after the last note).
     pub fn finish_recording(&mut self) {
-        let Some(from) = self.record_from.take() else { return };
-        let notes = std::mem::take(&mut self.recorded);
-        self.make_take(from as u32, notes, "Record");
+        crate::recording::finish(self);
     }
 
     /// Capture as Recording: the notes just played while not recording, as a region.
@@ -687,28 +705,8 @@ impl App {
     }
 
     fn make_take(&mut self, from: u32, notes: Vec<lg_core::events::Note>, what: &str) {
-        if notes.is_empty() {
-            return;
-        }
-        let bar = self.bar_ticks();
-        let start = (from / bar) * bar;
-        let end = notes.iter().map(|n| n.pos + n.len).max().unwrap_or(start + bar);
-        let length = (end.saturating_sub(start)).div_ceil(bar).max(1) * bar;
-        self.checkpoint(what);
-        let t = self.armed.iter().min().copied().or(self.selected_track).unwrap_or(0);
-        let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
-        if tr.kind == TrackKind::Audio {
-            return;
-        }
-        let name = tr.name.clone();
-        let props = Default::default();
-        if self.replace_mode {
-            tr.regions.retain(|r| r.start + r.length <= start || r.start >= start + length);
-        }
-        tr.regions.push(lg_core::Region { name, start, length, notes, audio: None, muted: false, source: None, origin: None, props });
-        let r = tr.regions.len() - 1;
-        self.selected_region = Some((t, r));
-        self.after_edit();
+        // (placed as the Record menu's overlap and Replace choices say)
+        crate::recording::midi_take(self, from, notes, what);
     }
 
     /// Sends a track to `bus`: Logic makes an aux strip for a bus that has none, with a reverb on
@@ -990,7 +988,9 @@ impl App {
                         let alt = alt.clone();
                         self.file = Some((alt, saved.data));
                         self.dirty = false;
-                        if saved.unsaved.is_empty() {
+                        if !saved.unsaved_automation.is_empty() {
+                            self.tell(format!("Saved — not in the Logic file yet: {}", saved.unsaved_automation.join(", ")));
+                        } else if saved.unsaved.is_empty() {
                             self.tell("Saved");
                         } else {
                             self.tell(format!("Saved — {} new region(s) without a model to copy (e.g. new Drummer regions) aren't in the Logic file yet", saved.unsaved.len()));
@@ -1043,7 +1043,7 @@ impl App {
         let Some(p) = self.project.as_mut() else { return };
         let row = p.tracks.len() as u32 + 1;
         let region = lg_core::Region { name: "Drummer - Pop Rock".into(), start: at, length: 8 * bar, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default() };
-        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+        p.tracks.push(lg_core::Track { name: "SoCal".into(), kind: TrackKind::Drummer, channel: 0, row, regions: vec![region], volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         self.programs.push(0);
         let t = p.tracks.len() - 1;
         self.selected_track = Some(t);
@@ -1089,6 +1089,7 @@ impl App {
 
     /// After the song changed: selections still valid, the engine follows.
     pub fn after_edit(&mut self) {
+        crate::trackarea::sync(self);
         if let Some(p) = &self.project {
             if self.selected_track.is_some_and(|t| t >= p.tracks.len()) {
                 self.selected_track = None;
@@ -1262,6 +1263,12 @@ impl App {
         if crate::mixercmd::run(self, ctx, name) {
             return true;
         }
+        if crate::midifunc::command(self, ctx, name) {
+            return true;
+        }
+        if crate::recording::command(self, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
@@ -1352,25 +1359,9 @@ impl App {
                     self.locate(t as f64);
                 }
             }
-            "Record" | "Record / Record Toggle" => {
-                if self.recording() {
-                    self.finish_recording();
-                } else {
-                    self.record_from = Some(self.position());
-                    self.recorded.clear();
-                    if !self.playing() {
-                        self.play_stop();
-                    }
-                }
-            }
+            "Record" | "Record / Record Toggle" => crate::recording::record_pressed(self, name),
             "Capture as Recording" => self.capture_recording(),
-            "Discard Recording and Return to Last Play Position" => {
-                self.recorded.clear();
-                if let Some(from) = self.record_from.take() {
-                    self.stop();
-                    self.locate(from);
-                }
-            }
+            "Discard Recording and Return to Last Play Position" => crate::recording::discard(self),
             "Toggle Metronome Click" => {
                 let on = {
                     let mut e = self.engine();
@@ -1721,6 +1712,7 @@ impl App {
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
+        crate::midiwin::windows(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
@@ -1766,6 +1758,7 @@ impl eframe::App for App {
         }
         self.keys(&ctx);
         crate::liveloops::update(self);
+        crate::recording::update(self);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };
         let inner = ui.max_rect().shrink(m);
         self.corner = if m > 0.0 { kn_ui::winframe::RADIUS } else { 0.0 };

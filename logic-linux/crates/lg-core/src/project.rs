@@ -45,6 +45,11 @@ pub struct Project {
     pub notes: Vec<String>,
     /// The mixer: channel strips, sends, auxes, outputs, groups (lg-core mixer).
     pub mixer: crate::mixer::Mixer,
+    /// Take folders made by recording here (not read from Logic's file yet).
+    pub takes: Vec<crate::takes::TakeFolder>,
+    /// The Transposition global track: (ticks from bar 1, semitones), each holding until the
+    /// next (MIDI regions on tracks that take transposition play shifted).
+    pub transposition: Vec<(u32, i8)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,13 +77,22 @@ pub struct Track {
     /// The track's channel strip: its instrument and Audio FX, in slot order (read from the
     /// project; empty for tracks made here).
     pub plugins: Vec<Plugin>,
+    /// The Tracks area's own state for the track: zoom, hidden, track stacks and folders,
+    /// track alternatives (arrange.rs).
+    pub extra: crate::arrange::TrackExtra,
 }
 
 /// One automation lane: a parameter and its points (song ticks, 0-127).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct AutoLane {
     pub param: u8,
     pub points: Vec<(u32, u8)>,
+    /// Curved segments: (the segment's first point's tick, curve -99..99; 0 or missing =
+    /// straight), as the Automation Curve tool bends them.
+    pub curves: Vec<(u32, i8)>,
+    /// A plug-in parameter's lane (the channel strip's slot, the parameter's id) in place of
+    /// Logic's channel parameter `param`.
+    pub plugin: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Debug)]
@@ -120,11 +134,14 @@ pub struct RegionProps {
     pub gate_time: u16,
     /// Delay in ticks (negative: early).
     pub delay: i32,
+    /// Where the loop repetitions end when the loop was dragged out at the region's upper
+    /// right corner (ticks from bar 1; 0: up to the next region or the project's end).
+    pub loop_to: u32,
 }
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0 }
     }
 }
 
@@ -502,7 +519,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             let len = end.saturating_sub(region.start).max(1);
             region.length = len.div_ceil(bar) * bar;
         }
-        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+        let t = by_row.entry(pl.row).or_insert_with(|| Track { name: channel_name, kind, channel: pl.channel, row: pl.row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         if kind != TrackKind::Instrument {
             t.kind = kind;
         }
@@ -517,7 +534,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             continue;
         }
         let kind = if name.starts_with("Audio ") { TrackKind::Audio } else { TrackKind::Instrument };
-        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+        by_row.insert(next_row, Track { name: name.clone(), kind, channel: *id, row: next_row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
         next_row += 1;
     }
     p.tracks = by_row.into_values().collect();
@@ -575,7 +592,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
                     }
                 }
                 for t in p.tracks.iter_mut().filter(|t| t.channel == pl.channel) {
-                    t.automation = lanes.iter().map(|(param, pts)| AutoLane { param: *param, points: pts.clone() }).collect();
+                    t.automation = lanes.iter().map(|(param, pts)| AutoLane { param: *param, points: pts.clone(), ..Default::default() }).collect();
                 }
             }
         }

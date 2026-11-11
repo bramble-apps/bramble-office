@@ -429,6 +429,9 @@ impl App {
             // ---- region editing
             "Split Regions/Events at Playhead Position" | "Split by Playhead" => self.split_at(&[pos]),
             "Split Regions/Events at Locators or Marquee Selection" | "Split by Locators" => {
+                if crate::regionops::apply_marquee(self, crate::regionops::Cut::Split) {
+                    return true;
+                }
                 let (a, b) = self.cycle;
                 self.split_at(&[a, b]);
             }
@@ -505,6 +508,9 @@ impl App {
                 self.after_edit();
             }
             "Crop Regions/Cells Outside Locators/Playable Range or Marquee Selection" | "Crop Regions Outside Locators" => {
+                if crate::regionops::apply_marquee(self, crate::regionops::Cut::Crop) {
+                    return true;
+                }
                 let (a, b) = self.cycle;
                 self.each_region("Crop", |rg, _| {
                     let s = rg.start.max(a);
@@ -728,7 +734,7 @@ impl App {
                             b.row = row;
                             b
                         }
-                        None => lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() },
+                        None => lg_core::Track { name: "Deluxe Classic".into(), kind: TrackKind::Instrument, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() },
                     };
                     p.tracks.push(tr);
                     self.programs.push(4);
@@ -740,7 +746,7 @@ impl App {
                 self.checkpoint("New Audio Track");
                 if let Some(p) = self.project.as_mut() {
                     let row = p.tracks.len() as u32 + 1;
-                    p.tracks.push(lg_core::Track { name: format!("Audio {}", p.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count() + 1), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new() });
+                    p.tracks.push(lg_core::Track { name: format!("Audio {}", p.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count() + 1), kind: TrackKind::Audio, channel: 0, row, regions: Vec::new(), volume_db: 0.0, pan: 0.0, mute: false, solo: false, plugins: Vec::new(), automation: Vec::new(), extra: Default::default() });
                     self.programs.push(0);
                     self.selected_track = Some(p.tracks.len() - 1);
                 }
@@ -802,6 +808,13 @@ impl App {
             }
             // ---- locators, navigation
             "Set Locators by Regions/Events/Marquee" | "Set Locators by Selection and Enable Cycle" | "Set Rounded Locators by Selection and Enable Cycle" => {
+                if let Some(m) = self.ta.regions.marquee.clone() {
+                    self.set_cycle((m.from, m.to));
+                    if !self.cycle_on() && name.contains("Enable Cycle") {
+                        self.toggle_cycle();
+                    }
+                    return true;
+                }
                 let sel = self.region_selection();
                 let p = self.project.as_ref();
                 let a = sel.iter().filter_map(|(t, r)| p?.tracks.get(*t)?.regions.get(*r).map(|x| x.start)).min();
@@ -988,7 +1001,7 @@ impl App {
                     self.load_engine();
                 }
             }
-            "Delete All Automation on Selected Tracks" | "Delete Visible Automation on Selected Tracks" => {
+            "Delete All Automation on Selected Tracks" | "Delete Visible Automation on Selected Tracks" | "Delete All Automation on Selected Track" | "Delete Visible Automation on Selected Track" => {
                 if let Some(t) = self.selected_track {
                     self.checkpoint("Delete Automation");
                     let only = (name.contains("Visible")).then(|| crate::automation::shown_param(self, t));
@@ -998,16 +1011,54 @@ impl App {
                     self.after_edit();
                 }
             }
-            "Delete Redundant Automation Points" => {
-                self.checkpoint("Delete Redundant Automation Points");
+            // ---- the Tracks area's tracks: stacks, folders, hide, zoom, alternatives (trackarea.rs)
+            "Create Track Stack…" | "Create Folder Stack" | "Create Summing Stack" | "Pack Folder" | "Flatten Stack" | "Unpack Folder to New Tracks" | "Unpack Folder to Existing Tracks" | "Convert Folder Stack to Summing Stack"
+            | "Open Track Stack" | "Close Track Stack" | "Open/Close Track Stack" | "Open/Close All Track Stacks" | "Go Into Folder or Region" | "Go Out of Folder or Region"
+            | "Select Summing Stack Tracks" | "Select Folder Stack Tracks" | "Select Folder Tracks" | "Summing Stack" | "Folder Stack" | "Folder"
+            | "Hide Selected Track" | "Hide Unselected Track" | "Unhide All Tracks" | "Toggle Hide View"
+            | "Individual Track Zoom In" | "Individual Track Zoom Out" | "Toggle Individual Track Zoom" | "Reset Individual Track Zoom" | "Individual Track Zoom Reset for All Tracks" | "Zoom Vertical In" | "Zoom Vertical Out" | "Toggle Zoom Focused Track or Row" | "Zoom Focused Track"
+            | "New Track Alternative" | "Duplicate Track Alternative" | "Delete Inactive Track Alternatives" | "Show Track Alternatives" | "Track Alternatives" | "Show Transposition Track" => return crate::trackarea::command(self, name),
+            // ---- regions: reverse, gain, fades, crossfades, bounce in place, the marquee (regionops.rs)
+            "Reverse On/Off" | "Reverse" | "Region Gain +1 dB" | "Region Gain -1 dB" | "Region Gain +0.1 dB" | "Region Gain -0.1 dB" | "Normalize Region/Cell Gain…" | "Normalize Region Gain…" | "Apply Normalize Region/Cell Gain Again" | "Apply Normalize Region Gain Again"
+            | "Apply Default Crossfade" | "Apply Last Edited Fade Again" | "Remove Fades" | "Remove Fade Ins" | "Remove Fade-In" | "Remove Fade Outs" | "Remove Fade-Out" | "Remove Crossfades" | "Remove Crossfade"
+            | "Bounce Regions/Cells in Place…" | "Bounce In Place…" | "Bounce Regions in Place…" | "Bounce Tracks in Place" | "Set Marquee to Selection" => return crate::regionops::command(self, name),
+            // ---- automation (automation.rs)
+            "Create 1 Track Automation Point at Region Borders" | "Create 2 Track Automation Points at Region Borders" | "Create 1 Automation Point at Region Borders" | "Create 2 Automation Points at Region Borders"
+            | "Create 1 Track Automation Point for Visible Parameter" | "Create 2 Track Automation Points for Visible Parameter" | "Create 1 Automation Point for Visible Parameter" | "Create 2 Automation Points for Visible Parameter"
+            | "Create 1 Track Automation Point each for Volume, Pan, Sends" | "Create 2 Track Automation Points each for Volume, Pan, Sends" | "Create 1 Automation Point each for Volume, Pan, Sends" | "Create 2 Automation Points each for Volume, Pan, Sends"
+            | "Create 1 Track Automation Point at Every Region Border" | "Create 2 Track Automation Points at Every Region Border"
+            | "Nudge Automation Up 1 Step" | "Nudge Automation Down 1 Step" | "Nudge Automation Up 10 Steps" | "Nudge Automation Down 10 Steps"
+            | "Delete Orphaned Automation on Selected Tracks" | "Delete Orphaned Automation on Selected Track" | "Delete All Track Automation" | "Delete Redundant Automation Points"
+            | "Automation: Cycle Through Used Parameters" | "Automation: Display Off" | "Show Track Automation" | "Set Automation Select Tool" | "Set Automation Curve Tool" | "Set Fade Tool" | "Set Marquee Tool" => return crate::automation::command(self, name),
+            // Delete: selected automation points, the marquee's range, else the selected regions
+            "Delete" => {
+                if crate::automation::delete_selected(self) || crate::regionops::apply_marquee(self, crate::regionops::Cut::Delete) {
+                    return true;
+                }
+                if self.notes_focus() && !self.selected_notes.is_empty() {
+                    self.delete_selection();
+                    return true;
+                }
+                let mut sel = self.region_selection();
+                if sel.is_empty() {
+                    return false;
+                }
+                self.checkpoint("Delete Region");
+                sel.sort_unstable();
                 if let Some(p) = self.project.as_mut() {
-                    for tr in &mut p.tracks {
-                        for l in &mut tr.automation {
-                            let pts = l.points.clone();
-                            l.points = pts.iter().enumerate().filter(|(k, x)| *k == 0 || *k + 1 == pts.len() || !(pts[k - 1].1 == x.1 && pts[k + 1].1 == x.1)).map(|(_, x)| *x).collect();
+                    for &(t, r) in sel.iter().rev() {
+                        if let Some(tr) = p.tracks.get_mut(t) {
+                            if r < tr.regions.len() {
+                                tr.regions.remove(r);
+                            }
                         }
                     }
                 }
+                for &(t, r) in sel.iter().rev() {
+                    crate::stepseq::region_removed(&self.ctx, t, r);
+                }
+                self.selected_region = None;
+                self.selected_regions.clear();
                 self.after_edit();
             }
             "Convert to Pattern Region" | "Open Step Sequencer…" | "Show/Hide Step Sequencer" => {

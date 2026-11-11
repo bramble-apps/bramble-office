@@ -117,7 +117,11 @@ pub fn context_menu(app: &mut App, resp: &egui::Response, place: &str) {
     if items.is_empty() {
         return;
     }
-    resp.context_menu(|ui| show_items(app, ui, items));
+    resp.context_menu(|ui| {
+        app.midi.menu_roll = place.starts_with("pianoroll");
+        show_items(app, ui, items);
+        app.midi.menu_roll = false;
+    });
 }
 
 /// The commands Studio runs (menu labels; "Menu > Item" where a label is ambiguous).
@@ -197,8 +201,11 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if label == "Mixer Redo" {
         return !app.mix.redo.is_empty();
     }
-    if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) {
+    if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) && !crate::recording::COMMANDS.contains(&label) && !crate::takes::COMMANDS.contains(&label) {
         return false;
+    }
+    if let Some(e) = crate::trackarea::enabled(app, label).or_else(|| crate::regionops::enabled(app, label)) {
+        return e;
     }
     match label {
         "Close Project" | "Close" | "Move Locators Forward by Cycle Length" | "Project or Section…" | "All MIDI Tracks as MIDI File…" => app.project.is_some(),
@@ -211,6 +218,10 @@ pub fn enabled(app: &App, label: &str) -> bool {
 fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<String>) {
     if it.separator {
         ui.separator();
+        return;
+    }
+    // (the Record menu's choice submenus: their items share names)
+    if crate::recording::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -237,6 +248,15 @@ fn checked(app: &App, label: &str) -> bool {
         return c;
     }
     if let Some(c) = crate::mixercmd::checked(app, label) {
+        return c;
+    }
+    if let Some(c) = crate::trackarea::checked(app, label).or_else(|| crate::regionops::checked(app, label)) {
+        return c;
+    }
+    if let Some(c) = crate::midifunc::checked(app, label) {
+        return c;
+    }
+    if let Some(c) = crate::recording::checked(app, label) {
         return c;
     }
     match label {
@@ -288,7 +308,11 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
             if i > 0 {
                 seps.push(ui.cursor().min.x);
             }
-            ui.menu_button(format!("{title} ⌄"), |ui| show_items(app, ui, local(name)));
+            ui.menu_button(format!("{title} ⌄"), |ui| {
+                app.midi.menu_roll = name.starts_with("pianoroll");
+                show_items(app, ui, local(name));
+                app.midi.menu_roll = false;
+            });
         }
     });
     let end = ui.min_rect().max.x;

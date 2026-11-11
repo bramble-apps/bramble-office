@@ -11,8 +11,16 @@ fn main() {
     }).unwrap_or("");
     // (edit.rs: Logic's editing commands, all of it)
     println!("cargo:rerun-if-changed=src/liveloops.rs");
+    println!("cargo:rerun-if-changed=src/midifunc.rs");
     println!("cargo:rerun-if-changed=src/mixercmd.rs");
-    let edit = std::fs::read_to_string("src/edit.rs").unwrap_or_default() + &std::fs::read_to_string("src/liveloops.rs").unwrap_or_default() + &std::fs::read_to_string("src/mixercmd.rs").unwrap_or_default();
+    println!("cargo:rerun-if-changed=src/recording.rs");
+    println!("cargo:rerun-if-changed=src/takes.rs");
+    // (recording.rs, takes.rs: their COMMANDS lists only)
+    let list = |f: &str| {
+        let s = std::fs::read_to_string(f).unwrap_or_default();
+        s.find("pub const COMMANDS").map(|i| s[i..i + s[i..].find("];").unwrap_or(0)].to_string()).unwrap_or_default()
+    };
+    let edit = std::fs::read_to_string("src/edit.rs").unwrap_or_default() + &std::fs::read_to_string("src/liveloops.rs").unwrap_or_default() + &std::fs::read_to_string("src/midifunc.rs").unwrap_or_default() + &std::fs::read_to_string("src/mixercmd.rs").unwrap_or_default() + &list("src/recording.rs") + &list("src/takes.rs");
     let body = format!("{body}\n{edit}");
     let body = body.as_str();
     let mut names: Vec<String> = Vec::new();

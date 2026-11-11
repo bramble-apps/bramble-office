@@ -120,7 +120,6 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             }
         }
         "Single" => app.mixer_view = MixerView::Single,
-        "All" => app.mixer_view = MixerView::All,
         "Narrow Channel Strips" => app.mix.narrow = true,
         "Wide Channel Strips" => app.mix.narrow = false,
         "Toggle Narrow/Wide Channel Strips" => app.mix.narrow = !app.mix.narrow,
@@ -320,7 +319,6 @@ pub fn checked(app: &App, label: &str) -> Option<bool> {
     }
     Some(match label {
         "Single" => app.mixer_view == MixerView::Single,
-        "All" => app.mixer_view == MixerView::All,
         "Narrow Channel Strips" => app.mix.narrow,
         "Wide Channel Strips" => !app.mix.narrow,
         "Enable Groups" | "Groups Active" => app.mix.groups_enabled,

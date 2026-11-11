@@ -418,7 +418,8 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         match kind {
             Some(TrackKind::Instrument) => slot(&p, y, instrument.as_deref().unwrap_or("Sampler"), Some(Color32::from_rgb(0x2f, 0x8f, 0x3a))),
             Some(TrackKind::Drummer) => slot(&p, y, instrument.as_deref().unwrap_or("Drum Kit"), Some(Color32::from_rgb(0x9a, 0x7a, 0x1e))),
-            Some(TrackKind::Audio) => slot(&p, y, &mixstate::in_label(app.mix.inputs.get(&i).copied().unwrap_or_default()), None),
+            // (the recording's input unless the strip is set to none or a bus)
+            Some(TrackKind::Audio) => slot(&p, y, &app.mix.inputs.get(&i).map_or_else(|| crate::recording::input_label(app, i).to_string(), |x| mixstate::in_label(*x)), None),
             None if aux.is_some() => {
                 let bus = app.auxes.get(aux.unwrap()).map_or(0, |a| a.bus);
                 slot(&p, y, &format!("Bus {}", bus + 1), None);
@@ -437,35 +438,44 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             }
         } else if kind == Some(TrackKind::Audio) {
             egui::Popup::menu(&resp).show(|ui| {
+                // one input slot for the strip and for recording: the sound card's two inputs
+                // (recording::InputSel) or none or a bus (mixstate::Input)
                 ui.set_min_width(160.0);
-                let cur = app.mix.inputs.get(&i).copied().unwrap_or_default();
-                let mut pick = None;
-                if ui.add(egui::Button::selectable(cur == Input::None, "No Input")).clicked() {
-                    pick = Some(Input::None);
+                let rec = app.rec.inputs.get(&i).copied().unwrap_or_default();
+                let own = app.mix.inputs.get(&i).copied();
+                let mut pick: Option<Result<crate::recording::InputSel, Input>> = None;
+                if ui.add(egui::Button::selectable(own == Some(Input::None), "No Input")).clicked() {
+                    pick = Some(Err(Input::None));
                 }
                 ui.separator();
                 ui.menu_button("Input", |ui| {
-                    for k in 0..8 {
-                        let v = if k == 0 { Input::Mono0 } else { Input::Mono(k) };
-                        if ui.add(egui::Button::selectable(cur == v, format!("Input {}", k + 1))).clicked() {
-                            pick = Some(v);
+                    for s in crate::recording::InputSel::ALL {
+                        if ui.add(egui::Button::selectable(own.is_none() && rec == s, s.label())).clicked() {
+                            pick = Some(Ok(s));
                         }
                     }
                     ui.separator();
-                    for k in (0..8).step_by(2) {
-                        if ui.add(egui::Button::selectable(cur == Input::Stereo(k), format!("Input {}-{}", k + 1, k + 2))).clicked() {
-                            pick = Some(Input::Stereo(k));
-                        }
+                    // (the sound card is opened as one stereo pair)
+                    for k in 3..=8 {
+                        ui.add_enabled(false, egui::Button::new(format!("Input {k}")));
                     }
                 });
                 ui.menu_button("Bus", |ui| {
-                    if let Some(b) = bus_menu(ui, app, match cur { Input::Bus(b) => Some(b), _ => None }) {
-                        pick = Some(Input::Bus(b));
+                    if let Some(b) = bus_menu(ui, app, match own { Some(Input::Bus(b)) => Some(b), _ => None }) {
+                        pick = Some(Err(Input::Bus(b)));
                     }
                 });
                 if let Some(v) = pick {
                     mixstate::checkpoint(app, "Input");
-                    app.mix.inputs.insert(i, v);
+                    match v {
+                        Ok(s) => {
+                            app.rec.inputs.insert(i, s);
+                            app.mix.inputs.remove(&i);
+                        }
+                        Err(x) => {
+                            app.mix.inputs.insert(i, x);
+                        }
+                    }
                     app.dirty = true;
                     ui.close();
                 }

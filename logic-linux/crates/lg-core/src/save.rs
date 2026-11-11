@@ -18,6 +18,24 @@ pub struct Saved {
     pub data: Vec<u8>,
     /// Regions that couldn't be written (made in Bramble): their names.
     pub unsaved: Vec<String>,
+    /// Automation that couldn't be written: tracks made here (no automation sequence of their
+    /// own yet), plug-in parameter lanes, curves (Logic's curve bytes aren't decoded).
+    pub unsaved_automation: Vec<String>,
+}
+
+/// Each track's automation sequence (EvSq id) by channel object: the "Track Automation Root
+/// Folder" places one "*Automation" sequence per channel.
+fn automation_sequences(chunks: &[Chunk]) -> HashMap<u32, u32> {
+    let mut out = HashMap::new();
+    let folder = chunks.iter().filter(|c| !c.is("USEl") && !c.is("UStk") && c.is("MSeq") && chunks::short_string(c.payload, 16).as_deref() == Some("Track Automation Root Folder")).map(|c| c.id).last();
+    let Some(f) = folder else { return out };
+    let Some(fe) = chunks.iter().filter(|c| c.is("EvSq") && c.id == f).last() else { return out };
+    for pl in events::records(fe.payload).iter().filter_map(events::placement) {
+        if let Some(seq) = pl.sequence.map(|s| s << 16) {
+            out.entry(pl.channel).or_insert(seq);
+        }
+    }
+    out
 }
 
 /// A note record from a template (Logic's own record for that note, or the region's first, or a
@@ -182,11 +200,35 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
         pl[32..36].copy_from_slice(&(id >> 16).to_le_bytes());
         added_placements.entry(o.folder).or_default().push((r.start + BAR_ONE, pl));
     }
+    // track automation: each channel's sequence rewritten when its lanes changed
+    let mut unsaved_automation = Vec::new();
+    let auto_seqs = automation_sequences(&chunks);
+    let mut auto_lanes: HashMap<u32, Vec<project::AutoLane>> = HashMap::new();
+    for t in &p.tracks {
+        let was = before.tracks.iter().find(|b| b.channel == t.channel && t.channel != 0).map_or(&[][..], |b| b.automation.as_slice());
+        if t.automation.iter().any(|l| l.plugin.is_some() && !l.points.is_empty()) {
+            unsaved_automation.push(format!("plug-in automation on {}", t.name));
+        }
+        if t.automation.iter().any(|l| l.plugin.is_none() && !l.curves.is_empty()) {
+            unsaved_automation.push(format!("automation curves on {}", t.name));
+        }
+        if !crate::automation::changed(was, &t.automation) {
+            continue;
+        }
+        match auto_seqs.get(&t.channel).filter(|_| t.channel != 0) {
+            Some(&seq) => {
+                auto_lanes.entry(seq).or_insert_with(|| t.automation.clone());
+            }
+            None => unsaved_automation.push(format!("automation on {}", t.name)),
+        }
+    }
     let unchanged = |c: &Chunk| c.raw.to_vec();
     let mut body: Vec<u8> = Vec::with_capacity(original.len());
     for (i, c) in chunks.iter().enumerate() {
         let live = c.is("EvSq") && last.get(&c.id) == Some(&i);
-        let new_payload = if live && notes.contains_key(&c.id) {
+        let new_payload = if live && auto_lanes.contains_key(&c.id) {
+            Some(crate::automation::write_lanes(c.payload, &auto_lanes[&c.id]))
+        } else if live && notes.contains_key(&c.id) {
             let old_notes: Vec<events::Note> = events::records(c.payload).iter().filter_map(events::note).collect();
             let want: Vec<events::Note> = notes[&c.id].clone();
             let same = old_notes.len() == want.len() && old_notes.iter().zip(&want).all(|(a, b)| a.pitch == b.pitch && a.velocity == b.velocity && a.len == b.len && a.pos == b.pos + BAR_ONE);
@@ -231,7 +273,7 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
     if tempo_now != tempo_was && tempo_now > 0 {
         set_tempo(&mut data, tempo_was, tempo_now);
     }
-    Ok(Saved { data, unsaved })
+    Ok(Saved { data, unsaved, unsaved_automation })
 }
 
 /// The alternative's MetaData.plist summary follows the song: its tempo (Logic and Finder read it).
@@ -300,5 +342,49 @@ mod tests {
         let notes: Vec<_> = events::records(&out).iter().filter_map(events::note).map(|n| (n.pitch, n.pos - BAR_ONE)).collect();
         assert_eq!(notes, vec![(62, 480), (67, 1920)]);
         assert_eq!(&out[out.len() - 16..], &end[..]);
+    }
+
+    /// The research's sample projects, when this checkout has them (testdata-private, or the
+    /// main checkout's).
+    fn sample(name: &str) -> Option<Vec<u8>> {
+        let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata-private/sample-files");
+        let main = std::path::PathBuf::from(std::env::var("HOME").ok()?).join("CascadeProjects/bramble-office/logic-linux/testdata-private/sample-files");
+        [here, main].iter().map(|d| d.join(name).join("Alternatives/000/ProjectData")).find(|p| p.exists()).and_then(|p| std::fs::read(p).ok())
+    }
+
+    #[test]
+    fn automation_is_written_back_and_read_again() {
+        let Some(orig) = sample("E08-volume-automation.logicx") else { return };
+        let p = project::read_project_data(&orig).unwrap();
+        assert_eq!(save(&p, &orig).unwrap().data, orig, "unchanged: the same bytes");
+        let t = p.tracks.iter().position(|t| !t.automation.is_empty()).expect("E08 has volume automation");
+        let mut e = p.clone();
+        {
+            let lane = &mut e.tracks[t].automation[0];
+            lane.points[1].1 = 40;
+            lane.points.push((lane.points[1].0 + 1920, 100));
+        }
+        e.tracks[t].automation.push(project::AutoLane { param: 10, points: vec![(0, 64), (3840, 20)], ..Default::default() });
+        let saved = save(&e, &orig).unwrap();
+        assert!(saved.unsaved_automation.is_empty(), "{:?}", saved.unsaved_automation);
+        let back = project::read_project_data(&saved.data).unwrap();
+        let mut want = e.tracks[t].automation.clone();
+        let mut got = back.tracks[t].automation.clone();
+        want.sort_by_key(|l| l.param);
+        got.sort_by_key(|l| l.param);
+        assert_eq!(got, want);
+        // the rest as it was
+        assert_eq!(back.tracks.len(), p.tracks.len());
+        assert_eq!(back.tracks[t].regions.len(), p.tracks[t].regions.len());
+        // a second track's first automation goes into its own (empty) sequence
+        if let Some(u) = (0..e.tracks.len()).find(|&i| i != t && e.tracks[i].channel != 0) {
+            let mut e2 = e.clone();
+            e2.tracks[u].automation = vec![project::AutoLane { param: 7, points: vec![(0, 90), (7680, 60)], ..Default::default() }];
+            let s2 = save(&e2, &orig).unwrap();
+            let b2 = project::read_project_data(&s2.data).unwrap();
+            if s2.unsaved_automation.is_empty() {
+                assert_eq!(b2.tracks[u].automation, e2.tracks[u].automation);
+            }
+        }
     }
 }
