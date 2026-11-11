@@ -91,6 +91,8 @@ fn all_instruments() -> Vec<(String, Box<dyn Instrument>)> {
         "Drum Machine Designer",
         "Studio Strings",
         "Studio Horns",
+        "Studio Bass",
+        "Studio Piano",
     ] {
         v.push((name.to_string(), by_logic_name(name, RATE).unwrap()));
     }
@@ -588,32 +590,32 @@ fn new_engines_are_in_tune() {
 #[test]
 fn ensemble_keyswitches_select_articulations() {
     let mut s = by_logic_name("Studio Strings", RATE).unwrap();
-    // C0 + 1 = staccato: the key itself is silent, the next note is short
-    s.note_on(25, 100);
+    // F#0 = staccato: the key itself is silent, the next note is short
+    s.note_on(30, 100);
     let (l, _) = render(s.as_mut(), 0.1);
     assert!(rms(&l) < 1e-5, "keyswitch sounded");
-    assert_eq!(s.get(13), 1.0);
+    assert_eq!(s.get(13), 6.0);
     s.note_on(60, 100);
-    let (l, _) = render(s.as_mut(), 1.0);
+    let (l, _) = render(s.as_mut(), 2.0);
     assert!(
         rms(&l[..9600]) > 1e-3 && rms(&l[l.len() - 4800..]) < rms(&l[..9600]) * 0.05,
-        "staccato did not stop by itself"
+        "staccato did not stop by itself ({} then {})",
+        rms(&l[..9600]),
+        rms(&l[l.len() - 4800..])
     );
-    // horns: fall on release bends the pitch down
+    // horns: a fall bends the pitch down
     let mut h = by_logic_name("Studio Horns", RATE).unwrap();
-    h.set(8, 0.0);
-    h.set(13, 11.0);
-    h.note_on(60, 100);
-    render(h.as_mut(), 0.4);
-    h.note_off(60);
-    let (l, _) = render(h.as_mut(), 0.5);
+    h.set(0, 4.0);
+    h.set(13, 7.0);
+    h.note_on(72, 100);
+    let (l, _) = render(h.as_mut(), 0.7);
     let f = fundamental(
-        &l[(0.3 * RATE) as usize..(0.45 * RATE) as usize],
-        80.0,
-        300.0,
+        &l[(0.5 * RATE) as usize..(0.62 * RATE) as usize],
+        150.0,
+        600.0,
     );
     assert!(
-        f < lg_dsp::midi_hz(58.0),
+        f < lg_dsp::midi_hz(71.0),
         "fall did not drop the pitch ({f} Hz)"
     );
 }

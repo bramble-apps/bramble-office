@@ -41,7 +41,25 @@ pub const MODELS: &[&str] = &[
 ];
 
 const MIDI_MODES: &[&str] = &["Poly", "Mono", "Legato"];
-const MODES: &[&str] = &["Normal", "Full Remote"];
+const MODES: &[&str] = &["Off", "Mod Wheel to Tremolo", "Full Remote"];
+/// Tempo-synced LFO lengths in beats, with their names (bars, beats, triplets).
+pub const SYNC: &[(f32, &str)] = &[(32.0, "8 bars"), (16.0, "4 bars"), (8.0, "2 bars"), (4.0, "1 bar"), (2.0, "1/2"), (4.0 / 3.0, "1/2t"), (1.0, "1/4"), (2.0 / 3.0, "1/4t"), (0.5, "1/8"), (1.0 / 3.0, "1/8t"), (0.25, "1/16"), (1.0 / 6.0, "1/16t"), (0.125, "1/32")];
+
+/// The synced length nearest to a rate in Hz at a tempo: (its rate in Hz, its name).
+pub fn sync_rate(hz: f32, bpm: f32) -> (f32, &'static str) {
+    let beat = bpm.max(20.0) / 60.0;
+    let mut best = (beat, "1/4");
+    let mut far = f32::MAX;
+    for (beats, name) in SYNC {
+        let f = beat / beats;
+        let d = (f / hz.max(0.001)).ln().abs();
+        if d < far {
+            far = d;
+            best = (f, name);
+        }
+    }
+    best
+}
 
 pub static PARAMS: &[Param] = &[
     Param::menu(0, "Model", MODELS, 15.0),
@@ -72,7 +90,7 @@ pub static PARAMS: &[Param] = &[
     Param::new(25, "Chorus Rate", 0.05, 10.0, 2.0, Unit::Hz),
     Param::new(26, "Delay Pianissimo", 0.0, 10.0, 0.69, Unit::Ms),
     Param::new(27, "Delay Fortissimo", 0.0, 10.0, 0.0, Unit::Ms),
-    Param::menu(28, "MIDI Mode", MIDI_MODES, 0.0),
+    Param::menu(28, "Voice Mode", MIDI_MODES, 0.0),
     Param::new(29, "EQ", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(30, "Drive", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(31, "Phaser", 0.0, 1.0, 1.0, Unit::OnOff),
@@ -81,7 +99,10 @@ pub static PARAMS: &[Param] = &[
     Param::new(34, "Bass Boost", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(35, "Phaser Sync", 0.0, 100.0, 100.0, Unit::None),
     Param::new(36, "Tremolo Sync", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::menu(37, "Mode", MODES, 1.0),
+    Param::menu(37, "MIDI Mode", MODES, 1.0),
+    Param::menu(38, "Drive Type", &["I", "II"], 0.0),
+    Param::new(39, "Bass Boost Level", 0.0, 1.0, 0.5, Unit::Ratio),
+    Param::new(41, "Phaser Rate Sync", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -502,6 +523,15 @@ pub(crate) struct KeysFxSettings {
     pub chorus_depth: f32,
     pub widen: f32,
     pub volume: f32,
+    /// The second distortion type (harder, asymmetric).
+    pub drive_type: u8,
+    /// Drive before the EQ (the electric piano's chain) instead of after it.
+    pub drive_first: bool,
+    pub boost_db: f32,
+    /// Peak filters instead of shelves, and their frequencies (0: the usual ones).
+    pub eq_peak: bool,
+    pub bass_hz: f32,
+    pub treble_hz: f32,
 }
 
 impl KeysFx {
@@ -534,14 +564,18 @@ impl KeysFx {
     }
     pub fn configure(&mut self, s: &KeysFxSettings) {
         let rate = self.rate;
+        let bh = if s.bass_hz > 0.0 { s.bass_hz } else { 180.0 };
+        let th = if s.treble_hz > 0.0 { s.treble_hz } else { 3500.0 };
         for b in &mut self.bass {
-            b.low_shelf(180.0, if s.eq { s.bass_db } else { 0.0 }, rate);
+            let db = if s.eq { s.bass_db } else { 0.0 };
+            if s.eq_peak { b.peaking(bh, 0.7, db, rate) } else { b.low_shelf(bh, db, rate) }
         }
         for b in &mut self.treble {
-            b.high_shelf(3500.0, if s.eq { s.treble_db } else { 0.0 }, rate);
+            let db = if s.eq { s.treble_db } else { 0.0 };
+            if s.eq_peak { b.peaking(th, 0.7, db, rate) } else { b.high_shelf(th, db, rate) }
         }
         for b in &mut self.boost {
-            b.peaking(90.0, 0.8, if s.bass_boost { 3.0 } else { 0.0 }, rate);
+            b.peaking(90.0, 0.8, if s.bass_boost { if s.boost_db > 0.0 { s.boost_db } else { 3.0 } } else { 0.0 }, rate);
         }
         for w in &mut self.warm {
             w.lowpass_hz(18000.0 - 9000.0 * s.warmth, rate);
@@ -555,15 +589,29 @@ impl KeysFx {
         for i in 0..l.len() {
             let mut x = [l[i], r[i]];
             for c in 0..2 {
-                let mut v = self.boost[c].run(self.treble[c].run(self.bass[c].run(x[c])));
+                let mut v = x[c];
+                let drive = |v: f32, lp: &mut OnePole| -> f32 {
+                    let g = s.drive_gain;
+                    if s.drive_type == 1 {
+                        // the second type: harder, with even harmonics
+                        let y = v * g * 1.6;
+                        lp.lp((y / (1.0 + y.abs()) + 0.2 * y * y / (1.0 + y * y)) / g.sqrt() * 1.3)
+                    } else {
+                        lp.lp(dsp::soft_clip(v * g) / g.sqrt())
+                    }
+                };
+                let driven = s.drive && s.drive_gain > 1.0;
+                if driven && s.drive_first {
+                    v = drive(v, &mut self.drive_lp[c]);
+                }
+                v = self.boost[c].run(self.treble[c].run(self.bass[c].run(v)));
                 // warmth: gentle tube-like asymmetry + top roll-off
                 if s.warmth > 0.0 {
                     let w = s.warmth * 0.6;
                     v = self.warm[c].lp(v + w * 0.3 * v * v.abs());
                 }
-                if s.drive && s.drive_gain > 1.0 {
-                    let g = s.drive_gain;
-                    v = self.drive_lp[c].lp(dsp::soft_clip(v * g) / g.sqrt());
+                if driven && !s.drive_first {
+                    v = drive(v, &mut self.drive_lp[c]);
                 }
                 x[c] = v;
             }
@@ -622,9 +670,30 @@ pub struct VintageKeysEp {
     rate: f32,
     mono_mode: u8,
     last_note: Option<u8>,
+    tempo: f32,
 }
 
 impl VintageKeysEp {
+    /// Every parameter but the model at its default (what choosing a new model does).
+    pub fn model_defaults() -> Vec<(u32, f32)> {
+        PARAMS.iter().filter(|p| p.id != 0).map(|p| (p.id, p.default)).collect()
+    }
+
+    /// Chooses a model as the Model pop-up does: sounding voices stop, the other parameters
+    /// go back to their defaults.
+    pub fn choose_model(&mut self, model: usize) {
+        self.set(0, model as f32);
+        for (id, v) in Self::model_defaults() {
+            self.params.set(id, v);
+        }
+        self.update();
+    }
+
+    /// The phaser's and the tremolo's rates in Hz as they run now (synced ones at the tempo).
+    pub fn lfo_rates(&self) -> (f32, f32) {
+        (self.fxs.phaser_rate, self.fxs.trem_rate)
+    }
+
     pub fn new(rate: f32) -> VintageKeysEp {
         dsp::warm_tables();
         let mut seed = 1u32;
@@ -652,6 +721,7 @@ impl VintageKeysEp {
             rate,
             mono_mode: 0,
             last_note: None,
+            tempo: 120.0,
         };
         s.update();
         s
@@ -678,12 +748,25 @@ impl VintageKeysEp {
         self.ch.update_bend();
         self.mono_mode = self.p(28).round() as u8;
         let trem_rate = if self.p(36) >= 0.5 {
-            // synced: the value is a note length in whole notes; 120 bpm until the host passes tempo
-            (2.0 / (self.p(18).max(0.03) * 4.0)).clamp(0.1, 16.0)
+            // synced: the value is a note length in whole notes
+            (self.tempo / 60.0 / (self.p(18).max(0.03) * 4.0)).clamp(0.02, 30.0)
         } else {
             self.p(18)
         };
+        let midi = self.p(37).round() as i32;
+        let wheel = if midi == 1 { self.ch.ctl.mod_wheel } else { 0.0 };
+        let (peak, bass_hz, treble_hz) = match self.shared.model.pickup {
+            Pickup::Reed => (true, 220.0, 2400.0),
+            Pickup::String => (false, 200.0, 3000.0),
+            Pickup::Tine => (false, 180.0, 3500.0),
+        };
         self.fxs = KeysFxSettings {
+            drive_type: self.p(38).round() as u8,
+            drive_first: true,
+            boost_db: 6.0 * self.p(39),
+            eq_peak: peak,
+            bass_hz,
+            treble_hz,
             eq: true,
             bass_db: self.p(12) * if self.p(29) >= 0.5 { 1.0 } else { 0.25 },
             treble_db: self.p(11) * if self.p(29) >= 0.5 { 1.0 } else { 0.25 },
@@ -693,13 +776,13 @@ impl VintageKeysEp {
             drive_gain: self.p(13),
             drive_tone: self.p(14),
             phaser: self.p(31) >= 0.5 && self.p(16) > 0.0,
-            phaser_rate: self.p(15),
+            phaser_rate: if self.p(41) >= 0.5 { sync_rate(self.p(15), self.tempo).0 } else { self.p(15) },
             phaser_color: self.p(16),
             phaser_stereo: self.p(17),
-            tremolo: self.p(32) >= 0.5 || self.ch.ctl.mod_wheel > 0.0,
+            tremolo: self.p(32) >= 0.5 || wheel > 0.0,
             trem_rate,
             trem_depth: (self.p(19) / 100.0)
-                .max(self.ch.ctl.mod_wheel * if self.p(32) >= 0.5 { 1.0 } else { 0.7 })
+                .max(wheel * if self.p(32) >= 0.5 { 1.0 } else { 0.7 })
                 .min(1.0),
             trem_stereo: self.p(20),
             chorus: self.p(33) >= 0.5,
@@ -720,7 +803,14 @@ impl Plugin for VintageKeysEp {
         self.params.get(id)
     }
     fn set(&mut self, id: u32, value: f32) {
+        let before = self.params.get(id);
         if self.params.set(id, value) {
+            if id == 0 && self.params.get(0).round() != before.round() {
+                // a new model: what is sounding stops
+                for v in &mut self.poly.voices {
+                    *v = EpVoice::new(v.rng.0);
+                }
+            }
             self.update();
         }
     }
@@ -762,12 +852,57 @@ impl Instrument for VintageKeysEp {
             self.poly.all_notes_off(&self.shared, &self.ch.ctl);
             return;
         }
+        // Full Remote: the controllers 1 and 12..28 move the instrument's controls
+        if self.p(37).round() as i32 == 2 {
+            let id = match cc {
+                1 => Some(22),
+                13 => Some(1),
+                14 => Some(2),
+                15 => Some(3),
+                16 => Some(4),
+                17 => Some(7),
+                18 => Some(11),
+                19 => Some(12),
+                20 => Some(13),
+                21 => Some(14),
+                22 => Some(15),
+                23 => Some(16),
+                24 => Some(17),
+                25 => Some(18),
+                26 => Some(19),
+                27 => Some(20),
+                28 => Some(21),
+                _ => None,
+            };
+            if cc == 12 {
+                self.choose_model((value as usize * MODELS.len() / 128).min(MODELS.len() - 1));
+                return;
+            }
+            if let Some(id) = id {
+                if let Some(p) = PARAMS.iter().find(|p| p.id == id) {
+                    self.set(id, p.min + (p.max - p.min) * value as f32 / 127.0);
+                }
+                return;
+            }
+        }
         if let Some(down) = self.ch.cc(cc, value) {
             self.poly.sustain(down, &self.shared, &self.ch.ctl);
         }
         if cc == 1 {
             self.update();
         }
+    }
+    fn set_tempo(&mut self, bpm: f64) {
+        if (bpm as f32 - self.tempo).abs() > 0.001 {
+            self.tempo = bpm as f32;
+            self.update();
+        }
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);
@@ -792,5 +927,87 @@ impl Instrument for VintageKeysEp {
             pos += m;
         }
         let _ = self.rate;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt()
+    }
+    fn play(e: &mut VintageKeysEp, secs: f32) -> Vec<f32> {
+        let n = (48000.0 * secs) as usize;
+        let (mut l, mut r) = (vec![0.0; n], vec![0.0; n]);
+        for (a, b) in l.chunks_mut(256).zip(r.chunks_mut(256)) {
+            e.render(a, b);
+        }
+        l
+    }
+
+    #[test]
+    fn a_new_model_stops_the_voices_and_resets() {
+        let mut e = VintageKeysEp::new(48000.0);
+        e.set(1, 40.0);
+        e.note_on(60, 100);
+        assert!(rms(&play(&mut e, 0.2)) > 1e-4);
+        e.choose_model(8);
+        assert_eq!(e.get(0), 8.0);
+        assert_eq!(e.get(1), 130.0, "Decay back at its default");
+        play(&mut e, 0.05);
+        assert!(rms(&play(&mut e, 0.1)) < 1e-5, "the old model's note is gone");
+    }
+
+    #[test]
+    fn full_remote_maps_the_controllers() {
+        let mut e = VintageKeysEp::new(48000.0);
+        e.controller(13, 0);
+        assert_eq!(e.get(1), 130.0, "not in Full Remote: nothing moves");
+        e.set(37, 2.0);
+        e.controller(13, 0);
+        assert_eq!(e.get(1), 0.0);
+        e.controller(28, 127);
+        assert_eq!(e.get(21), 1.0);
+        e.controller(1, 127);
+        assert_eq!(e.get(22), 12.0, "CC 1 is the Volume knob");
+        e.controller(12, 127);
+        assert_eq!(e.get(0) as usize, MODELS.len() - 1);
+        // Off: the mod wheel does nothing; Mod Wheel to Tremolo: it brings the tremolo in
+        let mut e = VintageKeysEp::new(48000.0);
+        e.set(37, 0.0);
+        e.controller(1, 127);
+        assert!(!e.fxs.tremolo);
+        e.set(37, 1.0);
+        e.controller(1, 127);
+        assert!(e.fxs.tremolo && e.fxs.trem_depth > 0.5);
+    }
+
+    #[test]
+    fn drive_types_and_bass_boost_are_heard() {
+        let tone = |set: &[(u32, f32)]| {
+            let mut e = VintageKeysEp::new(48000.0);
+            e.set(13, 8.0);
+            for (id, v) in set {
+                e.set(*id, *v);
+            }
+            e.note_on(36, 110);
+            rms(&play(&mut e, 0.4))
+        };
+        let (one, two) = (tone(&[(38, 0.0)]), tone(&[(38, 1.0)]));
+        assert!((one - two).abs() > one * 0.02, "{one} {two}");
+        let (flat, boosted) = (tone(&[(39, 0.0)]), tone(&[(39, 1.0)]));
+        assert!(boosted > flat * 1.05, "{flat} {boosted}");
+    }
+
+    #[test]
+    fn synced_rates_follow_the_tempo() {
+        assert_eq!(sync_rate(2.0, 120.0), (2.0, "1/4"));
+        assert_eq!(sync_rate(2.9, 120.0).1, "1/4t");
+        let mut e = VintageKeysEp::new(48000.0);
+        e.set(41, 1.0);
+        e.set(15, 1.6);
+        e.set_tempo(90.0);
+        assert!((e.lfo_rates().0 - 1.5).abs() < 1e-4, "a quarter note at 90 bpm");
     }
 }

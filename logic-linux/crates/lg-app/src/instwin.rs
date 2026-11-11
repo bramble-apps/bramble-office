@@ -415,6 +415,11 @@ pub fn window(app: &mut App, ctx: &egui::Context) -> bool {
         app.inst.rect = None;
         return false;
     };
+    // (the keyboard and studio instruments' windows: keyswin)
+    if crate::keyswin::window(app, ctx, t) {
+        app.inst.dropped.clear();
+        return true;
+    }
     let Some(k) = kind_of(app, t) else {
         app.inst.rect = None;
         return false;
