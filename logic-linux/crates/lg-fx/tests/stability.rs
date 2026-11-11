@@ -52,6 +52,10 @@ fn all_params_extreme_together() {
 #[test]
 fn defaults_fall_silent() {
     for (logic, ours) in lg_fx::list() {
+        // the Test Oscillator is a generator: it sounds by design whatever comes in
+        if logic == "Test Oscillator" {
+            continue;
+        }
         let mut fx = lg_fx::by_logic_name(logic, RATE).unwrap();
         fx.set_tempo(120.0);
         let tail = fx.tail().min(30.0);
