@@ -88,6 +88,8 @@ pub enum Kind {
     Dmd,
     Dkd,
     Alchemy,
+    /// A synthesizer with its own panel (synthwin).
+    Synth(crate::synthwin::Synth),
 }
 
 /// An editor's state as it was (for its undo).
@@ -132,6 +134,8 @@ pub struct State {
     pub alch_audio: HashMap<u64, (PathBuf, std::sync::Arc<lg_synth::wav::Audio>)>,
     /// What each track's running instrument last got: (the instance, the revision).
     pub applied: HashMap<u64, (usize, u64)>,
+    /// The synthesizers' current setting name by track id (synthui's Setting pop-up).
+    pub synth_setting: HashMap<u64, String>,
 }
 
 /// The track's id (stable through reorders).
@@ -162,7 +166,7 @@ pub fn kind_of(app: &App, t: usize) -> Option<Kind> {
     } else if any.is::<lg_synth::alchemy::Alchemy>() {
         Some(Kind::Alchemy)
     } else {
-        None
+        crate::synthwin::kind_of(any).map(Kind::Synth)
     }
 }
 
@@ -430,6 +434,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) -> bool {
         Kind::Dmd => crate::dmdwin::window(app, ctx, t),
         Kind::Dkd => crate::dkdwin::window(app, ctx, t),
         Kind::Alchemy => crate::alchemywin::window(app, ctx, t),
+        Kind::Synth(s) => crate::synthwin::window(app, ctx, t, s),
     }
     app.inst.dropped.clear();
     true

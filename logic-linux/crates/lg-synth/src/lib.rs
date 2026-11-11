@@ -22,7 +22,6 @@ pub mod dsp;
 pub mod ensemble;
 pub mod ep;
 pub mod es2;
-pub mod es_small;
 pub mod mellotron;
 pub mod organ;
 pub mod patches;
@@ -40,6 +39,10 @@ pub mod string;
 pub mod studio;
 pub mod studio_bass;
 pub mod studio_piano;
+pub mod synthkit;
+pub mod es1;
+pub mod es_emp;
+pub mod efm1;
 pub mod wav;
 
 pub use patches::{Engine, PatchSpec, patch};
@@ -255,11 +258,11 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         "Vintage Clav" | "Electric Clav" | NAME_CLAV => Box::new(clav::VintageClav::new(rate)),
         "ES2" | NAME_ES2 => Box::new(es2::Es2::new(rate)),
         "Alchemy" | "Sample Alchemy" | NAME_ALCHEMY => Box::new(alchemy::Alchemy::new(rate)),
-        "ES1" | NAME_ES1 => Box::new(es_small::es1(rate)),
-        "ES M" | NAME_ESM => Box::new(es_small::es_m(rate)),
-        "ES P" | NAME_ESP => Box::new(es_small::es_p(rate)),
-        "ES E" | NAME_ESE => Box::new(es_small::es_e(rate)),
-        "EFM1" | NAME_EFM1 => Box::new(es_small::efm1(rate)),
+        "ES1" | NAME_ES1 => Box::new(es1::Es1::new(rate)),
+        "ES M" | NAME_ESM => Box::new(es_emp::EsSmall::new(es_emp::Model::M, rate)),
+        "ES P" | NAME_ESP => Box::new(es_emp::EsSmall::new(es_emp::Model::P, rate)),
+        "ES E" | NAME_ESE => Box::new(es_emp::EsSmall::new(es_emp::Model::E, rate)),
+        "EFM1" | NAME_EFM1 => Box::new(efm1::Efm1::new(rate)),
         "Sculpture" | NAME_SCULPTURE => Box::new(sculpture::Sculpture::new(rate)),
         "Retro Synth" | NAME_RETRO => Box::new(retro::RetroSynth::new(rate)),
         "Piano" | NAME_PIANO => Box::new(piano::StudioPiano::new(rate)),
