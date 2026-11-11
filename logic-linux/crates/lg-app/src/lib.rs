@@ -12,6 +12,7 @@ mod controlbar;
 pub mod demo;
 mod dialogs;
 pub mod drummer;
+pub mod glyphs;
 pub mod edit;
 pub mod eq;
 mod inspector;
