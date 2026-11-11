@@ -383,5 +383,45 @@
   "area": "Interaction parity (interactions/ research)",
   "status": "Done",
   "feature": "Musical Typing window and MIDI keyboards (all inputs). [ ] Caps Lock keyboard"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes)"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Custom colour palette: edit, save and share the track / region colour palette"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes)"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Live Loops follow actions: per-cell rules (next, previous, random, repeat \u00d7n, stop) to chain cells"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Effects rack: parallel effect chains with splits and macro knobs in any channel strip (the Pedalboard's buses, generalised)"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Not started",
+  "feature": "Better Flex Pitch: sharper note detection, smoother pitch curves, editing several notes at once"
  }
 ]

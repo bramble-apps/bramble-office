@@ -106,6 +106,17 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [ ] Clipboard behaviour per area (keyboard-and-modifiers.txt)
 - [x] Musical Typing window and MIDI keyboards (all inputs). [ ] Caps Lock keyboard
 
+## 8. Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)
+Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 update", 2026-11-09). Added 2026-11-11.
+- [ ] Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region
+- [ ] Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes)
+- [ ] Custom colour palette: edit, save and share the track / region colour palette
+- [ ] Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes)
+- [ ] Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search
+- [ ] Live Loops follow actions: per-cell rules (next, previous, random, repeat ×n, stop) to chain cells
+- [ ] Effects rack: parallel effect chains with splits and macro knobs in any channel strip (the Pedalboard's buses, generalised)
+- [ ] Better Flex Pitch: sharper note detection, smoother pitch curves, editing several notes at once
+
 <!-- GENERATED: tool/checklist.py rewrites everything below -->
 
 # Item by item
