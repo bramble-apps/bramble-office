@@ -25,6 +25,7 @@ pub mod flexpitch;
 pub mod ops;
 pub mod peaks;
 pub mod record;
+pub mod stems;
 pub mod stretch;
 pub mod tempo;
 pub mod transients;

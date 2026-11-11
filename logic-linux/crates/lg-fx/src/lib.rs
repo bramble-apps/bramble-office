@@ -41,6 +41,14 @@ pub mod amp;
 pub mod multipressor;
 pub mod stomp;
 pub mod mastering;
+pub mod kit;
+pub mod remix_fx;
+pub mod pedals;
+pub mod pedalboard;
+pub mod beat_breaker;
+pub mod step_fx;
+pub mod delay_designer;
+pub mod meters;
 
 use lg_dsp::Effect;
 
@@ -87,6 +95,9 @@ const NAMES: &[(&str, &str)] = &[
     ("Vintage Drive", "Vintage Drive"),
     ("Delay Designer", "Delay Designer"),
     ("Mastering Assistant", "Mastering Chain"),
+    ("Remix FX", "Remix FX"),
+    ("Beat Breaker", "Beat Breaker"),
+    ("Step FX", "Step FX"),
 ];
 
 /// The stand-in for a Logic plug-in, by the name a project gives it (display or short name).
@@ -125,20 +136,34 @@ pub fn by_logic_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
         "Amp Designer" | "Amp" | "Amp Sculptor" => Box::new(amp::AmpDesigner::new(rate)),
         "Bass Amp Designer" | "Bass Amp" | "Bass Amp Sculptor" => Box::new(amp::BassAmp::new(rate)),
         "Multipressor" | "Multipr" => Box::new(multipressor::Multipressor::new(rate)),
-        "Pedalboard" | "Stomp Board" => Box::new(stomp::Pedalboard::new(rate)),
+        "Pedalboard" | "Stomp Board" => Box::new(pedalboard::Board::new(rate)),
         "Robo Flanger" | "RoboFlng" => Box::new(stomp::RoboFlanger::new(rate)),
         "Total Tremolo" | "TotalTrem" => Box::new(stomp::TotalTremolo::new(rate)),
         "Blue Echo" => Box::new(stomp::BlueEcho::new(rate)),
         "Tru-Tape Delay" | "Tru-Tape" => Box::new(stomp::TruTapeDelay::new(rate)),
         "Vintage Drive" => Box::new(stomp::VintageDrive::new(rate)),
-        "Delay Designer" | "Delay D" => Box::new(mastering::DelayDesigner::new(rate)),
+        "Delay Designer" | "Delay D" => Box::new(delay_designer::DelayDesigner::new(rate)),
         "Mastering Assistant" | "Mastering" | "Mastering Chain" => Box::new(mastering::MasteringAssistant::new(rate)),
-        _ => return None,
+        "Remix FX" => Box::new(remix_fx::RemixFx::new(rate)),
+        "Step FX" => Box::new(step_fx::StepFx::new(rate)),
+        "Beat Breaker" | "Beat Break" => Box::new(beat_breaker::BeatBreaker::new(rate)),
+        n => {
+            if let Some(m) = meters::Meter::new(n, rate) {
+                return Some(Box::new(m));
+            }
+            if let Some(p) = pedals::Pedal::by_name(n, rate) {
+                return Some(Box::new(p));
+            }
+            return None;
+        }
     };
     Some(fx)
 }
 
 /// Every effect here: (Logic's name, our name).
 pub fn list() -> Vec<(&'static str, &'static str)> {
-    NAMES.to_vec()
+    let mut v = NAMES.to_vec();
+    v.extend(pedals::PEDALS.iter().map(|(n, ..)| (*n, *n)));
+    v.extend(meters::Meter::names().iter().map(|n| (*n, *n)));
+    v
 }

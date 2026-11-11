@@ -22,6 +22,9 @@ pub struct Param {
     pub unit: Unit,
     /// Choices for a menu parameter (index = value).
     pub choices: &'static [&'static str],
+    /// Stored state the window edits in its own view (Beat Breaker's slices, Step FX's steps,
+    /// Delay Designer's taps): kept in the settings, left out of the Controls view.
+    pub hidden: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,10 +46,15 @@ pub enum Unit {
 
 impl Param {
     pub const fn new(id: u32, name: &'static str, min: f32, max: f32, default: f32, unit: Unit) -> Param {
-        Param { id, name, min, max, default, unit, choices: &[] }
+        Param { id, name, min, max, default, unit, choices: &[], hidden: false }
+    }
+    /// The same parameter, left out of the Controls view.
+    pub const fn hide(mut self) -> Param {
+        self.hidden = true;
+        self
     }
     pub const fn menu(id: u32, name: &'static str, choices: &'static [&'static str], default: f32) -> Param {
-        Param { id, name, min: 0.0, max: (choices.len() as f32) - 1.0, default, unit: Unit::Menu, choices }
+        Param { id, name, min: 0.0, max: (choices.len() as f32) - 1.0, default, unit: Unit::Menu, choices, hidden: false }
     }
 }
 
@@ -100,6 +108,28 @@ pub trait Effect: Plugin {
     fn gain_reduction(&self) -> f32 {
         0.0
     }
+    /// Where the song is (beats from the project start, tempo, playing): called before each
+    /// block, for effects that follow the bar (Beat Breaker, Step FX, Remix FX's synced effects).
+    fn set_transport(&mut self, _t: Transport) {}
+    /// Live values the effect's window shows (meters, analysis results, detected pitch…), by
+    /// name. Called from the interface, not the audio thread.
+    fn readouts(&self) -> Vec<(&'static str, f32)> {
+        Vec::new()
+    }
+    /// A longer readout: a curve or spectrum the window draws (Match EQ's curves, Mastering
+    /// Assistant's analysis, an analyzer), by name.
+    fn curve(&self, _name: &str) -> Vec<f32> {
+        Vec::new()
+    }
+}
+
+/// The song position an effect follows.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Transport {
+    /// Beats (quarter notes) from the project start, at the block's first sample.
+    pub beats: f64,
+    pub bpm: f64,
+    pub playing: bool,
 }
 
 pub fn db_to_gain(db: f32) -> f32 {
