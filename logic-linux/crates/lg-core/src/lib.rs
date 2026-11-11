@@ -13,6 +13,7 @@ pub mod mixer;
 pub mod plugin;
 pub mod project;
 pub mod save;
+pub mod score;
 pub mod takes;
 pub mod transform;
 

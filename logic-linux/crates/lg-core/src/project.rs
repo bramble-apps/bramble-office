@@ -50,6 +50,8 @@ pub struct Project {
     /// The Transposition global track: (ticks from bar 1, semitones), each holding until the
     /// next (MIDI regions on tracks that take transposition play shifted).
     pub transposition: Vec<(u32, i8)>,
+    /// The Score editor's attributes, staff styles and symbols (lg-core score).
+    pub score: crate::score::Score,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

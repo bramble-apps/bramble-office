@@ -121,6 +121,12 @@ impl eframe::App for Snap {
                 Ok("roll") => self.app.bottom = app::Bottom::PianoRoll,
                 _ => {}
             }
+            // LG_CMDS="Page View|Stems: up": key commands run by name (the editors' checks)
+            if let Ok(c) = std::env::var("LG_CMDS") {
+                for n in c.split('|') {
+                    self.app.key_command(&ctx, n.trim());
+                }
+            }
             // LG_MIDI="lane,collapse,scale,handles,labels": the Piano Roll's views; "all": every note selected
             if let Ok(v) = std::env::var("LG_MIDI") {
                 let m = &mut self.app.midi;

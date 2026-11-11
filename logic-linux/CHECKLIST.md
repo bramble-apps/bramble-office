@@ -33,7 +33,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
 - [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)
-- [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
+- [~] Editors pane: Piano Roll, Score (see below), Step Sequencer (see below), Session Player editors. [ ] audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
+- [~] Score editor (score.rs, scorecmd.rs, lg-notation, lg-core score): Linear, Wrapped and Page views (lines laid out by content, pages with title, page numbers, page rulers, Go to Page), staff styles (Treble, 8va / 8vb, Bass, Piano grand staff, Alto, Tenor, Drums with the GM drum map and cross heads, Guitar, Bass Guitar, B♭ Trumpet / Clarinet / Tenor Sax, E♭ Alto Sax, F Horn: written transposition and key), the region's Quantize / Interpretation / Syncopation, voice separation (two voices per staff, Explode Polyphony), Explode Folders (every MIDI track), score sets, instrument names, colour views (pitch, velocity, voice, B&W, note colours), duration bars, drag guides; Part box (notes with dot and triplet, articulations, dynamics with MIDI Meaning velocities, slurs, hairpins, clef changes, text, lyrics, chord symbols, key changes); note attributes (stems up / down / hidden / centred / end moved, ties up / down, Beam / Unbeam Selected, accidentals force / hide / guide, enharmonic shifts, Flats↔Sharps, interpretation / syncopation per note, staff assignment, fingering, pick fingers, auto slurs); Fix Displayed Note Positions (and Durations), Assign MIDI Channels based on Score Split, Nudge Position, Paste Multiple; Score Project Settings window (staff size, bar numbers, chord size, key on every line, MIDI Meaning, colours) and Staff Style window; 133/139 of Logic's Score Editor key commands; every edit one undo step (attributes live in the project). [ ] Stem Position Automatic / Side and Independent / Independent Grace are stored but not drawn differently; user-defined staff styles (Duplicate Staff Style only pins the current one), tablature, Extended Layout, Align Object Positions, Reset Line Layout; dragging symbols; time signature changes; key / clef changes are at bar lines only; score data not saved into the .logicx (and attributes keyed by note position are lost when a note is moved outside the Score); print / export to PDF and MusicXML; Logic's exact engraving distances unmeasured
+- [~] Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (⌥⇧B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. [ ] automation rows, per-step Step Rate mode, Zoom Focused Row, Display Edit Mode Values options, Sort Rows, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)
+- [~] Step Input Keyboard (stepinput.rs, ⌥⌘K): Logic's window (chord, values 1/1–1/64, dot, triplet, rest, ppp–fff, Q, channel, keyboard C0–C7), all 49 key commands while it is open, notes from MIDI keyboards, into the selected region at the playhead (the region grows), Diatonic Insert in the Score. [ ] the Score's own step-input cursor
+- [~] Step Editor (stepedit.rs, Window ▸ Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project
+- [~] Event Editor (eventedit.rs, the List Editors' Events): ↑ ↓, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (notes have no articulation ID yet)
+- [ ] Drum Machine Designer key commands: no pad view in Studio yet
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
 - [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
@@ -90,13 +96,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 191 | 594 | 32% |
-| Local menus | 460 | 1191 | 38% |
-| Right-click menus | 1201 | 2575 | 46% |
-| Key commands | 571 | 2207 | 25% |
+| Menu bar | 196 | 594 | 32% |
+| Local menus | 546 | 1191 | 45% |
+| Right-click menus | 1210 | 2575 | 46% |
+| Key commands | 867 | 2207 | 39% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 191 of 594
+## Menu bar: 196 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -649,7 +655,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 9/68</summary>
+<details><summary>Window — 14/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -695,13 +701,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Mixer  `⌘2`
 - [ ] Open Smart Controls
 - [x] Open Piano Roll  `⌘4`
-- [ ] Open Score Editor  `⌘5`
-- [ ] Open Step Sequencer  `⌘3`
-- [ ] Open Step Editor
+- [x] Open Score Editor  `⌘5`
+- [x] Open Step Sequencer  `⌘3`
+- [x] Open Step Editor
 - [ ] Open Audio Track Editor
 - [ ] Open Audio File Editor  `⌘6`
 - [ ] Open Smart Tempo Editor
-- [ ] Open Event List  `⌘7`
+- [x] Open Event List  `⌘7`
 - [ ] Open Signature List
 - [ ] Open Project Audio  `⌘8`
 - [ ] Open MIDI Transform  `⌘9`
@@ -710,7 +716,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Region Inspector Float  `⌥⇧R`
 - [ ] Show Play Surface  `⌘K`
 - [x] Show Musical Typing
-- [ ] Show Step Input Keyboard  `⌥⌘K`
+- [x] Show Step Input Keyboard  `⌥⌘K`
 - [x] Hide All Plug-in Windows  `V`
 - [ ] Untitled.logicx - Tracks
 - [ ] Screenset 1 (Tracks/Browser)  `1`
@@ -743,7 +749,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 460 of 1191
+## Local menus (Edit / Functions / View in each area): 546 of 1191
 
 
 <details><summary>audiofile-AudioFile — 0/7</summary>
@@ -1089,7 +1095,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Functions — 19/28</summary>
+<details><summary>eventlist-Functions — 20/28</summary>
 
 - [ ] Mute Notes  `⌃M`
 - [ ] Quantize Events  `Q`
@@ -1097,7 +1103,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Note Events
   - [ ] Convert Sustain Pedal to Note Length
   - [x] Set MIDI Channel to Voice Number
-  - [ ] Assign MIDI Channels based on Score Split  `⌃⇧C`
+  - [x] Assign MIDI Channels based on Score Split  `⌃⇧C`
 - [ ] MIDI Transform
   - [x] Fixed Velocity
   - [x] Random Pitch
@@ -1122,15 +1128,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-View — 2/17</summary>
+<details><summary>eventlist-View — 4/17</summary>
 
 - [ ] Link
   - [x] Off
   - [ ] Same Level
   - [x] Content
-- [ ] Relative Position  `⌃⇧R`
+- [x] Relative Position  `⌃⇧R`
 - [ ] Event Position and Length as Time  `⌃⌥R`
-- [ ] Length as Absolute Position  `⌃⇧A`
+- [x] Length as Absolute Position  `⌃⇧A`
 - [ ] SysEx in Hex Format
 - [ ] Locked
 - [ ] Muted
@@ -1425,7 +1431,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Edit — 36/51</summary>
+<details><summary>score-Edit — 40/51</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1435,7 +1441,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
 - [x] Paste Replace  `⇧⌘V`
-- [ ] Paste Multiple  `⌥⇧⌘V`
+- [x] Paste Multiple  `⌥⇧⌘V`
 - [x] Paste at Original Position
 - [x] Delete
 - [x] Repeat
@@ -1450,7 +1456,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] All Following  `⇧F`
   - [x] All Following of Same Pitch  `⌃⇧F`
   - [x] All Inside Locators  `⇧L`
-  - [ ] All Regions and Events
+  - [x] All Regions and Events
   - [ ] Muted Notes  `⇧M`
   - [ ] Overlapped Events  `⇧O`
   - [x] Same-Colored Notes  `⇧C`
@@ -1476,18 +1482,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Note End to Selected Notes (4 Ticks Overlap)
   - [x] Note End to Following Notes (8 Ticks Gap)  `⇧\`
   - [x] Note End to Following Notes (4 Ticks Overlap)
-- [ ] Diatonic Insert
-- [ ] Snap
+- [x] Diatonic Insert
+- [x] Snap
 
 </details>
 
-<details><summary>score-Functions — 29/121</summary>
+<details><summary>score-Functions — 62/121</summary>
 
 - [ ] Quantization
   - [ ] Quantize Events  `Q`
   - [x] Dequantize  `⌥⌘Q`
-  - [ ] Fix displayed Note Positions
-  - [ ] Fix displayed Note Positions and Durations
+  - [x] Fix displayed Note Positions
+  - [x] Fix displayed Note Positions and Durations
 - [ ] Delete MIDI Events
   - [x] Duplicates  `⌥D`
   - [x] Inside Locators
@@ -1497,41 +1503,41 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Note Events
   - [ ] Convert Sustain Pedal to Note Length
   - [x] Set MIDI Channel to Voice Number
-  - [ ] Assign MIDI Channels based on Score Split  `⌃⇧C`
+  - [x] Assign MIDI Channels based on Score Split  `⌃⇧C`
 - [x] Copy MIDI Events…
 - [ ] Note Attributes
   - [ ] Accidentals
-    - [ ] Default Accidental
-    - [ ] Enharmonic Shift: #  `⇧3`
-    - [ ] Enharmonic Shift: b  `⇧B`
-    - [ ] Flats to Sharps
-    - [ ] Sharps to Flats
-    - [ ] Force Accidental
-    - [ ] Hide Accidental
-    - [ ] Guide Accidental
+    - [x] Default Accidental
+    - [x] Enharmonic Shift: #  `⇧3`
+    - [x] Enharmonic Shift: b  `⇧B`
+    - [x] Flats to Sharps
+    - [x] Sharps to Flats
+    - [x] Force Accidental
+    - [x] Hide Accidental
+    - [x] Guide Accidental
   - [ ] Stems
     - [ ] Default
     - [x] Up  `⌃⌥↑`
     - [x] Down  `⌃⌥↓`
     - [ ] Hide
-    - [ ] Stem Position: Default
-    - [ ] Stem Position: Center
-    - [ ] Stem Position: Side
-    - [ ] Stem Position: Automatic
-    - [ ] Stem End: Default Length
-    - [ ] Stem End: Move Up  `⌥⌘↑`
-    - [ ] Stem End: Move Down  `⌥⌘↓`
+    - [x] Stem Position: Default
+    - [x] Stem Position: Center
+    - [x] Stem Position: Side
+    - [x] Stem Position: Automatic
+    - [x] Stem End: Default Length
+    - [x] Stem End: Move Up  `⌥⌘↑`
+    - [x] Stem End: Move Down  `⌥⌘↓`
   - [ ] Beaming
     - [ ] Default  `⌃D`
-    - [ ] Beam Selected  `⌃B`
-    - [ ] Unbeam Selected  `⌃U`
+    - [x] Beam Selected  `⌃B`
+    - [x] Unbeam Selected  `⌃U`
   - [ ] Automatic Slurs
     - [ ] Convert to Manual Slur
-    - [ ] Slur Auto Direction
-    - [ ] Slur Above
-    - [ ] Slur Below
-    - [ ] Slur Last Note
-    - [ ] Slurs for non-contiguous selected notes
+    - [x] Slur Auto Direction
+    - [x] Slur Above
+    - [x] Slur Below
+    - [x] Slur Last Note
+    - [x] Slurs for non-contiguous selected notes
   - [ ] Ties
     - [ ] Default
     - [ ] Above  `⌃⌥⇧↑`
@@ -1547,14 +1553,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Default
     - [ ] Force  `⌃⇧I`
     - [ ] Defeat  `⌃I`
-  - [ ] Independent
-    - [ ] Independent Grace
-    - [ ] Independent
-    - [ ] Not Independent
+  - [x] Independent
+    - [x] Independent Grace
+    - [x] Independent
+    - [x] Not Independent
   - [ ] Voice/Staff Assignment
-    - [ ] Default Staff
-    - [ ] Staff Above Voice
-    - [ ] Staff Below Voice
+    - [x] Default Staff
+    - [x] Staff Above Voice
+    - [x] Staff Below Voice
   - [ ] Colors
     - [ ] Default Color
     - [ ] Pitch Color
@@ -1575,7 +1581,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Color 13
     - [ ] Color 14
     - [ ] Color 15
-  - [ ] Reset All Attributes  `⌃⇧⌫`
+  - [x] Reset All Attributes  `⌃⇧⌫`
 - [ ] Text Attributes
   - [ ] Fonts…
   - [ ] Align
@@ -1607,49 +1613,49 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Layout — 0/15</summary>
+<details><summary>score-Layout — 8/15</summary>
 
-- [ ] Show Staff Styles  `⌃⌥⇧S`
+- [x] Show Staff Styles  `⌃⌥⇧S`
 - [ ] Show Score Sets  `⌃⌥⇧I`
 - [ ] Text Styles…
-- [ ] Global Format…  `⌃⌥⇧F`
-- [ ] Numbers and Names…  `⌃⌥⇧N`
+- [x] Global Format…  `⌃⌥⇧F`
+- [x] Numbers and Names…  `⌃⌥⇧N`
 - [ ] Tablature…  `⌃⌥⇧G`
-- [ ] Chords and Grids…  `⌃⌥⇧C`
-- [ ] Clefs and Signatures…  `⌃⌥⇧L`
+- [x] Chords and Grids…  `⌃⌥⇧C`
+- [x] Clefs and Signatures…  `⌃⌥⇧L`
 - [ ] Extended Layout Parameters…  `⌃⌥⇧X`
-- [ ] MIDI Meaning…  `⌃⌥⇧M`
-- [ ] Colors…  `⌃⌥⇧O`
+- [x] MIDI Meaning…  `⌃⌥⇧M`
+- [x] Colors…  `⌃⌥⇧O`
 - [ ] Chord Grid Library…
 - [ ] Score Settings…
-- [ ] Create Score Set from Selection
+- [x] Create Score Set from Selection
 - [ ] Reset Line Layout
 
 </details>
 
-<details><summary>score-View — 4/38</summary>
+<details><summary>score-View — 17/38</summary>
 
 - [ ] Link
   - [x] Off
   - [ ] Same Level
   - [x] Content
 - [ ] Colors
-  - [ ] Normal
-  - [ ] Show Pitch
-  - [ ] Show Velocity
-  - [ ] Show Voice Assignment
-  - [ ] Force Black&White
+  - [x] Normal
+  - [x] Show Pitch
+  - [x] Show Velocity
+  - [x] Show Voice Assignment
+  - [x] Force Black&White
 - [ ] View Mode
-  - [ ] Linear View
-  - [ ] Wrapped View
-  - [ ] Page View  `⌃P`
+  - [x] Linear View
+  - [x] Wrapped View
+  - [x] Page View  `⌃P`
 - [ ] Page Display Options
   - [ ] Show Margins
   - [ ] Show Pages in Pairs
-  - [ ] Show Page Rulers  `⌃⇧R`
+  - [x] Show Page Rulers  `⌃⇧R`
 - [ ] Show Local Inspector  `⌥⇧I`
 - [ ] Show Region Headers
-- [ ] Go to Page…  `⌃/`
+- [x] Go to Page…  `⌃/`
 - [ ] Duration Bars
   - [x] Off
   - [ ] Selected Notes
@@ -1659,14 +1665,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Dragged Objects
   - [ ] Selected Objects
   - [ ] All Objects
-- [ ] Explode Folders  `⌃F`
-- [ ] Explode Polyphony  `⌃X`
+- [x] Explode Folders  `⌃F`
+- [x] Explode Polyphony  `⌃X`
 - [ ] Scroll in Play  `⌃``
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show Global Tracks
 - [ ] Configure Global Tracks…
 - [ ] Global Track Protect Buttons
-- [ ] Show Instrument Names  `⌃⇧N`
+- [x] Show Instrument Names  `⌃⇧N`
 
 </details>
 
@@ -1701,7 +1707,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-Edit — 4/17</summary>
+<details><summary>stepseq-Edit — 13/17</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1711,44 +1717,44 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Copy  `⌘C`
 - [x] Paste  `⌘V`
 - [x] Delete
-- [ ] Repeat Step  `⌘R`
-- [ ] Copy Row  `⌃C`
-- [ ] Paste Row  `⌃V`
-- [ ] Paste Steps  `⌥⇧V`
-- [ ] Paste Row Settings  `⌃⌥⇧V`
-- [ ] Paste to New Row  `⌃⇧V`
-- [ ] Duplicate Row
-- [ ] Delete Row
-- [ ] Delete Unused Rows
+- [x] Repeat Step  `⌘R`
+- [x] Copy Row  `⌃C`
+- [x] Paste Row  `⌃V`
+- [x] Paste Steps  `⌥⇧V`
+- [x] Paste Row Settings  `⌃⌥⇧V`
+- [x] Paste to New Row  `⌃⇧V`
+- [x] Duplicate Row
+- [x] Delete Row
+- [x] Delete Unused Rows
 
 </details>
 
-<details><summary>stepseq-Functions — 1/17</summary>
+<details><summary>stepseq-Functions — 13/17</summary>
 
 - [ ] Live Record Options
   - [ ] Velocity
   - [ ] Note Length
   - [x] Quantize
   - [ ] MPE
-- [ ] Transpose +1 Semitone  `⌥↑`
-- [ ] Transpose -1 Semitone  `⌥↓`
-- [ ] Transpose +1 Octave  `⌥⇧↑`
-- [ ] Transpose -1 Octave  `⌥⇧↓`
-- [ ] Transpose to Project Key
-- [ ] Clear Step
-- [ ] Clear Row
-- [ ] Clear Pattern
-- [ ] Randomize Current Edit Mode for Selected Rows…
-- [ ] Randomize Current Edit Mode for Pattern…
-- [ ] Store as Default Pattern Template  `⌃⌥⌘D`
-- [ ] Revert to Default Pattern Template  `⌃⌥⇧D`
+- [x] Transpose +1 Semitone  `⌥↑`
+- [x] Transpose -1 Semitone  `⌥↓`
+- [x] Transpose +1 Octave  `⌥⇧↑`
+- [x] Transpose -1 Octave  `⌥⇧↓`
+- [x] Transpose to Project Key
+- [x] Clear Step
+- [x] Clear Row
+- [x] Clear Pattern
+- [x] Randomize Current Edit Mode for Selected Rows…
+- [x] Randomize Current Edit Mode for Pattern…
+- [x] Store as Default Pattern Template  `⌃⌥⌘D`
+- [x] Revert to Default Pattern Template  `⌃⌥⇧D`
 
 </details>
 
-<details><summary>stepseq-View — 0/18</summary>
+<details><summary>stepseq-View — 3/18</summary>
 
 - [ ] Zoom Focused Row  `⌃Z`
-- [ ] Pattern Browser  `⌥⇧B`
+- [x] Pattern Browser  `⌥⇧B`
 - [ ] Show Local Inspector  `⌥⇧I`
 - [ ] Display Edit Mode Values
   - [ ] Only when Editing Values
@@ -1757,8 +1763,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show Row Colors
 - [ ] Revert to Default Row Colors
 - [ ] Set Step Color
-  - [ ] By Region
-  - [ ] By Row
+  - [x] By Region
+  - [x] By Row
 - [ ] Sort Rows
   - [ ] By Type
   - [ ] By Type and Note
@@ -2007,9 +2013,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-more — 1/45</summary>
+<details><summary>tracks-more — 2/45</summary>
 
-- [ ] Snap
+- [x] Snap
   - [ ] Snap to Grid  `⌘G`
   - [ ] Smart
   - [ ] Bar
@@ -2087,7 +2093,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1201 of 2575
+## Right-click menus: 1210 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4453,15 +4459,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-background — 4/8</summary>
+<details><summary>score-background — 8/8</summary>
 
-- [ ] Linear View
-- [ ] Wrapped View
-- [ ] Page View  `⌃P`
+- [x] Linear View
+- [x] Wrapped View
+- [x] Page View  `⌃P`
 - [x] Select All  `⌘A`
 - [x] Select All Inside Locators  `⇧L`
 - [x] Paste  `⌘V`
-- [ ] Paste Multiple  `⌥⇧⌘V`
+- [x] Paste Multiple  `⌥⇧⌘V`
 - [x] Paste at Original Position
 
 </details>
@@ -4502,22 +4508,22 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>stepseq-row-header — 4/10</summary>
+<details><summary>stepseq-row-header — 8/10</summary>
 
 - [x] Copy  `⌃C`
-- [ ] Paste Row  `⌃V`
-- [ ] Paste Steps  `⌥⇧V`
-- [ ] Paste Row Settings  `⌃⌥⇧V`
+- [x] Paste Row  `⌃V`
+- [x] Paste Steps  `⌥⇧V`
+- [x] Paste Row Settings  `⌃⌥⇧V`
 - [x] Rename
 - [x] Duplicate  `⌘D`
 - [ ] Randomize On/Off…
 - [ ] Clear On/Off
-- [ ] Clear Row  `⌃⌘⌫`
+- [x] Clear Row  `⌃⌘⌫`
 - [x] Delete  `⌘⌫`
 
 </details>
 
-<details><summary>stepseq-step-cell — 4/7</summary>
+<details><summary>stepseq-step-cell — 5/7</summary>
 
 - [x] Cut  `⌘X`
 - [x] Copy  `⌘C`
@@ -4525,7 +4531,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Repeat  `⌘R`
 - [ ] Randomize On/Off
 - [ ] Clear On/Off
-- [ ] Clear Step  `⌃⌫`
+- [x] Clear Step  `⌃⌫`
 
 </details>
 
@@ -4910,7 +4916,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 571 of 2207
+## Key commands: 867 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4919,7 +4925,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 145/679</summary>
+<details><summary>Global Commands — 149/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5163,7 +5169,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Score Editor…  `⌘5`
 - [x] Open Step Sequencer…  `⌘3`
 - [x] Open Transform…  `⌘9`
-- [ ] Open Step Editor…
+- [x] Open Step Editor…
 - [x] Open Piano Roll…  `⌘4`
 - [ ] Open Transport Float…
 - [ ] Open Environment…  `⌘0`
@@ -5178,7 +5184,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Graphic Keyboard
 - [x] Show/Hide Musical Typing
 - [ ] Show/Hide Event Float  `⌥E`
-- [ ] Show/Hide Event List
+- [x] Show/Hide Event List
 - [ ] Show/Hide Main Window
 - [x] Show/Hide Mixer  `X`
 - [x] Show/Hide Smart Controls  `Y`
@@ -5190,11 +5196,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Text Style Window
 - [x] Show/Hide Step Sequencer
 - [x] Show/Hide Transform
-- [ ] Show/Hide Step Editor
+- [x] Show/Hide Step Editor
 - [x] Show/Hide Piano Roll  `P`
 - [ ] Show/Hide Transport Float
 - [ ] Show/Hide Environment
-- [ ] Show/Hide Step Input Keyboard  `⌥⌘K`
+- [x] Show/Hide Step Input Keyboard  `⌥⌘K`
 - [ ] Show/Hide Project Audio
 - [x] Show/Hide Browser  `B`
 - [ ] Search in Browser  `⌘F`
@@ -6669,283 +6675,283 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Score Editor — 0/139</summary>
+<details><summary>Score Editor — 133/139</summary>
 
-- [ ] Linear Axis View
-- [ ] Wrapped View
-- [ ] Page View  `⌃P`
-- [ ] Change View
-- [ ] Explode Folders  `⌃F`
-- [ ] Explode Polyphony  `⌃X`
-- [ ] Show/Hide Instrument Names  `⌃⇧N`
-- [ ] Show/Hide Page Rulers  `⌃⇧R`
-- [ ] Color View: individual
-- [ ] Color View: Show Pitch
-- [ ] Color View: Show Velocity
-- [ ] Color View: Show Polyphony
-- [ ] Color View: Force Black and White
-- [ ] Toggle Duration Bar Display
-- [ ] Toggle Guide Line Display
-- [ ] Go to Page…  `⌃/`
-- [ ] Paste Multiple  `⌥⇧⌘V`
-- [ ] Paste Multiple at original Position
-- [ ] Diatonic Insert
-- [ ] Snap on/off
-- [ ] Next Staff  `↓`
-- [ ] Previous Staff  `↑`
-- [ ] Select All Regions and Events
-- [ ] Default Syncopation
-- [ ] Force Syncopation  `⌃⇧Y`
-- [ ] Defeat Syncopation  `⌃Y`
-- [ ] Default Interpretation
-- [ ] Force Interpretation  `⌃⇧I`
-- [ ] Defeat Interpretation  `⌃I`
-- [ ] Fix Displayed Note Positions
-- [ ] Fix Displayed Note Positions and Durations
-- [ ] Stems: default
-- [ ] Stems: up  `⌃⌥↑`
-- [ ] Stems: down  `⌃⌥↓`
-- [ ] Stems: hide
-- [ ] Stem Position: Default
-- [ ] Stem Position: Center
-- [ ] Stem Position: Automatic
-- [ ] Stem Position: Side
-- [ ] Stem End: Default Length
-- [ ] Stem End: Move Up  `⌥⌘↑`
-- [ ] Stem End: Move Down  `⌥⌘↓`
-- [ ] Voice/Staff Assignment: default
-- [ ] Voice/Staff Assignment: staff above voice
-- [ ] Voice/Staff Assignment: staff below voice
-- [ ] Ties: default
-- [ ] Ties: up  `⌃⌥⇧↑`
-- [ ] Ties: down  `⌃⌥⇧↓`
-- [ ] Beam Selected Notes  `⌃B`
-- [ ] Unbeam Selected Notes  `⌃U`
-- [ ] Default Beams  `⌃D`
-- [ ] Not Independent
-- [ ] Independent
-- [ ] Independent Grace
-- [ ] Default Accidentals
-- [ ] Enharmonic Shift: #  `⇧3`
-- [ ] Enharmonic Shift: b  `⇧B`
-- [ ] Flats to Sharps
-- [ ] Sharps to Flats
-- [ ] Force Accidental
-- [ ] Hide Accidental
-- [ ] Guide Accidental
-- [ ] Force Accidental (only flats & sharps)
-- [ ] Reset Note Attributes  `⌃⇧⌫`
+- [x] Linear Axis View
+- [x] Wrapped View
+- [x] Page View  `⌃P`
+- [x] Change View
+- [x] Explode Folders  `⌃F`
+- [x] Explode Polyphony  `⌃X`
+- [x] Show/Hide Instrument Names  `⌃⇧N`
+- [x] Show/Hide Page Rulers  `⌃⇧R`
+- [x] Color View: individual
+- [x] Color View: Show Pitch
+- [x] Color View: Show Velocity
+- [x] Color View: Show Polyphony
+- [x] Color View: Force Black and White
+- [x] Toggle Duration Bar Display
+- [x] Toggle Guide Line Display
+- [x] Go to Page…  `⌃/`
+- [x] Paste Multiple  `⌥⇧⌘V`
+- [x] Paste Multiple at original Position
+- [x] Diatonic Insert
+- [x] Snap on/off
+- [x] Next Staff  `↓`
+- [x] Previous Staff  `↑`
+- [x] Select All Regions and Events
+- [x] Default Syncopation
+- [x] Force Syncopation  `⌃⇧Y`
+- [x] Defeat Syncopation  `⌃Y`
+- [x] Default Interpretation
+- [x] Force Interpretation  `⌃⇧I`
+- [x] Defeat Interpretation  `⌃I`
+- [x] Fix Displayed Note Positions
+- [x] Fix Displayed Note Positions and Durations
+- [x] Stems: default
+- [x] Stems: up  `⌃⌥↑`
+- [x] Stems: down  `⌃⌥↓`
+- [x] Stems: hide
+- [x] Stem Position: Default
+- [x] Stem Position: Center
+- [x] Stem Position: Automatic
+- [x] Stem Position: Side
+- [x] Stem End: Default Length
+- [x] Stem End: Move Up  `⌥⌘↑`
+- [x] Stem End: Move Down  `⌥⌘↓`
+- [x] Voice/Staff Assignment: default
+- [x] Voice/Staff Assignment: staff above voice
+- [x] Voice/Staff Assignment: staff below voice
+- [x] Ties: default
+- [x] Ties: up  `⌃⌥⇧↑`
+- [x] Ties: down  `⌃⌥⇧↓`
+- [x] Beam Selected Notes  `⌃B`
+- [x] Unbeam Selected Notes  `⌃U`
+- [x] Default Beams  `⌃D`
+- [x] Not Independent
+- [x] Independent
+- [x] Independent Grace
+- [x] Default Accidentals
+- [x] Enharmonic Shift: #  `⇧3`
+- [x] Enharmonic Shift: b  `⇧B`
+- [x] Flats to Sharps
+- [x] Sharps to Flats
+- [x] Force Accidental
+- [x] Hide Accidental
+- [x] Guide Accidental
+- [x] Force Accidental (only flats & sharps)
+- [x] Reset Note Attributes  `⌃⇧⌫`
 - [ ] Reset Line Layout
 - [ ] Align Object Positions Vertically
 - [ ] Align Object Positions Horizontally
 - [ ] Align Object Positions
-- [ ] Assign MIDI Channels based on Score Split  `⌃⇧C`
-- [ ] Nudge Position Up  `⌃⌥⌘↑`
-- [ ] Nudge Position Down  `⌃⌥⌘↓`
-- [ ] Nudge Position Left  `⌃⌥⌘←`
-- [ ] Nudge Position Right  `⌃⌥⌘→`
-- [ ] Settings: Global Format  `⌃⌥⇧F`
-- [ ] Settings: Numbers and Names  `⌃⌥⇧N`
+- [x] Assign MIDI Channels based on Score Split  `⌃⇧C`
+- [x] Nudge Position Up  `⌃⌥⌘↑`
+- [x] Nudge Position Down  `⌃⌥⌘↓`
+- [x] Nudge Position Left  `⌃⌥⌘←`
+- [x] Nudge Position Right  `⌃⌥⌘→`
+- [x] Settings: Global Format  `⌃⌥⇧F`
+- [x] Settings: Numbers and Names  `⌃⌥⇧N`
 - [ ] Settings: Guitar Tablature  `⌃⌥⇧G`
-- [ ] Settings: Chords and Grids  `⌃⌥⇧C`
-- [ ] Settings: Clefs and Signatures  `⌃⌥⇧L`
+- [x] Settings: Chords and Grids  `⌃⌥⇧C`
+- [x] Settings: Clefs and Signatures  `⌃⌥⇧L`
 - [ ] Settings: Extended Layout  `⌃⌥⇧X`
-- [ ] Settings: MIDI Meaning  `⌃⌥⇧M`
-- [ ] Settings: Score Colors  `⌃⌥⇧O`
-- [ ] Create Score Set from Selection
-- [ ] Part Box: 1/1 Note
-- [ ] Part Box: 1/2 Note
-- [ ] Part Box: 1/4 Note
-- [ ] Part Box: 1/8 Note
-- [ ] Part Box: 1/16 Note
-- [ ] Part Box: 1/32 Note
-- [ ] Next Part Box Symbol
-- [ ] Previous Part Box Symbol
-- [ ] Next Part Box Group
-- [ ] Previous Part Box Group
-- [ ] Attach Symbol: Fermata Up
-- [ ] Attach Symbol: Fermata Down
-- [ ] Attach Symbol: Staccato
-- [ ] Attach Symbol: Staccatissimo
-- [ ] Attach Symbol: Accent
-- [ ] Attach Symbol: Strong Accent
-- [ ] Attach Symbol: Long Accent
-- [ ] Attach Symbol: Tenuto
-- [ ] Attach Symbol: Up-Bow
-- [ ] Attach Symbol: Down-Bow
-- [ ] Attach Symbol: Flageolet
-- [ ] Attach Symbol: Pizzicato
-- [ ] Attach Symbol: Left Hand
-- [ ] Attach Symbol: Right Hand
-- [ ] Attach Symbol: Soft
-- [ ] Attach Symbol: Heavy
-- [ ] Attach Symbol: Jazz 1
-- [ ] Attach Symbol: Jazz 2
-- [ ] Attach Symbol: Jazz 3
-- [ ] Attach Symbol: Jazz 4
-- [ ] Attach Symbol: Jazz 5
-- [ ] Attach Symbol: Jazz 6
-- [ ] Insert: Slur Up
-- [ ] Insert: Slur Down
-- [ ] Insert: Crescendo  `⌃⇧,`
-- [ ] Insert: Decrescendo  `⌃⇧.`
-- [ ] Clear main finger  `⌃⌥⇧⌫`
-- [ ] Set main finger 1  `⌃⌥⇧1`
-- [ ] Set main finger 2  `⌃⌥⇧2`
-- [ ] Set main finger 3  `⌃⌥⇧3`
-- [ ] Set main finger 4  `⌃⌥⇧4`
-- [ ] Set main finger 5  `⌃⌥⇧5`
-- [ ] Clear pick finger
-- [ ] Set pick finger P
-- [ ] Set pick finger I
-- [ ] Set pick finger M
-- [ ] Set pick finger A
-- [ ] Set pick finger C
-- [ ] Convert Auto Slur
-- [ ] Reset Auto Slur
-- [ ] Slur Auto Direction
-- [ ] Auto Slur Above
-- [ ] Auto Slur Below
-- [ ] Slur Last Note
-- [ ] Slurs for non-contiguous selected notes
-- [ ] Duplicate Staff Style
-- [ ] Open Staff Style Window
+- [x] Settings: MIDI Meaning  `⌃⌥⇧M`
+- [x] Settings: Score Colors  `⌃⌥⇧O`
+- [x] Create Score Set from Selection
+- [x] Part Box: 1/1 Note
+- [x] Part Box: 1/2 Note
+- [x] Part Box: 1/4 Note
+- [x] Part Box: 1/8 Note
+- [x] Part Box: 1/16 Note
+- [x] Part Box: 1/32 Note
+- [x] Next Part Box Symbol
+- [x] Previous Part Box Symbol
+- [x] Next Part Box Group
+- [x] Previous Part Box Group
+- [x] Attach Symbol: Fermata Up
+- [x] Attach Symbol: Fermata Down
+- [x] Attach Symbol: Staccato
+- [x] Attach Symbol: Staccatissimo
+- [x] Attach Symbol: Accent
+- [x] Attach Symbol: Strong Accent
+- [x] Attach Symbol: Long Accent
+- [x] Attach Symbol: Tenuto
+- [x] Attach Symbol: Up-Bow
+- [x] Attach Symbol: Down-Bow
+- [x] Attach Symbol: Flageolet
+- [x] Attach Symbol: Pizzicato
+- [x] Attach Symbol: Left Hand
+- [x] Attach Symbol: Right Hand
+- [x] Attach Symbol: Soft
+- [x] Attach Symbol: Heavy
+- [x] Attach Symbol: Jazz 1
+- [x] Attach Symbol: Jazz 2
+- [x] Attach Symbol: Jazz 3
+- [x] Attach Symbol: Jazz 4
+- [x] Attach Symbol: Jazz 5
+- [x] Attach Symbol: Jazz 6
+- [x] Insert: Slur Up
+- [x] Insert: Slur Down
+- [x] Insert: Crescendo  `⌃⇧,`
+- [x] Insert: Decrescendo  `⌃⇧.`
+- [x] Clear main finger  `⌃⌥⇧⌫`
+- [x] Set main finger 1  `⌃⌥⇧1`
+- [x] Set main finger 2  `⌃⌥⇧2`
+- [x] Set main finger 3  `⌃⌥⇧3`
+- [x] Set main finger 4  `⌃⌥⇧4`
+- [x] Set main finger 5  `⌃⌥⇧5`
+- [x] Clear pick finger
+- [x] Set pick finger P
+- [x] Set pick finger I
+- [x] Set pick finger M
+- [x] Set pick finger A
+- [x] Set pick finger C
+- [x] Convert Auto Slur
+- [x] Reset Auto Slur
+- [x] Slur Auto Direction
+- [x] Auto Slur Above
+- [x] Auto Slur Below
+- [x] Slur Last Note
+- [x] Slurs for non-contiguous selected notes
+- [x] Duplicate Staff Style
+- [x] Open Staff Style Window
 
 </details>
 
-<details><summary>Event Editor — 0/9</summary>
+<details><summary>Event Editor — 8/9</summary>
 
-- [ ] Select Previous Event  `↑`
-- [ ] Select Next Event  `↓`
-- [ ] Length as Absolute Position  `⌃⇧A`
+- [x] Select Previous Event  `↑`
+- [x] Select Next Event  `↓`
+- [x] Length as Absolute Position  `⌃⇧A`
 - [ ] Articulation  `⌃⇧D`
-- [ ] Relative Position  `⌃⇧R`
-- [ ] Numerical Edit of Event Position
-- [ ] Duplicate Event and Numerical Edit  `⌘D`
-- [ ] Copy Value to All Following Events  `⇧V`
-- [ ] Create Event
+- [x] Relative Position  `⌃⇧R`
+- [x] Numerical Edit of Event Position
+- [x] Duplicate Event and Numerical Edit  `⌘D`
+- [x] Copy Value to All Following Events  `⇧V`
+- [x] Create Event
 
 </details>
 
-<details><summary>Step Editor — 0/16</summary>
+<details><summary>Step Editor — 16/16</summary>
 
-- [ ] Create Lane Set
-- [ ] Create Lane Set for GM Drums
-- [ ] Create Lane Set for Current Events
-- [ ] Clear Lane Set
-- [ ] Create Lane  `⌥⌘N`
-- [ ] Delete Lane  `⌘⌫`
-- [ ] Create Multiple Lanes…
-- [ ] Convert Lane…
-- [ ] Copy Lane  `⌃C`
-- [ ] Paste Lane  `⌃V`
-- [ ] Select All Lanes
-- [ ] Toggle Fix Value
-- [ ] Toggle Auto Define  `⌃A`
-- [ ] Select Next Lane  `↓`
-- [ ] Select Previous Lane  `↑`
-- [ ] Delete Lane Set
+- [x] Create Lane Set
+- [x] Create Lane Set for GM Drums
+- [x] Create Lane Set for Current Events
+- [x] Clear Lane Set
+- [x] Create Lane  `⌥⌘N`
+- [x] Delete Lane  `⌘⌫`
+- [x] Create Multiple Lanes…
+- [x] Convert Lane…
+- [x] Copy Lane  `⌃C`
+- [x] Paste Lane  `⌃V`
+- [x] Select All Lanes
+- [x] Toggle Fix Value
+- [x] Toggle Auto Define  `⌃A`
+- [x] Select Next Lane  `↓`
+- [x] Select Previous Lane  `↑`
+- [x] Delete Lane Set
 
 </details>
 
-<details><summary>Step Sequencer — 0/96</summary>
+<details><summary>Step Sequencer — 93/96</summary>
 
-- [ ] Show/Hide Pattern Browser  `⌥⇧B`
-- [ ] Repeat Step  `⌘R`
-- [ ] Copy Row  `⌃C`
-- [ ] Paste Row  `⌃V`
-- [ ] Paste Steps  `⌥⇧V`
-- [ ] Paste Row Settings  `⌃⌥⇧V`
-- [ ] Paste to New Row  `⌃⇧V`
-- [ ] Duplicate Row with Next Assignment  `⌘D`
-- [ ] Delete Row  `⌘⌫`
-- [ ] Delete Unused Rows  `⇧⌘⌫`
-- [ ] Clear Step  `⌃⌫`
-- [ ] Clear Row  `⌃⌘⌫`
-- [ ] Clear Pattern  `⌃⇧⌘⌫`
-- [ ] Learn (Add)  `⌥⌘L`
-- [ ] Learn (Assign)
-- [ ] Store as Default Pattern Template  `⌃⌥⌘D`
-- [ ] Revert to Default Pattern Template  `⌃⌥⇧D`
-- [ ] Transpose +1 Semitone  `⌥↑`
-- [ ] Transpose -1 Semitone  `⌥↓`
-- [ ] Transpose +1 Octave  `⌥⇧↑`
-- [ ] Transpose -1 Octave  `⌥⇧↓`
-- [ ] Transpose to Project Key
-- [ ] Clear Current Edit Mode Values for Row  `⌥⌘⌫`
-- [ ] Clear Current Edit Mode Values for All Rows  `⌥⇧⌘⌫`
-- [ ] Clear Current Edit Mode Values for All Note Rows
+- [x] Show/Hide Pattern Browser  `⌥⇧B`
+- [x] Repeat Step  `⌘R`
+- [x] Copy Row  `⌃C`
+- [x] Paste Row  `⌃V`
+- [x] Paste Steps  `⌥⇧V`
+- [x] Paste Row Settings  `⌃⌥⇧V`
+- [x] Paste to New Row  `⌃⇧V`
+- [x] Duplicate Row with Next Assignment  `⌘D`
+- [x] Delete Row  `⌘⌫`
+- [x] Delete Unused Rows  `⇧⌘⌫`
+- [x] Clear Step  `⌃⌫`
+- [x] Clear Row  `⌃⌘⌫`
+- [x] Clear Pattern  `⌃⇧⌘⌫`
+- [x] Learn (Add)  `⌥⌘L`
+- [x] Learn (Assign)
+- [x] Store as Default Pattern Template  `⌃⌥⌘D`
+- [x] Revert to Default Pattern Template  `⌃⌥⇧D`
+- [x] Transpose +1 Semitone  `⌥↑`
+- [x] Transpose -1 Semitone  `⌥↓`
+- [x] Transpose +1 Octave  `⌥⇧↑`
+- [x] Transpose -1 Octave  `⌥⇧↓`
+- [x] Transpose to Project Key
+- [x] Clear Current Edit Mode Values for Row  `⌥⌘⌫`
+- [x] Clear Current Edit Mode Values for All Rows  `⌥⇧⌘⌫`
+- [x] Clear Current Edit Mode Values for All Note Rows
 - [ ] Clear Current Edit Mode Values for All Automation Rows
-- [ ] Randomize Current Edit Mode Values for Selected Rows  `⇧⌘R`
-- [ ] Randomize Current Edit Mode Values for All Rows  `⌥⌘R`
-- [ ] Randomize Current Edit Mode Values for All Note Rows
+- [x] Randomize Current Edit Mode Values for Selected Rows  `⇧⌘R`
+- [x] Randomize Current Edit Mode Values for All Rows  `⌥⌘R`
+- [x] Randomize Current Edit Mode Values for All Note Rows
 - [ ] Randomize Current Edit Mode Values for All Automation Rows
-- [ ] Randomize Current Edit Mode Values for Selected Steps  `⌥⇧⌘R`
-- [ ] Set Step Color by Region Color
-- [ ] Set Step Color by Row Color
-- [ ] Select Step Above  `↑`
-- [ ] Select Step Below  `↓`
-- [ ] Select Previous Step  `←`
-- [ ] Select Next Step  `→`
-- [ ] Extend Selection Up  `⇧↑`
-- [ ] Extend Selection Down  `⇧↓`
-- [ ] Extend Selection Left  `⇧←`
-- [ ] Extend Selection Right  `⇧→`
-- [ ] Live Record  `⇧R`
-- [ ] Mono Mode  `⌃⇧⌘M`
-- [ ] Rename Row  `⇧↩`
-- [ ] Select Next Pattern Page  `⌥``
-- [ ] Save Pattern  `⇧⌘P`
-- [ ] Save Template  `⇧⌘T`
-- [ ] Set Pattern Playback Mode to Forward  `⌃⌥]`
-- [ ] Set Pattern Playback Mode to Reverse  `⌃⌥[`
-- [ ] Set Pattern Playback Mode to Ping Pong  `⌃⌥P`
-- [ ] Set Pattern Playback Mode to Shuffle  `⌃⌥\`
-- [ ] Set Pattern Playback Mode to Pendulum  `⌃⌥Y`
-- [ ] Set Pattern Playback Mode to Wander  `⌃⌥U`
-- [ ] Set Pattern Playback Mode to Random  `⌃⌥J`
-- [ ] Rotate Pattern Right  `⌃⌥⌘→`
-- [ ] Rotate Pattern Left  `⌃⌥⌘←`
-- [ ] Solo Row  `⌃⇧S`
-- [ ] Mute Row  `⌃⇧M`
-- [ ] Set Row Playback Mode to Forward  `⌃]`
-- [ ] Set Row Playback Mode to Reverse  `⌃[`
-- [ ] Set Row Playback Mode to Ping Pong  `⌃P`
-- [ ] Set Row Playback Mode to Shuffle  `⌃\`
-- [ ] Set Row Playback Mode to Pendulum  `⌃Y`
-- [ ] Set Row Playback Mode to Wander  `⌃U`
-- [ ] Set Row Playback Mode to Random  `⌃J`
-- [ ] Rotate Row Right  `⌥⌘→`
-- [ ] Rotate Row Left  `⌥⌘←`
-- [ ] Rotate Values for Current Edit Mode Right  `⌥⇧→`
-- [ ] Rotate Values for Current Edit Mode Left  `⌥⇧←`
-- [ ] Increment Loop Start for Row  `⌃⌥=`
-- [ ] Decrement Loop Start for Row  `⌃⌥-`
-- [ ] Increment Loop End for Row  `⌥⌘=`
-- [ ] Decrement Loop End for Row  `⌥⌘-`
-- [ ] Show Subrows for Row  `⌃⌘→`
-- [ ] Hide Subrows for Row  `⌃⌘←`
-- [ ] Show Subrows for All Rows  `⌃⇧⌘→`
-- [ ] Hide Subrows for All Rows  `⌃⇧⌘←`
-- [ ] Toggle Selected Step  `'`
-- [ ] Set Global Edit Mode to Steps On/Off  `⌃⌥S`
-- [ ] Set Global Edit Mode to Velocity/Value  `⌃⌥V`
-- [ ] Set Global Edit Mode to Gate  `⌃⌥G`
-- [ ] Set Global Edit Mode to Tie  `⌃⌥T`
-- [ ] Set Global Edit Mode to Note  `⌃⌥N`
-- [ ] Set Global Edit Mode to Octave  `⌃⌥O`
-- [ ] Set Global Edit Mode to Loop Start/End  `⌃⌥L`
-- [ ] Set Global Edit Mode to Note Repeat  `⌃⌥R`
-- [ ] Set Global Edit Mode to Chance  `⌃⌥C`
-- [ ] Set Global Edit Mode to Start Offset  `⌃⌥F`
+- [x] Randomize Current Edit Mode Values for Selected Steps  `⌥⇧⌘R`
+- [x] Set Step Color by Region Color
+- [x] Set Step Color by Row Color
+- [x] Select Step Above  `↑`
+- [x] Select Step Below  `↓`
+- [x] Select Previous Step  `←`
+- [x] Select Next Step  `→`
+- [x] Extend Selection Up  `⇧↑`
+- [x] Extend Selection Down  `⇧↓`
+- [x] Extend Selection Left  `⇧←`
+- [x] Extend Selection Right  `⇧→`
+- [x] Live Record  `⇧R`
+- [x] Mono Mode  `⌃⇧⌘M`
+- [x] Rename Row  `⇧↩`
+- [x] Select Next Pattern Page  `⌥``
+- [x] Save Pattern  `⇧⌘P`
+- [x] Save Template  `⇧⌘T`
+- [x] Set Pattern Playback Mode to Forward  `⌃⌥]`
+- [x] Set Pattern Playback Mode to Reverse  `⌃⌥[`
+- [x] Set Pattern Playback Mode to Ping Pong  `⌃⌥P`
+- [x] Set Pattern Playback Mode to Shuffle  `⌃⌥\`
+- [x] Set Pattern Playback Mode to Pendulum  `⌃⌥Y`
+- [x] Set Pattern Playback Mode to Wander  `⌃⌥U`
+- [x] Set Pattern Playback Mode to Random  `⌃⌥J`
+- [x] Rotate Pattern Right  `⌃⌥⌘→`
+- [x] Rotate Pattern Left  `⌃⌥⌘←`
+- [x] Solo Row  `⌃⇧S`
+- [x] Mute Row  `⌃⇧M`
+- [x] Set Row Playback Mode to Forward  `⌃]`
+- [x] Set Row Playback Mode to Reverse  `⌃[`
+- [x] Set Row Playback Mode to Ping Pong  `⌃P`
+- [x] Set Row Playback Mode to Shuffle  `⌃\`
+- [x] Set Row Playback Mode to Pendulum  `⌃Y`
+- [x] Set Row Playback Mode to Wander  `⌃U`
+- [x] Set Row Playback Mode to Random  `⌃J`
+- [x] Rotate Row Right  `⌥⌘→`
+- [x] Rotate Row Left  `⌥⌘←`
+- [x] Rotate Values for Current Edit Mode Right  `⌥⇧→`
+- [x] Rotate Values for Current Edit Mode Left  `⌥⇧←`
+- [x] Increment Loop Start for Row  `⌃⌥=`
+- [x] Decrement Loop Start for Row  `⌃⌥-`
+- [x] Increment Loop End for Row  `⌥⌘=`
+- [x] Decrement Loop End for Row  `⌥⌘-`
+- [x] Show Subrows for Row  `⌃⌘→`
+- [x] Hide Subrows for Row  `⌃⌘←`
+- [x] Show Subrows for All Rows  `⌃⇧⌘→`
+- [x] Hide Subrows for All Rows  `⌃⇧⌘←`
+- [x] Toggle Selected Step  `'`
+- [x] Set Global Edit Mode to Steps On/Off  `⌃⌥S`
+- [x] Set Global Edit Mode to Velocity/Value  `⌃⌥V`
+- [x] Set Global Edit Mode to Gate  `⌃⌥G`
+- [x] Set Global Edit Mode to Tie  `⌃⌥T`
+- [x] Set Global Edit Mode to Note  `⌃⌥N`
+- [x] Set Global Edit Mode to Octave  `⌃⌥O`
+- [x] Set Global Edit Mode to Loop Start/End  `⌃⌥L`
+- [x] Set Global Edit Mode to Note Repeat  `⌃⌥R`
+- [x] Set Global Edit Mode to Chance  `⌃⌥C`
+- [x] Set Global Edit Mode to Start Offset  `⌃⌥F`
 - [ ] Set Global Edit Mode to Step Rate  `⌃⌥A`
-- [ ] Set Global Edit Mode to Skip  `⌃⌥K`
-- [ ] Increment Current Edit Mode Values for Row
-- [ ] Decrement Current Edit Mode Values for Row
-- [ ] Increment Pattern Step Rate  `⌃⇧=`
-- [ ] Decrement Pattern Step Rate  `⌃⇧-`
-- [ ] Increment Row Step Rate  `⌃=`
-- [ ] Decrement Row Step Rate  `⌃-`
+- [x] Set Global Edit Mode to Skip  `⌃⌥K`
+- [x] Increment Current Edit Mode Values for Row
+- [x] Decrement Current Edit Mode Values for Row
+- [x] Increment Pattern Step Rate  `⌃⇧=`
+- [x] Decrement Pattern Step Rate  `⌃⇧-`
+- [x] Increment Row Step Rate  `⌃=`
+- [x] Decrement Row Step Rate  `⌃-`
 
 </details>
 
@@ -7154,38 +7160,38 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Step Input Keyboard — 7/49</summary>
+<details><summary>Step Input Keyboard — 49/49</summary>
 
-- [ ] Note “C”  `A`
-- [ ] Note “C#”  `W`
-- [ ] Note “D”  `S`
-- [ ] Note “D#”  `E`
-- [ ] Note “E”  `D`
-- [ ] Note “F”  `F`
-- [ ] Note “F#”  `T`
-- [ ] Note “G”  `G`
-- [ ] Note “G#”  `Y`
-- [ ] Note “A”  `H`
-- [ ] Note “A#”  `U`
-- [ ] Note “B”  `J`
-- [ ] Rest  `˽`
-- [ ] Next note will be sharp  `⇧3`
-- [ ] Next note will be flat  `⇧B`
-- [ ] Chord Mode  ```
-- [ ] Delete - Step Input  `⌃⌫`
-- [ ] Step Backwards  `←`
-- [ ] Step Forward  `→`
-- [ ] Octave 0
-- [ ] Octave 1
-- [ ] Octave 2
-- [ ] Octave 3
-- [ ] Octave 4
-- [ ] Octave 5
-- [ ] Octave 6
-- [ ] Octave - 2  `⇧Z`
-- [ ] Octave - 1  `Z`
-- [ ] Octave + 1  `X`
-- [ ] Octave + 2  `⇧X`
+- [x] Note “C”  `A`
+- [x] Note “C#”  `W`
+- [x] Note “D”  `S`
+- [x] Note “D#”  `E`
+- [x] Note “E”  `D`
+- [x] Note “F”  `F`
+- [x] Note “F#”  `T`
+- [x] Note “G”  `G`
+- [x] Note “G#”  `Y`
+- [x] Note “A”  `H`
+- [x] Note “A#”  `U`
+- [x] Note “B”  `J`
+- [x] Rest  `˽`
+- [x] Next note will be sharp  `⇧3`
+- [x] Next note will be flat  `⇧B`
+- [x] Chord Mode  ```
+- [x] Delete - Step Input  `⌃⌫`
+- [x] Step Backwards  `←`
+- [x] Step Forward  `→`
+- [x] Octave 0
+- [x] Octave 1
+- [x] Octave 2
+- [x] Octave 3
+- [x] Octave 4
+- [x] Octave 5
+- [x] Octave 6
+- [x] Octave - 2  `⇧Z`
+- [x] Octave - 1  `Z`
+- [x] Octave + 1  `X`
+- [x] Octave + 2  `⇧X`
 - [x] 1/1 Note  `1`
 - [x] 1/2 Note  `2`
 - [x] 1/4 Note  `3`
@@ -7193,18 +7199,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] 1/16 Note  `5`
 - [x] 1/32 Note  `6`
 - [x] 1/64 Note  `7`
-- [ ] 1/128 Note  `8`
-- [ ] Triplets On/Off  `9`
-- [ ] Dotted note values On/Off  `0`
-- [ ] Velocity 16 (ppp)  `C`
-- [ ] Velocity 32 (pp)  `V`
-- [ ] Velocity 48 (p)  `B`
-- [ ] Velocity 64 (mp)  `N`
-- [ ] Velocity 80 (mf)  `M`
-- [ ] Velocity 96 (f)  `,`
-- [ ] Velocity 112 (ff)  `.`
-- [ ] Velocity 127 (fff)  `/`
-- [ ] Quantize note starts On/Off  `Q`
+- [x] 1/128 Note  `8`
+- [x] Triplets On/Off  `9`
+- [x] Dotted note values On/Off  `0`
+- [x] Velocity 16 (ppp)  `C`
+- [x] Velocity 32 (pp)  `V`
+- [x] Velocity 48 (p)  `B`
+- [x] Velocity 64 (mp)  `N`
+- [x] Velocity 80 (mf)  `M`
+- [x] Velocity 96 (f)  `,`
+- [x] Velocity 112 (ff)  `.`
+- [x] Velocity 127 (fff)  `/`
+- [x] Quantize note starts On/Off  `Q`
 
 </details>
 
