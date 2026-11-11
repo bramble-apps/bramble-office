@@ -8,6 +8,10 @@ pub fn instrument(name: &str, rate: f32) -> Option<Box<dyn lg_dsp::Instrument>> 
     if std::env::var_os("LG_SOUNDFONT_ONLY").is_some() {
         return None;
     }
+    // a sampler made from loops (Browser ▸ Create Track with Loop): "<plug-in>\u{1f}<files>"
+    if name.contains('\u{1f}') {
+        return crate::soundlib::sampler_instrument(name, rate);
+    }
     lg_synth::by_logic_name(name, rate).or_else(|| lg_synth::for_patch(name, rate))
 }
 

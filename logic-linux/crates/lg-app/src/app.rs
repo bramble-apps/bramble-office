@@ -289,6 +289,15 @@ pub struct App {
     /// The Tracks area's own state: track selection, stacks entered, zoom, the marquee, fades,
     /// automation selection (trackarea.rs, regionops.rs, automation.rs).
     pub ta: crate::trackarea::State,
+    /// The Browser (browser.rs, soundlib.rs), Smart Controls and the Arpeggiators
+    /// (smartcontrols.rs, arp.rs), Project Audio and All Files (projaudio.rs, allfiles.rs), the
+    /// Project Files pane's tab (0 Project, 1 All Files), the browsers' preview.
+    pub br: crate::browser::State,
+    pub sc: crate::smartcontrols::State,
+    pub pa: crate::projaudio::State,
+    pub af: crate::allfiles::State,
+    pub pf_tab: usize,
+    pub preview: crate::preview::Preview,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -454,6 +463,12 @@ impl App {
             stopbtn: Default::default(),
             cb_show: Default::default(),
             ta: Default::default(),
+            br: Default::default(),
+            sc: Default::default(),
+            pa: Default::default(),
+            af: Default::default(),
+            pf_tab: 0,
+            preview: Default::default(),
         };
         match path {
             Some(p) => app.open_path(&p),
@@ -573,6 +588,7 @@ impl App {
                 }
             }
             notes.sort_by_key(|n| n.0);
+            crate::arp::for_playback(self, i, &mut notes);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
         crate::trackarea::stack_mix(self, &mut tracks);
@@ -587,6 +603,7 @@ impl App {
             e.tracks = tracks;
             e.param_auto = param_auto;
             crate::mixstate::to_engine(self, &mut e);
+            crate::arp::to_engine(self, &mut e);
             e.cycle = Some(self.cycle);
             e.program_changes();
         }
@@ -1265,6 +1282,10 @@ impl App {
             if crate::liveloops::key_press(self, key, m) {
                 continue;
             }
+            // the Browser, Project Audio and Smart Controls under the pointer: their groups
+            if crate::browser::key_press(self, key, m) || crate::projaudio::key_press(self, key, m) || crate::smartcontrols::key_press(self, key, m) {
+                continue;
+            }
             for c in crate::keymap::commands_for(key, m, focus) {
                 if self.key_command(ctx, c) {
                     break;
@@ -1275,6 +1296,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
+            return true;
+        }
         if crate::flex::command(self, ctx, name) {
             return true;
         }
@@ -1737,6 +1761,9 @@ impl App {
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);
+        crate::projaudio::window(self, &ctx);
+        crate::smartcontrols::window(self, &ctx);
+        crate::browser::frame(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;

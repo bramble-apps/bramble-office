@@ -105,6 +105,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
+    crate::browser::note_lanes(app, Rect::from_min_max(pos2(area.min.x, lanes.min.y), lanes.max));
     if app.global_tracks {
         global_tracks(app, ui, global, ruler.min.x);
     }

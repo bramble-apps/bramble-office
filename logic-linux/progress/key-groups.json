@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 149,
+  "done": 157,
   "total": 679,
-  "percent": 21.9
+  "percent": 23.1
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -109,9 +109,9 @@
  },
  {
   "group": "Project Audio",
-  "done": 3,
+  "done": 20,
   "total": 20,
-  "percent": 15.0
+  "percent": 100.0
  },
  {
   "group": "Audio File Editor",
@@ -127,9 +127,9 @@
  },
  {
   "group": "Browser",
-  "done": 2,
+  "done": 16,
   "total": 16,
-  "percent": 12.5
+  "percent": 100.0
  },
  {
   "group": "Sampler",
@@ -151,9 +151,9 @@
  },
  {
   "group": "Smart Controls",
-  "done": 0,
+  "done": 6,
   "total": 6,
-  "percent": 0.0
+  "percent": 100.0
  },
  {
   "group": "Tool Menu",

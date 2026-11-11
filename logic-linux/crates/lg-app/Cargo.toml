@@ -28,6 +28,8 @@ lg-dsp = { path = "../lg-dsp" }
 lg-audio = { path = "../lg-audio" }
 lg-players = { path = "../lg-players" }
 lg-synth = { path = "../lg-synth" }
+# the sample library's one-shots in the Browser
+lg-sounds = { path = "../lg-sounds" }
 lg-fx = { path = "../lg-fx" }
 lg-notation = { path = "../lg-notation" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)

@@ -30,12 +30,12 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Tracks area: ruler, cycle, regions, headers (M S R I, volume, pan), global tracks (Arrangement, Marker, Tempo, Signature, Chord, Transposition from the global header's right-click menu). Large icons at wide headers (≥ 340 pt); track zoom (Zoom Vertical, Individual Track Zoom in / out / toggle / reset, Zoom Focused Track); track stacks (Create Track Stack… sheet, Folder and Summing, open / close, Flatten, Convert to Summing, nested; main fader / mute / solo / pan act on the subtracks); packed folders (Pack Folder, Go Into / Out of Folder, Unpack); hide tracks (Hide Selected / Unselected, Unhide All, Toggle Hide View); track alternatives (header pop-up: New, Duplicate, Rename, switch, Delete Inactive); track reorder by dragging a header (stack-aware, others slide); Shift / Command multi-track selection. Index-kept app state follows tracks through reorder, delete and undo. [ ] stacks, folders, alternatives, zoom and hidden state aren't read from or written to the .logicx (stacks read flattened); a Summing stack doesn't run its aux's plug-ins (mixer/routing); take folders, flex, Movie track
 - [x] Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the … menu; header row (+, duplicate, S). [ ] catch button, zoom sliders
 - [x] Inspector: Region parameters (played through), Track parameters, the two channel strips. [ ] audio region parameters (gain, fades, flex), Region Inspector Float
-- [~] Browser as Logic 13's: two columns, Logic's patch library in Logic's order, search, filter, sort, SoundFonts. [ ] Loops & One-Shots content, Plug-in Presets, drag to tracks, preview
-- [~] Smart Controls (Y): the instrument's knobs, the EQ. [ ] Logic's per-patch screen-control layouts, arpeggiator, mapping, header (Track / Master / Compare)
+- [~] Browser as Logic 13's (browser.rs, soundlib.rs): All / Loops & One-Shots (Loops / One-Shots buttons) / Instruments / Effects / Plug-in Presets (columns, path bar; Studio's saved settings and .pst files) / Sound Library / SoundFonts, Locations (user folders analysed for type, tempo, key, bars, instrument tags; >60 s not analysed) and Smart Searches; tags by category (genre, instrument with subtags, paired descriptors, group tags with values, sound packs, Your Sounds, Favorites) in All Filters; Name Contains / tag suggestions / "Sounds like" phrase search, chips, Find Similar (tag/tempo/key similarity, 1000 max); favourites; Link to Selection and Replace Mode; preview with volume and Auto Leveling; drag to the tracks (right track type, new tracks below, Add Selected Files to Tracks), New Track with / Place at Playhead, Create Track with Loop ▸ Quick Sampler / Sample Alchemy / Drum Machine Designer (real sampler instruments), Add to DMD; first loop sets tempo and key; audio loops stretched to the project tempo (flex), MIDI loops to the key; Save Patch for Selected Track (Your Patches), Patch Merging, Add to Browser… (regions as loops/one-shots, Your Loops); compact navigation, columns view; all 16 Browser key commands. Only Bramble Sounds' one-shots and the user's own loops: no Apple loops. [ ] Browser Focus triangle on channel-strip slots, Session Player / pattern / chord loops, audio previews of MIDI loops, loops following later tempo or key changes, DMD pad drops, audio-content analysis (tags come from names), region drag into the Browser, legacy/Splice loop import
+- [~] Smart Controls (Y; Window ▸ Open Smart Controls) (smartcontrols.rs, arp.rs): layouts by patch type (Keyboard, Synthesizer, Drums, Orchestral, Guitar & Bass, Audio / Master Effects, Basic, Faders), screen controls mapped to one or more parameters with ranges (channel strip, EQ, sends, instrument, Audio FX), inspector (layout, mapping list, Add Mapping, Learn, external assignment Learn with MIDI CC), header Track / Master / Compare / subviews / routing destinations, the Arpeggiator (Up, Down, Up & Down, Outside In, Random, As Played, Chord; 14 rates; 1–4 octaves; Reflex / Latch / Latch Transpose; note length, velocity) on playback and on live keys; all 6 Smart Controls key commands. [ ] Logic's own per-patch layouts and mappings (not available), arp/mapping state saved in the .logicx, plug-in parameter edits in undo
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back into the .logicx, pan law and panner types (menu shown, Balance only)
-- [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [ ] Project Audio window (⌘8) and its 17 other commands
+- [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
 - [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
-- [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, All Files with preview and import
+- [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, Project Files (Project Audio; All Files Browser with Back/Forward, Computer/Home/Project, List/Column view, name search with kind/format/length/date/size filters, Action menu, Play, drag to tracks)
 - [x] Settings: all 27 tabs drawn as Logic's (measured), values saved; [~] only some wired (undo steps, help tags, middle C). [ ] Project Settings
 
 ## 3. Editing
@@ -92,13 +92,13 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 209 | 594 | 35% |
+| Menu bar | 215 | 594 | 36% |
 | Local menus | 525 | 1191 | 44% |
-| Right-click menus | 1236 | 2575 | 48% |
-| Key commands | 684 | 2207 | 30% |
+| Right-click menus | 1248 | 2575 | 48% |
+| Key commands | 729 | 2207 | 33% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 209 of 594
+## Menu bar: 215 of 594
 
 
 <details><summary>Bramble Studio — 13/48</summary>
@@ -154,7 +154,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 20/81</summary>
+<details><summary>File — 22/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -177,7 +177,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Project Management
   - [ ] Clean Up…
   - [ ] Consolidate…
-  - [ ] Rename…
+  - [x] Rename…
   - [ ] Show in Finder…
 - [ ] Project Settings
   - [x] General…
@@ -197,7 +197,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Movie
   - [ ] Open Movie…  `⌥⌘O`
   - [ ] Remove Movie
-  - [ ] Show in Finder
+  - [x] Show in Finder
   - [ ] Move Movie Files out of Project…
   - [ ] Import Audio from Movie
   - [ ] Export Audio to Movie…
@@ -628,14 +628,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>View — 6/18</summary>
+<details><summary>View — 7/18</summary>
 
 - [ ] Show Tab Bar
 - [ ] Show All Tabs  `⇧⌘\`
 - [x] Hide Browser  `B`
 - [x] Hide Inspector  `I`
 - [x] Show Mixer  `X`
-- [ ] Show Smart Controls  `Y`
+- [x] Show Smart Controls  `Y`
 - [x] Show Editor  `E`
 - [ ] Show List Editors  `D`
 - [ ] Show Note Pads  `⌃⇧P`
@@ -651,7 +651,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Window — 10/68</summary>
+<details><summary>Window — 13/68</summary>
 
 - [x] Minimize  `⌘M`
 - [ ] Minimize All  `⌥⌘M`
@@ -695,7 +695,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Remove Window from Set
 - [x] Open Main Window  `⌘1`
 - [x] Open Mixer  `⌘2`
-- [ ] Open Smart Controls
+- [x] Open Smart Controls
 - [x] Open Piano Roll  `⌘4`
 - [ ] Open Score Editor  `⌘5`
 - [ ] Open Step Sequencer  `⌘3`
@@ -705,7 +705,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Open Smart Tempo Editor
 - [ ] Open Event List  `⌘7`
 - [ ] Open Signature List
-- [ ] Open Project Audio  `⌘8`
+- [x] Open Project Audio  `⌘8`
 - [ ] Open MIDI Transform  `⌘9`
 - [ ] Open Transport Float
 - [ ] Show Event Float  `⌥E`
@@ -717,7 +717,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Untitled.logicx - Tracks
 - [ ] Screenset 1 (Tracks/Browser)  `1`
 - [ ] Duplicate…
-- [ ] Rename…
+- [x] Rename…
 - [x] Delete
 - [ ] Lock
 - [ ] Revert to Saved
@@ -2089,7 +2089,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1236 of 2575
+## Right-click menus: 1248 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2159,20 +2159,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>browser-loop-item — 2/12</summary>
+<details><summary>browser-loop-item — 12/12</summary>
 
-- [ ] New Track with Loop
-- [ ] Place Loop at Playhead
-- [ ] Create Track with Loop
-  - [ ] Quick Sampler
-  - [ ] Sample Alchemy
-  - [ ] Drum Machine Designer
-- [ ] Find Similar
-- [ ] Add to Favorites
+- [x] New Track with Loop
+- [x] Place Loop at Playhead
+- [x] Create Track with Loop
+  - [x] Quick Sampler
+  - [x] Sample Alchemy
+  - [x] Drum Machine Designer
+- [x] Find Similar
+- [x] Add to Favorites
 - [x] Rename
 - [x] Delete
-- [ ] Show in Finder
-- [ ] View Info
+- [x] Show in Finder
+- [x] View Info
 
 </details>
 
@@ -2945,7 +2945,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-instrument-slot-menu — 0/116</summary>
+<details><summary>mixer-instrument-slot-menu — 2/116</summary>
 
 - [ ] Vintage Electric Piano
   - [ ] Stereo
@@ -2964,7 +2964,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Quick Sampler (Single Sample)
     - [ ] Mono
     - [ ] Stereo
-  - [ ] Sample Alchemy
+  - [x] Sample Alchemy
     - [ ] Stereo
   - [ ] Sampler (Multi-Sample)
     - [ ] Mono
@@ -3028,7 +3028,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
     - [ ] Stereo
   - [ ] Vintage Mellotron
     - [ ] Mono
-- [ ] Drum Machine Designer
+- [x] Drum Machine Designer
 - [ ] AU Generators
   - [ ] Apple
     - [ ] AUAudioFilePlayer
@@ -4912,7 +4912,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 684 of 2207
+## Key commands: 729 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4921,7 +4921,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 149/679</summary>
+<details><summary>Global Commands — 157/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5161,7 +5161,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Event List…  `⌘7`
 - [x] Open Main Window…  `⌘1`
 - [x] Open Mixer…  `⌘2`
-- [ ] Open Smart Controls…
+- [x] Open Smart Controls…
 - [x] Open Score Editor…  `⌘5`
 - [x] Open Step Sequencer…  `⌘3`
 - [x] Open Transform…  `⌘9`
@@ -5169,7 +5169,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Piano Roll…  `⌘4`
 - [ ] Open Transport Float…
 - [ ] Open Environment…  `⌘0`
-- [ ] Open Project Audio…  `⌘8`
+- [x] Open Project Audio…  `⌘8`
 - [ ] Note Repeat  `⌃⌥↩`
 - [ ] Spot Erase  `⌃⌥⌫`
 - [ ] Open Audio File Editor…  `⌘6`
@@ -5197,12 +5197,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Transport Float
 - [ ] Show/Hide Environment
 - [ ] Show/Hide Step Input Keyboard  `⌥⌘K`
-- [ ] Show/Hide Project Audio
+- [x] Show/Hide Project Audio
 - [x] Show/Hide Browser  `B`
-- [ ] Search in Browser  `⌘F`
-- [ ] Show Loops & One-Shots in Browser
-- [ ] Show Instruments in Browser
-- [ ] Show Effects in Browser
+- [x] Search in Browser  `⌘F`
+- [x] Show Loops & One-Shots in Browser
+- [x] Show Instruments in Browser
+- [x] Show Effects in Browser
 - [ ] Show/Hide Assistant  `⌥⌘/`
 - [ ] Search Patch
 - [ ] Show/Hide All Files
@@ -5519,7 +5519,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Channel Strip Record Enable
 - [x] Toggle Channel Strip Input Monitoring  `⌃I`
 - [ ] Toggle Channel Strip Format (mono/stereo)  `⌃⇧S`
-- [ ] Toggle Channel Strip Arpeggiator
+- [x] Toggle Channel Strip Arpeggiator
 - [ ] Set Plug-in Latency Compensation Mode
 - [ ] Toggle Low Latency Monitoring Mode
 - [ ] Toggle Software Monitoring
@@ -6951,28 +6951,28 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Project Audio — 3/20</summary>
+<details><summary>Project Audio — 20/20</summary>
 
 - [x] Select Previous Audio File  `↑`
 - [x] Select Next Audio File  `↓`
-- [ ] Show Audio File Details
-- [ ] Hide Audio File Details
-- [ ] Rename…  `⇧↩`
-- [ ] Add Audio File…  `⌃F`
+- [x] Show Audio File Details
+- [x] Hide Audio File Details
+- [x] Rename…  `⇧↩`
+- [x] Add Audio File…  `⌃F`
 - [x] Add Region  `⌃R`
-- [ ] Delete Files  `⌘⌫`
-- [ ] Optimize Files…  `⌃O`
-- [ ] Backup Files  `⌃B`
-- [ ] Copy/Convert Files…  `⌃K`
-- [ ] Move Files out of Project
-- [ ] Select Used
-- [ ] Select Unused  `⇧U`
-- [ ] Show All Regions  `⌥↓`
-- [ ] Hide All Regions  `⌥↑`
-- [ ] Import Region Information  `⌃I`
-- [ ] Export Region Information  `⌃E`
-- [ ] Create Group…  `⌃G`
-- [ ] Delete Selected Audio File Groups
+- [x] Delete Files  `⌘⌫`
+- [x] Optimize Files…  `⌃O`
+- [x] Backup Files  `⌃B`
+- [x] Copy/Convert Files…  `⌃K`
+- [x] Move Files out of Project
+- [x] Select Used
+- [x] Select Unused  `⇧U`
+- [x] Show All Regions  `⌥↓`
+- [x] Hide All Regions  `⌥↑`
+- [x] Import Region Information  `⌃I`
+- [x] Export Region Information  `⌃E`
+- [x] Create Group…  `⌃G`
+- [x] Delete Selected Audio File Groups
 
 </details>
 
@@ -7073,24 +7073,24 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Browser — 2/16</summary>
+<details><summary>Browser — 16/16</summary>
 
-- [ ] View Info  `⌘I`
-- [ ] Play/Stop Preview  `⌥˽`
-- [ ] Clear Applied Tags  `⌘⌫`
-- [ ] Toggle All Filters
-- [ ] Save Patch for Selected Track…
-- [ ] Enable Patch Merging
-- [ ] Add Location
-- [ ] Add Smart Search
-- [ ] New Track with Selected Item  `↩`
-- [ ] Replace Patch  `⌘↩`
-- [ ] Find Similar
-- [ ] Add to Favorites
+- [x] View Info  `⌘I`
+- [x] Play/Stop Preview  `⌥˽`
+- [x] Clear Applied Tags  `⌘⌫`
+- [x] Toggle All Filters
+- [x] Save Patch for Selected Track…
+- [x] Enable Patch Merging
+- [x] Add Location
+- [x] Add Smart Search
+- [x] New Track with Selected Item  `↩`
+- [x] Replace Patch  `⌘↩`
+- [x] Find Similar
+- [x] Add to Favorites
 - [x] Rename
 - [x] Delete
-- [ ] Show in Finder
-- [ ] Toggle Columns View
+- [x] Show in Finder
+- [x] Toggle Columns View
 
 </details>
 
@@ -7210,14 +7210,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Smart Controls — 0/6</summary>
+<details><summary>Smart Controls — 6/6</summary>
 
-- [ ] Toggle Track Master View
-- [ ] Cycle Through Routing Destination Views
-- [ ] Cycle Through Subviews  `⌃⇧O`
-- [ ] Add Mapping
-- [ ] Learn Parameter Mapping
-- [ ] Learn External Assignment
+- [x] Toggle Track Master View
+- [x] Cycle Through Routing Destination Views
+- [x] Cycle Through Subviews  `⌃⇧O`
+- [x] Add Mapping
+- [x] Learn Parameter Mapping
+- [x] Learn External Assignment
 
 </details>
 

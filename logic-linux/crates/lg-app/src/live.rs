@@ -138,6 +138,10 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
             0x90 => note(app, a, b),
             0x80 => note(app, a, 0),
             0xB0 => {
+                // (a controller learned or assigned to a Smart Control moves it)
+                if a != 64 && crate::smartcontrols::midi_cc(app, a, b) {
+                    continue;
+                }
                 if a == 64 {
                     let on = b >= 64;
                     if !on && app.live.sustain {

@@ -185,6 +185,8 @@ pub struct Engine {
     pub rec: crate::recording::EngineRec,
     /// Plug-in parameter automation by track (automation.rs).
     pub param_auto: Vec<Vec<crate::automation::ParamLane>>,
+    /// The tracks' Arpeggiators for keys played live (arp.rs).
+    pub arp: crate::arp::EngineArps,
 }
 
 #[derive(Clone, Copy)]
@@ -201,7 +203,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new() }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default() }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -246,6 +248,21 @@ impl Engine {
 
     /// A note played live (Musical Typing, a MIDI keyboard) on a track's sound; velocity 0 stops it.
     pub fn live(&mut self, track: usize, pitch: u8, velocity: u8) {
+        if track >= self.tracks.len() {
+            return;
+        }
+        // (through the track's Arpeggiator when it's on)
+        if self.arp.active(track) {
+            if let Some(a) = self.arp.tracks.get_mut(&track) {
+                a.key(pitch, velocity);
+            }
+            return;
+        }
+        self.live_note(track, pitch, velocity);
+    }
+
+    /// A note to the track's instrument (live keys, the Arpeggiator's notes).
+    pub fn live_note(&mut self, track: usize, pitch: u8, velocity: u8) {
         if track >= self.tracks.len() {
             return;
         }
@@ -455,6 +472,13 @@ impl Engine {
         }
         let bpm = self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1);
         let tps = bpm / 60.0 * PPQ as f64 / RATE as f64;
+        // the Arpeggiators' steps for keys held live
+        if !self.arp.tracks.is_empty() {
+            let song = self.playing.then(|| (self.pos, self.pos + tps * frames as f64, PPQ));
+            for (t, p, v) in self.arp.tick(frames, RATE as f64, bpm, song) {
+                self.live_note(t, p, v);
+            }
+        }
         // recording: the input for this block; a count-in before bar 1 holds the playhead
         let input = self.rec.input(frames);
         let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
@@ -883,6 +907,14 @@ impl Output {
         let Some(sink) = &self._sink else { return };
         let Some(samples) = load_audio(path) else { return };
         sink.mixer().add(rodio::buffer::SamplesBuffer::new(std::num::NonZero::new(2).unwrap(), std::num::NonZero::new(RATE).unwrap(), samples));
+    }
+
+    /// Plays a source over whatever is playing (the Browsers' previews, with their volume and
+    /// stop); false without a sound device.
+    pub fn add_source<S: rodio::Source + std::marker::Send + 'static>(&self, src: S) -> bool {
+        let Some(sink) = &self._sink else { return false };
+        sink.mixer().add(src);
+        true
     }
 }
 

@@ -1795,6 +1795,7 @@ dependencies = [
  "lg-fx",
  "lg-notation",
  "lg-players",
+ "lg-sounds",
  "lg-synth",
  "libc",
  "midir",

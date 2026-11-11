@@ -2,11 +2,13 @@
 //! projects. The window, its parts and their behaviour follow the Logic research
 //! (logic-research: menus, key commands, screenshots); the files are read by lg-core.
 
+pub mod allfiles;
 pub mod app;
+pub mod arp;
 pub mod audio;
 pub mod audioedit;
 mod automation;
-mod browser;
+pub mod browser;
 mod chrome;
 mod controlbar;
 pub mod demo;
@@ -28,6 +30,8 @@ mod mixer;
 mod mixercmd;
 pub mod mixstate;
 mod pianoroll;
+mod preview;
+mod projaudio;
 pub mod recording;
 mod regionops;
 mod snap;
@@ -40,7 +44,8 @@ mod stepseq;
 pub mod settings;
 pub mod smarttempo;
 pub mod takes;
-mod smartcontrols;
+pub mod smartcontrols;
+pub mod soundlib;
 mod stopbutton;
 mod trackarea;
 mod tracks;

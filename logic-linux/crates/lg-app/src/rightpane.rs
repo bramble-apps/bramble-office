@@ -46,7 +46,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, pane: RightPane) {
         RightPane::Lists => lists(app, ui, area),
         RightPane::Notes => notes(app, ui, area),
         RightPane::Loops => files(app, ui, area, true),
-        RightPane::Files => files(app, ui, area, false),
+        RightPane::Files => project_files(app, ui, area),
+    }
+}
+
+// ---- Project Files: Project (the Project Audio Browser), All Files
+
+fn project_files(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    let tr = Rect::from_min_size(area.min + vec2(10.0, 8.0), vec2(area.width() - 20.0, 24.0));
+    let mut tab = app.pf_tab;
+    tabs(ui, tr, "pf-tab", &["Project", "All Files"], &mut tab);
+    app.pf_tab = tab;
+    let body = Rect::from_min_max(pos2(area.min.x + 1.0, tr.max.y + 6.0), area.max);
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
+    child.set_clip_rect(body);
+    if tab == 0 {
+        crate::projaudio::show(app, &mut child, body);
+    } else {
+        crate::allfiles::show(app, &mut child, body);
     }
 }
 
