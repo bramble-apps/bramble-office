@@ -45,6 +45,66 @@ pub fn hann(n: usize) -> Vec<f32> {
     (0..n).map(|i| 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / n as f32).cos()).collect()
 }
 
+/// A planned FFT (twiddles and bit reversal computed once) for the frame-by-frame work of the
+/// phase vocoder: forward and inverse, complex, power-of-two sizes.
+pub struct Fft {
+    n: usize,
+    rev: Vec<u32>,
+    cos: Vec<f32>,
+    sin: Vec<f32>,
+}
+
+impl Fft {
+    pub fn new(n: usize) -> Fft {
+        assert!(n.is_power_of_two() && n >= 2);
+        let bits = n.trailing_zeros();
+        let rev = (0..n as u32).map(|i| i.reverse_bits() >> (32 - bits)).collect();
+        let cos = (0..n / 2).map(|k| (2.0 * std::f64::consts::PI * k as f64 / n as f64).cos() as f32).collect();
+        let sin = (0..n / 2).map(|k| -(2.0 * std::f64::consts::PI * k as f64 / n as f64).sin() as f32).collect();
+        Fft { n, rev, cos, sin }
+    }
+
+    /// Forward transform in place (no scaling).
+    pub fn forward(&self, re: &mut [f32], im: &mut [f32]) {
+        let n = self.n;
+        for i in 0..n {
+            let j = self.rev[i] as usize;
+            if i < j {
+                re.swap(i, j);
+                im.swap(i, j);
+            }
+        }
+        let mut len = 2;
+        while len <= n {
+            let half = len / 2;
+            let step = n / len;
+            for start in (0..n).step_by(len) {
+                for k in 0..half {
+                    let (wr, wi) = (self.cos[k * step], self.sin[k * step]);
+                    let a = start + k;
+                    let b = a + half;
+                    let xr = re[b] * wr - im[b] * wi;
+                    let xi = re[b] * wi + im[b] * wr;
+                    re[b] = re[a] - xr;
+                    im[b] = im[a] - xi;
+                    re[a] += xr;
+                    im[a] += xi;
+                }
+            }
+            len <<= 1;
+        }
+    }
+
+    /// Inverse transform in place, scaled by 1/n.
+    pub fn inverse(&self, re: &mut [f32], im: &mut [f32]) {
+        im.iter_mut().for_each(|v| *v = -*v);
+        self.forward(re, im);
+        let k = 1.0 / self.n as f32;
+        re.iter_mut().for_each(|v| *v *= k);
+        im.iter_mut().for_each(|v| *v *= -k);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -57,5 +117,23 @@ mod tests {
         let best = (0..n / 2).max_by(|&a, &b| mag[a].total_cmp(&mag[b])).unwrap();
         assert_eq!(best, 8);
         assert!((mag[8] - n as f32 / 2.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn the_planned_fft_matches_and_inverts() {
+        let n = 512;
+        let x: Vec<f32> = (0..n).map(|i| ((i * 37 % 101) as f32 / 50.0) - 1.0).collect();
+        let (mut r1, mut i1) = (x.clone(), vec![0.0; n]);
+        super::fft(&mut r1, &mut i1);
+        let p = super::Fft::new(n);
+        let (mut r2, mut i2) = (x.clone(), vec![0.0; n]);
+        p.forward(&mut r2, &mut i2);
+        for k in 0..n {
+            assert!((r1[k] - r2[k]).abs() < 1e-3 && (i1[k] - i2[k]).abs() < 1e-3, "{k}");
+        }
+        p.inverse(&mut r2, &mut i2);
+        for k in 0..n {
+            assert!((r2[k] - x[k]).abs() < 1e-4 && i2[k].abs() < 1e-4, "{k}");
+        }
     }
 }
