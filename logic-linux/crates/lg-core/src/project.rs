@@ -161,11 +161,31 @@ pub struct RegionProps {
     pub fade_in: (u16, i8),
     pub fade_out: (u16, i8),
     pub audio_offset: u32,
+    /// Q-Strength (percent of the way to the grid), Q-Range (ticks: 0 all notes, positive only
+    /// notes farther off, negative only notes nearer), Q-Flam (ticks between chord notes).
+    pub q_strength: u8,
+    pub q_range: i16,
+    pub q_flam: i16,
+    /// Clip Length: notes end at the region's right border.
+    pub clip_length: bool,
+    /// Pitch Source: 0 Off, 1 Key Signature (MIDI regions follow key changes).
+    pub pitch_source: u8,
+    /// Lock Time Position: the region does not move.
+    pub locked: bool,
+    /// The region's own colour (palette index; None: its track's).
+    pub color: Option<u8>,
+    /// Delay shown (and typed) in milliseconds rather than ticks.
+    pub delay_ms: bool,
+    /// A caller's mark, carried through edits and copies (not a Logic parameter).
+    pub tag: u32,
 }
+
+/// Gate Time "Legato": every note lasts to the next one.
+pub const GATE_LEGATO: u16 = u16::MAX;
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, q_strength: 100, q_range: 0, q_flam: 0, clip_length: false, pitch_source: 0, locked: false, color: None, delay_ms: false, tag: 0 }
     }
 }
 
@@ -181,13 +201,21 @@ impl RegionProps {
             if (grid / q) % 2 == 1 {
                 grid += (q as f64 * (self.swing as f64 - 50.0) / 100.0) as i64;
             }
-            out.pos = (region_start as i64 + grid).max(0) as u32;
+            // Q-Range: 0 every note; positive only notes farther off than it; negative only
+            // notes within it. Q-Strength: how far toward the grid.
+            let off = region_start as i64 + grid - n.pos as i64;
+            let r = self.q_range as i64;
+            let take = r == 0 || (r > 0 && off.abs() > r) || (r < 0 && off.abs() <= -r);
+            if take {
+                let moved = (off as f64 * self.q_strength.min(100) as f64 / 100.0).round() as i64;
+                out.pos = (n.pos as i64 + moved).max(0) as u32;
+            }
         }
         out.pos = (out.pos as i64 + self.delay as i64).max(0) as u32;
         out.pitch = (n.pitch as i16 + self.transpose as i16).clamp(0, 127) as u8;
         let v = if self.dynamics == 0 { 64.0 } else { 64.0 + (n.velocity as f32 - 64.0) * self.dynamics as f32 / 100.0 };
         out.velocity = (v + self.velocity as f32).round().clamp(1.0, 127.0) as u8;
-        out.len = if self.gate_time == 0 { 120 } else { ((n.len as u64 * self.gate_time as u64) / 100).max(1) as u32 };
+        out.len = if self.gate_time == 0 { 120 } else if self.gate_time == GATE_LEGATO { n.len } else { ((n.len as u64 * self.gate_time as u64) / 100).max(1) as u32 };
         out
     }
 }
