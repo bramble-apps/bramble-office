@@ -406,11 +406,12 @@ pub fn number(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect, i
     }
     let focused = app.selected_track == Some(i);
     let selected = app.ta.selected.contains(&i);
-    let col = if dim { look::text_dim().gamma_multiply(0.5) } else if focused && app.ta.selected.len() > 1 { look::text() } else { look::text_dim() };
-    let c = pos2(row.min.x + 14.0 + x, row.center().y);
+    // (Logic: white numbers; inside a multiple selection the others a shade dimmer)
+    let col = if dim { look::text_dim().gamma_multiply(0.5) } else if selected && !focused && app.ta.selected.len() > 1 { look::mix(look::text(), look::text_dim(), 0.5) } else { look::text() };
+    let c = pos2(row.min.x + 10.0 + x, row.center().y - 3.0);
     hp.text(c, Align2::CENTER_CENTER, format!("{}", i + 1), look::regular(13.0), col);
     // (Logic's hairline between the number and the rest of the header)
-    hp.line_segment([pos2(row.min.x + 28.0 + x, row.min.y), pos2(row.min.x + 28.0 + x, row.max.y)], Stroke::new(1.0, Color32::from_black_alpha(60)));
+    hp.line_segment([pos2(row.min.x + 20.5 + x, row.min.y), pos2(row.min.x + 20.5 + x, row.max.y)], Stroke::new(1.0, look::ta_header_line()));
     if selected && app.ta.selected.len() > 1 {
         let r = Rect::from_center_size(c, vec2(22.0, 18.0));
         if ui.interact(r, ui.scope_id().with(("tracknum", i)), Sense::click()).clicked() {
@@ -431,6 +432,8 @@ pub fn icon(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, r: Rect, i: us
         app.tm.ui.icons = Some(i);
     }
     let c = color_of(&t);
+    // (Logic draws the icon a brighter shade of the track colour)
+    let ink = if kn_ui::theme::is_light() { c } else { look::icon_color(c) };
     if let Some(name) = t.extra.set.icon.as_deref().and_then(|n| n.strip_prefix("custom:")) {
         let ctx = ui.ctx().clone();
         if let Some(tex) = custom_texture(app, &ctx, name) {
@@ -441,12 +444,12 @@ pub fn icon(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, r: Rect, i: us
     let Some(g) = chosen_glyph(&t) else {
         // (the patch's own icon, in the track's colour when one is assigned)
         if t.extra.set.strip.color.is_some() && t.extra.stack.is_none() {
-            glyphs::paint(hp, r, glyphs::TrackIcon::of(&t).glyph(), if large { r.width() * 0.8 } else { 30.0 }, c);
+            glyphs::paint(hp, r, glyphs::TrackIcon::of(&t).glyph(), if large { r.width() * 0.8 } else { 27.0 }, ink);
             return Some(true);
         }
         return Some(false);
     };
-    glyphs::paint(hp, r, g, if large { r.width() * 0.8 } else { 30.0 }, c);
+    glyphs::paint(hp, r, g, if large { r.width() * 0.8 } else { 27.0 }, ink);
     Some(true)
 }
 
@@ -509,10 +512,11 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         let first = k == 0 || order.get(k - 1) != Some(&g);
         let last = order.get(k + 1) != Some(&g);
         if first && k > 0 {
-            *x += 5.0;
+            *x += 6.0;
         }
-        let r = Rect::from_min_size(pos2(*x, by), vec2(20.0, 19.0));
-        *x += 20.0;
+        // (Logic: 20.5 × 17.5 pt halves, 6 pt between pills)
+        let r = Rect::from_min_size(pos2(*x, by + 0.5), vec2(20.5, 17.5));
+        *x += 20.5;
         k += 1;
         let (a, b) = (if first { 5 } else { 0 }, if last { 5 } else { 0 });
         corners.set(egui::CornerRadius { nw: a, sw: a, ne: b, se: b });
@@ -540,7 +544,7 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
     let paint = |ui: &egui::Ui, r: Rect, fill: Color32, cr: egui::CornerRadius| {
         ui.painter().rect_filled(r, cr, fill);
         if cr.nw == 0 {
-            ui.painter().line_segment([pos2(r.min.x, r.min.y + 4.0), pos2(r.min.x, r.max.y - 4.0)], Stroke::new(1.0, Color32::from_black_alpha(70)));
+            ui.painter().line_segment([pos2(r.min.x, r.min.y + 4.5), pos2(r.min.x, r.max.y - 4.5)], Stroke::new(1.0, Color32::from_white_alpha(40)));
         }
     };
     let cr = |c: &std::cell::Cell<egui::CornerRadius>| c.get();
@@ -653,7 +657,7 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         let recording = app.recording() && armed;
         let implied = !armed && app.armed.is_empty() && app.selected_track == Some(i);
         paint(ui, r, if recording || (armed && blink) { red } else if armed { red.gamma_multiply(0.55) } else { look::header_pill() }, cr(&corners));
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "R", look::semibold(12.0), if armed { Color32::WHITE } else if implied { red } else { look::text() });
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "R", look::semibold(12.0), if armed { Color32::WHITE } else if implied { Color32::from_rgb(0xfe, 0x6e, 0x6e) } else { look::text() });
         if ui.interact(r, ui.scope_id().with(("rec", i)), Sense::click()).clicked() {
             if locked {
                 app.tm.ui.alert = Some(if set.frozen { "The track is frozen.".into() } else { "The track is locked.\nTurn off its Protect button to record on it.".into() });
@@ -672,7 +676,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
     }
     if cfg.input && !no_input(app, i) {
         let r = next(&mut x);
-        let orange = Color32::from_rgb(0xe8, 0x9a, 0x2c);
+        // (Logic's I: #F2A33C)
+        let orange = Color32::from_rgb(0xf2, 0xa3, 0x3c);
         let inst = t.kind != TrackKind::Audio;
         // instrument tracks: monitored while focused or record-enabled (an orange I); Option-click
         // turns that off (a white I)
@@ -727,7 +732,7 @@ pub fn set_hidden(app: &mut App, i: usize, hidden: bool) {
 pub fn send_knob(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect, by: f32, i: usize) -> bool {
     let Some(k) = crate::tm::set(app, i).and_then(|s| s.knob_send).map(|k| k as usize) else { return false };
     let Some(snd) = app.sends.get(&i).and_then(|v| v.get(k)).copied() else { return false };
-    let kc = pos2(row.max.x - 18.0, by + 8.5);
+    let kc = pos2(row.max.x - 23.75, by + 8.0);
     let resp = ui.interact(Rect::from_center_size(kc, vec2(20.0, 20.0)), ui.scope_id().with(("hsend", i)), Sense::click_and_drag()).on_hover_text(format!("Send {} to Bus {}: {:.1} dB", k + 1, snd.bus + 1, snd.level_db));
     hp.circle_filled(kc, 9.0, Color32::from_rgb(0x2a, 0x5a, 0x86));
     let f = crate::tracks::db_to_frac(snd.level_db);
