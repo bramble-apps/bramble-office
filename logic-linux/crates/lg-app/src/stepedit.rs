@@ -244,10 +244,12 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     true
 }
 
-pub fn hovered(ctx: &egui::Context, p: Option<egui::Pos2>) -> bool {
+/// The Step Editor window's rect while it's open (key focus: focus.rs).
+pub fn rect(ctx: &egui::Context) -> Option<Rect> {
     let st = state(ctx);
-    st.open && p.is_some_and(|p| st.rect.is_some_and(|r| r.contains(p)))
+    st.rect.filter(|_| st.open)
 }
+
 
 pub fn window(app: &mut App, ctx: &egui::Context) {
     let st = state(ctx);

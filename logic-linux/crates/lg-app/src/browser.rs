@@ -946,9 +946,10 @@ pub fn command(app: &mut App, name: &str) -> bool {
     run(app, name, false)
 }
 
-/// Keys while the pointer is over the Browser: the Browser group, ↑ / ↓ through the results.
+/// Keys while the Browser has the key focus (clicked last: focus.rs): the Browser group, ↑ / ↓
+/// through the results.
 pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
-    let over = app.ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| app.br.rect.contains(p));
+    let over = crate::focus::area(app) == crate::focus::Area::Browser;
     if !over || !app.show_browser {
         return false;
     }

@@ -271,6 +271,8 @@ pub struct App {
     pub editor_rect: Rect,
     /// Copied region (⌘C / ⌘X), pasted at the playhead on the selected track (⌘V).
     pub clipboard: Option<lg_core::Region>,
+    /// Every region Copy took (regionclip.rs).
+    pub region_clip: Vec<crate::regionclip::Clip>,
     /// The Logic file the project came from (Save writes back into it): the alternative's
     /// folder and its ProjectData as read.
     pub file: Option<(PathBuf, Vec<u8>)>,
@@ -350,6 +352,8 @@ pub struct App {
     pub preview: crate::preview::Preview,
     /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
     pub nav: crate::nav::State,
+    /// Logic's key focus: the area clicked last (focus.rs).
+    pub kf: crate::focus::KeyFocus,
     pub screens: crate::screensets::State,
     pub bars: crate::toolbar::State,
 }
@@ -508,6 +512,7 @@ impl App {
             help_tag: None,
             editor_rect: Rect::NOTHING,
             clipboard: None,
+            region_clip: Vec::new(),
             file: None,
             dirty: false,
             tempo_edit: None,
@@ -553,6 +558,7 @@ impl App {
             pf_tab: 0,
             preview: Default::default(),
             nav: Default::default(),
+            kf: Default::default(),
             screens: Default::default(),
             bars: crate::toolbar::State::load(),
             pf: Default::default(),
@@ -1321,24 +1327,22 @@ impl App {
 
     /// Key presses: Logic's key commands for the focused area (keymap.rs); ⌘Z / ⇧⌘Z undo.
     fn keys(&mut self, ctx: &egui::Context) {
+        crate::focus::press(self, ctx);
         if ctx.egui_wants_keyboard_input() {
             crate::live::frame(self, ctx);
             return;
         }
         let presses: Vec<(egui::Key, egui::Modifiers, Option<egui::Key>)> = ctx.input(|i| i.events.iter().filter_map(|e| match e {
             egui::Event::Key { key, pressed: true, modifiers, physical_key, .. } => Some((*key, *modifiers, *physical_key)),
+            // (egui-winit turns ⌘C / ⌘X / ⌘V into these and sends no key: Edit's Copy, Cut and
+            // Paste for the area with key focus)
+            egui::Event::Copy => Some((egui::Key::C, egui::Modifiers::COMMAND, None)),
+            egui::Event::Cut => Some((egui::Key::X, egui::Modifiers::COMMAND, None)),
+            egui::Event::Paste(_) | egui::Event::PasteImage(_) => Some((egui::Key::V, egui::Modifiers::COMMAND, None)),
             _ => None,
         }).collect());
-        let hover = ctx.input(|i| i.pointer.hover_pos());
-        let over_browser = self.show_browser && hover.is_some_and(|p| self.nav.browser_rect.contains(p));
-        let focus = match (self.bottom, hover.is_some_and(|p| self.editor_rect.contains(p))) {
-            _ if crate::stepedit::hovered(ctx, hover) => crate::keymap::Focus::StepEditor,
-            _ if crate::eventedit::hovered(self, ctx, hover) => crate::keymap::Focus::EventList,
-            _ if over_browser => crate::keymap::Focus::Browser,
-            (Bottom::Mixer, true) => crate::keymap::Focus::Mixer,
-            (Bottom::PianoRoll, true) => crate::score::focus(self, ctx),
-            _ => crate::keymap::Focus::Tracks,
-        };
+        // the area clicked last, not the one under the pointer (focus.rs)
+        let focus = crate::focus::keymap_focus(self, ctx);
         let used = crate::live::frame(self, ctx);
         for (key, m, physical) in presses {
             if used.contains(&key) {
@@ -1400,7 +1404,12 @@ impl App {
             if crate::browser::key_press(self, key, m) || crate::projaudio::key_press(self, key, m) || crate::smartcontrols::key_press(self, key, m) {
                 continue;
             }
-            for c in crate::keymap::commands_for(key, m, focus) {
+            let cmds = crate::keymap::commands_for(key, m, focus);
+            if cmds.is_empty() && matches!(key, egui::Key::Delete | egui::Key::Backspace) && m.is_none() {
+                crate::focus::delete_key(self, ctx);
+                continue;
+            }
+            for c in cmds {
                 if self.key_command(ctx, c) {
                     break;
                 }
@@ -1413,7 +1422,7 @@ impl App {
         if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
             return true;
         }
-        if crate::share::command(self, name) || crate::keyextra::command(self, ctx, name) {
+        if crate::focus::command(self, name) || crate::share::command(self, name) || crate::keyextra::command(self, ctx, name) {
             return true;
         }
         if crate::arrmarks::command(self, name) || crate::globalclip::command(self, name) || crate::beatmapping::command(self, name) || crate::stmulti::command(self, name) || crate::tempointerp::command(self, name) || crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
@@ -1695,46 +1704,17 @@ impl App {
                 }
                 self.after_edit();
             }
-            "Copy" | "Cut" => {
-                let Some((t, r)) = self.selected_region else { return false };
-                self.clipboard = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).cloned();
-                if name == "Cut" {
-                    self.delete_selection();
-                }
-            }
-            "Paste" => {
-                // at the playhead, on the selected track (Logic)
-                let (Some(t), Some(mut rg)) = (self.selected_track, self.clipboard.clone()) else { return false };
-                rg.origin = rg.source.or(rg.origin);
-                rg.source = None;
-                self.checkpoint("Paste");
-                let at = self.position() as u32;
-                let d = at as i64 - rg.start as i64;
-                rg.start = at;
-                for n in &mut rg.notes {
-                    n.pos = (n.pos as i64 + d).max(0) as u32;
-                }
-                if let Some(tr) = self.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-                    tr.regions.push(rg);
-                    self.selected_region = Some((t, tr.regions.len() - 1));
-                }
-                self.after_edit();
-            }
-            "Select All" => {
-                if self.bottom == Bottom::PianoRoll {
-                    if let Some((t, r)) = self.selected_region {
-                        let n = self.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.get(r)).map_or(0, |rg| rg.notes.len());
-                        self.selected_notes = (0..n).collect();
-                    }
-                } else if let Some(t) = self.selected_track {
-                    // the tracks area: the selected track's regions (the first selected)
-                    if self.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| !tr.regions.is_empty()) {
-                        self.selected_region = Some((t, 0));
-                    }
-                } else {
+            // (the Tracks area's regions; the editors' notes are midifunc.rs's, steps stepseq.rs's)
+            "Copy" | "Cut" if crate::focus::tracks(self) => {
+                if !crate::regionclip::copy(self) {
                     return false;
                 }
+                if name == "Cut" {
+                    self.edit_command(ctx, "Delete");
+                }
             }
+            // at the playhead, on the selected track (Logic)
+            "Paste" if crate::focus::tracks(self) => return crate::regionclip::paste(self),
             "Quantize Selected Regions/Cells/Events" => {
                 // Logic's default quantize: 1/16 notes; the selected notes in the Piano Roll, else
                 // the whole selected region
@@ -1875,6 +1855,7 @@ impl App {
         };
         let tracks = Rect::from_min_max(main.min, pos2(main.max.x, main.max.y - editor_h - if editor_h > 0.0 { 1.0 } else { 0.0 }));
         self.tracks_w = (tracks.width() - self.header_w).max(100.0);
+        self.kf.tracks_rect = Some(tracks);
         crate::tracks::show(self, ui, tracks);
         if editor_h > 0.0 {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
@@ -1916,6 +1897,7 @@ impl App {
                 }
             }
         }
+        crate::focus::paint(self, &ctx, &ui.painter().with_clip_rect(body));
         MIDDLE_C4.store(self.logic_settings.get("View / General / Display Middle C As:").starts_with("C4"), std::sync::atomic::Ordering::Relaxed);
         let tags_on = self.logic_settings.get("View / General / Show help tags") != "0";
         if let Some(tag) = self.help_tag.take().filter(|_| tags_on) {

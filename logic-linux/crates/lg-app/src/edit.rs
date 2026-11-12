@@ -130,7 +130,7 @@ impl App {
     }
 
     fn notes_focus(&self) -> bool {
-        self.bottom == Bottom::PianoRoll && self.selected_region.is_some() && self.editor_rect.contains(self.pointer)
+        self.bottom == Bottom::PianoRoll && self.selected_region.is_some() && crate::focus::editor(self)
     }
 
     /// Changes every selected region (or, in the Piano Roll, the selected notes) with `f`.
@@ -322,7 +322,7 @@ impl App {
         let beat = bar / self.project.as_ref().map_or(4, |p| p.signature.0.max(1) as u32);
         let pos = self.position() as u32;
         if let Some(t) = tool_named(name) {
-            if self.bottom == Bottom::PianoRoll && self.editor_rect.contains(self.pointer) {
+            if self.bottom == Bottom::PianoRoll && crate::focus::editor(self) {
                 self.roll_tool = t;
             } else {
                 self.tool = t;
@@ -1064,9 +1064,15 @@ impl App {
                 if crate::automation::delete_selected(self) || crate::regionops::apply_marquee(self, crate::regionops::Cut::Delete) {
                     return true;
                 }
-                if self.notes_focus() && !self.selected_notes.is_empty() {
-                    self.delete_selection();
+                // an editor with the key focus: its notes only, never the tracks' regions
+                if crate::focus::editor(self) {
+                    if self.notes_focus() && !self.selected_notes.is_empty() {
+                        self.delete_selection();
+                    }
                     return true;
+                }
+                if !crate::focus::tracks(self) {
+                    return false;
                 }
                 let mut sel = self.region_selection();
                 if sel.is_empty() {

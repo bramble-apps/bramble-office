@@ -233,6 +233,11 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     let _ = ctx;
     let pos = app.position() as u32;
     match name {
+        // Edit ▸ Delete (and the Delete key): the selected markers while they have the focus
+        "Delete" if app.mk.focus && !app.mk.sel.is_empty() => {
+            let ks = app.mk.sel.clone();
+            delete(app, &ks);
+        }
         "Create Marker" => {
             create(app, pos, Rounding::Bar, "Create Marker");
         }
@@ -718,11 +723,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
         app.mk.last_map = Some(m);
     }
     app.mk.sel.retain(|&k| k < app.markers.len());
-    // Delete / Backspace: the selected markers (while they have the focus)
-    if app.mk.focus && !app.mk.sel.is_empty() && !ctx.egui_wants_keyboard_input() && ctx.input(|i| (i.key_pressed(egui::Key::Backspace) || i.key_pressed(egui::Key::Delete)) && i.modifiers.is_none()) {
-        let ks = app.mk.sel.clone();
-        delete(app, &ks);
-    }
+    // (Delete / Backspace: Edit ▸ Delete, `command`, while the markers have the focus)
     let mut hit = std::mem::take(&mut app.mk.hit);
     if app.mk.list_open {
         let mut open = true;

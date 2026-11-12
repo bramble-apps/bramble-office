@@ -361,6 +361,19 @@ pub(crate) fn load<'a>(app: &'a mut App, path: &Path) -> Option<&'a Loaded> {
     app.audio_edit.files.get(path)
 }
 
+/// A file decoded once (the Tracks area's waveforms and trims, regiontrim.rs): no check that
+/// it changed on disk, so drawing doesn't stat files every frame.
+pub(crate) fn loaded<'a>(app: &'a mut App, path: &Path) -> Option<&'a Loaded> {
+    if app.audio_edit.files.contains_key(path) {
+        return app.audio_edit.files.get(path);
+    }
+    load(app, path)
+}
+
+pub(crate) fn loaded_ref<'a>(app: &'a App, path: &Path) -> Option<&'a Loaded> {
+    app.audio_edit.files.get(path)
+}
+
 /// A file's sample rate (as decoded).
 pub fn rate_of(app: &App, path: &Path) -> Option<u32> {
     app.audio_edit.files.get(path).map(|l| l.audio.rate)
@@ -400,7 +413,7 @@ fn region_frames(app: &App, rg: &lg_core::Region, x: &RegionAudio, rate: u32) ->
 }
 
 /// A flex-warped region's source frame for an output frame (both from the region's start).
-fn flex_src(flex: &[(usize, usize)], dst: f64) -> f64 {
+pub(crate) fn flex_src(flex: &[(usize, usize)], dst: f64) -> f64 {
     let mut prev = (0.0, 0.0);
     for &(s, d) in flex {
         let (s, d) = (s as f64, d as f64);
@@ -2504,7 +2517,7 @@ pub const COMMANDS: &[&str] = &[
 ];
 
 fn in_editor(app: &App) -> bool {
-    app.editor_rect.contains(app.pointer) || app.audio_edit.ctx.as_ref().is_some_and(|c| c.input(|i| i.pointer.hover_pos()).is_some_and(|h| app.editor_rect.contains(h)))
+    crate::focus::editor(app) || app.audio_edit.ctx.as_ref().is_some_and(|c| c.input(|i| i.pointer.hover_pos()).is_some_and(|h| app.editor_rect.contains(h)))
 }
 
 /// Runs a command of the audio editors by its Logic name (key commands of the groups "Audio File

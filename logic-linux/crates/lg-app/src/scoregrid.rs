@@ -683,7 +683,7 @@ fn editor(app: &mut App, ui: &mut egui::Ui, w: &mut Win, all: &mut Vec<Tuning>) 
                 }
             }
         });
-        if ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && !ui.ctx().egui_wants_keyboard_input() {
+        if crate::focus::in_window(app, ui) && ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && !ui.ctx().egui_wants_keyboard_input() {
             if let Some(b) = w.sel_barre.take() {
                 if b < w.edit.barres.len() {
                     w.edit.barres.remove(b);

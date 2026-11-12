@@ -776,9 +776,9 @@ fn import_regions(app: &mut App) {
     app.tell(format!("Imported {n} region{}", if n == 1 { "" } else { "s" }));
 }
 
-/// Keys while the pointer is over the Project Audio Browser: its group's key commands.
+/// Keys while the Project Audio Browser has the key focus (clicked last): its group's key commands.
 pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
-    let over = app.ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| app.pa.rect.is_some_and(|r| r.contains(p))) && (app.pa.window || (app.right_pane == Some(crate::app::RightPane::Files) && app.pf_tab == 0));
+    let over = crate::focus::clicked_in(app, app.pa.rect) && (app.pa.window || (app.right_pane == Some(crate::app::RightPane::Files) && app.pf_tab == 0));
     if !over {
         return false;
     }

@@ -182,7 +182,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
                 ui.end_row();
             }
         });
-        if ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && !ui.ctx().egui_wants_keyboard_input() {
+        if crate::focus::in_window(app, ui) && ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && !ui.ctx().egui_wants_keyboard_input() {
             if let Some(i) = row.filter(|&i| i < set.files.len()) {
                 set.files.remove(i);
                 row = None;

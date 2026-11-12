@@ -400,7 +400,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, open: &mut bool, track: usize)
         });
         // keys in the window: copy, paste, delete
         let (copy_k, paste_k, del_k) = ui.input(|i| (i.events.iter().any(|e| matches!(e, egui::Event::Copy)), i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))), i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)));
-        if !ctx.egui_wants_keyboard_input() {
+        if !ctx.egui_wants_keyboard_input() && crate::focus::in_window(app, ui) {
             if copy_k {
                 copy(&mut w, &styles, &cur);
             }
