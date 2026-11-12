@@ -190,6 +190,10 @@ fn create(app: &mut App, at: u32, r: Rounding, what: &str) -> Option<usize> {
     }
     app.checkpoint(what);
     let k = mk::create(&mut app.markers, at, None)?;
+    // (Settings ▸ View ▸ Tracks ▸ Marker Color: Auto-assign)
+    if let Some(c) = crate::viewprefs::marker_color(app) {
+        app.markers[k].2.color = Some(c);
+    }
     select_only(app, k);
     Some(k)
 }

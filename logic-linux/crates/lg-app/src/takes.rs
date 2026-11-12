@@ -666,6 +666,8 @@ fn take_lanes(app: &mut App, ui: &mut egui::Ui, lane: Rect, fi: usize, f: &TakeF
             let p = ui.painter_at(area);
             p.rect_filled(area, 0.0, look::lane_bg());
             for (k, take) in f.takes.iter().enumerate() {
+                // (Project Settings ▸ Recording ▸ Automatically colorize takes)
+                let body = crate::recsettings::take_color(app, f.track, k).unwrap_or(body);
                 let row = Rect::from_min_size(pos2(area.min.x, area.min.y + k as f32 * TAKE_H), vec2(area.width(), TAKE_H));
                 p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::grid_line()));
                 let tr = Rect::from_min_max(pos2(x(take.start as f32), row.min.y + 2.0), pos2(x((take.start + take.length) as f32), row.max.y - 2.0));

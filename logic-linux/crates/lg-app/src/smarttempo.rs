@@ -247,6 +247,12 @@ pub fn apply_region_tempo(app: &mut App) -> bool {
     let first = map.beats.iter().position(|&b| b >= rt.offset_sec - 1e-6).unwrap_or(0);
     let last = map.beats.iter().rposition(|&b| b <= rt.offset_sec + rt.len_sec + 1e-6).unwrap_or(map.beats.len() - 1);
     let Some(old) = app.project.as_ref().map(|p| (p.tempo, p.tempo_map.clone())) else { return false };
+    // each beat's tempo (Export Tempo Resolution: Smoothed or per beat)
+    let mut bpms: Vec<f64> = map.beats.windows(2).map(|w| 60.0 / (w[1] - w[0]).max(1e-6) * (beat_t / PPQ_F)).collect();
+    if map.variable && first < bpms.len() {
+        let end = last.max(first + 1).min(bpms.len());
+        crate::stdefaults::smooth(&mut bpms[first..end], &app.proj);
+    }
     let mut plan = None;
     for _ in 0..8 {
         // the region's beats on the timeline (ticks), with their tempos
@@ -256,8 +262,7 @@ pub fn apply_region_tempo(app: &mut App) -> bool {
             if tick < 0.0 {
                 continue;
             }
-            let bpm = 60.0 / (map.beats[k + 1] - map.beats[k]).max(1e-6) * (beat_t / PPQ_F);
-            let bpm = (bpm * 10_000.0).round() / 10_000.0;
+            let bpm = (bpms[k] * 10_000.0).round() / 10_000.0;
             if !map.variable && !entries.is_empty() {
                 break;
             }

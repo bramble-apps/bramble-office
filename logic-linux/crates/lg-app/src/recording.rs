@@ -631,14 +631,18 @@ pub fn start(app: &mut App) {
     let audio: Vec<TrackRec> = if have_input { audio.iter().zip(names).map(|(&t, name)| TrackRec { track: t, sel: app.rec.inputs.get(&t).copied().unwrap_or_default(), name, files: Vec::new() }).collect() } else { Vec::new() };
     app.record_from = Some(from);
     app.recorded.clear();
-    let count = if !playing && app.count_in { count_in_ticks(app) } else { 0.0 };
+    // (Project Settings ▸ Recording: Pre-roll instead of the count-in, no clicks)
+    let pre_roll = if !playing && app.count_in { crate::recsettings::pre_roll_ticks(app, from) } else { None };
+    let count = if !playing && app.count_in && pre_roll.is_none() { count_in_ticks(app) } else { 0.0 };
     {
         let mut e = app.engine_lock();
         if !audio.is_empty() {
             e.rec.start(from, punch.map(|(a, b)| (a as f64, b as f64)));
         }
         if !playing {
-            if count > 0.0 {
+            if let Some(pr) = pre_roll {
+                e.locate((from - pr).max(0.0));
+            } else if count > 0.0 {
                 let pre = from - count;
                 e.locate(pre.max(0.0));
                 e.rec.hold = (-pre).max(0.0);
@@ -681,6 +685,9 @@ pub fn update(app: &mut App) {
     }
     let is_audio = |t: usize| app.project.as_ref().is_some_and(|p| p.tracks.get(t).is_some_and(|tr| tr.kind == TrackKind::Audio));
     mon.retain(|m| is_audio(m.0));
+    // (Settings ▸ Audio ▸ General: input monitoring only for the focused track)
+    let rec_tracks: Vec<usize> = app.rec.session.as_ref().map(|s| s.audio.iter().map(|a| a.track).collect()).unwrap_or_default();
+    crate::recsettings::gb_monitor_filter(app, &mut mon, &rec_tracks);
     mon.sort_by_key(|m| m.0);
     if !mon.is_empty() {
         ensure_feed(app);
@@ -1097,7 +1104,9 @@ fn replace_midi(app: &mut App, t: usize, (a, b): (u32, u32), (first, last): (u32
 }
 
 /// The audio recording's passes placed on track `t`.
-fn place_audio(app: &mut App, t: usize, regions: Vec<Region>, cycle: Option<(u32, u32)>) {
+fn place_audio(app: &mut App, t: usize, mut regions: Vec<Region>, cycle: Option<(u32, u32)>) {
+    // (Settings ▸ Audio ▸ Devices ▸ Recording Delay)
+    crate::recsettings::delay_regions(app, &mut regions);
     let a = regions.iter().map(|r| r.start).min().unwrap_or(0);
     let b = regions.iter().map(|r| r.start + r.length).max().unwrap_or(a);
     if let Some(fi) = crate::takes::folder_at(app, t, a, b) {

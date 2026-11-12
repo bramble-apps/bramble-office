@@ -40,6 +40,30 @@ pub fn next_color(cur: Option<u8>, all: bool) -> u8 {
     }
 }
 
+const MARKER_COLOR: &str = "View / Tracks / Marker Color:";
+const MARKER_NEXT: &str = "State / Markers / Next color";
+
+/// Marker Color: Auto-assign 24 starts at the palette's second row's first colour and moves
+/// right along that row; 96 starts at the first colour and runs through all of them.
+pub fn next_marker_color(cur: Option<u8>, all: bool) -> u8 {
+    match (cur, all) {
+        (None, false) => PALETTE_COLS as u8,
+        (cur, all) => next_color(cur, all),
+    }
+}
+
+/// A new marker's colour (None: Static, dark grey).
+pub fn marker_color(app: &mut App) -> Option<u8> {
+    let mode = app.logic_settings.get(MARKER_COLOR);
+    if !mode.starts_with("Auto") {
+        return None;
+    }
+    let cur: Option<u8> = app.proj.0.get(MARKER_NEXT).and_then(|v| v.parse().ok());
+    let c = next_marker_color(cur, mode.contains("96"));
+    app.proj.0.insert(MARKER_NEXT.into(), c.to_string());
+    Some(c)
+}
+
 pub fn frame(app: &mut App) {
     if app.logic_settings.get(REGION_COLOR) == "As Track Color" && app.proj.on(COLORIZE) {
         crate::projsettings::set(&mut app.proj, COLORIZE, "0");
@@ -98,5 +122,16 @@ mod tests {
         // 96: on to the next row, then round
         assert_eq!(next_color(Some(23), true), 24);
         assert_eq!(next_color(Some(95), true), 0);
+    }
+
+    #[test]
+    fn marker_auto_colors() {
+        // 24: from the second row's first colour, along that row
+        assert_eq!(next_marker_color(None, false), 24);
+        assert_eq!(next_marker_color(Some(24), false), 25);
+        assert_eq!(next_marker_color(Some(47), false), 24);
+        // 96: from the first colour through all
+        assert_eq!(next_marker_color(None, true), 0);
+        assert_eq!(next_marker_color(Some(40), true), 41);
     }
 }

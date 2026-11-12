@@ -127,7 +127,7 @@ row	Input Device:	popup	System Default	System Default
 row	I/O Buffer Size:	popup	128	128	~32|64|128|256|512|1024
 row	^	text	Samples		
 row	Resulting Latency:	text	37.0 ms Roundtrip (5.6 ms Output)		
-row	Recording Delay:	slider		0	
+row	Recording Delay:	slider		0	-2000..2000
 # Recording Delay slider is 246 wide with 11 tick dots; 0 sits in the middle (blue fill from the left end to the knob)
 row	^	text	Samples		
 row	Processing Threads:	popup	Automatic (Recommended)	Automatic (Recommended)	~Automatic (Recommended)|1|2|4|8
@@ -140,7 +140,7 @@ row		button	Apply (disabled)
 
 === Audio / General ===
 # window: 750x587 points
-# label column right edge x≈241.5, controls at x≈251.5; popups 291 wide
+# label column right edge x≈241.5, controls at x≈251.5; popups 291 wide; slider 209 wide; stepper 72 wide
 row		check	Display audio engine overload message	1	
 row	Sample Accurate Automation:	popup	Volume, Pan, Sends, Plug-in Parameters	Volume, Pan, Sends, Plug-in Parameters	~Off|Volume|Volume, Pan|Volume, Pan, Sends|Volume, Pan, Sends, Plug-in Parameters
 row	Automatic Bus Assignment Uses:	popup	All Busses	All Busses	~All Busses|Busses 9 and above|Busses 17 and above|Busses 33 and above|Busses 65 and above
@@ -149,7 +149,7 @@ row		check	Input monitoring only for the focused track, and only when input moni
 # that label wraps to 2 lines (box is top-aligned with the first line); its text is from the PNG (unnamed in the dump)
 row		check	Independent monitoring level for record-enabled channel strips	0	
 # text from the PNG (unnamed in the dump)
-row	Dim Level:	slider		-20	
+row	Dim Level:	slider		-20	-30..0
 row	^	stepper		-20	
 row	^	text	dB		
 # Dim Level slider 209 wide, 7 tick dots; stepper 72 wide
@@ -159,7 +159,7 @@ row		text	Plug-in Latency
 row	Compensation:	popup	All (recommended)	All (recommended)	~Off|Audio and Software Instrument Tracks|All (recommended)
 row		check	Playback pre-roll	1	
 row		check	Low Latency Monitoring Mode	0	
-row	Limit:	slider	(disabled)	5	
+row	Limit:	slider	(disabled)	5	0..30
 row	^	stepper	(disabled)	5	
 row	^	text	ms		
 # the Limit slider knob still draws white but has no blue fill; its stepper is greyed
@@ -183,10 +183,10 @@ row		endgroup
 # label column right edge x≈186.5; sliders at x≈193 (265 wide, 7 tick dots); steppers 69 wide at x≈464; popups 265 wide
 # heading
 row		text	Crossfades for Merge and Take Comping		
-row	Crossfade Time:	slider		20	
+row	Crossfade Time:	slider		20	0..200
 row	^	stepper		20	
 row	^	text	ms		
-row	Crossfade Curve:	slider		0	
+row	Crossfade Curve:	slider		0	-100..100
 row	^	stepper		0	
 # Crossfade Curve 0 sits in the middle of its slider
 row		separator			
@@ -382,7 +382,7 @@ row		button	Score Project Settings…
 # no box; label column right edge x≈151.5, controls at x≈159.5; sliders 305 wide (9 tick dots), steppers 78 wide
 # heading
 row		text	Adjustments		
-row	Movie to Project:	slider		0	
+row	Movie to Project:	slider		0	-30..30
 # 0 sits in the middle of the slider
 row	^	stepper		0	
 row	^	text	Quarter Frames		
@@ -456,7 +456,7 @@ row	^	button	Setup…
 # label column right edge x≈264.5, controls at x≈273.5; slider 278 wide (11 tick dots), stepper 70 wide
 row	While Editing Show Long Names For:	check	Parameter name	1	
 row		check	Parameter value	1	
-row	Display Duration:	slider		2	
+row	Display Duration:	slider		2	1..10
 row	^	stepper		2.0	
 # the stepper shows "2.0" (dump value 2)
 row	^	text	s		

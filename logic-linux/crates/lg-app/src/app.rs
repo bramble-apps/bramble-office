@@ -798,6 +798,9 @@ impl App {
             self.tell(format!("Imported {n} track{}", if n == 1 { "" } else { "s" }));
             return;
         }
+        // (Project Settings ▸ Assets ▸ Convert audio file sample rate when importing)
+        let converted = crate::recsettings::import_converted(self, path);
+        let path = converted.as_path();
         let Some(seconds) = lg_core::project::wav_seconds(path).or_else(|| audio::load_audio(path).map(|s| s.len() as f64 / 2.0 / audio::RATE as f64)) else {
             self.tell("Couldn't read that audio file");
             return;
@@ -819,6 +822,9 @@ impl App {
         p.tracks[t].regions.push(lg_core::Region { name, start: at, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file: path.to_path_buf(), seconds }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
         self.selected_track = Some(t);
         self.after_edit();
+        // (Project Settings ▸ Smart Tempo ▸ Set Imported Files To)
+        let r = self.project.as_ref().map_or(0, |p| p.tracks[t].regions.len() - 1);
+        crate::stdefaults::imported(self, t, r);
     }
 
     /// Ends recording: the notes played become a region on the selected track (Logic: from the
@@ -946,6 +952,10 @@ impl App {
     /// Sets the song's tempo (the LCD): one tempo for the whole song.
     pub fn set_tempo(&mut self, bpm: f64) {
         let bpm = (bpm * 100.0).round() / 100.0;
+        // (Project Settings ▸ Recording ▸ Allow tempo change recording)
+        if crate::recsettings::record_tempo(self, bpm) {
+            return;
+        }
         let Some(p) = self.project.as_mut() else { return };
         if (p.tempo - bpm).abs() < 1e-6 {
             return;

@@ -326,7 +326,7 @@ pub fn save(app: &mut App) {
 pub fn movie_time(app: &App, tick: f64) -> Option<f64> {
     let s = &app.hub.movie;
     let info = s.info.as_ref()?;
-    let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+    let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
     let at = app.seconds_at(tick) + bar1;
     let start = s.start.unwrap_or(bar1);
     let t = at - start;
@@ -335,7 +335,7 @@ pub fn movie_time(app: &App, tick: f64) -> Option<f64> {
 
 /// The song position of a movie time.
 pub fn tick_of(app: &App, t: f64) -> f64 {
-    let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+    let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
     let start = app.hub.movie.start.unwrap_or(bar1);
     let (map, tempo) = app.project.as_ref().map_or((Vec::new(), 120.0), |p| (p.tempo_map.clone(), p.tempo));
     crate::syncmidi::tick_at(&map, tempo, start + t - bar1)
@@ -423,7 +423,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             }
         }
         "Move Movie Region to Playhead" | "Move Movie Region (and SMPTE Position) to Playhead" => {
-            let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+            let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
             let at = app.seconds_at(app.position()) + bar1;
             app.hub.movie.start = Some(at);
             app.dirty = true;
@@ -497,7 +497,7 @@ fn scenes(app: &mut App, how: &str) {
 
 fn remove_scenes(app: &mut App, how: &str) {
     let Some((a, b)) = range(app, how) else { return };
-    let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+    let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
     let start = app.hub.movie.start.unwrap_or(bar1);
     let gone: Vec<f64> = app.hub.movie.scenes.iter().copied().filter(|s| *s - start >= a - 1e-6 && *s - start <= b + 1e-6).collect();
     if gone.is_empty() {
@@ -515,7 +515,7 @@ fn follow_scenes(app: &mut App) {
     if app.hub.movie.scenes.is_empty() {
         return;
     }
-    let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+    let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
     let start = app.hub.movie.start.unwrap_or(bar1);
     let want: Vec<(u32, String)> = app.hub.movie.scenes.iter().enumerate().map(|(k, s)| (tick_of(app, *s - start).round() as u32, format!("Scene {}", k + 1))).collect();
     let p = app;
@@ -597,7 +597,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
                 }
             }
             Job::Scenes(cuts) => {
-                let (bar1, _, _) = crate::projsettings::smpte(&app.proj);
+                let (bar1, _, _) = crate::projsettings::smpte_real(&app.proj);
                 let start = app.hub.movie.start.unwrap_or(bar1);
                 app.checkpoint("Create Scene Markers");
                 for c in cuts {

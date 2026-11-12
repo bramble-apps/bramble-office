@@ -56,6 +56,10 @@ pub struct State {
     /// Adapt: the audio regions (by file) and tempo changes as last seen.
     last: std::collections::HashMap<PathBuf, (u32, u32)>,
     last_tm: Option<Vec<(u32, f64)>>,
+    /// Smart Tempo defaults (stdefaults.rs): new regions waiting for their analysis.
+    pub st_pending: Vec<crate::stdefaults::Pending>,
+    /// Independent monitoring level (recsettings.rs): faders as they were when armed.
+    pub armed_levels: crate::recsettings::Armed,
 }
 
 pub fn mode(app: &App) -> Mode {
@@ -227,6 +231,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
             app.tm2.free_file = Some(f.clone());
             continue;
         }
+        crate::stdefaults::recorded(app, &f);
         let there = regions_there(app, &f, at as u32);
         if adapts(mode(app), metronome(app), app.cycle_on(), there) {
             crate::smarttempo::analyze(app, &f);
@@ -265,6 +270,8 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
             crate::smarttempo::apply_region_tempo(app);
         }
     }
+    crate::stdefaults::frame(app);
+    crate::recsettings::frame(app);
     follow_regions(app);
     free_dialog(app, ctx);
     apply_dialog(app, ctx);

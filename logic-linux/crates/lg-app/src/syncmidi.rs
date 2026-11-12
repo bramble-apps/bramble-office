@@ -156,13 +156,13 @@ pub fn tick_at(map: &[(u32, f64)], tempo: f64, secs: f64) -> f64 {
 }
 
 fn rate_of(app: &App) -> Rate {
-    let (_, fps, drop) = crate::projsettings::smpte(&app.proj);
+    let (_, fps, drop) = crate::projsettings::smpte_real(&app.proj);
     Rate { fps, drop }
 }
 
 /// The bar 1 SMPTE time in seconds.
 fn offset(app: &App) -> f64 {
-    crate::projsettings::smpte(&app.proj).0
+    crate::projsettings::smpte_real(&app.proj).0
 }
 
 fn port_of(v: &str) -> String {
