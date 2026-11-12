@@ -83,8 +83,8 @@ fn body(pn: &mut Pane) {
     }
     // Key Tracking, Root Key, Mode
     pn.toggle(330.0, 250.0, 110.0, 22.0, ds::KEY_TRACK, "Key Tracking");
-    pn.text(330.0, 292.0, Align2::LEFT_CENTER, "Root Key", 10.5, SKIN.dim);
     if pn.on(ds::KEY_TRACK) {
+        pn.text(330.0, 292.0, Align2::LEFT_CENTER, "Root Key", 10.5, SKIN.dim);
         pn.field(386.0, 281.0, 54.0, 22.0, ds::ROOT, 1.0);
     }
     pn.text(460.0, 240.0, Align2::LEFT_CENTER, "Mode", 10.5, SKIN.dim);

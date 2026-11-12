@@ -34,7 +34,7 @@ fn body(pn: &mut Pane, v: lg::Variant) {
         } else {
             pn.hfader(150.0, y, 200.0, 22.0, p.id);
             let val = pn.get(p.id);
-            let s = pn.shown(p.id, val);
+            let s = if p.unit == lg_dsp::Unit::Ratio { format!("{:.0} %", val * 100.0) } else { pn.shown(p.id, val) };
             pn.text(424.0, y + 11.0, Align2::RIGHT_CENTER, &s, 10.5, SKIN.dim);
         }
     }
