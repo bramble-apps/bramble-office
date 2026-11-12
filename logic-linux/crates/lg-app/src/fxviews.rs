@@ -34,7 +34,7 @@ pub struct Live {
 }
 
 impl Live {
-    fn get(&self, name: &str) -> Option<f32> {
+    pub(crate) fn get(&self, name: &str) -> Option<f32> {
         self.readouts.iter().find(|r| r.0 == name).map(|r| r.1)
     }
     pub(crate) fn curve(&self, name: &str) -> &[f32] {
@@ -53,9 +53,14 @@ pub enum Action {
     /// Beat Breaker: save the edited pattern under a name / load a saved one.
     SavePattern(String),
     LoadPattern(std::path::PathBuf),
+    /// Auto Sampler: Sample (name it, then sample), Cancel, a key of its keyboard (velocity 0:
+    /// released).
+    AutoSample,
+    AutoSampleCancel,
+    PlayKey(u8, u8),
 }
 
-const EDITORS: &[&str] = &["Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Compressor", "Quantec Room Simulator", "Auto Sampler", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -63,6 +68,9 @@ pub fn has_editor(name: &str) -> bool {
 
 pub fn default_size(name: &str) -> egui::Vec2 {
     match name {
+        "Compressor" => crate::compview::SIZE,
+        "Quantec Room Simulator" => vec2(760.0, 640.0),
+        "Auto Sampler" => vec2(720.0, 640.0),
         "Remix FX" | "Beat Breaker" | "Step FX" | "Delay Designer" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
         "Space Designer" | "MultiMeter" => vec2(680.0, 520.0),
         "Match EQ" => vec2(720.0, 620.0),
@@ -78,7 +86,7 @@ pub fn curves_for(name: &str) -> &'static [&'static str] {
         "Space Designer" => &["ir"],
         "Match EQ" => &["current", "reference", "eq", "eq_r", "analyzer"],
         "Channel EQ" | "Linear Phase EQ" => &["analyzer"],
-        "MultiMeter" => &["spectrum", "goniometer"],
+        "MultiMeter" => &["spectrum", "spectrum_hold", "goniometer"],
         _ => &[],
     }
 }
@@ -146,6 +154,9 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
     let mut set = Vec::new();
     let mut act = None;
     egui::ScrollArea::vertical().id_salt(("fx-editor", slot)).auto_shrink([false, false]).show(ui, |ui| match name {
+        "Compressor" => crate::compview::view(ui, params, values, live, slot, &mut set),
+        "Quantec Room Simulator" => crate::qrsview::view(ui, params, values, live, &mut set),
+        "Auto Sampler" => crate::autosampler::view(ui, params, values, live, &mut set, &mut act),
         "Channel EQ" | "Linear Phase EQ" => crate::eqview::view(ui, params, values, live.curve("analyzer"), slot, &mut set),
         "Remix FX" => remix(ui, params, values, &mut set),
         "Beat Breaker" => beat_breaker(ui, params, values, live, &mut set, &mut act),
@@ -156,7 +167,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
         "Space Designer" => space(ui, params, values, live, &mut set, &mut act),
         "Match EQ" => crate::meqview::view(ui, params, values, live, slot, &mut set, &mut act),
         "Pitch Correction" => pitch_correction(ui, params, values, live, &mut set),
-        _ => meters(ui, name, params, values, live, &mut set),
+        _ => crate::meterview::view(ui, name, params, values, live, slot, &mut set),
     });
     (set, act)
 }
@@ -643,117 +654,7 @@ fn step_fx(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set
 fn delay_designer(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec<(u32, f32)>) {
     use lg_fx::delay_designer::*;
     let g = |id| v(params, values, id);
-    let view_id = ui.scope_id().with("dd-view");
-    let mut view = ui.data(|d| d.get_temp::<usize>(view_id)).unwrap_or(4);
-    ui.horizontal(|ui| {
-        for (k, n) in ["Cutoff", "Reso", "Transp", "Pan", "Level"].iter().enumerate() {
-            if ui.add(egui::Button::selectable(view == k, *n)).clicked() {
-                view = k;
-            }
-        }
-    });
-    ui.data_mut(|d| d.insert_temp(view_id, view));
-    let taps: Vec<(usize, f32)> = (0..TAPS).filter(|k| g(tap_id(*k, T_ON)) >= 0.5).map(|k| (k, g(tap_id(k, T_DELAY)))).collect();
-    let max_ms = taps.iter().map(|t| t.1).fold(500.0f32, f32::max) * 1.15;
-    let sel = g(SELECTED).round() as usize;
-    let (toggle, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
-    let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), 170.0), Sense::hover());
-    let (idbar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
-    let p = ui.painter().clone();
-    p.rect_filled(area, 6.0, look::lcd_bg());
-    p.rect_filled(idbar, 3.0, look::group_bg());
-    let x_of = |ms: f32| area.min.x + area.width() * (ms / max_ms);
-    for (k, ms) in &taps {
-        let x = x_of(*ms);
-        let on_col = if *k == sel { Color32::WHITE } else { look::accent() };
-        p.vline(x, area.y_range(), Stroke::new(1.0, look::mix(look::lcd_bg(), on_col, 0.4)));
-        let fy = |t: f32| area.max.y - area.height() * t.clamp(0.0, 1.0);
-        match view {
-            0 => {
-                let lo = (g(tap_id(*k, T_HP)).max(10.0) / 10.0).log10() / 3.31;
-                let hi = (g(tap_id(*k, T_LP)).max(10.0) / 10.0).log10() / 3.31;
-                p.line_segment([pos2(x, fy(lo)), pos2(x, fy(hi))], Stroke::new(4.0, on_col));
-            }
-            1 => {
-                p.line_segment([pos2(x, area.max.y), pos2(x, fy(g(tap_id(*k, T_RESO)) / 100.0))], Stroke::new(4.0, on_col));
-            }
-            2 => {
-                p.circle_filled(pos2(x, fy(0.5 + g(tap_id(*k, T_TRANSP)) / 48.0)), 4.0, on_col);
-            }
-            3 => {
-                let pan = g(tap_id(*k, T_PAN)) / 100.0;
-                let spread = g(tap_id(*k, T_SPREAD)) / 100.0;
-                let c = fy(0.5 + pan * 0.5);
-                p.line_segment([pos2(x, c - spread * 30.0), pos2(x, c + spread * 30.0)], Stroke::new(2.0, on_col));
-                p.circle_filled(pos2(x, c), 4.0, on_col);
-            }
-            _ => {
-                p.line_segment([pos2(x, area.max.y), pos2(x, fy(g(tap_id(*k, T_LEVEL)) / 100.0))], Stroke::new(4.0, on_col));
-            }
-        }
-        // the letter on the identification bar: click selects, drag moves in time, drag down out
-        // of the display deletes; the toggle above switches the view's parameter
-        let lr = Rect::from_center_size(pos2(x, idbar.center().y), vec2(16.0, idbar.height()));
-        p.text(lr.center(), Align2::CENTER_CENTER, tap_letter(*k).to_string(), look::semibold(12.0), on_col);
-        let resp = ui.interact(lr, ui.scope_id().with(("dd-tap", *k)), Sense::click_and_drag());
-        if resp.clicked() || resp.drag_started() {
-            set.push((SELECTED, *k as f32));
-        }
-        if resp.dragged() {
-            if let Some(pp) = resp.interact_pointer_pos() {
-                if pp.y > idbar.max.y + 30.0 && taps.len() > 1 {
-                    set.push((tap_id(*k, T_ON), 0.0));
-                } else {
-                    set.push((SELECTED, *k as f32));
-                    set.push((SEL + T_DELAY as u32, ((pp.x - area.min.x) / area.width() * max_ms).clamp(1.0, 10000.0)));
-                }
-            }
-        }
-        resp.context_menu(|ui| {
-            if ui.button("Delete Tap").clicked() && taps.len() > 1 {
-                set.push((tap_id(*k, T_ON), 0.0));
-                ui.close();
-            }
-        });
-        let tr = Rect::from_center_size(pos2(x, toggle.center().y), vec2(14.0, 14.0));
-        let tf = [T_FILTER, T_SLOPE, T_PITCH, T_FLIP, T_MUTE][view];
-        let ton = g(tap_id(*k, tf)) >= 0.5;
-        p.circle(tr.center(), 5.0, if ton { look::accent() } else { look::group_bg() }, Stroke::new(1.0, look::line()));
-        if ui.interact(tr, ui.scope_id().with(("dd-tog", *k)), Sense::click()).clicked() {
-            set.push((tap_id(*k, tf), if ton { 0.0 } else { 1.0 }));
-        }
-        // editing in the display: drag vertically on a tap's line
-        let col = Rect::from_center_size(pos2(x, area.center().y), vec2(10.0, area.height()));
-        let resp = ui.interact(col, ui.scope_id().with(("dd-edit", *k)), Sense::drag());
-        if let Some(pp) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-            let t = ((area.max.y - pp.y) / area.height()).clamp(0.0, 1.0);
-            set.push((SELECTED, *k as f32));
-            match view {
-                0 => set.push((SEL + T_LP as u32, 10.0 * 10f32.powf(t * 3.31))),
-                1 => set.push((SEL + T_RESO as u32, t * 100.0)),
-                2 => set.push((SEL + T_TRANSP as u32, ((t - 0.5) * 48.0).round())),
-                3 => set.push((SEL + T_PAN as u32, (t - 0.5) * 200.0)),
-                _ => set.push((SEL + T_LEVEL as u32, t * 100.0)),
-            }
-        }
-    }
-    // a click on the identification bar (not on a letter) adds a tap there
-    let resp = ui.interact(idbar, ui.scope_id().with("dd-idbar"), Sense::click());
-    if resp.clicked() {
-        if let Some(pp) = resp.interact_pointer_pos() {
-            if !taps.iter().any(|t| (x_of(t.1) - pp.x).abs() < 9.0) {
-                if let Some(k) = (0..TAPS).find(|k| g(tap_id(*k, T_ON)) < 0.5) {
-                    let ms = ((pp.x - area.min.x) / area.width() * max_ms).clamp(1.0, 10000.0);
-                    for (f, (_, _, _, d, _)) in FIELDS.iter().enumerate() {
-                        set.push((tap_id(k, f), *d));
-                    }
-                    set.push((tap_id(k, T_ON), 1.0));
-                    set.push((tap_id(k, T_DELAY), ms));
-                    set.push((SELECTED, k as f32));
-                }
-            }
-        }
-    }
+    crate::ddview::display(ui, params, values, set);
     // the Tap pads
     let tp_id = ui.scope_id().with("dd-tappads");
     let mut rec: Option<(f64, Vec<f32>)> = ui.data(|d| d.get_temp(tp_id));
@@ -806,9 +707,11 @@ fn delay_designer(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut
             d.remove::<(f64, Vec<f32>)>(tp_id);
         }
     });
-    ui.label(egui::RichText::new(format!("Tap {}", tap_letter(sel))).strong());
+    crate::ddview::bar_head(ui, params, values, set);
     let tap_ids: Vec<u32> = (1..FIELDS.len() as u32).map(|f| SEL + f).collect();
+    let before = set.len();
     set.extend(rows(ui, params, values, &tap_ids, "dd-bar"));
+    crate::ddview::spread_bar_edit(ui, before, set);
     set.extend(rows(ui, params, values, &[SYNC, GRID, SWING, FEEDBACK, FEEDBACK_TAP, FEEDBACK_LEVEL, MIX_DRY, MIX_WET], "dd-master"));
 }
 
@@ -825,6 +728,9 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
     ui.columns(2, |cols| {
         // the Pedal Browser: a category, its pedals; double-click adds (or replaces the selected)
         let ui = &mut cols[1];
+        if crate::pbrouter::import_mode(ui, params, values, sel, set) {
+            return;
+        }
         let cat_id = ui.scope_id().with("pb-cat");
         let cats = ["All", "Delay", "Distortion", "Dynamics", "Filter", "Modulation", "Pitch", "Utility"];
         let mut cat = ui.data(|d| d.get_temp::<usize>(cat_id)).unwrap_or(0);
@@ -850,7 +756,16 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
                             (last.map_or(0, |l| l + 1)..SLOTS).find(|s| kinds[*s] == 0)
                         }
                     };
-                    if let Some(t) = target {
+                    if utility {
+                        // a Splitter or Mixer goes where the Router's rules allow: before the
+                        // selected pedal, else at the end
+                        let n_used = kinds.iter().filter(|k| **k != 0).count();
+                        let at = sel.map_or(n_used, |s| (0..s).filter(|k| kinds[*k] != 0).count());
+                        let at = if *n == "Splitter" && at >= n_used { 0 } else { at };
+                        if !crate::pbrouter::place_utility(params, values, n, at, set) {
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("pb-refused"), format!("A {n} can't go there")));
+                        }
+                    } else if let Some(t) = target {
                         set.push((BASE + STRIDE * t as u32, k as f32));
                     }
                 }
@@ -859,23 +774,8 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
         ui.label(egui::RichText::new("Double-click a pedal to add it (or to replace the selected one).").size(11.0).color(look::text_dim()));
         // the Pedal area: the router line above (Bus A / B), the pedals left to right
         let ui = &mut cols[0];
-        let (router, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
-        let p = ui.painter().clone();
+        crate::pbrouter::router(ui, params, values, set);
         let used: Vec<usize> = (0..SLOTS).filter(|k| kinds[*k] != 0).collect();
-        let w = router.width() / used.len().max(1) as f32;
-        p.hline(router.x_range(), router.max.y - 8.0, Stroke::new(2.0, look::line()));
-        if g(BASE + 1) >= 0.0 && used.iter().any(|k| g(BASE + STRIDE * *k as u32 + 1) >= 0.5) {
-            p.hline(router.x_range(), router.min.y + 8.0, Stroke::new(2.0, look::line()));
-        }
-        for (i, k) in used.iter().enumerate() {
-            let b = g(BASE + STRIDE * *k as u32 + 1) >= 0.5;
-            let r = Rect::from_min_size(pos2(router.min.x + i as f32 * w + 2.0, if b { router.min.y } else { router.max.y - 16.0 }), vec2(w - 4.0, 16.0));
-            p.rect_filled(r, 3.0, look::group_bg());
-            p.text(r.center(), Align2::CENTER_CENTER, choices[kinds[*k]], look::regular(10.0), look::text());
-            if ui.interact(r, ui.scope_id().with(("pb-route", *k)), Sense::click()).on_hover_text("Click: move between Bus A and Bus B").clicked() {
-                set.push((BASE + STRIDE * *k as u32 + 1, if b { 0.0 } else { 1.0 }));
-            }
-        }
         ui.horizontal_wrapped(|ui| {
             for (i, k) in used.iter().enumerate() {
                 let r = ui.add(egui::Button::selectable(sel == Some(*k), format!("{} {}", i + 1, choices[kinds[*k]])));
@@ -885,6 +785,7 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
                 r.context_menu(|ui| {
                     if ui.button("Remove").clicked() {
                         set.push((BASE + STRIDE * *k as u32, 0.0));
+                        crate::pbrouter::after_remove(params, values, *k, set);
                         ui.close();
                     }
                     if i > 0 && ui.button("Move Left").clicked() {
@@ -904,6 +805,7 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
             set.extend(rows(ui, params, values, &ids, "pb-pedal"));
             if ui.button("Remove Pedal").clicked() {
                 set.push((BASE + STRIDE * s as u32, 0.0));
+                crate::pbrouter::after_remove(params, values, s, set);
             }
         }
     });
@@ -1132,80 +1034,18 @@ fn pitch_correction(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &
 // ---------------------------------------------------------------------------------------------
 // Meters
 
-fn meters(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], live: &Live, set: &mut Vec<(u32, f32)>) {
-    let (r, p) = panel(ui, if name == "MultiMeter" { 240.0 } else { 120.0 });
-    let row = |k: usize| Rect::from_min_size(pos2(r.min.x + 10.0, r.min.y + 10.0 + 18.0 * k as f32), vec2(r.width() * 0.5, 12.0));
-    let gget = |n| live.get(n).unwrap_or(-120.0);
-    match name {
-        "Level Meter" => {
-            meter(&p, row(0), gget("Peak L"), -60.0, 6.0, "Peak L");
-            meter(&p, row(1), gget("Peak R"), -60.0, 6.0, "Peak R");
-            meter(&p, row(2), gget("RMS L"), -60.0, 6.0, "RMS L");
-            meter(&p, row(3), gget("RMS R"), -60.0, 6.0, "RMS R");
-            p.text(row(4).left_center(), Align2::LEFT_CENTER, format!("Hold {:.1} / {:.1} dB", gget("Hold L"), gget("Hold R")), look::regular(11.0), look::text());
-        }
-        "Loudness Meter" => {
-            meter(&p, row(0), gget("Momentary"), -50.0, 0.0, "M");
-            meter(&p, row(1), gget("Short-Term"), -50.0, 0.0, "S");
-            meter(&p, row(2), gget("Integrated"), -50.0, 0.0, "I");
-            p.text(row(3).left_center(), Align2::LEFT_CENTER, format!("LU Range {:.1}   True Peak max {:.1} dBTP", live.get("LU Range").unwrap_or(0.0), gget("True Peak Max")), look::regular(11.0), look::text());
-        }
-        "Correlation Meter" => {
-            let c = live.get("Correlation").unwrap_or(1.0);
-            let br = Rect::from_center_size(r.center(), vec2(r.width() * 0.8, 14.0));
-            p.rect_filled(br, 3.0, look::group_bg());
-            p.circle_filled(pos2(br.center().x + br.width() / 2.0 * c, br.center().y), 7.0, if c < 0.0 { look::record_red() } else { Color32::from_rgb(0x40, 0xc0, 0x60) });
-            p.text(br.center_bottom() + vec2(0.0, 12.0), Align2::CENTER_TOP, format!("{c:+.2}   (−1 … 0 … +1)"), look::regular(12.0), look::text());
-        }
-        "BPM Counter" => {
-            let bpm = live.get("BPM").unwrap_or(0.0);
-            p.text(r.center(), Align2::CENTER_CENTER, if bpm > 0.0 { format!("{bpm:.1} BPM") } else { "— BPM".into() }, look::bold(28.0), look::lcd_text());
-        }
-        "Tuner" => {
-            let note = live.get("Note");
-            let cents = live.get("Cents").unwrap_or(0.0);
-            let names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
-            let t = note.map(|n| format!("{}{}", names[(n as i32).rem_euclid(12) as usize], (n as i32) / 12 - 1)).unwrap_or_else(|| "—".into());
-            p.text(r.center() - vec2(0.0, 18.0), Align2::CENTER_CENTER, t, look::bold(28.0), look::lcd_text());
-            let br = Rect::from_center_size(r.center() + vec2(0.0, 24.0), vec2(r.width() * 0.7, 8.0));
-            p.rect_filled(br, 2.0, look::group_bg());
-            p.circle_filled(pos2(br.center().x + br.width() / 2.0 * (cents / 50.0).clamp(-1.0, 1.0), br.center().y), 6.0, if cents.abs() < 3.0 { Color32::from_rgb(0x40, 0xc0, 0x60) } else { look::accent() });
-            p.text(br.center_bottom() + vec2(0.0, 6.0), Align2::CENTER_TOP, format!("{cents:+.0} ct   {:.1} Hz", live.get("Frequency").unwrap_or(0.0)), look::regular(11.0), look::text());
-        }
-        _ => {
-            // MultiMeter: analyzer on the left, goniometer on the right, levels and correlation
-            let ar = Rect::from_min_max(r.min + vec2(8.0, 8.0), pos2(r.center().x - 8.0, r.max.y - 40.0));
-            let spec = live.curve("spectrum");
-            let n = spec.len().max(1);
-            for (k, db) in spec.iter().enumerate() {
-                let x0 = ar.min.x + ar.width() * k as f32 / n as f32;
-                let h = ar.height() * ((db + 100.0) / 100.0).clamp(0.0, 1.0);
-                p.rect_filled(Rect::from_min_max(pos2(x0 + 0.5, ar.max.y - h), pos2(x0 + ar.width() / n as f32 - 0.5, ar.max.y)), 0.0, look::accent());
-            }
-            let gr = Rect::from_center_size(pos2(r.center().x + r.width() / 4.0, ar.center().y), vec2(ar.height(), ar.height()));
-            p.rect_stroke(gr, 0.0, Stroke::new(0.5, look::grid_line()), egui::StrokeKind::Inside);
-            let pts = live.curve("goniometer");
-            let peak = pts.iter().fold(1e-6f32, |m, v| m.max(v.abs()));
-            for c in pts.chunks(2).step_by(2) {
-                if let [s, m] = c {
-                    p.circle_filled(pos2(gr.center().x + s / peak * gr.width() / 2.0, gr.center().y - m / peak * gr.height() / 2.0), 0.8, Color32::from_rgb(0x50, 0xd0, 0x70));
-                }
-            }
-            let br = Rect::from_min_size(pos2(r.min.x + 10.0, r.max.y - 30.0), vec2(r.width() * 0.4, 10.0));
-            meter(&p, br, gget("Peak L").max(gget("Peak R")), -60.0, 6.0, "Peak");
-            let c = live.get("Correlation").unwrap_or(1.0);
-            p.text(pos2(r.center().x + 10.0, r.max.y - 25.0), Align2::LEFT_CENTER, format!("Correlation {c:+.2}   I {:.1} LUFS", gget("Integrated")), look::regular(11.0), look::text());
-        }
-    }
-    set.extend(crate::pluginwin::control_rows(ui, params, values, &[], "meter-rows"));
-}
-
 // ---------------------------------------------------------------------------------------------
 // actions
 
 /// Runs a view's action; parameters to set on the effect.
 pub fn run_action(app: &mut App, slot: (usize, usize), name: &str, a: Action) -> Vec<(u32, f32)> {
     match a {
+        Action::AutoSample | Action::AutoSampleCancel | Action::PlayKey(..) => {
+            if let Some((_, params, values)) = crate::pluginwin::effect_state_pub(app, slot.0, slot.1) {
+                crate::autosampler::run_action(app, slot.0, a, &params, &values);
+            }
+            Vec::new()
+        }
         Action::Reanalyze => {
             // the mix as it plays (the cycle if set, else the whole project), without the
             // Stereo Out's own effects

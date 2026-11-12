@@ -434,6 +434,66 @@ impl Effect for Board {
     }
 }
 
+
+// ---- the Router's rules (the guide's): where a Splitter, a Mixer or a split point may go ----
+
+/// The chain as the Router sees it: the used slots' names in order ("" never appears).
+pub fn chain(names: &[&str]) -> Vec<String> {
+    names.iter().filter(|n| !n.is_empty() && **n != "Empty").map(|n| n.to_string()).collect()
+}
+
+/// A Splitter may go before position `at` (0 = first) of the chain: not at the far right (no
+/// pedal after it), not right after a Splitter, not right before a Mixer, not in empty space.
+pub fn splitter_ok(chain: &[String], at: usize) -> bool {
+    if at >= chain.len() {
+        return false;
+    }
+    if at > 0 && chain[at - 1] == "Splitter" {
+        return false;
+    }
+    chain[at] != "Mixer" && chain[at] != "Splitter"
+}
+
+/// A Mixer may go before position `at`: not in the first slot, not right after a Mixer, not
+/// right after a Splitter (next to its split), not between a Splitter and its Mixer, not next
+/// to the split point `split` (when there is no Splitter).
+pub fn mixer_ok(chain: &[String], at: usize, split: Option<usize>) -> bool {
+    if at == 0 || at > chain.len() {
+        return false;
+    }
+    if chain[at - 1] == "Mixer" || chain[at - 1] == "Splitter" {
+        return false;
+    }
+    if let Some(sp) = chain.iter().position(|n| n == "Splitter")
+        && sp < at
+        && chain[sp..].iter().any(|n| n == "Mixer")
+        && chain[sp..at].iter().all(|n| n != "Mixer")
+    {
+        return false;
+    }
+    if let Some(s) = split
+        && !chain.iter().any(|n| n == "Splitter")
+        && (s == at || s + 1 == at)
+    {
+        return false;
+    }
+    true
+}
+
+/// A split point (before position `at`) may not sit directly before or after the Mixer.
+pub fn split_point_ok(chain: &[String], at: usize) -> bool {
+    let m = chain.iter().position(|n| n == "Mixer");
+    match m {
+        Some(m) => at < m && at + 1 != m && at != m + 1,
+        None => at < chain.len(),
+    }
+}
+
+/// Whether a second bus exists (a Splitter, a Mixer, or a pedal on Bus B).
+pub fn two_buses(chain: &[String], any_b: bool) -> bool {
+    any_b || chain.iter().any(|n| n == "Splitter" || n == "Mixer")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,5 +551,30 @@ mod tests {
         c.load_floats(&floats);
         assert_eq!(c.pedals()[1], "Phaze 2");
         assert!((c.get(BASE + STRIDE + 4) - 1.3).abs() < 1e-4);
+    }
+
+    fn ch(v: &[&str]) -> Vec<String> {
+        chain(v)
+    }
+
+    #[test]
+    fn router_rules() {
+        let c = ch(&["Rawk! Distortion", "", "Heavenly Chorus", "Blue Echo"]);
+        assert_eq!(c.len(), 3);
+        assert!(splitter_ok(&c, 0));
+        assert!(!splitter_ok(&c, 3)); // far right / empty space
+        let c2 = ch(&["Splitter", "Heavenly Chorus", "Mixer"]);
+        assert!(!splitter_ok(&c2, 1)); // right after a Splitter
+        assert!(!splitter_ok(&c2, 2)); // right before a Mixer
+        assert!(!mixer_ok(&c, 0, None)); // first slot
+        assert!(!mixer_ok(&c2, 3, None)); // right after a Mixer
+        assert!(!mixer_ok(&c2, 1, None)); // next to its Splitter
+        assert!(!mixer_ok(&c2, 2, None)); // between the Splitter and its Mixer
+        assert!(mixer_ok(&c, 2, Some(0)));
+        assert!(!mixer_ok(&c, 1, Some(0))); // next to the split point
+        let c3 = ch(&["Rawk! Distortion", "Heavenly Chorus", "Blue Echo", "Mixer"]);
+        assert!(split_point_ok(&c3, 0) && split_point_ok(&c3, 1));
+        assert!(!split_point_ok(&c3, 2) && !split_point_ok(&c3, 4));
+        assert!(two_buses(&c3, false) && !two_buses(&c, false));
     }
 }

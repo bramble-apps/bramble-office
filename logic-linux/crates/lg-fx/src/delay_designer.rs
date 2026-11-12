@@ -294,7 +294,19 @@ impl Effect for DelayDesigner {
                 let (fon, steep, hp, lp) = filt[k];
                 if fon {
                     for s in 0..2 {
-                        if steep {
+                        if hp > lp {
+                            // high-pass above low-pass: the two run in parallel, a band reject
+                            if steep {
+                                let x = y[s];
+                                y[s] = t.hp[s].run(x).high + t.lp[s].run(x).low;
+                            } else {
+                                let a_hp = 1.0 - (-std::f32::consts::TAU * hp.min(rate * 0.45) / rate).exp();
+                                let a_lp = 1.0 - (-std::f32::consts::TAU * lp.min(rate * 0.45) / rate).exp();
+                                t.hp1[s] = flush(t.hp1[s] + a_hp * (y[s] - t.hp1[s]));
+                                t.lp1[s] = flush(t.lp1[s] + a_lp * (y[s] - t.lp1[s]));
+                                y[s] = (y[s] - t.hp1[s]) + t.lp1[s];
+                            }
+                        } else if steep {
                             if hp > 20.0 {
                                 y[s] = t.hp[s].run(y[s]).high;
                             }
@@ -505,5 +517,27 @@ mod tests {
         dd.set_taps(&[200.0, 400.0, 650.0]);
         assert_eq!(dd.taps_in_time().len(), 3);
         assert_eq!(dd.p.idx(FEEDBACK_TAP), 2);
+    }
+
+    /// High-pass above low-pass: a band reject (a tone between them is cut, the outsides pass).
+    #[test]
+    fn crossed_filters_reject_a_band() {
+        let mut dd = DelayDesigner::new(48000.0);
+        dd.set(SEL + T_FILTER as u32, 1.0);
+        dd.set(SEL + T_HP as u32, 4000.0);
+        dd.set(SEL + T_LP as u32, 300.0);
+        dd.set(MIX_DRY, 0.0);
+        let tone = |f: f32| -> f32 {
+            let mut d = DelayDesigner::new(48000.0);
+            for (id, v) in [(SEL + T_FILTER as u32, 1.0), (SEL + T_HP as u32, 4000.0), (SEL + T_LP as u32, 300.0), (MIX_DRY, 0.0), (SEL + T_DELAY as u32, 10.0), (SEL + T_ON as u32, 1.0)] {
+                d.set(id, v);
+            }
+            let mut l: Vec<f32> = (0..48000).map(|i| (std::f32::consts::TAU * f * i as f32 / 48000.0).sin()).collect();
+            let mut r = l.clone();
+            d.process(&mut l, &mut r);
+            l[24000..].iter().map(|x| x * x).sum::<f32>()
+        };
+        let (low, mid, high) = (tone(80.0), tone(1100.0), tone(12000.0));
+        assert!(mid < low * 0.3 && mid < high * 0.3, "{low} {mid} {high}");
     }
 }
