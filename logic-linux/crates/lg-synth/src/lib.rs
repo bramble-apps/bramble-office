@@ -22,6 +22,7 @@ pub mod dsp;
 pub mod ensemble;
 pub mod ep;
 pub mod es2;
+pub mod evoc_ps;
 pub mod mellotron;
 pub mod organ;
 pub mod patches;
@@ -30,16 +31,23 @@ pub mod pluck;
 pub mod poly;
 pub mod quick;
 pub mod retro;
+pub mod sample_alchemy;
+pub mod sample_alchemy_an;
 pub mod sampled;
 pub mod sampler;
 pub mod sampler_doc;
 pub mod sampler_synth;
 pub mod sculpture;
+pub mod sculpture_fx;
+pub mod sculpture_string;
 pub mod string;
 pub mod studio;
 pub mod studio_bass;
 pub mod studio_piano;
 pub mod synthkit;
+pub mod ultrabeat;
+pub mod ultrabeat_dsp;
+pub mod ultrabeat_seq;
 pub mod es1;
 pub mod es_emp;
 pub mod efm1;
@@ -71,6 +79,9 @@ pub const NAME_ESM: &str = "Bass Mono";
 pub const NAME_ESP: &str = "Poly Six";
 pub const NAME_ESE: &str = "Ensemble Synth";
 pub const NAME_EFM1: &str = "FM Two";
+pub const NAME_EVOC_PS: &str = "Vocoder Poly";
+pub const NAME_ULTRABEAT: &str = "Beat Synth";
+pub const NAME_SAMPLE_ALCHEMY: &str = "Sample Alchemist";
 
 /// One of our instruments and the Logic plug-ins it stands in for.
 #[derive(Clone, Copy, Debug)]
@@ -112,7 +123,6 @@ static LIST: &[InstrumentInfo] = &[
             "Drum Kit Designer",
             "Drum Kits",
             "Drum Machine Designer",
-            "Ultrabeat",
             "Drum Synth",
         ],
         description: "Synthesized acoustic and analog drum kits on the GM / Drum Kit Designer note map, velocity layers and round robin.",
@@ -152,7 +162,7 @@ static LIST: &[InstrumentInfo] = &[
     },
     InstrumentInfo {
         name: NAME_ALCHEMY,
-        logic_names: &["Alchemy", "Sample Alchemy"],
+        logic_names: &["Alchemy"],
         description: "Four sources (virtual analog, additive, spectral, granular), master filters, Perform knobs and the Transform pad.",
     },
     InstrumentInfo {
@@ -204,6 +214,21 @@ static LIST: &[InstrumentInfo] = &[
         name: NAME_QUICK,
         logic_names: &["Quick Sampler (Single Sample)", "Quick Sampler"],
         description: "One sample: classic, one-shot, slice and recorder modes.",
+    },
+    InstrumentInfo {
+        name: NAME_EVOC_PS,
+        logic_names: &["EVOC 20 PolySynth", "EVOC 20 PS"],
+        description: "Vocoder with a polyphonic synth: the side chain's spectrum, in up to 20 bands, shapes the synth played from the keys.",
+    },
+    InstrumentInfo {
+        name: NAME_ULTRABEAT,
+        logic_names: &["Ultrabeat"],
+        description: "Drum synthesizer: 25 voices of two oscillators, ring modulator, noise, filter, envelopes, and a step sequencer.",
+    },
+    InstrumentInfo {
+        name: NAME_SAMPLE_ALCHEMY,
+        logic_names: &["Sample Alchemy"],
+        description: "One sample played in classic, loop, granular, additive or spectral modes, with filters, envelopes and a mod matrix.",
     },
 ];
 
@@ -257,7 +282,9 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         ),
         "Vintage Clav" | "Electric Clav" | NAME_CLAV => Box::new(clav::VintageClav::new(rate)),
         "ES2" | NAME_ES2 => Box::new(es2::Es2::new(rate)),
-        "Alchemy" | "Sample Alchemy" | NAME_ALCHEMY => Box::new(alchemy::Alchemy::new(rate)),
+        "Alchemy" | NAME_ALCHEMY => Box::new(alchemy::Alchemy::new(rate)),
+        "Sample Alchemy" | NAME_SAMPLE_ALCHEMY => Box::new(sample_alchemy::SampleAlchemy::new(rate)),
+        "EVOC 20 PolySynth" | "EVOC 20 PS" | NAME_EVOC_PS => Box::new(evoc_ps::EvocPs::new(rate)),
         "ES1" | NAME_ES1 => Box::new(es1::Es1::new(rate)),
         "ES M" | NAME_ESM => Box::new(es_emp::EsSmall::new(es_emp::Model::M, rate)),
         "ES P" | NAME_ESP => Box::new(es_emp::EsSmall::new(es_emp::Model::P, rate)),
@@ -270,7 +297,8 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
             Box::new(drums::StudioDrumKit::new(rate))
         }
         "Drum Machine Designer" | NAME_DMD => Box::new(dmd::DrumMachineDesigner::new(rate)),
-        "Ultrabeat" | "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
+        "Ultrabeat" | NAME_ULTRABEAT => Box::new(ultrabeat::Ultrabeat::new(rate)),
+        "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
         "Bass" => Box::new(bass::StudioBass::new(rate)),
         "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),
         "Studio Strings" => Box::new(studio::StudioSection::with_samples(studio::Kind::Strings, rate, false)),

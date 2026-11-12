@@ -124,6 +124,9 @@ pub trait Instrument: Plugin {
     /// over before `render` for the same block: vocoder analysis (EVOC 20 PolySynth), a
     /// synth's external oscillator or modulation input (ES1, ES2, Ultrabeat).
     fn side_chain(&mut self, _left: &[f32], _right: &[f32]) {}
+    /// Where the song is, before each block (instruments with their own sequencer: Ultrabeat's
+    /// step sequencer follows the host's play and bar position).
+    fn set_transport(&mut self, _t: Transport) {}
     /// The instrument itself, for editors that change more than parameters (a Sampler's zones,
     /// a Drum Machine Designer's pads): downcast to the concrete type.
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {

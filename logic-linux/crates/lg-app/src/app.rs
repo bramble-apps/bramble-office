@@ -294,6 +294,8 @@ pub struct App {
     /// Snap and Drag modes, the tempo and signature editors (arranging.rs).
     pub arr: crate::arranging::State,
     pub plugin_bypass: std::collections::HashSet<usize>,
+    /// The instruments' Side Chain choices (sidechain.rs).
+    pub side: crate::sidechain::State,
     pub plugin_clipboard: Option<Vec<f32>>,
     pub plugin_compare: std::collections::HashMap<usize, Vec<f32>>,
     /// The instrument editors (Sampler, Quick Sampler, Drum Machine / Kit Designer, Alchemy).
@@ -502,6 +504,7 @@ impl App {
             arr: Default::default(),
             mix: Default::default(),
             plugin_bypass: Default::default(),
+            side: Default::default(),
             plugin_clipboard: None,
             rec: Default::default(),
             plugin_compare: Default::default(),

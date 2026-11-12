@@ -11,6 +11,11 @@ pub enum Synth {
     EsP,
     Efm1,
     Es2,
+    Retro,
+    Sculpture,
+    Evoc,
+    Ultrabeat,
+    SampleAlchemy,
 }
 
 pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
@@ -26,6 +31,16 @@ pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
         Some(Synth::Efm1)
     } else if any.is::<lg_synth::es2::Es2>() {
         Some(Synth::Es2)
+    } else if any.is::<lg_synth::retro::RetroSynth>() {
+        Some(Synth::Retro)
+    } else if any.is::<lg_synth::sculpture::Sculpture>() {
+        Some(Synth::Sculpture)
+    } else if any.is::<lg_synth::evoc_ps::EvocPs>() {
+        Some(Synth::Evoc)
+    } else if any.is::<lg_synth::ultrabeat::Ultrabeat>() {
+        Some(Synth::Ultrabeat)
+    } else if any.is::<lg_synth::sample_alchemy::SampleAlchemy>() {
+        Some(Synth::SampleAlchemy)
     } else {
         None
     }
@@ -39,5 +54,10 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, s: Synth) {
         Synth::EsP => crate::espwin::window(app, ctx, t),
         Synth::Efm1 => crate::efm1win::window(app, ctx, t),
         Synth::Es2 => crate::es2win::window(app, ctx, t),
+        Synth::Retro => crate::retrowin::window(app, ctx, t),
+        Synth::Sculpture => crate::sculptwin::window(app, ctx, t),
+        Synth::Evoc => crate::evocwin::window(app, ctx, t),
+        Synth::Ultrabeat => crate::ubwin::window(app, ctx, t),
+        Synth::SampleAlchemy => crate::salchwin::window(app, ctx, t),
     }
 }
