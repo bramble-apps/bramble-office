@@ -49,6 +49,11 @@ pub const SHOW_EQ: u32 = B + 26;
 /// Manual changes of the EQ curve per channel (dB per band; added after Smoothing).
 pub const USER_L: u32 = 2200;
 pub const USER_R: u32 = 2300;
+/// A marker Studio writes in its own float blocks: Logic's Match EQ block isn't decoded, so a
+/// block without it (a Logic project's) loads as the default setting instead of being read
+/// into our ids.
+pub const LAYOUT: u32 = 2999;
+pub const LAYOUT_MARK: f32 = 7531.0;
 
 pub fn band_hz(k: usize) -> f32 {
     20.0 * 1000f32.powf(k as f32 / (BANDS - 1) as f32)
@@ -81,6 +86,7 @@ static P: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
         Param::new(SHOW_CURRENT, "Show Current", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
         Param::new(SHOW_REFERENCE, "Show Reference", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
         Param::new(SHOW_EQ, "Show EQ Curve", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
+        Param::new(LAYOUT, "Studio Layout", 0.0, 10000.0, LAYOUT_MARK, Unit::None).hide(),
         Param::new(HAS_CURRENT, "Current Spectrum", 0.0, 1.0, 0.0, Unit::OnOff).hide(),
         Param::new(HAS_REFERENCE, "Reference Spectrum", 0.0, 1.0, 0.0, Unit::OnOff).hide(),
     ];
@@ -355,6 +361,12 @@ impl Plugin for MatchEq {
         }
     }
     fn load_floats(&mut self, f: &[f32]) {
+        if f.get(LAYOUT as usize).copied() != Some(LAYOUT_MARK) {
+            // (a Logic project's block: not ours to read)
+            self.p.defaults();
+            self.update();
+            return;
+        }
         for d in self.p.defs {
             if let Some(v) = f.get(d.id as usize) {
                 self.p.set(d.id, *v);
@@ -371,6 +383,23 @@ mod tests {
     fn noise(n: usize, seed: u32) -> Vec<f32> {
         let mut z = crate::util::Noise(seed);
         (0..n).map(|_| z.next() * 0.3).collect()
+    }
+
+    #[test]
+    fn foreign_blocks_load_as_default_own_blocks_round_trip() {
+        let mut m = MatchEq::new(48000.0);
+        let junk: Vec<f32> = (0..4096).map(|i| (i as f32 * 0.37).sin() * 1e4).collect();
+        m.load_floats(&junk);
+        assert!(m.channel_curve(0).iter().all(|v| v.abs() < 1e-3));
+        m.set(USER_L + 5, 4.0);
+        let n = m.params().iter().map(|p| p.id as usize + 1).max().unwrap();
+        let mut f = vec![0.0; n];
+        for p in m.params() {
+            f[p.id as usize] = m.get(p.id);
+        }
+        let mut m2 = MatchEq::new(48000.0);
+        m2.load_floats(&f);
+        assert_eq!(m2.get(USER_L + 5), 4.0);
     }
 
     #[test]
