@@ -334,6 +334,7 @@ pub struct App {
     /// Session Player presets, custom patterns, hands (spx.rs).
     pub spx: crate::spx::State,
     pub spdrum: crate::spdrum::State,
+    pub artic: crate::artic::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -531,6 +532,7 @@ impl App {
             ax: Default::default(),
             spx: Default::default(),
             spdrum: Default::default(),
+            artic: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -684,6 +686,7 @@ impl App {
             }
             notes.sort_by_key(|n| n.0);
             crate::arp::for_playback(self, i, &mut notes);
+            crate::artic::for_playback(self, i, &mut notes);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
         crate::trackarea::stack_mix(self, &mut tracks);
@@ -1369,7 +1372,7 @@ impl App {
         if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
-        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
+        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) {
             return true;
         }
         if crate::envhub::command(self, ctx, name) {
@@ -1877,6 +1880,7 @@ impl App {
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
+        crate::artic::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);

@@ -129,6 +129,9 @@ fn track_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize
     label(&p, area, y, "No Transpose");
     changed |= widgets::check_slot(ui, slot_rect(area, y), id.with("notr"), &mut tp.no_transpose);
     y += ROW;
+    if !audio {
+        y = crate::artic::inspector_row(app, ui, &p, area, y, t);
+    }
     if changed {
         app.checkpoint("Track Parameter");
         app.track_props.insert(t, tp);

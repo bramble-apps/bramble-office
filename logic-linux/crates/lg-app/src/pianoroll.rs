@@ -78,6 +78,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             app.roll_inspector = !app.roll_inspector;
         }
         ui.add_space(8.0);
+        crate::artic::roll_popup(app, ui);
         // Logic's Piano Roll buttons: MIDI Draw (the velocity lane), Collapse Mode, the scale guides
         for (on, text, tip) in [(app.midi.velocity_lane, "Velocity", "Show / hide the velocity lane (MIDI Draw)"), (app.midi.collapse, "Collapse", "Collapse Mode: only the pitches the region uses"), (app.midi.scale_guides, "Scale", "Show the project key's scale on the rows")] {
             if ui.add(egui::Button::new(egui::RichText::new(text).size(11.5)).selected(on).corner_radius(5.0)).on_hover_text(tip).clicked() {
@@ -233,7 +234,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             continue;
         }
         let selected = app.selected_notes.contains(&k);
-        let c = note_color(app.midi.note_color, n, base);
+        let c = if app.artic.color_by { crate::artic::color(crate::artic::note_artic(&region, n)) } else { note_color(app.midi.note_color, n, base) };
         // (muted notes grey, as Logic's)
         let c = if n.muted { Color32::from_gray(120) } else { c };
         gp.rect_filled(r, 2.0, if selected { look::mix(c, Color32::WHITE, 0.45) } else { c });
