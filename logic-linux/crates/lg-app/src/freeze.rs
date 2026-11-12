@@ -219,6 +219,14 @@ pub fn job(app: &App, what: &What) -> Job {
     Job { engine, from: what.from, to: what.to, tail_secs: what.tail_secs, until_silent: what.until_silent }
 }
 
+/// A render like [`job`] with the prepared tracks changed first (Selection-Based Processing:
+/// another set of plug-ins on the track).
+pub fn job_with(app: &App, what: &What, f: impl FnOnce(&mut Vec<PlayTrack>)) -> Job {
+    let mut j = job(app, what);
+    f(&mut j.engine.tracks);
+    j
+}
+
 fn project_end(app: &App) -> u32 {
     app.project.as_ref().map_or(0, |p| p.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.start + r.length).max().unwrap_or(0)).max(app.bar_ticks())
 }
@@ -341,7 +349,7 @@ fn unique(dir: &std::path::Path, base: &str, ext: &str) -> PathBuf {
 }
 
 /// Writes a bounce in place file: 24-bit at the engine's rate.
-fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option<(PathBuf, f64)> {
+pub(crate) fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option<(PathBuf, f64)> {
     let dir = audio_dir(app);
     let _ = std::fs::create_dir_all(&dir);
     let path = unique(&dir, base, "wav");
@@ -354,11 +362,11 @@ fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option<(PathBuf, 
     Some((path, samples.len() as f64 / 2.0 / RATE as f64))
 }
 
-fn audio_region(name: &str, start: u32, length: u32, file: PathBuf, seconds: f64) -> Region {
+pub(crate) fn audio_region(name: &str, start: u32, length: u32, file: PathBuf, seconds: f64) -> Region {
     Region { name: name.into(), start, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file, seconds }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
 }
 
-fn ticks_of(app: &App, from: u32, frames: usize) -> u32 {
+pub(crate) fn ticks_of(app: &App, from: u32, frames: usize) -> u32 {
     // the length in ticks of `frames` rendered from `from` (at the tempo there)
     let secs = frames as f64 / RATE as f64;
     let bpm = app.project.as_ref().map_or(120.0, |p| p.tempo_map.iter().rev().find(|t| t.0 <= from).map_or(p.tempo, |t| t.1));

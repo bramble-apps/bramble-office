@@ -335,6 +335,7 @@ pub struct App {
     pub spx: crate::spx::State,
     pub spdrum: crate::spdrum::State,
     pub artic: crate::artic::State,
+    pub sbp: crate::sbp::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -533,6 +534,7 @@ impl App {
             spx: Default::default(),
             spdrum: Default::default(),
             artic: Default::default(),
+            sbp: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -1372,7 +1374,7 @@ impl App {
         if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
-        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) {
+        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) || crate::sbp::command(self, name) {
             return true;
         }
         if crate::envhub::command(self, ctx, name) {
@@ -1881,6 +1883,7 @@ impl App {
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);
+        crate::sbp::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);

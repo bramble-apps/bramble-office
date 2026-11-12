@@ -106,6 +106,7 @@ mod stemsplit;
 mod players;
 mod spedit;
 mod artic;
+mod sbp;
 mod spdrum;
 mod rightpane;
 mod screensets;

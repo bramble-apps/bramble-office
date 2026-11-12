@@ -19,6 +19,7 @@ use crate::players::Player;
 pub const COMMANDS: &[&str] = &[
     "Regenerate", "Convert to MIDI Region", "Convert to MIDI Region/Cell", "To MIDI Region", "Replace with Session Player Region", "Replace with Session Player Region/Cell", "To Session Player Region",
     "Create Session Player Region", "Create Session Player Region/Cell", "Populate Track with Session Player Regions",
+    "Apply Region Chords to Chord Track", "Cut Region Chords", "Copy Region Chords", "Delete Region Chords", "Paste Region Chords",
 ];
 
 /// A custom pattern: sixteenth-note steps (16 a bar), looped over the region.
@@ -57,6 +58,8 @@ pub struct State {
     pub patterns_open: bool,
     pub more_open: bool,
     pub chord_edit: Option<String>,
+    /// Cut / Copy Region Chords
+    pub chord_clip: Option<String>,
     /// The preview Play button's saved state (region solo, soloed regions, cycle on, cycle).
     pub preview: Option<(bool, Vec<(usize, usize)>, bool, (u32, u32))>,
 }
@@ -635,6 +638,36 @@ pub fn command(app: &mut App, name: &str) -> bool {
         return false;
     }
     match name {
+        "Apply Region Chords to Chord Track" | "Cut Region Chords" | "Copy Region Chords" | "Delete Region Chords" | "Paste Region Chords" => {
+            let sel = player_regions(app);
+            let Some(&first) = sel.first() else { return false };
+            let text = app.spx.region_chords.get(&first).map(|x| x.1.clone()).unwrap_or_default();
+            match name {
+                "Apply Region Chords to Chord Track" if !text.is_empty() => {
+                    app.checkpoint("Apply Region Chords to Chord Track");
+                    app.chord_text = text;
+                }
+                "Copy Region Chords" => app.spx.chord_clip = Some(text),
+                "Paste Region Chords" => {
+                    let Some(c) = app.spx.chord_clip.clone() else { return false };
+                    app.checkpoint("Paste Region Chords");
+                    for k in &sel {
+                        app.spx.region_chords.insert(*k, (true, c.clone()));
+                    }
+                }
+                _ => {
+                    app.checkpoint(name);
+                    if name == "Cut Region Chords" {
+                        app.spx.chord_clip = Some(text);
+                    }
+                    for k in &sel {
+                        app.spx.region_chords.remove(k);
+                    }
+                }
+            }
+            crate::players::regenerate_all(app);
+            app.dirty = true;
+        }
         "Regenerate" => {
             let sel = player_regions(app);
             let drums: Vec<(usize, usize)> = app.region_selection().into_iter().filter(|(t, _)| app.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Drummer)).collect();
