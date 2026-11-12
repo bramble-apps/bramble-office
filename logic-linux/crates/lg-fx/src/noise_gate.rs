@@ -11,7 +11,7 @@
 use crate::util::{Biquad, Coefs, Values, coef, db, plugin_impl};
 use lg_dsp::{Param, Unit};
 
-static PARAMS: [Param; 10] = [
+static PARAMS: [Param; 11] = [
     Param::new(0, "Threshold", -100.0, 0.0, -50.0, Unit::Db),
     Param::new(1, "Hysteresis", -20.0, 0.0, -3.0, Unit::Db),
     Param::new(2, "Reduction", -100.0, 0.0, -100.0, Unit::Db),
@@ -22,6 +22,8 @@ static PARAMS: [Param; 10] = [
     Param::new(7, "Low Cutoff", 20.0, 20000.0, 20.0, Unit::Hz),
     Param::new(8, "Lookahead", 0.0, 10.0, 0.0, Unit::Ms),
     Param::new(9, "Monitor", 0.0, 1.0, 0.0, Unit::OnOff),
+    // (our own id: Logic's Ducker-mode floats 10-14 aren't decoded)
+    Param::menu(1000, "Mode", &["Noise Gate", "Ducker"], 0.0),
 ];
 
 pub struct NoiseGate {
@@ -43,6 +45,7 @@ pub struct NoiseGate {
     delay: [Vec<f32>; 2],
     dpos: usize,
     look: usize,
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl NoiseGate {
@@ -67,6 +70,7 @@ impl NoiseGate {
             delay: [vec![0.0; cap], vec![0.0; cap]],
             dpos: 0,
             look: 0,
+            side: None,
         };
         g.update();
         g.gain = g.floor;
@@ -129,13 +133,28 @@ impl lg_dsp::Effect for NoiseGate {
         self.latency_samples()
     }
 
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let monitor = self.p.on(9);
         let cap = self.delay[0].len();
+        let side = self.side.take();
+        // Ducker: the key (a voice on the side chain) turns the signal down by Reduction, and
+        // the side chain is mixed into the output after processing
+        let ducker = self.p.idx(1000) == 1;
         for i in 0..n {
-            let kl = self.lp[0].run(self.hp[0].run(left[i]));
-            let kr = self.lp[1].run(self.hp[1].run(right[i]));
+            let (xl, xr) = match &side {
+                Some((a, b)) => (a.get(i).copied().unwrap_or(0.0), b.get(i).copied().unwrap_or(0.0)),
+                None => (left[i], right[i]),
+            };
+            let kl = self.lp[0].run(self.hp[0].run(xl));
+            let kr = self.lp[1].run(self.hp[1].run(xr));
             let a = kl.abs().max(kr.abs());
             self.peak = if a > self.peak { a } else { a + (self.peak - a) * self.peak_rel };
             if self.peak >= self.thr_open {
@@ -173,6 +192,13 @@ impl lg_dsp::Effect for NoiseGate {
             } else {
                 (left[i], right[i])
             };
+            if ducker {
+                // (the gate's gain inverted: open key = the floor, closed = unity)
+                let g = 1.0 + self.floor - self.gain;
+                left[i] = l * g + if side.is_some() { xl } else { 0.0 };
+                right[i] = r * g + if side.is_some() { xr } else { 0.0 };
+                continue;
+            }
             left[i] = l * self.gain;
             right[i] = r * self.gain;
         }
@@ -185,6 +211,27 @@ plugin_impl!(NoiseGate);
 mod tests {
     use super::*;
     use lg_dsp::{Effect, Plugin};
+
+    #[test]
+    fn ducker_mode_turns_down_under_the_key() {
+        let mut g = NoiseGate::new(48000.0);
+        g.set(0, -30.0);
+        g.set(2, -20.0);
+        g.set(1000, 1.0);
+        let key: Vec<f32> = (0..4800).map(|i| 0.5 * (i as f32 * 0.1).sin()).collect();
+        let mut l = vec![0.2f32; 4800];
+        let mut r = l.clone();
+        g.side_chain(&key, &key);
+        g.process(&mut l, &mut r);
+        // music at −20 dB plus the voice
+        assert!((l[4000] - key[4000] - 0.02).abs() < 0.005, "{}", l[4000] - key[4000]);
+        // no key: the music passes
+        let mut l = vec![0.2f32; 9600];
+        let mut r = l.clone();
+        g.side_chain(&vec![0.0; 9600], &vec![0.0; 9600]);
+        g.process(&mut l, &mut r);
+        assert!((l[9500] - 0.2).abs() < 0.01);
+    }
 
     #[test]
     fn gates_quiet_passes_loud() {

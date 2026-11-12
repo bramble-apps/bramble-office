@@ -330,6 +330,22 @@ fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String
         }
     }
     walk(ui, crate::menus::context("mixer-audiofx-slot"), current, &mut picked);
+    // Option-click: the Legacy submenu (Logic's older plug-ins: legacy.rs in lg-fx)
+    if ui.input(|i| i.modifiers.alt) || ui.data(|d| d.get_temp::<bool>(egui::Id::unique("fx-menu-legacy"))).unwrap_or(false) {
+        ui.data_mut(|d| d.insert_temp(egui::Id::unique("fx-menu-legacy"), true));
+        ui.separator();
+        ui.menu_button("Legacy", |ui| {
+            for n in lg_fx::legacy::NAMES {
+                if ui.add(egui::Button::selectable(current == Some(*n), *n)).clicked() {
+                    picked = Some(Some(n.to_string()));
+                    ui.close();
+                }
+            }
+        });
+    }
+    if picked.is_some() {
+        ui.data_mut(|d| d.remove::<bool>(egui::Id::unique("fx-menu-legacy")));
+    }
     picked
 }
 

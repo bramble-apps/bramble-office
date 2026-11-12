@@ -1300,7 +1300,7 @@ impl App {
                 continue;
             }
             // over an instrument editor: its undo and its key commands
-            if crate::instwin::key_press(self, ctx, key, m) {
+            if crate::instwin::key_press(self, ctx, key, m) || crate::pluginwin::fx_key(self, ctx, key, m) {
                 continue;
             }
             if m.command && key == egui::Key::Z {

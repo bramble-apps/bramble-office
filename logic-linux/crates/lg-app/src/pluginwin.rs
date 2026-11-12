@@ -116,7 +116,49 @@ fn header_buttons(ui: &mut egui::Ui, p: &egui::Painter, hr: Rect, salt: &str, co
     hit
 }
 
+/// Link mode Multi: the open plug-in windows follow the selected track (its instrument, and the
+/// plug-in in the same insert row of its strip).
+fn follow_link(app: &mut App, ctx: &egui::Context) {
+    if crate::plughead::link_mode(ctx) != 2 {
+        return;
+    }
+    let Some(sel) = app.selected_track else { return };
+    if let Some(t) = app.plugin_window
+        && t != sel
+        && app.instrument_for(sel).is_some()
+    {
+        app.plugin_window = Some(sel);
+    }
+    if let Some((s, k)) = app.mix.fx_window
+        && s != sel
+        && s < crate::mixer::AUX
+        && crate::mixstate::inserts(app, sel).get(k).is_some_and(|u| !u.name.is_empty())
+    {
+        app.mix.fx_window = Some((sel, k));
+    }
+}
+
+/// Checks (headless): LG_FX="Compressor" adds that effect to the first track's Audio FX and
+/// opens its window; LG_FX_SIDE=1 also picks Bus 1 as its side chain.
+fn test_hook(app: &mut App) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Ok(name) = std::env::var("LG_FX") else { return };
+    if app.project.is_none() || DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    crate::mixstate::edit_inserts(app, 0, |v| v.push(crate::mixstate::new_plugin(&name)));
+    app.load_engine();
+    let k = crate::mixstate::inserts(app, 0).len().saturating_sub(1);
+    app.mix.fx_window = Some((0, k));
+    if std::env::var_os("LG_FX_SIDE").is_some() {
+        app.side.by_slot.insert((0, k), crate::sidechain::Choice::Bus(0));
+        crate::sidechain::sync(app);
+    }
+}
+
 pub fn window(app: &mut App, ctx: &egui::Context) {
+    test_hook(app);
+    follow_link(app, ctx);
     fx_window(app, ctx);
     crate::mixer::group_window(app, ctx);
     if crate::instwin::window(app, ctx) {
@@ -133,31 +175,45 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     let texts = crate::hosting::texts(app, crate::hosting::Slot::Inst(t), &params, &values);
     let mut open = true;
     let mut set: Vec<(u32, f32)> = Vec::new();
-    egui::Window::new(format!("{track} — {patch}")).id(egui::Id::unique("plugin-window")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 520.0)).show(ctx, |ui| {
-        // the header
-        let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
-        let p = ui.painter().clone();
-        p.rect_filled(hr, 6.0, look::header_bg());
+    let can_undo = !app.inst.undo.is_empty();
+    let can_redo = !app.inst.redo.is_empty();
+    let mut hist: Option<bool> = None;
+    let scale = crate::plughead::scale(ctx, &patch);
+    let wresp = egui::Window::new(track.clone()).id(egui::Id::unique("plugin-window")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 520.0)).show(ctx, |ui| {
         let on = !app.plugin_bypass.contains(&t);
-        if bypass_button(ui, &p, hr, on, "inst") {
-            if on {
-                app.plugin_bypass.insert(t);
-            } else {
-                app.plugin_bypass.remove(&t);
+        let comparing = app.plugin_compare.contains_key(&t);
+        let head = crate::plughead::Head {
+            id: egui::Id::unique(("inst-head", t)),
+            plugin: &patch,
+            bypassed: !on,
+            setting: "Default Preset",
+            comparing,
+            can_compare: true,
+            can_paste: app.plugin_clipboard.as_ref().is_some_and(|v| v.len() == params.len()),
+            can_undo,
+            can_redo,
+            side_chain: false,
+            editor: None,
+        };
+        let out = crate::plughead::header(ui, &head);
+        use crate::plughead::Act;
+        match out.act {
+            Some(Act::Bypass) => {
+                if on {
+                    app.plugin_bypass.insert(t);
+                } else {
+                    app.plugin_bypass.remove(&t);
+                }
             }
-        }
-        p.text(pos2(hr.min.x + 40.0, hr.center().y), Align2::LEFT_CENTER, &patch, look::semibold(12.5), look::text());
-        // Copy / Paste of the settings, Compare (the settings as they were when opened)
-        match header_buttons(ui, &p, hr, "inst", app.plugin_compare.contains_key(&t)) {
-            Some(1) => app.plugin_clipboard = Some(values.clone()),
-            Some(2) => {
+            Some(Act::Copy) => app.plugin_clipboard = Some(values.clone()),
+            Some(Act::Paste) => {
                 if let Some(v) = app.plugin_clipboard.clone() {
                     for (prm, val) in params.iter().zip(v) {
                         set.push((prm.id, val));
                     }
                 }
             }
-            Some(_) => {
+            Some(Act::Compare) => {
                 // swap the current settings with the ones kept at the last Compare
                 let keep = app.plugin_compare.insert(t, values.clone());
                 if let Some(v) = keep {
@@ -166,13 +222,43 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     }
                 }
             }
-            None => {}
+            Some(Act::Undo) => hist = Some(false),
+            Some(Act::Redo) => hist = Some(true),
+            _ => {}
         }
+        egui::Popup::menu(&out.setting).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            if ui.button("Copy Setting").clicked() {
+                app.plugin_clipboard = Some(values.clone());
+                ui.close();
+            }
+            if ui.button("Recall Default").clicked() {
+                set.extend(params.iter().map(|p| (p.id, p.default)));
+                ui.close();
+            }
+        });
         ui.add_space(6.0);
         crate::hosting::view_row(app, ui, crate::hosting::Slot::Inst(t), &format!("{track} — {patch}"));
-        set.extend(controls(ui, &params, &values, &texts, "inst"));
+        let room = (ui.available_height() - crate::plughead::FOOTER - 6.0).max(120.0);
+        egui::ScrollArea::vertical().id_salt(("inst-body", t)).max_height(room).auto_shrink([false, true]).show(ui, |ui| {
+            set.extend(controls(ui, &params, &values, &texts, "inst"));
+        });
+        crate::plughead::footer(ui, &patch, None);
     });
+    if let Some(r) = &wresp {
+        crate::plughead::apply_scale(ctx, r.response.layer_id, r.response.rect.min, scale);
+        app.inst.rect = Some(egui::Rect::from_min_size(r.response.rect.min, r.response.rect.size() * scale));
+    }
+    match hist {
+        Some(true) => {
+            crate::instwin::redo(app);
+        }
+        Some(false) => {
+            crate::instwin::undo(app);
+        }
+        None => {}
+    }
     if !set.is_empty() {
+        crate::instwin::checkpoint_once(app, ctx, t, &format!("{patch} Setting"));
         if let Ok(mut e) = app.engine.lock() {
             for (id, v) in set {
                 e.set_instrument_param(t, id, v);
@@ -301,6 +387,67 @@ pub fn step_setting(app: &mut App, s: usize, k: usize, by: i32) {
     load_setting(app, s, k, &n, &p);
 }
 
+type History = (Vec<Vec<f32>>, Vec<Vec<f32>>);
+
+/// Whether an effect has a side chain input (its header shows the Side Chain pop-up).
+pub fn has_side_chain(name: &str) -> bool {
+    thread_local! {
+        static KNOWN: std::cell::RefCell<std::collections::HashMap<String, bool>> = Default::default();
+    }
+    KNOWN.with(|k| *k.borrow_mut().entry(name.to_string()).or_insert_with(|| crate::units::effect(name, crate::audio::RATE as f32).is_some_and(|e| e.has_side_chain())))
+}
+
+fn history_id(s: usize, k: usize) -> egui::Id {
+    egui::Id::unique(("fx-undo", s, k))
+}
+
+/// The window's plug-in undo / redo steps.
+fn fx_history_len(ctx: &egui::Context, s: usize, k: usize) -> (usize, usize) {
+    ctx.data(|d| d.get_temp::<History>(history_id(s, k))).map(|h| (h.0.len(), h.1.len())).unwrap_or((0, 0))
+}
+
+fn push_history(ctx: &egui::Context, s: usize, k: usize, before: Vec<f32>) {
+    ctx.data_mut(|d| {
+        let h = d.get_temp_mut_or_default::<History>(history_id(s, k));
+        h.0.push(before);
+        if h.0.len() > 100 {
+            h.0.remove(0);
+        }
+        h.1.clear();
+    });
+}
+
+/// Plug-in undo (or redo) of the effect window's slot: its whole setting as it was.
+fn fx_undo(app: &mut App, ctx: &egui::Context, s: usize, k: usize, redo: bool) -> bool {
+    let Some((name, params, values)) = effect_state(app, s, k) else { return false };
+    let base = crate::mixstate::inserts(app, s).get(k).map(|u| u.params.clone()).unwrap_or_default();
+    let now = floats_of(&params, &values, &base);
+    let got = ctx.data_mut(|d| {
+        let h = d.get_temp_mut_or_default::<History>(history_id(s, k));
+        let (from, to) = if redo { (&mut h.1, &mut h.0) } else { (&mut h.0, &mut h.1) };
+        let v = from.pop()?;
+        to.push(now);
+        Some(v)
+    });
+    let Some(v) = got else { return false };
+    apply_floats(app, s, k, v, None);
+    app.tell(format!("{} {name} Setting", if redo { "Redo" } else { "Undo" }));
+    true
+}
+
+/// ⌘Z / ⇧⌘Z with the pointer over the effect window: its plug-in undo.
+pub fn fx_key(app: &mut App, ctx: &egui::Context, key: egui::Key, m: egui::Modifiers) -> bool {
+    let Some((s, k)) = app.mix.fx_window else { return false };
+    if !(m.command && key == egui::Key::Z) || ctx.egui_wants_keyboard_input() {
+        return false;
+    }
+    let r: Option<egui::Rect> = ctx.data(|d| d.get_temp(egui::Id::unique("fx-window-rect")));
+    if !r.is_some_and(|r| ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| r.contains(p))) {
+        return false;
+    }
+    fx_undo(app, ctx, s, k, m.shift)
+}
+
 /// The effect window open on a slot.
 fn fx_window(app: &mut App, ctx: &egui::Context) {
     let Some((s, k)) = app.mix.fx_window else { return };
@@ -324,39 +471,71 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     let texts = crate::hosting::texts(app, hslot, &params, &values);
     let mut fx_action: Option<crate::fxviews::Action> = None;
     let size = crate::fxviews::default_size(&name);
-    egui::Window::new(format!("{strip} — {name}")).open(&mut open).collapsible(false).resizable(true).default_size(size).show(ctx, |ui| {
-        let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
-        let p = ui.painter().clone();
-        p.rect_filled(hr, 6.0, look::header_bg());
-        toggle_bypass = bypass_button(ui, &p, hr, !slot.bypass, "fx");
-        // the setting pop-up with ‹ ›
-        let lr = Rect::from_min_size(pos2(hr.min.x + 36.0, hr.min.y + 5.0), vec2(16.0, 20.0));
-        let rr = Rect::from_min_size(pos2(lr.max.x + 2.0, hr.min.y + 5.0), vec2(16.0, 20.0));
-        p.text(lr.center(), Align2::CENTER_CENTER, "‹", look::regular(14.0), look::text());
-        p.text(rr.center(), Align2::CENTER_CENTER, "›", look::regular(14.0), look::text());
-        if ui.interact(lr, ui.scope_id().with("fx-prev"), Sense::click()).on_hover_text("Previous Setting").clicked() {
-            step = -1;
+    let has_editor = crate::fxviews::has_editor(&name) && !hosted;
+    let side_ok = !hosted && has_side_chain(&name);
+    let view_id = egui::Id::unique(("fx-view", s, k));
+    let mut editor = has_editor && ctx.data(|d| d.get_temp::<bool>(view_id)).unwrap_or(true);
+    let (undo_n, redo_n) = fx_history_len(ctx, s, k);
+    let can_compare = comparing || app.mix.compare_back.contains_key(&(s, k));
+    let can_paste = app.mix.clipboard.as_ref().is_some_and(|c| c.0 == name);
+    let mut hist: Option<bool> = None;
+    let win_id = egui::Id::unique("fx-plugin-window");
+    let scale = crate::plughead::scale(ctx, &name);
+    let wresp = egui::Window::new(strip.clone()).id(win_id).open(&mut open).collapsible(false).resizable(true).default_size(size).show(ctx, |ui| {
+        let shown = if slot.preset.is_empty() || slot.preset == "#default" { "Default Preset".to_string() } else { slot.preset.trim_end_matches(".pst").to_string() };
+        let head = crate::plughead::Head {
+            id: egui::Id::unique(("fx-head", s, k)),
+            plugin: &name,
+            bypassed: slot.bypass,
+            setting: &shown,
+            comparing,
+            can_compare,
+            can_paste,
+            can_undo: undo_n > 0,
+            can_redo: redo_n > 0,
+            side_chain: side_ok,
+            editor: has_editor.then_some(editor),
+        };
+        let out = crate::plughead::header(ui, &head);
+        if let Some(r) = out.side_chain {
+            crate::sidechain::fx_popup(app, ui, r, s, k, if name == "Compressor" { "Internal" } else { "None" });
         }
-        if ui.interact(rr, ui.scope_id().with("fx-next"), Sense::click()).on_hover_text("Next Setting").clicked() {
-            step = 1;
+        match out.act {
+            Some(crate::plughead::Act::Bypass) => toggle_bypass = true,
+            Some(crate::plughead::Act::Prev) => step = -1,
+            Some(crate::plughead::Act::Next) => step = 1,
+            Some(crate::plughead::Act::Compare) => action = Some(0),
+            Some(crate::plughead::Act::Copy) => action = Some(1),
+            Some(crate::plughead::Act::Paste) => action = Some(2),
+            Some(crate::plughead::Act::Undo) => hist = Some(false),
+            Some(crate::plughead::Act::Redo) => hist = Some(true),
+            Some(crate::plughead::Act::Editor(e)) => {
+                editor = e;
+                ui.ctx().data_mut(|d| d.insert_temp(view_id, e));
+            }
+            None => {}
         }
-        let pr = Rect::from_min_size(pos2(rr.max.x + 6.0, hr.min.y + 4.0), vec2(170.0, 22.0));
-        p.rect_filled(pr, 5.0, look::group_bg());
-        let shown = if slot.preset.is_empty() { "#default".to_string() } else { slot.preset.trim_end_matches(".pst").to_string() };
-        p.with_clip_rect(pr.shrink(2.0)).text(pr.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, format!("{shown} ⌄"), look::regular(12.0), look::text());
-        let presp = ui.interact(pr, ui.scope_id().with("fx-setting"), Sense::click());
-        egui::Popup::menu(&presp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        egui::Popup::menu(&out.setting).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             ui.set_min_width(220.0);
             if ui.button("Copy Setting").clicked() {
                 action = Some(1);
                 ui.close();
             }
-            if ui.add_enabled(app.mix.clipboard.as_ref().is_some_and(|c| c.0 == name), egui::Button::new("Paste Setting")).clicked() {
+            if ui.add_enabled(can_paste, egui::Button::new("Paste Setting")).clicked() {
                 action = Some(2);
                 ui.close();
             }
             if ui.button("Reset Setting").clicked() {
                 reset = true;
+                ui.close();
+            }
+            ui.separator();
+            if ui.button("Next Setting").clicked() {
+                step = 1;
+                ui.close();
+            }
+            if ui.button("Previous Setting").clicked() {
+                step = -1;
                 ui.close();
             }
             ui.separator();
@@ -379,36 +558,19 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
                 }
             }
         });
-        if let Some(a) = header_buttons(ui, &p, hr, "fx", comparing) {
-            action = Some(a);
-        }
+        ui.add_space(4.0);
+        // the body scrolls; the footer stays at the bottom
+        let room = (ui.available_height() - crate::plughead::FOOTER - 6.0).max(120.0);
+        egui::ScrollArea::vertical().id_salt(("fx-body", s, k)).max_height(room).auto_shrink([false, true]).show(ui, |ui| {
         if hosted {
             // (a hosted plug-in: its own editor beside the Controls view)
             crate::hosting::view_row(app, ui, hslot, &format!("{strip} — {name}"));
             ui.add_space(4.0);
             set.extend(controls(ui, &params, &values, &texts, "fx"));
         } else {
-            // View: Logic's editor (where Studio has one for the plug-in) or Controls
-            let has_editor = crate::fxviews::has_editor(&name);
-            let view_id = ui.scope_id().with(("fx-view", s, k));
-            let mut editor = has_editor && ui.data(|d| d.get_temp::<bool>(view_id)).unwrap_or(true);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("View:").color(look::text_dim()));
-                if has_editor {
-                    if ui.add(egui::Button::selectable(editor, "Editor")).clicked() {
-                        editor = true;
-                    }
-                    if ui.add(egui::Button::selectable(!editor, "Controls")).clicked() {
-                        editor = false;
-                    }
-                    ui.data_mut(|d| d.insert_temp(view_id, editor));
-                } else {
-                    ui.label("Controls");
-                }
-                if comparing {
-                    ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
-                }
-            });
+            if comparing {
+                ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
+            }
             ui.add_space(4.0);
             if editor {
                 let live = app.engine.lock().map(|e| {
@@ -433,12 +595,36 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
                 set.extend(controls(ui, &params, &values, &texts, "fx"));
             }
         }
+        });
+        crate::plughead::footer(ui, &name, None);
     });
+    if let Some(r) = &wresp {
+        crate::plughead::apply_scale(ctx, r.response.layer_id, r.response.rect.min, scale);
+        let rr = r.response.rect;
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("fx-window-rect"), egui::Rect::from_min_size(rr.min, rr.size() * scale)));
+    }
     // (a hosted plug-in's own state, fresh, for Copy, Compare and Save Setting As…)
     if hosted && (matches!(action, Some(0) | Some(1)) || save.is_some()) {
         crate::hosting::sync_slot(app, hslot);
     }
     let base = if hosted { crate::mixstate::inserts(app, s).get(k).map(|u| u.params.clone()).unwrap_or_default() } else { slot.params.clone() };
+    // plug-in undo: the setting before this frame's change goes on the window's history
+    let before = floats_of(&params, &values, &base);
+    let changes = !set.is_empty() || fx_action.is_some() || matches!(action, Some(2)) || reset || load.is_some() || step != 0;
+    if changes {
+        let gesture_id = egui::Id::unique(("fx-gesture", s, k));
+        let in_gesture = ctx.data(|d| d.get_temp::<bool>(gesture_id)).unwrap_or(false);
+        if !in_gesture {
+            push_history(ctx, s, k, before.clone());
+        }
+        let down = ctx.input(|i| i.pointer.any_down());
+        ctx.data_mut(|d| d.insert_temp(gesture_id, down));
+    } else if !ctx.input(|i| i.pointer.any_down()) {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique(("fx-gesture", s, k)), false));
+    }
+    if let Some(redo) = hist {
+        fx_undo(app, ctx, s, k, redo);
+    }
     if let Some(a) = fx_action.take() {
         set.extend(crate::fxviews::run_action(app, (s, k), &name, a));
     }

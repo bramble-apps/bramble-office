@@ -64,6 +64,7 @@ pub mod rollextras;
 mod snap;
 mod newtrack;
 mod pluginwin;
+mod plughead;
 pub mod plugbrowser;
 mod instwin;
 mod samplerwin;

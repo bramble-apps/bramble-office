@@ -549,22 +549,41 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
     let mut open = true;
     let bypassed = app.plugin_bypass.contains(&t);
     let comparing = app.plugin_compare.contains_key(&t);
-    let resp = egui::Window::new(format!("{track} — {plugin}")).id(egui::Id::unique(("synth-window", t))).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+    let resp = egui::Window::new(track.clone()).id(egui::Id::unique(("synth-window", t))).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
         ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
-        let (hr, _) = ui.allocate_exact_size(vec2(size.x, 28.0), Sense::hover());
-        let p = ui.painter().clone();
-        p.rect_filled(hr, 6.0, look::header_bg());
-        let br = Rect::from_center_size(pos2(hr.min.x + 16.0, hr.center().y), vec2(22.0, 22.0));
-        crate::glyphs::paint(&p, br, crate::glyphs::ph::POWER, 18.0, if bypassed { look::text_dim() } else { look::accent() });
-        if ui.interact(br, egui::Id::unique(("synth-bypass", t)), Sense::click()).on_hover_text("Bypass").clicked() {
-            head = Some((8, String::new()));
+        // the header (shared by every plug-in window: plughead)
+        ui.set_width(size.x);
+        let hd = crate::plughead::Head {
+            id: egui::Id::unique(("synth-head", t)),
+            plugin,
+            bypassed,
+            setting: &cur_setting,
+            comparing,
+            can_compare: true,
+            can_paste: app.plugin_clipboard.as_ref().is_some_and(|v| v.len() == params.len()),
+            can_undo: !app.inst.undo.is_empty(),
+            can_redo: !app.inst.redo.is_empty(),
+            side_chain: !NO_SIDE_CHAIN.contains(&plugin),
+            editor: None,
+        };
+        let out = crate::plughead::header(ui, &hd);
+        use crate::plughead::Act;
+        head = match out.act {
+            Some(Act::Bypass) => Some((8, String::new())),
+            Some(Act::Prev) => Some((3, String::new())),
+            Some(Act::Next) => Some((4, String::new())),
+            Some(Act::Copy) => Some((5, String::new())),
+            Some(Act::Paste) => Some((6, String::new())),
+            Some(Act::Compare) => Some((7, String::new())),
+            Some(Act::Undo) => Some((9, String::new())),
+            Some(Act::Redo) => Some((10, String::new())),
+            _ => None,
+        };
+        // the Side Chain pop-up (vocoder analysis, EXT sources; Logic's Retro Synth has none)
+        if let Some(r) = out.side_chain {
+            crate::sidechain::popup(app, ui, r, t);
         }
-        // the Setting pop-up
-        let sr = Rect::from_min_size(pos2(hr.min.x + 34.0, hr.min.y + 4.0), vec2(190.0, 20.0));
-        let sresp = ui.interact(sr, egui::Id::unique(("synth-setting", t)), Sense::click());
-        p.rect_filled(sr, 5.0, if sresp.hovered() { look::button_on() } else { look::group_bg() });
-        p.with_clip_rect(sr).text(pos2(sr.min.x + 8.0, sr.center().y), Align2::LEFT_CENTER, &cur_setting, look::regular(12.0), look::text());
-        crate::glyphs::paint(&p, Rect::from_center_size(pos2(sr.max.x - 10.0, sr.center().y), vec2(10.0, 10.0)), crate::glyphs::ph::CARET_DOWN, 10.0, look::text_dim());
+        let sresp = out.setting;
         egui::Popup::menu(&sresp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             ui.set_min_width(220.0);
             if ui.button("Recall Default").clicked() {
@@ -609,34 +628,6 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
                 }
             }
         });
-        let mut x = sr.max.x + 6.0;
-        for (icon, act, tip) in [(crate::glyphs::ph::CARET_LEFT, 3u8, "Previous Setting"), (crate::glyphs::ph::CARET_RIGHT, 4, "Next Setting")] {
-            let r = Rect::from_min_size(pos2(x, hr.min.y + 4.0), vec2(20.0, 20.0));
-            let rs = ui.interact(r, egui::Id::unique(("synth-step", t, act)), Sense::click()).on_hover_text(tip);
-            p.rect_filled(r, 5.0, if rs.hovered() { look::button_on() } else { look::group_bg() });
-            crate::glyphs::paint(&p, r, icon, 11.0, look::text());
-            if rs.clicked() {
-                head = Some((act, String::new()));
-            }
-            x += 24.0;
-        }
-        // the Side Chain pop-up (vocoder analysis, EXT sources)
-        // (Logic's Retro Synth has no side chain input, so no pop-up)
-        if !NO_SIDE_CHAIN.contains(&plugin) {
-            crate::sidechain::popup(app, ui, Rect::from_min_size(pos2(x + 6.0, hr.min.y + 4.0), vec2(170.0, 20.0)), t);
-        }
-        let mut x = hr.max.x - 8.0;
-        for (label, act) in [("Paste", 6u8), ("Copy", 5), ("Compare", 7)] {
-            let w = p.layout_no_wrap(label.into(), look::regular(12.0), look::text()).size().x + 16.0;
-            let r = Rect::from_min_max(pos2(x - w, hr.min.y + 4.0), pos2(x, hr.max.y - 4.0));
-            x -= w + 6.0;
-            let rs = ui.interact(r, egui::Id::unique(("synth-head", t, act)), Sense::click());
-            p.rect_filled(r, 5.0, if rs.hovered() || (act == 7 && comparing) { look::button_on() } else { look::group_bg() });
-            p.text(r.center(), Align2::CENTER_CENTER, label, look::regular(12.0), look::text());
-            if rs.clicked() {
-                head = Some((act, String::new()));
-            }
-        }
         // the panel
         let mut body = Some(body);
         let mut panel = |ui: &mut egui::Ui| {
@@ -656,15 +647,9 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
             panel(ui)
         };
         // extended parameters
+        // the footer: the plug-in's name, the extended parameters' chevron at its left
+        crate::plughead::footer(ui, plugin, (!ext.is_empty()).then_some(&mut ext_open));
         if !ext.is_empty() {
-            let (dr, _) = ui.allocate_exact_size(vec2(size.x, 18.0), Sense::hover());
-            let tr = Rect::from_min_size(dr.min, vec2(170.0, 18.0));
-            let rs = ui.interact(tr, egui::Id::unique(("synth-ext-btn", t)), Sense::click());
-            crate::glyphs::paint(ui.painter(), Rect::from_min_size(tr.min, vec2(16.0, 18.0)), if ext_open { crate::glyphs::ph::CARET_DOWN } else { crate::glyphs::ph::CARET_RIGHT }, 11.0, look::text_dim());
-            ui.painter().text(pos2(tr.min.x + 18.0, tr.center().y), Align2::LEFT_CENTER, "Extended Parameters", look::regular(11.5), look::text_dim());
-            if rs.clicked() {
-                ext_open = !ext_open;
-            }
             if ext_open {
                 let list: Vec<Param> = ext.iter().filter_map(|id| params.iter().find(|p| p.id == *id).cloned()).collect();
                 let lv: Vec<f32> = list.iter().map(|p| params.iter().position(|q| q.id == p.id).map(|i| vals[i]).unwrap_or(0.0)).collect();
@@ -676,7 +661,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
         }
     });
     ctx.data_mut(|d| d.insert_temp(ext_id, ext_open));
-    app.inst.rect = resp.map(|r| r.response.rect);
+    let scale = crate::plughead::scale(ctx, plugin);
+    if let Some(r) = &resp {
+        crate::plughead::apply_scale(ctx, r.response.layer_id, r.response.rect.min, scale);
+    }
+    app.inst.rect = resp.map(|r| egui::Rect::from_min_size(r.response.rect.min, r.response.rect.size() * scale));
     if !set.is_empty() {
         instwin::checkpoint_once(app, ctx, t, &format!("{plugin} Setting"));
         instwin::set_params(app, t, &set);
@@ -724,6 +713,12 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
             if !app.plugin_bypass.remove(&t) {
                 app.plugin_bypass.insert(t);
             }
+        }
+        Some((9, _)) => {
+            instwin::undo(app);
+        }
+        Some((10, _)) => {
+            instwin::redo(app);
         }
         _ => {}
     }
