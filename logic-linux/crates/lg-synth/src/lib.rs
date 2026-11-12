@@ -32,6 +32,7 @@ pub mod poly;
 pub mod quick;
 pub mod retro;
 pub mod sample_alchemy;
+pub mod sample_alchemy_an;
 pub mod sampled;
 pub mod sampler;
 pub mod sampler_doc;
