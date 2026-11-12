@@ -240,3 +240,91 @@ fn noise_oscillator() {
     let (_, half) = noise(&|a| a.set(NOISE + 4, 0.5));
     assert!((half / wr - 0.5).abs() < 0.1, "Noise Vol: {half} vs {wr}");
 }
+
+mod transform {
+    use super::*;
+    use lg_synth::alchemy::*;
+
+    #[test]
+    fn weights_and_selection() {
+        assert_eq!(nearest_snapshot(0.125, 0.75), 0, "snapshot 1 is selected by default");
+        assert_eq!(nearest_snapshot(0.9, 0.2), 7);
+        for k in 0..8 {
+            let (x, y) = snapshot_centre(k);
+            let w = transform_weights(x, y);
+            assert!((w.iter().sum::<f32>() - 1.0).abs() < 1e-4);
+            assert!(w[k] > 0.99, "at a snapshot's centre it alone counts");
+        }
+        let a = Alchemy::new(RATE);
+        assert_eq!(nearest_snapshot(a.get(17), a.get(18)), 0);
+    }
+
+    #[test]
+    fn snapshot_update_and_morphing() {
+        let mut a = Alchemy::new(RATE);
+        a.set(1, 0.2);
+        assert_eq!(a.get(snapv(0, 0)), 0.2, "Snapshot Update writes the selected snapshot");
+        a.set(SNAP_UPDATE, 0.0);
+        a.set(1, 0.6);
+        assert_eq!(a.get(snapv(0, 0)), 0.2, "off: the snapshot stays");
+        // snapshot 2 with Character 1.0: moving the pad there morphs the Perform section
+        a.set(snapv(1, 0), 1.0);
+        let (x, y) = snapshot_centre(1);
+        a.set(17, x);
+        a.set(18, y);
+        assert!(a.mg.perform[0] > 0.98, "{}", a.mg.perform[0]);
+        a.set(17, 0.25);
+        let mid = a.mg.perform[0];
+        assert!(mid > 0.3 && mid < 0.9, "between snapshots 1 and 2: {mid}");
+    }
+
+    #[test]
+    fn octave_keyswitch_and_rate() {
+        let mut a = Alchemy::new(RATE);
+        a.set(SNAP_OCTAVE, 6.0); // C3: notes 60–67
+        a.note_on(62, 100);
+        render(&mut a, 0.05);
+        assert!(a.voice_states().is_empty(), "a switching note doesn't play");
+        assert_eq!(nearest_snapshot(a.get(17), a.get(18)), 2);
+        a.note_off(62);
+        a.note_on(72, 100);
+        render(&mut a, 0.02);
+        assert_eq!(a.voice_states().len(), 1, "other notes play");
+        // Rate: the pad glides there
+        a.set(SNAP_RATE, 0.5);
+        a.note_on(67, 100);
+        render(&mut a, 0.25);
+        let (tx, _) = snapshot_centre(7);
+        let x = a.get(17);
+        assert!(x > snapshot_centre(2).0 + 0.05 && x < tx - 0.05, "half-way: {x}");
+        render(&mut a, 0.4);
+        assert!((a.get(17) - tx).abs() < 1e-3);
+        // Off: notes play across the range
+        a.set(SNAP_OCTAVE, 0.0);
+        a.note_on(61, 100);
+        render(&mut a, 0.02);
+        assert!(a.voice_states().iter().any(|v| v.0 == 61));
+    }
+
+    #[test]
+    fn modwheel_and_snap_vol() {
+        let mut a = Alchemy::new(RATE);
+        a.set(SNAP_WHEEL, 3.0); // Control 3
+        a.controller(1, 127);
+        assert_eq!(a.get(3), 1.0);
+        a.set(SNAP_WHEEL, 17.0 + 2.0); // Control 3 Inv
+        a.controller(1, 127);
+        assert_eq!(a.get(3), 0.0);
+        assert_eq!(wheel_targets()[19], "Control 3 Inv");
+        // Snap Vol: −12 dB on the selected snapshot
+        let loud = |db: f32| {
+            let mut a = Alchemy::new(RATE);
+            a.set(SNAPVOL, db);
+            a.note_on(60, 100);
+            let (l, _) = render(&mut a, 0.3);
+            (l.iter().map(|x| x * x).sum::<f32>() / l.len() as f32).sqrt()
+        };
+        let r = loud(-12.0) / loud(0.0);
+        assert!((r - 0.25).abs() < 0.03, "{r}");
+    }
+}

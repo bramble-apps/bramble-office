@@ -25,6 +25,57 @@ pub const VOICE: u32 = 14960;
 /// + 8 + s (Low Cut), + 12 + s (High Cut).
 pub const NOISE: u32 = 14964;
 pub const PRIORITIES: &[&str] = &["Newest", "Oldest", "Lowest", "Highest"];
+/// The Transform pad: snapshot k's (0–7) Perform value i (0–15) is SNAPV + k × 16 + i; its
+/// Snap Vol (dB) SNAPVOL + k; then Snapshot Update, the keyswitch Octave, Rate (seconds, 0
+/// Off) and the ModWheel target.
+pub const SNAPV: u32 = 31000;
+pub const SNAPVOL: u32 = 31128;
+pub const SNAP_UPDATE: u32 = 31140;
+pub const SNAP_OCTAVE: u32 = 31141;
+pub const SNAP_RATE: u32 = 31142;
+pub const SNAP_WHEEL: u32 = 31143;
+pub const SNAP_OCTAVES: &[&str] = &["Off", "C-2", "C-1", "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"];
+/// ModWheel pop-up: None, the 16 Perform controls, the same inverted.
+pub fn wheel_targets() -> &'static [&'static str] {
+    static T: OnceLock<Vec<&'static str>> = OnceLock::new();
+    T.get_or_init(|| {
+        let names = ["Control 1", "Control 2", "Control 3", "Control 4", "Control 5", "Control 6", "Control 7", "Control 8", "X1", "Y1", "X2", "Y2", "Attack", "Decay", "Sustain", "Release"];
+        let mut v = vec!["None"];
+        v.extend(names);
+        for n in names {
+            v.push(Box::leak(format!("{n} Inv").into_boxed_str()));
+        }
+        v
+    })
+}
+pub const fn snapv(k: usize, i: usize) -> u32 {
+    SNAPV + (k * 16 + i) as u32
+}
+/// The snapshot cell centres: snapshot 1 at the top left of the 4 × 2 pad.
+pub fn snapshot_centre(k: usize) -> (f32, f32) {
+    ((k % 4) as f32 * 0.25 + 0.125, 0.75 - (k / 4) as f32 * 0.5)
+}
+/// The selected snapshot: the one whose cell holds the pad position.
+pub fn nearest_snapshot(x: f32, y: f32) -> usize {
+    let col = ((x * 4.0).floor() as i32).clamp(0, 3) as usize;
+    let row = if y >= 0.5 { 0 } else { 1 };
+    row * 4 + col
+}
+/// Each snapshot's weight at pad position (x, y) (they sum to 1).
+pub fn transform_weights(x: f32, y: f32) -> [f32; 8] {
+    let mut w = [0.0f32; 8];
+    let mut sum = 0.0;
+    for (k, wk) in w.iter_mut().enumerate() {
+        let (sx, sy) = snapshot_centre(k);
+        let d2 = (x - sx).powi(2) + (y - sy).powi(2);
+        *wk = 1.0 / (d2 * d2 + 1e-7);
+        sum += *wk;
+    }
+    for wk in &mut w {
+        *wk /= sum;
+    }
+    w
+}
 pub const GLIDE_MODES: &[&str] = &["Rate", "Time"];
 pub const NOISE_TYPES: &[&str] = &["White", "Pink", "Brown"];
 /// Noise Low Cut / High Cut knob (0–1) → Hz (20 Hz – 20 kHz).
@@ -979,9 +1030,12 @@ pub struct Alchemy {
     rng: Rng,
     delay: [Delay; 2],
     room: Room,
-    /// Transform pad snapshots (Perform values) and whether the pad drives the Perform section.
-    pub snapshots: Vec<[f32; 16]>,
+    /// Whether the Transform pad (its eight snapshots, in parameters SNAPV…) drives the Perform
+    /// section, and the pad's glide to a keyswitched snapshot (target x, y, seconds left).
     transform: bool,
+    pad_to: Option<(f32, f32, f32)>,
+    /// Keys that switched snapshots (not played).
+    switch_keys: u128,
     defaults: [f32; 16],
     sample: Option<Arc<(Vec<f32>, f32)>>,
     pub name: String,
@@ -1036,6 +1090,17 @@ pub fn all_params() -> &'static [Param] {
             v.push(Param::menu(KEYSCALE + s as u32, leak(format!("Keyscale {l}")), KEYSCALES, 0.0));
             v.push(Param::new(WAIT + s as u32, leak(format!("Wait {l}")), 0.0, 2.0, 0.0, Unit::Seconds));
         }
+        for k in 0..8usize {
+            let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
+            for (i, q) in PARAMS.iter().filter(|q| (1..=16).contains(&q.id)).enumerate() {
+                v.push(Param::new(snapv(k, i), leak(format!("Snapshot {} {}", k + 1, q.name)), 0.0, 1.0, q.default, Unit::Ratio).hide());
+            }
+            v.push(Param::new(SNAPVOL + k as u32, leak(format!("Snap Vol {}", k + 1)), -24.0, 12.0, 0.0, Unit::Db).hide());
+        }
+        v.push(Param::new(SNAP_UPDATE, "Snapshot Update", 0.0, 1.0, 1.0, Unit::OnOff));
+        v.push(Param::menu(SNAP_OCTAVE, "Transform Octave", SNAP_OCTAVES, 0.0));
+        v.push(Param::new(SNAP_RATE, "Transform Rate", 0.0, 5.0, 0.0, Unit::Seconds));
+        v.push(Param::menu(SNAP_WHEEL, "ModWheel", wheel_targets(), 0.0));
         v.push(Param::menu(VOICE, "Voice Priority", PRIORITIES, 0.0));
         v.push(Param::menu(VOICE + 1, "Glide Mode", GLIDE_MODES, 0.0));
         v.push(Param::new(VOICE + 2, "Wide Unison", 0.0, 1.0, 0.0, Unit::OnOff));
@@ -1138,8 +1203,9 @@ impl Alchemy {
                 Delay::new((rate * 1.0) as usize),
             ],
             room: Room::new(rate, 1.0),
-            snapshots: Vec::new(),
             transform: false,
+            pad_to: None,
+            switch_keys: 0,
             defaults,
             sample: None,
             name: String::new(),
@@ -1182,25 +1248,18 @@ impl Alchemy {
 
     /// Perform value k (0..16) after the Transform pad.
     fn perform(&self, k: usize) -> f32 {
-        if self.transform && self.snapshots.len() >= 2 {
-            let x = self.p(17);
-            let y = self.p(18);
-            let n = self.snapshots.len();
-            let mut wsum = 0.0;
-            let mut v = 0.0;
-            for (i, s) in self.snapshots.iter().enumerate() {
-                // the Transform pad's 4 × 2 cells (snapshot 1 at the top left)
-                let _ = n;
-                let (sx, sy) = ((i % 4) as f32 * 0.25 + 0.125, 1.0 - ((i / 4) % 2) as f32 * 0.5 - 0.25);
-                let d2 = (x - sx).powi(2) + (y - sy).powi(2);
-                let w = 1.0 / (d2 + 1e-4);
-                wsum += w;
-                v += w * s[k];
-            }
-            v / wsum
+        if self.transform {
+            let w = transform_weights(self.p(17), self.p(18));
+            (0..8).map(|i| w[i] * self.p(snapv(i, k))).sum()
         } else {
             self.p(PERFORM_IDS[k])
         }
+    }
+
+    /// The Snap Vol at the pad position (dB).
+    fn snap_vol(&self) -> f32 {
+        let w = transform_weights(self.p(17), self.p(18));
+        (0..8).map(|i| w[i] * self.p(SNAPVOL + i as u32)).sum()
     }
 
     /// The voices' settings from parameter values `p` (the knobs, or the knobs as modulated).
@@ -1540,8 +1599,14 @@ impl Alchemy {
             for (k, &id) in PERFORM_IDS.iter().enumerate() {
                 self.params.set(id, first[k]);
             }
+            // the eight snapshots (missing ones as snapshot 1)
+            for n in 0..8 {
+                let src = snaps.get(n).unwrap_or(first);
+                for i in 0..16 {
+                    self.params.set(snapv(n, i), src[i]);
+                }
+            }
         }
-        self.snapshots = snaps;
         self.update();
     }
 
@@ -1663,8 +1728,15 @@ impl Plugin for Alchemy {
         if self.params.set(id, v) {
             if id == 17 || id == 18 {
                 self.transform = true;
-            } else if PERFORM_IDS.contains(&id) {
+            } else if let Some(k) = PERFORM_IDS.iter().position(|&x| x == id) {
                 self.transform = false;
+                // Snapshot Update: a Perform control's change goes to the selected snapshot
+                if self.p(SNAP_UPDATE) >= 0.5 {
+                    let n = nearest_snapshot(self.p(17), self.p(18));
+                    self.params.set(snapv(n, k), v);
+                }
+            } else if (SNAPV..SNAPV + 128).contains(&id) {
+                self.transform = true;
             }
             let params = &self.params;
             if self.arp_cfg.read_changed(id, &|i| params.get(i)) || self.racks.read_changed(id, &|i| params.get(i)) {
@@ -1708,6 +1780,26 @@ impl Instrument for Alchemy {
         if velocity == 0 {
             return self.note_off(pitch);
         }
+        // the Transform pad's Octave: its first eight notes switch snapshots 1–8 (not played)
+        let oct = self.p(SNAP_OCTAVE).round() as i32;
+        if oct > 0 {
+            let base = (oct - 1) * 12;
+            let k = pitch as i32 - base;
+            if (0..8).contains(&k) {
+                let (x, y) = snapshot_centre(k as usize);
+                let rate = self.p(SNAP_RATE);
+                if rate <= 0.0 {
+                    self.params.set(17, x);
+                    self.params.set(18, y);
+                    self.transform = true;
+                    self.update();
+                } else {
+                    self.pad_to = Some((x, y, rate));
+                }
+                self.switch_keys |= 1u128 << pitch;
+                return;
+            }
+        }
         if self.extra.held == 0 {
             self.extra.mseg_t = 0.0;
         }
@@ -1728,6 +1820,10 @@ impl Instrument for Alchemy {
         self.play_on(pitch, velocity);
     }
     fn note_off(&mut self, pitch: u8) {
+        if self.switch_keys & (1u128 << pitch) != 0 {
+            self.switch_keys &= !(1u128 << pitch);
+            return;
+        }
         self.extra.held = self.extra.held.saturating_sub(1);
         if self.extra.held == 0 && self.mg.held > 0 {
             self.mg.held = 0;
@@ -1778,6 +1874,16 @@ impl Instrument for Alchemy {
             return self.poly.all_notes_off(&self.sh, &self.ch.ctl);
         }
         self.mg.cc[(cc as usize).min(127)] = value as f32 / 127.0;
+        // the ModWheel pop-up: the wheel moves a Perform control (or the inverse)
+        let wt = self.p(SNAP_WHEEL).round() as usize;
+        if cc == 1 && wt > 0 {
+            let (k, inv) = ((wt - 1) % 16, wt > 16);
+            let x = value as f32 / 127.0;
+            if self.params.set(PERFORM_IDS[k], if inv { 1.0 - x } else { x }) {
+                self.transform = false;
+                self.update();
+            }
+        }
         if let Some(d) = self.ch.cc(cc, value) {
             self.poly.sustain(d, &self.sh, &self.ch.ctl);
         }
@@ -1790,7 +1896,18 @@ impl Instrument for Alchemy {
         let mut sl = [0.0f32; CHUNK];
         let mut sr = [0.0f32; CHUNK];
         let (gl, gr) = self.ch.out_gains();
-        let vol = lg_dsp::db_to_gain(self.p(99));
+        // the pad gliding to a keyswitched snapshot at the Rate
+        if let Some((tx, ty, left)) = self.pad_to {
+            let dt = n as f32 / self.rate;
+            let k = (dt / left.max(1e-4)).min(1.0);
+            let (x, y) = (self.p(17), self.p(18));
+            self.params.set(17, x + (tx - x) * k);
+            self.params.set(18, y + (ty - y) * k);
+            self.transform = true;
+            self.pad_to = if k >= 1.0 { None } else { Some((tx, ty, left - dt)) };
+            self.update();
+        }
+        let vol = lg_dsp::db_to_gain(self.p(99) + self.snap_vol());
         let fx = self.perform(4);
         let (dl, dr) = (0.375 * self.rate, 0.25 * self.rate);
         let mut pos = 0;
@@ -1932,7 +2049,8 @@ impl Instrument for Alchemy {
                     any_dry = true;
                 }
             }
-            if self.used.envf != 0 {
+            // the levels (envelope followers, and the window's source / filter meters)
+            {
                 let mut lv = [0.0f32; 6];
                 for v in self.poly.voices.iter().filter(|v| v.on) {
                     for k in 0..6 {

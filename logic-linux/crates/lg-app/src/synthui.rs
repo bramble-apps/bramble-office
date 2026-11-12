@@ -500,6 +500,7 @@ pub fn shown_of(params: &[Param], vals: &[f32], texts: &[Option<String>], id: u3
 pub fn tutorial_names(plugin: &str) -> &'static [&'static str] {
     match plugin {
         "ES2" => lg_synth::es2_tutorials::NAMES,
+        "Sculpture" => lg_synth::sculpture_tutorials::NAMES,
         _ => &[],
     }
 }
@@ -507,6 +508,7 @@ pub fn tutorial_names(plugin: &str) -> &'static [&'static str] {
 pub fn tutorial_setting(plugin: &str, name: &str) -> Option<Vec<(u32, f32)>> {
     match plugin {
         "ES2" => lg_synth::es2_tutorials::setting(name),
+        "Sculpture" => lg_synth::sculpture_tutorials::setting(name),
         _ => None,
     }
 }
@@ -633,7 +635,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
                 head = Some((6, String::new()));
                 ui.close();
             }
-            // the plug-in's Tutorial Settings folder (ES2)
+            // the plug-in's Tutorial Settings folder (ES2, Sculpture)
             let tutorials = tutorial_names(plugin);
             if !tutorials.is_empty() {
                 ui.separator();

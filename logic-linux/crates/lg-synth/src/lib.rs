@@ -46,6 +46,7 @@ pub mod sampler;
 pub mod sampler_doc;
 pub mod sampler_synth;
 pub mod sculpture;
+pub mod sculpture_tutorials;
 pub mod sculpture_fx;
 pub mod sculpture_string;
 pub mod string;

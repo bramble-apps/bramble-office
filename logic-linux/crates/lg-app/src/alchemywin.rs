@@ -24,7 +24,7 @@ const W: f32 = 1146.0;
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let st_id = egui::Id::unique(("alchemy-st", t));
     let mut st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
-    let mut live = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| Live { levels: a.mg.levels, envf: a.mg.envf, time: 0.0 }).unwrap_or_default();
+    let mut live = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| Live { levels: a.mg.levels, perform: a.mg.perform, envf: a.mg.envf, time: 0.0 }).unwrap_or_default();
     live.time = ctx.input(|i| i.time);
     // the effects' own parameters, read from the running instrument
     let fx_params: Vec<Option<(Vec<lg_dsp::Param>, Vec<f32>)>> = (0..FX_SLOTS).map(|s| instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| a.extra.fx[s].as_ref().map(|f| {
@@ -41,7 +41,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         2 => vec2(W, 520.0),
         _ => vec2(W, 738.0),
     };
-    let ext: Vec<u32> = (0..5).map(|k| am::CTRL_CC + k).collect();
+    let mut ext: Vec<u32> = (0..5).map(|k| am::CTRL_CC + k).collect();
+    ext.push(lg_synth::alchemy_arp::OVERLAP_LEGACY);
     let actions = synthui::window(app, ctx, t, "Alchemy", size, SKIN, &ext, |p| body(p, &mut st, &live, &fx_params, audio_name.as_deref(), &presets, &cur));
     ctx.data_mut(|d| d.insert_temp(st_id, st));
     let mut file = dropped.first().cloned();
@@ -177,6 +178,8 @@ fn arp_import(app: &mut App, t: usize, arg: &str) {
 
 fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], audio: Option<&str>, presets: &[String], cur: &str) {
     let ix = Ix::new(p.params);
+    st.levels = live.levels;
+    st.perform = live.perform;
     name_bar(p, &ix, st, presets, cur);
     match st.view {
         1 => perform(p, &ix, st, fx, 46.0),
@@ -453,7 +456,10 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
         }
         let el = element(p, ix, s);
         let name = if !on { "Off".to_string() } else if el == 0 { lg_synth::alchemy::VA_SHAPES[(g(p, ix, 301 + s).round().max(0.0) as usize).min(3)].to_string() } else { ELEMENTS[el].to_string() };
-        rack::field_btn(p, p.rect(bx + 32.0, by, 150.0, 20.0), &name, ("src-name", s), false);
+        let nr = p.rect(bx + 32.0, by, 150.0, 20.0);
+        rack::field_btn(p, nr, &name, ("src-name", s), false);
+        // the source's output level (to the main filters or straight to the effects)
+        rack::level_fill(p, nr, st.levels[s as usize]);
         let d = rack::arrows(p, p.rect(bx + 184.0, by, 30.0, 20.0), ("src-ar", s));
         if d != 0 && el == 0 {
             let v = (g(p, ix, 301 + s) + d as f32).rem_euclid(4.0);
@@ -607,6 +613,30 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         pt.line_segment([a, a + c], Stroke::new(2.0, BLUE));
     }
     let resp = p.ui.interact(pad, egui::Id::unique(("alch-tpad", p.t)), Sense::click_and_drag());
+    // Control-click: the snapshot commands; the Action button (gear) below has them too
+    let mut cmd = None;
+    let (upd, can_paste) = (g(p, ix, lg_synth::alchemy::SNAP_UPDATE) >= 0.5, st.snap_clip.is_some());
+    resp.context_menu(|ui| snapshot_menu(ui, upd, can_paste, &mut cmd));
+    let gear = p.rect(84.0, y0 + 164.0, 46.0, 22.0);
+    let gresp = p.ui.interact(gear, egui::Id::unique(("alch-tgear", p.t)), Sense::click());
+    p.ui.painter().rect_filled(gear, 3.0, if gresp.hovered() { rgb(0x4a4f58) } else { rgb(0x3a3e45) });
+    crate::glyphs::paint(p.ui.painter(), gear, crate::glyphs::ph_fill::GEAR, 13.0, Color32::WHITE);
+    egui::Popup::menu(&gresp).show(|ui| snapshot_menu(ui, upd, can_paste, &mut cmd));
+    if let Some(c) = cmd {
+        snapshot_command(p, ix, st, c);
+    }
+    // Octave, Rate, ModWheel, Snap Vol (the selected snapshot's)
+    {
+        use lg_synth::alchemy::{nearest_snapshot, SNAPVOL, SNAP_OCTAVE, SNAP_RATE, SNAP_WHEEL};
+        let sel = nearest_snapshot(g(p, ix, 17), g(p, ix, 18)) as u32;
+        p.menu(150.0, y0 + 164.0, 80.0, 22.0, SNAP_OCTAVE);
+        p.field(244.0, y0 + 164.0, 66.0, 22.0, SNAP_RATE, 0.01);
+        p.menu(324.0, y0 + 164.0, 104.0, 22.0, SNAP_WHEEL);
+        p.field(442.0, y0 + 164.0, 66.0, 22.0, SNAPVOL + sel, 0.1);
+        for (x, l) in [(190.0, "Octave"), (277.0, "Rate"), (376.0, "ModWheel"), (475.0, "Snap Vol")] {
+            p.text(x, y0 + 196.0, Align2::CENTER_CENTER, l, 10.0, rgb(0x5a5d63));
+        }
+    }
     if let Some(q) = resp.interact_pointer_pos()
         && (resp.dragged() || resp.clicked())
     {
@@ -657,6 +687,127 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
 
 
 
+
+/// The Transform pad's snapshot commands.
+#[derive(Clone, Copy)]
+enum SnapCmd {
+    Copy,
+    Paste,
+    CopyFirstToAll,
+    Randomize,
+    Update,
+    StoreCurrent,
+    StoreTo(Option<usize>),
+    Swap(usize),
+}
+
+fn snapshot_menu(ui: &mut egui::Ui, update: bool, can_paste: bool, cmd: &mut Option<SnapCmd>) {
+    let mut pick = |ui: &mut egui::Ui, b: egui::Response, c: SnapCmd| {
+        if b.clicked() {
+            *cmd = Some(c);
+            ui.close();
+        }
+    };
+    let b = ui.button("Copy Snapshot");
+    pick(ui, b, SnapCmd::Copy);
+    let b = ui.add_enabled(can_paste, egui::Button::new("Paste Snapshot"));
+    pick(ui, b, SnapCmd::Paste);
+    let b = ui.button("Copy 1 To All");
+    pick(ui, b, SnapCmd::CopyFirstToAll);
+    let b = ui.button("Randomize Snapshots");
+    pick(ui, b, SnapCmd::Randomize);
+    let b = ui.add(egui::Button::selectable(update, "Snapshot Update"));
+    pick(ui, b, SnapCmd::Update);
+    ui.separator();
+    let b = ui.button("Store Current Snapshot");
+    pick(ui, b, SnapCmd::StoreCurrent);
+    ui.menu_button("Store Snapshot", |ui| {
+        for k in 0..8 {
+            let b = ui.button((k + 1).to_string());
+            pick(ui, b, SnapCmd::StoreTo(Some(k)));
+        }
+        let b = ui.button("All");
+        pick(ui, b, SnapCmd::StoreTo(None));
+    });
+    ui.menu_button("Swap Current Snapshot", |ui| {
+        for k in 0..8 {
+            let b = ui.button((k + 1).to_string());
+            pick(ui, b, SnapCmd::Swap(k));
+        }
+    });
+}
+
+/// A snapshot's 16 Perform values and its Snap Vol.
+fn snapshot_values(p: &Pane, ix: &Ix, k: usize) -> [f32; 17] {
+    use lg_synth::alchemy::{snapv, SNAPVOL};
+    let mut v = [0.0; 17];
+    for i in 0..16 {
+        v[i] = g(p, ix, snapv(k, i));
+    }
+    v[16] = g(p, ix, SNAPVOL + k as u32);
+    v
+}
+
+fn put_snapshot(p: &mut Pane, k: usize, v: &[f32; 17]) {
+    use lg_synth::alchemy::{snapv, SNAPVOL};
+    for i in 0..16 {
+        p.put(snapv(k, i), v[i]);
+    }
+    p.put(SNAPVOL + k as u32, v[16]);
+}
+
+fn snapshot_command(p: &mut Pane, ix: &Ix, st: &mut St, c: SnapCmd) {
+    use lg_synth::alchemy::{nearest_snapshot, SNAP_UPDATE};
+    let sel = nearest_snapshot(g(p, ix, 17), g(p, ix, 18));
+    match c {
+        SnapCmd::Copy => st.snap_clip = Some(snapshot_values(p, ix, sel)),
+        SnapCmd::Paste => {
+            if let Some(v) = st.snap_clip {
+                put_snapshot(p, sel, &v);
+            }
+        }
+        SnapCmd::CopyFirstToAll => {
+            let v = snapshot_values(p, ix, 0);
+            for k in 1..8 {
+                put_snapshot(p, k, &v);
+            }
+        }
+        SnapCmd::Randomize => {
+            // every snapshot but the selected one
+            let mut seed = (p.ui.input(|i| i.time) * 1000.0) as u32 | 1;
+            for k in (0..8).filter(|&k| k != sel) {
+                let mut v = snapshot_values(p, ix, k);
+                for x in v.iter_mut().take(16) {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    *x = (seed % 1000) as f32 / 999.0;
+                }
+                put_snapshot(p, k, &v);
+            }
+        }
+        SnapCmd::Update => {
+            let on = g(p, ix, SNAP_UPDATE) >= 0.5;
+            p.put(SNAP_UPDATE, if on { 0.0 } else { 1.0 });
+        }
+        SnapCmd::StoreCurrent => {
+            let mut v = snapshot_values(p, ix, sel);
+            v[..16].copy_from_slice(&st.perform);
+            put_snapshot(p, sel, &v);
+        }
+        SnapCmd::StoreTo(to) => {
+            let v = snapshot_values(p, ix, sel);
+            for k in (0..8).filter(|&k| to.is_none_or(|t| t == k)) {
+                put_snapshot(p, k, &v);
+            }
+        }
+        SnapCmd::Swap(k) => {
+            let (a, b) = (snapshot_values(p, ix, sel), snapshot_values(p, ix, k));
+            put_snapshot(p, sel, &b);
+            put_snapshot(p, k, &a);
+        }
+    }
+}
 
 /// Imported audio into the running Alchemy (mono, tuned by its detected pitch).
 pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
@@ -1526,6 +1677,7 @@ fn source_select(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>
     };
     let r = p.rect(560.0, 56.0, 190.0, 20.0);
     let resp = rack::field_btn(p, r, &name, ("src-select", s), true);
+    rack::level_fill(p, r, st.levels[su]);
     let d = rack::arrows(p, p.rect(754.0, 56.0, 30.0, 20.0), ("src-sel-ar", s));
     if d != 0 {
         let v = (g(p, ix, 301 + s) + d as f32).rem_euclid(4.0);

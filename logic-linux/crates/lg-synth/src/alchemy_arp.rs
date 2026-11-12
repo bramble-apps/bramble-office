@@ -24,6 +24,8 @@ pub const CYCLE_RESET: u32 = ARP + 12;
 pub const EDIT: u32 = ARP + 13;
 pub const TARGET: u32 = ARP + 14;
 pub const SNAP: u32 = ARP + 15;
+/// Extended parameter: Arp Overlap Legacy Mode (overlapping repeated notes left out).
+pub const OVERLAP_LEGACY: u32 = ARP + 16;
 /// Pattern p: PAT + p × PAT_STRIDE + (0: steps; SEQ0 + sequence × 128 + step).
 pub const PAT: u32 = 40000;
 pub const PAT_STRIDE: u32 = 1040;
@@ -91,6 +93,7 @@ pub fn params() -> Vec<Param> {
         Param::menu(EDIT, "Arp Edit Mode", EDIT_MODES, 0.0).hide(),
         Param::menu(TARGET, "Arp Edit Target", SEQS, 0.0).hide(),
         Param::menu(SNAP, "Arp Value Snap", SNAPS, 0.0).hide(),
+        Param::new(OVERLAP_LEGACY, "Arp Overlap Legacy Mode", 0.0, 1.0, 0.0, Unit::OnOff),
     ];
     for p in 0..PATTERNS {
         v.push(Param::new(pat(p, 0), leak(format!("Arp Pattern {} Steps", p + 1)), 1.0, STEPS as f32, 16.0, Unit::None).hide());
@@ -149,18 +152,21 @@ pub struct ArpCfg {
     pub latch: u8,
     pub key_trig: u8,
     pub cycle_reset: bool,
+    /// Arp Overlap Legacy Mode: a key played again while still held isn't added again.
+    pub overlap_legacy: bool,
     pub pats: Box<[PatCfg; PATTERNS]>,
 }
 
 impl Default for ArpCfg {
     fn default() -> Self {
-        ArpCfg { mode: 0, rate: 5, sync: true, hz: 4.0, octaves: 1, length: 0.8, pattern: 0, swing: 0.0, note_vel: 1.0, split: 127, latch: 0, key_trig: 0, cycle_reset: true, pats: Box::new([PatCfg::default(); PATTERNS]) }
+        ArpCfg { mode: 0, rate: 5, sync: true, hz: 4.0, octaves: 1, length: 0.8, pattern: 0, swing: 0.0, note_vel: 1.0, split: 127, latch: 0, key_trig: 0, cycle_reset: true, overlap_legacy: false, pats: Box::new([PatCfg::default(); PATTERNS]) }
     }
 }
 
 impl ArpCfg {
     pub fn read_knobs(&mut self, p: &dyn Fn(u32) -> f32) {
         self.mode = p(MODE).round().clamp(0.0, 7.0) as u8;
+        self.overlap_legacy = p(OVERLAP_LEGACY) >= 0.5;
         self.rate = (p(RATE).round().max(0.0) as usize).min(RATES.len() - 1);
         self.sync = p(SYNC) >= 0.5;
         self.hz = p(HZ);
@@ -191,7 +197,7 @@ impl ArpCfg {
     }
     /// Re-reads what a parameter belongs to; false if it isn't the arpeggiator's.
     pub fn read_changed(&mut self, id: u32, p: &dyn Fn(u32) -> f32) -> bool {
-        if (ARP..ARP + 16).contains(&id) {
+        if (ARP..=OVERLAP_LEGACY).contains(&id) {
             self.read_knobs(p);
             true
         } else if (PAT..PAT + PAT_STRIDE * PATTERNS as u32).contains(&id) {
@@ -277,7 +283,13 @@ impl Arp {
         self.down += 1;
         let fresh = self.nheld == 0;
         let add = c.latch == 2;
-        if (add || !self.held[..self.nheld].iter().any(|h| h.0 == pitch)) && self.nheld < STEPS {
+        // a key played again while it's still held: in the arpeggio twice, unless Arp Overlap
+        // Legacy Mode leaves it out
+        let again = self.held[..self.nheld].iter().any(|h| h.0 == pitch);
+        if again && c.overlap_legacy && !add {
+            return true;
+        }
+        if self.nheld < STEPS {
             self.held[self.nheld] = (pitch, vel);
             self.nheld += 1;
             self.held[..self.nheld].sort_by_key(|h| h.0);

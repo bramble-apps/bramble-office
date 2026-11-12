@@ -698,7 +698,8 @@ fn alchemy_reads_preset_text_and_transforms() {
     let text = "<alchemypreset>\r\nName = Test\r\n\r\n<perform>\r\n_Contrl1 = 0.1\r\n_Contrl2 = 0.9\r\nPerVol = 0.8\r\n_Contrl1 = 0.9\r\n_Contrl2 = 0.1\r\nPerVol = 0.8\r\n";
     let mut a = lg_synth::alchemy::Alchemy::new(RATE);
     a.load_preset_text(&text);
-    assert_eq!(a.snapshots.len(), 2);
+    assert!((a.get(lg_synth::alchemy::snapv(1, 0)) - 0.9).abs() < 1e-6, "snapshot 2");
+    assert!((a.get(lg_synth::alchemy::snapv(5, 1)) - 0.9).abs() < 1e-6, "missing snapshots as snapshot 1");
     assert!((a.get(1) - 0.1).abs() < 1e-6);
     a.set(17, 0.1);
     a.set(18, 0.5);
