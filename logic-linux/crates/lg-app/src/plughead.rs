@@ -11,6 +11,31 @@ use egui::{Align2, Color32, Pos2, Rect, Sense, pos2, vec2};
 use crate::glyphs;
 use crate::look;
 
+/// Logic's key commands for the plug-in window (⌃⌘Z / ⌃⇧⌘Z by default).
+pub const COMMANDS: &[&str] = &["Plug-in Undo", "Plug-in Redo"];
+
+/// Plug-in Undo / Redo: the open effect window's history, else the instrument window's.
+pub fn command(app: &mut crate::app::App, ctx: &egui::Context, name: &str) -> bool {
+    let redo = match name {
+        "Plug-in Undo" => false,
+        "Plug-in Redo" => true,
+        _ => return false,
+    };
+    if let Some((s, k)) = app.mix.fx_window
+        && crate::pluginwin::fx_undo(app, ctx, s, k, redo)
+    {
+        return true;
+    }
+    if app.plugin_window.is_some() {
+        if redo {
+            crate::instwin::redo(app);
+        } else {
+            crate::instwin::undo(app);
+        }
+    }
+    true
+}
+
 /// What a header button asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Act {
@@ -208,9 +233,10 @@ pub fn header(ui: &mut egui::Ui, h: &Head) -> Out {
     x += 66.0 + GAP;
     let cr = row(x, 73.0);
     let cresp = ui.interact(cr, h.id.with("compare"), Sense::click()).on_hover_text("Compare the edited setting with the saved one");
-    let lit = h.comparing || (cresp.hovered() && h.can_compare);
-    p.rect_filled(cr, 6.0, if lit { btn_hot() } else { btn_bg() });
-    p.text(cr.center(), Align2::CENTER_CENTER, "Compare", look::regular(12.5), if h.can_compare || h.comparing { look::text() } else { faded() });
+    // an edited setting turns Compare blue; comparing (the saved one playing) it is plain again
+    let fill = if h.comparing { power_on() } else if cresp.hovered() && h.can_compare { btn_hot() } else { btn_bg() };
+    p.rect_filled(cr, 6.0, fill);
+    p.text(cr.center(), Align2::CENTER_CENTER, "Compare", look::regular(12.5), if h.comparing { Color32::WHITE } else if h.can_compare { look::text() } else { faded() });
     if cresp.clicked() && (h.can_compare || h.comparing) {
         act = Some(Act::Compare);
     }
@@ -305,7 +331,7 @@ pub fn footer(ui: &mut egui::Ui, name: &str, more: Option<&mut bool>) {
     p.text(full.center(), Align2::CENTER_CENTER, name, look::regular(18.0), col(0xe0e0e0, 0x303030));
     if let Some(open) = more {
         let r = Rect::from_center_size(pos2(full.min.x + 20.0, full.center().y), vec2(24.0, 24.0));
-        let resp = ui.interact(r, ui.id().with(("plug-foot-more", name)), Sense::click()).on_hover_text("Extended Parameters");
+        let resp = ui.interact(r, ui.scope_id().with(("plug-foot-more", name)), Sense::click()).on_hover_text("Extended Parameters");
         glyphs::paint(&p, r, if *open { glyphs::ph::CARET_DOWN } else { glyphs::ph::CARET_RIGHT }, 14.0, if resp.hovered() { look::text() } else { label() });
         if resp.clicked() {
             *open = !*open;

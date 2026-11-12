@@ -90,32 +90,6 @@ pub(crate) fn control_rows(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: 
     set
 }
 
-/// The header's bypass button (a power symbol); true when clicked.
-fn bypass_button(ui: &mut egui::Ui, p: &egui::Painter, hr: Rect, on: bool, salt: &str) -> bool {
-    let bypass = Rect::from_center_size(pos2(hr.min.x + 18.0, hr.center().y), vec2(22.0, 22.0));
-    crate::glyphs::paint(p, bypass, crate::glyphs::ph::POWER, 19.0, if on { look::accent() } else { look::text_dim() });
-    ui.interact(bypass, ui.scope_id().with((salt, "pw-bypass")), Sense::click()).on_hover_text("Bypass").clicked()
-}
-
-/// Compare / Copy / Paste at the header's right; the one clicked (0 Compare, 1 Copy, 2 Paste).
-fn header_buttons(ui: &mut egui::Ui, p: &egui::Painter, hr: Rect, salt: &str, comparing: bool) -> Option<u8> {
-    let mut x = hr.max.x - 8.0;
-    let mut hit = None;
-    for (label, act) in [("Paste", 2u8), ("Copy", 1), ("Compare", 0)] {
-        let w = p.layout_no_wrap(label.into(), look::regular(12.0), look::text()).size().x + 16.0;
-        let r = Rect::from_min_max(pos2(x - w, hr.min.y + 4.0), pos2(x, hr.max.y - 4.0));
-        x -= w + 6.0;
-        let resp = ui.interact(r, ui.scope_id().with((salt, "pw", act)), Sense::click());
-        let lit = resp.hovered() || (act == 0 && comparing);
-        p.rect_filled(r, 5.0, if lit { look::button_on() } else { look::group_bg() });
-        p.text(r.center(), Align2::CENTER_CENTER, label, look::regular(12.0), look::text());
-        if resp.clicked() {
-            hit = Some(act);
-        }
-    }
-    hit
-}
-
 /// Link mode Multi: the open plug-in windows follow the selected track (its instrument, and the
 /// plug-in in the same insert row of its strip).
 fn follow_link(app: &mut App, ctx: &egui::Context) {
@@ -418,7 +392,7 @@ fn push_history(ctx: &egui::Context, s: usize, k: usize, before: Vec<f32>) {
 }
 
 /// Plug-in undo (or redo) of the effect window's slot: its whole setting as it was.
-fn fx_undo(app: &mut App, ctx: &egui::Context, s: usize, k: usize, redo: bool) -> bool {
+pub(crate) fn fx_undo(app: &mut App, ctx: &egui::Context, s: usize, k: usize, redo: bool) -> bool {
     let Some((name, params, values)) = effect_state(app, s, k) else { return false };
     let base = crate::mixstate::inserts(app, s).get(k).map(|u| u.params.clone()).unwrap_or_default();
     let now = floats_of(&params, &values, &base);
@@ -568,9 +542,6 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
             ui.add_space(4.0);
             set.extend(controls(ui, &params, &values, &texts, "fx"));
         } else {
-            if comparing {
-                ui.label(egui::RichText::new("Compare: the setting as it was").color(look::text_dim()));
-            }
             ui.add_space(4.0);
             if editor {
                 let live = app.engine.lock().map(|e| {

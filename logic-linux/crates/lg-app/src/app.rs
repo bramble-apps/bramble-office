@@ -1336,7 +1336,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
+        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
             return true;
         }
         if crate::envhub::command(self, ctx, name) {
