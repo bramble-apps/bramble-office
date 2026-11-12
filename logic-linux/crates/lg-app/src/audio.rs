@@ -195,6 +195,8 @@ pub struct Engine {
     /// Beats per bar, for the click's accent.
     pub beats_per_bar: u32,
     click: Option<(f32, f32)>,
+    /// The metronome's sounding clicks: frequency, time since struck, level (velocity).
+    clicks: Vec<(f32, f32, f32)>,
     pub master: f32,
     /// Peak levels per track (for the meters), decaying.
     pub meters: Vec<f32>,
@@ -243,6 +245,8 @@ pub struct Engine {
     /// locate start sounding (syncmidi.rs sets it); and whether the next block must chase.
     pub chase_notes: bool,
     chase_due: bool,
+    /// The Chase pane's other boxes (chase.rs).
+    pub chase: crate::chase::Chase,
     /// The MIDI channel (0..15) of the live input being played (instruments with a part per channel).
     pub live_channel: u8,
     was_playing: bool,
@@ -279,7 +283,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -646,9 +650,14 @@ impl Engine {
                 }
             }
             // chase: notes begun before a play start or locate sound from here (Chase ▸ Notes)
-            if (self.chase_due || !was) && self.chase_notes {
+            let chase_now = self.chase_due || !was;
+            let notes_now = chase_now && {
+                let audible: Vec<bool> = (0..self.tracks.len()).map(|i| self.audible(i)).collect();
+                crate::chase::run(self, from, &audible)
+            };
+            if notes_now && self.chase_notes {
                 for i in 0..self.tracks.len() {
-                    if !self.audible(i) {
+                    if !self.audible(i) || !crate::chase::notes_wanted(&self.chase, i) {
                         continue;
                     }
                     let ch = self.tracks[i].channel;
@@ -705,25 +714,20 @@ impl Engine {
                 if next < to {
                     let n = (next / div).round() as u32;
                     // (signature changes: beats and bars from the signature map)
-                    let (on_beat, bar) = if self.timeline.points.is_empty() {
+                    let (on_beat, bar, group) = if self.timeline.points.is_empty() {
                         let on_beat = n % 4 == 0;
-                        (on_beat, on_beat && (n / 4) % self.beats_per_bar.max(1) == 0)
+                        (on_beat, on_beat && (n / 4) % self.beats_per_bar.max(1) == 0, false)
                     } else {
                         let (_, start, sig) = self.timeline.bar_of(next as u32);
                         let beat = lg_core::timeline::Map::beat_len(sig);
-                        ((next as u32 - start) % beat == 0, start == next as u32)
+                        let off = next as u32 - start;
+                        // (compound meters, 6/8 9/8 12/8…: beats grouped in threes)
+                        let group = sig.1 >= 8 && sig.0 > 3 && sig.0 % 3 == 0 && off % (3 * beat) == 0;
+                        (off % beat == 0, start == next as u32, group)
                     };
-                    let f = if bar && cc.bar {
-                        Some(1760.0)
-                    } else if on_beat && cc.beat {
-                        Some(1320.0)
-                    } else if !on_beat && cc.division {
-                        Some(990.0)
-                    } else {
-                        None
-                    };
-                    if let Some(f) = f {
-                        self.click = Some((f, 0.0));
+                    for k in cc.levels(bar, group, on_beat) {
+                        let f = lg_dsp::midi_hz(cc.notes[k] as f32);
+                        self.clicks.push((f, 0.0, cc.vels[k] as f32 / 112.0));
                     }
                 }
             }
@@ -734,6 +738,11 @@ impl Engine {
                     self.all_off();
                     self.pos = a as f64;
                     self.rec.wrapped();
+                    // (Chase on cycle jump)
+                    if self.chase.cfg.on_cycle_jump {
+                        self.chase_due = true;
+                        self.chase.jump = true;
+                    }
                 }
             }
         }
@@ -1017,6 +1026,20 @@ impl Engine {
                 self.click = None;
             }
         }
+        if !self.clicks.is_empty() {
+            let decay = 90.0 - 60.0 * self.click_cfg.tone;
+            let gain = 0.35 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
+            for (freq, t, amp) in &mut self.clicks {
+                for k in 0..frames {
+                    let env = (-*t * decay).exp();
+                    let y = (std::f32::consts::TAU * *freq * *t).sin() * env * gain * *amp;
+                    out[2 * k] += y;
+                    out[2 * k + 1] += y;
+                    *t += 1.0 / RATE as f32;
+                }
+            }
+            self.clicks.retain(|c| c.1 <= 0.08);
+        }
         let mut peak = 0f32;
         let mut over = 0f32;
         let mg = self.master * self.ext.master_gain();
@@ -1174,11 +1197,31 @@ pub struct ClickCfg {
     /// 0 (short click) … 1 (woodblock).
     pub tone: f32,
     pub volume_db: f32,
+    /// Group clicks (compound meters' beat groups), polyphonic clicks (bar, group, beat and
+    /// division notes together), and Klopfgeist's note and velocity for bar, group, beat,
+    /// division.
+    pub group: bool,
+    pub poly: bool,
+    pub notes: [u8; 4],
+    pub vels: [u8; 4],
 }
 
 impl Default for ClickCfg {
     fn default() -> ClickCfg {
-        ClickCfg { simple: true, while_recording: true, only_count_in: false, bar: true, beat: true, division: false, tone: 0.5, volume_db: 0.0 }
+        ClickCfg { simple: true, while_recording: true, only_count_in: false, bar: true, beat: true, division: false, tone: 0.5, volume_db: 0.0, group: false, poly: false, notes: [93, 88, 88, 83], vels: [112, 100, 100, 88] }
+    }
+}
+
+impl ClickCfg {
+    /// Which of bar, group, beat, division click at a line that is a bar / group / beat line
+    /// (Polyphonic clicks: all that apply; else the first that applies).
+    pub fn levels(&self, bar: bool, group: bool, beat: bool) -> Vec<usize> {
+        // (a bar line is also a group and a beat line; a group line is a beat line; divisions
+        // click between beats)
+        let applies = [bar, bar || group, bar || group || beat, !beat];
+        let on = [self.bar, self.group, self.beat, self.division];
+        let all: Vec<usize> = (0..4).filter(|&k| applies[k] && on[k]).collect();
+        if self.poly { all } else { all.into_iter().take(1).collect() }
     }
 }
 

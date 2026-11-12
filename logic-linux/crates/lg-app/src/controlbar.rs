@@ -213,7 +213,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             } else if resp.hovered() {
                 p.rect_filled(cell, cell.height() / 2.0, look::button_on().gamma_multiply(0.55));
             }
-            let col = if on { Color32::WHITE } else { look::text() };
+            // (clicking only while recording: grey with a purple symbol)
+            let rec_only = i == 1 && crate::metroset::recording_only(app, on);
+            if rec_only {
+                p.rect_filled(cell, cell.height() / 2.0, look::button_on());
+            }
+            let col = if on { Color32::WHITE } else if rec_only { purple } else { look::text() };
+            if i == 1 {
+                crate::metroset::menu(app, &resp);
+            }
             if i == 0 {
                 p.text(b[i].center(), Align2::CENTER_CENTER, "1234", look::semibold(10.0), col);
             } else {

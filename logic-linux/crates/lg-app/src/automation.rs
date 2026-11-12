@@ -1119,9 +1119,23 @@ pub fn played(app: &App, t: usize) -> Vec<AutoLane> {
         fresh
     });
     let mut out = Vec::new();
+    // Project Settings ▸ General: region automation over the track's (else the track's own
+    // lane wins where it has points), and the preset value outside regions without their own
+    let region_first = app.proj.on("General /  / Region automation takes priority over track automation");
+    let preset = app.proj.on("General /  / Use preset parameter value for regions without region automation");
     for k in keys {
         let abs = tr.automation.iter().find(|l| matches(l, k)).filter(|l| !l.muted);
-        let spans: Vec<(u32, u32, &AutoLane)> = tr.regions.iter().filter(|r| !r.muted).filter_map(|r| r.ext.automation.iter().find(|l| matches(l, k)).map(|l| (r.start, r.start + r.length, l))).collect();
+        let track_wins = !region_first && abs.is_some_and(|l| !l.points.is_empty());
+        let spans: Vec<(u32, u32, &AutoLane)> = if track_wins { Vec::new() } else { tr.regions.iter().filter(|r| !r.muted).filter_map(|r| r.ext.automation.iter().find(|l| matches(l, k)).map(|l| (r.start, r.start + r.length, l))).collect() };
+        let base;
+        let abs = match abs {
+            None if preset && !spans.is_empty() => {
+                let v = current_value(app, t, k).round().clamp(0.0, 127.0) as u8;
+                base = AutoLane { param: spans[0].2.param, plugin: spans[0].2.plugin, points: vec![(0, v)], ..Default::default() };
+                Some(&base)
+            }
+            a => a,
+        };
         let Some(mut l) = lg_core::automation::merge_regions(abs, &spans) else {
             if let Some(rel) = tr.automation.iter().find(|l| matches(l, Key { rel: true, ..k }) && !l.muted && !l.points.is_empty()) {
                 out.push(lg_core::automation::consolidate(None, rel, current_value(app, t, k)));

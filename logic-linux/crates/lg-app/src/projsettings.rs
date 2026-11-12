@@ -46,7 +46,9 @@ const COUNT_IN: &[&str] = &["None", "1 Bar", "2 Bars", "3 Bars", "4 Bars", "5 Ba
 const ROWS: &[Row] = &[
     Row("General", "", "Use musical grid", Kind::Check, "1"),
     Row("General", "", "Only load plug-ins needed for project playback", Kind::Check, "0"),
+    Row("General", "", "Reset record enable state of Software Instrument tracks", Kind::Check, "0"),
     Row("General", "", "Region automation takes priority over track automation", Kind::Check, "1"),
+    Row("General", "", "Use preset parameter value for regions without region automation", Kind::Check, "0"),
     Row("Synchronization", "General", "Sync Mode:", Kind::Popup(&["Internal", "Ableton Link", "MTC", "Manual"]), "Internal"),
     Row("Synchronization", "General", "Frame Rate:", Kind::Popup(FRAME_RATES), "25"),
     Row("Synchronization", "General", "Auto detect format of MTC", Kind::Check, "1"),
@@ -56,7 +58,7 @@ const ROWS: &[Row] = &[
     Row("Synchronization", "General", "Auto enable External Sync", Kind::Check, "0"),
     Row("Synchronization", "MIDI", "Transmit MIDI Clock", Kind::Check, "0"),
     Row("Synchronization", "MIDI", "MIDI Clock Destination:", Kind::Text, "All"),
-    Row("Synchronization", "MIDI", "Clock Mode:", Kind::Popup(&["Pattern", "Song - SPP at Play Start and Cycle Jump", "Song - SPP at Play Start, Cycle Jump and while Playing (scrubbing)"]), "Song - SPP at Play Start and Cycle Jump"),
+    Row("Synchronization", "MIDI", "Clock Mode:", Kind::Popup(&lg_core::sync::ClockMode::NAMES), "Song - SPP at Play Start and Stop/SPP/Continue at Cycle Jump"),
     Row("Synchronization", "MIDI", "Transmit MTC", Kind::Check, "0"),
     Row("Synchronization", "MIDI", "MTC Destination:", Kind::Text, "All"),
     Row("Synchronization", "MIDI", "Transmit MIDI Machine Control (MMC)", Kind::Check, "0"),
@@ -70,6 +72,33 @@ const ROWS: &[Row] = &[
     Row("Metronome", "", "Bar", Kind::Check, "1"),
     Row("Metronome", "", "Beat", Kind::Check, "1"),
     Row("Metronome", "", "Division", Kind::Check, "0"),
+    Row("Metronome", "", "Group", Kind::Check, "0"),
+    Row("Metronome", "", "Bar Note", Kind::Num(0.0, 127.0, ""), "93"),
+    Row("Metronome", "", "Bar Velocity", Kind::Num(1.0, 127.0, ""), "112"),
+    Row("Metronome", "", "Group Note", Kind::Num(0.0, 127.0, ""), "88"),
+    Row("Metronome", "", "Group Velocity", Kind::Num(1.0, 127.0, ""), "100"),
+    Row("Metronome", "", "Beat Note", Kind::Num(0.0, 127.0, ""), "88"),
+    Row("Metronome", "", "Beat Velocity", Kind::Num(1.0, 127.0, ""), "100"),
+    Row("Metronome", "", "Division Note", Kind::Num(0.0, 127.0, ""), "83"),
+    Row("Metronome", "", "Division Velocity", Kind::Num(1.0, 127.0, ""), "88"),
+    Row("Metronome", "", "MIDI Click", Kind::Check, "0"),
+    Row("Metronome", "", "MIDI Bar", Kind::Check, "1"),
+    Row("Metronome", "", "MIDI Bar Channel", Kind::Num(1.0, 16.0, ""), "10"),
+    Row("Metronome", "", "MIDI Bar Note", Kind::Num(0.0, 127.0, ""), "37"),
+    Row("Metronome", "", "MIDI Bar Velocity", Kind::Num(1.0, 127.0, ""), "112"),
+    Row("Metronome", "", "MIDI Group", Kind::Check, "0"),
+    Row("Metronome", "", "MIDI Group Channel", Kind::Num(1.0, 16.0, ""), "10"),
+    Row("Metronome", "", "MIDI Group Note", Kind::Num(0.0, 127.0, ""), "37"),
+    Row("Metronome", "", "MIDI Group Velocity", Kind::Num(1.0, 127.0, ""), "100"),
+    Row("Metronome", "", "MIDI Beat", Kind::Check, "1"),
+    Row("Metronome", "", "MIDI Beat Channel", Kind::Num(1.0, 16.0, ""), "10"),
+    Row("Metronome", "", "MIDI Beat Note", Kind::Num(0.0, 127.0, ""), "37"),
+    Row("Metronome", "", "MIDI Beat Velocity", Kind::Num(1.0, 127.0, ""), "88"),
+    Row("Metronome", "", "MIDI Division", Kind::Check, "0"),
+    Row("Metronome", "", "MIDI Division Channel", Kind::Num(1.0, 16.0, ""), "10"),
+    Row("Metronome", "", "MIDI Division Note", Kind::Num(0.0, 127.0, ""), "37"),
+    Row("Metronome", "", "MIDI Division Velocity", Kind::Num(1.0, 127.0, ""), "72"),
+    Row("Metronome", "", "MIDI Port:", Kind::Text, "All"),
     Row("Metronome", "", "Tone:", Kind::Num(0.0, 100.0, "%"), "50"),
     Row("Metronome", "", "Volume:", Kind::Num(-60.0, 6.0, "dB"), "0"),
     Row("Recording", "General", "Count-in:", Kind::Popup(COUNT_IN), "1 Bar"),
@@ -100,11 +129,64 @@ const ROWS: &[Row] = &[
     Row("MIDI", "Input Filter", "Polyphonic Aftertouch", Kind::Check, "0"),
     Row("MIDI", "Input Filter", "System Exclusive", Kind::Check, "0"),
     Row("MIDI", "Chase", "Notes", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Sustained", Kind::Check, "1"),
+    Row("MIDI", "Chase", "In No Transpose instrument channel strips", Kind::Check, "1"),
     Row("MIDI", "Chase", "Program Change", Kind::Check, "1"),
     Row("MIDI", "Chase", "Pitch Bend", Kind::Check, "1"),
     Row("MIDI", "Chase", "Control Changes", Kind::Check, "1"),
+    Row("MIDI", "Chase", "0-15", Kind::Check, "1"),
+    Row("MIDI", "Chase", "64-71", Kind::Check, "1"),
+    Row("MIDI", "Chase", "All Other", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Aftertouch", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Polyphonic Aftertouch", Kind::Check, "1"),
+    Row("MIDI", "Chase", "System Exclusive", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Text Meta Events", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Chase separate channels in All Channels instruments", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Chase on cycle jump", Kind::Check, "0"),
+    Row("MIDI", "Chase", "Notes (on cycle jump)", Kind::Check, "1"),
+    Row("MIDI", "Chase", "Send full MIDI reset before chasing", Kind::Check, "0"),
     Row("MIDI", "Clip Length", "Control 1 (Modulation) to zero", Kind::Check, "1"),
     Row("MIDI", "Clip Length", "Pitch Bend to center position", Kind::Check, "1"),
+    Row("Score", "Global", "Top Margin:", Kind::Num(0.0, 10.0, "cm"), "1.75"),
+    Row("Score", "Global", "Bottom Margin:", Kind::Num(0.0, 10.0, "cm"), "1.75"),
+    Row("Score", "Global", "Left Margin:", Kind::Num(0.0, 10.0, "cm"), "1.58"),
+    Row("Score", "Global", "Right Margin:", Kind::Num(0.0, 10.0, "cm"), "1.58"),
+    Row("Score", "Global", "Add bracket space", Kind::Check, "0"),
+    Row("Score", "Global", "Alternating margins", Kind::Check, "0"),
+    Row("Score", "Global", "Header Space:", Kind::Num(0.0, 15.0, "cm"), "2.45"),
+    Row("Score", "Global", "Line Distance:", Kind::Num(0.0, 10.0, "cm"), "0.70"),
+    Row("Score", "Global", "Maximum Bars/Line:", Kind::Num(1.0, 99.0, ""), "99"),
+    Row("Score", "Global", "Justify last staff", Kind::Check, "0"),
+    Row("Score", "Global", "Open single staffs", Kind::Check, "0"),
+    Row("Score", "Global", "Hide muted notes", Kind::Check, "0"),
+    Row("Score", "Global", "Hide muted regions", Kind::Check, "0"),
+    Row("Score", "Global", "Hide muted tracks", Kind::Check, "0"),
+    Row("Score", "Numbers & Names", "Page Numbers", Kind::Check, "1"),
+    Row("Score", "Numbers & Names", "Page Horizontal Position:", Kind::Popup(&crate::scoreset::PAGE_H), "Alternating"),
+    Row("Score", "Numbers & Names", "Page Vertical Position:", Kind::Popup(&["Top", "Bottom"]), "Bottom"),
+    Row("Score", "Numbers & Names", "Page Offset:", Kind::Num(-99.0, 999.0, ""), "0"),
+    Row("Score", "Numbers & Names", "Page Horizontal Distance:", Kind::Num(0.0, 10.0, "cm"), "0.70"),
+    Row("Score", "Numbers & Names", "Page Vertical Distance:", Kind::Num(0.0, 10.0, "cm"), "0.70"),
+    Row("Score", "Numbers & Names", "Hide first page number", Kind::Check, "0"),
+    Row("Score", "Numbers & Names", "Prefix:", Kind::Text, ""),
+    Row("Score", "Numbers & Names", "Bar Numbers", Kind::Check, "1"),
+    Row("Score", "Numbers & Names", "Bar Horizontal Position:", Kind::Popup(&["At Bar Line", "At Bar Center"]), "At Bar Line"),
+    Row("Score", "Numbers & Names", "Bar Vertical Position:", Kind::Num(-20.0, 20.0, ""), "2.0"),
+    Row("Score", "Numbers & Names", "Step:", Kind::Num(0.0, 99.0, ""), "0"),
+    Row("Score", "Numbers & Names", "Bar Offset:", Kind::Num(-999.0, 999.0, ""), "0"),
+    Row("Score", "Numbers & Names", "Start With:", Kind::Num(1.0, 999.0, ""), "2"),
+    Row("Score", "Numbers & Names", "Hide bar numbers in linear view", Kind::Check, "1"),
+    Row("Score", "Numbers & Names", "Follow staff size", Kind::Check, "1"),
+    Row("Score", "Numbers & Names", "Top/bottom staff only", Kind::Check, "1"),
+    Row("Score", "Numbers & Names", "Instrument Names", Kind::Check, "0"),
+    Row("Score", "Numbers & Names", "Name Position:", Kind::Popup(&["Above Staffs", "Beside Staffs"]), "Beside Staffs"),
+    Row("Score", "Numbers & Names", "Name Align:", Kind::Popup(&["Left", "Right"]), "Right"),
+    Row("Score", "Numbers & Names", "First Staff:", Kind::Popup(&crate::scoreset::NAMES), "Full Names"),
+    Row("Score", "Numbers & Names", "Other Staffs:", Kind::Popup(&crate::scoreset::NAMES), "Short Names"),
+    Row("Score", "Clefs & Signatures", "Clefs:", Kind::Popup(&crate::scoreset::SHOW), "Every Staff"),
+    Row("Score", "Clefs & Signatures", "Key Signatures:", Kind::Popup(&crate::scoreset::SHOW), "Every Staff"),
+    Row("Score", "Clefs & Signatures", "Time Signatures:", Kind::Popup(&crate::scoreset::SHOW), "First Staff on Page 1"),
+    Row("Score", "Clefs & Signatures", "Hide bar lines", Kind::Check, "0"),
     Row("Smart Tempo", "", "Project Tempo Mode:", Kind::Popup(&["Keep Project Tempo", "Adapt Project Tempo", "Automatic Mode"]), "Automatic Mode"),
     Row("Smart Tempo", "", "Free Tempo Recording Default Tempo Behavior:", Kind::Popup(&["Ask", "Apply region tempo to project", "Apply average region tempo to project", "Apply project tempo to region", "Don't analyze region tempo or change project tempo"]), "Ask"),
     Row("Assets", "", "Copy audio files into project", Kind::Check, "1"),
@@ -168,6 +250,10 @@ pub fn click_cfg(v: &Values) -> crate::audio::ClickCfg {
         division: m("Audio Click (Klopfgeist)") && m("Division"),
         tone: v.num("Metronome /  / Tone:") / 100.0,
         volume_db: v.num("Metronome /  / Volume:"),
+        group: m("Audio Click (Klopfgeist)") && m("Group"),
+        poly: m("Polyphonic clicks"),
+        notes: ["Bar", "Group", "Beat", "Division"].map(|l| v.num(&format!("Metronome /  / {l} Note")).clamp(0.0, 127.0) as u8),
+        vels: ["Bar", "Group", "Beat", "Division"].map(|l| v.num(&format!("Metronome /  / {l} Velocity")).clamp(1.0, 127.0) as u8),
     }
 }
 
@@ -299,7 +385,7 @@ fn read_back(app: &mut App) {
     set(&mut app.proj, "Assets /  / Copy audio files into project", ca);
 }
 
-fn set(v: &mut Values, k: &str, val: &str) {
+pub(crate) fn set(v: &mut Values, k: &str, val: &str) {
     let def = ROWS.iter().find(|r| key(r) == k).map(|r| r.4);
     if def == Some(val) {
         v.0.remove(k);
@@ -323,13 +409,36 @@ fn project_path(app: &App) -> Option<PathBuf> {
 /// A project opened: its settings (Logic's defaults when it has none).
 pub fn after_open(app: &mut App) {
     app.proj = project_path(app).and_then(|p| file_for(&p)).and_then(|f| std::fs::read_to_string(f).ok()).map(|t| Values::from_text(&t)).unwrap_or_default();
+    crate::metroset::after_open(app);
+    restore_armed(app);
     apply(app);
     crate::surround::after_open(app);
+}
+
+/// Where the record enable state is kept (not a pane's row).
+const ARMED: &str = "State / Tracks / Record enabled";
+
+/// A project opened: its record-enabled tracks again (General ▸ Reset record enable state of
+/// Software Instrument tracks: instrument tracks come back off).
+fn restore_armed(app: &mut App) {
+    let reset = app.proj.on("General /  / Reset record enable state of Software Instrument tracks");
+    let kinds: Vec<lg_core::TrackKind> = app.project.as_ref().map(|p| p.tracks.iter().map(|t| t.kind).collect()).unwrap_or_default();
+    let list = app.proj.0.get(ARMED).cloned().unwrap_or_default();
+    app.armed = list.split(',').filter_map(|x| x.parse().ok()).filter(|&t: &usize| t < kinds.len() && !(reset && kinds[t] == lg_core::TrackKind::Instrument)).collect();
 }
 
 /// The project saved: its settings beside it.
 pub fn save(app: &mut App) {
     read_back(app);
+    // (the tracks' record enable buttons are kept with the project, as Logic keeps them)
+    let mut armed: Vec<usize> = app.armed.iter().copied().collect();
+    armed.sort_unstable();
+    let list = armed.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(",");
+    if list.is_empty() {
+        app.proj.0.remove(ARMED);
+    } else {
+        app.proj.0.insert(ARMED.into(), list);
+    }
     crate::surround::store(app);
     if app.automated {
         return;
@@ -364,7 +473,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
             if let Some(p) = kn_ui::files::FileDialog::new().set_title("Import Project Settings from a project (.logicx)").pick_folder() {
                 let p = lg_core::project::package_of(&p);
                 match settings_of(&p) {
-                    Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Score" | "Movie")).map(|s| s.to_string()).collect())),
+                    Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Movie")).map(|s| s.to_string()).collect())),
                     None => app.tell(format!("“{}” has no project settings Studio made (only projects saved in Studio keep them)", p.file_stem().unwrap_or_default().to_string_lossy())),
                 }
             }
@@ -372,6 +481,11 @@ pub fn command(app: &mut App, name: &str) -> bool {
         _ => return false,
     }
     true
+}
+
+/// Sub-panes drawn by their own code (the rows still keep the values and defaults).
+fn custom(pane: &str, sub: &str) -> bool {
+    matches!((pane, sub), ("MIDI", "Chase") | ("Synchronization", "MIDI") | ("Metronome", "")) || pane == "Score"
 }
 
 fn subs(pane: &str) -> Vec<&'static str> {
@@ -415,9 +529,13 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
         let sub = if ss.len() > 1 { app.ps_ui.sub.clone() } else { ss.first().map(|s| s.to_string()).unwrap_or_default() };
         match pane.as_str() {
             "General" => crate::projfile::general_info(app, ui),
+            "MIDI" if sub == "Chase" => crate::chase::pane(ui, &mut app.proj),
+            "Metronome" => crate::metroset::pane(app, ui),
+            "Synchronization" if sub == "MIDI" => crate::syncmidi::pane(app, ui),
             "Score" => {
-                ui.label("The Score's project settings (staff size, bar numbers, chords, MIDI Meaning, colours) are in its own window.");
-                if ui.button("Score Project Settings…").clicked() {
+                crate::scoreset::pane(ui, &mut app.proj, &sub);
+                ui.add_space(6.0);
+                if ui.button("Score Settings…").on_hover_text("The Score's own settings window (staff size, chords, MIDI Meaning, colours)").clicked() {
                     crate::score::set_editor_tab(ctx, crate::score::EditorTab::Score);
                     app.bottom = crate::app::Bottom::PianoRoll;
                     crate::score::with_state(ctx, |s| s.settings = Some(0));
@@ -449,7 +567,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
             _ => {}
         }
         egui::Grid::new(("ps-rows", pane.clone(), sub.clone())).num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            for r in ROWS.iter().filter(|r| r.0 == pane && r.1 == sub) {
+            for r in ROWS.iter().filter(|r| r.0 == pane && r.1 == sub && !custom(r.0, r.1)) {
                 let k = key(r);
                 if matches!(r.3, Kind::Text) && k.ends_with("Folder:") {
                     continue;
@@ -523,14 +641,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
         }
         let note = match (pane.as_str(), sub.as_str()) {
             ("Synchronization", "General") => "Sync Mode MTC: with external sync on (Toggle Sync intern/extern) Studio follows incoming MIDI Time Code. Ableton Link and Manual (Tempo Interpreter) aren't available. The frame rate and bar 1's SMPTE time set MTC, MMC and the time display.",
-            ("Synchronization", "MIDI") => "Destinations: a MIDI output's name, All or Off (Bramble Studio Virtual Out reaches other apps). MIDI Clock and MTC go out while playing; MMC is sent on play, stop, record and locate.",
             ("Synchronization", _) => "Studio has no word clock: Core Audio's choice is kept with the project only.",
             ("Audio", "Channel Strips") => "Automatic management keeps one channel strip object per track on the Environment's Mixer layer (Window ▸ Open MIDI Environment).",
-            ("Metronome", _) => "Klopfgeist: Studio's own click (bar, beat and division pitches, Tone, Volume).",
             ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning isn't built (plays equal tempered).",
-            ("MIDI", "Chase") => "Notes: notes already under way at a play start or locate sound from there. Studio's regions carry no program, pitch bend or controller events to chase.",
             ("MIDI", "Clip Length") => "Kept with the project; Studio's instruments don't reset these yet.",
-            ("Audio", "General") => "Studio's mixer pans with its own law: the Pan Law choice is kept with the project only.",
+            ("Audio", "General") => "Pan Law: the level of a centred mono signal (Compensated: centre unchanged, hard pans raised instead).",
             _ => "",
         };
         if !note.is_empty() {
@@ -550,7 +665,7 @@ fn import_sheet(app: &mut App, ctx: &egui::Context) {
     let mut done = None;
     egui::Window::new("Import Project Settings").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -40.0)).show(ctx, |ui| {
         ui.label(format!("From “{}”:", path.file_stem().unwrap_or_default().to_string_lossy()));
-        for p in PANES.iter().filter(|p| !matches!(**p, "Score" | "Movie")) {
+        for p in PANES.iter().filter(|p| !matches!(**p, "Movie")) {
             let mut on = ticked.iter().any(|t| t == p);
             if ui.checkbox(&mut on, *p).changed() {
                 if on {
