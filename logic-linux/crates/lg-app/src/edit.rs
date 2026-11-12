@@ -28,6 +28,8 @@ pub enum Tool {
     Velocity,
     Quantize,
     Brush,
+    /// The Gain tool: drag an audio region up or down for its gain (regionparams.rs).
+    Gain,
 }
 
 impl Tool {
@@ -49,10 +51,11 @@ impl Tool {
             Tool::Velocity => "Velocity Tool",
             Tool::Quantize => "Quantize Tool",
             Tool::Brush => "Brush Tool",
+            Tool::Gain => "Gain Tool",
         }
     }
 
-    pub const TRACKS: [Tool; 13] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Text, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Zoom, Tool::Fade, Tool::Automation, Tool::Marquee, Tool::Flex];
+    pub const TRACKS: [Tool; 14] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Text, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Zoom, Tool::Fade, Tool::Automation, Tool::Marquee, Tool::Flex, Tool::Gain];
     pub const PIANO_ROLL: [Tool; 13] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Zoom, Tool::Quantize, Tool::Velocity, Tool::Automation, Tool::Marquee, Tool::Brush];
 
     pub fn key(self) -> &'static str {
@@ -73,6 +76,7 @@ impl Tool {
             Tool::Velocity => "V",
             Tool::Quantize => "Q",
             Tool::Brush => "B",
+            Tool::Gain => "G",
         }
     }
 }
@@ -95,6 +99,7 @@ fn tool_named(name: &str) -> Option<Tool> {
         "Velocity Tool" => Tool::Velocity,
         "Quantize Tool" => Tool::Quantize,
         "Brush Tool" => Tool::Brush,
+        "Gain Tool" | "Set Gain Tool" => Tool::Gain,
         _ => return None,
     })
 }

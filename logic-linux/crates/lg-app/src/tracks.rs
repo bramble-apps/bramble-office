@@ -474,6 +474,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             let resp = ui.interact(rr.intersect(lanes), ui.scope_id().with(("region", i, ri)), Sense::click_and_drag());
+            // the Gain tool: the region's gain shown on hover, dragged up or down
+            crate::regionparams::gain_hover(app, ui, rr, i, ri, resp.hovered());
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
             }
@@ -486,7 +488,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_track = Some(i);
             }
             crate::menus::context_menu(app, &resp, if r.audio.is_some() { "region-audio" } else { "region-midi" });
-            if resp.dragged() {
+            if resp.dragged() && !crate::regionparams::gain_drag(app, resp.drag_delta().y, ui.input(|i| i.modifiers.shift)) {
                 // (the drag's region: with Option it is the copy, while the pointer is still over
                 // the original)
                 if let (Some(Drag::Region { track, region, from_tick, start }), Some(pp)) = (app.drag, resp.interact_pointer_pos()) {
@@ -519,6 +521,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             if resp.drag_stopped() {
+                crate::regionparams::gain_end(app);
                 // the Drag mode (No Overlap, X-Fade, Shuffle…) on the track it ended on
                 if let Some(Drag::Region { track, region, start, .. }) = app.drag {
                     let under = resp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()).and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
@@ -691,6 +694,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         app.center_roll(t, r);
+        if drag && tool == Tool::Gain {
+            crate::regionparams::gain_start(app, t, r);
+            return;
+        }
         if drag {
             // Option-drag: a copy moves, the original stays (Logic)
             let copy = ui.input(|i| i.modifiers.alt);
@@ -962,6 +969,7 @@ fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tic
                 zoom_at(app, f, pp.x, lanes_x);
             }
         }
+        Tool::Gain => return crate::regionparams::gain_click(app, ui, t, r),
         Tool::Text => {
             let cur = app.project.as_ref().map(|p| p.tracks[t].regions[r].name.clone()).unwrap_or_default();
             app.renaming_region = Some((t, r, cur));

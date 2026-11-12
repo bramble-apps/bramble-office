@@ -50,6 +50,9 @@ pub const COMMANDS: &[&str] = &[
     "Unlock SMPTE Position",
     "Lock/Unlock SMPTE Position",
     "SMPTE-Locked Regions",
+    "Gain Tool",
+    "Set Gain Tool",
+    "Toggle Region Solo",
 ];
 
 pub const ROW: f32 = 29.0;
@@ -90,6 +93,11 @@ pub struct State {
     pub ask_global: Option<String>,
     /// Limit Dragging to One Direction: the drag's axis once chosen (true: horizontal).
     pub axis: Option<bool>,
+    /// Region Solo on: the soloed regions (only they play).
+    pub region_solo: bool,
+    pub soloed: Vec<(usize, usize)>,
+    /// A Gain tool drag: the regions and their gains when it began, the dB moved.
+    gain: Option<(Vec<(usize, usize, f32)>, f32)>,
     /// Drawing in the Region Inspector Float (its header has no disclosure).
     in_float: bool,
 }
@@ -1076,6 +1084,92 @@ pub fn drag_axis(app: &mut App, ui: &egui::Ui) -> Option<bool> {
     app.rp.axis
 }
 
+/// Region Solo: whether region `r` of track `t` plays.
+pub fn plays(app: &App, t: usize, r: usize) -> bool {
+    !app.rp.region_solo || app.rp.soloed.contains(&(t, r))
+}
+
+fn audio_targets(app: &App, t: usize, r: usize) -> Vec<(usize, usize)> {
+    let mut v: Vec<(usize, usize)> = app.region_selection();
+    if !v.contains(&(t, r)) {
+        v = vec![(t, r)];
+    }
+    v.retain(|&(t, r)| app.project.as_ref().is_some_and(|p| p.tracks.get(t).and_then(|x| x.regions.get(r)).is_some_and(|x| x.audio.is_some())));
+    v
+}
+
+fn gain_tool(app: &App, ui: &egui::Ui) -> bool {
+    let t = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
+    t == crate::edit::Tool::Gain
+}
+
+/// Gain tool over an audio region: its gain in dB and a yellow line across it.
+pub fn gain_hover(app: &App, ui: &egui::Ui, rr: Rect, t: usize, r: usize, hovered: bool) {
+    if !(hovered || app.rp.gain.as_ref().is_some_and(|g| g.0.iter().any(|x| (x.0, x.1) == (t, r)))) || !gain_tool(app, ui) {
+        return;
+    }
+    if !app.project.as_ref().is_some_and(|p| p.tracks[t].regions[r].audio.is_some()) {
+        return;
+    }
+    let db = crate::audioedit::extras(app, t, r).gain_db;
+    // the line: 0 dB at mid height, ±24 dB at the edges
+    let y = rr.center().y - (db / 24.0).clamp(-1.0, 1.0) * rr.height() * 0.45;
+    let p = ui.painter_at(rr);
+    p.hline(rr.x_range(), y, Stroke::new(1.5, Color32::from_rgb(0xf5, 0xc5, 0x18)));
+    p.text(pos2(rr.min.x + 6.0, y - 3.0), Align2::LEFT_BOTTOM, format!("{db:+.1} dB"), look::semibold(11.0), Color32::from_rgb(0xf5, 0xc5, 0x18));
+}
+
+/// Gain tool press on an audio region: the selected audio regions (or this one) take part.
+pub fn gain_start(app: &mut App, t: usize, r: usize) {
+    let v = audio_targets(app, t, r);
+    if v.is_empty() {
+        return;
+    }
+    crate::audioedit::checkpoint(app, "Region Gain");
+    let g = v.iter().map(|&(t, r)| (t, r, crate::audioedit::extras(app, t, r).gain_db)).collect();
+    app.rp.gain = Some((g, 0.0));
+}
+
+/// While the Gain tool drags: up raises, down lowers (0.1 dB a point, Shift finer); every
+/// region by the same amount. True while a Gain drag runs.
+pub fn gain_drag(app: &mut App, dy: f32, fine: bool) -> bool {
+    let Some((v, mut d)) = app.rp.gain.take() else { return false };
+    d -= dy * if fine { 0.02 } else { 0.1 };
+    for &(t, r, g0) in &v {
+        let mut x = crate::audioedit::extras(app, t, r);
+        x.gain_db = (((g0 + d).clamp(-96.0, 30.0)) * 10.0).round() / 10.0;
+        crate::audioedit::set_extras(app, t, r, x);
+    }
+    if let Some(&(t, r, _)) = v.first() {
+        app.help_tag = Some(vec![("Gain:".into(), format!("{:+.1} dB", crate::audioedit::extras(app, t, r).gain_db))]);
+    }
+    app.rp.gain = Some((v, d));
+    true
+}
+
+pub fn gain_end(app: &mut App) {
+    if app.rp.gain.take().is_some() {
+        app.load_engine();
+    }
+}
+
+/// Gain tool click: Option resets the gain to 0 dB.
+pub fn gain_click(app: &mut App, ui: &egui::Ui, t: usize, r: usize) -> bool {
+    if ui.input(|i| i.modifiers.alt) {
+        let v = audio_targets(app, t, r);
+        if !v.is_empty() {
+            crate::audioedit::checkpoint(app, "Region Gain");
+            for (t, r) in v {
+                let mut x = crate::audioedit::extras(app, t, r);
+                x.gain_db = 0.0;
+                crate::audioedit::set_extras(app, t, r, x);
+            }
+            app.after_edit();
+        }
+    }
+    true
+}
+
 /// A region locked with Lock Time Position (Lock SMPTE Position) doesn't move.
 pub fn locked(rg: &lg_core::Region) -> bool {
     rg.props.locked
@@ -1135,6 +1229,13 @@ pub fn command(app: &mut App, _ctx: &egui::Context, name: &str) -> bool {
             app.after_edit();
         }
         "Region Inspector Float" => app.rp.float = !app.rp.float,
+        "Gain Tool" | "Set Gain Tool" => app.tool = crate::edit::Tool::Gain,
+        "Toggle Region Solo" => {
+            // on: the selected regions solo (only they play); off: everything plays again
+            app.rp.region_solo = !app.rp.region_solo;
+            app.rp.soloed = if app.rp.region_solo { app.region_selection() } else { Vec::new() };
+            app.load_engine();
+        }
         "Lock SMPTE Position" | "Unlock SMPTE Position" | "Lock/Unlock SMPTE Position" => {
             let sel = app.region_selection();
             let all = sel.iter().all(|&(t, r)| app.project.as_ref().is_some_and(|p| p.tracks[t].regions[r].props.locked));
@@ -1468,6 +1569,53 @@ mod tests {
         let p = a.project.as_ref().unwrap();
         let k = p.tracks[t].regions.iter().position(|x| x.start == mid + 3840).expect("the right part moved by the gap");
         assert!(crate::audioedit::extras(&a, t, k).offset > 0, "the right part plays on from the cut");
+    }
+
+    fn with_audio(a: &mut App) -> (usize, usize) {
+        let p = a.project.as_mut().unwrap();
+        let mut rg = p.tracks[0].regions[0].clone();
+        rg.notes.clear();
+        rg.audio = Some(lg_core::project::AudioRef { file: "/nonexistent/a.wav".into(), seconds: 4.0 });
+        rg.start = 0;
+        rg.length = 4 * 3840;
+        p.tracks[0].regions.push(rg);
+        (0, p.tracks[0].regions.len() - 1)
+    }
+
+    #[test]
+    fn gain_tool_and_region_solo() {
+        let mut a = app();
+        let (t, r) = with_audio(&mut a);
+        a.selected_regions = vec![(t, r)];
+        gain_start(&mut a, t, r);
+        assert!(gain_drag(&mut a, -30.0, false));
+        gain_end(&mut a);
+        assert!((crate::audioedit::extras(&a, t, r).gain_db - 3.0).abs() < 0.01, "30 points up: +3 dB");
+        let ctx = egui::Context::default();
+        command(&mut a, &ctx, "Toggle Region Solo");
+        assert!(plays(&a, t, r) && !plays(&a, 0, 0));
+        command(&mut a, &ctx, "Toggle Region Solo");
+        assert!(plays(&a, 0, 0));
+    }
+
+    #[test]
+    fn section_cut_keeps_audio_offset_and_fades() {
+        let mut a = app();
+        let (t, r) = with_audio(&mut a);
+        let mut x = crate::audioedit::extras(&a, t, r);
+        x.fades.in_ms = 50;
+        x.fades.out_ms = 80;
+        x.gain_db = -2.0;
+        crate::audioedit::set_extras(&mut a, t, r, x);
+        a.cycle = (3840, 2 * 3840);
+        command(&mut a, &egui::Context::default(), "Cut Section Between Locators (Global)");
+        let p = a.project.as_ref().unwrap();
+        let left = p.tracks[t].regions.iter().position(|x| x.audio.is_some() && x.start == 0).unwrap();
+        let right = p.tracks[t].regions.iter().position(|x| x.audio.is_some() && x.start == 3840).unwrap();
+        let (l, rr) = (crate::audioedit::extras(&a, t, left), crate::audioedit::extras(&a, t, right));
+        assert_eq!((l.offset, l.fades.in_ms, l.fades.out_ms, l.gain_db), (0, 50, 0, -2.0));
+        assert!(rr.offset > 0 && rr.fades.in_ms == 0 && rr.fades.out_ms == 80 && rr.gain_db == -2.0, "{rr:?}");
+        assert!(a.rp.section.as_ref().is_some_and(|s| s.len == 3840));
     }
 
     #[test]

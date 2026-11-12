@@ -629,7 +629,8 @@ impl App {
             // the next region on the track or the project's end
             let song_end = p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start + r.length)).max().unwrap_or(0).max(64 * self.bar_ticks());
             let mut notes: Vec<(u32, u32, u8, u8)> = Vec::new();
-            for r in t.regions.iter().filter(|r| !r.muted) {
+            // (Region Solo: only the soloed regions play, regionparams.rs)
+            for (_, r) in t.regions.iter().enumerate().filter(|(ri, r)| !r.muted && crate::regionparams::plays(self, i, *ri)) {
                 let mut until = if r.props.looped { t.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
                 // (a loop dragged out at the region's corner ends there)
                 if r.props.looped && r.props.loop_to > r.start + r.length {
