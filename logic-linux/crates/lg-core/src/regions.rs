@@ -24,6 +24,9 @@ pub struct RegionExt {
     /// Notes' articulation IDs: (ticks from the region's start, pitch, ID 1-255); notes not
     /// listed have none. (Studio keeps them here; not yet written into Logic's file.)
     pub artics: Vec<(u32, u8, u8)>,
+    /// Events locked with Lock SMPTE Position in the Event List: (ticks from the region's
+    /// start, status nibble 0x90 for notes, pitch / number).
+    pub locked: Vec<(u32, u8, u8)>,
 }
 
 /// One MIDI FX slot of a channel strip.

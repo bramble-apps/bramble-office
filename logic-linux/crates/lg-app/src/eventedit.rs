@@ -48,7 +48,7 @@ pub fn parse_position(text: &str, sig: (u8, u8)) -> Option<u32> {
     let bar = lg_core::project::bar_ticks(sig);
     let beat = bar / sig.0.max(1) as u32;
     let div = (beat / 4).max(1);
-    let n: Vec<u32> = text.split_whitespace().map(|x| x.parse::<u32>()).collect::<Result<_, _>>().ok()?;
+    let n: Vec<u32> = text.split(|c: char| c.is_whitespace() || c == '.' || c == ',').filter(|x| !x.is_empty()).map(|x| x.parse::<u32>()).collect::<Result<_, _>>().ok()?;
     let at = |k: usize, d: u32| n.get(k).map_or(d, |&v| v);
     let (b, bt, dv, tk) = (at(0, 1), at(1, 1), at(2, 1), at(3, 1));
     if b == 0 || bt == 0 || dv == 0 || tk == 0 {
@@ -173,5 +173,6 @@ mod tests {
         assert_eq!(parse_position("3", (3, 4)), Some(2 * 2880));
         assert_eq!(parse_position("0 1", (4, 4)), None);
         assert_eq!(parse_position("x", (4, 4)), None);
+        assert_eq!(parse_position("2.3,2 11", (4, 4)), Some(3840 + 1920 + 240 + 10));
     }
 }

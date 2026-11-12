@@ -337,6 +337,35 @@ fn region_transients(app: &mut App, g: &Reg) -> Vec<usize> {
     audioedit::transients_of(app, &g.file).into_iter().filter(|&f| f > g.x.offset && f < end).map(|f| f - g.x.offset).collect()
 }
 
+/// An audio region's transients as project ticks (groove templates take them as positions).
+pub fn transient_ticks(app: &mut App, t: usize, r: usize) -> Vec<u32> {
+    let Some(g) = reg(app, t, r) else { return Vec::new() };
+    let trs = region_transients(app, &g);
+    trs.into_iter().map(|f| {
+        let d = g.map.dst(f as f64);
+        crate::smarttempo::tick_at(app, g.start_sec + d / g.rate).max(0.0).round() as u32
+    }).collect()
+}
+
+/// The Region inspector's Quantize on audio regions: Flex turned on where it is off, then the
+/// audio quantized to the grid (ticks).
+pub fn quantize_audio(app: &mut App, grid: u32) -> bool {
+    let ts: Vec<(usize, usize)> = targets(app);
+    if ts.is_empty() || grid == 0 {
+        return false;
+    }
+    for &(t, _) in &ts {
+        if !track(app, t).on {
+            app.flex.tracks.insert(t, TrackFlex { on: true, mode: Mode::Polyphonic });
+        }
+    }
+    let keep = app.quantize_grid;
+    app.quantize_grid = grid;
+    let ok = quantize(app);
+    app.quantize_grid = keep;
+    ok
+}
+
 /// A marker added at a source frame (where it plays now), unless one is there.
 fn add_marker(x: &mut RegionAudio, map: &TimeMap, src: usize) -> bool {
     if src == 0 || x.flex.iter().any(|m| m.0.abs_diff(src) < 2) {

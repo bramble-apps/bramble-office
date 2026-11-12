@@ -150,7 +150,7 @@ fn is_midi(app: &App, t: usize, r: usize) -> bool {
 /// The Piano Roll is the place for the command: open on a MIDI region and focused (clicked
 /// last, under the pointer, or its own menu).
 pub fn roll_ctx(app: &App) -> bool {
-    app.bottom == Bottom::PianoRoll && app.selected_region.is_some_and(|(t, r)| is_midi(app, t, r)) && (app.midi.menu_roll || app.midi.roll_focus || app.editor_rect.contains(app.pointer))
+    app.selected_region.is_some_and(|(t, r)| is_midi(app, t, r)) && ((app.bottom == Bottom::PianoRoll && (app.midi.menu_roll || app.midi.roll_focus || app.editor_rect.contains(app.pointer))) || crate::evlist::focused(app))
 }
 
 /// Changes notes with `f`: in the Piano Roll its region's selected notes (all when none are
