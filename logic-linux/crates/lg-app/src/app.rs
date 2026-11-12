@@ -176,6 +176,10 @@ pub struct App {
     pub catch_off: bool,
     /// Live Loops: the grid, its cells, what plays and what's queued.
     pub live_loops: crate::liveloops::State,
+    /// Bramble's Piano Roll extras (ghost notes, more MIDI Draw lanes).
+    pub rx: crate::rollextras::State,
+    /// Bramble's custom colour palette (its editing state).
+    pub pal: crate::palette::State,
     /// The audio editors (Track, File, Smart Tempo): their state and the regions' audio edits.
     pub audio_edit: crate::audioedit::AudioEdit,
     /// Flex Time / Flex Pitch: the tracks' settings, pitch analyses (flex.rs).
@@ -395,6 +399,8 @@ impl App {
             global_tracks: false,
             catch_off: false,
             live_loops: Default::default(),
+            rx: Default::default(),
+            pal: crate::palette::State { name: crate::palette::load_saved(automated), ..Default::default() },
             audio_edit: Default::default(),
             flex: Default::default(),
             show_automation: false,

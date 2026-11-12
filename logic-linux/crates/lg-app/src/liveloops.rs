@@ -65,11 +65,14 @@ pub struct Cell {
     pub play_from: String,
     /// The cell it was read from (lg_core Cell.clip), for saving.
     pub origin: Option<u32>,
+    /// Bramble's follow action (follow.rs) and after how many plays.
+    pub follow: crate::follow::Action,
+    pub follow_count: u32,
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None }
+        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1 }
     }
 }
 
@@ -153,6 +156,8 @@ pub struct State {
     audio: Arc<Mutex<HashMap<PathBuf, Option<Arc<Vec<f32>>>>>>,
     loops: HashMap<(PathBuf, usize), Arc<Vec<f32>>>,
     momentary: Option<(usize, usize)>,
+    /// Follow actions already queued: (track, scene, its start).
+    pub follow_queued: BTreeSet<(usize, usize, u32)>,
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -358,6 +363,7 @@ pub fn sync(app: &mut App) {
         };
     }
     s.file = grid;
+    crate::follow::load(app, &mut s);
     app.live_loops = s;
 }
 
@@ -371,6 +377,7 @@ pub fn keep_after_save_as(app: &mut App) {
 /// written: their names come back.
 pub fn save_into(app: &App, data: &[u8]) -> (Vec<u8>, Vec<String>) {
     use lg_core::liveloops::Edit;
+    crate::follow::save(app);
     let s = &app.live_loops;
     let Some(g) = &s.file else {
         return (data.to_vec(), s.cells.values().map(|c| c.name.clone()).collect());
@@ -607,6 +614,9 @@ pub fn update(app: &mut App) {
             }
         }
         s.plays.retain(|_, p| p.current.is_some() || p.next.is_some());
+        if playing {
+            crate::follow::step(s, pos, b);
+        }
     }
     // recording into a cell: ends at its boundary (or keeps going)
     if let Some(r) = app.live_loops.rec {
@@ -1435,6 +1445,9 @@ fn context_menu(app: &mut App, resp: &egui::Response, place: &str, cell: Option<
         let mut fired: Option<(String, String)> = None;
         for it in items {
             menu_item(app, ui, it, if place.ends_with("scene-trigger") { "Scene" } else { "" }, cell, scene, &mut fired);
+        }
+        if let Some(k) = cell {
+            crate::follow::menu(app, ui, k);
         }
         if let Some((path, item)) = fired {
             if path.is_empty() || path == "Scene" {

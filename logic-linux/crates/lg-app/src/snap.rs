@@ -159,6 +159,12 @@ impl eframe::App for Snap {
                 m.scale_guides = v.contains("scale");
                 m.time_handles = v.contains("handles");
                 m.note_labels = v.contains("labels");
+                // (Bramble's: "ghosts", "ghosttracks", "lanes2": ghost notes, two more MIDI Draw lanes)
+                self.app.rx.ghosts = v.contains("ghost");
+                self.app.rx.ghosts_all = v.contains("ghosttracks");
+                if v.contains("lanes2") {
+                    self.app.rx.lanes = vec![Some((0xB0, 1)), Some((0xE0, 0))];
+                }
                 if v.contains("all") {
                     let n = self.app.selected_region.and_then(|(t, r)| self.app.project.as_ref()?.tracks.get(t)?.regions.get(r).map(|x| x.notes.len())).unwrap_or(0);
                     self.app.selected_notes = (0..n).collect();

@@ -809,15 +809,8 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
         let mid = inner.center().y;
         match samples {
             Some(s) if !s.is_empty() => {
-                let w = inner.width().max(1.0) as usize;
-                let per = (s.len() / 2 / w).max(1);
-                for k in 0..w {
-                    let from = k * per * 2;
-                    let peak = s.get(from..(from + per * 2).min(s.len())).map_or(0.0, |c| c.iter().fold(0f32, |m, x| m.max(x.abs())));
-                    let h = peak * inner.height() * 0.5;
-                    let x = inner.min.x + k as f32;
-                    p.vline(x, mid - h..=mid + h, Stroke::new(1.0, ink));
-                }
+                // (Bramble's smoother waveforms: multi-resolution overviews, wavecache.rs)
+                crate::wavecache::draw(p, inner, p.clip_rect(), &s, ink);
             }
             _ => {
                 p.hline(inner.x_range(), mid, Stroke::new(1.0, ink));

@@ -99,8 +99,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let tabs = Rect::from_min_max(pos2(left, tabs.min.y), pos2(tabs.max.x, tabs.max.y + LOCAL_H));
     let grid_top = tabs.max.y + RULER_H;
     // the velocity lane (MIDI Draw) under the notes
-    let lane_h = if app.midi.velocity_lane { LANE_H.min((area.max.y - grid_top) * 0.4) } else { 0.0 };
-    let lane = Rect::from_min_max(pos2(left + KEYS_W, area.max.y - lane_h), area.max);
+    // (more lanes under it: Bramble's, rollextras.rs)
+    let n_lanes = if app.midi.velocity_lane { 1 + app.rx.lanes.len() } else { 0 };
+    let per_lane = crate::rollextras::lane_layout(n_lanes, area.max.y - grid_top, LANE_H);
+    let lane_h = if app.midi.velocity_lane { per_lane * n_lanes as f32 } else { 0.0 };
+    let lane = Rect::from_min_max(pos2(left + KEYS_W, area.max.y - lane_h), pos2(area.max.x, area.max.y - lane_h + per_lane));
     let keys = Rect::from_min_max(pos2(left, grid_top), pos2(left + KEYS_W, area.max.y - lane_h));
     let grid = Rect::from_min_max(pos2(keys.max.x, grid_top), pos2(area.max.x, area.max.y - lane_h));
     let ruler = Rect::from_min_max(pos2(grid.min.x, tabs.max.y), pos2(grid.max.x, grid_top));
@@ -221,6 +224,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut pressed_note = None;
     let sixteenth = lg_core::events::PPQ as f32 / 4.0;
     let shift_down = ui.input(|i| i.modifiers.shift);
+    // Bramble's ghost notes: the other regions' notes faintly behind
+    crate::rollextras::draw_ghosts(app, &gp, grid, ti, ri, &x_of, &tick_at, &|pitch| rows.note_y(pitch), ROW);
     for (k, n) in region.notes.iter().enumerate() {
         let Some(y) = rows.note_y(n.pitch) else { continue };
         let r = Rect::from_min_max(pos2(x_of(n.pos as f32), y - ROW + 1.5), pos2(x_of((n.pos + n.len) as f32).max(x_of(n.pos as f32) + 3.0), y - 1.5));
@@ -525,6 +530,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // the velocity lane: each note's velocity as a stem; dragging across paints them
     if lane_h > 0.0 {
         velocity_lane(app, ui, lane, ti, ri, &x_of, &tick_at, left);
+        crate::rollextras::lanes(app, ui, lane, &mut |app, ui, r| velocity_lane(app, ui, r, ti, ri, &x_of, &tick_at, left));
     }
     // the playhead
     let ph = x_of(app.position() as f32);

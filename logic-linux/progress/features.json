@@ -386,33 +386,33 @@
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region"
+  "status": "Done",
+  "feature": "Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region (Piano Roll View \u25b8 Show Ghost Notes / Ghost Notes from All Tracks; in the tracks' colours, not clickable; rollextras.rs)"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes)"
+  "status": "Partial",
+  "feature": "Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes) \u2014 any number of MIDI Draw lanes (velocity, CCs, pitch bend, pressure, program), each with its own pop-up, + / \u00d7 at the lane's edge, View \u25b8 Add MIDI Draw Lane; track/plug-in automation lanes in the Piano Roll not yet; the extra lanes aren't saved with the project"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Custom colour palette: edit, save and share the track / region colour palette"
+  "status": "Done",
+  "feature": "Custom colour palette: edit, save and share the track / region colour palette (Colors window: Edit Palette with a colour picker / hex, Save Palette\u2026, Load Palette\u2026 in Studio's .bspalette format, Reset Palette; kept in Studio's settings; palette.rs, lg_core::trackmix)"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes)"
+  "status": "Done",
+  "feature": "Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes) (Tracks-area regions draw true min/max from cached lg_audio overviews, visible columns only, one filled shape, sample line when zoomed past samples; wavecache.rs)"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search"
+  "status": "Done",
+  "feature": "Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search (Browser \u25b8 Plug-ins; click in Replace Mode or New Track loads an instrument / adds an effect to the next Audio FX slot; plugbrowser.rs)"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
-  "status": "Not started",
-  "feature": "Live Loops follow actions: per-cell rules (next, previous, random, repeat \u00d7n, stop) to chain cells"
+  "status": "Done",
+  "feature": "Live Loops follow actions: per-cell rules (next, previous, random, repeat \u00d7n, stop) to chain cells (cell menu \u25b8 Follow Action: Next / Previous / First / Last / Random / Stop, Follow After 1\u201316 plays; queued in the last pass so clicks still win; kept beside the project in Studio's settings; follow.rs)"
  },
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",

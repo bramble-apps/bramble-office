@@ -1260,10 +1260,10 @@ fn color_palette(app: &mut App, ctx: &egui::Context) {
             let c = trackmix::palette(k);
             let cr = Rect::from_min_size(r.min + vec2((k as usize % cols) as f32 * cell, (k as usize / cols) as f32 * cell), vec2(cell, cell)).shrink(1.5);
             ui.painter().rect_filled(cr, 3.0, Color32::from_rgb(c[0], c[1], c[2]));
-            if current == Some(k) {
+            if current == Some(k) || crate::palette::is_selected(app, k) {
                 ui.painter().rect_stroke(cr.expand(1.0), 4.0, Stroke::new(2.0, look::text()), egui::StrokeKind::Outside);
             }
-            if ui.interact(cr, ui.scope_id().with(("pal", k)), Sense::click()).clicked() {
+            if ui.interact(cr, ui.scope_id().with(("pal", k)), Sense::click()).clicked() && !crate::palette::swatch_clicked(app, k) {
                 pick = Some(Some(k));
             }
         }
@@ -1271,6 +1271,9 @@ fn color_palette(app: &mut App, ctx: &egui::Context) {
         if ui.button("Default Color").on_hover_text("The track type's colour").clicked() {
             pick = Some(None);
         }
+        // Bramble's custom palette: edit, save, load, reset
+        ui.separator();
+        crate::palette::controls(app, ui);
     });
     if let Some(c) = pick {
         assign_color(app, target, c);

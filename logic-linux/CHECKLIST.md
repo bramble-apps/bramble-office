@@ -108,12 +108,12 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 
 ## 8. Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)
 Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 update", 2026-11-09). Added 2026-11-11.
-- [ ] Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region
-- [ ] Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes)
-- [ ] Custom colour palette: edit, save and share the track / region colour palette
-- [ ] Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes)
-- [ ] Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search
-- [ ] Live Loops follow actions: per-cell rules (next, previous, random, repeat ×n, stop) to chain cells
+- [x] Ghost notes in the Piano Roll: other regions' and tracks' notes shown faintly behind the edited region (Piano Roll View ▸ Show Ghost Notes / Ghost Notes from All Tracks; in the tracks' colours, not clickable; rollextras.rs)
+- [~] Multiple automation lanes in the Piano Roll: several controller / automation lanes stacked under the notes (users' #2 request, 70 votes) — any number of MIDI Draw lanes (velocity, CCs, pitch bend, pressure, program), each with its own pop-up, + / × at the lane's edge, View ▸ Add MIDI Draw Lane; track/plug-in automation lanes in the Piano Roll not yet; the extra lanes aren't saved with the project
+- [x] Custom colour palette: edit, save and share the track / region colour palette (Colors window: Edit Palette with a colour picker / hex, Save Palette…, Load Palette… in Studio's .bspalette format, Reset Palette; kept in Studio's settings; palette.rs, lg_core::trackmix)
+- [x] Smoother waveform display: multi-resolution waveform overviews, smooth at every zoom level (58 votes) (Tracks-area regions draw true min/max from cached lg_audio overviews, visible columns only, one filled shape, sample line when zoomed past samples; wavecache.rs)
+- [x] Browser with every plug-in and favourites in one place: Studio's own plus CLAP / VST3 / LV2 plug-ins, favourites, search (Browser ▸ Plug-ins; click in Replace Mode or New Track loads an instrument / adds an effect to the next Audio FX slot; plugbrowser.rs)
+- [x] Live Loops follow actions: per-cell rules (next, previous, random, repeat ×n, stop) to chain cells (cell menu ▸ Follow Action: Next / Previous / First / Last / Random / Stop, Follow After 1–16 plays; queued in the last pass so clicks still win; kept beside the project in Studio's settings; follow.rs)
 - [ ] Effects rack: parallel effect chains with splits and macro knobs in any channel strip (the Pedalboard's buses, generalised)
 - [ ] Better Flex Pitch: sharper note detection, smoother pitch curves, editing several notes at once
 

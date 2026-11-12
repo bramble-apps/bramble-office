@@ -48,6 +48,8 @@ pub enum Cat {
     Loops,
     Instruments,
     Effects,
+    /// Bramble's: every plug-in, Studio's own and hosted (plugbrowser.rs).
+    Plugins,
     Presets,
     SoundLibrary,
     SoundFonts,
@@ -57,7 +59,7 @@ pub enum Cat {
     Smart(usize),
 }
 
-const NAV: [(Cat, &str, &str); 7] = [(Cat::All, "All", ph::SQUARES_FOUR), (Cat::Loops, "Loops & One-Shots", ph::WAVEFORM), (Cat::Instruments, "Instruments", ph::PIANO_KEYS), (Cat::Effects, "Effects", ph::FADERS), (Cat::Presets, "Plug-in Presets", ph::SLIDERS), (Cat::SoundLibrary, "Sound Library", ph::BOOKS), (Cat::SoundFonts, "SoundFonts", ph::MUSIC_NOTES)];
+const NAV: [(Cat, &str, &str); 8] = [(Cat::All, "All", ph::SQUARES_FOUR), (Cat::Loops, "Loops & One-Shots", ph::WAVEFORM), (Cat::Instruments, "Instruments", ph::PIANO_KEYS), (Cat::Effects, "Effects", ph::FADERS), (Cat::Plugins, "Plug-ins", ph::PLUG), (Cat::Presets, "Plug-in Presets", ph::SLIDERS), (Cat::SoundLibrary, "Sound Library", ph::BOOKS), (Cat::SoundFonts, "SoundFonts", ph::MUSIC_NOTES)];
 
 /// Logic's instrument patches: (category, subcategory, name).
 pub fn patches() -> &'static [(String, String, String)] {
@@ -201,6 +203,7 @@ fn ensure_loaded(app: &mut App) {
     }
     let mut items = sl::patch_items();
     items.extend(effect_items());
+    items.extend(crate::plugbrowser::items());
     items.extend(user_patches());
     items.extend(user_loops());
     if let Some(root) = lg_sounds::root() {
@@ -268,8 +271,13 @@ fn selected_items(app: &App) -> Vec<Item> {
 }
 
 fn in_view(app: &App, it: &Item) -> bool {
+    // (the Plug-ins view's items only there)
+    if (it.pack == crate::plugbrowser::PACK) != (app.br.view == Cat::Plugins) {
+        return false;
+    }
     match app.br.view {
         Cat::All => true,
+        Cat::Plugins => true,
         Cat::Loops => matches!(it.kind, Kind::Loop | Kind::OneShot) && app.br.search.loops_only.is_none_or(|l| (it.kind == Kind::Loop) == l),
         Cat::Instruments => it.kind == Kind::Patch && it.loop_type != LoopType::Audio,
         Cat::Effects => it.kind == Kind::Patch && it.loop_type == LoopType::Audio,
@@ -374,6 +382,10 @@ fn toggle_favorite(app: &mut App, id: &str) {
 
 /// Loads a patch onto a track (Logic's library, Bramble's effects or a user patch).
 pub fn load_patch(app: &mut App, t: usize, it: &Item) {
+    if it.pack == crate::plugbrowser::PACK {
+        crate::plugbrowser::load(app, t, it);
+        return;
+    }
     if it.loop_type == LoopType::Audio && it.pack == "Bramble Effects" {
         crate::mixstate::checkpoint(app, "Change Patch");
         let name = it.name.clone();

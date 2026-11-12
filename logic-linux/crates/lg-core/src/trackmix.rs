@@ -463,7 +463,74 @@ pub struct TrackSet {
 pub const PALETTE_COLS: usize = 24;
 pub const PALETTE_ROWS: usize = 4;
 
+/// The user's own palette (Bramble's custom colour palette), when one is set: replaces the
+/// built-in colours index for index (a shorter list keeps the built-in ones after it).
+static CUSTOM: std::sync::RwLock<Option<Vec<[u8; 3]>>> = std::sync::RwLock::new(None);
+
+/// Sets (or with None, clears) the custom palette.
+pub fn set_custom_palette(colors: Option<Vec<[u8; 3]>>) {
+    *CUSTOM.write().unwrap_or_else(|e| e.into_inner()) = colors;
+}
+
+/// The custom palette, when one is set.
+pub fn custom_palette() -> Option<Vec<[u8; 3]>> {
+    CUSTOM.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// A palette colour: the custom palette's, else the built-in one.
 pub fn palette(i: u8) -> [u8; 3] {
+    if let Some(c) = CUSTOM.read().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|v| v.get(i as usize).copied()) {
+        return c;
+    }
+    default_palette(i)
+}
+
+/// Bramble Studio's palette file: a first line `bramble-studio-palette 1`, an optional
+/// `name\t<name>` line, then one `rrggbb` colour per line in palette order (row by row); `#`
+/// lines are comments.
+pub fn palette_text(name: &str, colors: &[[u8; 3]]) -> String {
+    let mut s = String::from("bramble-studio-palette 1\n");
+    if !name.is_empty() {
+        s += &format!("name\t{}\n", name.replace(['\n', '\t'], " "));
+    }
+    for (k, c) in colors.iter().enumerate() {
+        if k % PALETTE_COLS == 0 {
+            s += &format!("# row {}\n", k / PALETTE_COLS + 1);
+        }
+        s += &format!("{:02x}{:02x}{:02x}\n", c[0], c[1], c[2]);
+    }
+    s
+}
+
+/// Reads a palette file: (name, colours), None when it isn't one.
+pub fn parse_palette(text: &str) -> Option<(String, Vec<[u8; 3]>)> {
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#'));
+    let head = lines.next()?;
+    if !head.starts_with("bramble-studio-palette") {
+        return None;
+    }
+    let mut name = String::new();
+    let mut v = Vec::new();
+    for l in lines {
+        if let Some(n) = l.strip_prefix("name\t") {
+            name = n.to_string();
+            continue;
+        }
+        let h = l.trim_start_matches('#');
+        if h.len() != 6 {
+            return None;
+        }
+        let byte = |k: usize| u8::from_str_radix(&h[k..k + 2], 16).ok();
+        v.push([byte(0)?, byte(2)?, byte(4)?]);
+    }
+    if v.is_empty() || v.len() > PALETTE_COLS * PALETTE_ROWS {
+        return None;
+    }
+    Some((name, v))
+}
+
+/// The built-in palette (24 hues, 4 rows).
+pub fn default_palette(i: u8) -> [u8; 3] {
     let col = i as usize % PALETTE_COLS;
     let row = (i as usize / PALETTE_COLS).min(PALETTE_ROWS - 1);
     let h = col as f32 / PALETTE_COLS as f32;
@@ -1290,8 +1357,25 @@ mod tests {
     }
 
     #[test]
+    fn palette_files_round_trip_and_override() {
+        let mut cols: Vec<[u8; 3]> = (0..(PALETTE_COLS * PALETTE_ROWS) as u8).map(default_palette).collect();
+        cols[3] = [1, 2, 250];
+        let t = palette_text("Mine", &cols);
+        let (n, back) = parse_palette(&t).unwrap();
+        assert_eq!((n.as_str(), back.clone()), ("Mine", cols.clone()));
+        assert!(parse_palette("not a palette\n00ff00").is_none());
+        assert!(parse_palette("bramble-studio-palette 1\nzz00ff").is_none());
+        set_custom_palette(Some(back[..4].to_vec()));
+        assert_eq!(palette(3), [1, 2, 250]);
+        // past the custom list: the built-in colours
+        assert_eq!(palette(10), default_palette(10));
+        set_custom_palette(None);
+        assert_eq!(palette(3), default_palette(3));
+    }
+
+    #[test]
     fn palette_has_distinct_colours() {
-        let all: std::collections::HashSet<[u8; 3]> = (0..(PALETTE_COLS * PALETTE_ROWS) as u8).map(palette).collect();
+        let all: std::collections::HashSet<[u8; 3]> = (0..(PALETTE_COLS * PALETTE_ROWS) as u8).map(default_palette).collect();
         assert_eq!(all.len(), PALETTE_COLS * PALETTE_ROWS);
     }
 }

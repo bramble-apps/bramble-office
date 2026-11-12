@@ -303,7 +303,10 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
         for m in menus() {
             // the app menu (left of File): the update notice and the thank-you line
             let app_menu = m.label == "Bramble Studio";
-            let r = ui.menu_button(&m.label, |ui| {
+            // the app menu shows Studio's mark (a vinyl record) instead of its name, as Keydeck,
+            // Values, Letters and Notes do
+            let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
+            let r = ui.menu_button(label, |ui| {
                 ui.set_min_width(240.0);
                 crate::screensets::IN_WINDOW_MENU.with(|c| c.set(m.label == "Window"));
                 for c in &m.children {
@@ -315,7 +318,11 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
             });
             crate::screensets::IN_WINDOW_MENU.with(|c| c.set(false));
             if app_menu {
-                kn_ui::update::title_dot(ui, r.response.rect);
+                let b = r.response.rect;
+                crate::glyphs::paint(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), crate::glyphs::ph::VINYL_RECORD, 21.0, crate::look::text());
+                kn_ui::update::title_dot(ui, b);
+                let resp = r.response.clone().on_hover_text("Bramble Studio");
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Bramble Studio"));
             }
             right = right.max(r.response.rect.max.x);
         }
@@ -342,6 +349,9 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
             ui.menu_button(format!("{title} ⌄"), |ui| {
                 app.midi.menu_roll = name.starts_with("pianoroll");
                 show_items(app, ui, local(name));
+                if *name == "pianoroll-View" {
+                    crate::rollextras::view_items(app, ui);
+                }
                 app.midi.menu_roll = false;
             });
         }
