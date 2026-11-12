@@ -403,6 +403,7 @@ const LP_TAPS: usize = 4096;
 
 pub struct LinearPhaseEq {
     rate: f32,
+    dry: [Delay; 2],
     eq: ChannelEq,
     conv: [Convolver; 2],
     fir: Vec<f32>,
@@ -410,7 +411,7 @@ pub struct LinearPhaseEq {
 
 impl LinearPhaseEq {
     pub fn new(rate: f32) -> LinearPhaseEq {
-        let mut e = LinearPhaseEq { rate, eq: ChannelEq::new(rate), conv: [Convolver::new(LP_TAPS), Convolver::new(LP_TAPS)], fir: vec![0.0; LP_TAPS] };
+        let mut e = LinearPhaseEq { rate, dry: [Delay::new(LP_TAPS / 2 + 4), Delay::new(LP_TAPS / 2 + 4)], eq: ChannelEq::new(rate), conv: [Convolver::new(LP_TAPS), Convolver::new(LP_TAPS)], fir: vec![0.0; LP_TAPS] };
         e.design(rate);
         e
     }
@@ -469,10 +470,27 @@ impl Plugin for LinearPhaseEq {
 
 impl Effect for LinearPhaseEq {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
-        for i in 0..left.len().min(right.len()) {
-            left[i] = self.conv[0].run(left[i]);
-            right[i] = self.conv[1].run(right[i]);
+        use crate::channel_eq::{from_proc, to_proc};
+        let mode = self.eq.processing();
+        let (analyze, post, size, rms, decay) = self.eq.analyzer_settings();
+        if analyze && !post {
+            self.eq.analyzer.push(left, right, self.rate, size, rms, decay);
         }
+        for i in 0..left.len().min(right.len()) {
+            let (a, b) = to_proc(mode, left[i], right[i]);
+            let e = (self.conv[0].run(a), self.conv[1].run(b));
+            // (the dry part waits for the FIR's latency so the halves stay aligned)
+            self.dry[0].push(a);
+            self.dry[1].push(b);
+            let d = (self.dry[0].tap(LP_TAPS / 2), self.dry[1].tap(LP_TAPS / 2));
+            (left[i], right[i]) = from_proc(mode, d, e);
+        }
+        if analyze && post {
+            self.eq.analyzer.push(left, right, self.rate, size, rms, decay);
+        }
+    }
+    fn curve(&self, name: &str) -> Vec<f32> {
+        self.eq.curve(name)
     }
     fn latency(&self) -> usize {
         LP_TAPS / 2
@@ -1191,11 +1209,13 @@ pub struct Ringshifter {
     hc: [Biquad; 2],
     fb: [f32; 2],
     bpm: f64,
+    /// The side chain's block (Side Chain Ring Mod).
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl Ringshifter {
     pub fn new(rate: f32) -> Ringshifter {
-        let mut r = Ringshifter { p: Values::new(&RS_P), rate, hil: [Hilbert::default(); 2], osc: Phase::default(), lfo: Phase::default(), env: Follower::new(rate, 10.0, 200.0), line: [Delay::new((2.1 * rate) as usize), Delay::new((2.1 * rate) as usize)], lc: [Biquad::default(); 2], hc: [Biquad::default(); 2], fb: [0.0; 2], bpm: 120.0 };
+        let mut r = Ringshifter { p: Values::new(&RS_P), rate, hil: [Hilbert::default(); 2], osc: Phase::default(), lfo: Phase::default(), env: Follower::new(rate, 10.0, 200.0), line: [Delay::new((2.1 * rate) as usize), Delay::new((2.1 * rate) as usize)], lc: [Biquad::default(); 2], hc: [Biquad::default(); 2], fb: [0.0; 2], bpm: 120.0, side: None };
         r.update();
         r
     }
@@ -1218,7 +1238,14 @@ impl Ringshifter {
 }
 
 impl Effect for Ringshifter {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let mode = self.p.idx(B);
         let f0 = self.p.get(B + 1);
         let exp = self.p.idx(B + 2) == 1;
@@ -1256,6 +1283,9 @@ impl Effect for Ringshifter {
                         // up for the left, down for the right in Dual mode
                         if mode == 1 && s == 1 { a * c - b * s_ } else { a * c + b * s_ }
                     }
+                    // Side Chain Ring Mod: the input times the side chain audio (the sine
+                    // oscillator is off; no side chain = silence, as an unconnected input)
+                    3 => inp * side.as_ref().map(|(a, b)| if s == 0 { a.get(i) } else { b.get(i) }.copied().unwrap_or(0.0)).unwrap_or(0.0),
                     _ => inp * c,
                 };
                 if dlevel > 0.0 {

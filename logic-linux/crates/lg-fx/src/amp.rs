@@ -35,7 +35,7 @@ const REVERBS: &[&str] = &["Vintage Spring", "Simple Spring", "Mellow Spring", "
 
 /// A head's voicing.
 #[derive(Clone, Copy)]
-struct Voice {
+pub(crate) struct Voice {
     /// preamp gain range (dB at Gain 10)
     gain_db: f32,
     /// stage asymmetry (0 = symmetric)
@@ -51,7 +51,7 @@ struct Voice {
     bright: f32,
 }
 
-const VOICES: [Voice; 20] = [
+pub(crate) const VOICES: [Voice; 20] = [
     Voice { gain_db: 34.0, bias: 0.25, stages: 2, stack: 1, sag: 0.3, hard: 0.5, bright: 3.0 },
     Voice { gain_db: 30.0, bias: 0.35, stages: 1, stack: 0, sag: 0.6, hard: 0.3, bright: 2.0 },
     Voice { gain_db: 24.0, bias: 0.15, stages: 1, stack: 0, sag: 0.25, hard: 0.4, bright: 4.0 },
@@ -76,15 +76,15 @@ const VOICES: [Voice; 20] = [
 
 /// A cabinet: low resonance (Hz, Q), roll-off corner (Hz), a mid colour (Hz, dB).
 #[derive(Clone, Copy)]
-struct Cab {
-    res: f32,
-    res_q: f32,
-    top: f32,
-    colour: f32,
-    colour_db: f32,
+pub(crate) struct Cab {
+    pub(crate) res: f32,
+    pub(crate) res_q: f32,
+    pub(crate) top: f32,
+    pub(crate) colour: f32,
+    pub(crate) colour_db: f32,
 }
 
-fn cab_for(name: &str) -> Cab {
+pub(crate) fn cab_for(name: &str) -> Cab {
     let n = name;
     let (res, top) = if n.contains("4x12") {
         (95.0, 5000.0)
@@ -116,7 +116,7 @@ fn cab_for(name: &str) -> Cab {
 }
 
 /// The modelled amp (guitar or bass voicing), stereo-linked (one model per channel).
-struct AmpCore {
+pub(crate) struct AmpCore {
     rate: f32,
     os: [[Over4; 3]; 2],
     inter: [[Biquad; 2]; 2],
@@ -125,8 +125,8 @@ struct AmpCore {
     presence: [Biquad; 2],
     cab: [[Biquad; 5]; 2],
     mic: [[Biquad; 3]; 2],
-    sag: Follower,
-    pre_gain: f32,
+    pub(crate) sag: Follower,
+    pub(crate) pre_gain: f32,
     master: f32,
     voice: Voice,
     dc: [[f32; 3]; 2],
@@ -134,7 +134,7 @@ struct AmpCore {
 }
 
 impl AmpCore {
-    fn new(rate: f32) -> AmpCore {
+    pub(crate) fn new(rate: f32) -> AmpCore {
         AmpCore {
             rate,
             os: [[Over4::new(rate); 3]; 2],
@@ -155,7 +155,7 @@ impl AmpCore {
 
     /// Sets the amp. Knobs are 0..10.
     #[allow(clippy::too_many_arguments)]
-    fn set(&mut self, voice: Voice, gain: f32, bass: f32, mids: f32, treble: f32, presence: f32, master: f32, stack: usize, cab: Cab, mic: usize, mic_x: f32, mic_z: f32, low_hp: f32) {
+    pub(crate) fn set(&mut self, voice: Voice, gain: f32, bass: f32, mids: f32, treble: f32, presence: f32, master: f32, stack: usize, cab: Cab, mic: usize, mic_x: f32, mic_z: f32, low_hp: f32) {
         let r = self.rate;
         self.voice = voice;
         self.pre_gain = db(gain / 10.0 * voice.gain_db - 6.0);
@@ -213,7 +213,7 @@ impl AmpCore {
         }
     }
 
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         for s in 0..2 {
             for o in self.os[s].iter_mut() {
                 o.clear();
@@ -230,7 +230,7 @@ impl AmpCore {
 
     /// One sample of one channel (`sag` shared, updated by the caller).
     #[inline]
-    fn run(&mut self, s: usize, x: f32, sag_amt: f32, cab_on: bool) -> f32 {
+    pub(crate) fn run(&mut self, s: usize, x: f32, sag_amt: f32, cab_on: bool) -> f32 {
         let v = self.voice;
         let bias = v.bias;
         let tri = |u: f32| -> f32 {
@@ -273,7 +273,7 @@ impl AmpCore {
 }
 
 /// A short spring reverb: a dispersive all-pass chain (the chirp) in a damped feedback loop.
-struct Spring {
+pub(crate) struct Spring {
     ap: [[(Delay, f32); 4]; 2],
     loop_d: [Delay; 2],
     lp: [crate::util::OnePole; 2],
@@ -281,7 +281,7 @@ struct Spring {
 }
 
 impl Spring {
-    fn new(rate: f32) -> Spring {
+    pub(crate) fn new(rate: f32) -> Spring {
         let mk = |ms: f32| (Delay::new((ms * 0.001 * rate) as usize + 4), ms * 0.001 * rate);
         Spring {
             ap: [[mk(2.1), mk(3.7), mk(5.3), mk(7.9)], [mk(2.3), mk(3.9), mk(5.9), mk(8.3)]],
@@ -290,7 +290,7 @@ impl Spring {
             fb: 0.75,
         }
     }
-    fn set(&mut self, rate: f32, kind: usize) {
+    pub(crate) fn set(&mut self, rate: f32, kind: usize) {
         let (cut, fb) = match kind {
             2 | 4 => (2800.0, 0.72),
             3 => (7000.0, 0.72),
@@ -303,7 +303,7 @@ impl Spring {
             l.set(rate, cut);
         }
     }
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         for c in self.ap.iter_mut() {
             for (d, _) in c.iter_mut() {
                 d.clear();
@@ -314,7 +314,7 @@ impl Spring {
         }
     }
     #[inline]
-    fn run(&mut self, s: usize, x: f32, rate: f32) -> f32 {
+    pub(crate) fn run(&mut self, s: usize, x: f32, rate: f32) -> f32 {
         let l = self.loop_d[s].read(0.033 * rate * if s == 1 { 1.13 } else { 1.0 });
         let mut y = x + l * self.fb;
         for (d, len) in self.ap[s].iter_mut() {

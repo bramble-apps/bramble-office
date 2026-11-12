@@ -49,7 +49,7 @@ pub const MIX: u32 = 24;
 pub const IN_GAIN: u32 = 25;
 pub const OUT_GAIN: u32 = 26;
 
-static PARAMS: [Param; 23] = [
+static PARAMS: [Param; 24] = [
     Param::new(THRESHOLD, "Threshold", -60.0, 0.0, -20.0, Unit::Db),
     Param::new(RATIO, "Ratio", 1.0, 30.0, 2.1, Unit::Ratio),
     Param::new(ATTACK, "Attack", 0.0, 200.0, 15.0, Unit::Ms),
@@ -74,7 +74,12 @@ static PARAMS: [Param; 23] = [
     Param::new(OUT_GAIN, "Output Gain", -30.0, 30.0, 0.0, Unit::Db),
     // the gain-reduction meter's float (Logic stores the display state at 20-23)
     Param::new(16, "Side Chain Filter (reserved)", 0.0, 1.0, 0.0, Unit::None),
+    // (our own id: Logic's Listen state isn't decoded)
+    Param::new(LISTEN, "Listen", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
+
+/// The side chain section's Listen button: the output is the (filtered) side chain signal.
+pub const LISTEN: u32 = 1000;
 
 /// How one circuit type behaves.
 #[derive(Clone, Copy, Debug)]
@@ -157,6 +162,8 @@ pub struct Compressor {
     dc_k: f32,
     /// The current gain reduction in dB (positive), for a meter.
     pub reduction: f32,
+    /// The external side chain's next block (header Side Chain pop-up): it only triggers.
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl Compressor {
@@ -193,6 +200,7 @@ impl Compressor {
             dc: [0.0; 2],
             dc_k: 1.0 - coef(rate, 1000.0 / (crate::util::TAU * 5.0)),
             reduction: 0.0,
+            side: None,
         };
         c.update();
         c
@@ -323,8 +331,17 @@ impl lg_dsp::Effect for Compressor {
         self.reduction
     }
 
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
+        let side = self.side.take();
+        let listen = self.p.on(LISTEN);
         let sum = self.p.idx(SC_DETECT) == 1;
         let dist = self.p.idx(DISTORTION);
         let limit = self.p.on(LIMIT_ON);
@@ -332,8 +349,21 @@ impl lg_dsp::Effect for Compressor {
         let c = self.c;
         for i in 0..n {
             let (dl, dr) = (left[i] * self.in_gain, right[i] * self.in_gain);
-            // feedback circuits listen after the gain stage
-            let (sl, sr) = if c.feedback { (dl * self.g_last, dr * self.g_last) } else { (dl, dr) };
+            // feedback circuits listen after the gain stage; an external side chain only
+            // triggers (its audio isn't processed)
+            let (sl, sr) = if let Some((a, b)) = &side {
+                (a.get(i).copied().unwrap_or(0.0) * self.in_gain, b.get(i).copied().unwrap_or(0.0) * self.in_gain)
+            } else if c.feedback {
+                (dl * self.g_last, dr * self.g_last)
+            } else {
+                (dl, dr)
+            };
+            if listen {
+                // Listen: the side chain as the detector hears it (after its filter)
+                left[i] = self.sc[0].run(sl);
+                right[i] = self.sc[1].run(sr);
+                continue;
+            }
             let (ml, mr) = (self.detect(0, sl), self.detect(1, sr));
             let ms = if sum { 0.5 * (ml + mr) } else { ml.max(mr) };
             let level = 10.0 * ms.max(1e-12).log10() + c.det_offset + if self.rms_k > 0.0 { c.rms_cal } else { 0.0 };
@@ -403,6 +433,34 @@ plugin_impl!(Compressor);
 mod tests {
     use super::*;
     use lg_dsp::{Effect, Plugin};
+
+    /// An external side chain triggers the reduction; its audio isn't heard.
+    #[test]
+    fn side_chain_triggers_only() {
+        let mut c = Compressor::new(48000.0);
+        for (id, v) in [(RATIO, 10.0), (THRESHOLD, -30.0), (AUTO_GAIN, 0.0), (ATTACK, 1.0)] {
+            c.set(id, v);
+        }
+        assert!(c.has_side_chain());
+        let quiet = vec![0.01f32; 4800];
+        let key: Vec<f32> = (0..4800).map(|i| 0.8 * (i as f32 * 0.05).sin()).collect();
+        let (mut l, mut r) = (quiet.clone(), quiet.clone());
+        c.side_chain(&key, &key);
+        c.process(&mut l, &mut r);
+        assert!(c.reduction > 10.0, "{}", c.reduction);
+        assert!(l[4000..].iter().all(|v| v.abs() < 0.01));
+        // without the key, the quiet input passes
+        let (mut l, mut r) = (quiet.clone(), quiet.clone());
+        c.reset();
+        c.process(&mut l, &mut r);
+        assert!((l[4700] - 0.01).abs() < 0.002);
+        // Listen plays the side chain
+        c.set(LISTEN, 1.0);
+        let (mut l, mut r) = (quiet.clone(), quiet);
+        c.side_chain(&key, &key);
+        c.process(&mut l, &mut r);
+        assert!((l[100] - key[100]).abs() < 1e-4);
+    }
 
     /// A steady sine 14 dB over the threshold at 4:1 is turned down by 10.5 dB.
     #[test]

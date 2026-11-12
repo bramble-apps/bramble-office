@@ -140,6 +140,13 @@ pub trait Instrument: Plugin {
 /// An audio effect: processes the block in place.
 pub trait Effect: Plugin {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]);
+    /// The side chain block for the next `process` (Logic's Side Chain pop-up: another track,
+    /// a bus or an input); effects without a side chain input ignore it.
+    fn side_chain(&mut self, _left: &[f32], _right: &[f32]) {}
+    /// Whether the effect has a side chain input (its window shows the Side Chain pop-up).
+    fn has_side_chain(&self) -> bool {
+        false
+    }
     /// The tempo, for tempo-synced delays and LFOs.
     fn set_tempo(&mut self, _bpm: f64) {}
     /// Samples of delay the effect adds (look-ahead limiters and gates), for latency

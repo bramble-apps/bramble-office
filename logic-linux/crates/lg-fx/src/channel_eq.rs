@@ -55,8 +55,178 @@ static PARAMS: LazyLock<Vec<Param>> = LazyLock::new(|| {
         v.push(Param::new(id + 3, name(b, "Q-Factor"), 0.1, 100.0, d.3, Unit::Ratio));
     }
     v.push(Param::new(32, "Master Gain", -24.0, 24.0, 0.0, Unit::Db));
+    // the window's controls and display options (our own ids: Logic stores them after the
+    // block, not decoded)
+    v.extend([
+        Param::new(ANALYZER, "Analyzer", 0.0, 1.0, 1.0, Unit::OnOff),
+        Param::menu(ANALYZER_POST, "Analyzer Pre/Post", &["Pre", "Post"], 1.0),
+        Param::menu(ANALYZER_MODE, "Analyzer Mode", &["Peak", "RMS"], 0.0),
+        Param::menu(ANALYZER_RES, "Analyzer Resolution", &["Low (2048)", "Medium (4096)", "High (8192)"], 1.0),
+        Param::new(ANALYZER_DECAY, "Analyzer Decay", 1.0, 100.0, 20.0, Unit::None),
+        Param::new(ANALYZER_TOP, "Analyzer Top", -80.0, 20.0, 0.0, Unit::Db),
+        Param::menu(ANALYZER_RANGE, "Analyzer Range", &["60 dB", "80 dB", "100 dB"], 0.0),
+        Param::new(Q_COUPLE, "Q-Couple", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::menu(Q_STRENGTH, "Gain-Q Couple Strength", COUPLINGS, 2.0),
+        Param::new(HQ, "HQ", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::menu(PROCESSING, "Processing", PROCESSINGS, 0.0),
+        Param::menu(SCALE_MODE, "EQ dB Scale Mode", SCALE_MODES, 1.0),
+        Param::new(SCALE_OFFSET, "EQ Scale Offset", -30.0, 30.0, 0.0, Unit::Db),
+        Param::new(VIS_MASTER, "Visualize Master Gain", 0.0, 1.0, 0.0, Unit::OnOff),
+    ]);
     v
 });
+
+pub const ANALYZER: u32 = 1000;
+pub const ANALYZER_POST: u32 = 1001;
+pub const ANALYZER_MODE: u32 = 1002;
+pub const ANALYZER_RES: u32 = 1003;
+pub const ANALYZER_DECAY: u32 = 1004;
+pub const ANALYZER_TOP: u32 = 1005;
+pub const ANALYZER_RANGE: u32 = 1006;
+pub const Q_COUPLE: u32 = 1007;
+pub const Q_STRENGTH: u32 = 1008;
+pub const HQ: u32 = 1009;
+pub const PROCESSING: u32 = 1010;
+pub const SCALE_MODE: u32 = 1011;
+pub const SCALE_OFFSET: u32 = 1012;
+pub const VIS_MASTER: u32 = 1013;
+pub const COUPLINGS: &[&str] = &["Proportional", "Light", "Medium", "Strong", "Asymmetric Light", "Asymmetric Medium", "Asymmetric Strong"];
+pub const PROCESSINGS: &[&str] = &["Stereo", "Left Only", "Right Only", "Mid Only", "Side Only"];
+pub const SCALE_MODES: &[&str] = &["Linear 12 dB", "Linear 30 dB", "Linear 60 dB", "Warped"];
+
+/// Gain-Q coupling: the Q a peak band plays with for its gain (the stored Q is kept; a change
+/// of strength changes the played Q, as Logic's automation note says). Proportional widens
+/// small boosts / cuts and narrows big ones; the others narrow with gain, the asymmetric ones
+/// more for cuts than boosts.
+pub fn coupled_q(q: f32, gain: f32, strength: usize) -> f32 {
+    let g = gain.abs();
+    let f = match strength {
+        0 => (g / 6.0).max(0.25).sqrt(),
+        1..=3 => 1.0 + [0.0, 0.25, 0.5, 1.0][strength] * g / 12.0,
+        _ => {
+            let s = [0.25, 0.5, 1.0][(strength - 4).min(2)];
+            1.0 + if gain < 0.0 { s } else { s * 0.4 } * g / 12.0
+        }
+    };
+    (q * f).clamp(0.1, 100.0)
+}
+
+/// The analyzer (an FFT of the input or output; Peak or RMS; 2048 / 4096 / 8192 points; a
+/// falling display): 200 log-spaced bands from 20 Hz to 20 kHz, in dB.
+#[derive(Clone)]
+pub struct Analyzer {
+    ring: Vec<f32>,
+    at: usize,
+    since: usize,
+    pub bands: Vec<f32>,
+}
+
+pub const ANALYZER_BANDS: usize = 200;
+
+impl Default for Analyzer {
+    fn default() -> Analyzer {
+        Analyzer { ring: vec![0.0; 8192], at: 0, since: 0, bands: vec![-120.0; ANALYZER_BANDS] }
+    }
+}
+
+impl Analyzer {
+    /// Band k's centre (Hz).
+    pub fn band_hz(k: usize) -> f32 {
+        20.0 * 1000f32.powf(k as f32 / (ANALYZER_BANDS - 1) as f32)
+    }
+    pub fn push(&mut self, l: &[f32], r: &[f32], rate: f32, size: usize, rms: bool, decay_db_s: f32) {
+        let n = size.clamp(2048, 8192);
+        for (a, b) in l.iter().zip(r) {
+            self.ring[self.at] = 0.5 * (a + b);
+            self.at = (self.at + 1) % self.ring.len();
+            self.since += 1;
+            if self.since >= n / 4 {
+                self.since = 0;
+                self.frame(n, rate, rms, decay_db_s * (n / 4) as f32 / rate);
+            }
+        }
+    }
+    fn frame(&mut self, n: usize, rate: f32, rms: bool, fall: f32) {
+        let len = self.ring.len();
+        let mut buf: Vec<crate::convolve::C> = (0..n).map(|i| {
+            let x = self.ring[(self.at + len - n + i) % len];
+            let w = 0.5 - 0.5 * (std::f32::consts::TAU * i as f32 / n as f32).cos();
+            crate::convolve::C { re: x * w, im: 0.0 }
+        }).collect();
+        crate::convolve::Fft::new(n).run(&mut buf, false);
+        // (Hann's coherent gain is 0.5: a full-scale sine reads 0 dB)
+        let mag = |k: usize| (buf[k].re * buf[k].re + buf[k].im * buf[k].im).sqrt() * 4.0 / n as f32;
+        let bin = rate / n as f32;
+        for b in 0..ANALYZER_BANDS {
+            let (lo, hi) = (Self::band_hz(b) * 2f32.powf(-1.0 / 40.0), Self::band_hz(b) * 2f32.powf(1.0 / 40.0));
+            let (k0, k1) = (((lo / bin).floor() as usize).max(1), ((hi / bin).ceil() as usize).min(n / 2));
+            let ks = k0..=k1.max(k0);
+            let v = if rms {
+                let c = ks.clone().count() as f32;
+                (ks.map(|k| mag(k).powi(2)).sum::<f32>() / c).sqrt()
+            } else {
+                ks.map(mag).fold(0.0, f32::max)
+            };
+            let d = 20.0 * v.max(1e-7).log10();
+            // a falling display: rises at once, falls at the decay rate
+            self.bands[b] = d.max(self.bands[b] - fall);
+        }
+    }
+}
+
+/// Two-times oversampling (HQ): a 31-tap half-band low-pass for the way up and down.
+#[derive(Clone)]
+struct Halfband {
+    taps: Vec<f32>,
+    z: Vec<f32>,
+    at: usize,
+}
+
+impl Halfband {
+    fn new() -> Halfband {
+        let n = 31;
+        let taps = (0..n).map(|i| {
+            let m = i as f32 - 15.0;
+            let sinc = if m == 0.0 { 0.5 } else { (std::f32::consts::PI * m * 0.5).sin() / (std::f32::consts::PI * m) };
+            let w = 0.42 - 0.5 * (std::f32::consts::TAU * i as f32 / 30.0).cos() + 0.08 * (2.0 * std::f32::consts::TAU * i as f32 / 30.0).cos();
+            sinc * w
+        }).collect();
+        Halfband { taps, z: vec![0.0; n], at: 0 }
+    }
+    fn run(&mut self, x: f32) -> f32 {
+        let n = self.z.len();
+        self.z[self.at] = x;
+        let mut y = 0.0;
+        for (i, t) in self.taps.iter().enumerate() {
+            y += t * self.z[(self.at + n - i) % n];
+        }
+        self.at = (self.at + 1) % n;
+        y
+    }
+    fn clear(&mut self) {
+        self.z.iter_mut().for_each(|v| *v = 0.0);
+    }
+}
+
+/// Splits a stereo pair for the Processing mode: the two channels the bands run on.
+#[inline]
+pub fn to_proc(mode: usize, l: f32, r: f32) -> (f32, f32) {
+    if mode >= 3 { (0.5 * (l + r), 0.5 * (l - r)) } else { (l, r) }
+}
+
+/// Back to left / right: only the processed part of the pair is taken from the EQ (Left Only,
+/// Right Only, Mid Only, Side Only).
+#[inline]
+pub fn from_proc(mode: usize, (a, b): (f32, f32), (ea, eb): (f32, f32)) -> (f32, f32) {
+    let (x, y) = match mode {
+        1 => (ea, b),
+        2 => (a, eb),
+        3 => (ea, b),
+        4 => (a, eb),
+        _ => (ea, eb),
+    };
+    if mode >= 3 { (x + y, x - y) } else { (x, y) }
+}
 
 /// Logic's shelf Q-Factor against the cookbook's shelf Q (matched to Logic's renders: a shelf at
 /// Q 0.1 spreads over about two octaves, not five). Peaks use Logic's Q as is.
@@ -135,11 +305,16 @@ pub struct ChannelEq {
     bands: [BandState; 8],
     master: Smooth,
     countdown: usize,
+    /// HQ: the filters run at twice the rate
+    os: usize,
+    up: [Halfband; 2],
+    down: [Halfband; 2],
+    pub analyzer: Analyzer,
 }
 
 impl ChannelEq {
     pub fn new(rate: f32) -> ChannelEq {
-        let mut e = ChannelEq { p: Values::new(&*PARAMS), rate, bands: [BandState::default(); 8], master: Smooth::new(rate, 20.0, 1.0), countdown: 0 };
+        let mut e = ChannelEq { p: Values::new(&*PARAMS), rate, bands: [BandState::default(); 8], master: Smooth::new(rate, 20.0, 1.0), countdown: 0, os: 1, up: [Halfband::new(), Halfband::new()], down: [Halfband::new(), Halfband::new()], analyzer: Analyzer::default() };
         e.update();
         e.snap();
         e
@@ -149,12 +324,25 @@ impl ChannelEq {
     fn wanted(&self, k: usize) -> (bool, [f32; 3]) {
         let b = 4 * k as u32;
         let on = self.p.on(b);
-        let (f, g, q) = (self.p.get(b + 1), self.p.get(b + 2), self.p.get(b + 3));
+        let (f, g, mut q) = (self.p.get(b + 1), self.p.get(b + 2), self.p.get(b + 3));
+        if (2..=5).contains(&k) && self.p.on(Q_COUPLE) {
+            q = coupled_q(q, g, self.p.idx(Q_STRENGTH));
+        }
         let active = on && if k == 0 || k == 7 { g >= 0.5 } else { g.abs() > 0.001 };
         (active, [f, g, q])
     }
 
     fn update(&mut self) {
+        let os = if self.p.on(HQ) { 2 } else { 1 };
+        if os != self.os {
+            self.os = os;
+            for b in self.bands.iter_mut() {
+                b.active = !b.active;
+            }
+            for h in self.up.iter_mut().chain(self.down.iter_mut()) {
+                h.clear();
+            }
+        }
         for k in 0..8 {
             let (active, t) = self.wanted(k);
             let b = &mut self.bands[k];
@@ -188,7 +376,7 @@ impl ChannelEq {
             return;
         }
         let mut c = [Coefs::THRU; MAX_SECT + 1];
-        b.n = design(self.rate, k, b.now[0], b.now[1], b.now[2], &mut c);
+        b.n = design(self.rate * self.os as f32, k, b.now[0], b.now[1], b.now[2], &mut c);
         for i in 0..b.n {
             b.sect[i][0].c = c[i];
             b.sect[i][1].c = c[i];
@@ -249,6 +437,11 @@ impl ChannelEq {
 impl lg_dsp::Effect for ChannelEq {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
+        let mode = self.processing();
+        let (analyze, post, size, rms, decay) = self.analyzer_settings();
+        if analyze && !post {
+            self.analyzer.push(left, right, self.rate, size, rms, decay);
+        }
         let mut i = 0;
         while i < n {
             if self.countdown == 0 {
@@ -258,19 +451,73 @@ impl lg_dsp::Effect for ChannelEq {
             let run = self.countdown.min(n - i);
             self.countdown -= run;
             for j in i..i + run {
-                let (mut l, mut r) = (left[j], right[j]);
-                for b in self.bands.iter_mut() {
-                    for s in b.sect[..b.n].iter_mut() {
-                        l = s[0].run(l);
-                        r = s[1].run(r);
+                let (a, b) = to_proc(mode, left[j], right[j]);
+                let (ea, eb) = if self.os == 2 {
+                    // HQ: up (zero-stuffed, half-band), the bands at 2x, down
+                    let mut out = (0.0, 0.0);
+                    for phase in 0..2 {
+                        let (xa, xb) = if phase == 0 { (a * 2.0, b * 2.0) } else { (0.0, 0.0) };
+                        let (ua, ub) = (self.up[0].run(xa), self.up[1].run(xb));
+                        let (ya, yb) = self.run_bands(ua, ub);
+                        let (da, db_) = (self.down[0].run(ya), self.down[1].run(yb));
+                        if phase == 0 {
+                            out = (da, db_);
+                        }
                     }
-                }
+                    out
+                } else {
+                    self.run_bands(a, b)
+                };
+                let (l, r) = from_proc(mode, (a, b), (ea, eb));
                 let m = self.master.next();
                 left[j] = l * m;
                 right[j] = r * m;
             }
             i += run;
         }
+        if analyze && post {
+            self.analyzer.push(left, right, self.rate, size, rms, decay);
+        }
+    }
+    fn latency(&self) -> usize {
+        // (the two half-bands at twice the rate)
+        if self.os == 2 { 15 } else { 0 }
+    }
+    fn curve(&self, name: &str) -> Vec<f32> {
+        if name == "analyzer" { self.analyzer.bands.clone() } else { Vec::new() }
+    }
+}
+
+impl ChannelEq {
+    #[inline]
+    fn run_bands(&mut self, mut l: f32, mut r: f32) -> (f32, f32) {
+        for b in self.bands.iter_mut() {
+            for s in b.sect[..b.n].iter_mut() {
+                l = s[0].run(l);
+                r = s[1].run(r);
+            }
+        }
+        (l, r)
+    }
+
+    /// The analyzer's settings: (on, post, points, rms, decay dB/s).
+    pub fn analyzer_settings(&self) -> (bool, bool, usize, bool, f32) {
+        (self.p.on(ANALYZER), self.p.idx(ANALYZER_POST) == 1, [2048, 4096, 8192][self.p.idx(ANALYZER_RES).min(2)], self.p.idx(ANALYZER_MODE) == 1, self.p.get(ANALYZER_DECAY))
+    }
+
+    /// One band's response in dB at `f` (its own curve in the window), None when it's inactive.
+    pub fn band_db(&self, k: usize, f: f32) -> Option<f32> {
+        let (active, t) = self.wanted(k);
+        if !active {
+            return None;
+        }
+        let mut c = [Coefs::THRU; MAX_SECT + 1];
+        let n = design(self.rate, k, t[0], t[1], t[2], &mut c);
+        Some(c[..n].iter().map(|s| lg_dsp::gain_to_db(s.magnitude(self.rate, f))).sum())
+    }
+
+    pub fn processing(&self) -> usize {
+        self.p.idx(PROCESSING)
     }
 }
 
@@ -289,6 +536,54 @@ mod tests {
         e.process(&mut l, &mut r);
         let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt();
         lg_dsp::gain_to_db(rms(&l[24000..]) / (0.25 / 2f32.sqrt()))
+    }
+
+    #[test]
+    fn processing_modes_hq_analyzer_and_coupling() {
+        let rate = 48000.0;
+        let tone = |hz: f32, a: f32| -> Vec<f32> { (0..24000).map(|i| (crate::util::TAU * hz * i as f32 / rate).sin() * a).collect() };
+        let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt();
+        let mut e = ChannelEq::new(rate);
+        e.set(Q_COUPLE, 0.0);
+        e.set(17, 1000.0);
+        e.set(18, -12.0);
+        e.reset();
+        // Left Only: the right side passes untouched
+        e.set(PROCESSING, 1.0);
+        let (mut l, mut r) = (tone(1000.0, 0.5), tone(1000.0, 0.5));
+        e.process(&mut l, &mut r);
+        assert!(rms(&l[12000..]) < 0.3 * 0.354 && (rms(&r[12000..]) - 0.354).abs() < 0.01);
+        // Side Only: a mono (mid-only) signal passes; Mid Only cuts it
+        e.set(PROCESSING, 4.0);
+        e.reset();
+        let (mut l, mut r) = (tone(1000.0, 0.5), tone(1000.0, 0.5));
+        e.process(&mut l, &mut r);
+        assert!((rms(&l[12000..]) - 0.354).abs() < 0.01);
+        e.set(PROCESSING, 3.0);
+        e.reset();
+        let (mut l, mut r) = (tone(1000.0, 0.5), tone(1000.0, 0.5));
+        e.process(&mut l, &mut r);
+        assert!(rms(&l[12000..]) < 0.12);
+        // HQ: the same response, 15 samples later
+        e.set(PROCESSING, 0.0);
+        e.set(HQ, 1.0);
+        e.reset();
+        assert_eq!(lg_dsp::Effect::latency(&e), 15);
+        let (mut l, mut r) = (tone(1000.0, 0.5), tone(1000.0, 0.5));
+        e.process(&mut l, &mut r);
+        let g = lg_dsp::gain_to_db(rms(&l[12000..]) / 0.3536);
+        assert!((g + 12.0).abs() < 0.3, "HQ {g}");
+        // the analyzer reads a full-scale-ish sine near its level
+        let mut a = ChannelEq::new(rate);
+        let (mut l, mut r) = (tone(1000.0, 0.5), tone(1000.0, 0.5));
+        a.process(&mut l, &mut r);
+        let k = (0..ANALYZER_BANDS).min_by(|x, y| (Analyzer::band_hz(*x) - 1000.0).abs().total_cmp(&(Analyzer::band_hz(*y) - 1000.0).abs())).unwrap();
+        let peak = a.curve("analyzer")[k];
+        assert!((peak + 6.0).abs() < 1.5, "{peak}");
+        // coupling: stronger narrows more; asymmetric narrows cuts more than boosts
+        assert!(coupled_q(1.0, 12.0, 3) > coupled_q(1.0, 12.0, 1));
+        assert!(coupled_q(1.0, -12.0, 6) > coupled_q(1.0, 12.0, 6));
+        assert!(coupled_q(1.0, 1.0, 0) < 1.0 && coupled_q(1.0, 18.0, 0) > 1.0);
     }
 
     #[test]

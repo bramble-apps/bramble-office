@@ -55,6 +55,7 @@ pub mod pitchfx;
 pub mod evoc;
 pub mod match_eq;
 pub mod surround;
+pub mod legacy;
 
 use lg_dsp::Effect;
 
@@ -163,6 +164,9 @@ pub fn by_logic_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
             if let Some(m) = surround::by_name(n, rate) {
                 return Some(m);
             }
+            if let Some(m) = legacy::by_name(n, rate) {
+                return Some(m);
+            }
             if let Some(m) = more_fx::by_name(n, rate) {
                 return Some(m);
             }
@@ -184,6 +188,7 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
     v.extend(pedals::PEDALS.iter().map(|(n, ..)| (*n, *n)));
     v.extend(meters::Meter::names().iter().map(|n| (*n, *n)));
     v.extend(more_fx::NAMES.iter().map(|n| (*n, *n)));
+    v.extend(legacy::NAMES.iter().map(|n| (*n, *n)));
     v.extend(surround::NAMES.iter().map(|n| (*n, *n)));
     v.extend(verbs::NAMES.iter().chain(pitchfx::NAMES).chain(evoc::NAMES).chain(&["Match EQ"]).map(|n| (*n, *n)));
     v

@@ -1300,7 +1300,7 @@ impl App {
                 continue;
             }
             // over an instrument editor: its undo and its key commands
-            if crate::instwin::key_press(self, ctx, key, m) {
+            if crate::instwin::key_press(self, ctx, key, m) || crate::pluginwin::fx_key(self, ctx, key, m) {
                 continue;
             }
             if m.command && key == egui::Key::Z {
@@ -1336,7 +1336,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
+        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
             return true;
         }
         if crate::envhub::command(self, ctx, name) {
@@ -1859,7 +1859,8 @@ impl App {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;
             let mut p = self.eqs.get(&t).copied().unwrap_or_default();
-            if crate::eq::window(&ctx, &mut open, &name, &mut p) {
+            let analyzer = self.engine().eq_analyzer(t);
+            if crate::eq::window(&ctx, &mut open, t, &name, &mut p, &analyzer) {
                 self.eqs.insert(t, p);
                 if let Some(tr) = self.engine().tracks.get_mut(t) {
                     tr.eq = Some(p);

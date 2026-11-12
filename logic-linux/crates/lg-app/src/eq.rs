@@ -1,25 +1,33 @@
-//! Bramble's Channel EQ (the stand-in for Logic's, same parameters in the same order: Logic
-//! research E04/E05 — eight bands of [frequency Hz, gain dB (cut filters: slope), Q, on]):
-//! Low Cut, Low Shelf, four Bells, High Shelf, High Cut. Standard biquads (RBJ cookbook).
-//! The window: the response curve on a log frequency scale, a coloured handle per band to drag
-//! (frequency across, gain up and down), the bands' on / off buttons and readouts, as Logic's.
+//! The track's Channel EQ (its EQ slot): the settings (eight bands of [on, frequency, gain —
+//! the cuts' slope —, Q] as Logic's block, Master Gain, the window's options) and the
+//! processing, which is lg-fx's Channel EQ (Logic-matched slopes and shelves, Gain-Q coupling,
+//! HQ, Processing modes, the analyzer). The window is Logic's plug-in window: the shared header
+//! (plughead.rs: bypass, Settings, ‹ ›, Compare, Copy | Paste, Undo | Redo, View Editor /
+//! Controls and size, Link), the Channel EQ view (eqview.rs) and the footer.
 
-use egui::{pos2, vec2, Align2, Color32, Sense, Stroke};
+use egui::vec2;
+use lg_dsp::{Effect, Plugin};
 
 pub const RATE: f32 = crate::audio::RATE as f32;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Band {
     pub freq: f32,
-    /// dB for shelves and bells; for the cut filters, the slope (Logic's value; 12 dB/oct here)
+    /// dB for shelves and bells; for the cut filters, the slope (Logic's value × 6 dB/oct)
     pub gain: f32,
     pub q: f32,
     pub on: bool,
 }
 
+/// The window's options and extras by id from 1000 (lg_fx::channel_eq's ANALYZER …).
+pub const OPTS: usize = 14;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Params {
     pub bands: [Band; 8],
+    pub master: f32,
+    pub opts: [f32; OPTS],
+    pub bypass: bool,
 }
 
 impl Default for Params {
@@ -27,7 +35,12 @@ impl Default for Params {
     /// flat.
     fn default() -> Self {
         let b = |freq, gain, q, on| Band { freq, gain, q, on };
-        Params { bands: [b(20.0, 2.0, 0.71, false), b(75.0, 0.0, 1.0, true), b(100.0, 0.0, 0.6, true), b(250.0, 0.0, 0.3, true), b(1040.0, 0.0, 0.41, true), b(2500.0, 0.0, 0.2, true), b(7500.0, 0.0, 1.0, true), b(20000.0, 4.0, 0.71, false)] }
+        let fx = lg_fx::channel_eq::ChannelEq::new(RATE);
+        let mut opts = [0.0; OPTS];
+        for (i, o) in opts.iter_mut().enumerate() {
+            *o = fx.get(1000 + i as u32);
+        }
+        Params { bands: [b(20.0, 2.0, 0.71, false), b(75.0, 0.0, 1.0, true), b(100.0, 0.0, 0.6, true), b(250.0, 0.0, 0.3, true), b(1040.0, 0.0, 0.41, true), b(2500.0, 0.0, 0.2, true), b(7500.0, 0.0, 1.0, true), b(20000.0, 4.0, 0.71, false)], master: 0.0, opts, bypass: false }
     }
 }
 
@@ -43,183 +56,278 @@ impl Params {
             let f = &v[4 * i..4 * i + 4];
             *b = Band { on: f[0] > 0.5, freq: f[1].clamp(10.0, 22000.0), gain: f[2], q: f[3].max(0.1) };
         }
+        p.master = v.get(32).copied().filter(|g| g.is_finite()).unwrap_or(0.0);
         Some(p)
     }
 
     pub fn is_flat(&self) -> bool {
-        self.bands.iter().enumerate().all(|(i, b)| !b.on || ((1..7).contains(&i) && b.gain.abs() < 0.01))
+        self.master.abs() < 0.01 && self.bands.iter().enumerate().all(|(i, b)| !b.on || ((1..7).contains(&i) && b.gain.abs() < 0.01))
     }
-}
 
-#[derive(Clone, Copy, Debug, Default)]
-struct Biquad {
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    a1: f32,
-    a2: f32,
-    z1: [f32; 2],
-    z2: [f32; 2],
-}
-
-/// Logic's band types, by position.
-fn kind(i: usize) -> &'static str {
-    match i {
-        0 => "lowcut",
-        1 => "lowshelf",
-        6 => "highshelf",
-        7 => "highcut",
-        _ => "bell",
-    }
-}
-
-impl Biquad {
-    fn design(i: usize, b: &Band) -> Biquad {
-        let w = std::f32::consts::TAU * b.freq.min(RATE * 0.45) / RATE;
-        let (sw, cw) = (w.sin(), w.cos());
-        let a = 10f32.powf(b.gain / 40.0);
-        let q = if i == 0 || i == 7 { 0.707 } else { (b.q * 2.0).max(0.2) };
-        let alpha = sw / (2.0 * q);
-        let (b0, b1, b2, a0, a1, a2) = match kind(i) {
-            "lowcut" => ((1.0 + cw) / 2.0, -(1.0 + cw), (1.0 + cw) / 2.0, 1.0 + alpha, -2.0 * cw, 1.0 - alpha),
-            "highcut" => ((1.0 - cw) / 2.0, 1.0 - cw, (1.0 - cw) / 2.0, 1.0 + alpha, -2.0 * cw, 1.0 - alpha),
-            "lowshelf" => {
-                let s = 2.0 * a.sqrt() * alpha;
-                (a * ((a + 1.0) - (a - 1.0) * cw + s), 2.0 * a * ((a - 1.0) - (a + 1.0) * cw), a * ((a + 1.0) - (a - 1.0) * cw - s), (a + 1.0) + (a - 1.0) * cw + s, -2.0 * ((a - 1.0) + (a + 1.0) * cw), (a + 1.0) + (a - 1.0) * cw - s)
+    /// The value of a Channel EQ parameter id.
+    pub fn value(&self, id: u32) -> f32 {
+        match id {
+            0..=31 => {
+                let b = &self.bands[id as usize / 4];
+                [if b.on { 1.0 } else { 0.0 }, b.freq, b.gain, b.q][id as usize % 4]
             }
-            "highshelf" => {
-                let s = 2.0 * a.sqrt() * alpha;
-                (a * ((a + 1.0) + (a - 1.0) * cw + s), -2.0 * a * ((a - 1.0) + (a + 1.0) * cw), a * ((a + 1.0) + (a - 1.0) * cw - s), (a + 1.0) - (a - 1.0) * cw + s, 2.0 * ((a - 1.0) - (a + 1.0) * cw), (a + 1.0) - (a - 1.0) * cw - s)
+            32 => self.master,
+            1000.. => self.opts.get(id as usize - 1000).copied().unwrap_or(0.0),
+            _ => 0.0,
+        }
+    }
+
+    pub fn set_value(&mut self, id: u32, v: f32) {
+        match id {
+            0..=31 => {
+                let b = &mut self.bands[id as usize / 4];
+                match id % 4 {
+                    0 => b.on = v >= 0.5,
+                    1 => b.freq = v.clamp(20.0, 20000.0),
+                    2 => b.gain = v,
+                    _ => b.q = v.clamp(0.1, 100.0),
+                }
             }
-            _ => (1.0 + alpha * a, -2.0 * cw, 1.0 - alpha * a, 1.0 + alpha / a, -2.0 * cw, 1.0 - alpha / a),
-        };
-        Biquad { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0, z1: [0.0; 2], z2: [0.0; 2] }
+            32 => self.master = v.clamp(-24.0, 24.0),
+            1000.. => {
+                if let Some(o) = self.opts.get_mut(id as usize - 1000) {
+                    *o = v;
+                }
+            }
+            _ => {}
+        }
     }
 
-    fn run(&mut self, x: f32, ch: usize) -> f32 {
-        let y = self.b0 * x + self.z1[ch];
-        self.z1[ch] = self.b1 * x - self.a1 * y + self.z2[ch];
-        self.z2[ch] = self.b2 * x - self.a2 * y;
-        y
-    }
-
-    /// The magnitude in dB at `f`.
-    fn response(&self, f: f32) -> f32 {
-        let w = std::f32::consts::TAU * f / RATE;
-        let (c1, s1, c2, s2) = (w.cos(), w.sin(), (2.0 * w).cos(), (2.0 * w).sin());
-        let nr = self.b0 + self.b1 * c1 + self.b2 * c2;
-        let ni = -(self.b1 * s1 + self.b2 * s2);
-        let dr = 1.0 + self.a1 * c1 + self.a2 * c2;
-        let di = -(self.a1 * s1 + self.a2 * s2);
-        10.0 * ((nr * nr + ni * ni) / (dr * dr + di * di)).max(1e-12).log10()
+    /// A Channel EQ with these settings (the processing and its curves).
+    pub fn unit(&self) -> lg_fx::channel_eq::ChannelEq {
+        let mut fx = lg_fx::channel_eq::ChannelEq::new(RATE);
+        let ids: Vec<u32> = fx.params().iter().map(|p| p.id).collect();
+        for id in ids {
+            fx.set(id, self.value(id));
+        }
+        fx
     }
 }
 
 /// A running Channel EQ (its filters keep their state between blocks).
-#[derive(Clone, Debug)]
 pub struct Eq {
     pub params: Params,
-    filters: Vec<(usize, Biquad)>,
+    fx: lg_fx::channel_eq::ChannelEq,
 }
 
 impl Eq {
     pub fn new(params: Params) -> Eq {
-        let mut e = Eq { params, filters: Vec::new() };
-        e.set(params);
-        e
+        let mut fx = params.unit();
+        fx.reset();
+        Eq { params, fx }
     }
 
     pub fn set(&mut self, params: Params) {
+        for id in self.fx.params().iter().map(|p| p.id).collect::<Vec<_>>() {
+            if params.value(id) != self.params.value(id) {
+                self.fx.set(id, params.value(id));
+            }
+        }
         self.params = params;
-        self.filters = params.bands.iter().enumerate().filter(|(i, b)| b.on && !((1..7).contains(i) && b.gain.abs() < 0.01)).map(|(i, b)| (i, Biquad::design(i, b))).collect();
     }
 
     pub fn process(&mut self, l: &mut [f32], r: &mut [f32]) {
-        for (_, f) in &mut self.filters {
-            for x in l.iter_mut() {
-                *x = f.run(*x, 0);
-            }
-            for x in r.iter_mut() {
-                *x = f.run(*x, 1);
-            }
+        if !self.params.bypass {
+            self.fx.process(l, r);
         }
+    }
+
+    /// The analyzer's bands (dB), for the window.
+    pub fn analyzer(&self) -> Vec<f32> {
+        self.fx.curve("analyzer")
     }
 }
 
-/// The whole EQ's response in dB at `f` (the window's curve).
+/// The whole EQ's response in dB at `f` (the strip's thumbnail curve).
 pub fn response(p: &Params, f: f32) -> f32 {
-    p.bands.iter().enumerate().filter(|(_, b)| b.on).map(|(i, b)| Biquad::design(i, b).response(f)).sum()
+    p.unit().response_db(f) - p.master
 }
 
-const BAND_COLORS: [u32; 8] = [0xe0524c, 0xe8913a, 0xe8d03a, 0x5ac85a, 0x3ac8c0, 0x3a8ee8, 0x8a5ae8, 0xd05ac8];
+type History = (Vec<Params>, Vec<Params>);
 
-/// The Channel EQ window; true when the settings changed.
-pub fn window(ctx: &egui::Context, open: &mut bool, title: &str, p: &mut Params) -> bool {
-    let mut changed = false;
-    egui::Window::new(format!("{title} — Channel EQ")).id(egui::Id::unique("channel-eq")).open(open).collapsible(false).resizable(false).default_width(640.0).show(ctx, |ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(620.0, 240.0), Sense::hover());
-        let pa = ui.painter_at(rect);
-        pa.rect_filled(rect, 6.0, Color32::from_rgb(0x14, 0x16, 0x1a));
-        let x_of = |f: f32| rect.min.x + (f.log10() - 20f32.log10()) / (20000f32.log10() - 20f32.log10()) * rect.width();
-        let f_of = |x: f32| 10f32.powf(20f32.log10() + (x - rect.min.x) / rect.width() * (20000f32.log10() - 20f32.log10()));
-        let y_of = |db: f32| rect.center().y - db / 24.0 * (rect.height() / 2.0 - 10.0);
-        // the grid: decades and ±6 / 12 / 18 dB
-        for f in [30.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0] {
-            pa.vline(x_of(f), rect.y_range(), Stroke::new(1.0, Color32::from_gray(0x2a)));
-            let t = if f >= 1000.0 { format!("{}k", f / 1000.0) } else { format!("{f}") };
-            pa.text(pos2(x_of(f) + 2.0, rect.max.y - 12.0), Align2::LEFT_CENTER, t, crate::look::regular(9.5), Color32::from_gray(0x70));
-        }
-        for db in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0] {
-            pa.hline(rect.x_range(), y_of(db), Stroke::new(1.0, if db == 0.0 { Color32::from_gray(0x44) } else { Color32::from_gray(0x24) }));
-        }
-        // the curve
-        let pts: Vec<egui::Pos2> = (0..=300).map(|k| {
-            let x = rect.min.x + k as f32 / 300.0 * rect.width();
-            pos2(x, y_of(response(p, f_of(x)).clamp(-24.0, 24.0)))
-        }).collect();
-        pa.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::from_rgb(0x9c, 0xe0, 0xff))));
-        // the band handles
-        for i in 0..8 {
-            let b = p.bands[i];
-            let c = crate::look::mix(kn_ui::theme::rgb(BAND_COLORS[i]), Color32::BLACK, if b.on { 0.0 } else { 0.6 });
-            let gy = if (1..7).contains(&i) { b.gain } else { 0.0 };
-            let at = pos2(x_of(b.freq), y_of(gy));
-            pa.circle_filled(at, 6.0, c);
-            let resp = ui.interact(egui::Rect::from_center_size(at, vec2(16.0, 16.0)), ui.scope_id().with(("eqband", i)), Sense::click_and_drag());
-            if resp.dragged() {
-                if let Some(pp) = resp.interact_pointer_pos() {
-                    p.bands[i].freq = f_of(pp.x.clamp(rect.min.x, rect.max.x)).clamp(20.0, 20000.0);
-                    if (1..7).contains(&i) {
-                        p.bands[i].gain = (-(pp.y - rect.center().y) / (rect.height() / 2.0 - 10.0) * 24.0).clamp(-24.0, 24.0);
+/// The track's Channel EQ window (track `t`); true when the settings changed.
+pub fn window(ctx: &egui::Context, open: &mut bool, t: usize, title: &str, p: &mut Params, analyzer: &[f32]) -> bool {
+    use crate::plughead::{Act, Head};
+    let before = *p;
+    let id = egui::Id::unique(("chan-eq-win", t));
+    let hist_id = id.with("hist");
+    let (undo_n, redo_n) = ctx.data(|d| d.get_temp::<History>(hist_id)).map(|h| (h.0.len(), h.1.len())).unwrap_or((0, 0));
+    let orig_id = id.with("orig");
+    let back_id = id.with("back");
+    let clip_id = egui::Id::unique("chan-eq-clipboard");
+    let name_id = id.with("setting");
+    let view_id = id.with("editor");
+    let editor = ctx.data(|d| d.get_temp::<bool>(view_id)).unwrap_or(true);
+    let edited = ctx.data(|d| d.get_temp::<Params>(orig_id)).is_some();
+    let can_back = ctx.data(|d| d.get_temp::<Params>(back_id)).is_some();
+    let clip: Option<Params> = ctx.data(|d| d.get_temp(clip_id));
+    let setting: String = ctx.data(|d| d.get_temp(name_id)).unwrap_or_else(|| "Default Preset".into());
+    let saved = crate::pluginwin::saved_settings("Channel EQ");
+    let unit = p.unit();
+    let params: Vec<lg_dsp::Param> = unit.params().to_vec();
+    let values: Vec<f32> = params.iter().map(|q| p.value(q.id)).collect();
+    let mut set: Vec<(u32, f32)> = Vec::new();
+    let mut act = None;
+    let mut load: Option<(String, Vec<(u32, f32)>)> = None;
+    let mut save: Option<String> = None;
+    let scale = crate::plughead::scale(ctx, "Channel EQ");
+    let resp = egui::Window::new(title).id(id).open(open).collapsible(false).resizable(true).default_size(vec2(1014.0, 540.0)).show(ctx, |ui| {
+        let head = Head { id: id.with("head"), plugin: "Channel EQ", bypassed: p.bypass, setting: &setting, comparing: edited, can_compare: edited || can_back, can_paste: clip.is_some(), can_undo: undo_n > 0, can_redo: redo_n > 0, side_chain: false, editor: Some(editor) };
+        let out = crate::plughead::header(ui, &head);
+        act = out.act;
+        egui::Popup::menu(&out.setting).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            ui.set_min_width(220.0);
+            if ui.button("Copy Setting").clicked() {
+                act = Some(Act::Copy);
+                ui.close();
+            }
+            if ui.add_enabled(clip.is_some(), egui::Button::new("Paste Setting")).clicked() {
+                act = Some(Act::Paste);
+                ui.close();
+            }
+            if ui.button("Reset Setting").clicked() {
+                load = Some(("Default Preset".into(), params.iter().map(|q| (q.id, q.default)).collect()));
+                ui.close();
+            }
+            ui.separator();
+            ui.horizontal(|ui| {
+                let typed_id = id.with("typed");
+                let mut typed: String = ui.data(|d| d.get_temp(typed_id)).unwrap_or_default();
+                ui.add(egui::TextEdit::singleline(&mut typed).hint_text("Setting name").desired_width(110.0));
+                if ui.add_enabled(!typed.trim().is_empty(), egui::Button::new("Save Setting As…")).clicked() {
+                    save = Some(typed.trim().to_string());
+                    typed.clear();
+                    ui.close();
+                }
+                ui.data_mut(|d| d.insert_temp(typed_id, typed));
+            });
+            if !saved.is_empty() {
+                ui.separator();
+            }
+            for (n, path) in &saved {
+                if ui.add(egui::Button::selectable(*n == setting, n.as_str())).clicked() {
+                    if let Some(v) = crate::pluginwin::read_setting(path) {
+                        load = Some((n.clone(), v));
                     }
-                    p.bands[i].on = true;
-                    changed = true;
+                    ui.close();
                 }
             }
-            if resp.double_clicked() {
-                p.bands[i].on = !p.bands[i].on;
-                changed = true;
+        });
+        ui.add_space(4.0);
+        if editor {
+            crate::eqview::view(ui, &params, &values, analyzer, (usize::MAX, t), &mut set);
+        } else {
+            let texts = vec![None; params.len()];
+            set.extend(crate::pluginwin::controls(ui, &params, &values, &texts, "chan-eq"));
+        }
+        let ext_id = id.with("ext");
+        let mut ext_open = ui.ctx().data(|d| d.get_temp::<bool>(ext_id)).unwrap_or(false);
+        crate::plughead::footer(ui, "Channel EQ", Some(&mut ext_open));
+        ui.ctx().data_mut(|d| d.insert_temp(ext_id, ext_open));
+        if ext_open {
+            let i = params.iter().position(|q| q.name == "Analyzer Decay");
+            if let Some(i) = i {
+                set.extend(crate::pluginwin::controls(ui, &params[i..=i], &values[i..=i], &[None], "chan-eq-ext"));
             }
         }
-        // the bands' buttons and readouts
-        ui.horizontal(|ui| {
-            for i in 0..8 {
-                let b = &mut p.bands[i];
-                ui.vertical(|ui| {
-                    ui.set_width(70.0);
-                    let label = ["Low Cut", "Low Shelf", "Bell 1", "Bell 2", "Bell 3", "Bell 4", "High Shelf", "High Cut"][i];
-                    if kn_ui::theme::checkbox(ui, &mut b.on, label).changed() {
-                        changed = true;
-                    }
-                    let f = if b.freq >= 1000.0 { format!("{:.2} kHz", b.freq / 1000.0) } else { format!("{:.0} Hz", b.freq) };
-                    ui.label(egui::RichText::new(f).font(crate::look::regular(11.0)));
-                    if (1..7).contains(&i) {
-                        ui.label(egui::RichText::new(format!("{:+.1} dB", b.gain)).font(crate::look::regular(11.0)));
-                    }
-                });
-            }
-        });
     });
+    if let Some(r) = &resp {
+        crate::plughead::apply_scale(ctx, r.response.layer_id, r.response.rect.min, scale);
+    }
+    match act {
+        Some(Act::Bypass) => p.bypass = !p.bypass,
+        Some(Act::Editor(e)) => {
+            ctx.data_mut(|d| d.insert_temp(view_id, e));
+        }
+        Some(Act::Copy) => {
+            ctx.data_mut(|d| d.insert_temp(clip_id, *p));
+        }
+        Some(Act::Paste) => {
+            if let Some(c) = clip {
+                let bypass = p.bypass;
+                *p = c;
+                p.bypass = bypass;
+            }
+        }
+        Some(Act::Compare) => {
+            // swap between the edited setting and the one before the first edit
+            if let Some(o) = ctx.data_mut(|d| d.remove_temp::<Params>(orig_id)) {
+                ctx.data_mut(|d| d.insert_temp(back_id, *p));
+                *p = o;
+            } else if let Some(b) = ctx.data_mut(|d| d.remove_temp::<Params>(back_id)) {
+                ctx.data_mut(|d| d.insert_temp(orig_id, *p));
+                *p = b;
+            }
+        }
+        Some(Act::Undo) | Some(Act::Redo) => {
+            let redo = act == Some(Act::Redo);
+            let now = *p;
+            if let Some(v) = ctx.data_mut(|d| {
+                let h = d.get_temp_mut_or_default::<History>(hist_id);
+                let (from, to) = if redo { (&mut h.1, &mut h.0) } else { (&mut h.0, &mut h.1) };
+                let v = from.pop()?;
+                to.push(now);
+                Some(v)
+            }) {
+                *p = v;
+            }
+            return *p != before;
+        }
+        Some(Act::Prev) | Some(Act::Next) if !saved.is_empty() => {
+            let at = saved.iter().position(|(n, _)| *n == setting);
+            let n = saved.len() as i32;
+            let next = match at {
+                Some(i) => (i as i32 + if act == Some(Act::Next) { 1 } else { -1 }).rem_euclid(n) as usize,
+                None => 0,
+            };
+            if let Some(v) = crate::pluginwin::read_setting(&saved[next].1) {
+                load = Some((saved[next].0.clone(), v));
+            }
+        }
+        _ => {}
+    }
+    if let Some((n, pairs)) = load {
+        for (pid, v) in pairs {
+            p.set_value(pid, v);
+        }
+        ctx.data_mut(|d| d.insert_temp(name_id, n));
+    }
+    if let Some(n) = save
+        && crate::pluginwin::write_setting("Channel EQ", &n, &params, &values).is_some()
+    {
+        ctx.data_mut(|d| d.insert_temp(name_id, n));
+    }
+    for (pid, v) in set {
+        p.set_value(pid, v);
+    }
+    let changed = *p != before;
+    if changed && !matches!(act, Some(Act::Compare)) {
+        // the first edit keeps the setting as it was (Compare); each gesture is one undo step
+        ctx.data_mut(|d| {
+            if d.get_temp::<Params>(orig_id).is_none() {
+                d.insert_temp(orig_id, before);
+            }
+            d.remove::<Params>(back_id);
+        });
+        let gesture_id = id.with("gesture");
+        let in_gesture = ctx.data(|d| d.get_temp::<bool>(gesture_id)).unwrap_or(false);
+        if !in_gesture {
+            ctx.data_mut(|d| {
+                let h = d.get_temp_mut_or_default::<History>(hist_id);
+                h.0.push(before);
+                h.1.clear();
+            });
+        }
+        let down = ctx.input(|i| i.pointer.any_down());
+        ctx.data_mut(|d| d.insert_temp(gesture_id, down));
+    } else if !ctx.input(|i| i.pointer.any_down()) {
+        ctx.data_mut(|d| d.insert_temp(id.with("gesture"), false));
+    }
     changed
 }
 

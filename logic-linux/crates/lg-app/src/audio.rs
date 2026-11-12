@@ -118,6 +118,26 @@ fn build_inserts(list: &[(String, Vec<f32>)], tempo: f64) -> (Vec<Box<dyn lg_dsp
     (fx, at)
 }
 
+impl Engine {
+    /// The track's Channel EQ analyzer (dB per band), for its window.
+    pub fn eq_analyzer(&self, t: usize) -> Vec<f32> {
+        self.eqs.get(t).and_then(|e| e.as_ref()).map(|e| e.analyzer()).unwrap_or_default()
+    }
+}
+
+/// Hands each effect with a side chain choice its block (before `run_inserts`).
+fn feed_side(u: &mut Units, strip: FxStrip, fx_side: &std::collections::HashMap<(FxStrip, usize), SideSrc>, block: &dyn Fn(SideSrc) -> (Vec<f32>, Vec<f32>)) {
+    if fx_side.is_empty() {
+        return;
+    }
+    for (fx, k) in u.inserts.iter_mut().zip(u.insert_index.iter()) {
+        if let Some(src) = fx_side.get(&(strip, *k)) {
+            let (l, r) = block(*src);
+            fx.side_chain(&l, &r);
+        }
+    }
+}
+
 /// Runs a strip's effects (the bypassed ones skipped); the largest gain reduction (dB).
 fn run_inserts(u: &mut Units, bypass: &[bool], l: &mut [f32], r: &mut [f32], at: lg_dsp::Transport) -> f32 {
     let mut gr = 0f32;
@@ -219,6 +239,8 @@ pub struct Engine {
     /// that listen (EVOC 20 PolySynth, ES1 / ES2's EXT, Sculpture's External object,
     /// Ultrabeat's side-chain oscillator) get its block before they render.
     pub side_src: Vec<Option<SideSrc>>,
+    /// Effects' side chains (the plug-in header's Side Chain pop-up), by (strip, insert slot).
+    pub fx_side: std::collections::HashMap<(FxStrip, usize), SideSrc>,
     /// Each track's sound after its effects, before the fader (this block's once rendered,
     /// else the block before), and the buses as the last block left them: side-chain sources.
     side_out: Vec<(Vec<f32>, Vec<f32>)>,
@@ -283,7 +305,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -611,7 +633,7 @@ impl Engine {
             }
         }
         // recording: the input for this block; a count-in before bar 1 holds the playhead
-        self.rec.side_listen = self.side_src.iter().any(|s| *s == Some(SideSrc::Input));
+        self.rec.side_listen = self.side_src.iter().any(|s| *s == Some(SideSrc::Input)) || self.fx_side.values().any(|s| *s == SideSrc::Input);
         let input = self.rec.input(frames);
         let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
         let was = self.was_playing;
@@ -858,6 +880,8 @@ impl Engine {
                 let lat: Vec<(usize, usize)> = self.units.get(i).map(|u| u.inserts.iter().zip(u.insert_index.iter()).map(|(fx, k)| (*k, fx.latency())).collect()).unwrap_or_default();
                 let bypass = self.ext.bypass(i, bypass, &lat);
                 if let Some(u) = self.units.get_mut(i) {
+                    let (so, bp, inp) = (&self.side_out, &self.bus_prev, input.as_deref());
+                    feed_side(u, FxStrip::Track(i), &self.fx_side, &|src| side_block(src, so, bp, inp, frames));
                     let g = run_inserts(u, &bypass, &mut l, &mut r, at);
                     self.gr[i] = self.gr[i].max(g);
                 }
@@ -889,6 +913,8 @@ impl Engine {
                     r.copy_from_slice(br);
                 }
                 if let Some(u) = self.aux_units.get_mut(ai) {
+                    let (so, bp, inp) = (&self.side_out, &self.bus_prev, input.as_deref());
+                    feed_side(u, FxStrip::Aux(ai), &self.fx_side, &|src| side_block(src, so, bp, inp, frames));
                     let g = run_inserts(u, &aux.bypass, &mut l, &mut r, at);
                     self.aux_gr[ai] = self.aux_gr[ai].max(g);
                 }
@@ -968,7 +994,7 @@ impl Engine {
             self.ext.meter(node, n_tracks, peak);
         }
         // (the buses as they are now: next block's bus side chains)
-        if self.side_src.iter().any(|s| matches!(s, Some(SideSrc::Bus(_)))) {
+        if self.side_src.iter().any(|s| matches!(s, Some(SideSrc::Bus(_)))) || self.fx_side.values().any(|s| matches!(s, SideSrc::Bus(_))) {
             self.bus_prev.clone_from(&self.buses);
         }
         // the Stereo Out's own effects (Logic's master chain; deactivated in surround)
@@ -977,6 +1003,8 @@ impl Engine {
                 l[f] = out[2 * f];
                 r[f] = out[2 * f + 1];
             }
+            let (so, bp, inp) = (&self.side_out, &self.bus_prev, input.as_deref());
+            feed_side(&mut self.master_units, FxStrip::Master, &self.fx_side, &|src| side_block(src, so, bp, inp, frames));
             let g = run_inserts(&mut self.master_units, &self.master_bypass, &mut l, &mut r, at);
             self.master_gr = self.master_gr.max(g);
             for f in 0..frames {

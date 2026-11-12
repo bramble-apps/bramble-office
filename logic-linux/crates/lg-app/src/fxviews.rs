@@ -37,7 +37,7 @@ impl Live {
     fn get(&self, name: &str) -> Option<f32> {
         self.readouts.iter().find(|r| r.0 == name).map(|r| r.1)
     }
-    fn curve(&self, name: &str) -> &[f32] {
+    pub(crate) fn curve(&self, name: &str) -> &[f32] {
         self.curves.get(name).map(|v| v.as_slice()).unwrap_or(&[])
     }
 }
@@ -55,7 +55,7 @@ pub enum Action {
     LoadPattern(std::path::PathBuf),
 }
 
-const EDITORS: &[&str] = &["Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -64,7 +64,10 @@ pub fn has_editor(name: &str) -> bool {
 pub fn default_size(name: &str) -> egui::Vec2 {
     match name {
         "Remix FX" | "Beat Breaker" | "Step FX" | "Delay Designer" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
-        "Space Designer" | "Match EQ" | "MultiMeter" => vec2(680.0, 520.0),
+        "Space Designer" | "MultiMeter" => vec2(680.0, 520.0),
+        "Match EQ" => vec2(720.0, 620.0),
+        // (Logic's Channel EQ window at 100 %: 1028 × 552 points with its header and footer)
+        "Channel EQ" | "Linear Phase EQ" => vec2(1014.0, 540.0),
         _ => vec2(520.0, 460.0),
     }
 }
@@ -73,7 +76,8 @@ pub fn curves_for(name: &str) -> &'static [&'static str] {
     match name {
         "Mastering Assistant" => &["spectrum", "eq"],
         "Space Designer" => &["ir"],
-        "Match EQ" => &["current", "reference", "eq"],
+        "Match EQ" => &["current", "reference", "eq", "eq_r", "analyzer"],
+        "Channel EQ" | "Linear Phase EQ" => &["analyzer"],
         "MultiMeter" => &["spectrum", "goniometer"],
         _ => &[],
     }
@@ -142,6 +146,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
     let mut set = Vec::new();
     let mut act = None;
     egui::ScrollArea::vertical().id_salt(("fx-editor", slot)).auto_shrink([false, false]).show(ui, |ui| match name {
+        "Channel EQ" | "Linear Phase EQ" => crate::eqview::view(ui, params, values, live.curve("analyzer"), slot, &mut set),
         "Remix FX" => remix(ui, params, values, &mut set),
         "Beat Breaker" => beat_breaker(ui, params, values, live, &mut set, &mut act),
         "Step FX" => step_fx(ui, params, values, live, &mut set),
@@ -149,7 +154,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
         "Pedalboard" => pedalboard(ui, params, values, &mut set),
         "Mastering Assistant" => mastering(ui, params, values, live, &mut set, &mut act),
         "Space Designer" => space(ui, params, values, live, &mut set, &mut act),
-        "Match EQ" => match_eq(ui, params, values, live, &mut set, &mut act),
+        "Match EQ" => crate::meqview::view(ui, params, values, live, slot, &mut set, &mut act),
         "Pitch Correction" => pitch_correction(ui, params, values, live, &mut set),
         _ => meters(ui, name, params, values, live, &mut set),
     });
@@ -1071,51 +1076,6 @@ fn space(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: 
 
 // ---------------------------------------------------------------------------------------------
 // Match EQ
-
-fn match_eq(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: &mut Vec<(u32, f32)>, act: &mut Option<Action>) {
-    use lg_fx::match_eq::*;
-    let g = |id| v(params, values, id);
-    ui.horizontal(|ui| {
-        for (id, n) in [(CURRENT_LEARN, "Current Learn"), (REFERENCE_LEARN, "Reference Learn"), (MATCH, "Match")] {
-            let on = g(id) >= 0.5;
-            if ui.add(egui::Button::selectable(on, n)).clicked() {
-                set.push((id, if on { 0.0 } else { 1.0 }));
-            }
-        }
-        ui.menu_button("Current ⌄", |ui| {
-            if ui.button("Clear Current Spectrum").clicked() {
-                set.push((HAS_CURRENT, 0.0));
-                ui.close();
-            }
-            if ui.button("Generate Current Spectrum from Audio File…").clicked() {
-                *act = Some(Action::LearnFromFile(false));
-                ui.close();
-            }
-        });
-        ui.menu_button("Reference ⌄", |ui| {
-            if ui.button("Clear Reference Spectrum").clicked() {
-                set.push((HAS_REFERENCE, 0.0));
-                ui.close();
-            }
-            if ui.button("Generate Reference Spectrum from Audio File…").clicked() {
-                *act = Some(Action::LearnFromFile(true));
-                ui.close();
-            }
-        });
-    });
-    let (r, p) = panel(ui, 200.0);
-    let cur = live.curve("current");
-    let refc = live.curve("reference");
-    if g(HAS_CURRENT) >= 0.5 {
-        curve_line(&p, r, cur, -110.0, -10.0, Color32::from_rgb(0x50, 0xd0, 0x70), 1.5);
-    }
-    if g(HAS_REFERENCE) >= 0.5 {
-        curve_line(&p, r, refc, -110.0, -10.0, Color32::from_rgb(0xb0, 0x70, 0xf0), 1.5);
-    }
-    curve_line(&p, r, live.curve("eq"), -24.0, 24.0, look::accent(), 2.0);
-    let ids: Vec<u32> = params.iter().map(|p| p.id).filter(|id| (APPLY..=CHANNEL).contains(id)).collect();
-    set.extend(rows(ui, params, values, &ids, "meq-rows"));
-}
 
 // ---------------------------------------------------------------------------------------------
 // Pitch Correction

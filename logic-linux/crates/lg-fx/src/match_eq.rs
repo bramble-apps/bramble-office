@@ -38,6 +38,17 @@ pub const EASE_OUT_HI: u32 = B + 15;
 pub const CHANNEL: u32 = B + 16;
 pub const HAS_CURRENT: u32 = B + 17;
 pub const HAS_REFERENCE: u32 = B + 18;
+pub const ANALYZER: u32 = B + 19;
+pub const ANALYZER_POST: u32 = B + 20;
+pub const CHANNEL_LINK: u32 = B + 21;
+pub const HIDE_OTHERS: u32 = B + 22;
+pub const GAIN_OFFSET: u32 = B + 23;
+pub const SHOW_CURRENT: u32 = B + 24;
+pub const SHOW_REFERENCE: u32 = B + 25;
+pub const SHOW_EQ: u32 = B + 26;
+/// Manual changes of the EQ curve per channel (dB per band; added after Smoothing).
+pub const USER_L: u32 = 2200;
+pub const USER_R: u32 = 2300;
 
 pub fn band_hz(k: usize) -> f32 {
     20.0 * 1000f32.powf(k as f32 / (BANDS - 1) as f32)
@@ -62,12 +73,22 @@ static P: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
         Param::new(EASE_OUT_LO, "Ease-Out Low", 2000.0, 20000.0, 10000.0, Unit::Hz),
         Param::new(EASE_OUT_HI, "Ease-Out High", 2000.0, 20000.0, 16000.0, Unit::Hz),
         Param::menu(CHANNEL, "Channel", &["L&R", "L", "R"], 0.0),
+        Param::new(ANALYZER, "Analyzer", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::menu(ANALYZER_POST, "Analyzer Pre/Post", &["Pre", "Post"], 1.0),
+        Param::new(CHANNEL_LINK, "Channel Link", 0.0, 100.0, 100.0, Unit::Percent),
+        Param::new(HIDE_OTHERS, "Hide Others", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::new(GAIN_OFFSET, "Gain Offset", -24.0, 24.0, 0.0, Unit::Db),
+        Param::new(SHOW_CURRENT, "Show Current", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
+        Param::new(SHOW_REFERENCE, "Show Reference", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
+        Param::new(SHOW_EQ, "Show EQ Curve", 0.0, 1.0, 1.0, Unit::OnOff).hide(),
         Param::new(HAS_CURRENT, "Current Spectrum", 0.0, 1.0, 0.0, Unit::OnOff).hide(),
         Param::new(HAS_REFERENCE, "Reference Spectrum", 0.0, 1.0, 0.0, Unit::OnOff).hide(),
     ];
     for k in 0..BANDS {
         v.push(Param::new(CURRENT + k as u32, crate::kit::leak(format!("Current {k}")), -150.0, 50.0, -60.0, Unit::Db).hide());
         v.push(Param::new(REFERENCE + k as u32, crate::kit::leak(format!("Reference {k}")), -150.0, 50.0, -60.0, Unit::Db).hide());
+        v.push(Param::new(USER_L + k as u32, crate::kit::leak(format!("Edit L {k}")), -30.0, 30.0, 0.0, Unit::Db).hide());
+        v.push(Param::new(USER_R + k as u32, crate::kit::leak(format!("Edit R {k}")), -30.0, 30.0, 0.0, Unit::Db).hide());
     }
     v
 });
@@ -83,12 +104,15 @@ pub struct MatchEq {
     since: usize,
     bq: [[Biquad; BANDS]; 2],
     conv: [Convolver; 2],
-    curve: Vec<f32>,
+    curve: [Vec<f32>; 2],
+    pub analyzer: crate::channel_eq::Analyzer,
+    /// The side chain's block: Reference Learn learns it when one is chosen.
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl MatchEq {
     pub fn new(rate: f32) -> MatchEq {
-        let mut m = MatchEq { p: Values::new(P.as_slice()), rate, ring: Ring::new(4096), acc: [vec![0.0; BANDS], vec![0.0; BANDS]], frames: [0; 2], since: 0, bq: [[Biquad::default(); BANDS]; 2], conv: [Convolver::new(FIR), Convolver::new(FIR)], curve: vec![0.0; BANDS] };
+        let mut m = MatchEq { p: Values::new(P.as_slice()), rate, ring: Ring::new(4096), acc: [vec![0.0; BANDS], vec![0.0; BANDS]], frames: [0; 2], since: 0, bq: [[Biquad::default(); BANDS]; 2], conv: [Convolver::new(FIR), Convolver::new(FIR)], curve: [vec![0.0; BANDS], vec![0.0; BANDS]], analyzer: Default::default(), side: None };
         m.update();
         m
     }
@@ -127,10 +151,16 @@ impl MatchEq {
     /// The EQ curve (dB per band) Match applies: reference − current, smoothed, scaled by
     /// Apply, limited, eased in and out.
     pub fn compute_curve(&self) -> Vec<f32> {
-        if !(self.p.on(HAS_CURRENT) && self.p.on(HAS_REFERENCE)) {
-            return vec![0.0; BANDS];
-        }
-        let raw: Vec<f32> = (0..BANDS).map(|k| self.p.get(REFERENCE + k as u32) - self.p.get(CURRENT + k as u32)).collect();
+        self.channel_curve(0)
+    }
+
+    /// The EQ curve of one channel (0 left, 1 right): the matched curve (smoothed, × Apply),
+    /// plus that channel's manual changes (Smoothing doesn't touch them) and the gain offset,
+    /// then limited and eased.
+    pub fn channel_curve(&self, ch: usize) -> Vec<f32> {
+        let user = if ch == 0 { USER_L } else { USER_R };
+        let have = self.p.on(HAS_CURRENT) && self.p.on(HAS_REFERENCE);
+        let raw: Vec<f32> = (0..BANDS).map(|k| if have { self.p.get(REFERENCE + k as u32) - self.p.get(CURRENT + k as u32) } else { 0.0 }).collect();
         // remove the overall level difference (Match shapes the tone, not the level)
         let mean = raw.iter().sum::<f32>() / BANDS as f32;
         let raw: Vec<f32> = raw.iter().map(|v| v - mean).collect();
@@ -140,8 +170,9 @@ impl MatchEq {
             raw[a..b].iter().sum::<f32>() / (b - a) as f32
         }).collect();
         let apply = self.p.get(APPLY) / 100.0;
+        let offset = self.p.get(GAIN_OFFSET);
         for (k, v) in c.iter_mut().enumerate() {
-            *v *= apply;
+            *v = *v * apply + self.p.get(user + k as u32) + offset;
             if self.p.on(LIMIT_BOOST) {
                 *v = v.min(self.p.get(BOOST_MAX));
             }
@@ -162,39 +193,40 @@ impl MatchEq {
         c
     }
 
-    fn curve_at(&self, f: f32) -> f32 {
+    fn curve_at(&self, ch: usize, f: f32) -> f32 {
         let t = (f.max(20.0) / 20.0).ln() / 1000f32.ln() * (BANDS - 1) as f32;
         let k = (t.floor() as usize).min(BANDS - 2);
         let u = (t - k as f32).clamp(0.0, 1.0);
-        self.curve[k] * (1.0 - u) + self.curve[k + 1] * u
+        self.curve[ch][k] * (1.0 - u) + self.curve[ch][k + 1] * u
     }
 
     fn update(&mut self) {
-        self.curve = self.compute_curve();
+        self.curve = [self.channel_curve(0), self.channel_curve(1)];
         let on = self.p.on(MATCH);
         // minimal phase: one peaking filter per band at the curve's value
-        for k in 0..BANDS {
-            let g = if on { self.curve[k] } else { 0.0 };
-            let c = if g.abs() < 0.05 || band_hz(k) >= self.rate * 0.45 { Coefs::THRU } else { Coefs::peak(self.rate, band_hz(k), 4.3, g * 0.9) };
-            self.bq[0][k].c = c;
-            self.bq[1][k].c = c;
+        for ch in 0..2 {
+            for k in 0..BANDS {
+                let g = if on { self.curve[ch][k] } else { 0.0 };
+                let c = if g.abs() < 0.05 || band_hz(k) >= self.rate * 0.45 { Coefs::THRU } else { Coefs::peak(self.rate, band_hz(k), 4.3, g * 0.9) };
+                self.bq[ch][k].c = c;
+            }
         }
-        // linear phase: frequency-sampled FIR
+        // linear phase: frequency-sampled FIR per channel
         if self.p.idx(PHASE) == 0 {
             let fft = Fft::new(FIR);
-            let mut buf: Vec<C> = (0..FIR).map(|k| {
-                let kk = if k <= FIR / 2 { k } else { FIR - k };
-                let f = kk as f32 * self.rate / FIR as f32;
-                C { re: if on { db(self.curve_at(f)) } else { 1.0 }, im: 0.0 }
-            }).collect();
-            fft.run(&mut buf, true);
-            let fir: Vec<f32> = (0..FIR).map(|i| {
-                let src = (i + FIR / 2) % FIR;
-                let w = 0.5 - 0.5 * (crate::util::TAU * i as f32 / FIR as f32).cos();
-                buf[src].re / FIR as f32 * w
-            }).collect();
-            for c in self.conv.iter_mut() {
-                c.load(&fir);
+            for ch in 0..2 {
+                let mut buf: Vec<C> = (0..FIR).map(|k| {
+                    let kk = if k <= FIR / 2 { k } else { FIR - k };
+                    let f = kk as f32 * self.rate / FIR as f32;
+                    C { re: if on { db(self.curve_at(ch, f)) } else { 1.0 }, im: 0.0 }
+                }).collect();
+                fft.run(&mut buf, true);
+                let fir: Vec<f32> = (0..FIR).map(|i| {
+                    let src = (i + FIR / 2) % FIR;
+                    let w = 0.5 - 0.5 * (crate::util::TAU * i as f32 / FIR as f32).cos();
+                    buf[src].re / FIR as f32 * w
+                }).collect();
+                self.conv[ch].load(&fir);
             }
         }
         if !self.p.on(CURRENT_LEARN) && !self.p.on(REFERENCE_LEARN) {
@@ -211,13 +243,28 @@ impl MatchEq {
 }
 
 impl Effect for MatchEq {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let learning = [self.p.on(CURRENT_LEARN), self.p.on(REFERENCE_LEARN)];
         let linear = self.p.idx(PHASE) == 0;
         let on = self.p.on(MATCH);
+        let (analyze, post) = (self.p.on(ANALYZER), self.p.idx(ANALYZER_POST) == 1);
+        if analyze && !post {
+            self.analyzer.push(left, right, self.rate, 4096, false, 20.0);
+        }
         for i in 0..left.len().min(right.len()) {
             if learning[0] || learning[1] {
-                let m = self.pick(left[i], right[i]);
+                // Reference Learn listens to the side chain when there is one
+                let m = match &side {
+                    Some((a, b)) if learning[1] => self.pick(a.get(i).copied().unwrap_or(0.0), b.get(i).copied().unwrap_or(0.0)),
+                    _ => self.pick(left[i], right[i]),
+                };
                 self.ring.push(m, m);
                 self.since += 1;
                 if self.since >= 2048 {
@@ -250,6 +297,9 @@ impl Effect for MatchEq {
                 }
             }
         }
+        if analyze && post {
+            self.analyzer.push(left, right, self.rate, 4096, false, 20.0);
+        }
     }
     fn latency(&self) -> usize {
         if self.p.idx(PHASE) == 0 && self.p.on(MATCH) { FIR / 2 } else { 0 }
@@ -259,6 +309,8 @@ impl Effect for MatchEq {
             "current" => self.spectrum(false),
             "reference" => self.spectrum(true),
             "eq" => self.compute_curve(),
+            "eq_r" => self.channel_curve(1),
+            "analyzer" => self.analyzer.bands.clone(),
             _ => Vec::new(),
         }
     }
@@ -284,6 +336,12 @@ impl Plugin for MatchEq {
         if self.p.set(id, v) {
             if ending && self.p.on(HAS_CURRENT) && self.p.on(HAS_REFERENCE) {
                 self.p.set(MATCH, 1.0);
+                // a new match drops the manual changes and sets Apply back to 100 %
+                for k in 0..BANDS as u32 {
+                    self.p.set(USER_L + k, 0.0);
+                    self.p.set(USER_R + k, 0.0);
+                }
+                self.p.set(APPLY, 100.0);
             }
             self.update();
         }
@@ -313,6 +371,22 @@ mod tests {
     fn noise(n: usize, seed: u32) -> Vec<f32> {
         let mut z = crate::util::Noise(seed);
         (0..n).map(|_| z.next() * 0.3).collect()
+    }
+
+    #[test]
+    fn manual_edits_per_channel_skip_smoothing() {
+        let mut m = MatchEq::new(48000.0);
+        m.set(SMOOTHING, 100.0);
+        m.set(USER_L + 30, 6.0);
+        let l = m.channel_curve(0);
+        let r = m.channel_curve(1);
+        assert!((l[30] - 6.0).abs() < 1e-4, "smoothing leaves the edit alone");
+        assert!(r[30].abs() < 1e-4, "the right channel keeps its own curve");
+        m.set(GAIN_OFFSET, -3.0);
+        assert!((m.channel_curve(1)[10] + 3.0).abs() < 1e-4);
+        m.set(LIMIT_BOOST, 1.0);
+        m.set(BOOST_MAX, 2.0);
+        assert!(m.channel_curve(0)[30] <= 2.0 + 1e-4);
     }
 
     #[test]

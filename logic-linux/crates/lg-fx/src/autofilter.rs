@@ -35,6 +35,8 @@ static PARAMS: [Param; 16] = [
 ];
 
 pub struct AutoFilter {
+    /// The side chain's block: the envelope follows it when one is chosen.
+    side: Option<(Vec<f32>, Vec<f32>)>,
     p: Values,
     rate: f32,
     bpm: f64,
@@ -49,7 +51,7 @@ pub struct AutoFilter {
 
 impl AutoFilter {
     pub fn new(rate: f32) -> AutoFilter {
-        let mut a = AutoFilter { p: Values::new(&PARAMS), rate, bpm: 120.0, lfo: Phase::default(), env: 0.0, stage: 0.0, pole: [[0.0; 4]; 2], att: 0.0, dec: 0.0, rel: 0.0 };
+        let mut a = AutoFilter { side: None, p: Values::new(&PARAMS), rate, bpm: 120.0, lfo: Phase::default(), env: 0.0, stage: 0.0, pole: [[0.0; 4]; 2], att: 0.0, dec: 0.0, rel: 0.0 };
         a.update();
         a
     }
@@ -77,7 +79,14 @@ impl AutoFilter {
 }
 
 impl lg_dsp::Effect for AutoFilter {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let p = &self.p;
         let rate = self.rate;
         let base_oct = (p.get(2) / 100.0) * 1000f32.log2(); // octaves above 20 Hz
@@ -97,7 +106,10 @@ impl lg_dsp::Effect for AutoFilter {
             let ph = self.lfo.step(rate, hz);
             // envelope: attack to 1 while the input is above threshold, then decay to sustain;
             // below threshold it releases to 0
-            let lvl = left[i].abs().max(right[i].abs());
+            let lvl = match &side {
+                Some((a, b)) => a.get(i).copied().unwrap_or(0.0).abs().max(b.get(i).copied().unwrap_or(0.0).abs()),
+                None => left[i].abs().max(right[i].abs()),
+            };
             if lvl > thr {
                 if self.stage < 0.5 {
                     self.env = 1.0 + (self.env - 1.0) * self.att;
