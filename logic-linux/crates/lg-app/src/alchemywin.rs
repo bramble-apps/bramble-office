@@ -9,7 +9,7 @@
 //! search field; Simple view is the Name bar and the Perform section.
 
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
-use lg_synth::alchemy_extra::{FX, FX_PARAM, FX_SLOTS, FX_TYPES};
+use lg_synth::alchemy_extra::FX_SLOTS;
 use lg_synth::alchemy_mod as am;
 
 use crate::alchemyrack::{self as rack, g, Ix, Live, St, BLUE, ORANGE};
@@ -187,7 +187,7 @@ fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>
                 0 => global(p, &ix, st),
                 5 => {
                     nav(p, st);
-                    p.text(300.0, 160.0, Align2::LEFT_CENTER, "Morph: the sources' morphing isn't in Studio yet.", 12.0, p.skin.dim);
+                    morph_page(p, &ix, st);
                 }
                 s => {
                     nav(p, st);
@@ -244,9 +244,6 @@ fn source_filters(p: &mut Pane, ix: &Ix, st: &mut St, s: u32) {
     rack::knob(p, ix, st, x0 + 250.0, 186.0, 38.0, ROUTE_F2 + s, "F1/F2");
 }
 
-fn ix_get(ix: &Ix, vals: &[f32], id: u32) -> f32 {
-    ix.0.get(&id).map(|&i| vals[i]).unwrap_or(0.0)
-}
 
 // ---------------------------------------------------------------- Name bar
 
@@ -375,7 +372,12 @@ fn nav(p: &mut Pane, st: &mut St) {
         let resp = p.ui.interact(r, egui::Id::unique(("alch-nav", p.t, k)), Sense::click());
         let lit = st.page as usize == k;
         if (1..=4).contains(&k) {
-            p.ui.painter().rect_filled(Rect::from_min_size(r.min + vec2(0.0, 8.0), vec2(2.0, 21.0)), 0.0, BLUE);
+            // blue: the source is on; green: it's being morphed; none: off
+            let on = p.get(277 + k as u32 - 1) >= 0.5;
+            let morphing = p.get(lg_synth::alchemy::MORPH) >= 2.5;
+            if on {
+                p.ui.painter().rect_filled(Rect::from_min_size(r.min + vec2(0.0, 8.0), vec2(2.0, 21.0)), 0.0, if morphing { rgb(0x5ac46a) } else { BLUE });
+            }
         }
         p.ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, *n, look::regular(11.5), if lit { BLUE } else if resp.hovered() { Color32::WHITE } else { p.skin.text });
         if resp.clicked() {
@@ -502,17 +504,10 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         arp_pane(p, ix, st, 86.0, y0);
         return;
     }
-    if st.lower != 0 {
-        let r = p.rect(80.0, y0, W - 88.0, 200.0);
-        p.ui.painter().rect_filled(r, 0.0, rgb(0x23272e));
-        let (vals, ixr) = (p.vals, ix);
-        let get = |id: u32| ix_get(ixr, vals, id);
-        let mut set = Vec::new();
-        let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(6.0)).layout(egui::Layout::top_down(egui::Align::Min)));
-        egui::ScrollArea::vertical().id_salt(("alch-lower-pane", p.t, st.lower)).show(&mut child, |ui| {
-            fx_page(ui, &get, fx, &mut set);
-        });
-        p.set.extend(set);
+    if st.lower == 2 {
+        p.ui.painter().rect_filled(p.rect(80.0, y0, W - 88.0, 200.0), 0.0, rgb(0x23272e));
+        effects_pane(p, ix, st, 86.0, y0);
+        let _ = fx;
         return;
     }
     // the Transform pad: eight snapshots, the framing box follows the pad position
@@ -581,90 +576,8 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
     let _ = ORANGE;
 }
 
-fn row(ui: &mut egui::Ui, label: &str, pid: u32, min: f32, max: f32, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).size(11.5).color(look::text_dim()));
-        let mut v = get(pid);
-        if ui.add(egui::Slider::new(&mut v, min..=max)).changed() {
-            set.push((pid, v));
-        }
-    });
-}
 
-fn menu(ui: &mut egui::Ui, label: &str, pid: u32, choices: &[&str], get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).size(11.5).color(look::text_dim()));
-        let cur = get(pid).round().max(0.0) as usize;
-        ui.menu_button(format!("{} ⌄", choices.get(cur).copied().unwrap_or("")), |ui| {
-            for (k, c) in choices.iter().enumerate() {
-                if ui.add(egui::Button::selectable(k == cur, *c)).clicked() {
-                    set.push((pid, k as f32));
-                    ui.close();
-                }
-            }
-        });
-    });
-}
 
-fn check(ui: &mut egui::Ui, label: &str, pid: u32, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    let mut on = get(pid) >= 0.5;
-    if ui.checkbox(&mut on, label).changed() {
-        set.push((pid, if on { 1.0 } else { 0.0 }));
-    }
-}
-
-fn fx_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], set: &mut Vec<(u32, f32)>) {
-    egui::ScrollArea::vertical().id_salt("alchemy-fx").show(ui, |ui| {
-        for s in 0..FX_SLOTS {
-            let b = FX + s as u32 * 10;
-            egui::Frame::new().fill(look::group_bg()).corner_radius(6.0).inner_margin(6.0).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("Effect {}", s + 1)).strong());
-                    menu(ui, "", b, FX_TYPES, get, set);
-                    check(ui, "Bypass", b + 2, get, set);
-                    row(ui, "Mix", b + 1, 0.0, 1.0, get, set);
-                });
-                if let Some(Some((params, vals))) = fx.get(s) {
-                    egui::Grid::new(("alch-fx", s)).num_columns(4).show(ui, |ui| {
-                        for (i, prm) in params.iter().enumerate().take(24) {
-                            ui.label(egui::RichText::new(prm.name).size(11.0).color(look::text_dim()));
-                            let mut v = vals[i];
-                            let id = FX_PARAM + s as u32 * 100 + prm.id;
-                            let ch = match prm.unit {
-                                lg_dsp::Unit::OnOff => {
-                                    let mut on = v >= 0.5;
-                                    let c = ui.checkbox(&mut on, "").changed();
-                                    v = if on { 1.0 } else { 0.0 };
-                                    c
-                                }
-                                lg_dsp::Unit::Menu => {
-                                    let mut c = false;
-                                    ui.menu_button(prm.choices.get(v.round() as usize).copied().unwrap_or(""), |ui| {
-                                        for (j, n) in prm.choices.iter().enumerate() {
-                                            if ui.button(*n).clicked() {
-                                                v = j as f32;
-                                                c = true;
-                                                ui.close();
-                                            }
-                                        }
-                                    });
-                                    c
-                                }
-                                _ => ui.add(egui::DragValue::new(&mut v).range(prm.min..=prm.max).speed((prm.max - prm.min) / 300.0)).changed(),
-                            };
-                            if ch {
-                                set.push((id, v));
-                            }
-                            if i % 2 == 1 {
-                                ui.end_row();
-                            }
-                        }
-                    });
-                }
-            });
-        }
-    });
-}
 
 /// Imported audio into the running Alchemy (mono, tuned by its detected pitch).
 pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
@@ -1134,6 +1047,381 @@ fn arp_file(p: &mut Pane, ix: &Ix, r: Rect, pi: usize) {
     if let Some(v) = load {
         for (f, val) in v {
             p.put(aa::pat(pi, f), val);
+        }
+    }
+}
+
+/// The Effects pane: the rack buttons (Main, A–D) with the rack's File menu, the rack's slots
+/// (On, the effect pop-up, drag a name to move it), and each effect's controls left to right with
+/// its own File menu.
+fn effects_pane(p: &mut Pane, ix: &Ix, st: &mut St, x0: f32, y0: f32) {
+    use lg_synth::alchemy_fx as fx;
+    let rk = st.fx_rack.min(fx::RACKS - 1);
+    for (k, n) in fx::RACK_NAMES.iter().enumerate() {
+        let w = if k == 0 { 42.0 } else { 26.0 };
+        let x = if k == 0 { x0 } else { x0 + 46.0 + (k - 1) as f32 * 28.0 };
+        if rack::flat(p, p.rect(x, y0 + 6.0, w, 20.0), n, rk == k, true, ("fx-rack", k)) {
+            st.fx_rack = k;
+            st.fx_scroll = 0.0;
+        }
+    }
+    rack_file(p, ix, p.rect(x0 + 162.0, y0 + 6.0, 48.0, 20.0), rk);
+    // the slots: the effects in order, then one empty slot
+    let types: Vec<usize> = (0..fx::SLOTS).map(|s| g(p, ix, fx::id(rk, s, 0)).round().max(0.0) as usize).collect();
+    let last = types.iter().rposition(|&t| t != 0).map(|i| i + 1).unwrap_or(0);
+    let shown = (last + 1).min(fx::SLOTS);
+    let mut drop_on: Option<usize> = None;
+    let mut rows = Vec::new();
+    for s in 0..shown {
+        let y = y0 + 32.0 + s as f32 * 21.0;
+        let on = g(p, ix, fx::id(rk, s, 1)) >= 0.5;
+        if rack::flat(p, p.rect(x0, y, 28.0, 19.0), "On", on && types[s] != 0, types[s] != 0, ("fx-on", rk, s)) {
+            p.put(fx::id(rk, s, 1), if on { 0.0 } else { 1.0 });
+        }
+        let r = p.rect(x0 + 32.0, y, 178.0, 19.0);
+        rows.push(r);
+        // one control: click for the effect menu, drag the name to move the effect
+        let resp = p.ui.interact(r, egui::Id::unique(("fx-ty", p.t, rk, s)), Sense::click_and_drag());
+        p.ui.painter().rect_filled(r, 3.0, if resp.hovered() { rgb(0x23272e) } else { rack::FIELD });
+        p.ui.painter().with_clip_rect(r).text(pos2(r.center().x - 6.0, r.center().y), Align2::CENTER_CENTER, if types[s] == 0 { "" } else { fx::TYPES[types[s]] }, look::regular(11.0), p.skin.text);
+        crate::glyphs::paint(p.ui.painter(), Rect::from_center_size(pos2(r.max.x - 9.0, r.center().y), vec2(10.0, 10.0)), crate::glyphs::ph::CARET_DOWN, 9.0, p.skin.dim);
+        let dresp = resp.clone();
+        if dresp.drag_started() && types[s] != 0 {
+            st.fx_drag = Some(s);
+        }
+        if dresp.drag_stopped() {
+            if let Some(q) = p.ui.input(|i| i.pointer.interact_pos()) {
+                drop_on = Some((((q.y - p.o.y - y0 - 32.0) / 21.0).floor().max(0.0) as usize).min(shown.saturating_sub(1)));
+            }
+        }
+        let mut pick = None;
+        egui::Popup::menu(&resp).show(|ui| {
+            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                for (k, n) in fx::TYPES.iter().enumerate() {
+                    // Band Reject needs a Bandpass Filter before it
+                    let ok = k != 12 || types[..s].contains(&11);
+                    if ui.add_enabled(ok, egui::Button::selectable(k == types[s], *n)).clicked() {
+                        pick = Some(k);
+                    }
+                }
+            });
+        });
+        if let Some(k) = pick {
+            // a new effect replaces the slot's one, with its own defaults; None keeps the slot
+            p.put(fx::id(rk, s, 0), k as f32);
+            p.put(fx::id(rk, s, 1), 1.0);
+            for (i, sp) in fx::knobs(k).iter().enumerate() {
+                p.put(fx::id(rk, s, 2 + i as u32), fx::unscale(sp, sp.def));
+            }
+        }
+    }
+    if let (Some(from), Some(to)) = (st.fx_drag, drop_on) {
+        if from != to {
+            // moving an effect shifts the others to keep their order
+            let slot = |s: usize| -> Vec<f32> { (0..24u32).map(|f| g(p, ix, fx::id(rk, s, f))).collect() };
+            let mut all: Vec<Vec<f32>> = (0..fx::SLOTS).map(slot).collect();
+            let item = all.remove(from);
+            all.insert(to, item);
+            for (s, v) in all.iter().enumerate() {
+                for (f, x) in v.iter().enumerate() {
+                    p.put(fx::id(rk, s, f as u32), *x);
+                }
+            }
+        }
+        st.fx_drag = None;
+    } else if drop_on.is_some() {
+        st.fx_drag = None;
+    }
+    // the effects' controls, left to right
+    let area = p.rect(x0 + 222.0, y0 + 4.0, W - x0 - 230.0, 192.0);
+    if p.ui.rect_contains_pointer(area) {
+        let d = p.ui.input(|i| i.smooth_scroll_delta);
+        st.fx_scroll = (st.fx_scroll - d.x - d.y).max(0.0);
+    }
+    let mut x = area.min.x - p.o.x - st.fx_scroll;
+    let clip = p.ui.clip_rect();
+    p.ui.set_clip_rect(area.intersect(clip));
+    for s in 0..fx::SLOTS {
+        let ty = types[s];
+        if ty == 0 {
+            continue;
+        }
+        let ks = fx::knobs(ty);
+        let cols = ks.len().div_ceil(3).max(3);
+        let w = cols as f32 * 52.0 + 12.0;
+        let y = area.min.y - p.o.y;
+        p.ui.painter().rect_filled(p.rect(x, y, w, 188.0), 4.0, rgb(0x1c2026));
+        p.text(x + 8.0, y + 12.0, Align2::LEFT_CENTER, fx::TYPES[ty], 11.0, p.skin.text);
+        effect_file(p, ix, p.rect(x + w - 46.0, y + 3.0, 40.0, 18.0), rk, s, ty);
+        for (i, sp) in ks.iter().enumerate() {
+            let (cx, cy) = (x + 32.0 + (i / 3) as f32 * 52.0, y + 26.0 + (i % 3) as f32 * 54.0);
+            let pid = fx::id(rk, s, 2 + i as u32);
+            match sp.kind {
+                2 => {
+                    let on = g(p, ix, pid) >= 0.5;
+                    if rack::flat(p, p.rect(cx - 22.0, cy + 8.0, 44.0, 18.0), sp.name, on, true, ("fx-sw", rk, s, i)) {
+                        p.put(pid, if on { 0.0 } else { 1.0 });
+                    }
+                }
+                3 => {
+                    let cur = fx::scale(sp, g(p, ix, pid)) as usize;
+                    let resp = rack::field_btn(p, p.rect(cx - 24.0, cy + 8.0, 48.0, 18.0), sp.choices.get(cur).copied().unwrap_or(""), ("fx-menu", rk, s, i), false);
+                    p.text(cx, cy + 36.0, Align2::CENTER_CENTER, sp.name, 9.5, p.skin.dim);
+                    let mut pick = None;
+                    egui::Popup::menu(&resp).show(|ui| {
+                        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                            for (k, n) in sp.choices.iter().enumerate() {
+                                if ui.add(egui::Button::selectable(k == cur, *n)).clicked() {
+                                    pick = Some(k);
+                                }
+                            }
+                        });
+                    });
+                    if let Some(k) = pick {
+                        p.put(pid, fx::unscale(sp, k as f32));
+                    }
+                }
+                _ => {
+                    p.knob(cx, cy, 26.0, pid, "");
+                    p.text(cx, cy + 36.0, Align2::CENTER_CENTER, sp.name, 9.5, p.skin.dim);
+                }
+            }
+        }
+        x += w + 6.0;
+    }
+    p.ui.set_clip_rect(clip);
+}
+
+fn fx_dir(ext: &str) -> Option<std::path::PathBuf> {
+    rack::mod_dir(ext)
+}
+
+/// An effect's File menu: Presets (Studio's and saved), Save…, Copy, Paste, Clear.
+fn effect_file(p: &mut Pane, ix: &Ix, r: Rect, rk: usize, s: usize, ty: usize) {
+    use lg_synth::alchemy_fx as fx;
+    let resp = p.ui.interact(r, egui::Id::unique(("fx-file", p.t, rk, s)), Sense::click());
+    p.ui.painter().rect_filled(r, 3.0, if resp.hovered() { rgb(0x4a4f58) } else { rack::BTN });
+    p.ui.painter().text(r.center(), Align2::CENTER_CENTER, "File", look::regular(10.0), p.skin.text);
+    let ks = fx::knobs(ty);
+    let cur: Vec<f32> = (0..ks.len()).map(|i| g(p, ix, fx::id(rk, s, 2 + i as u32))).collect();
+    let files: Vec<(String, std::path::PathBuf)> = fx_dir("afx").and_then(|d| std::fs::read_dir(d).ok()).into_iter().flatten().flatten().map(|e| e.path()).filter(|x| x.extension().is_some_and(|e| e == "afx") && x.file_stem().is_some_and(|n| n.to_string_lossy().starts_with(&format!("{} - ", fx::TYPES[ty])))).map(|x| (x.file_stem().unwrap_or_default().to_string_lossy().into_owned(), x)).collect();
+    let name_id = egui::Id::unique(("fx-save-name", p.t));
+    let mut name: String = p.ui.data(|d| d.get_temp(name_id)).unwrap_or_default();
+    let mut load: Option<Vec<f32>> = None;
+    let mut act = 0u8;
+    egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.menu_button("Presets", |ui| {
+            for (n, list) in fx::presets(ty) {
+                if ui.button(n).clicked() {
+                    let mut v: Vec<f32> = ks.iter().map(|sp| fx::unscale(sp, sp.def)).collect();
+                    for (i, real) in list {
+                        if let Some(sp) = ks.get(i) {
+                            v[i] = fx::unscale(sp, real);
+                        }
+                    }
+                    load = Some(v);
+                    ui.close();
+                }
+            }
+            if !files.is_empty() {
+                ui.separator();
+            }
+            for (n, path) in &files {
+                if ui.button(n.split(" - ").nth(1).unwrap_or(n)).clicked() {
+                    load = Some(rack::read_fields(path).into_iter().map(|(_, v)| v).collect());
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("Save…", |ui| {
+            let te = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Name").desired_width(150.0));
+            let enter = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.button("Save").clicked() || enter) && !name.trim().is_empty() {
+                act = 1;
+                ui.close();
+            }
+        });
+        for (k, n) in ["Copy", "Paste", "Clear"].iter().enumerate() {
+            if ui.button(*n).clicked() {
+                act = 2 + k as u8;
+                ui.close();
+            }
+        }
+    });
+    let clip = egui::Id::unique("alchemy-fx-clipboard");
+    match act {
+        1 => {
+            if let Some(dir) = fx_dir("afx") {
+                let _ = std::fs::create_dir_all(&dir);
+                let body: String = cur.iter().enumerate().map(|(i, v)| format!("{i} {v}\n")).collect();
+                let _ = std::fs::write(dir.join(format!("{} - {}.afx", fx::TYPES[ty], name.trim().replace('/', "-"))), body);
+            }
+            name.clear();
+        }
+        2 => {
+            p.ui.data_mut(|d| d.insert_temp(clip, (ty, cur.clone())));
+        }
+        3 => {
+            if let Some((t2, v)) = p.ui.data(|d| d.get_temp::<(usize, Vec<f32>)>(clip))
+                && t2 == ty
+            {
+                load = Some(v);
+            }
+        }
+        4 => load = Some(ks.iter().map(|sp| fx::unscale(sp, sp.def)).collect()),
+        _ => {}
+    }
+    p.ui.data_mut(|d| d.insert_temp(name_id, name));
+    if let Some(v) = load {
+        for (i, x) in v.iter().enumerate().take(fx::KNOBS) {
+            p.put(fx::id(rk, s, 2 + i as u32), *x);
+        }
+    }
+}
+
+/// A rack's File menu: Load / Save (.afr), Copy, Paste, Clear (removes its effects), Randomize.
+fn rack_file(p: &mut Pane, ix: &Ix, r: Rect, rk: usize) {
+    use lg_synth::alchemy_fx as fx;
+    let resp = p.ui.interact(r, egui::Id::unique(("fx-rackfile", p.t)), Sense::click());
+    p.ui.painter().rect_filled(r, 3.0, if resp.hovered() { rgb(0x4a4f58) } else { rack::BTN });
+    p.ui.painter().text(r.center(), Align2::CENTER_CENTER, "File", look::regular(11.0), p.skin.text);
+    let all: Vec<(u32, f32)> = (0..fx::SLOTS).flat_map(|s| (0..24u32).map(move |f| (s as u32 * 24 + f, 0.0))).map(|(k, _)| (k, g(p, ix, fx::id(rk, 0, 0) + k))).collect();
+    let files: Vec<(String, std::path::PathBuf)> = fx_dir("afr").and_then(|d| std::fs::read_dir(d).ok()).into_iter().flatten().flatten().map(|e| e.path()).filter(|x| x.extension().is_some_and(|e| e == "afr")).map(|x| (x.file_stem().unwrap_or_default().to_string_lossy().into_owned(), x)).collect();
+    let name_id = egui::Id::unique(("fx-rack-save-name", p.t));
+    let mut name: String = p.ui.data(|d| d.get_temp(name_id)).unwrap_or_default();
+    let mut load: Option<Vec<(u32, f32)>> = None;
+    let mut act = 0u8;
+    egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.menu_button("Load", |ui| {
+            if files.is_empty() {
+                ui.label("No saved racks");
+            }
+            for (n, path) in &files {
+                if ui.button(n).clicked() {
+                    load = Some(rack::read_fields(path));
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("Save…", |ui| {
+            let te = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Name").desired_width(150.0));
+            let enter = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.button("Save").clicked() || enter) && !name.trim().is_empty() {
+                act = 1;
+                ui.close();
+            }
+        });
+        for (k, n) in ["Copy", "Paste", "Clear", "Randomize"].iter().enumerate() {
+            if ui.button(*n).clicked() {
+                act = 2 + k as u8;
+                ui.close();
+            }
+        }
+    });
+    let clip = egui::Id::unique("alchemy-rack-clipboard");
+    match act {
+        1 => {
+            if let Some(dir) = fx_dir("afr") {
+                let _ = std::fs::create_dir_all(&dir);
+                let body: String = all.iter().map(|(f, v)| format!("{f} {v}\n")).collect();
+                let _ = std::fs::write(dir.join(format!("{}.afr", name.trim().replace('/', "-"))), body);
+            }
+            name.clear();
+        }
+        2 => {
+            p.ui.data_mut(|d| d.insert_temp(clip, all.clone()));
+        }
+        3 => load = p.ui.data(|d| d.get_temp::<Vec<(u32, f32)>>(clip)),
+        4 => {
+            for s in 0..fx::SLOTS {
+                p.put(fx::id(rk, s, 0), 0.0);
+            }
+        }
+        5 => {
+            let mut x = ((p.ui.input(|i| i.time) * 1000.0) as u32) | 1;
+            for s in 0..fx::SLOTS {
+                let ty = g(p, ix, fx::id(rk, s, 0)).round() as usize;
+                for i in 0..fx::knobs(ty).len() {
+                    x ^= x << 13;
+                    x ^= x >> 17;
+                    x ^= x << 5;
+                    p.put(fx::id(rk, s, 2 + i as u32), (x & 0xFFFF) as f32 / 65535.0);
+                }
+            }
+        }
+        _ => {}
+    }
+    p.ui.data_mut(|d| d.insert_temp(name_id, name));
+    if let Some(v) = load {
+        for (f, x) in v {
+            p.put(fx::id(rk, 0, 0) + f, x);
+        }
+    }
+}
+
+/// The Morph page: the four modes, All / Elements, X / Y (Y hidden in the linear modes), the
+/// element knobs, Auto Gain, Fixed Pitch, the Morph Linear groups and the morph square.
+fn morph_page(p: &mut Pane, ix: &Ix, st: &mut St) {
+    use lg_synth::alchemy::{MORPH, MORPH_GROUPS};
+    let mode = g(p, ix, MORPH).round() as usize;
+    p.text(84.0, 66.0, Align2::LEFT_CENTER, "MORPH", 12.5, p.skin.text);
+    for (k, n) in ["Off", "XFade XY", "XFade Linear", "Morph XY", "Morph Linear"].iter().enumerate() {
+        if rack::flat(p, p.rect(150.0 + k as f32 * 92.0, 56.0, 90.0, 20.0), n, mode == k, true, ("morph-mode", k)) {
+            p.put(MORPH, k as f32);
+        }
+    }
+    let linear = mode == 2 || mode == 4;
+    let elements = g(p, ix, MORPH + 1) >= 0.5;
+    for (k, n) in ["All", "Elements"].iter().enumerate() {
+        if rack::flat(p, p.rect(84.0 + k as f32 * 66.0, 92.0, 64.0, 20.0), n, elements == (k == 1), mode >= 3, ("morph-el", k)) {
+            p.put(MORPH + 1, k as f32);
+        }
+    }
+    if mode == 4 {
+        for (k, n) in MORPH_GROUPS.iter().enumerate() {
+            let cur = g(p, ix, MORPH + 2).round() as usize;
+            if rack::flat(p, p.rect(230.0 + k as f32 * 64.0, 92.0, 62.0, 20.0), n, cur == k, true, ("morph-grp", k)) {
+                p.put(MORPH + 2, k as f32);
+            }
+        }
+    }
+    // X / Y, or the element knobs
+    let knobs: Vec<(u32, u32, &str, Color32)> = if elements && mode >= 3 {
+        vec![(79, 80, "Additive/VA", BLUE), (81, 82, "Spectral/Granular", ORANGE), (MORPH + 6, MORPH + 7, "Pitch", rgb(0x5ac46a)), (83, 84, "Formant", rgb(0xa070e0))]
+    } else {
+        vec![(75, 76, "", Color32::WHITE)]
+    };
+    for (k, (xid, yid, n, _)) in knobs.iter().enumerate() {
+        let x = 120.0 + k as f32 * 120.0;
+        rack::knob(p, ix, st, x, 128.0, 36.0, *xid, &if n.is_empty() { "X".to_string() } else { format!("{n} X") });
+        if !linear {
+            rack::knob(p, ix, st, x + 54.0, 128.0, 36.0, *yid, "Y");
+        }
+    }
+    for (k, (id, n)) in [(MORPH + 3, "Auto Gain"), (MORPH + 4, "Fixed Pitch")].iter().enumerate() {
+        let on = g(p, ix, *id) >= 0.5;
+        if rack::flat(p, p.rect(84.0 + k as f32 * 92.0, 220.0, 88.0, 20.0), n, on, true, ("morph-sw", k)) {
+            p.put(*id, if on { 0.0 } else { 1.0 });
+        }
+    }
+    // the morph square: drag a point (with Elements, each element's)
+    let sq = p.rect(650.0, 86.0, 136.0, 136.0);
+    p.ui.painter().rect_filled(sq, 3.0, rgb(0x12151a));
+    for (lx, ly, l) in [(0.0, 0.0, "C"), (1.0, 0.0, "D"), (0.0, 1.0, "A"), (1.0, 1.0, "B")] {
+        p.ui.painter().text(pos2(sq.min.x + 8.0 + lx * (sq.width() - 16.0), sq.min.y + 8.0 + (1.0 - ly) * (sq.height() - 16.0)), Align2::CENTER_CENTER, l, look::regular(10.0), p.skin.dim);
+    }
+    for (k, (xid, yid, _, col)) in knobs.iter().enumerate() {
+        let (fx_, fy) = (g(p, ix, *xid), if linear { 0.5 } else { g(p, ix, *yid) });
+        let c = pos2(sq.min.x + fx_ * sq.width(), sq.min.y + fy * sq.height());
+        p.ui.painter().circle_filled(c, 6.0, *col);
+        let resp = p.ui.interact(Rect::from_center_size(c, vec2(16.0, 16.0)), egui::Id::unique(("morph-pt", p.t, k)), Sense::drag());
+        if resp.dragged()
+            && let Some(q) = resp.interact_pointer_pos()
+        {
+            p.put(*xid, ((q.x - sq.min.x) / sq.width()).clamp(0.0, 1.0));
+            if !linear {
+                p.put(*yid, ((q.y - sq.min.y) / sq.height()).clamp(0.0, 1.0));
+            }
         }
     }
 }

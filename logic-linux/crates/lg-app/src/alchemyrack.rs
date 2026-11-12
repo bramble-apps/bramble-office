@@ -44,6 +44,9 @@ pub struct St {
     /// Each source page's element view (0: the element that plays, then VA … Formant).
     pub elem: [u8; 4],
     pub arp_scroll: usize,
+    pub fx_rack: usize,
+    pub fx_scroll: f32,
+    pub fx_drag: Option<usize>,
 }
 
 /// Live values read from the running instrument for the displays.
@@ -308,6 +311,16 @@ pub fn target_marks(p: &Pane, ix: &Ix, st: &St, id: u32, c: Pos2, d: f32) {
     }
     if st.target == id {
         pt.circle_stroke(c, d / 2.0 + 4.0, Stroke::new(1.2, BLUE));
+    }
+    // a green arc on a source's knob while the sources are morphed
+    let name = target_name(p, ix, id);
+    if g(p, ix, lg_synth::alchemy::MORPH) >= 2.5 && [" A", " B", " C", " D"].iter().any(|l| name.ends_with(l)) {
+        let start = std::f32::consts::PI * (0.5 + 1.0 / 6.0);
+        let pts: Vec<Pos2> = (0..=24).map(|k| {
+            let a = start + std::f32::consts::PI * 5.0 / 3.0 * k as f32 / 24.0;
+            c + vec2(a.cos(), a.sin()) * (d / 2.0 + 1.0)
+        }).collect();
+        pt.add(egui::Shape::line(pts, Stroke::new(1.0, rgb(0x5ac46a))));
     }
 }
 

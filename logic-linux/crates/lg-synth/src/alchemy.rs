@@ -130,6 +130,8 @@ struct SourceCfg {
     /// The three source filters: (type, cutoff knob, res knob, drive knob, on); parallel or not.
     sf: [(u8, f32, f32, f32, bool); 3],
     sf_par: bool,
+    /// The Send pop-up: 0 F1/F2, 1–4 F1 and FX A–D, 5–8 F2 and FX A–D.
+    send: u8,
     /// The additive / spectral / formant settings (alchemy_partials).
     part: crate::alchemy_partials::PartCfg,
 }
@@ -146,6 +148,9 @@ pub(crate) struct AlchShared {
     /// Each main filter's FX amount (the rest goes straight to the outputs).
     m_fx: f32,
     f2_fx: f32,
+    /// Which effects rack each main filter's FX share goes to (0 Main, 1–4 A–D).
+    m_rack: u8,
+    f2_rack: u8,
     m_drive: f32,
     f2_on: bool,
     f2_cut: f32,
@@ -229,6 +234,10 @@ pub(crate) struct AlchVoice {
     /// What goes past the effects (the main filters' FX amounts below 100 %), this block.
     pub(crate) dry: [(f32, f32); CHUNK],
     pub(crate) dry_n: usize,
+    /// What goes to effects racks A–D this block (after the voice's level), and before it.
+    pub(crate) rk: [[(f32, f32); CHUNK]; 4],
+    pub(crate) rk_used: [bool; 4],
+    rk_raw: [[(f32, f32); CHUNK]; 4],
     rng: Rng,
     fade: Fade,
     killing: bool,
@@ -263,6 +272,9 @@ impl AlchVoice {
             f2: Default::default(),
             dry: [(0.0, 0.0); CHUNK],
             dry_n: 0,
+            rk: [[(0.0, 0.0); CHUNK]; 4],
+            rk_used: [false; 4],
+            rk_raw: [[(0.0, 0.0); CHUNK]; 4],
             rng: Rng::new(seed),
             fade: Fade::default(),
             killing: false,
@@ -609,7 +621,13 @@ impl Voice<AlchShared> for AlchVoice {
                 }
             }
             let mut pk = 0.0f32;
-            let (w1, w2) = (1.0 - c.route.clamp(0.0, 1.0), c.route.clamp(0.0, 1.0));
+            // the Send: F1/F2 balance, or a main filter and an effects rack (bypassing the filters)
+            let k = c.route.clamp(0.0, 1.0);
+            let (w1, w2, rack) = match c.send {
+                0 => (1.0 - k, k, None),
+                1..=4 => (1.0 - k, 0.0, Some(c.send as usize - 1)),
+                _ => (0.0, 1.0 - k, Some(c.send as usize - 5)),
+            };
             for i in 0..n {
                 pk = pk.max(bl[i].abs()).max(br[i].abs());
                 if w1 > 0.0 {
@@ -618,6 +636,12 @@ impl Voice<AlchShared> for AlchVoice {
                 if w2 > 0.0 {
                     self_mix_add(&mut self.mix2, i, bl[i] * w2, br[i] * w2);
                 }
+            }
+            if let Some(rk) = rack.filter(|_| k > 0.0) {
+                for i in 0..n {
+                    self_mix_add(&mut self.rk_raw[rk], i, bl[i] * k, br[i] * k);
+                }
+                self.rk_used[rk] = true;
             }
             self.lv[si] = pk;
         }
@@ -645,8 +669,18 @@ impl Voice<AlchShared> for AlchVoice {
             let (yl, yr) = if sh.f2_on { (self.f2[0].run(il), self.f2[1].run(ir)) } else { (il, ir) };
             f2p = f2p.max(yl.abs());
             let (e2l, e2r) = (yl * sh.f2_fx, yr * sh.f2_fx);
-            xl = e1l + e2l;
-            xr = e1r + e2r;
+            // each filter's FX share goes to its rack (Main: the voice's output)
+            xl = 0.0;
+            xr = 0.0;
+            for (rk, el, er) in [(sh.m_rack, e1l, e1r), (sh.f2_rack, e2l, e2r)] {
+                if rk == 0 {
+                    xl += el;
+                    xr += er;
+                } else {
+                    self_mix_add(&mut self.rk_raw[rk as usize - 1], i, el, er);
+                    self.rk_used[rk as usize - 1] = true;
+                }
+            }
             let dl = m1l * (1.0 - sh.par) + yl - e2l;
             let dr = m1r * (1.0 - sh.par) + yr - e2r;
             self.fenv.next();
@@ -657,6 +691,13 @@ impl Voice<AlchShared> for AlchVoice {
             let yl = xl * g * pl;
             let yr = xr * g * pr;
             self.dry[i] = (dl * g * pl, dr * g * pr);
+            for k in 0..4 {
+                if self.rk_used[k] {
+                    let (a, b) = self.rk_raw[k][i];
+                    self.rk[k][i] = (a * g * pl, b * g * pr);
+                    self.rk_raw[k][i] = (0.0, 0.0);
+                }
+            }
             peak = peak.max(yl.abs()).max(self.dry[i].0.abs());
             l[i] += yl;
             r[i] += yr;
@@ -681,6 +722,109 @@ impl Voice<AlchShared> for AlchVoice {
 fn self_mix_add(mix: &mut [(f32, f32); CHUNK], i: usize, a: f32, b: f32) {
     mix[i].0 += a;
     mix[i].1 += b;
+}
+
+/// Morph section: MORPH + (0 mode, 1 Elements, 2 group, 3 Auto Gain, 4 Fixed Pitch, 5 Auto Align,
+/// 6–7 Pitch X / Y); Morph All X / Y are Logic's ids 75–76, the element knobs 77–84.
+pub const MORPH: u32 = 14800;
+pub const MORPH_MODES: &[&str] = &["Off", "XFade XY", "XFade Linear", "Morph XY", "Morph Linear"];
+pub const MORPH_GROUPS: &[&str] = &["A-B", "C-D", "A-B-C-D"];
+
+/// The four sources' weights at (x, y) for a morph mode and group.
+pub fn morph_weights(mode: u8, group: u8, x: f32, y: f32) -> [f32; 4] {
+    let (x, y) = (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
+    match mode {
+        1 | 3 => [(1.0 - x) * (1.0 - y), x * (1.0 - y), (1.0 - x) * y, x * y],
+        2 | 4 => {
+            let g = if mode == 2 { 2 } else { group };
+            match g {
+                0 => [1.0 - x, x, 0.0, 0.0],
+                1 => [0.0, 0.0, 1.0 - x, x],
+                _ => {
+                    let t = x * 3.0;
+                    let k = (t.floor() as usize).min(2);
+                    let f = t - k as f32;
+                    let mut w = [0.0; 4];
+                    w[k] = 1.0 - f;
+                    w[k + 1] = f;
+                    w
+                }
+            }
+        }
+        _ => [1.0; 4],
+    }
+}
+
+/// Crossfades the sources' levels, or morphs them into one source (interpolated settings, per
+/// element when Elements is on: Additive/VA, Spectral/Granular, Pitch, Formant).
+fn morph(sh: &mut AlchShared, p: &dyn Fn(u32) -> f32) {
+    let mode = p(MORPH).round().clamp(0.0, 4.0) as u8;
+    if mode == 0 {
+        return;
+    }
+    let group = p(MORPH + 2).round().clamp(0.0, 2.0) as u8;
+    let on: [bool; 4] = [0, 1, 2, 3].map(|s| sh.src[s].kind != Kind::Off);
+    let norm = |mut w: [f32; 4]| {
+        for s in 0..4 {
+            if !on[s] {
+                w[s] = 0.0;
+            }
+        }
+        let t: f32 = w.iter().sum();
+        if t > 1e-6 {
+            for x in &mut w {
+                *x /= t;
+            }
+        }
+        w
+    };
+    let all = morph_weights(mode, group, p(75), p(76));
+    if mode <= 2 {
+        let w = if p(MORPH + 3) >= 0.5 { norm(all) } else { all };
+        for s in 0..4 {
+            sh.src[s].vol *= w[s];
+        }
+        return;
+    }
+    let elements = p(MORPH + 1) >= 0.5;
+    let wsel = |xid: u32, yid: u32| if elements { norm(morph_weights(mode, group, p(xid), p(yid))) } else { norm(all) };
+    let (w_add, w_spec, w_pitch, w_form) = (wsel(79, 80), wsel(81, 82), wsel(MORPH + 6, MORPH + 7), wsel(83, 84));
+    let w_all = norm(all);
+    let dom = (0..4).max_by(|&a, &b| w_all[a].total_cmp(&w_all[b])).unwrap_or(0);
+    if !on[dom] {
+        return;
+    }
+    let src = sh.src;
+    let mix = |w: &[f32; 4], f: &dyn Fn(&SourceCfg) -> f32| -> f32 { (0..4).map(|s| w[s] * f(&src[s])).sum() };
+    let mut m = src[dom];
+    let w_el = match m.kind {
+        Kind::Spectral | Kind::Granular => w_spec,
+        _ => w_add,
+    };
+    m.vol = mix(&w_all, &|c| c.vol);
+    m.pan = mix(&w_all, &|c| c.pan);
+    // pitch glides between the sources' tunings (Fixed Pitch keeps the root)
+    m.semis = if p(MORPH + 4) >= 0.5 { 0.0 } else { mix(&w_pitch, &|c| c.semis) };
+    m.position = mix(&w_el, &|c| c.position);
+    m.speed = mix(&w_el, &|c| c.speed);
+    m.density = mix(&w_el, &|c| c.density);
+    m.va_sym = mix(&w_add, &|c| c.va_sym);
+    m.va_detune = mix(&w_add, &|c| c.va_detune);
+    m.va_sync = mix(&w_add, &|c| c.va_sync);
+    m.va_num = mix(&w_add, &|c| c.va_num as f32).round().max(1.0) as usize;
+    m.route = mix(&w_all, &|c| c.route);
+    // the formant knob also morphs the source filters' knobs
+    for k in 0..3 {
+        m.sf[k].1 = mix(&w_form, &|c| c.sf[k].1);
+        m.sf[k].2 = mix(&w_form, &|c| c.sf[k].2);
+        m.sf[k].3 = mix(&w_form, &|c| c.sf[k].3);
+    }
+    m.part.fm_shift = mix(&w_form, &|c| c.part.fm_shift);
+    m.part.fm_size = mix(&w_form, &|c| c.part.fm_size);
+    m.part.fm_select = mix(&w_form, &|c| c.part.fm_select);
+    m.part.pvar = mix(&w_add, &|c| c.part.pvar);
+    m.part.sym = mix(&w_add, &|c| c.part.sym);
+    sh.src = [m, SourceCfg::default(), SourceCfg::default(), SourceCfg::default()];
 }
 
 /// Each source's F1/F2 knob (A–D), and the Name bar's Limiter.
@@ -731,6 +875,8 @@ pub struct Alchemy {
     pub arp_cfg: crate::alchemy_arp::ArpCfg,
     pub arp: crate::alchemy_arp::Arp,
     playing: bool,
+    /// The effects racks (alchemy_fx).
+    pub racks: crate::alchemy_fx::Racks,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -746,6 +892,15 @@ pub fn all_params() -> &'static [Param] {
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
         v.extend(crate::alchemy_partials::params());
         v.extend(crate::alchemy_arp::params());
+        v.extend(crate::alchemy_fx::params());
+        v.push(Param::menu(MORPH, "Morph Mode", MORPH_MODES, 0.0));
+        v.push(Param::new(MORPH + 1, "Morph Elements", 0.0, 1.0, 0.0, Unit::OnOff));
+        v.push(Param::menu(MORPH + 2, "Morph Group", MORPH_GROUPS, 2.0));
+        v.push(Param::new(MORPH + 3, "Auto Gain", 0.0, 1.0, 1.0, Unit::OnOff));
+        v.push(Param::new(MORPH + 4, "Fixed Pitch", 0.0, 1.0, 0.0, Unit::OnOff));
+        v.push(Param::new(MORPH + 5, "Auto Align", 0.0, 1.0, 1.0, Unit::OnOff));
+        v.push(Param::new(MORPH + 6, "Morph Pitch X", 0.0, 1.0, 0.0, Unit::Ratio));
+        v.push(Param::new(MORPH + 7, "Morph Pitch Y", 0.0, 1.0, 0.0, Unit::Ratio));
         for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
             let b = SRC_FILT + s as u32 * 16;
             let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
@@ -783,6 +938,8 @@ impl Alchemy {
                 f2_type: 0,
                 m_fx: 1.0,
                 f2_fx: 1.0,
+                m_rack: 0,
+                f2_rack: 0,
                 m_drive: 0.0,
                 f2_on: false,
                 f2_cut: 1.0,
@@ -844,6 +1001,7 @@ impl Alchemy {
             arp_cfg: Default::default(),
             arp: Default::default(),
             playing: false,
+            racks: crate::alchemy_fx::Racks::new(rate),
         };
         a.room.feedback = 0.82;
         let params = &a.params;
@@ -851,6 +1009,8 @@ impl Alchemy {
         a.used = crate::alchemy_mod::used(&a.mods);
         let params = &a.params;
         a.arp_cfg.read_all(&|i| params.get(i));
+        let params = &a.params;
+        a.racks.read_all(&|i| params.get(i));
         a.update();
         a
     }
@@ -895,6 +1055,8 @@ impl Alchemy {
             f2_type: 0,
             m_fx: 1.0,
             f2_fx: 1.0,
+            m_rack: 0,
+            f2_rack: 0,
             m_drive: 0.0,
             f2_on: false,
             f2_cut: 1.0,
@@ -981,10 +1143,12 @@ impl Alchemy {
                     (ty.round().max(0.0) as u8, p(51 + k as u32 * 8 + s as u32), p(55 + k as u32 * 8 + s as u32), p(b + 5 + k as u32), p(b + k as u32) >= 0.5)
                 }),
                 sf_par: p(SRC_FILT + s as u32 * 16 + 8) >= 0.5,
+                send: p(crate::alchemy_fx::SEND + s as u32).round().clamp(0.0, 8.0) as u8,
                 part: crate::alchemy_partials::PartCfg::read(p, s),
                 route: p(ROUTE_F2 + s as u32),
             };
         }
+        morph(&mut sh, p);
         sh.character = d(0);
         sh.m_cut = (p(85) + d(1) * 0.5).clamp(0.0, 1.0);
         sh.m_res = p(86);
@@ -994,6 +1158,8 @@ impl Alchemy {
         sh.f2_type = p(368).round().max(0.0) as u8;
         sh.m_fx = p(88);
         sh.f2_fx = p(92);
+        sh.m_rack = p(crate::alchemy_fx::SEND + 4).round().clamp(0.0, 4.0) as u8;
+        sh.f2_rack = p(crate::alchemy_fx::SEND + 5).round().clamp(0.0, 4.0) as u8;
         sh.f2_on = p(367) >= 0.5;
         sh.f2_cut = p(89);
         sh.f2_res = p(90);
@@ -1210,6 +1376,13 @@ impl Plugin for Alchemy {
         all_params()
     }
     fn value_text(&self, id: u32, value: f32) -> Option<String> {
+        use crate::alchemy_fx as fx;
+        if (fx::FXR..fx::FXR + fx::RACKS as u32 * 256).contains(&id) {
+            let k = id - fx::FXR;
+            let (r, sl, f) = ((k / 256) as usize, ((k % 256) / 24) as usize, (k % 256) % 24);
+            let ty = self.params.get(fx::id(r, sl, 0)).round().max(0.0) as usize;
+            return fx::knobs(ty).get((f as usize).wrapping_sub(2)).filter(|_| f >= 2).map(|s| fx::text(s, value));
+        }
         crate::alchemy_arp::value_text(id, value)
     }
     fn get(&self, id: u32) -> f32 {
@@ -1230,7 +1403,7 @@ impl Plugin for Alchemy {
                 self.transform = false;
             }
             let params = &self.params;
-            if self.arp_cfg.read_changed(id, &|i| params.get(i)) {
+            if self.arp_cfg.read_changed(id, &|i| params.get(i)) || self.racks.read_changed(id, &|i| params.get(i)) {
                 return;
             }
             if self.mods.read_changed(id, &|i| params.get(i)) {
@@ -1253,12 +1426,13 @@ impl Plugin for Alchemy {
         self.room.reset();
         self.ch.reset();
         self.extra.reset();
+        self.racks.reset();
         let mut ev = [crate::alchemy_arp::ArpEv::Off(0); 32];
         self.arp.clear(&mut ev);
         self.update();
     }
     fn tail(&self) -> f32 {
-        self.sh.amp_env[3] + 2.0 + if self.extra.fx.iter().any(|f| f.is_some()) { 3.0 } else { 0.0 }
+        self.sh.amp_env[3] + 2.0 + if self.extra.fx.iter().any(|f| f.is_some()) || self.racks.tail() { 6.0 } else { 0.0 }
     }
 }
 
@@ -1455,6 +1629,9 @@ impl Instrument for Alchemy {
             let mut drl = [0.0f32; CHUNK];
             let mut drr = [0.0f32; CHUNK];
             let mut any_dry = false;
+            let mut rkl = [[0.0f32; CHUNK]; 4];
+            let mut rkr = [[0.0f32; CHUNK]; 4];
+            let mut rk_any = [false; 4];
             for v in self.poly.voices.iter_mut() {
                 if v.dry_n == m {
                     for i in 0..m {
@@ -1462,8 +1639,29 @@ impl Instrument for Alchemy {
                         drr[i] += v.dry[i].1;
                     }
                     any_dry = true;
+                    for k in 0..4 {
+                        if v.rk_used[k] {
+                            for i in 0..m {
+                                rkl[k][i] += v.rk[k][i].0;
+                                rkr[k][i] += v.rk[k][i].1;
+                            }
+                            rk_any[k] = true;
+                        }
+                    }
                 }
                 v.dry_n = 0;
+                v.rk_used = [false; 4];
+            }
+            // racks A–D: their effects, then mixed in with the dry part
+            for k in 0..4 {
+                if rk_any[k] || self.racks.used[k + 1] {
+                    self.racks.process(k + 1, self.bpm, &mut rkl[k][..m], &mut rkr[k][..m]);
+                    for i in 0..m {
+                        drl[i] += rkl[k][i];
+                        drr[i] += rkr[k][i];
+                    }
+                    any_dry = true;
+                }
             }
             if self.used.envf != 0 {
                 let mut lv = [0.0f32; 6];
@@ -1481,6 +1679,9 @@ impl Instrument for Alchemy {
                     sl[i] *= mvol;
                     sr[i] *= mvol;
                 }
+            }
+            if self.racks.used[0] {
+                self.racks.process(0, self.bpm, &mut sl[..m], &mut sr[..m]);
             }
             self.extra.process_fx(&mut sl[..m], &mut sr[..m]);
             if fx > 0.0 {

@@ -82,6 +82,15 @@ fn render_is_allocation_free() {
         }
         lg_dsp::Plugin::set(&mut a, route(1, RT_SMOOTH), 0.4);
         insts.push(("alchemy modulation".into(), Box::new(a)));
+        // effects racks: Main and A with reverbs, delay, phaser, convolution
+        let mut a = lg_synth::alchemy::Alchemy::new(rate);
+        use lg_synth::alchemy_fx as fx;
+        for (r, s, ty) in [(0usize, 0usize, 1.0f32), (0, 1, 4.0), (0, 2, 6.0), (1, 0, 3.0), (1, 1, 2.0)] {
+            lg_dsp::Plugin::set(&mut a, fx::id(r, s, 0), ty);
+        }
+        lg_dsp::Plugin::set(&mut a, fx::SEND, 1.0);
+        lg_dsp::Plugin::set(&mut a, lg_synth::alchemy::ROUTE_F2, 0.5);
+        insts.push(("alchemy effects".into(), Box::new(a)));
     }
     // the bundled sampled instruments (when the library is installed), synthesized fallbacks too
     for name in ["Piano", "Drum Kit Designer", "Strings", "Guitar", "Bass", "Studio Horns"] {
