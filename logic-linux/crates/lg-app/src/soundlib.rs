@@ -1072,6 +1072,11 @@ pub fn sampler_instrument(choice: &str, rate: f32) -> Option<Box<dyn lg_dsp::Ins
     let mut parts = choice.split('\u{1f}');
     let plugin = parts.next()?;
     match plugin {
+        // (an instrument Auto Sampler made: its SFZ)
+        "Sampler" => {
+            let f = parts.next()?;
+            lg_synth::sampler::Sampler::from_sfz(Path::new(f), rate).ok().map(|q| Box::new(q) as Box<dyn lg_dsp::Instrument>)
+        }
         "Quick Sampler" => {
             let f = parts.next()?;
             lg_synth::quick::QuickSampler::from_file(Path::new(f), rate).ok().map(|q| Box::new(q) as Box<dyn lg_dsp::Instrument>)

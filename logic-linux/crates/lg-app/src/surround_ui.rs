@@ -427,6 +427,8 @@ pub fn master_plugin_menu(app: &App, ui: &mut egui::Ui, current: Option<&str>) -
     };
     native(ui, "Dynamics", &["Surround Compressor"], &mut picked);
     native(ui, "Imaging", &["Spatial Audio Monitoring"], &mut picked);
+    native(ui, "Reverb", &["Quantec Room Simulator"], &mut picked);
+    native(ui, "Metering", &["Level Meter", "Loudness Meter", "MultiMeter"], &mut picked);
     native(ui, "Utility", &["Multichannel Gain", "Down Mixer"], &mut picked);
     ui.separator();
     ui.label(egui::RichText::new("Multi Mono").color(look::text_dim()));

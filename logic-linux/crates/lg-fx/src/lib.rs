@@ -56,6 +56,7 @@ pub mod evoc;
 pub mod match_eq;
 pub mod surround;
 pub mod legacy;
+pub mod autosampler;
 
 use lg_dsp::Effect;
 
@@ -170,6 +171,9 @@ pub fn by_logic_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
             if let Some(m) = more_fx::by_name(n, rate) {
                 return Some(m);
             }
+            if n == "Auto Sampler" {
+                return Some(Box::new(autosampler::AutoSampler::new(rate)));
+            }
             if let Some(m) = meters::Meter::new(n, rate) {
                 return Some(Box::new(m));
             }
@@ -187,6 +191,7 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
     let mut v = NAMES.to_vec();
     v.extend(pedals::PEDALS.iter().map(|(n, ..)| (*n, *n)));
     v.extend(meters::Meter::names().iter().map(|n| (*n, *n)));
+    v.push(("Auto Sampler", "Auto Sampler"));
     v.extend(more_fx::NAMES.iter().map(|n| (*n, *n)));
     v.extend(legacy::NAMES.iter().map(|n| (*n, *n)));
     v.extend(surround::NAMES.iter().map(|n| (*n, *n)));

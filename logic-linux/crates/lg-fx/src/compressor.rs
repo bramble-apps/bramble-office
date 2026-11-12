@@ -49,12 +49,12 @@ pub const MIX: u32 = 24;
 pub const IN_GAIN: u32 = 25;
 pub const OUT_GAIN: u32 = 26;
 
-static PARAMS: [Param; 24] = [
+static PARAMS: [Param; 27] = [
     Param::new(THRESHOLD, "Threshold", -60.0, 0.0, -20.0, Unit::Db),
     Param::new(RATIO, "Ratio", 1.0, 30.0, 2.1, Unit::Ratio),
     Param::new(ATTACK, "Attack", 0.0, 200.0, 15.0, Unit::Ms),
     Param::new(RELEASE, "Release", 5.0, 5000.0, 51.0, Unit::Ms),
-    Param::new(MAKEUP, "Make Up", -30.0, 30.0, 0.0, Unit::Db),
+    Param::new(MAKEUP, "Make Up", -30.0, 50.0, 0.0, Unit::Db),
     Param::new(KNEE, "Knee", 0.0, 1.0, 0.7, Unit::None),
     Param::menu(PEAK_RMS, "Peak/RMS", &["Peak", "RMS"], 1.0),
     Param::menu(AUTO_GAIN, "Auto Gain", &["Off", "0 dB", "-12 dB"], 2.0),
@@ -76,10 +76,19 @@ static PARAMS: [Param; 24] = [
     Param::new(16, "Side Chain Filter (reserved)", 0.0, 1.0, 0.0, Unit::None),
     // (our own id: Logic's Listen state isn't decoded)
     Param::new(LISTEN, "Listen", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::menu(DISPLAY, "Display Select", &["Meter", "Graph"], 0.0).hide(),
+    Param::menu(VIEW, "View Select", &["Side Chain", "Output"], 1.0).hide(),
+    Param::new(PEAK_RESET, "Peak Reset", 0.0, 1.0e6, 0.0, Unit::None).hide(),
 ];
 
 /// The side chain section's Listen button: the output is the (filtered) side chain signal.
 pub const LISTEN: u32 = 1000;
+/// The editor's Meter / Graph buttons and Side Chain / Output buttons (Logic keeps both in the
+/// setting; their floats aren't decoded, so they have our own ids), and the peak fields' reset
+/// (a counter the window bumps).
+pub const DISPLAY: u32 = 1001;
+pub const VIEW: u32 = 1002;
+pub const PEAK_RESET: u32 = 1003;
 
 /// How one circuit type behaves.
 #[derive(Clone, Copy, Debug)]
@@ -164,6 +173,15 @@ pub struct Compressor {
     pub reduction: f32,
     /// The external side chain's next block (header Side Chain pop-up): it only triggers.
     side: Option<(Vec<f32>, Vec<f32>)>,
+    /// The window's meters: input (after Input Gain) and output levels with their fall, the
+    /// peaks held since the last reset, and whether the limiter is working.
+    meter_in: [f32; 2],
+    meter_out: [f32; 2],
+    peak_in: f32,
+    peak_out: f32,
+    meter_fall: f32,
+    limiting: f32,
+    reset_seen: f32,
 }
 
 impl Compressor {
@@ -201,6 +219,14 @@ impl Compressor {
             dc_k: 1.0 - coef(rate, 1000.0 / (crate::util::TAU * 5.0)),
             reduction: 0.0,
             side: None,
+            meter_in: [0.0; 2],
+            meter_out: [0.0; 2],
+            peak_in: 0.0,
+            peak_out: 0.0,
+            // (about 20 dB a second back from a peak)
+            meter_fall: db(-20.0 / rate),
+            limiting: 0.0,
+            reset_seen: 0.0,
         };
         c.update();
         c
@@ -234,6 +260,11 @@ impl Compressor {
     }
 
     fn update(&mut self) {
+        if self.p.get(PEAK_RESET) != self.reset_seen {
+            self.reset_seen = self.p.get(PEAK_RESET);
+            self.peak_in = 0.0;
+            self.peak_out = 0.0;
+        }
         let p = &self.p;
         self.c = CIRC[p.idx(CIRCUIT).min(6)];
         let rate = self.rate;
@@ -347,8 +378,13 @@ impl lg_dsp::Effect for Compressor {
         let limit = self.p.on(LIMIT_ON);
         let auto_rel = self.p.on(AUTO_RELEASE);
         let c = self.c;
+        let mut limiting = false;
         for i in 0..n {
             let (dl, dr) = (left[i] * self.in_gain, right[i] * self.in_gain);
+            for (m, x) in self.meter_in.iter_mut().zip([dl, dr]) {
+                *m = (*m * self.meter_fall).max(x.abs());
+            }
+            self.peak_in = self.peak_in.max(dl.abs()).max(dr.abs());
             // feedback circuits listen after the gain stage; an external side chain only
             // triggers (its audio isn't processed)
             let (sl, sr) = if let Some((a, b)) = &side {
@@ -418,12 +454,33 @@ impl lg_dsp::Effect for Compressor {
                 self.lim_gain = if want < self.lim_gain { want } else { want + (self.lim_gain - want) * self.lim_rel };
                 yl *= self.lim_gain;
                 yr *= self.lim_gain;
+                limiting |= self.lim_gain < 0.999;
             }
             yl = distort(dist, yl);
             yr = distort(dist, yr);
             left[i] = (left[i] * (1.0 - self.mix) + yl * self.mix) * self.out_gain;
             right[i] = (right[i] * (1.0 - self.mix) + yr * self.mix) * self.out_gain;
+            for (m, x) in self.meter_out.iter_mut().zip([left[i], right[i]]) {
+                *m = (*m * self.meter_fall).max(x.abs());
+            }
+            self.peak_out = self.peak_out.max(left[i].abs()).max(right[i].abs());
         }
+        // (the LED stays lit a moment after the limiter lets go)
+        self.limiting = if limiting { 1.0 } else { (self.limiting - n as f32 / (0.15 * self.rate)).max(0.0) };
+    }
+
+    fn readouts(&self) -> Vec<(&'static str, f32)> {
+        let d = lg_dsp::gain_to_db;
+        vec![
+            ("Input L", d(self.meter_in[0])),
+            ("Input R", d(self.meter_in[1])),
+            ("Output L", d(self.meter_out[0])),
+            ("Output R", d(self.meter_out[1])),
+            ("Input Peak", d(self.peak_in)),
+            ("Output Peak", d(self.peak_out)),
+            ("Gain Reduction", self.reduction),
+            ("Limiting", self.limiting),
+        ]
     }
 }
 
