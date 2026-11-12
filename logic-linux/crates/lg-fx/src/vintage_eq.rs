@@ -20,7 +20,7 @@
 use crate::util::{Biquad, Coefs, Values, db, flush, plugin_impl};
 use lg_dsp::{Param, Unit};
 
-const MODELS: &[&str] = &["Silky", "Punchy", "Clean"];
+const MODELS: &[&str] = &["Silky", "Punchy", "Smooth", "Off"];
 const PHASES: &[&str] = &["Natural", "Linear", "Linear (2)"];
 
 /// The shared output section: drive into a model's saturation, then volume.
@@ -55,6 +55,12 @@ impl Output {
                 let u = x * k;
                 (u / (1.0 + u.abs().powf(2.5)).powf(0.4)) / k
             }
+            // Smooth: the console's line stage, a gentle symmetric rounding
+            2 => {
+                let u = x * k;
+                (u / (1.0 + 0.25 * u * u).sqrt()) / k
+            }
+            // Off: no output stage model
             _ => x,
         };
         self.dc[ch] = flush(self.dc[ch] + self.dck * (y - self.dc[ch]));
@@ -77,7 +83,7 @@ const GEQ_NAMES: [&str; 10] = ["31 Hz", "63 Hz", "125 Hz", "250 Hz", "500 Hz", "
 static GEQ_PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
     let mut v: Vec<Param> = (0..10).map(|i| Param::new(i as u32, GEQ_NAMES[i], -12.0, 12.0, 0.0, Unit::Db)).collect();
     v.push(Param::new(10, "Tune", -50.0, 50.0, 0.0, Unit::Percent));
-    v.push(Param::new(11, "Volume", -24.0, 24.0, 0.0, Unit::Db));
+    v.push(Param::new(11, "Volume", -25.0, 25.0, 0.0, Unit::Db));
     v.push(Param::new(12, "IN", 0.0, 1.0, 1.0, Unit::OnOff));
     v.push(Param::new(13, "Drive", 1.0, 10.0, 5.0, Unit::None));
     v.push(Param::menu(14, "Output Model", MODELS, 1.0));
@@ -160,7 +166,7 @@ static TUBE_PARAMS: [Param; 20] = [
     Param::new(21, "Drive", 1.0, 10.0, 4.0, Unit::None),
     Param::menu(22, "Output Model", MODELS, 0.0),
     Param::menu(19, "Phase", PHASES, 0.0),
-    Param::new(20, "Volume", -24.0, 24.0, 0.0, Unit::Db),
+    Param::new(20, "Volume", -25.0, 25.0, 0.0, Unit::Db),
 ];
 
 pub struct TubeEq {
@@ -227,7 +233,7 @@ plugin_impl!(TubeEq);
 // ---------------------------------------------------------------------------------------------
 // Vintage Console EQ
 
-static CONSOLE_PARAMS: [Param; 12] = [
+static CONSOLE_PARAMS: [Param; 15] = [
     Param::new(0, "High Gain", -16.0, 16.0, 0.0, Unit::Db),
     Param::new(1, "Mid Gain", -18.0, 18.0, 0.0, Unit::Db),
     Param::new(2, "Mid Freq", 0.36, 7.2, 3.2, Unit::None),
@@ -238,8 +244,12 @@ static CONSOLE_PARAMS: [Param; 12] = [
     Param::new(7, "High Pass On", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(8, "Mid Q High", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(12, "Drive", 1.0, 10.0, 4.0, Unit::None),
-    Param::menu(13, "Output Model", MODELS, 1.0),
-    Param::new(9, "Volume", -24.0, 24.0, 0.0, Unit::Db),
+    Param::menu(13, "Output Model", MODELS, 2.0),
+    Param::new(9, "Volume", -25.0, 25.0, 0.0, Unit::Db),
+    // (our own ids) the Low, Mid and High band buttons
+    Param::new(1000, "Low", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(1001, "Mid", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(1002, "High", 0.0, 1.0, 1.0, Unit::OnOff),
 ];
 
 pub struct ConsoleEq {
@@ -259,11 +269,17 @@ impl ConsoleEq {
         let (p, r) = (&self.p, self.rate);
         let mut c = [Coefs::THRU; 5];
         if p.on(6) {
-            c[0] = Coefs::high_shelf(r, 12000.0f32.min(r * 0.45), 0.6, p.get(0));
+            if p.on(1002) {
+                c[0] = Coefs::high_shelf(r, 12000.0f32.min(r * 0.45), 0.6, p.get(0));
+            }
             let q = if p.on(8) { 1.4 } else { 0.7 };
-            c[1] = Coefs::peak(r, (p.get(2) * 1000.0).min(r * 0.45), q, p.get(1));
+            if p.on(1001) {
+                c[1] = Coefs::peak(r, (p.get(2) * 1000.0).min(r * 0.45), q, p.get(1));
+            }
             // the inductor low shelf has a small overshoot above its corner (Q above 0.707)
-            c[2] = Coefs::low_shelf(r, p.get(4), 0.9, p.get(3));
+            if p.on(1000) {
+                c[2] = Coefs::low_shelf(r, p.get(4), 0.9, p.get(3));
+            }
             if p.on(7) {
                 // an 18 dB/oct high-pass: a first-order plus a second-order section
                 c[3] = Coefs::hp1(r, p.get(5));
@@ -321,6 +337,37 @@ mod tests {
         g.set(5, 12.0);
         let b = gain_at(&mut g, 1000.0);
         assert!((b - 12.0).abs() < 0.8, "{b}");
+    }
+
+    #[test]
+    fn console_band_buttons_and_output_models() {
+        let mut c = ConsoleEq::new(48000.0);
+        c.set(13, 3.0); // Output Model Off
+        c.set(3, 12.0);
+        c.set(1, 12.0);
+        c.set(0, 12.0);
+        assert!(gain_at(&mut c, 60.0) > 8.0);
+        c.set(1000, 0.0);
+        assert!(gain_at(&mut c, 60.0).abs() < 0.5);
+        c.set(2, 1.0);
+        assert!(gain_at(&mut c, 1000.0) > 8.0);
+        c.set(1001, 0.0);
+        assert!(gain_at(&mut c, 1000.0).abs() < 0.5);
+        assert!(gain_at(&mut c, 16000.0) > 8.0);
+        c.set(1002, 0.0);
+        assert!(gain_at(&mut c, 16000.0).abs() < 0.5);
+        assert_eq!(MODELS, &["Silky", "Punchy", "Smooth", "Off"]);
+        // Off adds nothing; Smooth rounds a hot signal
+        let hot: Vec<f32> = (0..4800).map(|i| 0.9 * (crate::util::TAU * 100.0 * i as f32 / 48000.0).sin()).collect();
+        let pk = |m: usize| {
+            let mut o = Output::default();
+            o.set(48000.0, 10.0, m, 0.0);
+            o.dck = 0.0;
+            hot.iter().map(|x| o.run(0, *x).abs()).fold(0.0, f32::max)
+        };
+        assert!((pk(3) - 0.9).abs() < 1e-4);
+        assert!(pk(2) < 0.85);
+        assert_eq!(CONSOLE_PARAMS.iter().find(|p| p.id == 9).unwrap().max, 25.0);
     }
 
     #[test]

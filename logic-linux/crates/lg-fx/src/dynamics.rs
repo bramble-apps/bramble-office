@@ -103,12 +103,14 @@ plugin_impl!(DeEsser);
 // ---------------------------------------------------------------------------------------------
 // Gain
 
-static GAIN_PARAMS: [Param; 5] = [
+static GAIN_PARAMS: [Param; 6] = [
     Param::new(1, "Phase Invert Left", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(2, "Phase Invert Right", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(3, "Swap Left/Right", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(4, "Gain", -96.0, 24.0, 0.0, Unit::Db),
     Param::new(5, "Mono", 0.0, 1.0, 0.0, Unit::OnOff),
+    // (our own id) left/right balance of the input: turning one side up turns the other down
+    Param::new(1000, "Balance", -100.0, 100.0, 0.0, Unit::Percent),
 ];
 
 pub struct Gain {
@@ -139,9 +141,11 @@ impl lg_dsp::Effect for Gain {
         let p = &self.p;
         let (il, ir) = (if p.on(1) { -1.0 } else { 1.0 }, if p.on(2) { -1.0 } else { 1.0 });
         let (swap, mono) = (p.on(3), p.on(5));
+        let b = p.get(1000) / 100.0;
+        let (bl, br) = ((1.0 - b).min(1.0), (1.0 + b).min(1.0));
         for i in 0..left.len().min(right.len()) {
             let g = self.g.next();
-            let (mut l, mut r) = (left[i] * il, right[i] * ir);
+            let (mut l, mut r) = (left[i] * il * bl, right[i] * ir * br);
             if swap {
                 std::mem::swap(&mut l, &mut r);
             }
@@ -156,7 +160,37 @@ impl lg_dsp::Effect for Gain {
     }
 }
 
-plugin_impl!(Gain);
+impl lg_dsp::Plugin for Gain {
+    fn params(&self) -> &[lg_dsp::Param] {
+        self.p.defs
+    }
+    fn get(&self, id: u32) -> f32 {
+        self.p.get(id)
+    }
+    fn set(&mut self, id: u32, value: f32) {
+        // like Logic's buttons: turning Mono on turns Swap Left/Right off
+        if id == 5 && value > 0.5 {
+            self.p.set(3, 0.0);
+        }
+        if self.p.set(id, value) {
+            self.update();
+        }
+    }
+    fn reset(&mut self) {
+        self.clear();
+    }
+    fn tail(&self) -> f32 {
+        self.tail_secs()
+    }
+    fn load_floats(&mut self, floats: &[f32]) {
+        for d in self.p.defs {
+            if let Some(v) = floats.get(d.id as usize) {
+                self.p.set(d.id, *v);
+            }
+        }
+        self.update();
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Enveloper
@@ -288,5 +322,23 @@ mod tests {
         let mut r = vec![1.0; 10];
         g.process(&mut l, &mut r);
         assert!((l[5] - db(-6.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn gain_balance_and_mono_turns_swap_off() {
+        let mut g = Gain::new(48000.0);
+        g.set(1000, 50.0);
+        let mut l = vec![1.0; 10];
+        let mut r = vec![1.0; 10];
+        g.process(&mut l, &mut r);
+        assert!((l[5] - 0.5).abs() < 1e-6 && (r[5] - 1.0).abs() < 1e-6);
+        g.set(1000, -100.0);
+        let (mut l, mut r) = (vec![1.0; 10], vec![1.0; 10]);
+        g.process(&mut l, &mut r);
+        assert!((l[5] - 1.0).abs() < 1e-6 && r[5].abs() < 1e-6);
+        g.set(3, 1.0);
+        assert!(g.p.on(3));
+        g.set(5, 1.0);
+        assert!(!g.p.on(3) && g.p.on(5));
     }
 }

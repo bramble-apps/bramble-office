@@ -16,7 +16,7 @@
 //!
 //! Mix is a crossfade (dry = 1 - mix) throughout, as in Logic's delays.
 
-use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Values, beats_hz, flush, plugin_impl, sine01, sync_index_beats, tri};
+use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Values, beats_hz, coef, flush, plugin_impl, sine01, sync_index_beats, tri};
 use lg_dsp::{Param, Unit};
 
 // ---------------------------------------------------------------------------------------------
@@ -176,7 +176,8 @@ plugin_impl!(Ensemble);
 static FLANGER_PARAMS: [Param; 5] = [
     Param::new(0, "Mix", 0.0, 100.0, 50.0, Unit::Percent),
     Param::new(1, "Intensity", 0.0, 100.0, 50.0, Unit::Percent),
-    Param::new(2, "Rate", 0.01, 20.0, 0.1333, Unit::Hz),
+    // free Hz, or with Rate Sync a note value (negative = a sync index, -14 = 1/4)
+    Param::new(2, "Rate", -26.0, 20.0, 0.1333, Unit::None),
     Param::new(3, "Feedback", -100.0, 100.0, 67.0, Unit::Percent),
     Param::new(4, "Rate Sync", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
@@ -187,12 +188,26 @@ pub struct Flanger {
     line: [Delay; 2],
     ph: Phase,
     fb: [f32; 2],
+    bpm: f64,
 }
 
 impl Flanger {
     pub fn new(rate: f32) -> Flanger {
         let cap = (0.02 * rate) as usize;
-        Flanger { p: Values::new(&FLANGER_PARAMS), rate, line: [Delay::new(cap), Delay::new(cap)], ph: Phase::default(), fb: [0.0; 2] }
+        Flanger { p: Values::new(&FLANGER_PARAMS), rate, line: [Delay::new(cap), Delay::new(cap)], ph: Phase::default(), fb: [0.0; 2], bpm: 120.0 }
+    }
+
+    /// The sweep rate: free Hz, or with Rate Sync locked to a note value at the project tempo
+    /// (a free rate snaps to the nearest one; bars and triplets included).
+    pub fn hz(&self) -> f32 {
+        let r = self.p.get(2);
+        if !self.p.on(4) {
+            return r.abs().max(0.01);
+        }
+        if r < 0.0 {
+            return beats_hz(sync_index_beats(r), self.bpm);
+        }
+        crate::util::nearest_sync_hz(r.max(0.01), self.bpm)
     }
     fn update(&mut self) {}
     fn clear(&mut self) {
@@ -212,7 +227,7 @@ impl lg_dsp::Effect for Flanger {
         let mix = p.get(0) / 100.0;
         let depth = p.get(1) / 100.0;
         let fb = (p.get(3) / 100.0).clamp(-0.97, 0.97);
-        let hz = p.get(2);
+        let hz = self.hz();
         let (lo, hi) = (0.0003 * rate, (0.0003 + 0.0077 * depth) * rate);
         for i in 0..left.len().min(right.len()) {
             let ph = self.ph.step(rate, hz);
@@ -228,6 +243,12 @@ impl lg_dsp::Effect for Flanger {
             }
         }
     }
+
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 {
+            self.bpm = bpm;
+        }
+    }
 }
 
 plugin_impl!(Flanger);
@@ -235,7 +256,7 @@ plugin_impl!(Flanger);
 // ---------------------------------------------------------------------------------------------
 // Phaser and Microphaser
 
-static PHASER_PARAMS: [Param; 16] = [
+static PHASER_PARAMS: [Param; 17] = [
     Param::new(0, "Rate LFO 1", 0.01, 20.0, 0.24, Unit::Hz),
     Param::new(1, "Rate LFO 2", 0.01, 20.0, 0.48, Unit::Hz),
     Param::new(2, "LFO Mix", 0.0, 100.0, 10.0, Unit::Percent),
@@ -244,7 +265,7 @@ static PHASER_PARAMS: [Param; 16] = [
     Param::new(5, "Sweep Ceiling", 20.0, 20000.0, 13200.0, Unit::Hz),
     Param::new(6, "Stages", 4.0, 12.0, 12.0, Unit::None),
     Param::new(8, "Phase", -180.0, 180.0, 180.0, Unit::None),
-    Param::new(9, "Output Mix", 0.0, 100.0, 50.0, Unit::Percent),
+    Param::new(9, "Output Mix", -100.0, 100.0, 50.0, Unit::Percent),
     Param::new(13, "Feedback High Cut", 20.0, 20000.0, 20000.0, Unit::Hz),
     Param::new(14, "Feedback Low Cut", 20.0, 20000.0, 20.0, Unit::Hz),
     Param::new(18, "Warmth", 0.0, 1.0, 0.0, Unit::OnOff),
@@ -252,6 +273,8 @@ static PHASER_PARAMS: [Param; 16] = [
     Param::new(23, "LFO 1 Sync", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(24, "LFO 2 Sync", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::menu(25, "Sweep Mode", &["Squared", "Linear", "Exponential"], 0.0),
+    // (our own id) the envelope follower: the input level lifts the sweep range
+    Param::new(1000, "Env Follow", 0.0, 100.0, 0.0, Unit::Percent),
 ];
 
 static MICROPHASER_PARAMS: [Param; 3] = [
@@ -271,11 +294,14 @@ pub struct Phaser {
     fb: [f32; 2],
     fb_lp: [Biquad; 2],
     fb_hp: [Biquad; 2],
+    /// Comb filter lines for the odd Stages values.
+    comb: [crate::util::Delay; 2],
+    env: f32,
 }
 
 impl Phaser {
     pub fn new(rate: f32) -> Phaser {
-        let mut p = Phaser { p: Values::new(&PHASER_PARAMS), micro: false, rate, lfo1: Phase::default(), lfo2: Phase::default(), ap: [[0.0; 12]; 2], fb: [0.0; 2], fb_lp: [Biquad::default(); 2], fb_hp: [Biquad::default(); 2] };
+        let mut p = Phaser { p: Values::new(&PHASER_PARAMS), micro: false, rate, lfo1: Phase::default(), lfo2: Phase::default(), ap: [[0.0; 12]; 2], fb: [0.0; 2], fb_lp: [Biquad::default(); 2], fb_hp: [Biquad::default(); 2], comb: [crate::util::Delay::new(4096), crate::util::Delay::new(4096)], env: 0.0 };
         p.update();
         p
     }
@@ -299,7 +325,9 @@ impl Phaser {
     fn clear(&mut self) {
         self.ap = [[0.0; 12]; 2];
         self.fb = [0.0; 2];
+        self.env = 0.0;
         for s in 0..2 {
+            self.comb[s].clear();
             self.fb_lp[s].clear();
             self.fb_hp[s].clear();
         }
@@ -319,14 +347,22 @@ impl lg_dsp::Effect for Phaser {
             let int = p.get(15) / 100.0;
             (p.get(0), 0.5, 0.0, p.get(3) / 100.0, 550.0, 550.0 * (5400.0f32 / 550.0).powf(int.max(0.02)), 8, -0.5, 0.5, false)
         } else {
-            (p.get(0), p.get(1), p.get(2) / 100.0, p.get(3) / 100.0, p.get(4), p.get(5), (p.get(6).round() as usize).clamp(2, 12) & !1, p.get(8) / 360.0, p.get(9) / 100.0, p.on(18))
+            (p.get(0), p.get(1), p.get(2) / 100.0, p.get(3) / 100.0, p.get(4), p.get(5), (p.get(6).round() as usize).clamp(2, 12), p.get(8) / 360.0, p.get(9) / 100.0, p.on(18))
         };
         let fb = fb.clamp(-0.95, 0.95);
         let (lo, hi) = (floor.min(ceil).max(20.0), ceil.max(floor).min(rate * 0.45));
         let mode = if self.micro { 0 } else { p.idx(25) };
+        // odd Stages (5, 7, 9, 11): comb filtering instead of all-pass phasing
+        let comb = stages % 2 == 1;
+        let follow = if self.micro { 0.0 } else { p.get(1000) / 100.0 };
+        let env_k = coef(rate, 80.0);
         for i in 0..left.len().min(right.len()) {
             let p1 = self.lfo1.step(rate, r1);
             let p2 = self.lfo2.step(rate, r2);
+            let lvl = left[i].abs().max(right[i].abs());
+            self.env = flush(if lvl > self.env { lvl } else { lvl + (self.env - lvl) * env_k });
+            // the follower raises the sweep by up to three octaves at full level
+            let lift = 2f32.powf(3.0 * follow * self.env.min(1.0));
             for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
                 let off = if s == 1 { phase } else { 0.0 };
                 let m = (1.0 - lmix) * (0.5 + 0.5 * sine01(p1 + off)) + lmix * (0.5 + 0.5 * sine01(p2 + off));
@@ -335,7 +371,15 @@ impl lg_dsp::Effect for Phaser {
                     2 => m.sqrt(),
                     _ => m,
                 };
-                let f = lo * (hi / lo).powf(m);
+                let f = (lo * (hi / lo).powf(m) * lift).min(rate * 0.45);
+                if comb {
+                    let c = &mut self.comb[s];
+                    let d = (rate / f).clamp(1.0, 4000.0);
+                    let y = c.read(d);
+                    c.push(*x + flush(y * fb));
+                    *x = *x * (1.0 - mix.abs()) + y * mix;
+                    continue;
+                }
                 // first-order all-pass coefficient for this corner
                 let t = (std::f32::consts::PI * f / rate).tan();
                 let a = (t - 1.0) / (t + 1.0);
@@ -352,7 +396,8 @@ impl lg_dsp::Effect for Phaser {
                 }
                 let f = self.fb_hp[s].run(self.fb_lp[s].run(y));
                 self.fb[s] = flush(f);
-                *x = *x * (1.0 - mix) + y * mix;
+                // a negative Output Mix inverts the effect signal's phase
+                *x = *x * (1.0 - mix.abs()) + y * mix;
             }
         }
     }
@@ -453,6 +498,20 @@ mod tests {
     use lg_dsp::{Effect, Plugin};
 
     #[test]
+    fn flanger_rate_sync_locks_to_tempo() {
+        let mut f = Flanger::new(48000.0);
+        f.set_tempo(120.0);
+        f.set(2, 1.9);
+        assert!((f.hz() - 1.9).abs() < 1e-5);
+        f.set(4, 1.0);
+        assert!((f.hz() - 2.0).abs() < 1e-4, "{}", f.hz()); // a quarter note at 120
+        f.set(2, -26.0);
+        assert!((f.hz() - 0.125).abs() < 1e-4); // four bars
+        f.set_tempo(60.0);
+        assert!((f.hz() - 0.0625).abs() < 1e-4);
+    }
+
+    #[test]
     fn tremolo_quarter_at_120_is_2hz() {
         let t = Tremolo::new(48000.0);
         assert!((t.hz() - 2.0).abs() < 1e-4);
@@ -467,6 +526,35 @@ mod tests {
         t.process(&mut l, &mut r);
         let (mn, mx) = l.iter().fold((1.0f32, 0.0f32), |a, v| (a.0.min(*v), a.1.max(*v)));
         assert!(mn < 0.05 && mx > 0.95, "{mn} {mx}");
+    }
+
+    #[test]
+    fn phaser_odd_stages_comb_negative_mix_and_env_follow() {
+        let tone = |f: f32, a: f32| -> Vec<f32> { (0..24000).map(|i| a * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect() };
+        let rms = |v: &[f32]| (v[12000..].iter().map(|x| x * x).sum::<f32>() / 12000.0).sqrt();
+        let run = |set: &[(u32, f32)], x: &[f32]| {
+            let mut p = Phaser::new(48000.0);
+            for &(id, v) in [(3, 0.0), (4, 1000.0), (5, 1000.0), (9, 50.0)].iter().chain(set) {
+                p.set(id, v);
+            }
+            let (mut l, mut r) = (x.to_vec(), x.to_vec());
+            p.process(&mut l, &mut r);
+            l
+        };
+        // 5 stages: a comb with a 1 ms delay notches 500 Hz, passes 1 kHz
+        let x5 = tone(500.0, 0.1);
+        assert!(rms(&run(&[(6, 5.0)], &x5)) < 0.01 * rms(&x5), "{}", rms(&run(&[(6, 5.0)], &x5)));
+        let x1 = tone(1000.0, 0.1);
+        assert!(rms(&run(&[(6, 5.0)], &x1)) > 0.9 * rms(&x1));
+        // even stages are real phasing (no comb notch at 500 Hz)
+        assert!(rms(&run(&[(6, 4.0)], &x5)) > 0.1 * rms(&x5));
+        // negative Output Mix: the effect signal inverted
+        let a = run(&[(9, 100.0)], &x1);
+        let b = run(&[(9, -100.0)], &x1);
+        assert!(a.iter().zip(&b).all(|(p, q)| (p + q).abs() < 1e-5));
+        // Env Follow: a loud input lifts the comb's notch away from 500 Hz
+        let loud = tone(500.0, 0.9);
+        assert!(rms(&run(&[(6, 5.0), (1000, 100.0)], &loud)) > 0.3 * rms(&loud));
     }
 
     #[test]

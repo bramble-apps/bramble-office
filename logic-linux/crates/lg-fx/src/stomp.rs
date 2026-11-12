@@ -96,7 +96,7 @@ plugin_impl!(RoboFlanger);
 
 const WAVES: &[&str] = &["Square", "Saw Up", "Saw Down", "Triangle", "Pulse 25%", "Pulse 75%", "Random", "Stepped", "Sine", "Smooth Random"];
 
-static TREM_PARAMS: [Param; 7] = [
+static TREM_PARAMS: [Param; 11] = [
     Param::new(0, "On", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(1, "Sync", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::new(2, "Rate", 0.01, 20.0, 0.1667, Unit::None),
@@ -104,6 +104,12 @@ static TREM_PARAMS: [Param; 7] = [
     Param::menu(4, "Wave", WAVES, 8.0),
     Param::new(5, "Smooth", 0.0, 100.0, 30.0, Unit::Percent),
     Param::new(6, "Volume", -24.0, 12.0, 3.0, Unit::Db),
+    // (our own ids) the footswitches: 1/2 Speed and 2x Speed act once per press; Speed Up and
+    // Slow Down move Rate to its maximum / minimum while held
+    Param::new(1000, "1/2 Speed", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1001, "2x Speed", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1002, "Speed Up", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1003, "Slow Down", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 pub struct TotalTremolo {
@@ -125,6 +131,25 @@ impl TotalTremolo {
     fn hz(&self) -> f32 {
         if self.p.on(1) { beats_hz(4.0 * self.p.get(2).max(0.01), self.bpm) } else { self.p.get(2).max(0.01) }
     }
+    /// Multiplies the speed (synced, Rate is a length in bars, so it divides).
+    fn scale_speed(&mut self, k: f32) {
+        let v = self.p.get(2);
+        self.p.set(2, if self.p.on(1) { v / k } else { v * k });
+    }
+    /// A user edit: the 1/2 Speed and 2x Speed buttons act on Rate and spring back.
+    pub fn edit(&mut self, id: u32, value: f32) {
+        match id {
+            1000 | 1001 if value > 0.5 => {
+                self.scale_speed(if id == 1000 { 0.5 } else { 2.0 });
+                self.update();
+            }
+            _ => {
+                if self.p.set(id, value) {
+                    self.update();
+                }
+            }
+        }
+    }
     fn update(&mut self) {
         let sm = self.p.get(5) / 100.0;
         self.smooth.set(self.rate, self.hz() * (1.5 + 200.0 * (1.0 - sm).powi(2)));
@@ -141,6 +166,13 @@ impl Effect for TotalTremolo {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         if !self.p.on(0) {
             return;
+        }
+        // Speed Up / Slow Down held: the rate glides an octave per half second towards the end
+        let (up, down) = (self.p.on(1002), self.p.on(1003));
+        if up != down {
+            let n = left.len().min(right.len()) as f32;
+            self.scale_speed(2f32.powf(2.0 * n / self.rate * if up { 1.0 } else { -1.0 }));
+            self.update();
         }
         let depth = self.p.get(3) / 100.0;
         let wave = self.p.idx(4);
@@ -177,7 +209,33 @@ impl Effect for TotalTremolo {
     }
 }
 
-plugin_impl!(TotalTremolo);
+impl lg_dsp::Plugin for TotalTremolo {
+    fn params(&self) -> &[lg_dsp::Param] {
+        self.p.defs
+    }
+    fn get(&self, id: u32) -> f32 {
+        self.p.get(id)
+    }
+    fn set(&mut self, id: u32, value: f32) {
+        self.edit(id, value);
+    }
+    fn reset(&mut self) {
+        self.clear();
+    }
+    fn tail(&self) -> f32 {
+        self.tail_secs()
+    }
+    fn load_floats(&mut self, floats: &[f32]) {
+        for d in self.p.defs {
+            if let Some(v) = floats.get(d.id as usize) {
+                if d.id < 1000 {
+                    self.p.set(d.id, *v);
+                }
+            }
+        }
+        self.update();
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 
@@ -552,6 +610,41 @@ plugin_impl!(Pedalboard);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn total_tremolo_speed_buttons() {
+        use lg_dsp::{Effect, Plugin};
+        let mut t = TotalTremolo::new(48000.0);
+        t.set_tempo(120.0);
+        let h0 = t.hz();
+        t.set(1000, 1.0);
+        assert!((t.hz() - h0 * 0.5).abs() < 1e-4, "{} {h0}", t.hz());
+        assert_eq!(t.get(1000), 0.0); // springs back
+        t.set(1001, 1.0);
+        t.set(1001, 1.0);
+        assert!((t.hz() - h0 * 2.0).abs() < 1e-4);
+        // free mode too
+        t.set(1, 0.0);
+        t.set(2, 4.0);
+        t.set(1001, 1.0);
+        assert!((t.hz() - 8.0).abs() < 1e-4);
+        // Speed Up held runs Rate to its maximum, Slow Down to its minimum
+        t.set(1002, 1.0);
+        let (mut l, mut r) = (vec![0.5; 48000 * 4], vec![0.5; 48000 * 4]);
+        for (a, b) in l.chunks_mut(512).zip(r.chunks_mut(512)) {
+            t.process(a, b);
+        }
+        assert!((t.get(2) - 20.0).abs() < 1e-3);
+        t.set(1002, 0.0);
+        t.set(1003, 1.0);
+        for (a, b) in l.chunks_mut(512).zip(r.chunks_mut(512)) {
+            t.process(a, b);
+        }
+        for (a, b) in l.chunks_mut(512).zip(r.chunks_mut(512)) {
+            t.process(a, b);
+        }
+        assert!((t.get(2) - 0.01).abs() < 1e-3, "{}", t.get(2));
+    }
 
     #[test]
     fn signatures_pick_the_right_pedal() {

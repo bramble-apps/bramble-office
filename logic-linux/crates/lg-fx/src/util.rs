@@ -524,6 +524,13 @@ pub fn beats_hz(beats: f32, bpm: f64) -> f32 {
     (bpm as f32 / 60.0) / beats.max(1e-3)
 }
 
+/// A free rate locked to the nearest synced note value (sync indices 2-26: 1/64 to four bars,
+/// straight, triplet and dotted) at a tempo.
+pub fn nearest_sync_hz(hz: f32, bpm: f64) -> f32 {
+    let want = hz.max(1e-3);
+    (2..=26).map(|k| beats_hz(sync_index_beats(-(k as f32)), bpm)).min_by(|a, b| (a / want).ln().abs().total_cmp(&(b / want).ln().abs())).unwrap_or(want)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -354,8 +354,21 @@ static AMP_PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(||
         Param::new(30, "Reverb Enable", 0.0, 1.0, 1.0, Unit::OnOff),
         Param::menu(31, "Reverb Type", REVERBS, 8.0),
         Param::new(32, "Reverb Level", 0.0, 10.0, 2.2, Unit::None),
+        // (our own id) the Sync/Free switch: synced, Speed steps through note values from four
+        // bars to 1/64 (straight, triplet, dotted) at the project tempo
+        Param::new(1000, "FX Sync", 0.0, 1.0, 0.0, Unit::OnOff),
     ]
 });
+
+/// Amp Designer's modulation speed: free (Hz from the Speed knob) or synced to a note value.
+fn amp_fx_hz(knob: f32, sync: bool, bpm: f64) -> f32 {
+    if sync {
+        let idx = 26.0 - (knob.clamp(0.0, 10.0) / 10.0 * 24.0).round();
+        crate::util::beats_hz(crate::util::sync_index_beats(-idx), bpm)
+    } else {
+        0.5 + knob * 0.9
+    }
+}
 
 pub struct AmpDesigner {
     p: Values,
@@ -365,11 +378,12 @@ pub struct AmpDesigner {
     fx_ph: Phase,
     vib: [Delay; 2],
     out: f32,
+    bpm: f64,
 }
 
 impl AmpDesigner {
     pub fn new(rate: f32) -> AmpDesigner {
-        let mut a = AmpDesigner { p: Values::new(&AMP_PARAMS), rate, core: AmpCore::new(rate), spring: Spring::new(rate), fx_ph: Phase::default(), vib: [Delay::new((0.02 * rate) as usize), Delay::new((0.02 * rate) as usize)], out: 1.0 };
+        let mut a = AmpDesigner { p: Values::new(&AMP_PARAMS), rate, core: AmpCore::new(rate), spring: Spring::new(rate), fx_ph: Phase::default(), vib: [Delay::new((0.02 * rate) as usize), Delay::new((0.02 * rate) as usize)], out: 1.0, bpm: 120.0 };
         a.update();
         a
     }
@@ -405,7 +419,7 @@ impl lg_dsp::Effect for AmpDesigner {
         let rate = self.rate;
         let fx = self.p.on(24);
         let depth = self.p.get(25) / 10.0;
-        let speed = 0.5 + self.p.get(9) * 0.9;
+        let speed = amp_fx_hz(self.p.get(9), self.p.on(1000), self.bpm);
         let vibrato = self.p.idx(28) == 1;
         let rev = if self.p.on(30) { self.p.get(32) / 10.0 } else { 0.0 };
         for i in 0..left.len().min(right.len()) {
@@ -429,6 +443,12 @@ impl lg_dsp::Effect for AmpDesigner {
                 }
                 *x = y * self.out;
             }
+        }
+    }
+
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 {
+            self.bpm = bpm;
         }
     }
 }
@@ -471,6 +491,21 @@ static BASS_PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|
         Param::menu(48, "Microphone Type", BASS_MICS, 0.0),
         Param::new(63, "Amp/DI Mix", 0.0, 100.0, 0.0, Unit::Percent),
         Param::new(64, "Output Gain", -40.0, 12.0, 4.5, Unit::Db),
+        // (our own id) where the additional EQ sits: before (default) or after the compressor
+        Param::menu(1000, "EQ Position", &["Pre", "Post"], 0.0),
+        // (our own ids) the compressor's Hard / Soft algorithm and its Gain relative to the
+        // always-on AutoGain
+        Param::menu(1001, "Compressor Mode", &["Hard", "Soft"], 1.0),
+        Param::new(1002, "Compressor Gain", -12.0, 12.0, 0.0, Unit::Db),
+        // (our own ids) channel 2, the D.I. box: Boost (input gain), HF Cut (noise filter) and
+        // Tone (six preset curves, with its on/off button)
+        Param::new(1003, "D.I. Boost", 0.0, 20.0, 0.0, Unit::Db),
+        Param::new(1004, "D.I. HF Cut", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::new(1005, "D.I. Tone On", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::menu(1006, "D.I. Tone", &["1", "2", "3", "4", "5", "6"], 0.0),
+        // (our own ids) the amp's Channel switch (I active 0 dB, II passive -15 dB) and Bright
+        Param::menu(1007, "Channel", &["I", "II"], 0.0),
+        Param::new(1008, "Bright", 0.0, 1.0, 0.0, Unit::OnOff),
     ]);
     v
 });
@@ -482,11 +517,42 @@ pub struct BassAmp {
     eq: [[Biquad; 7]; 2],
     comp: Follower,
     out: f32,
+    /// The D.I. box: HF Cut plus the Tone curve's three sections, per side.
+    di: [[Biquad; 4]; 2],
+    /// The Bright switch's lift of the highs and upper mids before the pre-amp.
+    bright: [Biquad; 2],
+}
+
+/// Bass Amp Designer's compressor gain for a detected level `e` (dB): Hard about 8:1, Soft
+/// 2.5:1; AutoGain (always on) gives back about half of what it takes from a full-scale
+/// signal, and Gain (`trim`, dB) adds or removes gain relative to that.
+fn bass_comp(e: f32, thr: f32, hard: bool, trim: f32) -> f32 {
+    let slope = if hard { 0.875 } else { 0.6 };
+    db(-((e - thr).max(0.0) * slope) - thr * slope * 0.5 + trim)
+}
+
+/// The D.I. box's six Tone curves as up to three filter sections.
+fn di_tone(r: f32, tone: usize) -> [Coefs; 3] {
+    let t = Coefs::THRU;
+    match tone {
+        // -6 dB scoop over 100 Hz-10 kHz, deepest near 800 Hz
+        0 => [Coefs::peak(r, 800.0, 0.35, -6.0), t, t],
+        // a deep (-24 dB) V-shaped notch centred near 800 Hz
+        1 => [Coefs::peak(r, 800.0, 0.45, -24.0), t, t],
+        // a gentle -3 dB scoop, deepest around 800-1200 Hz
+        2 => [Coefs::peak(r, 1000.0, 0.35, -3.0), t, t],
+        // -3 dB near 8 kHz, a slight lift from 60 Hz to 1 kHz, +3 dB above 10 kHz
+        3 => [Coefs::peak(r, 8000.0f32.min(r * 0.4), 1.2, -3.0), Coefs::peak(r, 250.0, 0.5, 1.5), Coefs::high_shelf(r, 12000.0f32.min(r * 0.45), 0.7, 3.0)],
+        // a ramp from -24 dB at 10 Hz up to +3 dB near 900 Hz
+        4 => [Coefs::highpass(r, 55.0, 0.6), Coefs::peak(r, 900.0, 0.5, 3.0), t],
+        // the same ramp, rolling off about 6 dB between 10 and 20 kHz
+        _ => [Coefs::highpass(r, 55.0, 0.6), Coefs::peak(r, 900.0, 0.5, 3.0), Coefs::high_shelf(r, 14000.0f32.min(r * 0.45), 0.7, -6.0)],
+    }
 }
 
 impl BassAmp {
     pub fn new(rate: f32) -> BassAmp {
-        let mut b = BassAmp { p: Values::new(&BASS_PARAMS), rate, core: AmpCore::new(rate), eq: [[Biquad::default(); 7]; 2], comp: Follower::new(rate, 10.0, 200.0), out: 1.0 };
+        let mut b = BassAmp { p: Values::new(&BASS_PARAMS), rate, core: AmpCore::new(rate), eq: [[Biquad::default(); 7]; 2], comp: Follower::new(rate, 10.0, 200.0), out: 1.0, di: [[Biquad::default(); 4]; 2], bright: [Biquad::default(); 2] };
         b.update();
         b
     }
@@ -535,6 +601,23 @@ impl BassAmp {
             }
         }
         self.out = db(p.get(64) - 6.0);
+        // Hard: fast and firm; Soft: slow attack, long release (more sustain)
+        if p.idx(1001) == 0 {
+            self.comp.set(r, 2.0, 120.0);
+        } else {
+            self.comp.set(r, 30.0, 400.0);
+        }
+        let br = if p.on(1008) { Coefs::high_shelf(r, 1500.0, 0.7, 6.0) } else { Coefs::THRU };
+        self.bright[0].c = br;
+        self.bright[1].c = br;
+        let hf = if p.on(1004) { Coefs::lowpass(r, 6000.0f32.min(r * 0.45), 0.707) } else { Coefs::THRU };
+        let tone = if p.on(1005) { di_tone(r, p.idx(1006)) } else { [Coefs::THRU; 3] };
+        for s in 0..2 {
+            self.di[s][0].c = hf;
+            for k in 0..3 {
+                self.di[s][k + 1].c = tone[k];
+            }
+        }
     }
     fn clear(&mut self) {
         self.core.clear();
@@ -553,26 +636,166 @@ impl lg_dsp::Effect for BassAmp {
         let comp_on = self.p.on(2);
         let thr = self.p.get(6);
         let di = self.p.get(63) / 100.0;
+        let hard = self.p.idx(1001) == 0;
+        let trim = self.p.get(1002);
+        let boost = db(self.p.get(1003));
+        let chan = if self.p.idx(1007) == 1 { db(-15.0) } else { 1.0 };
+        let post = self.p.idx(1000) == 1;
         for i in 0..left.len().min(right.len()) {
-            let lvl = left[i].abs().max(right[i].abs());
-            let sag = self.core.sag.run((lvl * self.core.pre_gain).min(4.0)) / 4.0;
+            // Pre: the EQ shapes what the compressor hears; Post: it shapes the compressed signal
+            let mut pre = [self.bright[0].run(left[i] * chan), self.bright[1].run(right[i] * chan)];
+            if !post {
+                for (s, v) in pre.iter_mut().enumerate() {
+                    for b in self.eq[s].iter_mut() {
+                        *v = b.run(*v);
+                    }
+                }
+            }
+            let lvl = pre[0].abs().max(pre[1].abs());
+            let raw = left[i].abs().max(right[i].abs());
+            let sag = self.core.sag.run((raw * self.core.pre_gain).min(4.0)) / 4.0;
             // the pre-amp compressor: about 4:1 above its threshold
             let g = if comp_on {
                 let e = lg_dsp::gain_to_db(self.comp.run(lvl).max(1e-6));
-                db(-((e - thr).max(0.0) * 0.75))
+                bass_comp(e, thr, hard, trim)
             } else {
                 1.0
             };
             for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
-                let mut v = *x * g;
-                for b in self.eq[s].iter_mut() {
-                    v = b.run(v);
+                let mut v = pre[s] * g;
+                if post {
+                    for b in self.eq[s].iter_mut() {
+                        v = b.run(v);
+                    }
                 }
                 let amp = self.core.run(s, v, sag, true);
-                *x = (amp * (1.0 - di) + v * di) * self.out;
+                // channel 2: the D.I. box on the dry input
+                let mut d = if di > 0.0 { (*x * boost * 1.2).tanh() / 1.2 } else { 0.0 };
+                if di > 0.0 {
+                    for b in self.di[s].iter_mut() {
+                        d = b.run(d);
+                    }
+                }
+                *x = (amp * (1.0 - di) + d * di) * self.out;
             }
         }
     }
 }
 
 plugin_impl!(BassAmp);
+
+#[cfg(test)]
+mod fx_sync_tests {
+    use super::*;
+    use lg_dsp::{Effect, Plugin};
+
+    #[test]
+    fn bass_di_box_and_compressor_controls() {
+        let tone = |f: f32, a: f32| -> Vec<f32> { (0..24000).map(|i| a * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect() };
+        let rms = |v: &[f32]| (v[12000..].iter().map(|x| x * x).sum::<f32>() / 12000.0).sqrt();
+        let run = |set: &[(u32, f32)], x: &[f32]| {
+            let mut b = BassAmp::new(48000.0);
+            for &(id, v) in set {
+                b.set(id, v);
+            }
+            let (mut l, mut r) = (x.to_vec(), x.to_vec());
+            b.process(&mut l, &mut r);
+            l
+        };
+        // Blend fully right: the D.I. box alone, clean at a low level
+        let x = tone(800.0, 0.05);
+        let di = [(63, 100.0), (2, 0.0)];
+        let flat = rms(&run(&di, &x));
+        // Tone 2 notches 800 Hz deeply, Tone 1 a little, and only with Tone on
+        let t2 = rms(&run(&[di[0], di[1], (1005, 1.0), (1006, 1.0)], &x));
+        let t1 = rms(&run(&[di[0], di[1], (1005, 1.0), (1006, 0.0)], &x));
+        let off = rms(&run(&[di[0], di[1], (1005, 0.0), (1006, 1.0)], &x));
+        assert!(lg_dsp::gain_to_db(t2 / flat) < -18.0, "{}", lg_dsp::gain_to_db(t2 / flat));
+        let g1 = lg_dsp::gain_to_db(t1 / flat);
+        assert!(g1 < -4.0 && g1 > -8.0, "{g1}");
+        assert!((off - flat).abs() < 1e-4);
+        // Tone 5: -24 dB region at very low frequencies
+        let lo = tone(12.0, 0.05);
+        let t5 = rms(&run(&[di[0], di[1], (1005, 1.0), (1006, 4.0)], &lo)) / rms(&run(&di, &lo));
+        assert!(lg_dsp::gain_to_db(t5) < -18.0);
+        // Boost raises the input gain; HF Cut takes the highs down
+        assert!(rms(&run(&[di[0], di[1], (1003, 12.0)], &x)) > 3.0 * flat);
+        let hi = tone(12000.0, 0.05);
+        assert!(rms(&run(&[di[0], di[1], (1004, 1.0)], &hi)) < 0.5 * rms(&run(&di, &hi)));
+        // compressor: Hard squeezes more than Soft; AutoGain lifts what sits under the
+        // threshold; Gain trims relative to it
+        let red = |hard| lg_dsp::gain_to_db(bass_comp(0.0, -30.0, hard, 0.0) / bass_comp(-30.0, -30.0, hard, 0.0));
+        assert!(red(true) < -25.0 && red(false) > -20.0, "{} {}", red(true), red(false));
+        assert!(lg_dsp::gain_to_db(bass_comp(-40.0, -30.0, true, 0.0)) > 10.0);
+        assert!((lg_dsp::gain_to_db(bass_comp(-40.0, -30.0, true, 6.0) / bass_comp(-40.0, -30.0, true, 0.0)) - 6.0).abs() < 1e-3);
+        // Soft attacks slower
+        let mut h = BassAmp::new(48000.0);
+        h.set(1001, 0.0);
+        let mut so = BassAmp::new(48000.0);
+        so.set(1001, 1.0);
+        for _ in 0..240 {
+            h.comp.run(1.0);
+            so.comp.run(1.0);
+        }
+        assert!(h.comp.env > so.comp.env + 0.1, "{} {}", h.comp.env, so.comp.env);
+    }
+
+    #[test]
+    fn bass_channel_and_bright() {
+        let tone = |f: f32| -> Vec<f32> { (0..24000).map(|i| 0.01 * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect() };
+        let rms = |v: &[f32]| (v[12000..].iter().map(|x| x * x).sum::<f32>() / 12000.0).sqrt();
+        let run = |set: &[(u32, f32)], x: &[f32]| {
+            let mut b = BassAmp::new(48000.0);
+            b.set(2, 0.0);
+            b.set(3, 0.0);
+            b.set(47, 6.0); // Direct (PowerAmp Out)
+            for &(id, v) in set {
+                b.set(id, v);
+            }
+            let (mut l, mut r) = (x.to_vec(), x.to_vec());
+            b.process(&mut l, &mut r);
+            rms(&l)
+        };
+        let x = tone(200.0);
+        let g = lg_dsp::gain_to_db(run(&[(1007, 1.0)], &x) / run(&[], &x));
+        assert!(g < -8.0, "{g}");
+        let h = tone(4000.0);
+        assert!(run(&[(1008, 1.0)], &h) > 1.4 * run(&[], &h));
+        assert!((run(&[(1008, 1.0)], &tone(60.0)) / run(&[], &tone(60.0)) - 1.0).abs() < 0.15);
+    }
+
+    #[test]
+    fn bass_eq_pre_post_matters_only_with_the_compressor() {
+        let x: Vec<f32> = (0..24000).map(|i| 0.4 * (crate::util::TAU * 100.0 * i as f32 / 48000.0).sin()).collect();
+        let run = |comp: f32, pos: f32| {
+            let mut b = BassAmp::new(48000.0);
+            b.set(2, comp);
+            b.set(33, 15.0); // +15 dB at 100 Hz
+            b.set(1000, pos);
+            let (mut l, mut r) = (x.clone(), x.clone());
+            b.process(&mut l, &mut r);
+            l
+        };
+        assert_eq!(BASS_PARAMS.iter().find(|p| p.id == 1000).unwrap().default, 0.0);
+        let d = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(p, q)| (p - q).abs()).fold(0.0, f32::max);
+        assert!(d(&run(0.0, 0.0), &run(0.0, 1.0)) < 1e-4);
+        assert!(d(&run(1.0, 0.0), &run(1.0, 1.0)) > 0.01);
+    }
+
+    #[test]
+    fn amp_fx_sync_free() {
+        // free: Hz from the knob
+        assert!((amp_fx_hz(5.0, false, 120.0) - 5.0).abs() < 1e-5);
+        // synced: knob 0 = four bars, 10 = 1/64; values in between land on note values,
+        // triplets included
+        assert!((amp_fx_hz(0.0, true, 120.0) - 0.125).abs() < 1e-5);
+        assert!((amp_fx_hz(10.0, true, 120.0) - 32.0).abs() < 1e-3);
+        let triplet = (0..=100).any(|k| {
+            let beats = 2.0 / amp_fx_hz(k as f32 / 10.0, true, 120.0);
+            ((beats * 1.5) - (beats * 1.5).round()).abs() < 1e-3 && (beats.log2() - beats.log2().round()).abs() > 0.1
+        });
+        assert!(triplet);
+        // and it follows the tempo
+        assert!((amp_fx_hz(0.0, true, 60.0) - 0.0625).abs() < 1e-5);
+    }
+}

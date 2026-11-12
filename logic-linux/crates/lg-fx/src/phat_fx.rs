@@ -12,7 +12,7 @@ use crate::util::{Biquad, Coefs, Delay, Follower, OnePole, Phase, Values, beats_
 use lg_dsp::{Param, Unit};
 
 const BP_TYPES: &[&str] = &["Classic", "Edgy", "Rich", "Gritty"];
-const DIST_TYPES: &[&str] = &["Bit Crusher", "Downsampler", "Vari Drive", "Grit", "Scream", "Exciter", "Hard Saturation", "Tube", "Soft Saturation"];
+const DIST_TYPES: &[&str] = &["Bit Crusher", "Downsampler", "Vari Drive", "Grit", "Scream", "Exciter", "Hard Saturation", "Tube", "Soft Saturation", "Diode", "Dirt", "Squared"];
 const FILTER_TYPES: &[&str] = &[
     "LP 12dB Smooth", "LP 12dB Edgy", "LP 12dB Rich", "LP 12dB Clean", "LP 24dB Rich", "BP 6dB Smooth", "BP 6dB Edgy", "BP 6dB Rich", "BP 6dB Clean", "BP 12dB Rich", "HP 12dB Smooth", "HP 12dB Edgy", "HP 12dB Rich", "HP 12dB Clean", "HP 24dB Rich", "Comb Neg", "Comb PM", "Comb Pos", "Peaking",
     // (ours after Logic's decoded list: the rest of the guide's types)
@@ -40,7 +40,27 @@ pub const ORDER: u32 = 223;
 /// XY pad: X targets A / B, Y targets A / B, X on, Y on, X depth, Y depth, X, Y.
 pub const XY: u32 = 230;
 const MOD_MODES: &[&str] = &["Soft", "Heavy", "Doubler", "Ring Mod"];
-const COMP_MODES: &[&str] = &["Vintage VCA", "Vintage FET", "Vintage Opto", "Platinum", "Studio VCA", "Studio FET", "Classic VCA"];
+const COMP_MODES: &[&str] = &["Vintage VCA", "Vintage FET", "Vintage Opto", "Platinum", "Studio VCA", "Studio FET", "Classic VCA", "Classic", "Clip"];
+
+/// The compressor's gain for `over` dB of reduction and `makeup` dB in a mode: FET models can
+/// only attenuate (make-up never takes the gain above unity); VCA, Platinum, Classic and the
+/// others can attenuate or amplify.
+fn comp_gain(mode: usize, over: f32, makeup: f32) -> f32 {
+    let g = db(-over + makeup);
+    if matches!(mode, 1 | 5) { g.min(1.0) } else { g }
+}
+
+/// Detector attack and release (ms) per mode: Opto slow and level-dependent (see process),
+/// Platinum fast and clean, Clip instant.
+fn comp_times(mode: usize, rel: f32) -> (f32, f32) {
+    match mode {
+        2 => (25.0, rel * 2.0),
+        3 => (0.5, rel),
+        8 => (0.01, 5.0),
+        1 | 5 => (1.0, rel),
+        _ => (5.0, rel),
+    }
+}
 const LIMITS: &[&str] = &["Soft Limiting", "Hard Clipping", "Limiter"];
 const TARGETS: &[&str] = &["Filter Cutoff", "Filter Resonance", "Bandpass Low Cutoff", "Bandpass High Cutoff", "Distortion Drive", "Mod FX Rate", "Master Output"];
 const SHAPES: &[&str] = &["Sine", "Triangle", "Ramp Up", "Ramp Down", "Square", "Random Hold", "Random Glide"];
@@ -237,7 +257,8 @@ impl PhatFx {
             self.bass_lp2[s].c = Coefs::lowpass(self.rate, f * 1.5, 0.707);
         }
         let rel = 30.0 + 1000.0 * self.p.get(57);
-        self.comp_env.set(self.rate, 5.0, rel);
+        let (a, r) = comp_times(self.p.idx(64), rel);
+        self.comp_env.set(self.rate, a, r);
         self.env.set(self.rate, self.p.get(ENV_ATTACK), self.p.get(ENV_RELEASE));
     }
 
@@ -307,6 +328,21 @@ fn dist(kind: usize, x: f32, d: f32, hold: &mut f32, n: f32) -> f32 {
         7 => {
             let u = x * g;
             (if u > 0.0 { u.tanh() } else { (u * 0.6).tanh() / 0.6 }) / g.sqrt()
+        }
+        // Diode: hard, asymmetric (a diode pair's forward drop on one side)
+        9 => {
+            let u = x * g;
+            (if u > 0.0 { u.min(0.6) + 0.1 * (u - 0.6).max(0.0).tanh() } else { (u * 0.8).tanh() }) / g.sqrt()
+        }
+        // Dirt: a biased tube stage, dirty even harmonics
+        10 => {
+            let u = x * g;
+            ((u + 0.35).tanh() - 0.35f32.tanh()) / g.powf(0.6)
+        }
+        // Squared: the signal times its own magnitude, then clipped
+        11 => {
+            let u = (x * g).clamp(-1.0, 1.0);
+            u * u.abs() / g.powf(0.5).max(1.0)
         }
         _ => (x * g).tanh() / g.powf(0.6),
     }
@@ -397,9 +433,14 @@ impl lg_dsp::Effect for PhatFx {
             let gr = if on[5] {
                 let lvl = lg_dsp::gain_to_db(cl.max(1e-6));
                 let thr = -10.0 - 30.0 * camt;
-                let over = (lvl - thr).max(0.0) * (0.5 + 0.4 * camt);
+                let mode = self.p.idx(64);
+                let mut over = (lvl - thr).max(0.0) * (0.5 + 0.4 * camt);
+                if mode == 2 {
+                    // opto: a soft, nonlinear response (gentle near threshold, firmer above)
+                    over = over * over / (over + 6.0);
+                }
                 self.comp_gr = over;
-                db(-over + 10.0 * camt * 0.6)
+                comp_gain(mode, over, 10.0 * camt * 0.6)
             } else {
                 1.0
             };
@@ -559,6 +600,31 @@ plugin_impl!(PhatFx);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guide_distortion_and_compressor_types() {
+        for t in ["Bit Crusher", "Diode", "Dirt", "Grit", "Downsampler", "Exciter", "Scream", "Soft Saturation", "Squared", "Tube", "Vari Drive"] {
+            assert!(DIST_TYPES.contains(&t), "{t}");
+        }
+        for t in ["Classic", "Clip", "Platinum", "Studio VCA", "Studio FET", "Classic VCA", "Vintage VCA", "Vintage FET", "Vintage Opto"] {
+            assert!(COMP_MODES.contains(&t), "{t}");
+        }
+        // the new shapes are distinct and bounded
+        let shape = |k: usize| (0..64).map(|i| { let mut h = 0.0; dist(k, (i as f32 / 32.0) - 1.0, 0.7, &mut h, 0.0) }).collect::<Vec<f32>>();
+        let (a, b, c) = (shape(9), shape(10), shape(11));
+        assert!(a != b && b != c && a != c);
+        assert!(a.iter().chain(&b).chain(&c).all(|v| v.is_finite() && v.abs() < 2.0));
+        // Diode is asymmetric
+        let mut h = 0.0;
+        assert!((dist(9, 0.5, 0.7, &mut h, 0.0) + dist(9, -0.5, 0.7, &mut h, 0.0)).abs() > 0.01);
+        // FET only attenuates; VCA can amplify
+        assert_eq!(comp_gain(1, 0.0, 6.0), 1.0);
+        assert_eq!(comp_gain(5, 3.0, 6.0), 1.0);
+        assert!(comp_gain(0, 0.0, 6.0) > 1.9);
+        assert!(comp_gain(4, 0.0, 6.0) > 1.9);
+        // Opto is slower to attack than FET and Platinum
+        assert!(comp_times(2, 100.0).0 > comp_times(1, 100.0).0 && comp_times(1, 100.0).0 > comp_times(3, 100.0).0);
+    }
     use lg_dsp::{Effect, Plugin};
 
     fn level(fx: &mut PhatFx, f: f32) -> f32 {
