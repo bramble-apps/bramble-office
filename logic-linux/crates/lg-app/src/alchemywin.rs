@@ -1,69 +1,77 @@
-//! Alchemy's window: the sound engine's controls (as the Controls view lists them) and the
-//! pages Logic's Alchemy has beyond them: Arpeggiator (mode, octaves, rate, note length, swing,
-//! latch) with its 16-step sequencer (click a step to turn it on or off, drag its bar for the
-//! velocity), MSEG (drag the points; the loop between two points; amounts to the master
-//! filter, volume and pitch) and Effects (four slots of Studio's effects, mix, bypass, and each
-//! effect's own controls). Sources: each source A–D's element (VA, Additive, Spectral, Granular)
-//! and its controls, and Import Audio… (or a file dropped on the window): the audio the sample
-//! elements play, tuned by its detected pitch. Mod Rack: eight routings from LFO 1 / 2, the MSEG,
-//! the mod wheel, aftertouch, pitch bend or the sequencer step to the filters, tune, volume and
-//! each source's volume, pan, pitch and position.
+//! Alchemy's window, laid out as Logic's: the Name bar (Browse / Simple / Advanced, the preset
+//! field with ‹ ›, File: Initialize Preset / Refresh Library, Save, Save As, Limiter, Vol); in
+//! Advanced view the Global page (sources A–D with Vol / Tune / Pan / F1/F2, the two main filters
+//! with Par/Ser, Master, Voices), each source's page (element and its controls, Import Audio…),
+//! the modulation section (alchemyrack) and, at the bottom in every view, the Perform section
+//! (Transform pad, eight knobs, two XY pads, the envelope knobs) sharing its place with the
+//! Arpeggiator (mode, octaves, rate, length, swing, latch, 16-step sequencer) and Effects (four
+//! slots of Studio's effects with their controls). Browse view lists the saved presets with a
+//! search field; Simple view is the Name bar and the Perform section.
 
-use egui::{pos2, vec2, Color32, Rect, Sense, Stroke};
+use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 use lg_synth::alchemy_extra::{self as ax, FX, FX_PARAM, FX_SLOTS, FX_TYPES};
+use lg_synth::alchemy_mod as am;
 
+use crate::alchemyrack::{self as rack, g, Ix, Live, St, BLUE, ORANGE};
 use crate::app::App;
 use crate::instwin;
 use crate::look;
+use crate::synthui::{self, rgb, Pane, Skin};
+
+const SKIN: Skin = Skin::new(0x1c2027, 0x23272e, 0x46a6d6);
+const W: f32 = 1146.0;
 
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
-    let Some((params, vals)) = instwin::values(app, t) else { return };
-    let get = |pid: u32| params.iter().position(|x| x.id == pid).map(|i| vals[i]).unwrap_or(0.0);
-    let track = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
-    let tab_id = egui::Id::unique(("alchemy-tab", t));
-    let mut tab: usize = ctx.data(|d| d.get_temp(tab_id)).unwrap_or(0);
+    let st_id = egui::Id::unique(("alchemy-st", t));
+    let mut st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
+    let mut live = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| Live { levels: a.mg.levels, envf: a.mg.envf, time: 0.0 }).unwrap_or_default();
+    live.time = ctx.input(|i| i.time);
     // the effects' own parameters, read from the running instrument
     let fx_params: Vec<Option<(Vec<lg_dsp::Param>, Vec<f32>)>> = (0..FX_SLOTS).map(|s| instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| a.extra.fx[s].as_ref().map(|f| {
         let p = f.params().to_vec();
         let v = p.iter().map(|x| f.get(x.id)).collect();
         (p, v)
     })).flatten()).collect();
-    let mut set: Vec<(u32, f32)> = Vec::new();
-    let mut import = false;
     let audio_name = instwin::track_id(app, t).and_then(|id| app.inst.alch_audio.get(&id)).and_then(|(p, _)| p.file_name()).map(|s| s.to_string_lossy().into_owned());
+    let presets: Vec<String> = crate::pluginwin::saved_settings("Alchemy").into_iter().map(|(n, _)| n).collect();
+    let cur = synthui::setting_name(app, t);
     let dropped = std::mem::take(&mut app.inst.dropped);
-    let mut open = true;
-    let resp = egui::Window::new(format!("{track} — Alchemy")).id(egui::Id::unique(("alchemy-window", t))).open(&mut open).collapsible(false).resizable(true).default_size(vec2(780.0, 600.0)).show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            for (k, n) in ["Main", "Arpeggiator", "MSEG", "Effects", "Sources", "Mod Rack"].iter().enumerate() {
-                if ui.add(egui::Button::selectable(tab == k, *n)).clicked() {
-                    tab = k;
+    let size = match st.view {
+        1 => vec2(W, 258.0),
+        2 => vec2(W, 520.0),
+        _ => vec2(W, 738.0),
+    };
+    let ext: Vec<u32> = (0..5).map(|k| am::CTRL_CC + k).collect();
+    let actions = synthui::window(app, ctx, t, "Alchemy", size, SKIN, &ext, |p| body(p, &mut st, &live, &fx_params, audio_name.as_deref(), &presets, &cur));
+    ctx.data_mut(|d| d.insert_temp(st_id, st));
+    let mut file = dropped.first().cloned();
+    for a in actions {
+        let (verb, arg) = a.split_once(':').unwrap_or((a.as_str(), ""));
+        match verb {
+            "import" => file = kn_ui::files::FileDialog::new().set_title("Import Audio").add_filter("Audio", &["wav", "aif", "aiff", "caf", "flac", "WAV", "AIF", "AIFF"]).pick_file(),
+            "init" => initialize(app, t),
+            "refresh" => app.tell(format!("{} Alchemy presets", crate::pluginwin::saved_settings("Alchemy").len())),
+            "step" => synthui::step_setting(app, t, "Alchemy", arg.parse().unwrap_or(1)),
+            "load" => {
+                if let Some((n, path)) = crate::pluginwin::saved_settings("Alchemy").into_iter().find(|(n, _)| n == arg)
+                    && let Some(pairs) = crate::pluginwin::read_setting(&path)
+                {
+                    synthui::apply_setting(app, t, &n, &pairs);
                 }
             }
-        });
-        ui.separator();
-        match tab {
-            1 => arp_page(ui, &get, &mut set),
-            4 => sources_page(ui, t, &params, &get, &mut set, &mut import, audio_name.as_deref()),
-            5 => rack_page(ui, &get, &mut set),
-            2 => mseg_page(ui, &get, &mut set),
-            3 => fx_page(ui, &get, &fx_params, &mut set),
-            _ => {
-                let main: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000).cloned().collect();
-                let mv: Vec<f32> = main.iter().map(|p| get(p.id)).collect();
-                set.extend(crate::pluginwin::controls(ui, &main, &mv, &[], "alchemy-main"));
+            "save" => {
+                if let Some((params, vals)) = instwin::values(app, t)
+                    && crate::pluginwin::write_setting("Alchemy", arg, &params, &vals).is_some()
+                {
+                    if let Some(id) = instwin::track_id(app, t) {
+                        app.inst.synth_setting.insert(id, arg.to_string());
+                    }
+                    app.tell(format!("Saved the preset “{arg}”"));
+                }
             }
+            "seq-import" => seq_import(app, t, arg),
+            _ => {}
         }
-    });
-    ctx.data_mut(|d| d.insert_temp(tab_id, tab));
-    app.inst.rect = resp.map(|r| r.response.rect);
-    if !set.is_empty() {
-        instwin::checkpoint_once(app, ctx, t, "Alchemy Setting");
-        instwin::set_params(app, t, &set);
-    }
-    let mut file = dropped.first().cloned();
-    if import {
-        file = kn_ui::files::FileDialog::new().set_title("Import Audio").add_filter("Audio", &["wav", "aif", "aiff", "caf", "flac", "WAV", "AIF", "AIFF"]).pick_file();
     }
     if let Some(f) = file {
         match lg_synth::wav::read_audio(&f) {
@@ -73,17 +81,444 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                     app.inst.alch_audio.insert(id, (f.clone(), std::sync::Arc::new(a)));
                 }
                 // the source shown plays it (its Granular element on)
-                let src: u32 = ctx.data(|d| d.get_temp(egui::Id::unique(("alchemy-src", t)))).unwrap_or(0);
+                let st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
+                let src = (st.page.clamp(1, 4) - 1) as u32;
                 instwin::set_params(app, t, &[(277 + src, 1.0), (313 + src, 1.0)]);
                 instwin::bump(app, t);
             }
             Err(e) => app.tell(format!("Couldn't import {}: {e}", f.display())),
         }
     }
-    if !open {
-        app.plugin_window = None;
-        app.inst.rect = None;
+}
+
+/// Initialize Preset: a basic sawtooth (source A, wide unison off), AHDSR 1 and Velocity on
+/// Master Vol, Ctrl C (CC 74 Brightness) on Filter 1 Cutoff; everything else at its default.
+pub fn init_pairs(list: &[lg_dsp::Param]) -> Vec<(u32, f32)> {
+    use am::*;
+    let mut v: Vec<(u32, f32)> = list.iter().map(|p| (p.id, p.default)).collect();
+    let mut put = |id: u32, x: f32| {
+        if let Some(e) = v.iter_mut().find(|e| e.0 == id) {
+            e.1 = x;
+        }
+    };
+    // source A: one saw; B off; the Perform knobs neutral
+    put(278, 0.0);
+    put(301, 2.0);
+    put(8, 1.0);
+    put(9, 0.0);
+    put(10, 0.0);
+    put(4, 0.5);
+    put(5, 0.0);
+    put(85, 0.75);
+    put(ahd(0, AH_A), 0.0);
+    put(ahd(0, AH_D), 0.0);
+    put(ahd(0, AH_S), 1.0);
+    put(ahd(0, AH_R), 0.3);
+    for (n, (tgt, src, d)) in [(94u32, code(K_AHD, 0), 1.0f32), (94, code(K_NOTE, 0), 0.5), (85, code(K_MIDI, 4), 0.5)].into_iter().enumerate() {
+        put(route(n, RT_TARGET), tgt as f32);
+        put(route(n, RT_SRC), src);
+        put(route(n, RT_ON), 1.0);
+        put(route(n, RT_DEPTH), d);
     }
+    v
+}
+
+fn initialize(app: &mut App, t: usize) {
+    let Some((params, vals)) = instwin::values(app, t) else { return };
+    // only what differs (a full list of thousands of values would be slow to keep)
+    let pairs: Vec<(u32, f32)> = init_pairs(&params).into_iter().zip(&vals).filter(|((_, v), cur)| (*v - **cur).abs() > 1e-6).map(|(p, _)| p).collect();
+    instwin::checkpoint(app, t, "Initialize Preset");
+    instwin::set_params(app, t, &pairs);
+    if let Some(id) = instwin::track_id(app, t) {
+        app.inst.synth_setting.insert(id, "Default".into());
+    }
+}
+
+/// The sequencer's File > Import Velocity / Note / Groove from a short MIDI file.
+fn seq_import(app: &mut App, t: usize, arg: &str) {
+    let mut it = arg.split(':');
+    let (Some(Ok(mode)), Some(Ok(i))) = (it.next().map(|x| x.parse::<u8>()), it.next().map(|x| x.parse::<usize>())) else { return };
+    let Some(path) = kn_ui::files::FileDialog::new().set_title("Import MIDI File").add_filter("MIDI", &["mid", "midi", "MID"]).pick_file() else { return };
+    let Some(imp) = std::fs::read(&path).ok().and_then(|d| lg_core::midi::read(&d)) else {
+        app.tell(format!("Couldn't read {}", path.display()));
+        return;
+    };
+    let mut notes: Vec<(u32, u8, u8)> = imp.tracks.iter().flat_map(|(_, _, n)| n.iter().map(|n| (n.pos, n.pitch, n.velocity))).collect();
+    notes.sort();
+    let Some((params, vals)) = instwin::values(app, t) else { return };
+    let rate = params.iter().position(|p| p.id == am::seq(i, am::SQ_RATE)).map(|k| vals[k]).unwrap_or(5.0);
+    let beats = am::SEQ_RATE_BEATS[(rate.round().max(0.0) as usize).min(am::SEQ_RATE_BEATS.len() - 1)];
+    let pairs: Vec<(u32, f32)> = am::seq_import(&notes, 960, beats, mode).into_iter().map(|(f, v)| (am::seq(i, f), v)).collect();
+    instwin::checkpoint(app, t, "Import to Sequencer");
+    instwin::set_params(app, t, &pairs);
+}
+
+fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], audio: Option<&str>, presets: &[String], cur: &str) {
+    let ix = Ix::new(p.params);
+    name_bar(p, &ix, st, presets, cur);
+    match st.view {
+        1 => perform(p, &ix, st, fx, 46.0),
+        2 => {
+            browse(p, st, presets, cur);
+            perform(p, &ix, st, fx, 308.0);
+        }
+        _ => {
+            match st.page {
+                0 => global(p, &ix, st),
+                5 => {
+                    nav(p, st);
+                    p.text(300.0, 160.0, Align2::LEFT_CENTER, "Morph: the sources' morphing isn't in Studio yet.", 12.0, p.skin.dim);
+                }
+                s => {
+                    nav(p, st);
+                    let (params, vals) = (p.params, p.vals);
+                    let get = |id: u32| ix_get(&ix, vals, id);
+                    let r = p.rect(84.0, 48.0, W - 92.0, 230.0);
+                    let mut set = Vec::new();
+                    let mut import = false;
+                    let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)));
+                    egui::ScrollArea::vertical().id_salt(("alch-src-page", p.t)).show(&mut child, |ui| {
+                        sources_page(ui, p.t, (s - 1) as u32, params, &get, &mut set, &mut import, audio);
+                    });
+                    p.set.extend(set);
+                    if import {
+                        p.actions.push("import".into());
+                    }
+                }
+            }
+            rack::section(p, &ix, st, live, 5.0, 290.0, W - 10.0, 234.0);
+            perform(p, &ix, st, fx, 528.0);
+        }
+    }
+}
+
+fn ix_get(ix: &Ix, vals: &[f32], id: u32) -> f32 {
+    ix.0.get(&id).map(|&i| vals[i]).unwrap_or(0.0)
+}
+
+// ---------------------------------------------------------------- Name bar
+
+fn name_bar(p: &mut Pane, ix: &Ix, st: &mut St, presets: &[String], cur: &str) {
+    let pt = p.painter();
+    pt.rect_filled(p.rect(0.0, 0.0, W, 40.0), 0.0, rgb(0x55585e));
+    for (k, n) in ["BROWSE", "SIMPLE", "ADVANCED"].iter().enumerate() {
+        let view = [2u8, 1, 0][k];
+        let r = p.rect(8.0 + k as f32 * 90.0, 7.0, 89.0, 27.0);
+        let resp = p.ui.interact(r, egui::Id::unique(("alch-view", p.t, k)), Sense::click());
+        let lit = st.view == view;
+        pt.rect_filled(r, 0.0, if lit { BLUE } else if resp.hovered() { rgb(0x4d5056) } else { rgb(0x43464c) });
+        pt.text(r.center(), Align2::CENTER_CENTER, *n, look::regular(11.5), Color32::WHITE);
+        if resp.clicked() {
+            st.view = view;
+        }
+    }
+    // the preset field, ‹ ›
+    let fr = p.rect(326.0, 7.0, 355.0, 27.0);
+    let resp = p.ui.interact(fr, egui::Id::unique(("alch-preset", p.t)), Sense::click());
+    pt.rect_filled(fr, 0.0, rgb(0x43464c));
+    pt.rect_filled(Rect::from_min_size(fr.min, vec2(28.0, 27.0)), 0.0, rgb(0x3a3d43));
+    crate::glyphs::paint(&pt, Rect::from_min_size(fr.min, vec2(28.0, 27.0)), crate::glyphs::ph::CARET_DOWN, 11.0, Color32::WHITE);
+    let shown = if cur == "Factory Default" { "Default" } else { cur };
+    pt.text(pos2(fr.min.x + 28.0 + (fr.width() - 28.0) / 2.0, fr.center().y), Align2::CENTER_CENTER, shown, look::regular(12.0), Color32::WHITE);
+    egui::Popup::menu(&resp).show(|ui| {
+        if presets.is_empty() {
+            ui.label("No saved presets");
+        }
+        egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
+            for n in presets {
+                if ui.add(egui::Button::selectable(n == cur, n.as_str())).clicked() {
+                    p.actions.push(format!("load:{n}"));
+                }
+            }
+        });
+    });
+    let ar = p.rect(683.0, 7.0, 60.0, 27.0);
+    pt.rect_filled(ar, 0.0, rgb(0x43464c));
+    let d = rack::arrows(p, ar, "alch-preset-step");
+    if d != 0 {
+        p.actions.push(format!("step:{d}"));
+    }
+    // File / Save / Save As
+    let fb = p.rect(750.0, 7.0, 45.0, 27.0);
+    let resp = p.ui.interact(fb, egui::Id::unique(("alch-namefile", p.t)), Sense::click());
+    pt.rect_filled(fb, 0.0, if resp.hovered() { rgb(0x4d5056) } else { rgb(0x43464c) });
+    pt.text(fb.center(), Align2::CENTER_CENTER, "File", look::regular(11.5), Color32::WHITE);
+    egui::Popup::menu(&resp).show(|ui| {
+        ui.add_enabled(false, egui::Button::new("Save Consolidated"));
+        if ui.button("Initialize Preset").clicked() {
+            p.actions.push("init".into());
+        }
+        if ui.button("Refresh Library").clicked() {
+            p.actions.push("refresh".into());
+        }
+    });
+    let saved = presets.iter().any(|n| n == cur);
+    let sb = p.rect(796.0, 7.0, 52.0, 27.0);
+    let sresp = p.ui.interact(sb, egui::Id::unique(("alch-namesave", p.t)), Sense::click());
+    pt.rect_filled(sb, 0.0, if sresp.hovered() { rgb(0x4d5056) } else { rgb(0x43464c) });
+    pt.text(sb.center(), Align2::CENTER_CENTER, "Save", look::regular(11.5), Color32::WHITE);
+    if sresp.clicked() && saved {
+        p.actions.push(format!("save:{cur}"));
+    }
+    let ab = p.rect(849.0, 7.0, 68.0, 27.0);
+    let aresp = p.ui.interact(ab, egui::Id::unique(("alch-namesaveas", p.t)), Sense::click());
+    pt.rect_filled(ab, 0.0, if aresp.hovered() { rgb(0x4d5056) } else { rgb(0x43464c) });
+    pt.text(ab.center(), Align2::CENTER_CENTER, "Save As", look::regular(11.5), Color32::WHITE);
+    // Save on a preset that isn't one of the user's opens Save As
+    let save_as = if sresp.clicked() && !saved { Some(&sresp) } else { None };
+    let mut name = std::mem::take(&mut st.save_name);
+    for resp in [Some(&aresp), save_as].into_iter().flatten() {
+        egui::Popup::menu(resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            let te = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Preset name").desired_width(170.0));
+            let enter = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.button("Save").clicked() || enter) && !name.trim().is_empty() {
+                p.actions.push(format!("save:{}", name.trim()));
+                name.clear();
+                ui.close();
+            }
+        });
+    }
+    st.save_name = name;
+    // Limiter, Vol
+    let lim = g(p, ix, lg_synth::alchemy::LIMITER) >= 0.5;
+    if rack::flat(p, p.rect(990.0, 9.0, 54.0, 22.0), "Limiter", lim, true, "limiter") {
+        p.put(lg_synth::alchemy::LIMITER, if lim { 0.0 } else { 1.0 });
+    }
+    p.text(1062.0, 20.0, Align2::LEFT_CENTER, "Vol", 11.0, Color32::WHITE);
+    let mut v = g(p, ix, 99);
+    let kr = p.rect(1086.0, 2.0, 36.0, 36.0 + 18.0);
+    if crate::widgets::knob(p.ui, kr, egui::Id::unique(("alch-outvol", p.t)), &mut v, -40.0, 12.0, 0.0, "", &|v| format!("{v:.1} dB")) {
+        p.put(99, v);
+    }
+}
+
+fn browse(p: &mut Pane, st: &mut St, presets: &[String], cur: &str) {
+    p.ui.painter().rect_filled(p.rect(0.0, 40.0, W, 262.0), 0.0, rgb(0x1c2027));
+    let sr = p.rect(16.0, 52.0, 300.0, 22.0);
+    let mut q = std::mem::take(&mut st.search);
+    p.ui.put(sr, egui::TextEdit::singleline(&mut q).hint_text("Search presets"));
+    let list: Vec<&String> = presets.iter().filter(|n| q.is_empty() || n.to_lowercase().contains(&q.to_lowercase())).collect();
+    st.search = q;
+    let r = p.rect(16.0, 82.0, W - 32.0, 212.0);
+    let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)));
+    egui::ScrollArea::vertical().id_salt(("alch-browse", p.t)).show(&mut child, |ui| {
+        if list.is_empty() {
+            ui.label(egui::RichText::new("No presets: save one with Save As").color(look::text_dim()));
+        }
+        for n in list {
+            if ui.add(egui::Button::selectable(n == cur, n.as_str())).clicked() {
+                p.actions.push(format!("load:{n}"));
+            }
+        }
+    });
+}
+
+// ---------------------------------------------------------------- Global page
+
+fn nav(p: &mut Pane, st: &mut St) {
+    p.ui.painter().rect_filled(p.rect(0.0, 40.0, W, 248.0), 0.0, rgb(0x1c2027));
+    p.ui.painter().rect_filled(p.rect(4.0, 48.0, 64.0, 232.0), 0.0, rgb(0x16191e));
+    for (k, n) in ["GLOBAL", "A", "B", "C", "D", "MORPH"].iter().enumerate() {
+        let r = p.rect(4.0, 50.0 + k as f32 * 38.5, 64.0, 37.0);
+        let resp = p.ui.interact(r, egui::Id::unique(("alch-nav", p.t, k)), Sense::click());
+        let lit = st.page as usize == k;
+        if (1..=4).contains(&k) {
+            p.ui.painter().rect_filled(Rect::from_min_size(r.min + vec2(0.0, 8.0), vec2(2.0, 21.0)), 0.0, BLUE);
+        }
+        p.ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, *n, look::regular(11.5), if lit { BLUE } else if resp.hovered() { Color32::WHITE } else { p.skin.text });
+        if resp.clicked() {
+            st.page = k as u8;
+        }
+    }
+}
+
+const ELEMENTS: [&str; 4] = ["VA", "Additive", "Spectral", "Granular"];
+
+fn element(p: &Pane, ix: &Ix, s: u32) -> usize {
+    if g(p, ix, 313 + s) >= 0.5 { 3 } else if g(p, ix, 309 + s) >= 0.5 { 2 } else if g(p, ix, 293 + s) >= 0.5 { 1 } else { 0 }
+}
+
+fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
+    nav(p, st);
+    let pt = p.painter();
+    let line = Stroke::new(1.0, rgb(0x30353d));
+    pt.line_segment([p.o + vec2(548.0, 48.0), p.o + vec2(548.0, 282.0)], line);
+    pt.line_segment([p.o + vec2(838.0, 48.0), p.o + vec2(838.0, 282.0)], line);
+    pt.line_segment([p.o + vec2(838.0, 172.0), p.o + vec2(W - 4.0, 172.0)], line);
+    let title = |x: f32, y: f32, s: &str| pt.text(p.o + vec2(x, y), Align2::LEFT_CENTER, s, look::regular(12.5), p.skin.text);
+    title(84.0, 66.0, "SOURCES");
+    title(560.0, 66.0, "FILTER");
+    title(852.0, 66.0, "MASTER");
+    title(852.0, 192.0, "VOICES");
+    // the four sources
+    for s in 0..4u32 {
+        let bx = 84.0 + (s % 2) as f32 * 231.0;
+        let by = 82.0 + (s / 2) as f32 * 102.0;
+        let on = g(p, ix, 277 + s) >= 0.5;
+        if rack::flat(p, p.rect(bx + 8.0, by, 20.0, 20.0), ["A", "B", "C", "D"][s as usize], on, true, ("src-on", s)) {
+            p.put(277 + s, if on { 0.0 } else { 1.0 });
+        }
+        let el = element(p, ix, s);
+        let name = if !on { "Off".to_string() } else if el == 0 { lg_synth::alchemy::VA_SHAPES[(g(p, ix, 301 + s).round().max(0.0) as usize).min(3)].to_string() } else { ELEMENTS[el].to_string() };
+        rack::field_btn(p, p.rect(bx + 32.0, by, 150.0, 20.0), &name, ("src-name", s), false);
+        let d = rack::arrows(p, p.rect(bx + 184.0, by, 30.0, 20.0), ("src-ar", s));
+        if d != 0 && el == 0 {
+            let v = (g(p, ix, 301 + s) + d as f32).rem_euclid(4.0);
+            p.put(301 + s, v);
+        }
+        for (k, (id, l)) in [(19 + s, "Vol"), (27 + s, "Tune"), (23 + s, "Pan"), (lg_synth::alchemy::ROUTE_F2 + s, "F1/F2")].iter().enumerate() {
+            rack::knob(p, ix, st, bx + 28.0 + k as f32 * 50.0, by + 30.0, 38.0, *id, l);
+        }
+    }
+    // the main filters
+    for (k, (on, ty, ids)) in [(364u32, 365u32, [85u32, 86, 87]), (367, 368, [89, 90, 91])].iter().enumerate() {
+        let y = 82.0 + k as f32 * 102.0;
+        let lit = g(p, ix, *on) >= 0.5;
+        if rack::flat(p, p.rect(560.0, y, 28.0, 20.0), "On", lit, true, ("f-on", k)) {
+            p.put(*on, if lit { 0.0 } else { 1.0 });
+        }
+        rack::menu_arrows(p, ix, 592.0, y, 96.0, *ty);
+        for (j, (id, l)) in ids.iter().zip(["Cutoff", "Res", "Drive"]).enumerate() {
+            rack::knob(p, ix, st, 594.0 + j as f32 * 50.0, y + 30.0, 38.0, *id, l);
+        }
+    }
+    rack::knob(p, ix, st, 760.0, 150.0, 30.0, 93, "Par/Ser");
+    // master
+    for (k, (id, l, x)) in [(94u32, "Vol", 884.0f32), (95, "Pan", 934.0), (96, "Coarse", 1050.0), (97, "Fine", 1100.0)].iter().enumerate() {
+        let _ = k;
+        rack::knob(p, ix, st, *x, 80.0, 38.0, *id, l);
+    }
+    // voices
+    rack::flat(p, p.rect(936.0, 182.0, 30.0, 20.0), "All", true, true, "v-all");
+    for (k, l) in ["A", "B", "C", "D"].iter().enumerate() {
+        rack::flat(p, p.rect(976.0 + k as f32 * 21.0, 182.0, 20.0, 20.0), l, false, false, ("v-src", k));
+    }
+    p.menu(852.0, 210.0, 86.0, 20.0, 371);
+    p.text(852.0, 238.0, Align2::LEFT_CENTER, "Mode", 10.0, p.skin.dim);
+    // Num: the voices (whole numbers)
+    let num = g(p, ix, 376).round();
+    let nr = p.rect(946.0, 210.0, 48.0, 20.0);
+    let resp = rack::field_btn(p, nr, &format!("{num:.0}"), "num", true);
+    let mut pick = None;
+    egui::Popup::menu(&resp).show(|ui| {
+        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+            for n in 1..=32 {
+                if ui.add(egui::Button::selectable(n as f32 == num, n.to_string())).clicked() {
+                    pick = Some(n as f32);
+                }
+            }
+        });
+    });
+    if let Some(n) = pick {
+        p.put(376, n);
+    }
+    p.text(946.0, 238.0, Align2::LEFT_CENTER, "Num", 10.0, p.skin.dim);
+    p.field(946.0, 248.0, 38.0, 20.0, 391, 1.0);
+    p.field(988.0, 248.0, 38.0, 20.0, 396, 1.0);
+    p.text(946.0, 276.0, Align2::LEFT_CENTER, "Up-Bend-Down", 10.0, p.skin.dim);
+    rack::knob(p, ix, st, 1100.0, 196.0, 34.0, 98, "Glide");
+}
+
+// ---------------------------------------------------------------- Perform / Arp / Effects
+
+fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], y0: f32) {
+    let light = rgb(0xc9cacd);
+    let dark_text = rgb(0x2a2c30);
+    p.ui.painter().rect_filled(p.rect(0.0, y0 - 4.0, W, 212.0), 0.0, light);
+    p.ui.painter().rect_filled(p.rect(4.0, y0, 64.0, 204.0), 0.0, rgb(0x9a9ca1));
+    for (k, n) in ["PERFORM", "ARP", "EFFECTS"].iter().enumerate() {
+        let r = p.rect(4.0, y0 + k as f32 * 38.0, 64.0, 37.0);
+        let resp = p.ui.interact(r, egui::Id::unique(("alch-lower", p.t, k)), Sense::click());
+        let lit = st.lower as usize == k;
+        if lit {
+            p.ui.painter().rect_filled(r, 0.0, light);
+        }
+        p.ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, *n, look::regular(11.5), if lit { rgb(0x5a5d63) } else { Color32::WHITE });
+        if resp.clicked() {
+            st.lower = k as u8;
+        }
+    }
+    if st.lower != 0 {
+        let r = p.rect(80.0, y0, W - 88.0, 200.0);
+        p.ui.painter().rect_filled(r, 0.0, rgb(0x23272e));
+        let (vals, ixr) = (p.vals, ix);
+        let get = |id: u32| ix_get(ixr, vals, id);
+        let mut set = Vec::new();
+        let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(6.0)).layout(egui::Layout::top_down(egui::Align::Min)));
+        egui::ScrollArea::vertical().id_salt(("alch-lower-pane", p.t, st.lower)).show(&mut child, |ui| {
+            if st.lower == 1 {
+                arp_page(ui, &get, &mut set);
+            } else {
+                fx_page(ui, &get, fx, &mut set);
+            }
+        });
+        p.set.extend(set);
+        return;
+    }
+    // the Transform pad: eight snapshots, the framing box follows the pad position
+    let pad = p.rect(84.0, y0 + 4.0, 425.0, 152.0);
+    let pt = p.painter();
+    pt.rect_filled(pad, 2.0, rgb(0x1a1d22));
+    let (cw, chh) = (pad.width() / 4.0, pad.height() / 2.0);
+    for k in 0..8 {
+        let c = Rect::from_min_size(pad.min + vec2((k % 4) as f32 * cw, (k / 4) as f32 * chh), vec2(cw, chh));
+        pt.rect_stroke(c.shrink(1.5), 0.0, Stroke::new(1.0, rgb(0x2c3036)), egui::StrokeKind::Inside);
+        pt.text(c.center(), Align2::CENTER_CENTER, format!("Snapshot {}", k + 1), look::regular(11.5), Color32::WHITE);
+    }
+    let (px, py) = (g(p, ix, 17), g(p, ix, 18));
+    let fc = pos2(pad.min.x + px * pad.width(), pad.max.y - py * pad.height());
+    let fr = Rect::from_center_size(fc, vec2(cw - 8.0, chh - 8.0));
+    for (a, b, c) in [(fr.left_top(), vec2(12.0, 0.0), vec2(0.0, 12.0)), (fr.right_top(), vec2(-12.0, 0.0), vec2(0.0, 12.0)), (fr.left_bottom(), vec2(12.0, 0.0), vec2(0.0, -12.0)), (fr.right_bottom(), vec2(-12.0, 0.0), vec2(0.0, -12.0))] {
+        pt.line_segment([a, a + b], Stroke::new(2.0, BLUE));
+        pt.line_segment([a, a + c], Stroke::new(2.0, BLUE));
+    }
+    let resp = p.ui.interact(pad, egui::Id::unique(("alch-tpad", p.t)), Sense::click_and_drag());
+    if let Some(q) = resp.interact_pointer_pos()
+        && (resp.dragged() || resp.clicked())
+    {
+        let (mut fx_, mut fy) = (((q.x - pad.min.x) / pad.width()).clamp(0.0, 1.0), ((pad.max.y - q.y) / pad.height()).clamp(0.0, 1.0));
+        if resp.clicked() {
+            // a click selects that snapshot (the box centred on it)
+            fx_ = ((fx_ * 4.0).floor().min(3.0) + 0.5) / 4.0;
+            fy = ((fy * 2.0).floor().min(1.0) + 0.5) / 2.0;
+        }
+        p.put(17, fx_);
+        p.put(18, fy);
+    }
+    // the eight knobs, labelled by what they control
+    let label = |p: &Pane, x: f32, y: f32, s: &str| p.text(x, y, Align2::CENTER_CENTER, s, 11.0, dark_text);
+    for k in 0..8u32 {
+        let x = 553.0 + (k % 4) as f32 * 66.0;
+        let y = y0 + 12.0 + (k / 4) as f32 * 82.0;
+        let name = p.prm(k + 1).name;
+        let mut v = g(p, ix, k + 1);
+        let kr = p.rect(x - 19.0, y, 38.0, 38.0 + 18.0);
+        if crate::widgets::knob(p.ui, kr, egui::Id::unique(("alch-perf", p.t, k)), &mut v, 0.0, 1.0, p.prm(k + 1).default, "", &|v| format!("{:.0} %", v * 100.0)) {
+            p.put(k + 1, v);
+        }
+        p.text(x, y + 48.0, Align2::CENTER_CENTER, name, 10.0, dark_text);
+    }
+    // the XY pads
+    for (k, (ix_, iy)) in [(9u32, 10u32), (11, 12)].iter().enumerate() {
+        let x = 790.0 + k as f32 * 120.0;
+        let xn = p.prm(*ix_).name;
+        let yn = p.prm(*iy).name;
+        p.text(x, y0 + 12.0, Align2::LEFT_CENTER, &format!("X{}: {xn}", k + 1), 10.5, dark_text);
+        p.xy(x, y0 + 22.0, 110.0, 110.0, *ix_, *iy);
+        p.text(x + 55.0, y0 + 144.0, Align2::CENTER_CENTER, &format!("Y{}: {yn}", k + 1), 10.5, dark_text);
+    }
+    // the envelope knobs
+    for (k, (id, n)) in [(13u32, "Attack"), (14, "Decay"), (15, "Sustain"), (16, "Release")].iter().enumerate() {
+        let x = 1060.0 + (k % 2) as f32 * 52.0;
+        let y = y0 + 12.0 + (k / 2) as f32 * 82.0;
+        let mut v = g(p, ix, *id);
+        let kr = p.rect(x - 19.0, y, 38.0, 38.0 + 18.0);
+        if crate::widgets::knob(p.ui, kr, egui::Id::unique(("alch-penv", p.t, k)), &mut v, 0.0, 1.0, p.prm(*id).default, "", &|v| format!("{:.0} %", v * 100.0)) {
+            p.put(*id, v);
+        }
+        label(p, x, y + 48.0, n);
+    }
+    let _ = ORANGE;
 }
 
 fn row(ui: &mut egui::Ui, label: &str, pid: u32, min: f32, max: f32, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
@@ -168,53 +603,6 @@ fn arp_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32
     }
 }
 
-fn mseg_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    ui.horizontal(|ui| {
-        check(ui, "MSEG On", ax::MSEG, get, set);
-        check(ui, "Loop", ax::MSEG + 4, get, set);
-    });
-    row(ui, "Points", ax::MSEG + 7, 2.0, 16.0, get, set);
-    row(ui, "Loop Start (point)", ax::MSEG + 5, 0.0, 15.0, get, set);
-    row(ui, "Loop End (point)", ax::MSEG + 6, 0.0, 15.0, get, set);
-    row(ui, "To Cutoff", ax::MSEG + 1, -1.0, 1.0, get, set);
-    row(ui, "To Volume", ax::MSEG + 2, -1.0, 1.0, get, set);
-    row(ui, "To Pitch", ax::MSEG + 3, -24.0, 24.0, get, set);
-    let n = get(ax::MSEG + 7).round().clamp(2.0, 16.0) as usize;
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 200.0), Sense::hover());
-    let p = ui.painter().clone();
-    p.rect_filled(r, 6.0, look::lane_bg());
-    p.hline(r.x_range(), r.center().y, Stroke::new(1.0, look::grid_line()));
-    let times: Vec<f32> = (0..n).map(|k| if k == 0 { 0.0 } else { get(ax::MSEG_TIME + k as u32) }).collect();
-    let total: f32 = times.iter().sum::<f32>().max(0.5) * 1.1;
-    let mut x = 0.0;
-    let mut pts = Vec::new();
-    for k in 0..n {
-        x += times[k];
-        let lv = get(ax::MSEG_LEVEL + k as u32);
-        pts.push(pos2(r.min.x + x / total * r.width(), r.center().y - lv * r.height() * 0.45));
-    }
-    p.add(egui::Shape::line(pts.clone(), Stroke::new(2.0, look::accent())));
-    if get(ax::MSEG + 4) >= 0.5 {
-        let (a, b) = (get(ax::MSEG + 5).round() as usize, get(ax::MSEG + 6).round() as usize);
-        if a < pts.len() && b < pts.len() && b > a {
-            p.rect_filled(Rect::from_min_max(pos2(pts[a].x, r.min.y), pos2(pts[b].x, r.max.y)), 0.0, look::accent().gamma_multiply(0.12));
-        }
-    }
-    for (k, pt) in pts.iter().enumerate() {
-        p.circle_filled(*pt, 5.0, Color32::WHITE);
-        let resp = ui.interact(Rect::from_center_size(*pt, vec2(14.0, 14.0)), ui.scope_id().with(("mseg-pt", k)), Sense::drag());
-        if resp.dragged() {
-            let d = resp.drag_delta();
-            let lv = (get(ax::MSEG_LEVEL + k as u32) - d.y / (r.height() * 0.45)).clamp(-1.0, 1.0);
-            set.push((ax::MSEG_LEVEL + k as u32, lv));
-            if k > 0 {
-                let tm = (get(ax::MSEG_TIME + k as u32) + d.x / r.width() * total).clamp(0.0, 10.0);
-                set.push((ax::MSEG_TIME + k as u32, tm));
-            }
-        }
-    }
-}
-
 fn fx_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], set: &mut Vec<(u32, f32)>) {
     egui::ScrollArea::vertical().id_salt("alchemy-fx").show(ui, |ui| {
         for s in 0..FX_SLOTS {
@@ -278,22 +666,15 @@ pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
     al.set_granular_sample(mono, a.rate as f32, hz);
 }
 
-fn sources_page(ui: &mut egui::Ui, t: usize, params: &[lg_dsp::Param], get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>, import: &mut bool, audio: Option<&str>) {
-    let sid = egui::Id::unique(("alchemy-src", t));
-    let mut src: u32 = ui.data(|d| d.get_temp(sid)).unwrap_or(0);
+fn sources_page(ui: &mut egui::Ui, t: usize, src: u32, params: &[lg_dsp::Param], get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>, import: &mut bool, audio: Option<&str>) {
     ui.horizontal(|ui| {
-        for (k, l) in ["A", "B", "C", "D"].iter().enumerate() {
-            if ui.add(egui::Button::selectable(src == k as u32, format!("Source {l}"))).clicked() {
-                src = k as u32;
-            }
-        }
+        ui.label(egui::RichText::new(format!("SOURCE {}", ["A", "B", "C", "D"][src as usize])).size(12.5));
         ui.separator();
         if ui.button("Import Audio…").on_hover_text("Or drop an audio file on the window").clicked() {
             *import = true;
         }
         ui.label(egui::RichText::new(audio.unwrap_or("no audio imported")).color(look::text_dim()));
     });
-    ui.data_mut(|d| d.insert_temp(sid, src));
     let letter = ["A", "B", "C", "D"][src as usize];
     ui.horizontal(|ui| {
         check(ui, "On", 277 + src, get, set);
@@ -313,18 +694,4 @@ fn sources_page(ui: &mut egui::Ui, t: usize, params: &[lg_dsp::Param], get: &dyn
     let own: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000 && p.name.ends_with(&suffix) && !p.name.contains(" On ") && !p.name.starts_with("Source On") && !p.name.ends_with(&format!("On{suffix}"))).cloned().collect();
     let vals: Vec<f32> = own.iter().map(|p| get(p.id)).collect();
     set.extend(crate::pluginwin::controls(ui, &own, &vals, &[], &format!("alch-src-{t}-{src}")));
-}
-
-fn rack_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    ui.label(egui::RichText::new("Each routing: a source moves a target by its depth").size(11.0).color(look::text_dim()));
-    for m in 0..ax::MOD_SLOTS {
-        let b = ax::MOD + m as u32 * 4;
-        ui.horizontal(|ui| {
-            ui.label(format!("{}", m + 1));
-            check(ui, "On", b, get, set);
-            menu(ui, "Source", b + 1, ax::MOD_SOURCES, get, set);
-            menu(ui, "Target", b + 2, ax::MOD_TARGETS, get, set);
-            row(ui, "Depth", b + 3, -1.0, 1.0, get, set);
-        });
-    }
 }

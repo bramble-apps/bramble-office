@@ -389,11 +389,11 @@ pub fn shown_of(params: &[Param], vals: &[f32], texts: &[Option<String>], id: u3
 }
 
 /// The settings file's current name by track (shown in the header).
-fn setting_name(app: &App, t: usize) -> String {
+pub(crate) fn setting_name(app: &App, t: usize) -> String {
     instwin::track_id(app, t).and_then(|id| app.inst.synth_setting.get(&id).cloned()).unwrap_or_else(|| "Factory Default".to_string())
 }
 
-fn apply_setting(app: &mut App, t: usize, name: &str, pairs: &[(u32, f32)]) {
+pub(crate) fn apply_setting(app: &mut App, t: usize, name: &str, pairs: &[(u32, f32)]) {
     instwin::checkpoint(app, t, "Load Setting");
     instwin::set_params(app, t, pairs);
     if let Some(id) = instwin::track_id(app, t) {

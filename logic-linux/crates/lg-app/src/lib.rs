@@ -70,6 +70,7 @@ mod samplerwin;
 mod dmdwin;
 mod quickwin;
 mod dkdwin;
+mod alchemyrack;
 mod alchemywin;
 mod keyswin;
 mod b3win;
