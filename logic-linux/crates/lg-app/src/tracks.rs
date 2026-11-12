@@ -334,7 +334,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 None => track_icon(&hp, icon, t),
             }
         }
-        let name_x = if drew.is_some() { icon.max.x + 6.0 } else { icon.min.x };
+        let name_x = if drew.is_some() { icon.max.x + 8.0 } else { icon.min.x };
         // the name: double-click to rename (Return keeps it, Escape doesn't)
         let alt_w = if app.ta.show_alternatives || !t.extra.alternatives.is_empty() { 74.0 } else { 34.0 };
         let name_r = Rect::from_min_size(pos2(name_x - 2.0, row.min.y + 5.0), vec2((row.max.x - name_x - alt_w).max(40.0), 20.0));
@@ -353,7 +353,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             _ => {
-                hp.text(pos2(name_x, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, (((row.max.x - name_x - alt_w) / 7.5) as usize).clamp(6, 40)), look::semibold(13.0), if dim { look::text_dim() } else { look::text() });
+                hp.text(pos2(name_x, row.min.y + 15.0), Align2::LEFT_CENTER, ellipsize(&t.name, (((row.max.x - name_x - alt_w) / 7.0) as usize).clamp(6, 40)), look::regular(13.5), if dim { look::text_dim() } else { look::text() });
                 if let Some(extra) = crate::trackhdr::name_column(app, i) {
                     hp.text(pos2(row.max.x - alt_w - 2.0, row.min.y + 15.0), Align2::RIGHT_CENTER, ellipsize(&extra, 16), look::regular(10.5), look::text_dim());
                 }
@@ -364,7 +364,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         // the header's buttons, as its configuration shows them (trackhdr.rs): On/Off, M, S,
         // Protect, Freeze, R, I
-        let by = row.min.y + 29.0;
+        let by = row.min.y + 27.0;
         let pressed = crate::trackhdr::buttons(app, ui, row, i, name_x, by);
         let mut changed = pressed.changed;
         let (mute, solo) = (pressed.mute, pressed.solo);
@@ -373,11 +373,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the pan knob at the right (or the send it is set to)
         if app.tm.hdr.pan && !crate::trackhdr::send_knob(app, ui, &hp, row, by, i) {
         let mut pan = t.pan;
-        let kc = pos2(row.max.x - 18.0, by + 8.5);
-        let kresp = ui.interact(Rect::from_center_size(kc, vec2(20.0, 20.0)), ui.scope_id().with(("hpan", i)), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
-        hp.circle_filled(kc, 9.0, Color32::from_gray(0x55));
+        let kc = pos2(row.max.x - 19.0, by + 9.5);
+        let kresp = ui.interact(Rect::from_center_size(kc, vec2(22.0, 22.0)), ui.scope_id().with(("hpan", i)), Sense::click_and_drag()).on_hover_text(format!("Pan {:+.0}", pan * 64.0));
+        hp.circle_filled(kc, 11.0, look::header_groove());
+        hp.circle_filled(kc, 8.0, Color32::from_gray(0x8c));
         let ang = std::f32::consts::PI * (1.5 + 0.75 * pan);
-        hp.line_segment([kc, kc + vec2(ang.cos(), ang.sin()) * 7.5], Stroke::new(1.8, Color32::WHITE));
+        let dir = vec2(ang.cos(), ang.sin());
+        hp.line_segment([kc + dir * 3.5, kc + dir * 7.0], Stroke::new(1.6, Color32::WHITE));
         if kresp.dragged() {
             pan = (pan - kresp.drag_delta().y / 100.0).clamp(-1.0, 1.0);
             app.help_tag = Some(vec![("Pan".into(), format!("{:+.0}", pan * 64.0))]);
@@ -398,15 +400,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // volume: a small slider (dB)
         let mut vol = t.volume_db;
         if app.tm.hdr.volume {
-        let vr = Rect::from_min_size(pos2(bx + 98.0, by + 1.0), vec2((row.max.x - bx - 138.0).max(30.0), 15.0));
+        let vr = Rect::from_min_size(pos2(bx + 98.0 + 2.0, by), vec2((row.max.x - bx - 144.0).max(30.0), 19.0));
         let vresp = ui.interact(vr, ui.scope_id().with(("vol", i)), Sense::click_and_drag()).on_hover_text(format!("Volume {vol:.1} dB"));
         let frac = db_to_frac(vol);
-        hp.rect_filled(Rect::from_center_size(pos2(vr.center().x, vr.center().y), vec2(vr.width(), 4.0)), 2.0, look::group_bg());
-        crate::trackhdr::volume_meter(app, &hp, vr, i);
-        hp.circle_filled(pos2(vr.min.x + frac * vr.width(), vr.center().y), 6.5, look::text_dim());
+        hp.rect_filled(vr, 9.5, look::header_groove());
+        let inner = vr.shrink2(vec2(9.5, 0.0));
+        crate::trackhdr::volume_meter(app, &hp, inner, i);
+        hp.circle_filled(pos2(inner.min.x + frac * inner.width(), vr.center().y), 7.5, Color32::from_gray(0x8c));
         if let Some(pp) = vresp.interact_pointer_pos() {
             if vresp.dragged() || vresp.clicked() {
-                vol = frac_to_db(((pp.x - vr.min.x) / vr.width()).clamp(0.0, 1.0));
+                vol = frac_to_db(((pp.x - vr.min.x - 9.5) / (vr.width() - 19.0)).clamp(0.0, 1.0));
                 changed = true;
             }
         }
@@ -850,17 +853,15 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
 /// card in the track's colour.
 fn track_icon_large(p: &egui::Painter, r: Rect, t: &lg_core::Track) {
     let c = look::region_color(t.kind);
-    p.rect_filled(r, 8.0, look::mix(Color32::from_gray(0x2a), c, 0.18));
     p.rect_stroke(r, 8.0, Stroke::new(1.0, c.gamma_multiply(0.5)), egui::StrokeKind::Inside);
-    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), r.width() * 0.7, c);
+    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), r.width() * 0.8, c);
 }
 
 /// A track's icon: what it plays (keys, drums, guitar, synth, a microphone or a waveform for
 /// audio) in the track's colour.
 fn track_icon(p: &egui::Painter, r: Rect, t: &lg_core::Track) {
     let c = look::region_color(t.kind);
-    p.rect_filled(r, 6.0, c.gamma_multiply(0.22));
-    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), 24.0, icon_ink(c));
+    crate::glyphs::paint(p, r, crate::glyphs::TrackIcon::of(t).glyph(), 30.0, icon_ink(c));
 }
 
 /// The icon in the track's colour, a shade darker on the light theme (to stand out on its card).

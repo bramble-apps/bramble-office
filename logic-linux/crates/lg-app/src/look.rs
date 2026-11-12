@@ -128,6 +128,15 @@ fn pick(d: u32, l: u32) -> Color32 {
     kn_ui::theme::rgb(if dark() { d } else { l })
 }
 
+/// Logic's track-header pills (M|S, R|I) and the volume groove: a tint over the row, so they
+/// show on selected and plain rows alike.
+pub fn header_pill() -> Color32 {
+    if dark() { Color32::from_white_alpha(20) } else { Color32::from_black_alpha(18) }
+}
+pub fn header_groove() -> Color32 {
+    if dark() { Color32::from_black_alpha(95) } else { Color32::from_black_alpha(30) }
+}
+
 /// The window's background (behind the panes).
 pub fn window_bg() -> Color32 {
     pick(0x1c1c1e, 0xe9e9eb)

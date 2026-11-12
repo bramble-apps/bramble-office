@@ -404,7 +404,9 @@ pub fn number(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect, i
     let selected = app.ta.selected.contains(&i);
     let col = if dim { look::text_dim().gamma_multiply(0.5) } else if focused && app.ta.selected.len() > 1 { look::text() } else { look::text_dim() };
     let c = pos2(row.min.x + 14.0 + x, row.center().y);
-    hp.text(c, Align2::CENTER_CENTER, format!("{}", i + 1), look::semibold(12.0), col);
+    hp.text(c, Align2::CENTER_CENTER, format!("{}", i + 1), look::regular(13.0), col);
+    // (Logic's hairline between the number and the rest of the header)
+    hp.line_segment([pos2(row.min.x + 28.0 + x, row.min.y), pos2(row.min.x + 28.0 + x, row.max.y)], Stroke::new(1.0, Color32::from_black_alpha(60)));
     if selected && app.ta.selected.len() > 1 {
         let r = Rect::from_center_size(c, vec2(22.0, 18.0));
         if ui.interact(r, ui.scope_id().with(("tracknum", i)), Sense::click()).clicked() {
@@ -428,7 +430,6 @@ pub fn icon(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, r: Rect, i: us
     if let Some(name) = t.extra.set.icon.as_deref().and_then(|n| n.strip_prefix("custom:")) {
         let ctx = ui.ctx().clone();
         if let Some(tex) = custom_texture(app, &ctx, name) {
-            hp.rect_filled(r, 6.0, c.gamma_multiply(0.22));
             hp.image(tex.id(), r.shrink(2.0), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             return Some(true);
         }
@@ -436,14 +437,12 @@ pub fn icon(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, r: Rect, i: us
     let Some(g) = chosen_glyph(&t) else {
         // (the patch's own icon, in the track's colour when one is assigned)
         if t.extra.set.strip.color.is_some() && t.extra.stack.is_none() {
-            hp.rect_filled(r, 6.0, c.gamma_multiply(0.22));
-            glyphs::paint(hp, r, glyphs::TrackIcon::of(&t).glyph(), if large { r.width() * 0.7 } else { 24.0 }, c);
+            glyphs::paint(hp, r, glyphs::TrackIcon::of(&t).glyph(), if large { r.width() * 0.8 } else { 30.0 }, c);
             return Some(true);
         }
         return Some(false);
     };
-    hp.rect_filled(r, if large { 8.0 } else { 6.0 }, c.gamma_multiply(0.22));
-    glyphs::paint(hp, r, g, if large { r.width() * 0.7 } else { 24.0 }, c);
+    glyphs::paint(hp, r, g, if large { r.width() * 0.8 } else { 30.0 }, c);
     Some(true)
 }
 
@@ -486,9 +485,33 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
     let blink = (ui.input(|i| i.time) * 2.5).fract() < 0.5;
     let (any_solo, flow) = solo_state(app);
     let mut x = bx;
-    let next = |x: &mut f32| {
-        let r = Rect::from_min_size(pos2(*x, by), vec2(20.0, 17.0));
-        *x += 23.0;
+    // Logic joins the buttons into pills (M|S, R|I…): each group's buttons touch, a divider
+    // between them, the outer corners rounded, 5 pt between groups
+    let shown = [
+        (cfg.on_off, 0),
+        (cfg.mute, 1),
+        (cfg.solo, 1),
+        (cfg.protect, 2),
+        (cfg.freeze, 2),
+        (cfg.record && !no_input(app, i), 3),
+        (cfg.input && !no_input(app, i), 3),
+        (app.ta.show_hidden && app.tm.ui.hide_button, 4),
+    ];
+    let order: Vec<u8> = shown.iter().filter(|s| s.0).map(|s| s.1).collect();
+    let mut k = 0usize;
+    let corners = std::cell::Cell::new(egui::CornerRadius::default());
+    let mut next = |x: &mut f32| {
+        let g = order.get(k).copied().unwrap_or(9);
+        let first = k == 0 || order.get(k - 1) != Some(&g);
+        let last = order.get(k + 1) != Some(&g);
+        if first && k > 0 {
+            *x += 5.0;
+        }
+        let r = Rect::from_min_size(pos2(*x, by), vec2(20.0, 19.0));
+        *x += 20.0;
+        k += 1;
+        let (a, b) = (if first { 5 } else { 0 }, if last { 5 } else { 0 });
+        corners.set(egui::CornerRadius { nw: a, sw: a, ne: b, se: b });
         r
     };
     // one button: its look, and what the pointer does to it — a click or the start of a slide
@@ -509,11 +532,18 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         }
         None
     };
-    let paint = |ui: &egui::Ui, r: Rect, fill: Color32| ui.painter().rect_filled(r, 4.0, fill);
+    // (the button's fill with its pill corners; a hairline divider where it joins the one before)
+    let paint = |ui: &egui::Ui, r: Rect, fill: Color32, cr: egui::CornerRadius| {
+        ui.painter().rect_filled(r, cr, fill);
+        if cr.nw == 0 {
+            ui.painter().line_segment([pos2(r.min.x, r.min.y + 4.0), pos2(r.min.x, r.max.y - 4.0)], Stroke::new(1.0, Color32::from_black_alpha(70)));
+        }
+    };
+    let cr = |c: &std::cell::Cell<egui::CornerRadius>| c.get();
     if cfg.on_off {
         let r = next(&mut x);
         let on = !set.off;
-        paint(ui, r, look::group_bg());
+        paint(ui, r, look::header_pill(), cr(&corners));
         glyphs::paint(ui.painter(), r, ph::POWER, 12.0, if on { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::text_dim().gamma_multiply(0.6) });
         if let Some(state) = press(app, ui, r, Btn::OnOff, on, "onoff") {
             if let Some(s) = crate::tm::set_mut(app, i) {
@@ -529,8 +559,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         // (while something is soloed: the tracks it silences flash their M blue)
         let silenced = any_solo && !t.solo && !t.mute && !set.strip.solo_safe && !flow.contains(&i) && set.external.is_none();
         let blue = Color32::from_rgb(0x4f, 0xa8, 0xe8);
-        paint(ui, r, if t.mute { blue } else if silenced && blink { blue.gamma_multiply(0.45) } else { look::group_bg() });
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "M", look::bold(11.0), if t.mute { Color32::BLACK } else { look::text() });
+        paint(ui, r, if t.mute { blue } else if silenced && blink { blue.gamma_multiply(0.45) } else { look::header_pill() }, cr(&corners));
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "M", look::semibold(12.0), if t.mute { Color32::BLACK } else { look::text() });
         if let Some(state) = press(app, ui, r, Btn::Mute, t.mute, "mute") {
             if cmd {
                 // Command-click: every track in the same state follows
@@ -548,8 +578,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         let r = next(&mut x);
         let yellow = Color32::from_rgb(0xe8, 0xc8, 0x3c);
         let in_flow = flow.contains(&i);
-        paint(ui, r, if t.solo { yellow } else if in_flow && blink { yellow.gamma_multiply(0.5) } else { look::group_bg() });
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "S", look::bold(11.0), if t.solo { Color32::BLACK } else { look::text() });
+        paint(ui, r, if t.solo { yellow } else if in_flow && blink { yellow.gamma_multiply(0.5) } else { look::header_pill() }, cr(&corners));
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "S", look::semibold(12.0), if t.solo { Color32::BLACK } else { look::text() });
         if set.strip.solo_safe {
             ui.painter().line_segment([r.left_bottom() + vec2(3.0, -3.0), r.right_top() + vec2(-3.0, 3.0)], Stroke::new(1.5, look::record_red()));
         }
@@ -579,7 +609,7 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
     }
     if cfg.protect {
         let r = next(&mut x);
-        paint(ui, r, look::group_bg());
+        paint(ui, r, look::header_pill(), cr(&corners));
         glyphs::paint(ui.painter(), r, if set.protected { ph_fill::LOCK } else { ph::LOCK_OPEN }, 12.0, if set.protected { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::text_dim() });
         if let Some(state) = press(app, ui, r, Btn::Protect, set.protected, "protect") {
             if cmd {
@@ -603,7 +633,7 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
             FreezeMode::SourceOnly => Color32::from_rgb(0x52, 0xc0, 0x3c),
             FreezeMode::PreFader => Color32::from_rgb(0x4f, 0xa8, 0xe8),
         };
-        paint(ui, r, if set.frozen { col } else { look::group_bg() });
+        paint(ui, r, if set.frozen { col } else { look::header_pill() }, cr(&corners));
         glyphs::paint(ui.painter(), r, ph::SNOWFLAKE, 12.0, if set.frozen { Color32::WHITE } else { look::text_dim() });
         if let Some(state) = press(app, ui, r, Btn::Freeze, set.frozen, "freeze") {
             crate::freeze::set_frozen(app, i, state);
@@ -618,8 +648,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         // none is armed: grey with a red R (it records)
         let recording = app.recording() && armed;
         let implied = !armed && app.armed.is_empty() && app.selected_track == Some(i);
-        paint(ui, r, if recording || (armed && blink) { red } else if armed { red.gamma_multiply(0.55) } else { look::group_bg() });
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "R", look::bold(11.0), if armed { Color32::WHITE } else if implied { red } else { look::text() });
+        paint(ui, r, if recording || (armed && blink) { red } else if armed { red.gamma_multiply(0.55) } else { look::header_pill() }, cr(&corners));
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "R", look::semibold(12.0), if armed { Color32::WHITE } else if implied { red } else { look::text() });
         if ui.interact(r, ui.scope_id().with(("rec", i)), Sense::click()).clicked() {
             if locked {
                 app.tm.ui.alert = Some(if set.frozen { "The track is frozen.".into() } else { "The track is locked.\nTurn off its Protect button to record on it.".into() });
@@ -645,8 +675,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         let auto = inst && (app.selected_track == Some(i) || app.armed.contains(&i));
         let off = app.tm.ui.monitor_off.contains(&t.extra.id);
         let mon = app.monitoring.contains(&i);
-        paint(ui, r, if mon { orange } else { look::group_bg() });
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "I", look::bold(11.0), if mon { Color32::WHITE } else if auto && !off { orange } else if inst { look::text() } else { orange });
+        paint(ui, r, if mon { orange } else { look::header_pill() }, cr(&corners));
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "I", look::semibold(12.0), if mon { Color32::WHITE } else if auto && !off { orange } else if inst { look::text() } else { orange });
         if ui.interact(r, ui.scope_id().with(("mon", i)), Sense::click()).clicked() {
             if inst && alt {
                 if !app.tm.ui.monitor_off.remove(&t.extra.id) {
@@ -664,8 +694,8 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
     if app.ta.show_hidden && app.tm.ui.hide_button {
         let r = next(&mut x);
         let on = t.extra.hidden;
-        paint(ui, r, if on { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::group_bg() });
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "H", look::bold(11.0), if on { Color32::BLACK } else { look::text() });
+        paint(ui, r, if on { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::header_pill() }, cr(&corners));
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, "H", look::semibold(12.0), if on { Color32::BLACK } else { look::text() });
         if let Some(state) = press(app, ui, r, Btn::Hide, on, "hide") {
             set_hidden(app, i, state);
         }
