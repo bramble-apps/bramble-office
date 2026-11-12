@@ -32,7 +32,8 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        State { shown: false, on: false, percent: 0.0, mode: 1, unit: 0, typing: None }
+        // (LG_VARISPEED=1: shown, for checks)
+        State { shown: std::env::var_os("LG_VARISPEED").is_some(), on: false, percent: 0.0, mode: 1, unit: 0, typing: None }
     }
 }
 
