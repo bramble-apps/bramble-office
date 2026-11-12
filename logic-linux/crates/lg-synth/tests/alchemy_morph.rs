@@ -69,3 +69,24 @@ fn xfade_and_morph() {
     let p = pitch_of(&render(&mut a, 0.5)[4800..]);
     assert!((p - 220.0).abs() < 15.0, "fixed: {p}");
 }
+
+#[test]
+fn keyscale_and_wait() {
+    use lg_synth::alchemy::{KEYSCALE, WAIT};
+    // Keyscale Off: every key plays C3
+    let mut a = sines();
+    a.set(278, 0.0);
+    a.set(KEYSCALE, 2.0);
+    a.note_on(72, 100);
+    let p = pitch_of(&render(&mut a, 0.5)[4800..]);
+    assert!((p - 261.6).abs() < 15.0, "{p}");
+    // Wait: silent for the first 0.2 s
+    let mut a = sines();
+    a.set(278, 0.0);
+    a.set(WAIT, 0.2);
+    a.note_on(60, 100);
+    let l = render(&mut a, 0.4);
+    let early = l[..4800].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+    let late = l[12000..].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+    assert!(early < 1e-4 && late > 1e-3, "{early} {late}");
+}

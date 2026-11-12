@@ -130,6 +130,9 @@ struct SourceCfg {
     /// The three source filters: (type, cutoff knob, res knob, drive knob, on); parallel or not.
     sf: [(u8, f32, f32, f32, bool); 3],
     sf_par: bool,
+    /// Keyscale (0 Key+PBend, 1 Key, 2 Off) and Wait (seconds before the source starts).
+    keyscale: u8,
+    wait: f32,
     /// The Send pop-up: 0 F1/F2, 1–4 F1 and FX A–D, 5–8 F2 and FX A–D.
     send: u8,
     /// The additive / spectral / formant settings (alchemy_partials).
@@ -250,6 +253,8 @@ pub(crate) struct AlchVoice {
     /// (sources A–D, main filters 1–2) for the envelope followers.
     pub(crate) mv: crate::alchemy_mod::ModVoice,
     legato: bool,
+    /// Seconds since the note started.
+    age: f32,
     /// The arpeggiator step's pan for this note.
     npan: f32,
     own: Option<AlchShared>,
@@ -284,6 +289,7 @@ impl AlchVoice {
             mix2: [(0.0, 0.0); CHUNK],
             mv: Default::default(),
             legato: false,
+            age: 0.0,
             npan: 0.0,
             own: None,
             ov: Default::default(),
@@ -311,6 +317,9 @@ impl Voice<AlchShared> for AlchVoice {
             self.pitch = self.target;
         }
         self.legato = was && sh.glide > 0.0;
+        if !self.legato {
+            self.age = 0.0;
+        }
         self.mv.fresh = true;
         self.mv.note = note;
         self.mv.vel = self.vel;
@@ -409,10 +418,16 @@ impl Voice<AlchShared> for AlchVoice {
         let mut br = [0.0f32; CHUNK];
         for si in 0..4 {
             let c = sh.src[si];
-            if c.kind == Kind::Off || c.vol <= 0.0 {
+            // Wait: the source starts a while after the key
+            if c.kind == Kind::Off || c.vol <= 0.0 || self.age < c.wait {
                 continue;
             }
-            let hz = lg_dsp::midi_hz(base + c.semis);
+            // Keyscale: Key+PBend follows notes and bend, Key only notes, Off neither (C3)
+            let hz = lg_dsp::midi_hz(match c.keyscale {
+                1 => base - ctl.bend,
+                2 => 60.0 + sh.tune,
+                _ => base,
+            } + c.semis);
             let st = &mut self.src[si];
             let kt = if c.keytrack { 2f32.powf(key * 0.5) } else { 1.0 };
             let mut filt_on = [false; 3];
@@ -704,6 +719,7 @@ impl Voice<AlchShared> for AlchVoice {
         }
         self.dry_n = n;
         self.level = peak;
+        self.age += n as f32 / rate;
         self.lv[4] = f1p;
         self.lv[5] = f2p;
         if self.amp.idle() || (self.killing && self.fade.gain <= 0.0) {
@@ -727,6 +743,10 @@ fn self_mix_add(mix: &mut [(f32, f32); CHUNK], i: usize, a: f32, b: f32) {
 /// Morph section: MORPH + (0 mode, 1 Elements, 2 group, 3 Auto Gain, 4 Fixed Pitch, 5 Auto Align,
 /// 6–7 Pitch X / Y); Morph All X / Y are Logic's ids 75–76, the element knobs 77–84.
 pub const MORPH: u32 = 14800;
+/// Each source's Keyscale and Wait.
+pub const KEYSCALE: u32 = 14810;
+pub const WAIT: u32 = 14814;
+pub const KEYSCALES: &[&str] = &["Key+PBend", "Key", "Off"];
 pub const MORPH_MODES: &[&str] = &["Off", "XFade XY", "XFade Linear", "Morph XY", "Morph Linear"];
 pub const MORPH_GROUPS: &[&str] = &["A-B", "C-D", "A-B-C-D"];
 
@@ -894,6 +914,11 @@ pub fn all_params() -> &'static [Param] {
         v.extend(crate::alchemy_arp::params());
         v.extend(crate::alchemy_fx::params());
         v.push(Param::menu(MORPH, "Morph Mode", MORPH_MODES, 0.0));
+        for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
+            let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
+            v.push(Param::menu(KEYSCALE + s as u32, leak(format!("Keyscale {l}")), KEYSCALES, 0.0));
+            v.push(Param::new(WAIT + s as u32, leak(format!("Wait {l}")), 0.0, 2.0, 0.0, Unit::Seconds));
+        }
         v.push(Param::new(MORPH + 1, "Morph Elements", 0.0, 1.0, 0.0, Unit::OnOff));
         v.push(Param::menu(MORPH + 2, "Morph Group", MORPH_GROUPS, 2.0));
         v.push(Param::new(MORPH + 3, "Auto Gain", 0.0, 1.0, 1.0, Unit::OnOff));
@@ -1144,6 +1169,8 @@ impl Alchemy {
                 }),
                 sf_par: p(SRC_FILT + s as u32 * 16 + 8) >= 0.5,
                 send: p(crate::alchemy_fx::SEND + s as u32).round().clamp(0.0, 8.0) as u8,
+                keyscale: p(KEYSCALE + s as u32).round().clamp(0.0, 2.0) as u8,
+                wait: p(WAIT + s as u32),
                 part: crate::alchemy_partials::PartCfg::read(p, s),
                 route: p(ROUTE_F2 + s as u32),
             };

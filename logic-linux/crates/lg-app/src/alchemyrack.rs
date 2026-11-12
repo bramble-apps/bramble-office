@@ -310,7 +310,8 @@ pub fn target_marks(p: &Pane, ix: &Ix, st: &St, id: u32, c: Pos2, d: f32) {
         pt.add(egui::Shape::line(pts, Stroke::new(2.5, ORANGE)));
     }
     if st.target == id {
-        pt.circle_stroke(c, d / 2.0 + 4.0, Stroke::new(1.2, BLUE));
+        // the current target: a blue ring on the knob's face (clear of its label)
+        pt.circle_stroke(c, d / 2.0 - 4.0, Stroke::new(1.5, BLUE));
     }
     // a green arc on a source's knob while the sources are morphed
     let name = target_name(p, ix, id);

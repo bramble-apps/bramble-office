@@ -382,6 +382,26 @@ fn nav(p: &mut Pane, st: &mut St) {
         p.ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, *n, look::regular(11.5), if lit { BLUE } else if resp.hovered() { Color32::WHITE } else { p.skin.text });
         if resp.clicked() {
             st.page = k as u8;
+            // Option-click: view and solo the source (again: the other sources back as they were)
+            if (1..=4).contains(&k) && p.ui.input(|i| i.modifiers.alt) {
+                let sid = egui::Id::unique(("alch-solo", p.t));
+                let saved: Option<(usize, [f32; 4])> = p.ui.data(|d| d.get_temp(sid));
+                match saved {
+                    Some((who, prev)) if who == k => {
+                        for j in 0..4u32 {
+                            p.put(277 + j, prev[j as usize]);
+                        }
+                        p.ui.data_mut(|d| d.remove::<(usize, [f32; 4])>(sid));
+                    }
+                    _ => {
+                        let prev = saved.map(|x| x.1).unwrap_or([0, 1, 2, 3].map(|j| p.get(277 + j)));
+                        for j in 0..4u32 {
+                            p.put(277 + j, if j as usize == k - 1 { 1.0 } else { 0.0 });
+                        }
+                        p.ui.data_mut(|d| d.insert_temp(sid, (k, prev)));
+                    }
+                }
+            }
         }
     }
 }
@@ -442,6 +462,10 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
             rack::knob(p, ix, st, 594.0 + j as f32 * 50.0, y + 30.0, 38.0, *id, names[j]);
         }
         rack::knob(p, ix, st, 790.0, y + 30.0, 38.0, [88u32, 92][k], "FX Main");
+        if !lit {
+            // a filter that's off: its controls dimmed, as Logic shows them
+            p.ui.painter().rect_filled(p.rect(592.0, y + 26.0, 230.0, 62.0), 0.0, rgb(0x1c2027).gamma_multiply(0.55));
+        }
     }
     rack::knob(p, ix, st, 742.0, 150.0, 28.0, 93, "Par/Ser");
     // master
@@ -610,10 +634,10 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
         let on = g(p, ix, flags[k]) >= 0.5;
         p.ui.painter().circle_filled(r.right_top() + vec2(-5.0, 5.0), 2.5, if on { ORANGE } else { rgb(0x44484f) });
     }
-    if rack::flat(p, p.rect(560.0, 56.0, 92.0, 20.0), "Import Audio…", false, true, ("import", s)) {
-        p.actions.push("import".into());
-    }
-    p.text(658.0, 66.0, Align2::LEFT_CENTER, audio.unwrap_or("no audio"), 10.0, p.skin.dim);
+    source_select(p, ix, st, s, audio);
+    p.menu(560.0, 88.0, 90.0, 20.0, lg_synth::alchemy::KEYSCALE + s);
+    p.text(560.0, 116.0, Align2::LEFT_CENTER, "Keyscale", 10.0, p.skin.dim);
+    rack::knob(p, ix, st, 700.0, 82.0, 30.0, lg_synth::alchemy::WAIT + s, "Wait");
     // the element's own On (the engine plays one element: Granular, else Spectral, else Additive, else VA)
     let on_id = flags[view];
     let on = g(p, ix, on_id) >= 0.5;
@@ -627,8 +651,7 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
             for (j, (pid, l)) in [(204 + s, "Volume"), (208 + s, "Symmetry"), (212 + s, "Phase"), (216 + s, "Detune"), (250 + s, "Sync")].iter().enumerate() {
                 k(p, st, 120.0 + j as f32 * 60.0, 124.0, 38.0, *pid, l);
             }
-            p.field(430.0, 132.0, 40.0, 20.0, 220 + s, 1.0);
-            p.text(450.0, 162.0, Align2::CENTER_CENTER, "Num Osc", 10.5, p.skin.dim);
+            p.knob_menu(450.0, 124.0, 38.0, 220 + s, "Num Osc");
             let nz = g(p, ix, 305 + s) >= 0.5;
             if rack::flat(p, p.rect(500.0, 132.0, 50.0, 20.0), "Noise", nz, true, ("va-noise", s)) {
                 p.put(305 + s, if nz { 0.0 } else { 1.0 });
@@ -1421,6 +1444,161 @@ fn morph_page(p: &mut Pane, ix: &Ix, st: &mut St) {
             p.put(*xid, ((q.x - sq.min.x) / sq.width()).clamp(0.0, 1.0));
             if !linear {
                 p.put(*yid, ((q.y - sq.min.y) / sq.height()).clamp(0.0, 1.0));
+            }
+        }
+    }
+}
+
+/// A source's Source Select field: the content's name, ‹ › through the VA waves, and the menu:
+/// Import Audio…, Load VA ▸, Load Source / Save Source…, Copy, Paste, Clear, Randomize, Swap With.
+fn source_select(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) {
+    let su = s as usize;
+    let letter = ["A", "B", "C", "D"][su];
+    let suffix = format!(" {letter}");
+    let el = element(p, ix, s);
+    let name = match el {
+        0 => lg_synth::alchemy::VA_SHAPES[(g(p, ix, 301 + s).round().max(0.0) as usize).min(3)].to_string(),
+        _ => audio.map(|a| a.to_string()).unwrap_or_else(|| ELEMENTS[el].to_string()),
+    };
+    let r = p.rect(560.0, 56.0, 190.0, 20.0);
+    let resp = rack::field_btn(p, r, &name, ("src-select", s), true);
+    let d = rack::arrows(p, p.rect(754.0, 56.0, 30.0, 20.0), ("src-sel-ar", s));
+    if d != 0 {
+        let v = (g(p, ix, 301 + s) + d as f32).rem_euclid(4.0);
+        p.put(301 + s, v);
+    }
+    // the source's own settings (by name), for Copy / Save / Clear / Swap
+    let mine: Vec<(u32, &'static str)> = p.params.iter().filter(|q| q.name.ends_with(&suffix)).map(|q| (q.id, q.name)).collect();
+    let files: Vec<(String, std::path::PathBuf)> = rack::mod_dir("src").and_then(|d| std::fs::read_dir(d).ok()).into_iter().flatten().flatten().map(|e| e.path()).filter(|x| x.extension().is_some_and(|e| e == "src")).map(|x| (x.file_stem().unwrap_or_default().to_string_lossy().into_owned(), x)).collect();
+    let name_id = egui::Id::unique(("src-save-name", p.t));
+    let mut save_name: String = p.ui.data(|d| d.get_temp(name_id)).unwrap_or_default();
+    let mut act: Option<(u8, usize)> = None;
+    let mut load: Option<Vec<(String, f32)>> = None;
+    egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        if ui.button("Import Audio…").clicked() {
+            act = Some((0, 0));
+            ui.close();
+        }
+        ui.menu_button("Load VA", |ui| {
+            for (k, n) in lg_synth::alchemy::VA_SHAPES.iter().enumerate() {
+                if ui.button(*n).clicked() {
+                    act = Some((1, k));
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("Load Source", |ui| {
+            if files.is_empty() {
+                ui.label("No saved sources");
+            }
+            for (n, path) in &files {
+                if ui.button(n).clicked() {
+                    load = Some(std::fs::read_to_string(path).unwrap_or_default().lines().filter_map(|l| {
+                        let (k, v) = l.rsplit_once('\t')?;
+                        Some((k.to_string(), v.parse().ok()?))
+                    }).collect());
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("Save Source…", |ui| {
+            let te = ui.add(egui::TextEdit::singleline(&mut save_name).hint_text("Name").desired_width(150.0));
+            let enter = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.button("Save").clicked() || enter) && !save_name.trim().is_empty() {
+                act = Some((2, 0));
+                ui.close();
+            }
+        });
+        ui.separator();
+        for (k, n) in ["Copy Source", "Paste Source", "Clear Source", "Randomize Source"].iter().enumerate() {
+            if ui.button(*n).clicked() {
+                act = Some((3 + k as u8, 0));
+                ui.close();
+            }
+        }
+        ui.menu_button("Swap With Source", |ui| {
+            for (k, l) in ["A", "B", "C", "D"].iter().enumerate() {
+                if k != su && ui.button(*l).clicked() {
+                    act = Some((7, k));
+                    ui.close();
+                }
+            }
+        });
+    });
+    // settings keyed by their name without the letter, so they move between sources
+    let generic = |n: &str| n[..n.len() - suffix.len()].to_string();
+    let cur: Vec<(String, f32)> = mine.iter().map(|(id, n)| (generic(n), g(p, ix, *id))).collect();
+    let clip = egui::Id::unique("alchemy-source-clipboard");
+    match act {
+        Some((0, _)) => p.actions.push("import".into()),
+        Some((1, k)) => {
+            // Load VA: VA on, the other engines off
+            p.put(297 + s, 1.0);
+            p.put(301 + s, k as f32);
+            for f in [293, 309, 313] {
+                p.put(f + s, 0.0);
+            }
+            st.elem[su] = 1;
+        }
+        Some((2, _)) => {
+            if let Some(dir) = rack::mod_dir("src") {
+                let _ = std::fs::create_dir_all(&dir);
+                let body: String = cur.iter().map(|(n, v)| format!("{n}\t{v}\n")).collect();
+                let _ = std::fs::write(dir.join(format!("{}.src", save_name.trim().replace('/', "-"))), body);
+            }
+            save_name.clear();
+        }
+        Some((3, _)) => {
+            p.ui.data_mut(|d| d.insert_temp(clip, cur.clone()));
+        }
+        Some((4, _)) => load = p.ui.data(|d| d.get_temp::<Vec<(String, f32)>>(clip)),
+        Some((5, _)) => {
+            for (id, _) in &mine {
+                if let Some(q) = p.params.iter().find(|q| q.id == *id) {
+                    let d = q.default;
+                    p.put(*id, d);
+                }
+            }
+        }
+        Some((6, _)) => {
+            // random values for the knobs of the source's elements that are on
+            let mut x = ((p.ui.input(|i| i.time) * 1000.0) as u32) | 1;
+            for (id, _) in &mine {
+                let Some(q) = p.params.iter().find(|q| q.id == *id).cloned() else { continue };
+                if matches!(q.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) || q.hidden {
+                    continue;
+                }
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                let f = (x & 0xFFFF) as f32 / 65535.0;
+                let v = q.default + (q.min + f * (q.max - q.min) - q.default) * 0.4;
+                p.put(*id, v);
+            }
+        }
+        Some((7, k)) => {
+            let other = format!(" {}", ["A", "B", "C", "D"][k]);
+            let theirs: Vec<(u32, String)> = p.params.iter().filter(|q| q.name.ends_with(&other)).map(|q| (q.id, q.name[..q.name.len() - other.len()].to_string())).collect();
+            let vals_mine: Vec<(u32, String, f32)> = mine.iter().map(|(id, n)| (*id, generic(n), g(p, ix, *id))).collect();
+            let vals_theirs: Vec<(u32, String, f32)> = theirs.iter().map(|(id, n)| (*id, n.clone(), g(p, ix, *id))).collect();
+            for (id, n, _) in &vals_mine {
+                if let Some(t) = vals_theirs.iter().find(|t| &t.1 == n) {
+                    p.put(*id, t.2);
+                }
+            }
+            for (id, n, _) in &vals_theirs {
+                if let Some(m) = vals_mine.iter().find(|m| &m.1 == n) {
+                    p.put(*id, m.2);
+                }
+            }
+        }
+        _ => {}
+    }
+    p.ui.data_mut(|d| d.insert_temp(name_id, save_name));
+    if let Some(list) = load {
+        for (id, n) in &mine {
+            if let Some((_, v)) = list.iter().find(|(k, _)| *k == generic(n)) {
+                p.put(*id, *v);
             }
         }
     }
