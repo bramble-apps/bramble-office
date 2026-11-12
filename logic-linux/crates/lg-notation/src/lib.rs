@@ -240,6 +240,7 @@ impl Value {
             16 => 2,
             32 => 3,
             64 => 4,
+            128 => 5,
             _ => 0,
         }
     }
@@ -262,7 +263,7 @@ impl Default for Quant {
 
 impl Quant {
     /// Logic's Quantize choices for the Score: 4, 8, 16, 32, 64, 12, 24, 48, 8,12 16,12 16,24 …
-    pub const CHOICES: [(&'static str, Quant); 10] = [
+    pub const CHOICES: [(&'static str, Quant); 11] = [
         ("4", Quant { straight: 960, triplet: None }),
         ("8", Quant { straight: 480, triplet: None }),
         ("16", Quant { straight: 240, triplet: None }),
@@ -273,6 +274,8 @@ impl Quant {
         ("8,12", Quant { straight: 480, triplet: Some(640) }),
         ("16,12", Quant { straight: 240, triplet: Some(640) }),
         ("16,24", Quant { straight: 240, triplet: Some(320) }),
+        // (after the default's index 9)
+        ("128", Quant { straight: 30, triplet: None }),
     ];
 }
 
@@ -362,12 +365,54 @@ pub struct Beam {
     pub up: bool,
 }
 
-/// A triplet bracket over items `first..=last`.
+/// A tuplet bracket over items `first..=last`: `n` notes in the time of `of` (3 in 2 for the
+/// automatic triplets), the note value `base` (Show note value: "5:4" style lower number).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuplet {
     pub first: usize,
     pub last: usize,
     pub up: bool,
+    pub n: u8,
+    pub of: u8,
+    pub base: u8,
+    /// A user tuplet (Part box N-tuplet), with its display options.
+    pub spec: Option<TupletSpec>,
+}
+
+/// A user N-tuplet (Logic's Tuplet window): `n` notes of value 1/`base` in the time of `of`
+/// such notes, starting at `start` (ticks from bar 1). Notes inside are written on its grid,
+/// overriding the display Quantize.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct TupletSpec {
+    pub start: u32,
+    pub n: u8,
+    pub of: u8,
+    pub base: u8,
+    pub hide_bracket: bool,
+    pub hide_number: bool,
+    pub show_value: bool,
+    /// 0 automatic, 1 up, −1 down.
+    pub dir: i8,
+    /// Allow double / half values (a note of twice or half the tuplet value inside it).
+    pub double: bool,
+    pub half: bool,
+}
+
+impl TupletSpec {
+    /// The time it occupies, in ticks.
+    pub fn len(&self) -> u32 {
+        self.of.max(1) as u32 * (PPQ * 4 / self.base.max(1) as u32)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
+    pub fn end(&self) -> u32 {
+        self.start + self.len()
+    }
+    /// One tuplet note, in ticks (fractional).
+    pub fn unit(&self) -> f64 {
+        self.len() as f64 / self.n.max(1) as f64
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -397,7 +442,7 @@ impl Metre {
 }
 
 /// What to engrave.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Options {
     pub sig: (u8, u8),
     pub key: Key,
@@ -411,11 +456,16 @@ pub struct Options {
     pub syncopation: bool,
     /// Max. Dots (region parameter): the most dots a value may have, 0–3 (default 1).
     pub max_dots: u8,
+    /// User tuplets in the span (Part box N-tuplet).
+    pub tuplets: Vec<TupletSpec>,
+    /// No Overlap (region parameter, on by default): a chord shows the length of its shortest
+    /// note, up to the next chord; off, its longest.
+    pub no_overlap: bool,
 }
 
 impl Options {
     pub fn new(sig: (u8, u8), key: Key, quant: Quant, from: u32, to: u32) -> Options {
-        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1 }
+        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1, tuplets: Vec::new(), no_overlap: true }
     }
 }
 
@@ -476,7 +526,7 @@ pub fn display_positions(notes: &[NoteIn], sig: (u8, u8), q: Quant, from: u32) -
 /// The values a span is written in from `p` to `e` within one bar (with ties between them).
 fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bool, synco: bool, max_dots: u8) -> Vec<(u32, u32, Value, bool)> {
     let mut out = Vec::new();
-    let cands: [(u32, Value); 18] = [
+    let cands: [(u32, Value); 19] = [
         (3840 + 1920 + 960 + 480, Value { base: 1, dots: 3 }),
         (3840 + 1920 + 960, Value { base: 1, dots: 2 }),
         (3840 + 1920, Value { base: 1, dots: 1 }),
@@ -495,6 +545,7 @@ fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bo
         (240, Value { base: 16, dots: 0 }),
         (120, Value { base: 32, dots: 0 }),
         (60, Value { base: 64, dots: 0 }),
+        (30, Value { base: 128, dots: 0 }),
     ];
     while p < e {
         let rel = p - bar0;
@@ -555,7 +606,7 @@ fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bo
                 break;
             }
         }
-        let (v, val) = chosen.unwrap_or((60.min(lim - p).max(1), Value { base: 64, dots: 0 }));
+        let (v, val) = chosen.unwrap_or((30.min(lim - p).max(1), Value { base: 128, dots: 0 }));
         out.push((p, v, val, false));
         p += v;
     }
@@ -565,7 +616,15 @@ fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bo
 /// Engraves one staff's notes.
 pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
     let m = Metre::new(o.sig);
-    let (q, triplets) = quantise(notes, m, o.quant, o.from);
+    // user tuplets inside the span (whole, not overlapping each other)
+    let mut tsp: Vec<TupletSpec> = o.tuplets.iter().copied().filter(|t| t.n > 0 && t.start >= o.from && t.end() <= o.to && t.len() > 0).collect();
+    tsp.sort_by_key(|t| t.start);
+    tsp.dedup_by(|b, a| b.start < a.end());
+    let in_tuplet = |pos: u32| tsp.iter().position(|t| pos + (t.unit() / 2.0) as u32 >= t.start && pos < t.end().saturating_sub((t.unit() / 2.0) as u32));
+    let outside: Vec<NoteIn> = notes.iter().copied().filter(|n| in_tuplet(n.pos).is_none()).collect();
+    let (q, triplets) = quantise(&outside, m, o.quant, o.from);
+    let notes_all = notes;
+    let notes = &outside[..];
     // chords: notes starting together (on the display grid)
     let mut onsets: Vec<u32> = q.iter().map(|x| x.0).collect();
     onsets.sort_unstable();
@@ -582,8 +641,13 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
         }
         let members: Vec<&(u32, u32, usize)> = q.iter().filter(|x| x.0 == on).collect();
         let next = onsets.get(k + 1).copied().unwrap_or(u32::MAX);
-        // No Overlap (Logic's default): a note ends where the next chord starts
-        let mut end = members.iter().map(|x| x.1).max().unwrap_or(on).min(next).min(o.to);
+        // (a user tuplet starting before the next chord ends this one)
+        let next = tsp.iter().map(|t| t.start).filter(|&s| s > on).min().map_or(next, |s| s.min(next));
+        // No Overlap (Logic's default): a note ends where the next chord starts, a chord at its
+        // shortest note's end; off, at its longest (still no further than the next chord)
+        let ends = members.iter().map(|x| x.1);
+        let end = if o.no_overlap { ends.min() } else { ends.max() };
+        let mut end = end.unwrap_or(on).min(next).min(o.to);
         // Interpretation: a short note reads as the value up to the next eighth (or the next
         // note), so a staccato quarter isn't a sixteenth and rests
         let f = members.iter().map(|x| notes[x.2].interp).find(|&x| x != 0).unwrap_or(0);
@@ -611,6 +675,63 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
     }
     if t < o.to {
         segs.push((t, o.to, None));
+    }
+    // rests cut around the user tuplets (their spans are written below)
+    let mut cut: Vec<(u32, u32, Option<usize>)> = Vec::new();
+    for (s, e, c) in segs {
+        if c.is_some() {
+            cut.push((s, e, c));
+            continue;
+        }
+        let mut a = s;
+        for t in tsp.iter().filter(|t| t.start < e && t.end() > s) {
+            if t.start > a {
+                cut.push((a, t.start, None));
+            }
+            a = a.max(t.end());
+        }
+        if a < e {
+            cut.push((a, e, None));
+        }
+    }
+    let segs = cut;
+    let spell_head = |n: NoteIn, tie: bool| -> Head {
+        let sp = o.key.spell_pref(n.pitch, n.spell);
+        let (pos, cross) = if clef == Clef::Percussion { drum_position(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
+        Head { note: n.index, pitch: n.pitch, spelled: sp, pos, acc: None, tie, shifted: false, tie_dir: if n.tie == 1 || n.tie == -1 { n.tie } else { 0 }, tie_hidden: n.tie == 2, guide: false, cross }
+    };
+    // the tuplets' items: notes on the tuplet grid, rests in the empty units
+    let mut tuplet_items: Vec<(usize, Vec<Item>)> = Vec::new();
+    for (ti, t) in tsp.iter().enumerate() {
+        let unit = t.unit();
+        let mut slots: Vec<Vec<NoteIn>> = vec![Vec::new(); t.n as usize];
+        for n in notes_all.iter().filter(|n| in_tuplet(n.pos) == Some(ti)) {
+            let k = (((n.pos as f64 - t.start as f64) / unit).round().max(0.0) as usize).min(t.n as usize - 1);
+            slots[k].push(*n);
+        }
+        let mut items = Vec::new();
+        let bar = (t.start - o.from) / m.bar;
+        let mut k = 0usize;
+        while k < t.n as usize {
+            let tick = t.start + (k as f64 * unit).round() as u32;
+            if slots[k].is_empty() {
+                items.push(Item { tick, dur: unit.round() as u32, value: Value { base: t.base, dots: 0 }, heads: vec![], stem_up: true, beam: None, triplet: false, full_bar: false, bar, stem_hidden: false });
+                k += 1;
+                continue;
+            }
+            // how many units the chord lasts (to the next onset), as one value where allowed
+            let want = slots[k].iter().map(|n| ((n.len as f64 / unit).round() as usize).max(1)).max().unwrap_or(1);
+            let free = (k + 1..t.n as usize).take_while(|&j| slots[j].is_empty()).count() + 1;
+            let span = want.min(free);
+            let (units, value) = if span >= 2 && t.double && t.base >= 2 { (2, Value { base: t.base / 2, dots: 0 }) } else { (1, Value { base: t.base, dots: 0 }) };
+            let mut heads: Vec<Head> = slots[k].iter().map(|&n| spell_head(n, false)).collect();
+            heads.sort_by_key(|h| h.pos);
+            heads.dedup_by_key(|h| h.pitch);
+            items.push(Item { tick, dur: (units as f64 * unit).round() as u32, value, heads, stem_up: true, beam: None, triplet: false, full_bar: false, bar, stem_hidden: false });
+            k += units;
+            // the rest of a longer note: rests (written as Logic does, on the tuplet's grid)
+        }
+        tuplet_items.push((ti, items));
     }
     for (s, e, chord) in segs {
         let mut p = s;
@@ -652,6 +773,11 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
             p = end;
         }
     }
+    for (_, items) in &tuplet_items {
+        v.items.extend(items.iter().cloned());
+    }
+    v.items.sort_by_key(|it| it.tick);
+    let notes = notes_all;
     if clef != Clef::Percussion {
         accidentals(&mut v, o.key);
     }
@@ -676,6 +802,19 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
     let beam_of = |it: &Item| it.heads.iter().map(|h| attr(h.note).beam).find(|&s| s != 0).unwrap_or(0);
     let flags: Vec<(i8, i8)> = v.items.iter().map(|it| (stem_of(it), beam_of(it))).collect();
     stems_and_beams(&mut v, m, &flags, clef == Clef::Percussion);
+    for t in &tsp {
+        let idx: Vec<usize> = (0..v.items.len()).filter(|&i| v.items[i].tick >= t.start && v.items[i].tick < t.end()).collect();
+        let (Some(&first), Some(&last)) = (idx.first(), idx.last()) else { continue };
+        let ps: Vec<i32> = idx.iter().flat_map(|&i| v.items[i].heads.iter().map(|h| h.pos)).collect();
+        let auto = v.items[first].beam.map_or(ps.iter().sum::<i32>() < 4 * ps.len().max(1) as i32, |b| v.beams[b].up);
+        let up = match t.dir {
+            1 => true,
+            -1 => false,
+            _ => auto,
+        };
+        v.tuplets.push(Tuplet { first, last, up, n: t.n, of: t.of, base: t.base, spec: Some(*t) });
+    }
+    v.tuplets.sort_by_key(|t| t.first);
     v
 }
 
@@ -872,7 +1011,7 @@ fn stems_and_beams(v: &mut Voice, m: Metre, flags: &[(i8, i8)], drums: bool) {
             }
             let ps: Vec<i32> = (k..=j).flat_map(|i| v.items[i].heads.iter().map(|h| h.pos)).collect();
             let up = v.items[k].beam.map_or(ps.iter().sum::<i32>() < 4 * ps.len().max(1) as i32, |b| v.beams[b].up);
-            v.tuplets.push(Tuplet { first: k, last: j, up });
+            v.tuplets.push(Tuplet { first: k, last: j, up, n: 3, of: 2, base: 0, spec: None });
             k = j + 1;
         } else {
             k += 1;
@@ -1292,6 +1431,30 @@ mod tests {
         // straight sixteenths stay straight with 16,24
         let s: Vec<NoteIn> = (0..4).map(|k| n(k, 67, k as u32 * 240, 240)).collect();
         assert!(engrave(&s, Clef::Treble, &opts(1)).tuplets.is_empty());
+    }
+
+    #[test]
+    fn user_tuplets() {
+        // five sixteenths in the time of four on beat 2, a quarter on beat 1
+        let mut t: Vec<NoteIn> = (0..5).map(|k| n(k, 67, 960 + k as u32 * 192, 192)).collect();
+        t.push(n(9, 60, 0, 1200));
+        let mut o = opts(1);
+        o.tuplets.push(TupletSpec { start: 960, n: 5, of: 4, base: 16, ..Default::default() });
+        let v = engrave(&t, Clef::Treble, &o);
+        assert_eq!(&shape(&v)[..6], ["n4", "n16", "n16", "n16", "n16", "n16"]);
+        assert_eq!(v.tuplets.len(), 1);
+        assert_eq!((v.tuplets[0].n, v.tuplets[0].first, v.tuplets[0].last), (5, 1, 5));
+        // 8:8/32 in an eighth: a run of 32nds whatever the Quantize
+        let r: Vec<NoteIn> = (0..4).map(|k| n(k, 67, k as u32 * 120, 120)).collect();
+        let mut o = opts(1);
+        o.quant = Quant::CHOICES.iter().find(|c| c.0 == "8").unwrap().1;
+        o.tuplets.push(TupletSpec { start: 0, n: 8, of: 8, base: 32, hide_bracket: true, hide_number: true, ..Default::default() });
+        let v = engrave(&r, Clef::Treble, &o);
+        assert_eq!(&shape(&v)[..8], ["n32", "n32", "n32", "n32", "r32", "r32", "r32", "r32"]);
+        // an empty tuplet shows as many rests as its count
+        let mut o = opts(1);
+        o.tuplets.push(TupletSpec { start: 1920, n: 7, of: 4, base: 16, ..Default::default() });
+        assert_eq!(engrave(&[], Clef::Treble, &o).items.iter().filter(|i| i.is_rest() && i.value.base == 16).count(), 7);
     }
 
     #[test]

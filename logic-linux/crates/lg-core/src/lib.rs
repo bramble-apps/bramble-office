@@ -22,6 +22,7 @@ pub mod regions;
 pub mod regparams;
 pub mod save;
 pub mod score;
+pub mod staffstyle;
 pub mod sync;
 pub mod takes;
 pub mod timeline;

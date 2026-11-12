@@ -84,11 +84,14 @@ impl Look {
     }
 }
 
+/// The interface's text fonts and the Score's music font (also outlined into printed PDFs).
+pub static REGULAR: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-render/fonts/matched/sfera/Sfera-Regular.ttf");
+pub static BOLD: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-render/fonts/matched/sfera/Sfera-Bold.ttf");
+pub static BRAVURA: &[u8] = include_bytes!("../fonts/Bravura.otf");
+
 /// SF Pro's metric match (Sfera, bundled with kn-render) first in the interface's families.
 fn use_sfera(ctx: &egui::Context) {
     use egui::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
-    static REGULAR: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-render/fonts/matched/sfera/Sfera-Regular.ttf");
-    static BOLD: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-render/fonts/matched/sfera/Sfera-Bold.ttf");
     static SEMIBOLD: &[u8] = include_bytes!("../../../../keynote-linux/crates/kn-render/fonts/matched/sfera/Sfera-Semibold.ttf");
     let at = |family: FontFamily| InsertFontFamily { family, priority: FontPriority::Highest };
     static GEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -97,7 +100,6 @@ fn use_sfera(ctx: &egui::Context) {
     ctx.add_font(FontInsert::new(&format!("lg-sfera-bold-{g}"), egui::FontData::from_static(BOLD), vec![at(FontFamily::Name("bold".into()))]));
     ctx.add_font(FontInsert::new(&format!("lg-sfera-semibold-{g}"), egui::FontData::from_static(SEMIBOLD), vec![at(FontFamily::Name("semibold".into()))]));
     // Bravura (SIL OFL 1.1, Steinberg): the Score's music symbols, by their SMuFL code points
-    static BRAVURA: &[u8] = include_bytes!("../fonts/Bravura.otf");
     ctx.add_font(FontInsert::new(&format!("lg-bravura-{g}"), egui::FontData::from_static(BRAVURA), vec![at(FontFamily::Name("bravura".into()))]));
     // the icons (Phosphor + Tabler, MIT): glyphs.rs
     crate::glyphs::add(ctx, g);

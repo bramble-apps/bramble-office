@@ -147,6 +147,8 @@ pub enum Part {
     Time(usize),
     /// Line Break, Page Break, No Line Break, No Page Break.
     Break(usize),
+    /// The N-tuplet (with the triplets in the Notes group): opens the Tuplet window.
+    NTuplet,
 }
 
 /// The Part box's symbol groups, in its group buttons' order: (name, number of symbols).
@@ -154,10 +156,11 @@ pub const GROUP_NAMES: [&str; 14] = ["Notes", "Pedal", "Clefs", "Dynamics", "Not
 
 impl Part {
     /// (group, item) and the groups' sizes, for Next / Previous Part Box Symbol and Group.
-    pub const GROUPS: [usize; 14] = [7, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 7, 4];
+    pub const GROUPS: [usize; 14] = [9, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 7, 4];
     pub fn index(self) -> (usize, usize) {
         match self {
             Part::Note(i) => (0, i),
+            Part::NTuplet => (0, VALUES.len()),
             Part::Pedal(i) => (1, i),
             Part::Clef(i) => (2, i),
             Part::Dynamic(i) => (3, i),
@@ -177,6 +180,7 @@ impl Part {
         let g = g % Part::GROUPS.len();
         let i = i.min(Part::GROUPS[g] - 1);
         match g {
+            0 if i >= VALUES.len() => Part::NTuplet,
             0 => Part::Note(i),
             1 => Part::Pedal(i),
             2 => Part::Clef(i),
@@ -210,6 +214,7 @@ impl Part {
             Part::Key(i) => key_name(i as i8 - 7),
             Part::Time(i) => format!("Time Signature {}", TIMES[i]),
             Part::Break(i) => lg_core::score::Break::ALL[i].name().to_string(),
+            Part::NTuplet => "N-tuplet".to_string(),
         }
     }
 }
@@ -274,6 +279,32 @@ pub struct State {
     /// Pages in the Page view (for Go to Page), and the page to bring into view.
     pub pages: usize,
     pub goto_page: Option<usize>,
+    /// The Tool menus: the left-click and the Command-click tool (indices into `TOOLS`).
+    pub tool: usize,
+    pub tool2: usize,
+    /// Drawing for print / PDF (onscreen-only items left out).
+    pub printing: bool,
+    /// The Link button: 0 off, 1 Same Level (purple), 2 Content (yellow).
+    pub link: u8,
+    /// Page Setup: paper (scorepdf PAPERS) and orientation.
+    pub paper: u8,
+    pub landscape: bool,
+    /// A print / PDF / Camera job waiting for its frame, and the view to go back to.
+    pub print_job: Option<(crate::scorepdf::Job, View)>,
+    /// A Camera tool drag in progress (from).
+    camera_from: Option<Pos2>,
+    /// Link off: the region shown regardless of the selection.
+    pub pinned: Option<(usize, usize)>,
+}
+
+/// The Score Editor's tools (Tool menus).
+pub const TOOLS: [&str; 9] = ["Pointer", "Pencil", "Eraser", "Text", "Layout", "Zoom", "Voice Separation", "Solo", "Camera"];
+
+impl State {
+    /// The tool a click uses now (Command held: the Command-click tool).
+    pub fn tool_now(&self, cmd: bool) -> usize {
+        if cmd { self.tool2 } else { self.tool }
+    }
 }
 
 impl Default for State {
@@ -313,6 +344,15 @@ impl Default for State {
             sel_bar: None,
             sel_pedal: None,
             bar_drag_len: false,
+            tool: 0,
+            tool2: 1,
+            printing: false,
+            link: 2,
+            paper: 0,
+            landscape: false,
+            print_job: None,
+            camera_from: None,
+            pinned: None,
         }
     }
 }
@@ -339,7 +379,7 @@ pub fn state(ctx: &egui::Context) -> State {
 }
 
 /// Part box note values: (label, base).
-pub const VALUES: [(&str, u8); 7] = [("1/1", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8), ("1/16", 16), ("1/32", 32), ("1/64", 64)];
+pub const VALUES: [(&str, u8); 8] = [("1/1", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8), ("1/16", 16), ("1/32", 32), ("1/64", 64), ("1/128", 128)];
 /// Dynamics (Logic's MIDI Meaning defaults give each a velocity).
 pub const DYNAMICS: [&str; 8] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
 
@@ -364,6 +404,8 @@ struct Row {
     staff: usize,
     voice: Option<u8>,
     style: nt::StaffStyle,
+    /// The style's definition (Staff Style window): staffs, voices, range.
+    def: std::sync::Arc<lg_core::staffstyle::StaffStyleDef>,
     name: String,
     /// The score set's short name ("" = made from the name), bracket and bar line joins to the
     /// next instrument.
@@ -376,6 +418,13 @@ struct Row {
     off: f32,
 }
 
+impl Row {
+    /// The staff's size (Staff Style window Size) as a factor.
+    fn size(&self) -> f32 {
+        self.def.staffs.get(self.staff).map_or(1.0, |s| s.size.clamp(25, 250) as f32 / 100.0)
+    }
+}
+
 /// One engraved stretch: a region's notes on a row between key and clef changes.
 struct Seg {
     row: usize,
@@ -383,6 +432,8 @@ struct Seg {
     voice: nt::Voice,
     from: u32,
     hide_rests: bool,
+    /// The staff style's voice it draws (rests, tuplets, beams, colour, heads).
+    vdef: lg_core::staffstyle::VoiceDef,
 }
 
 /// A line (system) on screen: bars b0..b1, where each bar starts (xs has one more for the
@@ -415,7 +466,13 @@ impl Line {
 
 /// The clef a row uses from `tick`: the last clef change at or before it, else the style's.
 fn clef_at(app: &App, row: &Row, tick: u32) -> (nt::Clef, i8) {
-    let base = (row.style.clefs[row.staff.min(row.style.clefs.len() - 1)], row.style.octave);
+    let base = match row.def.staffs.get(row.staff) {
+        Some(sd) => {
+            let (c, o) = crate::scorestyle::nt_clef(sd.clef_name());
+            (c, o.signum())
+        }
+        None => (row.style.clefs[row.staff.min(row.style.clefs.len() - 1)], row.style.octave),
+    };
     let Some(ts) = app.project.as_ref().and_then(|p| p.score.track(row.id)) else { return base };
     ts.symbols.iter().filter(|s| s.kind == SymbolKind::Clef && s.staff as usize == row.staff && s.tick <= tick).max_by_key(|s| s.tick).map_or(base, |s| (clef_named(&s.text), 0))
 }
@@ -433,8 +490,16 @@ pub fn clef_named(name: &str) -> nt::Clef {
 /// The staff style a track uses (its own, or Logic's automatic choice by range).
 pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
     let Some(tr) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { return nt::StaffStyle::ALL[0] };
-    if let Some(s) = app.project.as_ref().and_then(|p| p.score.track(tr.extra.id)).and_then(|ts| nt::StaffStyle::by_name(&ts.style)) {
-        return s;
+    if let Some(name) = app.project.as_ref().and_then(|p| p.score.track(tr.extra.id)).map(|ts| ts.style.as_str()).filter(|n| !n.is_empty()) {
+        let own = app.project.as_ref().is_some_and(|p| p.score.staff_styles.iter().any(|d| d.name == name));
+        if !own {
+            if let Some(s) = nt::StaffStyle::by_name(name) {
+                return s;
+            }
+        }
+        if let Some(d) = crate::scorestyle::def_named(app, name) {
+            return crate::scorestyle::to_nt(&d);
+        }
     }
     let pitches: Vec<u8> = tr.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
     let lname = tr.name.to_lowercase();
@@ -443,6 +508,12 @@ pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
     }
     let piano = ["piano", "keys", "grand", "steinway", "rhodes", "clav", "organ", "harpsichord"].iter().any(|w| lname.contains(w));
     nt::StaffStyle::auto(&pitches, piano)
+}
+
+/// The definition of the style a track uses.
+pub fn def_of(app: &App, t: usize) -> lg_core::staffstyle::StaffStyleDef {
+    let s = style_of(app, t);
+    crate::scorestyle::def_named(app, s.name).unwrap_or_else(|| crate::scorestyle::builtin_def(s))
 }
 
 /// The display Quantize a track reads with.
@@ -476,29 +547,39 @@ fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
     if st.explode_folders {
         return p.tracks.iter().enumerate().filter(|(_, t)| midi(t)).map(|(i, _)| i).collect();
     }
-    app.selected_region.map(|(t, _)| vec![t]).filter(|v| v.iter().all(|&t| p.tracks.get(t).is_some_and(|tr| !(hide_muted && tr.mute)))).unwrap_or_default()
+    st.pinned.or(app.selected_region).map(|(t, _)| vec![t]).filter(|v| v.iter().all(|&t| p.tracks.get(t).is_some_and(|tr| !(hide_muted && tr.mute)))).unwrap_or_default()
 }
 
 /// The rows for the shown tracks, with their vertical offsets (in staff spaces × sp).
 fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut off = 4.0 * sp;
+    let mut prev_below = 0.0;
     for (k, &t) in tracks.iter().enumerate() {
         let Some(tr) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { continue };
         let style = style_of(app, t);
+        let def = std::sync::Arc::new(def_of(app, t));
+        // (space above and below each staff, Staff Style window, in half spaces)
+        let above = |s: usize| def.staffs.get(s).map_or(0.0, |x| x.above as f32) * sp / 2.0;
+        let below = |s: usize| def.staffs.get(s).map_or(0.0, |x| x.below as f32) * sp / 2.0;
         if k > 0 {
-            off += 12.0 * sp;
+            off += 12.0 * sp + prev_below + above(0);
+        } else {
+            off += above(0);
         }
         let n = style.clefs.len();
+        prev_below = below(n.saturating_sub(1));
         for s in 0..n {
             let voices: &[Option<u8>] = if st.explode_poly { &[Some(0), Some(1)] } else { &[None] };
             for (vk, &v) in voices.iter().enumerate() {
-                if s > 0 || vk > 0 {
+                if s > 0 && vk == 0 {
+                    off += 10.0 * sp + below(s - 1) + above(s);
+                } else if vk > 0 {
                     off += 10.0 * sp;
                 }
                 let entry = st.set.and_then(|k| app.project.as_ref()?.score.sets.get(k)?.entry(tr.extra.id).cloned()).unwrap_or_default();
                 let name = if entry.full.is_empty() { tr.name.clone() } else { entry.full.clone() };
-                rows.push(Row { t, id: tr.extra.id, staff: s, voice: v, style, name, short: entry.short.clone(), bracket: entry.bracket, barline: entry.barline, brace: n > 1 && s == 0 && vk == 0, off });
+                rows.push(Row { t, id: tr.extra.id, staff: s, voice: v, style, def: def.clone(), name, short: entry.short.clone(), bracket: entry.bracket, barline: entry.barline, brace: n > 1 && s == 0 && vk == 0, off });
             }
         }
     }
@@ -514,21 +595,37 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
         .notes
         .iter()
         .enumerate()
-        .filter(|(_, n)| !(hide_muted && n.muted))
+        .filter(|(_, n)| !(hide_muted && n.muted) && row.def.in_range(n.pitch))
         .filter(|(_, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             let staff = match a.staff {
                 1 => 0,
                 -1 => row.style.clefs.len() - 1,
-                _ => row.style.staff_of(n.pitch),
+                // the style's voices (split pitch, MIDI channel) put it on a staff
+                _ => row.def.staff_for(n.pitch, n.channel),
             };
             staff == row.staff
         })
         .map(|(i, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
-            nt::NoteIn { index: i, pitch: row.style.written(n.pitch), pos: n.pos, len: n.len, spell: a.spell, stem: a.stem, beam: a.beam, interp: a.interp, synco: a.synco, tie: a.tie, acc: a.accidental }
+            // the voice's Stem, Tie and Beam where the note has no attribute of its own
+            let v = row.def.voices.get(row.def.voice_for(n.pitch, n.channel)).cloned().unwrap_or_default();
+            let stem = if a.stem != 0 { a.stem } else { [0, 1, -1, 2][v.stem.min(3) as usize] };
+            let tie = if a.tie != 0 { a.tie } else { [0, 1, -1][v.tie.min(2) as usize] };
+            let beam = if a.beam != 0 { a.beam } else if v.beam == 2 { -1 } else { 0 };
+            nt::NoteIn { index: i, pitch: row.style.written(n.pitch), pos: n.pos, len: n.len, spell: a.spell, stem, beam, interp: a.interp, synco: a.synco, tie, acc: a.accidental }
         })
         .collect();
+    // several voices on the staff in the style: each note in its own; else automatic separation
+    let on_staff = row.def.voices_on(row.staff);
+    if on_staff.len() > 1 {
+        let chan: Vec<u8> = mine.iter().map(|x| region.notes.get(x.index).map_or(0, |n| n.channel)).collect();
+        let voices: Vec<u8> = mine.iter().zip(chan).map(|(x, c)| {
+            let vi = row.def.voice_for(region.notes.get(x.index).map_or(x.pitch, |n| n.pitch), c);
+            (on_staff.iter().position(|&k| k == vi).unwrap_or(0) > 0) as u8
+        }).collect();
+        return mine.into_iter().zip(voices).collect();
+    }
     let voices = nt::split_voices(&mine);
     mine.into_iter().zip(voices).collect()
 }
@@ -570,6 +667,8 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.interpretation = interp;
                 opts.syncopation = synco;
                 opts.max_dots = max_dots_of(app, row.id);
+                opts.tuplets = crate::scoretuplet::specs(app, row.id);
+                opts.no_overlap = p.score.track(row.id).is_none_or(|x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
                     None if two => vec![0, 1],
@@ -582,7 +681,10 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                             n.stem = if v == 0 { 1 } else { -1 };
                         }
                     }
-                    out.push(Seg { row: ri, rix, voice: nt::engrave(&sel, clef, &opts), from: a, hide_rests: v == 1 && row.voice.is_none() });
+                        let on_staff = row.def.voices_on(row.staff);
+                    let vk = on_staff.get(v as usize).or(on_staff.first()).copied().unwrap_or(0);
+                    let vdef = row.def.voices.get(vk).cloned().unwrap_or_default();
+                    out.push(Seg { row: ri, rix, voice: nt::engrave(&sel, clef, &opts), from: a, hide_rests: (v == 1 && row.voice.is_none()) || vdef.rest == 1, vdef });
                 }
             }
         }
@@ -673,6 +775,8 @@ fn note_color(colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ctx = ui.ctx().clone();
     let mut st = state(&ctx);
+    // a print / PDF / Camera job: this frame draws every page for it (scorepdf.rs)
+    st.printing = st.print_job.is_some() && st.view == View::Page;
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
@@ -695,9 +799,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // the local menus: Layout / Edit / Functions / View
     let local = Rect::from_min_size(pos2(area.min.x, tabs_r.max.y), vec2(area.width(), LOCAL_H));
     p.rect_filled(local, 0.0, look::header_bg());
-    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+    let menus_end = ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
         crate::menus::local_bar(app, ui, &[("Layout", "score-Layout"), ("Edit", "score-Edit"), ("Functions", "score-Functions"), ("View", "score-View")]);
-    });
+        ui.cursor().min.x
+    }).inner;
+    // the Link button, the Tool menus and the zoom slider
+    crate::scoretools::bar(ui, local, menus_end + 8.0, &mut st);
+    // (Link off: the Score keeps the region it shows; on, it follows the selection)
+    if st.link == 0 {
+        if st.pinned.is_none() {
+            st.pinned = app.selected_region;
+        }
+    } else {
+        st.pinned = None;
+    }
     // the Part box strip
     // (the Part box and the region's Score parameters are in the Score inspector: scoreinsp.rs)
     let part = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(area.width(), 0.0));
@@ -791,8 +906,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             lines.push(Line { b0, b1: b0 + n, xs, top, x_start: music.min.x, first: true, page_first: true });
         }
         View::Wrapped | View::Page => {
-            let page_w = 120.0 * sp;
-            let page_h = 170.0 * sp;
+            // (Page Setup: the paper's proportions)
+            let (pw, ph) = crate::scorepdf::paper(&st);
+            let page_w = if st.landscape { 170.0 * sp } else { 120.0 * sp };
+            let page_h = page_w * ph / pw;
             let names_w = if names_beside { 9.0 * sp } else { 0.0 };
             // (Global: the page margins; the wrapped view keeps a narrow edge)
             let margins = |pg: usize| if st.view == View::Page { let (l, r) = fmt.margins(pg); (l * sp + names_w, r * sp) } else { (2.0 * sp + names_w, 2.0 * sp) };
@@ -851,9 +968,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     }
-    // pages, their rulers and the title
+    // pages, their rulers and the title (a print frame: every page, from here on read back)
+    let print_from = st.printing.then(|| ctx.graphics_mut(|g| g.entry(ui.layer_id()).next_idx().0));
     for (k, pr) in pages.iter().enumerate() {
-        if !pr.intersects(music) {
+        if !pr.intersects(music) && !st.printing {
             continue;
         }
         mp.rect_filled(pr.translate(vec2(2.0, 3.0)), 0.0, Color32::from_black_alpha(40));
@@ -920,10 +1038,35 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
 
     // the background: clicks, double-clicks (insert), the right-click menu
-    let bg = ui.interact(music, ui.scope_id().with("sc-bg"), Sense::click());
+    let bg = ui.interact(music, ui.scope_id().with("sc-bg"), Sense::click_and_drag());
+    // the Tool menus' tools: Camera drags an area of the Page view to a PDF, Zoom toggles an
+    // enlarged view, Pencil and Text insert with one click, Eraser deletes (notes, tuplets)
+    let tool = st.tool_now(ui.input(|i| i.modifiers.command));
+    if tool == 8 && st.view == View::Page {
+        if bg.drag_started() {
+            st.camera_from = bg.interact_pointer_pos();
+        }
+        if let (Some(a), Some(b)) = (st.camera_from, ui.input(|i| i.pointer.interact_pos())) {
+            let r = Rect::from_two_pos(a, b);
+            mp.rect_stroke(r, 0.0, Stroke::new(1.0, look::accent()), egui::StrokeKind::Middle);
+            if bg.drag_stopped() {
+                st.camera_from = None;
+                if r.width() > 8.0 && r.height() > 8.0 {
+                    if let Some(path) = crate::scorepdf::pdf_path(app, "Camera") {
+                        st.print_job = Some((crate::scorepdf::Job::Camera(r, path), st.view));
+                        ctx.request_repaint();
+                    }
+                }
+            }
+        }
+    }
+    if tool == 5 && bg.clicked() {
+        st.space = if st.space < 12.0 { (st.space * 2.0).min(24.0) } else { (st.space / 2.0).max(3.0) };
+        st.bar_w = (st.bar_w * if st.space >= 12.0 { 2.0 } else { 0.5 }).clamp(80.0, 2400.0);
+    }
     crate::menus::context_menu(app, &bg, "score-background");
 
-    let sel_color = look::mix(look::accent(), Color32::BLACK, 0.1);
+    let sel_color = if st.printing { INK } else { look::mix(look::accent(), Color32::BLACK, 0.1) };
     let mut pressed: Option<(usize, usize, usize, bool)> = None;
     let score = app.project.as_ref().map(|p| p.score.clone()).unwrap_or_default();
     let project_tracks: Vec<lg_core::Track> = app.project.as_ref().map(|p| tracks.iter().map(|&t| p.tracks[t].clone()).collect()).unwrap_or_default();
@@ -937,7 +1080,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let (sel_region_now, sel_notes_now) = (app.selected_region, app.selected_notes.clone());
     for (li, line) in lines.iter().enumerate() {
         let line_x1 = *line.xs.last().unwrap_or(&line.x_start);
-        if line.top - 8.0 * sp > music.max.y || line.top + block_h + 8.0 * sp < music.min.y {
+        if !st.printing && (line.top - 8.0 * sp > music.max.y || line.top + block_h + 8.0 * sp < music.min.y) {
             continue;
         }
         let x_of = |tick: f32| line.x_of(tick, bar_t);
@@ -963,17 +1106,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         for (rk, row) in rows.iter().enumerate() {
             let bottom = line.top + row.off;
             let x_from = if linear { music.min.x } else { line.x_start };
-            for l in 0..5 {
-                let y = bottom - l as f32 * sp;
-                if row.style.clefs[0] == nt::Clef::Percussion || true {
-                    mp.hline(x_from..=if linear { music.max.x } else { line_x1 }, y, Stroke::new(1.0, INK));
-                }
+            let sp = sp * row.size();
+            // (the style's staff: Drum.N / no clef.N have N lines, centred on the five)
+            let n_lines = row.def.staffs.get(row.staff).map_or(5, |sd| sd.lines());
+            let line_off = (5.0 - n_lines as f32) / 2.0;
+            for l in 0..n_lines {
+                let y = bottom - (l as f32 + line_off) * sp;
+                mp.hline(x_from..=if linear { music.max.x } else { line_x1 }, y, Stroke::new(1.0, INK));
             }
             let (clef, octave) = clef_at(app, row, line.b0 * bar_t as u32);
-            let key = row.style.written_key(key_at(line.b0 * bar_t as u32));
+            let key_shown = row.def.staffs.get(row.staff).is_none_or(|sd| sd.key && !row.def.mapped);
+            let key = if key_shown { row.style.written_key(key_at(line.b0 * bar_t as u32)) } else { nt::Key::default() };
             if linear {
                 // the header panel
-                for l in 0..5 {
+                for l in 0..n_lines {
+                    let l = l as f32 + line_off;
                     headp.hline(head.min.x + 8.0 + if names_on { 80.0 } else { 0.0 }..=head.max.x, bottom - l as f32 * sp, Stroke::new(1.0, INK));
                 }
                 let x = head.min.x + 14.0 + if names_on { 80.0 } else { 0.0 };
@@ -984,14 +1131,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 draw_header(&headp, x, bottom, sp, fmt.clefs != crate::scoreset::Show::Hide, clef, octave, if fmt.keys != crate::scoreset::Show::Hide { key } else { nt::Key::default() }, (fmt.times != crate::scoreset::Show::Hide).then_some(sig));
                 // a click on the key or the time signature opens its window
-                header_clicks(app, ui, Rect::from_min_max(pos2(x, bottom - 4.0 * sp), pos2(head.max.x, bottom)).intersect(head), x, sp, key_at(line.b0 * bar_t as u32), sig, (rk, true));
+                header_clicks(app, ui, Rect::from_min_max(pos2(x, bottom - 4.0 * sp), pos2(head.max.x, bottom)).intersect(head), x, sp, key_at(line.b0 * bar_t as u32), sig, (rk, true), row.t);
             } else {
                 // (Clefs & Signatures: where clefs, keys and time signatures show)
                 let key_on = line.first || (st.key_every_line && fmt.keys.on(line.page_first, line.first));
                 let key_on = key_on && fmt.keys != crate::scoreset::Show::Hide;
                 let time_on = fmt.times.on(line.page_first, line.first);
                 draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, fmt.clefs.on(line.page_first, line.first), clef, octave, if key_on { key } else { nt::Key::default() }, time_on.then_some(sig));
-                header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false));
+                header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false), row.t);
             }
             if !linear && (rk == 0 || rows[rk - 1].t != row.t) {
                 let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first).map(|n| if !row.short.is_empty() && n != row.name { row.short.clone() } else { n }) };
@@ -1202,6 +1349,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let Some(region) = tr.regions.get(seg.rix) else { continue };
             let bottom = line.top + row.off;
             let staff = Staff { bottom };
+            // (the staff style's Size: the staff's notes at its size)
+            let sp = sp * row.size();
             // (bars under one- and two-bar repeat signs hide their notes and rests)
             let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32 && !repeated.contains(&(tick / bar_t as u32));
             let sel_here = sel_region_now == Some((row.t, seg.rix));
@@ -1212,11 +1361,29 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     return sel_color;
                 }
                 let n = region.notes.get(i).copied().unwrap_or(Note { channel: 0, pitch: 60, velocity: 80, pos: 0, len: 0, muted: false });
-                note_color(st.colors, &n, voice_of(i), &score.attr(row.id, n.pos, n.pitch))
+                let a = score.attr(row.id, n.pos, n.pitch);
+                // the voice's Color (only in View ▸ Colors ▸ Normal; a note's own colour wins)
+                if st.colors == Colors::Normal && a.color == 0 && seg.vdef.color > 0 {
+                    return match seg.vdef.color {
+                        1 => note_color(Colors::Pitch, &n, 0, &a),
+                        2 => note_color(Colors::Velocity, &n, 0, &a),
+                        c => note_color(Colors::Normal, &n, 0, &NoteAttr { color: (c - 2) % 16, ..a }),
+                    };
+                }
+                note_color(st.colors, &n, voice_of(i), &a)
             };
             let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
-            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line };
-            draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
+            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing };
+            let numbers = draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
+            // a user tuplet's number: double-click edits it (Tuplet window), the Eraser deletes it
+            for (tick, r) in numbers {
+                let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-tuplet", li, row.id, tick)), Sense::click());
+                if resp.double_clicked() {
+                    crate::scoretuplet::edit_at(ui.ctx(), row.t, tick);
+                } else if resp.clicked() && tool == 2 {
+                    crate::scoretuplet::delete_at(app, row.t, tick);
+                }
+            }
             // duration bars: the notes' real lengths
             if st.duration_bars > 0 {
                 for it in seg.voice.items.iter().filter(|it| in_line(it.tick)) {
@@ -1365,7 +1532,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         // the playhead
         let ph = app.position() as f32;
-        if ph >= line.b0 as f32 * bar_t && ph < line.b1 as f32 * bar_t {
+        if !st.printing && ph >= line.b0 as f32 * bar_t && ph < line.b1 as f32 * bar_t {
             let x = x_of(ph);
             if music.x_range().contains(x) {
                 mp.vline(x, (line.top - 6.0 * sp)..=(line.top + block_h + 2.0 * sp), Stroke::new(1.2, Color32::from_gray(0x30)));
@@ -1390,6 +1557,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
 
     // a press: select (Shift toggles), start a move
+    if let Some((t, rix, note, false)) = pressed.filter(|_| tool == 2) {
+        // the Eraser: the note goes
+        app.checkpoint("Erase Note");
+        if let Some(r) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(rix)) {
+            if note < r.notes.len() {
+                r.notes.remove(note);
+            }
+        }
+        app.selected_notes.clear();
+        app.after_edit();
+        pressed = None;
+    }
     if let Some((t, rix, note, drag)) = pressed {
         st.sel_symbol = None;
         st.sel_bar = None;
@@ -1483,11 +1662,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // a Part box symbol dropped on the score, or a double-click with one selected
     let dropped = bg.dnd_release_payload::<Part>().map(|p| *p);
     if pressed.is_none() {
-        let at = if dropped.is_some() { ui.input(|i| i.pointer.interact_pos()) } else if bg.double_clicked() { bg.interact_pointer_pos() } else { None };
+        let one_click = bg.clicked() && (tool == 1 || tool == 3);
+        let at = if dropped.is_some() { ui.input(|i| i.pointer.interact_pos()) } else if bg.double_clicked() || one_click { bg.interact_pointer_pos() } else { None };
+        // (the Text tool: a text object where clicked)
+        let keep_part = st.part;
+        if one_click && tool == 3 {
+            st.part = Part::Text(0);
+        }
         if let Some(part) = dropped {
             st.part = part;
         }
-        if at.is_some() {
+        // (Page view text in the header space or on / outside the margins: global text)
+        let global = st.view == View::Page && st.part == Part::Text(0) && at.is_some_and(|pp| {
+            let cm = crate::scoreset::SP_PER_CM * sp;
+            let content = |k: usize| {
+                let pr = pages[k];
+                let (l, r) = fmt.margins(k);
+                let inner = Rect::from_min_max(pos2(pr.min.x + l * sp, pr.min.y + fmt.top * cm), pos2(pr.max.x - r * sp, pr.max.y - fmt.bottom * cm));
+                (inner, inner.min.y + if k == 0 { fmt.header * cm } else { 0.0 })
+            };
+            crate::scoreglobal::try_insert(app, &ctx, pp, &pages, &content)
+        });
+        if at.is_some() && !global {
             if let Some(pp) = at {
                 // the line and staff under the pointer
                 if let Some(line) = lines.iter().find(|l| pp.y >= l.top - 9.0 * sp && pp.y <= l.top + block_h + 7.0 * sp && pp.x >= l.x_start) {
@@ -1499,6 +1695,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         insert_at(app, &mut st, row, tick, pos, pp);
                     }
                 }
+            }
+            if one_click && tool == 3 {
+                st.part = keep_part;
             }
         } else if bg.clicked() && !symbol_clicked {
             app.selected_notes.clear();
@@ -1574,6 +1773,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         crate::scoreinsp::delete_selected(app);
         st = state(&ctx);
     }
+    // global text on the pages (Page view)
+    if st.view == View::Page {
+        crate::scoreglobal::draw(app, ui, &mp, &pages, st.printing);
+    }
+    // the print frame done: its shapes to the PDF / printer
+    if let (true, Some(from)) = (st.printing, print_from) {
+        if let Some((job, view)) = st.print_job.take() {
+            let paper = crate::scorepdf::paper(&st);
+            crate::scorepdf::finish(app, &ctx, ui.layer_id(), from, &pages, job, paper);
+            st.view = view;
+        }
+        st.printing = false;
+    }
     windows(app, &ctx, &mut st, cur_t);
     ctx.data_mut(|d| d.insert_temp(state_id(), st));
 }
@@ -1627,32 +1839,37 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     }
     if st.styles_window {
         let mut open = true;
-        let cur = style_of(app, t);
-        let mut pick = None;
-        egui::Window::new("Staff Style").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
-            ui.label(egui::RichText::new("The selected track's staff style").size(11.0));
-            if ui.selectable_label(app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| app.project.as_ref()?.score.track(tr.extra.id)).is_none_or(|ts| ts.style.is_empty()), "Auto").clicked() {
-                pick = Some("");
-            }
-            for s in nt::StaffStyle::ALL {
-                let detail = format!("{}  ({} staff{}{})", s.name, s.clefs.len(), if s.clefs.len() > 1 { "s" } else { "" }, if s.transpose != 0 { format!(", transpose {:+}", s.transpose) } else { String::new() });
-                if ui.selectable_label(cur.name == s.name, detail).clicked() {
-                    pick = Some(s.name);
-                }
-            }
-        });
-        if let Some(n) = pick {
-            set_style(app, t, n);
-        }
+        crate::scorestyle::window(app, ctx, &mut open, t);
         st.styles_window = open;
     }
+    crate::scorestyle::clef_menu(app, ctx);
+    crate::scoretuplet::window(app, ctx);
+    crate::scorepdf::dialogs(app, ctx);
+    crate::scoreglobal::window(app, ctx);
 }
 
 pub const SETTINGS_TABS: [&str; 6] = ["Global", "Numbers & Names", "Chords & Grids", "Clefs & Signatures", "MIDI Meaning", "Colors"];
 
 /// Sets a track's staff style (one undo step).
 pub fn set_style(app: &mut App, t: usize, name: &str) {
-    region_param(app, t, "Staff Style", |ts| ts.style = name.to_string());
+    // the track and every other track with a selected region (one style for several at once)
+    let mut ts: Vec<usize> = vec![t];
+    if app.selected_regions.iter().any(|x| x.0 == t) {
+        ts.extend(app.selected_regions.iter().map(|x| x.0));
+    }
+    ts.sort_unstable();
+    ts.dedup();
+    let ids: Vec<u64> = ts.iter().filter_map(|&k| app.project.as_ref()?.tracks.get(k).map(|t| t.extra.id)).collect();
+    if ids.is_empty() {
+        return;
+    }
+    app.checkpoint("Staff Style");
+    if let Some(p) = app.project.as_mut() {
+        for id in ids {
+            p.score.track_mut(id).style = name.to_string();
+        }
+    }
+    app.after_edit();
 }
 
 pub(crate) fn region_param(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut lg_core::score::TrackScore)) {
@@ -1708,6 +1925,13 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
             insert_note(app, row.t, tick_q, pitch, len, 80);
         }
         Part::Rest(_) => app.tell("Rests are drawn by the Score itself (user rests aren't available yet)"),
+        Part::NTuplet => {
+            // on the note nearest the place (its start), else the place; Option: the last settings
+            let at = nearest_note(app, row.t, tick_q).and_then(|(rix, i)| app.project.as_ref()?.tracks.get(row.t)?.regions.get(rix)?.notes.get(i).map(|n| n.pos)).filter(|&p| p.abs_diff(tick_q) < bar_t / 2).unwrap_or(tick_q);
+            let ctx = app.ctx.clone();
+            let option = ctx.input(|i| i.modifiers.alt);
+            crate::scoretuplet::insert(app, &ctx, row.t, at, option);
+        }
         Part::Artic(_) | Part::Dynamic(_) => {
             // on the note nearest the click, or (a dynamic) at the place
             if let Some((rix, i)) = nearest_note(app, row.t, tick_q) {
@@ -1866,7 +2090,7 @@ pub fn apply_part(app: &mut App, st: &State, part: Part) -> bool {
 
 /// The staff header's key and time signature: a click (Linear view) or Control-click opens
 /// the Key Signature or Time Signature window.
-fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key: nt::Key, sig: (u8, u8), salt: (usize, bool)) {
+fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key: nt::Key, sig: (u8, u8), salt: (usize, bool), track: usize) {
     if r.width() <= 0.0 {
         return;
     }
@@ -1876,11 +2100,17 @@ fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key
     let ctx = ui.ctx().clone();
     let key_dlg = Dialog::Key { at: 0, fifths: key.fifths, minor: app.project.as_ref().is_some_and(|p| p.key.contains("minor")) };
     let time_dlg = Dialog::Time { bar: 0, beats: sig.0.to_string(), value: [1u8, 2, 4, 8, 16, 32].iter().position(|&d| d == sig.1).unwrap_or(2) };
-    if salt.1 && resp.clicked() {
+    let on_clef = resp.interact_pointer_pos().is_some_and(|pp| which(pp).is_none());
+    if resp.double_clicked() && on_clef {
+        // a double-click on the staff's clef: the Staff Style window on its style
+        crate::scorestyle::open_on(&ctx, style_of(app, track).name);
+        crate::scorestyle::close_clef_menu(&ctx);
+    } else if salt.1 && resp.clicked() {
         match resp.interact_pointer_pos().and_then(which) {
             Some(true) => crate::scoreinsp::open_dialog(&ctx, key_dlg.clone()),
             Some(false) => crate::scoreinsp::open_dialog(&ctx, time_dlg.clone()),
-            None => {}
+            // Linear view: a click on the clef opens the staff styles menu
+            None => crate::scorestyle::open_clef_menu(&ctx, resp.interact_pointer_pos().unwrap_or(r.min), track),
         }
     }
     resp.context_menu(|ui| {
@@ -2085,6 +2315,8 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
         }
         SymbolKind::Text => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &s.text, t, sp, INK)),
         SymbolKind::AutoText => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &(t.auto)(&s.text), t, sp, INK)),
+        // (drawn with the notes it holds)
+        SymbolKind::Tuplet => {}
         SymbolKind::Chord => {
             // root (and letters before the first number) on the line, the rest raised in the
             // Chord Extension style; a comma splits them by hand; a slash bass follows the root
@@ -2226,6 +2458,11 @@ struct DrawOpts<'a> {
     attr: &'a dyn Fn(usize) -> NoteAttr,
     hide_rests: bool,
     in_line: &'a dyn Fn(u32) -> bool,
+    /// The staff style's voice (Rest Slash, Tuplet, Beam Horiz., Head) and the beat in ticks.
+    vdef: &'a lg_core::staffstyle::VoiceDef,
+    beat: u32,
+    /// Hidden items shown (on screen; print leaves them out).
+    show_hidden: bool,
 }
 
 fn y_of(staff: &Staff, pos: i32, sp: f32) -> f32 {
@@ -2297,7 +2534,8 @@ pub(crate) fn special_head(p: &egui::Painter, c: Pos2, sp: f32, base: u8, head: 
     smufl(p, ch, c, sp, col, true);
 }
 
-fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &dyn Fn(f32) -> f32, o: &DrawOpts) {
+fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &dyn Fn(f32) -> f32, o: &DrawOpts) -> Vec<(u32, Rect)> {
+    let mut numbers = Vec::new();
     let stem_w = (0.12 * sp).max(1.0);
     // stem ends, for beams
     let mut stems: Vec<Option<(f32, f32, f32)>> = vec![None; v.items.len()];
@@ -2307,7 +2545,18 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         let here = (o.in_line)(it.tick);
         let x = x_of(it.tick as f32);
         if it.is_rest() {
-            if here && !o.hide_rests {
+            if here && !o.hide_rests && o.vdef.rest == 2 && it.dur >= o.beat {
+                // Rest ▸ Slash: a beat slash per beat (rests shorter than a beat stay)
+                let beat = o.beat.max(1);
+                let first = it.tick.div_ceil(beat) * beat;
+                let mut t = first;
+                while t + beat <= it.tick + it.dur {
+                    let cx = x_of(t as f32) + 1.4 * sp;
+                    let cy = staff.bottom - 2.0 * sp;
+                    p.line_segment([pos2(cx - 0.6 * sp, cy + sp), pos2(cx + 0.6 * sp, cy - sp)], Stroke::new(0.45 * sp, INK));
+                    t += beat;
+                }
+            } else if here && !o.hide_rests {
                 let cx = if it.full_bar { x_of((it.tick + it.dur / 2) as f32) } else { x + 0.8 * sp + 0.6 * sp };
                 rest(p, cx, staff.bottom, sp, it.value, it.full_bar, INK);
             }
@@ -2346,7 +2595,14 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             let c = head_center(it, h, staff, sp, x);
             let col = (o.color)(h.note);
             let head = (o.attr)(h.note).head;
-            if head != 0 {
+            if o.vdef.head == 3 {
+                // Head ▸ Hide
+            } else if o.vdef.head == 1 || (o.vdef.head == 2 && (o.attr)(h.note).finger > 0) {
+                // Head ▸ Note Names / Finger Names: the name (or finger) inside the head
+                notehead(p, c, sp, 1, col, REGION_PAPER);
+                let label = if o.vdef.head == 1 { const N: [&str; 7] = ["C", "D", "E", "F", "G", "A", "B"]; N[(h.spelled.letter % 7) as usize].to_string() } else { (o.attr)(h.note).finger.to_string() };
+                p.text(c, Align2::CENTER_CENTER, label, look::bold(sp * 1.0), col);
+            } else if head != 0 {
                 special_head(p, c, sp, it.value.base, head, col);
             } else if h.cross {
                 smufl(p, '\u{E0A9}', c, sp, col, true);
@@ -2473,7 +2729,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         }
         let (f, l) = (pts[0], pts[pts.len() - 1]);
         let dx = (l.1 - f.1).max(1.0);
-        let slope = ((l.3 - f.3) / dx).clamp(-0.18, 0.18);
+        let slope = if o.vdef.beam == 1 { 0.0 } else { ((l.3 - f.3) / dx).clamp(-0.18, 0.18) };
         // move the line so every stem is at least 2.5 spaces
         let mut off = 0.0f32;
         for &(_, x, y0, _) in &pts {
@@ -2517,12 +2773,24 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             }
         }
     }
-    // triplet numbers
+    // triplet and tuplet numbers (the voice's Tuplet: Up / Down / Hide for automatic triplets;
+    // a user tuplet's own Hide bracket / Hide number / Show note value; hidden numbers show in
+    // parentheses on screen and aren't printed)
     for t in &v.tuplets {
         let (a, b) = (&v.items[t.first], &v.items[t.last]);
         if !(o.in_line)(a.tick) {
             continue;
         }
+        let (hide_bracket, hide_number, show_value) = match t.spec {
+            Some(sp) => (sp.hide_bracket, sp.hide_number, sp.show_value),
+            None => (o.vdef.tuplet == 3, o.vdef.tuplet == 3, false),
+        };
+        let up = match (t.spec.map_or(0, |s| s.dir), o.vdef.tuplet) {
+            (1, _) | (0, 1) => true,
+            (-1, _) | (0, 2) => false,
+            _ => t.up,
+        };
+        let t = &nt::Tuplet { up, ..t.clone() };
         let xa = x_of(a.tick as f32) + 0.8 * sp;
         let xb = x_of(b.tick as f32) + 0.8 * sp + 1.25 * sp;
         let ys: Vec<f32> = (t.first..=t.last).filter_map(|i| stems[i].map(|s| s.2)).collect();
@@ -2531,16 +2799,30 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         } else {
             ys.iter().copied().fold(staff.bottom, f32::max) + 1.1 * sp
         };
-        if a.beam.is_none() || a.beam != b.beam {
+        if (a.beam.is_none() || a.beam != b.beam) && !hide_bracket {
             let d = if t.up { 0.5 * sp } else { -0.5 * sp };
             p.line_segment([pos2(xa, y + d), pos2(xa, y)], Stroke::new(1.0, INK));
             p.line_segment([pos2(xa, y), pos2(xb, y)], Stroke::new(1.0, INK));
             p.line_segment([pos2(xb, y), pos2(xb, y + d)], Stroke::new(1.0, INK));
         }
         let c = pos2((xa + xb) / 2.0, y);
-        p.rect_filled(Rect::from_center_size(c, vec2(sp * 1.1, sp * 1.3)), 0.0, REGION_PAPER);
-        p.text(c, Align2::CENTER_CENTER, "3", look::bold(sp * 1.5), INK);
+        let label = if hide_number { format!("({})", t.n) } else if show_value && t.base > 0 { format!("{}:{}", t.n, t.of) } else { t.n.to_string() };
+        let col = if hide_number { Color32::from_gray(0x80) } else { INK };
+        let g = p.layout_no_wrap(label, look::bold(sp * 1.5), col);
+        let r = Rect::from_center_size(c, g.size() + vec2(0.2 * sp, 0.0));
+        if !(hide_number && t.spec.is_none() && hide_bracket && !o.show_hidden) {
+            p.rect_filled(r, 0.0, REGION_PAPER);
+            p.galley(r.min + vec2(0.1 * sp, 0.0), g, col);
+            if show_value && t.base > 0 && !hide_number {
+                // the note value as the lower number
+                p.text(pos2(c.x, r.max.y + 0.2 * sp), Align2::CENTER_TOP, format!("1/{}", t.base), look::regular(sp * 1.0), INK);
+            }
+        }
+        if t.spec.is_some() {
+            numbers.push((a.tick, r));
+        }
     }
+    numbers
 }
 
 /// A filled band between two curves of as many points (a tie's crescent, a flag): one mesh,
@@ -2604,6 +2886,7 @@ pub(crate) fn rest(p: &egui::Painter, x: f32, bottom: f32, sp: f32, v: nt::Value
         8 => ('\u{E4E6}', 4.0),
         16 => ('\u{E4E7}', 4.0),
         32 => ('\u{E4E8}', 4.0),
+        128 => ('\u{E4EA}', 4.0),
         _ => ('\u{E4E9}', 4.0),
     };
     smufl(p, ch, pos2(x, y(line)), sp, col, true);
