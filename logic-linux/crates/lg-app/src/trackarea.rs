@@ -426,6 +426,13 @@ pub fn command(app: &mut App, name: &str) -> bool {
             if sel.is_empty() {
                 return false;
             }
+            // (groups linking Track Zoom: their tracks zoom with the selected ones)
+            let mut sel = sel.clone();
+            for k in sel.clone() {
+                sel.extend(crate::mixstate::linked(app, k, (2, 0x02)));
+            }
+            sel.sort();
+            sel.dedup();
             if let Some(p) = app.project.as_mut() {
                 for &i in &sel {
                     let t = &mut p.tracks[i];

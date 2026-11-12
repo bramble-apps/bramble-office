@@ -1019,13 +1019,27 @@ pub fn group_window(app: &mut App, ctx: &egui::Context) {
     let mut grp = before.clone();
     let labels: Vec<String> = app.mix.groups.iter().enumerate().map(|(k, x)| x.label(k)).collect();
     let mut pick = None;
+    let mut more: Option<&str> = None;
     egui::Window::new("Group Settings").open(&mut open).collapsible(false).resizable(false).default_width(300.0).show(ctx, |ui| {
-        egui::ComboBox::from_id_salt("group-pick").selected_text(&labels[g]).show_ui(ui, |ui| {
-            for (k, l) in labels.iter().enumerate() {
-                if ui.selectable_label(k == g, l).clicked() {
-                    pick = Some(k);
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("group-pick").selected_text(&labels[g]).show_ui(ui, |ui| {
+                for (k, l) in labels.iter().enumerate() {
+                    if ui.selectable_label(k == g, l).clicked() {
+                        pick = Some(k);
+                    }
                 }
-            }
+            });
+            // the More menu at the upper right: the group commands
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("···", |ui| {
+                    for c in ["Copy Group Settings", "Paste Group Settings", "Add Selected Channel Strips to Selected Groups", "Remove Selected Channel Strips from Selected Groups", "Select Members of Selected Groups", "Delete Unused Groups"] {
+                        if ui.button(c).clicked() {
+                            more = Some(c);
+                            ui.close();
+                        }
+                    }
+                });
+            });
         });
         ui.horizontal(|ui| {
             ui.label("Name:");
@@ -1065,6 +1079,9 @@ pub fn group_window(app: &mut App, ctx: &egui::Context) {
     }
     if let Some(k) = pick {
         app.mix.group_window = Some(k);
+    }
+    if let Some(c) = more {
+        crate::mixercmd::run(app, ctx, c);
     }
     if !open {
         app.mix.group_window = None;

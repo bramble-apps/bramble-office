@@ -358,8 +358,12 @@ pub fn left_edge(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect
                 app.help_tag = Some(vec![("Zoom All Tracks".into(), format!("{:.2}", app.ta.v_zoom))]);
             } else {
                 let z = (z0 + total / crate::tracks::ROW_H).clamp(0.5, 6.0);
-                if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)) {
-                    tr.extra.height = z;
+                // (a group linking Track Zoom zooms its tracks together)
+                let with: Vec<usize> = crate::mixstate::linked(app, i, (2, 0x02)).into_iter().chain([i]).collect();
+                for k in with {
+                    if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(k)) {
+                        tr.extra.height = z;
+                    }
                 }
                 app.help_tag = Some(vec![("Zoom".into(), format!("{z:.2} × window zoom"))]);
             }
