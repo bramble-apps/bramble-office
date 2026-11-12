@@ -1837,6 +1837,9 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
         });
         st.settings = open.then_some(tab);
     }
+    if crate::scorestyle::take_open_request(ctx) {
+        st.styles_window = true;
+    }
     if st.styles_window {
         let mut open = true;
         crate::scorestyle::window(app, ctx, &mut open, t);
@@ -1844,7 +1847,7 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     }
     crate::scorestyle::clef_menu(app, ctx);
     crate::scoretuplet::window(app, ctx);
-    crate::scorepdf::dialogs(app, ctx);
+    crate::scorepdf::dialogs(app, ctx, st);
     crate::scoreglobal::window(app, ctx);
 }
 

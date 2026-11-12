@@ -78,7 +78,7 @@ pub fn pdf_path(app: &App, title: &str) -> Option<std::path::PathBuf> {
 }
 
 /// The Print and Page Setup dialogs.
-pub fn dialogs(app: &mut App, ctx: &egui::Context) {
+pub fn dialogs(app: &mut App, ctx: &egui::Context, st: &mut score::State) {
     let Some(mut d) = ctx.data(|m| m.get_temp::<Option<Dlg>>(dlg_id())).flatten() else { return };
     let mut open = true;
     let mut close = false;
@@ -103,7 +103,6 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
                     ui.add(egui::DragValue::new(copies).range(1..=99));
                     ui.end_row();
                     ui.label("Paper:");
-                    let st = score::state(ctx);
                     ui.label(format!("{}{}", PAPERS[st.paper as usize % PAPERS.len()].0, if st.landscape { ", landscape" } else { "" }));
                     ui.end_row();
                 });
@@ -111,7 +110,7 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
                 ui.horizontal(|ui| {
                     if ui.button("PDF…").on_hover_text("Save the score as a PDF").clicked() {
                         if let Some(path) = pdf_path(app, &title) {
-                            request(ctx, Job::Pdf(path));
+                            request(ctx, st, Job::Pdf(path));
                         }
                         close = true;
                     }
@@ -120,7 +119,7 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
                     }
                     if ui.add_enabled(!list.is_empty(), egui::Button::new("Print")).clicked() {
                         let name = list.get(*printer).cloned().unwrap_or_default();
-                        request(ctx, Job::Print(name, *copies));
+                        request(ctx, st, Job::Print(name, *copies));
                         close = true;
                     }
                 });
@@ -128,7 +127,6 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
         }
         Dlg::Setup => {
             egui::Window::new("Page Setup").collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
-                let mut st = score::state(ctx);
                 egui::Grid::new("ps-grid").num_columns(2).show(ui, |ui| {
                     ui.label("Paper Size:");
                     egui::ComboBox::from_id_salt("ps-paper").selected_text(PAPERS[st.paper as usize % PAPERS.len()].0).show_ui(ui, |ui| {
@@ -144,10 +142,6 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
                     });
                     ui.end_row();
                 });
-                score::with_state(ctx, |s| {
-                    s.paper = st.paper;
-                    s.landscape = st.landscape;
-                });
                 if ui.button("OK").clicked() {
                     close = true;
                 }
@@ -159,11 +153,9 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
 }
 
 /// Asks the Score for a print frame (Page view; drawn next frame).
-pub fn request(ctx: &egui::Context, job: Job) {
-    score::with_state(ctx, |s| {
-        s.print_job = Some((job, s.view));
-        s.view = score::View::Page;
-    });
+pub fn request(ctx: &egui::Context, st: &mut score::State, job: Job) {
+    st.print_job = Some((job, st.view));
+    st.view = score::View::Page;
     ctx.request_repaint();
 }
 

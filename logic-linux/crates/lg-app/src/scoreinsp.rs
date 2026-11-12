@@ -931,7 +931,7 @@ fn part_box(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, pb: &mut P
             for (k, (part, dotted, triplet)) in row.into_iter().enumerate() {
                 let r = Rect::from_min_size(pos2(x0 + (k % per_row) as f32 * sw, y + (k / per_row) as f32 * cell_h), vec2(sw - 1.0, cell_h - 2.0));
                 let on = st.part == part && (g != 0 || (st.dotted == dotted && st.triplet == triplet));
-                let resp = ui.interact(r, id.with(("s", g, k, dotted, triplet)), Sense::click_and_drag()).on_hover_text(part.name());
+                let resp = ui.interact(r, id.with(("s", g, part.index(), dotted, triplet)), Sense::click_and_drag()).on_hover_text(part.name());
                 if on {
                     p.rect_filled(r, 3.0, look::accent());
                 } else if resp.hovered() {

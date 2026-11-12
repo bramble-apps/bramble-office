@@ -211,7 +211,7 @@ pub fn paste_styles(app: &mut App, v: &[StaffStyleDef]) {
 #[derive(Clone, Default)]
 struct Win {
     cur: String,
-    /// 0 overview only, 1 everything, 2 parameters only.
+    /// 0 everything (the default), 1 overview only, 2 parameters only.
     view: u8,
     list: bool,
     list_sel: Vec<String>,
@@ -238,7 +238,13 @@ pub fn open_on(ctx: &egui::Context, name: &str) {
         w.cur = name.to_string();
         w.list = false;
     });
-    score::with_state(ctx, |s| s.styles_window = true);
+    // (the Score's state is written back at the end of its frame: it opens the window then)
+    ctx.data_mut(|m| m.insert_temp(egui::Id::unique("lg-ssw-open"), true));
+}
+
+/// A double-click asked for the window (read once by the Score).
+pub fn take_open_request(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|m| m.remove_temp::<bool>(egui::Id::unique("lg-ssw-open"))).unwrap_or(false)
 }
 
 fn menu_id() -> egui::Id {
@@ -372,8 +378,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, open: &mut bool, track: usize)
                 }
             });
             ui.add_space(12.0);
-            for (k, tip) in [(0u8, "Style overview only"), (1, "Whole window"), (2, "Staff and voice parameters only")] {
-                let icon = ["▭", "▤", "▦"][k as usize];
+            for (k, tip, icon) in [(1u8, "Style overview only", "▭"), (0, "Whole window", "▤"), (2, "Staff and voice parameters only", "▦")] {
                 if ui.selectable_label(w.view == k, icon).on_hover_text(tip).clicked() {
                     w.view = k;
                 }
@@ -413,12 +418,12 @@ pub fn window(app: &mut App, ctx: &egui::Context, open: &mut bool, track: usize)
             if w.view != 2 {
                 overview(app, ui, &mut w, &cur);
             }
-            if w.view != 0 {
+            if w.view != 1 {
                 ui.separator();
                 params(app, ui, &mut w, &cur);
             }
             // a double-click below the parameters: List view
-            let rest = ui.allocate_response(vec2(ui.available_width(), 24.0f32.max(ui.available_height())), egui::Sense::click());
+            let rest = ui.allocate_response(vec2(ui.available_width(), 24.0), egui::Sense::click());
             if rest.double_clicked() {
                 w.list = true;
             }
@@ -650,7 +655,19 @@ fn picture(ui: &mut egui::Ui, d: &StaffStyleDef) {
         }
         let bottom = y + (lines.max(1) - 1) as f32 * k;
         tops.push((y, bottom));
-        p.text(egui::pos2(rect.min.x + 26.0, (y + bottom) / 2.0), egui::Align2::LEFT_CENTER, s.clef_name(), egui::FontId::proportional(9.0), ink);
+        // the clef (Bravura), on its line
+        let (c, _) = nt_clef(s.clef_name());
+        let (ch, line) = match c {
+            nt::Clef::Treble => ('\u{E050}', 1.0),
+            nt::Clef::Bass => ('\u{E062}', 3.0),
+            nt::Clef::Alto => ('\u{E05C}', 2.0),
+            nt::Clef::Tenor => ('\u{E05C}', 3.0),
+            nt::Clef::Percussion => ('\u{E069}', 2.0),
+        };
+        if lines >= 5 && !s.clef_name().starts_with("no clef") {
+            score::smufl(&p, ch, egui::pos2(rect.min.x + 26.0, bottom - line * k), k, ink, false);
+        }
+        p.text(egui::pos2(rect.max.x - 10.0, (y + bottom) / 2.0), egui::Align2::RIGHT_CENTER, s.clef_name(), egui::FontId::proportional(9.0), Color32::from_gray(0x70));
         y = bottom + 3.0 * k + s.below as f32 * k / 2.0;
     }
     if let (Some(f), Some(l)) = (tops.first(), tops.last()) {
