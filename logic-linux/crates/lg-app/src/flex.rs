@@ -845,6 +845,7 @@ fn quantize(app: &mut App) -> bool {
     for (g, q) in todo {
         let mut x = g.x;
         x.flex = q;
+        x.flex_auto = x.flex.iter().map(|m| m.0).collect();
         audioedit::set_extras(app, g.t, g.r, x);
     }
     app.after_edit();

@@ -69,6 +69,8 @@ pub struct RegionAudio {
     pub anchor: usize,
     /// Flex markers: (source frame, destination frame), both from the region's start.
     pub flex: Vec<(usize, usize)>,
+    /// The flex markers audio quantization placed (their source frames; flexedit.rs).
+    pub flex_auto: Vec<usize>,
     /// Reverse (the region plays its audio backwards; the file is left as it is).
     pub reverse: bool,
     /// Flex Pitch: the region's notes with their edits (frames of the file; empty: unedited).
@@ -995,7 +997,16 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     crate::flex::pitch_view(app, ui, rbody, t, r, &dst_x);
     let on_region = area_resp.hover_pos().or(area_resp.interact_pointer_pos()).is_some_and(|h| reg.contains(h));
     if on_region {
-        crate::menus::context_menu(app, &area_resp, "region-audio");
+        // over a flex marker its menu; on a Flex track the reset items first (flexedit.rs)
+        let at = area_resp.hover_pos().map_or(f32::NAN, |h| h.x);
+        let marker = flex_hits.iter().find(|f| f.2.is_some() && (f.0 - at).abs() < 4.0).and_then(|f| f.2).filter(|_| app.audio_edit.show_flex);
+        area_resp.context_menu(|ui| match marker {
+            Some(k) => crate::flexedit::marker_menu(app, ui, t, r, k),
+            None => {
+                crate::flexedit::background_items(app, ui, t, r);
+                crate::menus::show_items(app, ui, crate::menus::context("region-audio"));
+            }
+        });
     }
     let cmd = ui.input(|i| i.modifiers.command);
     let tool = if cmd { app.audio_edit.cmd_tool } else { app.audio_edit.tool };
@@ -1183,6 +1194,15 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 let dst = (dst_sec * rate as f64) as usize;
                 // between the neighbouring markers
                 let mut flex = nx.flex.clone();
+                // Option: the marker moves with its audio, nothing stretched (flexedit.rs)
+                if let Some(k) = index.filter(|k| *k < flex.len() && ui.input(|i| i.modifiers.alt)) {
+                    nx.flex = crate::flexedit::moved_without_stretch(&flex, k, dst.max(1));
+                    let k2 = nx.flex.iter().position(|m| m.1 == dst.max(1));
+                    let src2 = k2.map_or(src, |k2| nx.flex[k2].0);
+                    set_extras(app, t, r, nx);
+                    app.audio_edit.t_drag = Some(TDrag::Flex { src: src2, index: k2 });
+                    return;
+                }
                 if let Some(k) = index.filter(|k| *k < flex.len()) {
                     flex.remove(k);
                 }
@@ -1194,6 +1214,14 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 nx.flex = flex;
                 set_extras(app, t, r, nx);
                 app.audio_edit.t_drag = Some(TDrag::Flex { src, index: k });
+            }
+        }
+    }
+    if area_resp.drag_stopped() && tool == crate::edit::Tool::Eraser && app.audio_edit.show_flex {
+        // the Eraser dragged across flex markers deletes them
+        if let (Some(a), Some(b)) = (ui.input(|i| i.pointer.press_origin()), area_resp.interact_pointer_pos()) {
+            if a.y > rbody.min.y {
+                crate::flexedit::erase(app, t, r, &flex_hits, a.x, b.x);
             }
         }
     }
@@ -1221,6 +1249,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
             let tk = tick_of(pp.x);
             match tool {
                 crate::edit::Tool::Scissors if reg.contains(pp) => split(app, t, r, snap_tick(app, tk, px_per_tick)),
+                crate::edit::Tool::Eraser if app.audio_edit.show_flex && pp.y > rbody.min.y && crate::flexedit::erase(app, t, r, &flex_hits, pp.x, pp.x) => {}
                 crate::edit::Tool::Eraser if reg.contains(pp) => {
                     checkpoint(app, "Delete Region");
                     if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {

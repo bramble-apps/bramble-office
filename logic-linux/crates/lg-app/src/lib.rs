@@ -130,6 +130,7 @@ mod joinaudio;
 mod demix;
 mod regsolo;
 mod stretch;
+mod flexedit;
 pub mod settings;
 pub mod share;
 pub mod smarttempo;
