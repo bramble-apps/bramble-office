@@ -33,7 +33,7 @@ pub const COMMANDS: &[&str] = &[
     "Toggle Next Region/Cell/Event or Move Marquee Start (or Extend Marquee Selection) to Next Transient",
 ];
 
-const ROW: f32 = 22.0;
+const ROW: f32 = 24.0;
 /// The event type buttons, in Logic's order (status nibble; 0x90 notes, 0xF0 SysEx).
 pub const TYPES: [(&str, u8); 7] = [("Notes", 0x90), ("Progr. Change", 0xC0), ("Pitch Bend", 0xE0), ("Controller", 0xB0), ("Aftertouch", 0xD0), ("Poly Aftertouch", 0xA0), ("Syst. Exclusive", 0xF0)];
 const CREATE: [(&str, u8); 6] = [("Notes", 0x90), ("Progr. Change", 0xC0), ("Pitch Bend", 0xE0), ("Controller", 0xB0), ("Aftertouch", 0xD0), ("Poly Aftertouch", 0xA0)];
@@ -414,8 +414,29 @@ fn pill(ui: &mut egui::Ui, r: Rect, idv: egui::Id, label: &str, on: bool, on_col
     let p = ui.painter();
     let bg = if on { on_col } else if resp.hovered() { look::button_on() } else { look::group_bg() };
     p.rect_filled(r, 5.0, bg);
-    p.text(r.center(), Align2::CENTER_CENTER, label, look::regular(12.0), if on { Color32::WHITE } else { look::text() });
+    fit_text(p, r.shrink2(vec2(4.0, 0.0)), label, 12.0, if on { Color32::WHITE } else { look::text() });
     resp
+}
+
+/// Text centred in `r`, its size lowered (to 9 pt) until it fits, then cut with an ellipsis.
+fn fit_text(p: &egui::Painter, r: Rect, text: &str, size: f32, col: Color32) {
+    let mut sz = size;
+    loop {
+        let g = p.layout_no_wrap(text.to_string(), look::regular(sz), col);
+        if g.size().x <= r.width() || sz <= 9.0 {
+            if g.size().x <= r.width() {
+                p.galley(pos2(r.center().x - g.size().x / 2.0, r.center().y - g.size().y / 2.0), g, col);
+            } else {
+                let mut t: String = text.to_string();
+                while !t.is_empty() && p.layout_no_wrap(format!("{t}…"), look::regular(sz), col).size().x > r.width() {
+                    t.pop();
+                }
+                p.text(r.center(), Align2::CENTER_CENTER, format!("{t}…"), look::regular(sz), col);
+            }
+            return;
+        }
+        sz -= 0.5;
+    }
 }
 
 fn icon_button(ui: &mut egui::Ui, r: Rect, idv: egui::Id, icon: &str, on: bool, on_col: Color32, enabled: bool) -> egui::Response {
@@ -447,12 +468,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     if icon_button(ui, lvl, egui::Id::unique("evl-level"), glyphs::ph::ARROW_ELBOW_LEFT_UP, false, BLUE, has_region && !st.regions).on_hover_text("Display Level: the regions and folders").clicked() {
         st.regions = true;
     }
-    let menus = Rect::from_min_max(pos2(lvl.max.x + 8.0, bar.min.y), pos2((lvl.max.x + 230.0).min(bar.max.x - 110.0), bar.max.y));
+    // (the menus take what is left between Display Level and Catch / MIDI In / Out)
+    // (a narrow pane: Catch and MIDI In / Out go to a row of their own under the menus)
+    let narrow = bar.width() < 34.0 + 8.0 + 196.0 + 8.0 + 3.0 * 38.0;
+    let menus = Rect::from_min_max(pos2(lvl.max.x + 8.0, bar.min.y), pos2(if narrow { bar.max.x } else { (lvl.max.x + 230.0).min(bar.max.x - 3.0 * 38.0 - 12.0) }, bar.max.y));
+    let row2 = if narrow { 30.0 } else { 0.0 };
     p.rect_filled(menus, 6.0, look::group_bg());
     let mut run: Option<&'static str> = None;
     {
         let mut c = ui.new_child(egui::UiBuilder::new().max_rect(menus.shrink2(vec2(6.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        c.spacing_mut().item_spacing.x = 10.0;
+        c.spacing_mut().item_spacing.x = if narrow { 4.0 } else { 10.0 };
         c.menu_button("Edit ⌄", |ui| edit_menu(ui, &mut run));
         c.menu_button("Functions ⌄", |ui| {
             for n in ["Lock SMPTE Position", "Unlock SMPTE Position"] {
@@ -502,12 +527,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             ui.checkbox(&mut st.float, "Event Float");
         });
     }
-    let catch = Rect::from_min_size(pos2(menus.max.x + 8.0, bar.min.y), vec2(34.0, 24.0));
+    let catch = if narrow { Rect::from_min_size(pos2(bar.min.x, bar.min.y + row2), vec2(34.0, 24.0)) } else { Rect::from_min_size(pos2(menus.max.x + 8.0, bar.min.y), vec2(34.0, 24.0)) };
     if icon_button(ui, catch, egui::Id::unique("evl-catch"), glyphs::ph::ARROWS_IN_LINE_HORIZONTAL, st.catch, BLUE, true).on_hover_text("Catch: the list follows the playhead").clicked() {
         st.catch = !st.catch;
     }
-    let out = Rect::from_min_size(pos2(bar.max.x - 34.0, bar.min.y), vec2(34.0, 24.0));
-    let inn = Rect::from_min_size(pos2(out.min.x - 38.0, bar.min.y), vec2(34.0, 24.0));
+    let out = Rect::from_min_size(pos2(bar.max.x - 34.0, bar.min.y + row2), vec2(34.0, 24.0));
+    let inn = Rect::from_min_size(pos2(out.min.x - 38.0, bar.min.y + row2), vec2(34.0, 24.0));
     if icon_button(ui, inn, egui::Id::unique("evl-in"), glyphs::ph::PIANO_KEYS, st.midi_in, Color32::from_rgb(0xd0, 0x30, 0x30), true).on_hover_text("MIDI In: step input of notes from a keyboard").clicked() {
         st.midi_in = !st.midi_in;
         let on = st.midi_in;
@@ -518,7 +543,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     if icon_button(ui, out, egui::Id::unique("evl-out"), glyphs::ph::SPEAKER_HIGH, st.midi_out, GREEN, true).on_hover_text("MIDI Out: play events as they are selected").clicked() {
         st.midi_out = !st.midi_out;
     }
-    let mut y = bar.max.y + 8.0;
+    let mut y = bar.max.y + 8.0 + row2;
     p.hline(body.x_range(), y - 4.0, Stroke::new(1.0, look::line()));
     if st.regions {
         y = region_level(app, ui, &mut st, Rect::from_min_max(pos2(body.min.x, y), body.max));
@@ -559,23 +584,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     if icon_button(ui, plus, egui::Id::unique("evl-plus"), glyphs::ph::PLUS, false, BLUE, true).on_hover_text("Add an event of the type shown at the playhead").clicked() {
         create = true;
     }
-    let tsel = Rect::from_min_size(pos2(plus.max.x + 8.0, y), vec2(110.0, 24.0));
+    // (the type and Quantize pop-ups share what the row has)
+    let room = body.max.x - 10.0 - 34.0 - 8.0 - (plus.max.x + 8.0);
+    let pop_w = ((room - 8.0 - 70.0) / 2.0).clamp(70.0, 110.0);
+    let tsel = Rect::from_min_size(pos2(plus.max.x + 8.0, y), vec2(pop_w, 24.0));
     {
         let mut c = ui.new_child(egui::UiBuilder::new().max_rect(tsel));
-        egui::ComboBox::from_id_salt("evl-create-type").width(tsel.width() - 8.0).selected_text(CREATE[st.create].0).show_ui(&mut c, |ui| {
+        egui::ComboBox::from_id_salt("evl-create-type").width(tsel.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(CREATE[st.create].0).show_ui(&mut c, |ui| {
             for (k, (n, _)) in CREATE.iter().enumerate() {
                 ui.selectable_value(&mut st.create, k, *n);
             }
         });
     }
     let qbtn = Rect::from_min_size(pos2(body.max.x - 10.0 - 34.0, y), vec2(34.0, 24.0));
-    let qsel = Rect::from_min_size(pos2(qbtn.min.x - 8.0 - 110.0, y), vec2(110.0, 24.0));
+    let qsel = Rect::from_min_size(pos2(qbtn.min.x - 8.0 - pop_w, y), vec2(pop_w, 24.0));
     if qsel.min.x > tsel.max.x + 70.0 {
         p.text(pos2(qsel.min.x - 6.0, qsel.center().y), Align2::RIGHT_CENTER, "Quantize:", look::regular(12.0), look::text_dim());
     }
     {
         let mut c = ui.new_child(egui::UiBuilder::new().max_rect(qsel));
-        egui::ComboBox::from_id_salt("evl-quant").width(qsel.width() - 8.0).selected_text(lg_core::functions::QUANTIZE_STEPS[st.quantize]).show_ui(&mut c, |ui| {
+        egui::ComboBox::from_id_salt("evl-quant").width(qsel.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(lg_core::functions::QUANTIZE_STEPS[st.quantize]).show_ui(&mut c, |ui| {
             for (k, n) in lg_core::functions::QUANTIZE_STEPS.iter().enumerate() {
                 ui.selectable_value(&mut st.quantize, k, *n);
             }
@@ -597,20 +625,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     let all = rows(&rg, &st.shown);
     let ev = crate::eventedit::state(&ctx);
     let w = list_area.width() - 12.0;
-    let mut cols: Vec<(&str, f32)> = vec![("L", 18.0), ("M", 20.0), (if ev.relative { "Rel. Position" } else { "Position" }, w * 0.25), ("Status", w * 0.13), ("Ch", w * 0.07), ("Num", w * 0.12), ("Val", w * 0.1), (if ev.abs_length { "End" } else { "Length/Info" }, w * 0.2)];
+    // (Logic's widths at its default pane, in points, scaled to the pane)
+    let k = (w - 36.0) / 362.0;
+    let mut cols: Vec<(&str, f32)> = vec![("L", 18.0), ("M", 18.0), (if ev.relative { "Rel. Position" } else { "Position" }, 100.0 * k), ("Status", 40.0 * k), ("Ch", 30.0 * k), ("Num", 42.0 * k), ("Val", 40.0 * k), (if ev.abs_length { "End" } else { "Length/Info" }, 110.0 * k)];
     let artic_set = app.artic.tracks.get(&t).cloned();
     if st.artic_col {
         cols.push(("Artic.", w * 0.12));
-        let scale = (w - 38.0) / cols.iter().skip(2).map(|c| c.1).sum::<f32>();
+        let scale = (w - 36.0) / cols.iter().skip(2).map(|c| c.1).sum::<f32>();
         cols.iter_mut().skip(2).for_each(|c| c.1 *= scale);
     }
     let hr = Rect::from_min_size(list_area.min, vec2(list_area.width(), ROW));
     p.rect_filled(hr, 0.0, look::header_bg());
     let mut x = hr.min.x + 4.0;
     for (i, (n, cw)) in cols.iter().enumerate() {
-        let a = if i < 2 { Align2::CENTER_CENTER } else { Align2::LEFT_CENTER };
-        let at = if i < 2 { pos2(x + cw / 2.0, hr.center().y) } else { pos2(x + 2.0, hr.center().y) };
-        p.text(at, a, *n, look::regular(11.5), look::text_dim());
+        let _ = i;
+        let (a, at) = (Align2::CENTER_CENTER, pos2(x + cw / 2.0, hr.center().y));
+        let _ = (a, at);
+        fit_text(&p, Rect::from_min_max(pos2(x + 1.0, hr.min.y), pos2(x + cw - 3.0, hr.max.y)), n, 11.5, look::text_dim());
         x += cw;
         p.vline(x - 2.0, hr.y_range().shrink(5.0), Stroke::new(1.0, look::line()));
     }
@@ -701,7 +732,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             let shown_pos = if ev.relative { abs.saturating_sub(rg.start) } else { abs };
             let pr = cell(x, cols[2].1);
             let ptxt = pos_text(app, &st, shown_pos);
-            p.text(pos2(pr.min.x + 2.0, pr.center().y), Align2::LEFT_CENTER, &ptxt, f.clone(), txt);
+            // (right-aligned, as Logic's)
+            p.text(pos2(pr.max.x - 4.0, pr.center().y), Align2::RIGHT_CENTER, &ptxt, f.clone(), txt);
             if !st.as_time {
                 let bar = app.bar_ticks();
                 let beat = bar / app.project.as_ref().map_or(4, |p| p.signature.0.max(1)) as u32;
@@ -745,7 +777,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
                 let Some((v, lo, hi)) = field_of(&rg, row, fld) else { return };
                 let mut fv = v as f32;
                 let step = if matches!((row, fld), (Row::E(i), Field::Num | Field::Val) if rg.ext.events[i].kind & 0xF0 == 0xE0) { 64.0 } else { 1.0 };
-                if widgets::value_slot(ui, r, ui.scope_id().with((name, k)), &mut fv, lo as f32, hi as f32, v as f32, step, shown) {
+                // (clipped to its cell)
+                let idv = ui.scope_id().with((name, k));
+                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(r));
+                c.set_clip_rect(r.intersect(ui.clip_rect()));
+                if widgets::value_slot(&mut c, r, idv, &mut fv, lo as f32, hi as f32, v as f32, step, shown) {
                     *edit = Some((row, fld, fv as i32));
                 }
             };

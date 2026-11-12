@@ -390,8 +390,26 @@ fn run_user(app: &mut App, slot: usize, select_first: bool) -> bool {
     run_transform(app, &t, if select_first { 2 } else { 1 })
 }
 
+/// How many regions the Transform window works on, and how many of their notes match.
+pub(crate) fn transform_count(app: &App, t: &Transform) -> (usize, usize) {
+    let regions: Vec<(usize, usize)> = if roll_ctx(app) { app.selected_region.into_iter().collect() } else { app.region_selection() };
+    let Some(p) = &app.project else { return (0, 0) };
+    let mut n = 0;
+    let mut k = 0;
+    for (tt, r) in regions {
+        if let Some(rg) = p.tracks.get(tt).and_then(|x| x.regions.get(r)).filter(|g| g.audio.is_none()) {
+            k += 1;
+            n += t.select(&rg.notes, rg.start).len();
+        }
+    }
+    (k, n)
+}
+
 /// The Transform window's buttons: 0 Select Only, 1 Operate Only, 2 Select and Operate.
 pub(crate) fn run_transform(app: &mut App, t: &Transform, how: u8) -> bool {
+    let mut tb = t.clone();
+    tb.bar = app.bar_ticks();
+    let t = &tb;
     if how == 0 {
         return select(app, |notes, _, i| t.select(notes, i.start));
     }
@@ -407,6 +425,14 @@ pub(crate) fn run_transform(app: &mut App, t: &Transform, how: u8) -> bool {
             *sel = s;
         } else if !roll {
             sel.clear();
+        }
+        // the Mode's deleting and copying ways (lg-core transform apply)
+        if t.mode != 0 {
+            let mut tt = t.clone();
+            tt.bar = i.bar;
+            let scope = sel.clone();
+            *sel = tt.apply(notes, &scope, i.start, &mut rng);
+            return;
         }
         let o = transform::origin_for(t, notes, sel, i.start);
         let scope = sel.clone();

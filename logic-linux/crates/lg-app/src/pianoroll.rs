@@ -79,6 +79,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         ui.add_space(8.0);
         crate::artic::roll_popup(app, ui);
+        // the Piano Roll's own Snap (rollsnap.rs)
+        crate::rollsnap::popup(ui);
         // Logic's Piano Roll buttons: MIDI Draw (the velocity lane), Collapse Mode, the scale guides
         for (on, text, tip) in [(app.midi.velocity_lane, "Velocity", "Show / hide the velocity lane (MIDI Draw)"), (app.midi.collapse, "Collapse", "Collapse Mode: only the pitches the region uses"), (app.midi.scale_guides, "Scale", "Show the project key's scale on the rows")] {
             if ui.add(egui::Button::new(egui::RichText::new(text).size(11.5)).selected(on).corner_radius(5.0)).on_hover_text(tip).clicked() {
@@ -137,6 +139,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let (sx, bw) = (app.roll_scroll_x, app.roll_bar_w);
     let x_of = move |tick: f32| grid.min.x + (tick / bar_t - sx) * bw;
     let tick_at = move |x: f32| (x - grid.min.x) / bw * bar_t + sx * bar_t;
+    let ppt = bw / bar_t;
     let gp = ui.painter_at(grid);
     let kp = ui.painter_at(keys);
     // the keyboard's white keys under everything
@@ -281,10 +284,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 (Some(RollDrag::Resize { from_x, orig, targets }), Some(pp)) => {
                     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
-                    let mut dt = tick_at(pp.x) - tick_at(from_x);
-                    if !shift_down {
-                        dt = (dt / sixteenth).round() * sixteenth;
-                    }
+                    let dt = crate::rollsnap::length_delta(app, ui.ctx(), tick_at(pp.x) - tick_at(from_x), ppt);
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
                         for &i in &targets {
                             if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
@@ -301,12 +301,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if let (Some(crate::app::Drag::Notes { from_tick, from_pitch, .. }), Some(pp)) = (app.drag, pp) {
                 let tick = tick_at(pp.x);
                 let pitch = rows.row_at(pp.y);
-                let mut dt = tick - from_tick;
-                if !shift_down {
-                    dt = (dt / sixteenth).round() * sixteenth;
-                }
-                let dp = (pitch - from_pitch).round() as i32;
                 let orig = app.drag_notes.clone();
+                // (snapped by the pressed note: rollsnap.rs)
+                let o_pos = orig.get(k).map_or(from_tick, |n| n.pos as f32);
+                let dt = crate::rollsnap::delta(app, ui.ctx(), o_pos, tick - from_tick, ppt);
+                let dp = (pitch - from_pitch).round() as i32;
                 let sel = app.selected_notes.clone();
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
                     for &i in &sel {
@@ -345,7 +344,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             Tool::Eraser => app.delete_selection(),
             Tool::Scissors if !drag => {
                 if let Some(t) = click_tick {
-                    let at = ((t / sixteenth).round() * sixteenth) as u32;
+                    let at = crate::rollsnap::round(app, ui.ctx(), t, ppt) as u32;
                     crate::midifunc::edit(app, "Split Notes", |notes, sel, _| {
                         lg_core::functions::split_notes(notes, sel, &[at]);
                     });
@@ -405,7 +404,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let pitch = rows.pitch_at(pp.y);
             let step = if app.roll_quantize > 0 { app.roll_quantize } else { sixteenth as u32 };
             if tool == Tool::Pencil {
-                let at = ((tick_at(pp.x) / sixteenth).floor() * sixteenth).max(0.0) as u32;
+                let at = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32;
                 let (len, vel) = app.midi.default_note;
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
                     rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len, muted: false });
@@ -463,7 +462,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     if pressed_note.is_none() && bg.double_clicked() {
         if let Some(pp) = bg.interact_pointer_pos() {
-            let tick = (tick_at(pp.x) / sixteenth).floor() * sixteenth;
+            let tick = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt);
             let pitch = rows.pitch_at(pp.y);
             app.checkpoint("Create Note");
             if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
@@ -475,7 +474,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     } else if pressed_note.is_none() && bg.clicked() {
         if tool == Tool::Pencil {
             if let Some(pp) = bg.interact_pointer_pos() {
-                let at = ((tick_at(pp.x) / sixteenth).floor() * sixteenth).max(0.0) as u32;
+                let at = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32;
                 let pitch = rows.pitch_at(pp.y);
                 let (len, vel) = app.midi.default_note;
                 crate::midifunc::edit(app, "Create Note", |notes, sel, _| {
