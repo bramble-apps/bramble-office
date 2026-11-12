@@ -1094,35 +1094,33 @@ impl Engine {
             }
             self.voices.retain(|v| v.env > 0.0005 || !v.releasing);
         }
-        // the metronome's click: a short decaying sine
+        // the metronome's click: Klopfgeist's sound (lg-synth utility)
+        // (Tone = Klopfgeist's Tonality: a short click → a pitched, longer woodblock; Volume: the level)
+        let click_len = lg_synth::utility::tone_length(self.click_cfg.tone, 0.5);
         if let Some((freq, ref mut t)) = self.click {
-            // (Tone: a short click → a pitched, longer woodblock; Volume: the level)
-            let decay = 90.0 - 60.0 * self.click_cfg.tone;
-            let gain = 0.35 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
+            let gain = 0.5 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
             for k in 0..frames {
-                let env = (-*t * decay).exp();
-                let y = (std::f32::consts::TAU * freq * *t).sin() * env * gain;
+                let y = lg_synth::utility::tone(*t, freq, self.click_cfg.tone, 0.5) * gain;
                 out[2 * k] += y;
                 out[2 * k + 1] += y;
                 *t += 1.0 / RATE as f32;
             }
-            if *t > 0.08 {
+            if *t > click_len {
                 self.click = None;
             }
         }
         if !self.clicks.is_empty() {
-            let decay = 90.0 - 60.0 * self.click_cfg.tone;
-            let gain = 0.35 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
+            let gain = 0.5 * lg_dsp::db_to_gain(self.click_cfg.volume_db);
+            let tone = self.click_cfg.tone;
             for (freq, t, amp) in &mut self.clicks {
                 for k in 0..frames {
-                    let env = (-*t * decay).exp();
-                    let y = (std::f32::consts::TAU * *freq * *t).sin() * env * gain * *amp;
+                    let y = lg_synth::utility::tone(*t, *freq, tone, 0.5) * gain * *amp;
                     out[2 * k] += y;
                     out[2 * k + 1] += y;
                     *t += 1.0 / RATE as f32;
                 }
             }
-            self.clicks.retain(|c| c.1 <= 0.08);
+            self.clicks.retain(|c| c.1 <= click_len);
         }
         let mut peak = 0f32;
         let mut over = 0f32;

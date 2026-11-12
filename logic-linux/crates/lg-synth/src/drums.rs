@@ -61,7 +61,63 @@ pub static PARAMS: &[Param] = &[
     Param::new(31, "Cymbals Tune", -12.0, 12.0, 0.0, Unit::Semitones),
     Param::new(32, "Percussion Tune", -12.0, 12.0, 0.0, Unit::Semitones),
     Param::new(33, "Percussion Decay", 0.2, 3.0, 1.0, Unit::Ratio),
+    // Drum Kit Designer's extended parameters: Input Mapping and the extra pieces' gains
+    Param::menu(INPUT_MAPPING, "Input Mapping", INPUT_MAPPINGS, 0.0),
+    Param::new(EXTRA_GAIN, "Shaker Gain", -24.0, 12.0, 0.0, Unit::Db),
+    Param::new(EXTRA_GAIN + 1, "Tambourine Gain", -24.0, 12.0, 0.0, Unit::Db),
+    Param::new(EXTRA_GAIN + 2, "Claps Gain", -24.0, 12.0, 0.0, Unit::Db),
+    Param::new(EXTRA_GAIN + 3, "Cowbell Gain", -24.0, 12.0, 0.0, Unit::Db),
+    Param::new(EXTRA_GAIN + 4, "Sticks Gain", -24.0, 12.0, 0.0, Unit::Db),
 ];
+
+/// Drum Kit Designer's Input Mapping (extended parameters).
+pub const INPUT_MAPPING: u32 = 400;
+pub const INPUT_MAPPINGS: &[&str] = &["GM", "GM + ModWheel controls HiHat opening level", "V-Drum"];
+/// The first of the extra gain sliders (Shaker, Tambourine, Claps, Cowbell, Sticks).
+pub const EXTRA_GAIN: u32 = 401;
+/// The notes each extra gain slider applies to (GM: Cabasa / Maracas / Shaker, Tambourine,
+/// Hand Clap, Cowbell, Sticks).
+pub const EXTRA_NOTES: [&[u8]; 5] = [&[69, 70, 82], &[54], &[39], &[56], &[31]];
+
+/// The extra gain slider (0..5) a note belongs to.
+pub fn extra_of(note: u8) -> Option<usize> {
+    EXTRA_NOTES.iter().position(|ns| ns.contains(&note))
+}
+
+/// Whether a kit has its own sound for an extra gain slider (a slider without one has no effect).
+pub fn kit_has_extra(kit: u8, slot: usize) -> bool {
+    EXTRA_NOTES.get(slot).is_some_and(|ns| ns.iter().any(|&n| build_hit(kit, n, 0.5, [0.0; 4]).is_some()))
+}
+
+/// The note Drum Kit Designer plays for an incoming one under an Input Mapping: GM as it comes;
+/// GM + ModWheel: hi-hat strikes open as far as the mod wheel says (closed, semi-open, open);
+/// V-Drum: a V-Drum kit's edge / rim triggers to their pieces, the hi-hat pedal controller (CC4,
+/// 127 = closed) setting how open the hi-hat strikes are.
+pub fn map_input(mode: u8, note: u8, modwheel: u8, pedal: u8) -> u8 {
+    let by_open = |open: u8| if open < 43 { 42 } else if open < 86 { 33 } else { 46 };
+    match mode {
+        1 => match note {
+            42 | 46 | 26 | 30 | 33 | 34 => by_open(modwheel),
+            n => n,
+        },
+        2 => {
+            let n = match note {
+                22 => 42,
+                26 => 46,
+                55 => 49,
+                52 => 57,
+                59 => 51,
+                58 => 43,
+                n => n,
+            };
+            match n {
+                42 | 46 => by_open(127 - pedal),
+                n => n,
+            }
+        }
+        _ => note,
+    }
+}
 
 /// A kit piece's source (Drum Kit Designer's piece choices): the kit's own, or another kit's.
 pub const PIECE_KITS: &[&str] = &["Kit", "Studio Kit", "Vintage Kit", "Heavy Kit", "Brush Kit", "Analog 808", "Analog 909", "Electronic Pop"];
@@ -190,6 +246,7 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
         match note {
             33 | 34 => 200, // semi-open (internal code)
             26 | 30 => 46,
+            31 => 201, // sticks (internal code)
             _ => 42,
         }
     } else {
@@ -574,9 +631,10 @@ pub fn build_hit(kit: u8, note: u8, v: f32, rr: [f32; 4]) -> Option<Hit> {
             h.bursts = (if note == 73 { 4 } else { 10 }, 0.016);
             h.gain = 0.35;
         }
-        75 | 76 | 77 | 85 => {
+        75 | 76 | 77 | 85 | 201 => {
             h.group = Group::Perc;
             let (f, t) = match note {
+                201 => (3300.0, 0.025),
                 75 => (2500.0, 0.06),
                 76 => (1250.0, 0.07),
                 77 => (850.0, 0.08),
@@ -1030,6 +1088,9 @@ pub struct StudioDrumKit {
     sh: DrumShared,
     room: Room,
     rate: f32,
+    /// The mod wheel and hi-hat pedal (CC4) as last received (Input Mapping).
+    modwheel: u8,
+    pedal: u8,
 }
 
 impl StudioDrumKit {
@@ -1047,6 +1108,8 @@ impl StudioDrumKit {
             sh: DrumShared::new(rate),
             room: Room::new(rate, 0.45),
             rate,
+            modwheel: 0,
+            pedal: 0,
         };
         k.poly.retrigger_kills = false;
         k.room.feedback = 0.72;
@@ -1151,6 +1214,7 @@ impl Instrument for StudioDrumKit {
         if velocity == 0 {
             return;
         }
+        let pitch = map_input(self.p(INPUT_MAPPING).round() as u8, pitch, self.modwheel, self.pedal);
         let rate = self.rate;
         let (kit, src, pad) = self.sh.route(pitch);
         let probe = build_hit(kit, src, 0.5, [0.0; 4]);
@@ -1181,11 +1245,24 @@ impl Instrument for StudioDrumKit {
             }
         }
         self.poly.note_on(pitch, velocity, &self.sh, &self.ch.ctl);
+        // the extended parameters' gain sliders (Shaker, Tambourine, Claps, Cowbell, Sticks)
+        if let Some(k) = extra_of(pitch) {
+            let g = lg_dsp::db_to_gain(self.p(EXTRA_GAIN + k as u32));
+            for v in self.poly.voices.iter_mut().filter(|v| v.on && v.note == pitch && v.t == 0) {
+                v.gain *= g;
+            }
+        }
     }
     fn note_off(&mut self, pitch: u8) {
+        let pitch = map_input(self.p(INPUT_MAPPING).round() as u8, pitch, self.modwheel, self.pedal);
         self.poly.note_off(pitch, &self.sh, &self.ch.ctl);
     }
     fn controller(&mut self, cc: u8, value: u8) {
+        match cc {
+            1 => self.modwheel = value,
+            4 => self.pedal = value,
+            _ => {}
+        }
         // CC4 (hi-hat pedal) opens/closes: below 64 counts as a closed hat for choking purposes
         if cc == 120 {
             for v in &mut self.poly.voices {
@@ -1225,5 +1302,61 @@ impl Instrument for StudioDrumKit {
             }
             pos += m;
         }
+    }
+}
+
+#[cfg(test)]
+mod input_mapping_tests {
+    use super::*;
+
+    fn peak_of(k: &mut StudioDrumKit, note: u8) -> f32 {
+        k.reset();
+        k.note_on(note, 110);
+        let (mut l, mut r) = (vec![0.0; 4800], vec![0.0; 4800]);
+        k.render(&mut l, &mut r);
+        l.iter().fold(0.0f32, |a, v| a.max(v.abs()))
+    }
+
+    #[test]
+    fn gm_mod_wheel_opens_the_hi_hat() {
+        assert_eq!(map_input(0, 46, 0, 0), 46);
+        assert_eq!(map_input(1, 46, 0, 0), 42);
+        assert_eq!(map_input(1, 42, 64, 0), 33);
+        assert_eq!(map_input(1, 42, 127, 0), 46);
+        assert_eq!(map_input(1, 44, 127, 0), 44, "the pedal stays the pedal");
+        assert_eq!(map_input(1, 38, 127, 0), 38);
+    }
+
+    #[test]
+    fn v_drum_triggers_and_pedal() {
+        assert_eq!(map_input(2, 55, 0, 0), 49);
+        assert_eq!(map_input(2, 59, 0, 0), 51);
+        assert_eq!(map_input(2, 26, 0, 0), 46, "open edge, pedal up");
+        assert_eq!(map_input(2, 46, 0, 127), 42, "pedal down closes");
+        assert_eq!(map_input(2, 22, 0, 60), 33);
+    }
+
+    #[test]
+    fn extra_gain_sliders_change_their_pieces_only() {
+        let mut k = StudioDrumKit::new(48_000.0);
+        k.set(20, 0.0);
+        let tamb = peak_of(&mut k, 54);
+        let snare = peak_of(&mut k, 38);
+        k.set(EXTRA_GAIN + 1, -12.0);
+        let quiet = peak_of(&mut k, 54);
+        assert!(quiet < tamb * 0.4 && quiet > 0.0, "{quiet} vs {tamb}");
+        assert!((peak_of(&mut k, 38) - snare).abs() < snare * 0.2);
+        // sticks have their own sound now and a slider
+        assert!(peak_of(&mut k, 31) > 0.0);
+        assert!(kit_has_extra(0, 4) && kit_has_extra(0, 2));
+    }
+
+    #[test]
+    fn mod_wheel_mapping_through_the_instrument() {
+        let mut k = StudioDrumKit::new(48_000.0);
+        k.set(INPUT_MAPPING, 1.0);
+        k.controller(1, 127);
+        k.note_on(42, 100);
+        assert!(k.poly.voices.iter().any(|v| v.on && v.note == 46));
     }
 }

@@ -119,6 +119,8 @@ mod b3win;
 mod epwin;
 mod clavwin;
 mod mellotronwin;
+mod utilwin;
+mod convsampler;
 mod studiowin;
 mod synthui;
 mod sidechain;

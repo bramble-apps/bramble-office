@@ -159,6 +159,35 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 }
             });
         }
+        // the disclosure arrow at the lower left: Input Mapping and the extra pieces' gains
+        crate::keyswin::extended(&mut cell, egui::Id::unique(("dkd-ext", t)), |ui| {
+            use lg_synth::drums::{kit_has_extra, EXTRA_GAIN, INPUT_MAPPING, INPUT_MAPPINGS};
+            let cur = get(INPUT_MAPPING).round().max(0.0) as usize;
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Input Mapping").size(11.0).color(look::text_dim()));
+                egui::ComboBox::from_id_salt(("dkd-mapping", t)).selected_text(INPUT_MAPPINGS.get(cur).copied().unwrap_or("GM")).width(250.0).show_ui(ui, |ui| {
+                    for (k, n) in INPUT_MAPPINGS.iter().enumerate() {
+                        if ui.selectable_label(k == cur, *n).clicked() && k != cur {
+                            set.push((INPUT_MAPPING, k as f32));
+                        }
+                    }
+                });
+            });
+            let kit = get(0).round() as u8;
+            for (k, label) in ["Shaker Gain", "Tambourine Gain", "Claps Gain", "Cowbell Gain", "Sticks Gain"].iter().enumerate() {
+                let id = EXTRA_GAIN + k as u32;
+                let mut v = get(id);
+                // (a slider whose sound the kit doesn't have is dimmed: it would do nothing)
+                ui.add_enabled_ui(kit_has_extra(kit, k), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(vec2(100.0, 16.0), egui::Label::new(egui::RichText::new(*label).size(11.0).color(look::text_dim())));
+                        if ui.add(egui::Slider::new(&mut v, -24.0..=12.0).suffix(" dB")).changed() {
+                            set.push((id, v));
+                        }
+                    });
+                });
+            }
+        });
     });
     ctx.data_mut(|d| {
         d.insert_temp(sel_id, sel);

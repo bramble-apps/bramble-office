@@ -22,6 +22,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
         Piano,
         Section,
         Bass,
+        Util(crate::utilwin::Kind),
     }
     let kind = {
         let Ok(e) = app.engine.lock() else { return false };
@@ -40,6 +41,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
             K::Section
         } else if any.is::<lg_synth::studio_bass::StudioBassInst>() {
             K::Bass
+        } else if let Some(u) = crate::utilwin::kind_of(any) {
+            K::Util(u)
         } else {
             return false;
         }
@@ -52,6 +55,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) -> bool {
         K::Piano => crate::studiowin::piano(app, ctx, t),
         K::Section => crate::studiowin::section(app, ctx, t),
         K::Bass => crate::studiowin::bass(app, ctx, t),
+        K::Util(u) => crate::utilwin::window(app, ctx, t, u),
     }
     true
 }

@@ -168,6 +168,7 @@ fn test_hook(app: &mut App) {
 
 pub fn window(app: &mut App, ctx: &egui::Context) {
     crate::autosampler::poll(app);
+    crate::convsampler::dialog(app, ctx);
     test_hook(app);
     follow_link(app, ctx);
     fx_window(app, ctx);
