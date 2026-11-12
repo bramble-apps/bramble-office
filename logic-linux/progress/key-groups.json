@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 538,
+  "done": 541,
   "total": 679,
-  "percent": 79.2
+  "percent": 79.7
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,27 +19,27 @@
  },
  {
   "group": "Various Windows",
-  "done": 66,
+  "done": 67,
   "total": 110,
-  "percent": 60.0
+  "percent": 60.9
  },
  {
   "group": "Windows Showing Audio Files",
-  "done": 12,
+  "done": 13,
   "total": 15,
-  "percent": 80.0
+  "percent": 86.7
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 181,
+  "done": 182,
   "total": 290,
-  "percent": 62.4
+  "percent": 62.8
  },
  {
   "group": "Various Editors",
-  "done": 29,
+  "done": 65,
   "total": 67,
-  "percent": 43.3
+  "percent": 97.0
  },
  {
   "group": "Views Showing Time Ruler",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 144,
+  "done": 145,
   "total": 249,
-  "percent": 57.8
+  "percent": 58.2
  },
  {
   "group": "Live Loops Grid",
@@ -79,9 +79,9 @@
  },
  {
   "group": "Piano Roll",
-  "done": 7,
+  "done": 8,
   "total": 12,
-  "percent": 58.3
+  "percent": 66.7
  },
  {
   "group": "Score Editor",
