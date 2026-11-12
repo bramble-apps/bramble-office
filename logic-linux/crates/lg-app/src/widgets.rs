@@ -10,6 +10,13 @@ use crate::look;
 /// A knob with its label under it and the value above while it's dragged. Returns true when the
 /// value changed.
 pub fn knob(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: &mut f32, min: f32, max: f32, default: f32, label: &str, shown: &dyn Fn(f32) -> String) -> bool {
+    knob_ex(ui, r, id, value, min, max, default, label, shown, 6.0)
+}
+
+/// The knob, its label allowed `pad` points past the knob's sides (a long label under a small
+/// knob).
+#[allow(clippy::too_many_arguments)]
+pub fn knob_ex(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: &mut f32, min: f32, max: f32, default: f32, label: &str, shown: &dyn Fn(f32) -> String, pad: f32) -> bool {
     let p = ui.painter().clone();
     let d = r.width().min(r.height() - 18.0) - 4.0;
     let c = pos2(r.center().x, r.min.y + d / 2.0 + 2.0);
@@ -53,7 +60,7 @@ pub fn knob(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: &mut f32, min: f32,
     let a = start + sweep * frac;
     p.line_segment([c + vec2(a.cos(), a.sin()) * (d / 2.0 - 12.0).max(2.0), c + vec2(a.cos(), a.sin()) * (d / 2.0 - 6.0)], Stroke::new(2.0, Color32::WHITE));
     let text = if resp.dragged() || resp.hovered() { shown(*value) } else { label.to_string() };
-    p.with_clip_rect(r.expand2(vec2(6.0, 0.0))).text(pos2(r.center().x, r.max.y - 8.0), Align2::CENTER_CENTER, text, look::regular(11.0), if resp.dragged() { look::text() } else { look::text_dim() });
+    p.with_clip_rect(r.expand2(vec2(pad, 0.0))).text(pos2(r.center().x, r.max.y - 8.0), Align2::CENTER_CENTER, text, look::regular(11.0), if resp.dragged() { look::text() } else { look::text_dim() });
     if resp.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
     }

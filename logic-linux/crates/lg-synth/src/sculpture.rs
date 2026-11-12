@@ -281,7 +281,7 @@ fn build_params() -> Vec<Param> {
     v.push(n(BEND_UP, "Bender Range Up", 0.0, 24.0, 2.0, Unit::Semitones));
     v.push(n(BEND_DOWN, "Bender Range Down", 0.0, 24.0, 2.0, Unit::Semitones));
     v.push(n(BEND_LINK, "Bender Range Linked", 0.0, 1.0, 1.0, o));
-    v.push(n(POLY, "Polyphony", 1.0, POLY_MAX as f32, 16.0, Unit::None));
+    v.push(n(POLY, "Polyphony", 1.0, POLY_MAX as f32, 8.0, Unit::None));
     // string
     v.push(n(INNER_LOSS, "Inner Loss", 0.0, 1.0, 0.3, r));
     v.push(n(STIFFNESS, "Stiffness", 0.0, 1.0, 0.2, r));
@@ -2731,6 +2731,9 @@ impl Plugin for Sculpture {
         }
         if id == D_NOTE || id == VIB_NOTE || (0..2).any(|i| id == lfo(i, L_NOTE)) {
             return Some(NOTE_VALUES[(v.round().max(0.0) as usize).min(NOTE_VALUES.len() - 1)].0.to_string());
+        }
+        if id == POLY {
+            return Some(format!("{}", v.round()));
         }
         if id == TRANSPOSE {
             return Some(TRANSPOSES[((v.round() + 3.0).clamp(0.0, 6.0)) as usize].to_string());

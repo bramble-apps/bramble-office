@@ -14,7 +14,7 @@ use crate::instwin;
 use crate::look;
 use crate::synthui::{self, rgb, Pane, Skin};
 
-const SKIN: Skin = Skin::new(0x2f3a3f, 0x252d31, 0x6fc2d8);
+const SKIN: Skin = Skin::new(0x2f3a3f, 0x252d31, 0x6fc2d8).silver();
 const SILVER: Color32 = rgb(0xc8ccd0);
 const BLUE: Color32 = rgb(0x4a8fe0);
 const ORANGE: Color32 = rgb(0xe8a04a);
@@ -56,11 +56,6 @@ fn sidechain(p: &mut Pane) {
     }
     cap(p, 178.0, 84.0, "Bands");
     p.field(176.0, 92.0, 62.0, 20.0, e::BANDS, 0.12);
-    p.text(20.0, 138.0, Align2::LEFT_CENTER, "Analysis In: the Side Chain pop-up", 10.0, p.skin.dim);
-    p.text(20.0, 153.0, Align2::LEFT_CENTER, "in the plug-in header (track, bus or input)", 10.0, p.skin.dim);
-    if frozen {
-        p.text(20.0, 172.0, Align2::LEFT_CENTER, "Frozen: Attack and Release have no effect", 10.0, Color32::from_rgb(0xf0, 0xc8, 0x70));
-    }
 }
 
 fn uv(p: &mut Pane) {
@@ -113,16 +108,16 @@ fn synthesis(p: &mut Pane, live: &Live) {
         p.hfader(470.0, 136.0, 290.0, 16.0, e::FM_INT);
     }
     // noise and tuning
-    p.knob(496.0, 164.0, 40.0, e::NOISE_LEVEL, "Noise Level");
-    p.knob(560.0, 164.0, 40.0, e::NOISE_COLOR, "Noise Color");
-    cap(p, 628.0, 170.0, "Tune");
-    p.field(628.0, 178.0, 60.0, 18.0, e::TUNE, 0.5);
+    p.knob(500.0, 164.0, 40.0, e::NOISE_LEVEL, "Noise Level");
+    p.knob(574.0, 164.0, 40.0, e::NOISE_COLOR, "Noise Color");
+    cap(p, 622.0, 170.0, "Tune");
+    p.field(622.0, 178.0, 60.0, 18.0, e::TUNE, 0.5);
     p.knob(724.0, 164.0, 40.0, e::ANALOG, "Analog");
     p.knob(788.0, 164.0, 40.0, e::GLIDE, "Glide");
     cap(p, 840.0, 170.0, "Bend");
     p.field(840.0, 178.0, 40.0, 18.0, e::BEND, 0.1);
     // filter and envelope
-    p.text(470.0, 238.0, Align2::LEFT_CENTER, "FILTER (before the formant filter)", 10.0, p.skin.dim);
+    p.text(470.0, 238.0, Align2::LEFT_CENTER, "FILTER", 10.0, p.skin.dim);
     p.knob(496.0, 252.0, 44.0, e::CUTOFF, "Cutoff");
     p.knob(570.0, 252.0, 44.0, e::FILTER_RES, "Resonance");
     p.text(650.0, 238.0, Align2::LEFT_CENTER, "ENVELOPE", 10.0, p.skin.dim);
@@ -207,9 +202,9 @@ fn formant(p: &mut Pane, live: &Live) {
     if p.button(rb, if highlp { "Highest: LP" } else { "Highest: BP" }, highlp, "highest") {
         p.put(e::HIGHEST_MODE, if highlp { 0.0 } else { 1.0 });
     }
-    p.knob(205.0, 302.0, 30.0, e::RESONANCE, "Resonance");
-    p.knob(283.0, 302.0, 30.0, e::STRETCH, "Stretch");
-    p.knob(361.0, 302.0, 30.0, e::SHIFT, "Shift");
+    p.knob(215.0, 302.0, 32.0, e::RESONANCE, "Resonance");
+    p.knob(297.0, 302.0, 32.0, e::STRETCH, "Stretch");
+    p.knob(379.0, 302.0, 32.0, e::SHIFT, "Shift");
 }
 
 fn modulation(p: &mut Pane) {
@@ -217,13 +212,13 @@ fn modulation(p: &mut Pane) {
     // Pitch LFO (left column) and Shift LFO (right column): rate left of centre is tempo-synced
     p.text(20.0, 386.0, Align2::LEFT_CENTER, "Pitch LFO", 10.0, p.skin.dim);
     p.knob(52.0, 392.0, 30.0, e::PITCH_RATE, "Rate");
-    p.text(52.0, 392.0 + 32.0, Align2::CENTER_CENTER, &e::rate_text(p.get(e::PITCH_RATE)), 9.0, p.skin.text);
+    p.text(52.0, 392.0 + 56.0, Align2::CENTER_CENTER, &e::rate_text(p.get(e::PITCH_RATE)), 9.5, p.skin.text);
     p.menu(86.0, 390.0, 96.0, 18.0, e::PITCH_WAVE);
     // Int via Whl: the left arrow is the intensity with the wheel at its minimum, the right with it at its maximum
     p.range(86.0, 420.0, 130.0, 24.0, e::PITCH_INT_MIN, e::PITCH_INT_MAX, "Int via Whl", Color32::from_rgb(0x5f, 0xb0, 0x6a));
     p.text(232.0, 386.0, Align2::LEFT_CENTER, "Shift LFO", 10.0, p.skin.dim);
     p.knob(266.0, 392.0, 30.0, e::SHIFT_RATE, "Rate");
-    p.text(266.0, 392.0 + 32.0, Align2::CENTER_CENTER, &e::rate_text(p.get(e::SHIFT_RATE)), 9.0, p.skin.text);
+    p.text(266.0, 392.0 + 56.0, Align2::CENTER_CENTER, &e::rate_text(p.get(e::SHIFT_RATE)), 9.5, p.skin.text);
     p.menu(300.0, 390.0, 100.0, 18.0, e::SHIFT_WAVE);
     p.text(300.0, 424.0, Align2::LEFT_CENTER, "Intensity", 10.0, p.skin.dim);
     p.hfader(300.0, 430.0, 130.0, 18.0, e::SHIFT_INT);
@@ -235,11 +230,9 @@ fn output(p: &mut Pane) {
     p.seg(470.0, 394.0, 126.0, 20.0, e::SIGNAL, e::SIGNALS, false);
     cap(p, 610.0, 386.0, "Ensemble");
     p.seg(610.0, 394.0, 116.0, 20.0, e::ENSEMBLE, e::ENSEMBLES, false);
-    p.knob(780.0, 380.0, 38.0, e::WIDTH, "Stereo Width");
-    let w = p.get(e::WIDTH);
-    p.text(836.0, 400.0, Align2::LEFT_CENTER, if w < 0.05 { "centre" } else if w < 0.5 { "narrow" } else if w < 0.95 { "ascending" } else { "alternating" }, 9.5, p.skin.dim);
-    cap(p, 470.0, 428.0, "Level");
-    p.hfader(510.0, 420.0, 220.0, 18.0, e::LEVEL);
+    p.knob(820.0, 372.0, 40.0, e::WIDTH, "Stereo Width");
+    cap(p, 470.0, 438.0, "Level");
+    p.hfader(510.0, 430.0, 200.0, 18.0, e::LEVEL);
     let t = p.shown(e::LEVEL, p.get(e::LEVEL));
-    p.text(740.0, 429.0, Align2::LEFT_CENTER, &t, 10.0, p.skin.text);
+    p.text(716.0, 439.0, Align2::LEFT_CENTER, &t, 10.0, p.skin.text);
 }

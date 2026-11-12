@@ -24,12 +24,89 @@ pub struct Skin {
     pub accent: Color32,
     pub text: Color32,
     pub dim: Color32,
+    /// Logic's silver knobs (a dark skirt with tick marks, a brushed cap, a dot pointer)
+    /// instead of the ring knobs.
+    pub silver: bool,
 }
 
 impl Skin {
     pub const fn new(bg: u32, panel: u32, accent: u32) -> Skin {
-        Skin { bg: rgb(bg), panel: rgb(panel), accent: rgb(accent), text: Color32::from_rgb(0xe6, 0xe6, 0xe8), dim: Color32::from_rgb(0x9c, 0x9c, 0xa2) }
+        Skin { bg: rgb(bg), panel: rgb(panel), accent: rgb(accent), text: Color32::from_rgb(0xe6, 0xe6, 0xe8), dim: Color32::from_rgb(0x9c, 0x9c, 0xa2), silver: false }
     }
+    pub const fn silver(mut self) -> Skin {
+        self.silver = true;
+        self
+    }
+    pub const fn texts(mut self, text: u32, dim: u32) -> Skin {
+        self.text = rgb(text);
+        self.dim = rgb(dim);
+        self
+    }
+}
+
+/// Draws a silver knob (no interaction): the skirt of diameter `d` at `c`, the ticks around it
+/// when `ticks`, the pointer dot at angle `pointer` (radians, clockwise from the right).
+pub fn silver_body(p: &egui::Painter, c: Pos2, d: f32, hot: bool, pointer: Option<f32>, ticks: bool) {
+    let start = std::f32::consts::PI * (0.5 + 1.0 / 6.0);
+    let sweep = std::f32::consts::PI * 5.0 / 3.0;
+    let r = d / 2.0;
+    if ticks {
+        for k in 0..=10 {
+            let a = start + sweep * k as f32 / 10.0;
+            let u = vec2(a.cos(), a.sin());
+            p.line_segment([c + u * (r + 2.5), c + u * (r + 5.0)], Stroke::new(1.0, Color32::from_gray(0x6a)));
+        }
+    }
+    // the skirt and its shadow
+    p.circle_filled(c + vec2(0.0, 1.5), r, Color32::from_black_alpha(90));
+    p.circle_filled(c, r, Color32::from_gray(0x16));
+    p.circle_stroke(c, r - 0.5, Stroke::new(1.0, Color32::from_gray(0x34)));
+    // the brushed silver cap: light from the top left
+    let cr = r * 0.74;
+    for k in 0..6 {
+        let t = k as f32 / 5.0;
+        let g = (0x8c as f32 + (0xd6 - 0x8c) as f32 * t) as u8;
+        p.circle_filled(c - vec2(0.6, 0.9) * (cr * 0.22 * t), cr * (1.0 - 0.55 * t), Color32::from_gray(g));
+    }
+    p.circle_stroke(c, cr, Stroke::new(0.8, Color32::from_gray(0x5c)));
+    if hot {
+        p.circle_filled(c, cr, Color32::from_white_alpha(18));
+    }
+    if let Some(a) = pointer {
+        p.circle_filled(c + vec2(a.cos(), a.sin()) * (r * 0.87), (d * 0.035).max(1.6), Color32::from_gray(0xf2));
+    }
+}
+
+/// Logic's silver knob centred at `c` (diameter `d` is the dark skirt; the ticks sit just
+/// outside it). Drag up or down (Shift: fine), Option-click or double-click for the default.
+#[allow(clippy::too_many_arguments)]
+pub fn silver_knob(ui: &mut egui::Ui, c: Pos2, d: f32, id: egui::Id, value: &mut f32, min: f32, max: f32, default: f32, name: &str, shown: &dyn Fn(f32) -> String) -> bool {
+    let kr = Rect::from_center_size(c, vec2(d + 6.0, d + 6.0));
+    let resp = ui.interact(kr, id, Sense::click_and_drag()).on_hover_text(format!("{name}: {}", shown(*value)));
+    let mut changed = false;
+    if resp.dragged() {
+        let fine = ui.input(|i| i.modifiers.shift);
+        let v = (*value - resp.drag_delta().y / if fine { 600.0 } else { 150.0 } * (max - min)).clamp(min, max);
+        if v != *value {
+            *value = v;
+            changed = true;
+        }
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+    }
+    if resp.double_clicked() || (resp.clicked() && ui.input(|i| i.modifiers.alt)) {
+        *value = default;
+        changed = true;
+    }
+    if resp.dragged() {
+        egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), id.with("tip"), egui::PopupAnchor::Pointer).show(|ui| {
+            ui.label(shown(*value));
+        });
+    }
+    let frac = if max > min { (*value - min) / (max - min) } else { 0.0 };
+    let start = std::f32::consts::PI * (0.5 + 1.0 / 6.0);
+    let sweep = std::f32::consts::PI * 5.0 / 3.0;
+    silver_body(ui.painter(), c, d, resp.hovered() || resp.dragged(), Some(start + sweep * frac), true);
+    changed
 }
 
 pub const fn rgb(v: u32) -> Color32 {
@@ -107,7 +184,33 @@ impl Pane<'_> {
         let r = Rect::from_min_size(self.o + vec2(x - d / 2.0 - 2.0, y), vec2(d + 4.0, d + 18.0));
         let (ps, vs, ts) = (self.params, self.vals, self.texts);
         let kid = self.id("knob", id);
-        let ch = crate::widgets::knob(self.ui, r, kid, &mut v, p.min, p.max, p.default, label, &|v| shown_of(ps, vs, ts, id, v));
+        if self.skin.silver {
+            let (ps, vs, ts) = (self.params, self.vals, self.texts);
+            let ch = silver_knob(self.ui, self.o + vec2(x, y + d / 2.0 + 2.0), d - 6.0, kid, &mut v, p.min, p.max, p.default, if label.is_empty() { p.name } else { label }, &|v| shown_of(ps, vs, ts, id, v));
+            if !label.is_empty() {
+                self.ui.painter().with_clip_rect(r.expand2(vec2(14.0, 2.0))).text(pos2(r.center().x, r.max.y - 6.0), Align2::CENTER_CENTER, label, look::regular(11.0), self.skin.dim);
+            }
+            if ch {
+                let v = if matches!(p.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) { v.round() } else { v };
+                self.put(id, v);
+            }
+            return ch;
+        }
+        let ch = crate::widgets::knob_ex(self.ui, r, kid, &mut v, p.min, p.max, p.default, label, &|v| shown_of(ps, vs, ts, id, v), 16.0);
+        if ch {
+            let v = if matches!(p.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) { v.round() } else { v };
+            self.put(id, v);
+        }
+        ch
+    }
+    /// A silver knob centred at (cx, cy) with skirt diameter `d` and no label of its own (the
+    /// window draws the label where Logic has it).
+    pub fn knob_at(&mut self, cx: f32, cy: f32, d: f32, id: u32) -> bool {
+        let p = self.prm(id);
+        let mut v = self.get(id);
+        let (ps, vs, ts) = (self.params, self.vals, self.texts);
+        let kid = self.id("knob", id);
+        let ch = silver_knob(self.ui, self.o + vec2(cx, cy), d, kid, &mut v, p.min, p.max, p.default, p.name, &|v| shown_of(ps, vs, ts, id, v));
         if ch {
             let v = if matches!(p.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) { v.round() } else { v };
             self.put(id, v);
@@ -300,6 +403,10 @@ impl Pane<'_> {
     }
     /// A pop-up menu showing the parameter's choice.
     pub fn menu(&mut self, x: f32, y: f32, w: f32, h: f32, id: u32) {
+        let _ = self.menu_resp(x, y, w, h, id);
+    }
+    /// The pop-up menu, returning its response (for a shortcut menu of its own).
+    pub fn menu_resp(&mut self, x: f32, y: f32, w: f32, h: f32, id: u32) -> egui::Response {
         let p = self.prm(id);
         let cur = self.geti(id);
         let r = self.rect(x, y, w, h);
@@ -324,6 +431,7 @@ impl Pane<'_> {
         if let Some(i) = pick {
             self.put(id, i as f32);
         }
+        resp
     }
     /// A value field: drag up or down, double-click to type.
     pub fn field(&mut self, x: f32, y: f32, w: f32, h: f32, id: u32, step: f32) {
@@ -422,6 +530,9 @@ pub fn step_setting(app: &mut App, t: usize, plugin: &str, by: i32) {
 /// A synthesizer's window: the header, then `body` draws the panel of `size`; `ext` are the
 /// extended parameters under the disclosure triangle at the lower left. Returns the actions
 /// the body asked for.
+/// The synthesizers whose Logic window has no Side Chain pop-up.
+const NO_SIDE_CHAIN: &[&str] = &["Retro Synth"];
+
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: egui::Vec2, skin: Skin, ext: &[u32], body: impl FnOnce(&mut Pane)) -> Vec<String> {
     let Some((params, vals)) = instwin::values(app, t) else { return Vec::new() };
     let texts: Vec<Option<String>> = app.engine.lock().ok().and_then(|e| e.units.get(t).and_then(|u| u.instrument.as_ref()).map(|ins| params.iter().zip(&vals).map(|(p, v)| ins.value_text(p.id, *v)).collect())).unwrap_or_default();
@@ -510,7 +621,10 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
             x += 24.0;
         }
         // the Side Chain pop-up (vocoder analysis, EXT sources)
-        crate::sidechain::popup(app, ui, Rect::from_min_size(pos2(x + 6.0, hr.min.y + 4.0), vec2(170.0, 20.0)), t);
+        // (Logic's Retro Synth has no side chain input, so no pop-up)
+        if !NO_SIDE_CHAIN.contains(&plugin) {
+            crate::sidechain::popup(app, ui, Rect::from_min_size(pos2(x + 6.0, hr.min.y + 4.0), vec2(170.0, 20.0)), t);
+        }
         let mut x = hr.max.x - 8.0;
         for (label, act) in [("Paste", 6u8), ("Copy", 5), ("Compare", 7)] {
             let w = p.layout_no_wrap(label.into(), look::regular(12.0), look::text()).size().x + 16.0;
@@ -524,12 +638,23 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
             }
         }
         // the panel
-        let (pr, _) = ui.allocate_exact_size(size, Sense::hover());
-        ui.painter().rect_filled(pr, 8.0, skin.bg);
-        let mut pane = Pane { ui, o: pr.min, params: &params, vals: &vals, texts: &texts, set: Vec::new(), skin, t, actions: Vec::new() };
-        body(&mut pane);
-        set = std::mem::take(&mut pane.set);
-        actions = std::mem::take(&mut pane.actions);
+        let mut body = Some(body);
+        let mut panel = |ui: &mut egui::Ui| {
+            let (pr, _) = ui.allocate_exact_size(size, Sense::hover());
+            ui.painter().rect_filled(pr, 8.0, skin.bg);
+            let mut pane = Pane { ui, o: pr.min, params: &params, vals: &vals, texts: &texts, set: Vec::new(), skin, t, actions: Vec::new() };
+            if let Some(b) = body.take() {
+                b(&mut pane);
+            }
+            (std::mem::take(&mut pane.set), std::mem::take(&mut pane.actions))
+        };
+        // a panel taller than the main window scrolls (the header stays put)
+        let room = (ui.ctx().content_rect().height() - 110.0).max(240.0);
+        (set, actions) = if size.y > room {
+            egui::ScrollArea::vertical().id_salt(("synth-scroll", t)).max_height(room).min_scrolled_height(room).show(ui, |ui| panel(ui)).inner
+        } else {
+            panel(ui)
+        };
         // extended parameters
         if !ext.is_empty() {
             let (dr, _) = ui.allocate_exact_size(vec2(size.x, 18.0), Sense::hover());
