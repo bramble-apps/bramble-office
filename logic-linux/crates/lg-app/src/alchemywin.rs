@@ -172,19 +172,7 @@ fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>
                 s => {
                     nav(p, st);
                     source_filters(p, &ix, st, (s - 1) as u32);
-                    let (params, vals) = (p.params, p.vals);
-                    let get = |id: u32| ix_get(&ix, vals, id);
-                    let r = p.rect(84.0, 48.0, 700.0, 230.0);
-                    let mut set = Vec::new();
-                    let mut import = false;
-                    let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)));
-                    egui::ScrollArea::vertical().id_salt(("alch-src-page", p.t)).show(&mut child, |ui| {
-                        sources_page(ui, p.t, (s - 1) as u32, params, &get, &mut set, &mut import, audio);
-                    });
-                    p.set.extend(set);
-                    if import {
-                        p.actions.push("import".into());
-                    }
+                    source_page(p, &ix, st, (s - 1) as u32, audio);
                 }
             }
             rack::section(p, &ix, st, live, 5.0, 290.0, W - 10.0, 234.0);
@@ -717,32 +705,151 @@ pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
     al.set_granular_sample(mono, a.rate as f32, hz);
 }
 
-fn sources_page(ui: &mut egui::Ui, t: usize, src: u32, params: &[lg_dsp::Param], get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>, import: &mut bool, audio: Option<&str>) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(format!("SOURCE {}", ["A", "B", "C", "D"][src as usize])).size(12.5));
-        ui.separator();
-        if ui.button("Import Audio…").on_hover_text("Or drop an audio file on the window").clicked() {
-            *import = true;
+/// A source's subpage: the element buttons (VA, Additive, Spectral, Granular) and Formant,
+/// Import Audio…, and the chosen element's controls.
+fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) {
+    use lg_synth::alchemy_partials::{self as ap, id};
+    let su = s as usize;
+    p.text(84.0, 66.0, Align2::LEFT_CENTER, &format!("SOURCE {}", ["A", "B", "C", "D"][su]), 12.5, p.skin.text);
+    let playing = element(p, ix, s);
+    let view = match st.elem[su] {
+        0 => playing,
+        v => (v - 1) as usize,
+    };
+    let names = ["VA", "ADDITIVE", "SPECTRAL", "GRANULAR", "FORMANT"];
+    let flags = [297 + s, 293 + s, 309 + s, 313 + s, id(su, ap::FM_ON)];
+    for (k, n) in names.iter().enumerate() {
+        let r = p.rect(170.0 + k as f32 * 76.0, 56.0, 74.0, 20.0);
+        if rack::flat(p, r, n, view == k, true, ("elem", s, k)) {
+            st.elem[su] = k as u8 + 1;
         }
-        ui.label(egui::RichText::new(audio.unwrap_or("no audio imported")).color(look::text_dim()));
-    });
-    let letter = ["A", "B", "C", "D"][src as usize];
-    ui.horizontal(|ui| {
-        check(ui, "On", 277 + src, get, set);
-        ui.label(egui::RichText::new("Element").color(look::text_dim()));
-        // one element at a time (the engine plays the first on of Granular, Spectral, Additive, VA)
-        let cur = if get(313 + src) >= 0.5 { 3 } else if get(309 + src) >= 0.5 { 2 } else if get(293 + src) >= 0.5 { 1 } else { 0 };
-        for (k, n) in ["VA", "Additive", "Spectral", "Granular"].iter().enumerate() {
-            if ui.add(egui::Button::selectable(cur == k, *n)).clicked() {
-                set.push((297 + src, if k == 0 { 1.0 } else { 0.0 }));
-                set.push((293 + src, if k == 1 { 1.0 } else { 0.0 }));
-                set.push((309 + src, if k == 2 { 1.0 } else { 0.0 }));
-                set.push((313 + src, if k == 3 { 1.0 } else { 0.0 }));
+        let on = g(p, ix, flags[k]) >= 0.5;
+        p.ui.painter().circle_filled(r.right_top() + vec2(-5.0, 5.0), 2.5, if on { ORANGE } else { rgb(0x44484f) });
+    }
+    if rack::flat(p, p.rect(560.0, 56.0, 92.0, 20.0), "Import Audio…", false, true, ("import", s)) {
+        p.actions.push("import".into());
+    }
+    p.text(658.0, 66.0, Align2::LEFT_CENTER, audio.unwrap_or("no audio"), 10.0, p.skin.dim);
+    // the element's own On (the engine plays one element: Granular, else Spectral, else Additive, else VA)
+    let on_id = flags[view];
+    let on = g(p, ix, on_id) >= 0.5;
+    if rack::flat(p, p.rect(84.0, 88.0, 30.0, 20.0), "On", on, true, ("elem-on", s, view)) {
+        p.put(on_id, if on { 0.0 } else { 1.0 });
+    }
+    let k = |p: &mut Pane, st: &mut St, x: f32, y: f32, d: f32, pid: u32, l: &str| rack::knob(p, ix, st, x, y, d, pid, l);
+    match view {
+        0 => {
+            rack::menu_arrows(p, ix, 124.0, 88.0, 100.0, 301 + s);
+            for (j, (pid, l)) in [(204 + s, "Volume"), (208 + s, "Symmetry"), (212 + s, "Phase"), (216 + s, "Detune"), (250 + s, "Sync")].iter().enumerate() {
+                k(p, st, 120.0 + j as f32 * 60.0, 124.0, 38.0, *pid, l);
+            }
+            p.field(430.0, 132.0, 40.0, 20.0, 220 + s, 1.0);
+            p.text(450.0, 162.0, Align2::CENTER_CENTER, "Num Osc", 10.5, p.skin.dim);
+            let nz = g(p, ix, 305 + s) >= 0.5;
+            if rack::flat(p, p.rect(500.0, 132.0, 50.0, 20.0), "Noise", nz, true, ("va-noise", s)) {
+                p.put(305 + s, if nz { 0.0 } else { 1.0 });
+            }
+        }
+        1 => {
+            let cx = g(p, ix, id(su, ap::A_COMPLEX)) >= 0.5;
+            for (j, l) in ["Sine", "Complex"].iter().enumerate() {
+                if rack::flat(p, p.rect(124.0 + j as f32 * 56.0, 88.0, 54.0, 20.0), l, cx == (j == 1), true, ("add-cx", s, j)) {
+                    p.put(id(su, ap::A_COMPLEX), j as f32);
+                }
+            }
+            if cx {
+                rack::menu_arrows(p, ix, 240.0, 88.0, 90.0, id(su, ap::A_SHAPE));
+            }
+            for (j, (f, l)) in [(ap::A_VOL, "Volume"), (ap::A_PVAR, "PVar"), (ap::A_SYM, "Sym")].iter().enumerate() {
+                k(p, st, 420.0 + j as f32 * 56.0, 82.0, 32.0, id(su, *f), l);
+            }
+            k(p, st, 600.0, 82.0, 32.0, id(su, ap::A_NUM), "");
+            p.text(600.0, 128.0, Align2::CENTER_CENTER, &format!("{} Partials", g(p, ix, id(su, ap::A_NUM)).round()), 10.0, p.skin.dim);
+            for u in 0..3usize {
+                let b = [ap::U1, ap::U2, ap::U3][u];
+                let types = [ap::U1_TYPES, ap::U2_TYPES, ap::U3_TYPES][u];
+                unit_strip(p, ix, st, 84.0 + u as f32 * 236.0, 150.0, su, b, types, u);
+            }
+        }
+        2 => {
+            let nm = g(p, ix, id(su, ap::SP_MODE)) >= 0.5;
+            for (j, l) in ["Pitch", "Noise"].iter().enumerate() {
+                if rack::flat(p, p.rect(124.0 + j as f32 * 50.0, 88.0, 48.0, 20.0), l, nm == (j == 1), true, ("sp-mode", s, j)) {
+                    p.put(id(su, ap::SP_MODE), j as f32);
+                }
+            }
+            for (j, (f, l)) in [(ap::SP_VOL, "Volume"), (ap::SP_LO, "Low Cut"), (ap::SP_HI, "High Cut")].iter().enumerate() {
+                k(p, st, 300.0 + j as f32 * 60.0, 82.0, 32.0, id(su, *f), l);
+            }
+            for u in 0..2usize {
+                spec_strip(p, ix, st, 84.0 + u as f32 * 350.0, 150.0, su, [ap::SFX1, ap::SFX2][u], u);
+            }
+        }
+        3 => {
+            for (j, (pid, l)) in [(35 + s, "Position"), (39 + s, "Speed"), (47 + s, "Density")].iter().enumerate() {
+                k(p, st, 150.0 + j as f32 * 70.0, 124.0, 40.0, *pid, l);
+            }
+        }
+        _ => {
+            for (j, (f, l)) in [(ap::FM_SHIFT, "Shift"), (ap::FM_SIZE, "Size"), (ap::FM_CENTER, "Center"), (ap::FM_SELECT, "Select")].iter().enumerate() {
+                k(p, st, 150.0 + j as f32 * 64.0, 88.0, 38.0, id(su, *f), l);
+            }
+            for u in 0..4u32 {
+                rack::menu_arrows(p, ix, 84.0 + u as f32 * 176.0, 170.0, 140.0, id(su, ap::FM_TYPE + u));
+                p.text(84.0 + u as f32 * 176.0, 200.0, Align2::LEFT_CENTER, &format!("Unit {}", u + 1), 10.0, p.skin.dim);
+            }
+        }
+    }
+}
+
+/// An additive effect unit: On, its type (choosing one sets its knobs), four knobs.
+fn unit_strip(p: &mut Pane, ix: &Ix, st: &mut St, x: f32, y: f32, s: usize, b: u32, types: &[&str], u: usize) {
+    use lg_synth::alchemy_partials::{self as ap, id};
+    p.ui.painter().rect_filled(p.rect(x, y, 230.0, 126.0), 4.0, rgb(0x20242a));
+    let on = g(p, ix, id(s, b)) >= 0.5;
+    if rack::flat(p, p.rect(x + 6.0, y + 6.0, 28.0, 20.0), "On", on, true, ("unit-on", s, u)) {
+        p.put(id(s, b), if on { 0.0 } else { 1.0 });
+    }
+    let ty = g(p, ix, id(s, b + 1)).round().max(0.0) as usize;
+    let resp = rack::field_btn(p, p.rect(x + 40.0, y + 6.0, 150.0, 20.0), types.get(ty).copied().unwrap_or(""), ("unit-ty", s, u), true);
+    let mut pick = None;
+    egui::Popup::menu(&resp).show(|ui| {
+        for (k, n) in types.iter().enumerate() {
+            if ui.add(egui::Button::selectable(k == ty, *n)).clicked() {
+                pick = Some(k);
             }
         }
     });
-    let suffix = format!(" {letter}");
-    let own: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000 && p.name.ends_with(&suffix) && !p.name.contains(" On ") && !p.name.starts_with("Filter ") && !p.name.starts_with("Source On") && !p.name.ends_with(&format!("On{suffix}"))).cloned().collect();
-    let vals: Vec<f32> = own.iter().map(|p| get(p.id)).collect();
-    set.extend(crate::pluginwin::controls(ui, &own, &vals, &[], &format!("alch-src-{t}-{src}")));
+    if let Some(k) = pick {
+        p.put(id(s, b + 1), k as f32);
+        for (j, v) in ap::unit_defaults(u, k).iter().enumerate() {
+            p.put(id(s, b + 2 + j as u32), *v);
+        }
+    }
+    for (j, n) in ap::unit_knobs(u, ty).iter().enumerate() {
+        if !n.is_empty() {
+            // the label drawn here: long names don't fit the knob's own slot
+            let kx = x + 30.0 + j as f32 * 56.0;
+            rack::knob(p, ix, st, kx, y + 40.0, 32.0, id(s, b + 2 + j as u32), "");
+            p.text(kx, y + 88.0, Align2::CENTER_CENTER, n, 10.0, p.skin.dim);
+        }
+    }
+}
+
+/// A spectral effect unit: On, type, Mix and three knobs named by the type.
+fn spec_strip(p: &mut Pane, ix: &Ix, st: &mut St, x: f32, y: f32, s: usize, b: u32, u: usize) {
+    use lg_synth::alchemy_partials::{self as ap, id};
+    p.ui.painter().rect_filled(p.rect(x, y, 344.0, 126.0), 4.0, rgb(0x20242a));
+    let on = g(p, ix, id(s, b)) >= 0.5;
+    if rack::flat(p, p.rect(x + 6.0, y + 6.0, 28.0, 20.0), "On", on, true, ("sfx-on", s, u)) {
+        p.put(id(s, b), if on { 0.0 } else { 1.0 });
+    }
+    rack::menu_arrows(p, ix, x + 40.0, y + 6.0, 130.0, id(s, b + 1));
+    let ty = g(p, ix, id(s, b + 1)).round().max(0.0) as usize;
+    rack::knob(p, ix, st, x + 34.0, y + 40.0, 32.0, id(s, b + 2), "Mix");
+    for (j, n) in ap::spec_knobs(ty).iter().enumerate() {
+        if !n.is_empty() {
+            rack::knob(p, ix, st, x + 110.0 + j as f32 * 70.0, y + 40.0, 32.0, id(s, b + 3 + j as u32), n);
+        }
+    }
 }

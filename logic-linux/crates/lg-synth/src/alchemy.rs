@@ -21,7 +21,7 @@ pub const PLAY_MODES: &[&str] = &["Poly", "Mono", "Legato"];
 
 include!("alchemy_params.rs");
 
-const NP: usize = 48; // partials
+const NP: usize = crate::alchemy_partials::NP; // partials
 const NSPEC: usize = 8;
 const GRAIN_ROOT: f32 = 130.812_78; // C3 (MIDI 48)
 
@@ -130,6 +130,8 @@ struct SourceCfg {
     /// The three source filters: (type, cutoff knob, res knob, drive knob, on); parallel or not.
     sf: [(u8, f32, f32, f32, bool); 3],
     sf_par: bool,
+    /// The additive / spectral / formant settings (alchemy_partials).
+    part: crate::alchemy_partials::PartCfg,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -189,6 +191,7 @@ struct SrcState {
     gnext: f32,
     sf: [[crate::alchemy_filter::AFilt; 2]; 3],
     nf: Svf,
+    ps: crate::alchemy_partials::PartState,
 }
 
 impl Default for SrcState {
@@ -203,6 +206,7 @@ impl Default for SrcState {
             gnext: 0.0,
             sf: Default::default(),
             nf: Svf::default(),
+            ps: Default::default(),
         }
     }
 }
@@ -306,6 +310,9 @@ impl Voice<AlchShared> for AlchVoice {
                 s.jit[k] = 1.0;
             }
             s.grains = [Grain::default(); 12];
+            if !was {
+                s.ps.start(self.rng.next_u32());
+            }
             s.gpos = sh.src[i].position;
             s.gnext = 0.0;
             if !was {
@@ -442,47 +449,66 @@ impl Voice<AlchShared> for AlchVoice {
                     let pos = (c.position + sh.character * 0.5).clamp(0.0, 1.0);
                     let (a0, a1, t) = spec_at(pos);
                     let spectral = c.kind == Kind::Spectral;
-                    // partial amplitudes for this chunk
-                    let mut amps = [0.0f32; NP];
-                    let mut incs = [0.0f32; NP];
-                    let mut sel = [0usize; NP];
-                    let mut np = 0;
+                    // the content's partials (the bank morph), through the partial engine
+                    let mut ba = [0.0f32; NP];
+                    let mut bq = [0.0f32; NP];
                     for k in 0..NP {
-                        let ratio = b.ratio[a0][k] * (1.0 - t) + b.ratio[a1][k] * t;
-                        let f = hz * ratio;
-                        if f > rate * 0.45 {
-                            break;
-                        }
+                        bq[k] = b.ratio[a0][k] * (1.0 - t) + b.ratio[a1][k] * t;
                         let mut a = b.amp[a0][k] * (1.0 - t) + b.amp[a1][k] * t;
                         if spectral {
                             // slowly wandering partial levels: the "alive" resynthesised sound
-                            st.jit[k] +=
-                                (self.rng.unit() * 2.0 - st.jit[k]) * (0.02 + 0.2 * c.speed);
+                            st.jit[k] += (self.rng.unit() * 2.0 - st.jit[k]) * (0.02 + 0.2 * c.speed);
                             a *= st.jit[k];
                         }
-                        if a > 2e-3 && f < 14_000.0 {
-                            // compact list of the audible partials
-                            amps[np] = a * vol;
-                            incs[np] = f / rate;
+                        ba[k] = a;
+                    }
+                    let mut pa = [0.0f32; NP];
+                    let mut pf = [0.0f32; NP];
+                    let mut pp = [0.0f32; NP];
+                    let used = crate::alchemy_partials::process(&c.part, spectral, &ba, &bq, hz, n as f32 / rate, rate * 0.45, &mut st.ps, &mut pa, &mut pf, &mut pp);
+                    if st.ps.lock_phase && st.ps.t <= n as f32 / rate * 1.5 {
+                        st.ph = [0.0; NP];
+                    }
+                    let noise_mode = spectral && c.part.noise_mode;
+                    let mut amps = [0.0f32; NP];
+                    let mut gr = [0.0f32; NP];
+                    let mut incs = [0.0f32; NP];
+                    let mut sel = [0usize; NP];
+                    let mut shaped = [false; NP];
+                    let mut np = 0;
+                    for k in 0..used {
+                        if pa[k] > 2e-4 {
+                            // Noise: each bin's level jumps about (filtered-noise-like bands)
+                            let nz = if noise_mode { 0.2 + 1.6 * self.rng.unit() } else { 1.0 };
+                            let pn = (c.pan + pp[k]).clamp(-1.0, 1.0);
+                            amps[np] = pa[k] * vol * nz * (1.0 - pn).sqrt();
+                            gr[np] = pa[k] * vol * nz * (1.0 + pn).sqrt();
+                            incs[np] = pf[k] / rate;
+                            shaped[np] = (c.part.complex || (c.part.sym - 0.5).abs() > 1e-3) && pf[k] * 8.0 < rate * 0.45;
                             sel[np] = k;
                             np += 1;
                         }
                     }
+                    let (shape, sym) = (if c.part.complex { c.part.shape } else { 0 }, c.part.sym);
                     st.nf.set((800.0 + 2500.0 * pos).min(rate * 0.4), 0.8, rate);
                     let noise_amt = if spectral { 0.15 * vol } else { 0.0 };
                     for i in 0..n {
-                        let mut x = 0.0;
+                        let (mut xl, mut xr) = (0.0, 0.0);
                         for j in 0..np {
                             let k = sel[j];
-                            x += amps[j] * dsp::sin_cycles(st.ph[k]);
+                            let w = if shaped[j] { crate::alchemy_partials::shape_at(shape, st.ph[k], sym) } else { dsp::sin_cycles(st.ph[k]) };
+                            xl += amps[j] * w;
+                            xr += gr[j] * w;
                             let ph = st.ph[k] + incs[j];
                             st.ph[k] = if ph >= 1.0 { ph - 1.0 } else { ph };
                         }
                         if noise_amt > 0.0 {
-                            x += st.nf.run(self.rng.bipolar()) * noise_amt;
+                            let z = st.nf.run(self.rng.bipolar()) * noise_amt;
+                            xl += z * pl;
+                            xr += z * pr;
                         }
-                        bl[i] = x * pl;
-                        br[i] = x * pr;
+                        bl[i] = xl;
+                        br[i] = xr;
                     }
                 }
                 Kind::Granular => {
@@ -703,6 +729,7 @@ pub fn all_params() -> &'static [Param] {
             v.push(Param::new(ROUTE_F2 + k as u32, n, 0.0, 1.0, 0.0, Unit::Ratio));
         }
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
+        v.extend(crate::alchemy_partials::params());
         for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
             let b = SRC_FILT + s as u32 * 16;
             let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
@@ -927,6 +954,7 @@ impl Alchemy {
                     (ty.round().max(0.0) as u8, p(51 + k as u32 * 8 + s as u32), p(55 + k as u32 * 8 + s as u32), p(b + 5 + k as u32), p(b + k as u32) >= 0.5)
                 }),
                 sf_par: p(SRC_FILT + s as u32 * 16 + 8) >= 0.5,
+                part: crate::alchemy_partials::PartCfg::read(p, s),
                 route: p(ROUTE_F2 + s as u32),
             };
         }

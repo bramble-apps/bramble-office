@@ -41,6 +41,8 @@ pub struct St {
     pub hist: Vec<(f32, f32)>,
     pub save_name: String,
     pub rect_sel: Option<Pos2>,
+    /// Each source page's element view (0: the element that plays, then VA … Formant).
+    pub elem: [u8; 4],
 }
 
 /// Live values read from the running instrument for the displays.
