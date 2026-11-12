@@ -48,6 +48,9 @@ pub struct PartBox {
     pub open: bool,
     pub region_open: bool,
     pub event_open: bool,
+    /// Linear view's Insert / Quantize / Velocity rows (closed by default, as Logic 13 opens
+    /// the Score inspector at Region).
+    pub linear_open: bool,
     /// A group handle being dragged: (group, its block's top when the drag began).
     drag: Option<usize>,
     /// Set name being typed (New / Rename).
@@ -56,7 +59,7 @@ pub struct PartBox {
 
 impl Default for PartBox {
     fn default() -> Self {
-        PartBox { shown: vec![0], set: String::new(), open: true, region_open: true, event_open: true, drag: None, naming: None }
+        PartBox { shown: vec![0], set: String::new(), open: true, region_open: true, event_open: true, linear_open: false, drag: None, naming: None }
     }
 }
 
@@ -298,7 +301,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         names.extend(app.project.as_ref().map(|p| p.score.sets.iter().map(|s| s.name.clone()).collect::<Vec<_>>()).unwrap_or_default());
         let cur = st.set.map_or(0, |k| k + 1).min(names.len() - 1);
         let pr = Rect::from_min_max(pos2(r.min.x + 62.0, r.center().y - 11.0), pos2(r.max.x - 14.0, r.center().y + 11.0));
-        if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter"), cur, &names) {
+        // Option-click: the instruments, to extract one as a part (its track's name)
+        let ext_id = ui.scope_id().with("si-filter-extract");
+        if ui.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|pp| pr.contains(pp))) {
+            let alt = ui.input(|i| i.modifiers.alt);
+            ctx.data_mut(|d| d.insert_temp(ext_id, alt));
+        }
+        let extract = ctx.data(|d| d.get_temp::<bool>(ext_id)).unwrap_or(false);
+        let parts = crate::scoreattr::part_choices(app);
+        if extract {
+            let pn: Vec<String> = parts.iter().map(|x| x.1.clone()).collect();
+            let shown_now = st.score_set.as_ref().and_then(|v| (v.len() == 1).then(|| v[0])).and_then(|id| parts.iter().position(|x| x.0 == id)).unwrap_or(0);
+            if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter-parts"), shown_now, &pn) {
+                let id = parts[k].0;
+                st.set = None;
+                st.score_set = Some(vec![id]);
+                score::with_state(&ctx, |s| {
+                    s.set = None;
+                    s.score_set = Some(vec![id]);
+                });
+                ctx.data_mut(|d| d.insert_temp(ext_id, false));
+            }
+        } else if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter"), cur, &names) {
             st.set = (k > 0).then(|| k - 1);
             st.score_set = None;
             score::with_state(&ctx, |s| {
@@ -311,14 +335,33 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     let sel = app.selected_region.filter(|&(t, r)| app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).is_some_and(|r| r.audio.is_none()));
     let t = sel.map(|x| x.0).or(app.selected_track);
+    // (Linear view: Insert, Time Quantize, Scale Quantize and Velocity, as Logic's Score
+    // inspector shows them above the Region parameters)
+    if score::state(&ctx).view == score::View::Linear {
+        let ins = match st.part {
+            Part::Note(i) => score::VALUES[i].0.to_string(),
+            _ => String::new(),
+        };
+        if header(ui, area, y, "si-linear", "Insert:", &ins, pb.linear_open) {
+            pb.linear_open = !pb.linear_open;
+        }
+        y += HEAD + 1.0;
+        if pb.linear_open {
+            y = linear_rows(app, ui, area, y, &mut st, sel);
+        }
+    }
     // Region:
-    let rname = sel.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone()).unwrap_or_default();
+    let n_regions = { let mut v = app.selected_regions.clone(); v.extend(app.selected_region); v.sort_unstable(); v.dedup(); v.len() };
+    let rname = if sel.is_none() { "Insert Defaults".to_string() } else if n_regions > 1 { format!("{n_regions} selected") } else { sel.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone()).unwrap_or_default() };
     if header(ui, area, y, "si-region", "Region:", &rname, pb.region_open) {
         pb.region_open = !pb.region_open;
     }
     y += HEAD + 1.0;
     if pb.region_open {
-        if let Some(t) = t {
+        if sel.is_none() {
+            // no region selected: the Insert Defaults new regions take
+            y = defaults_rows(app, ui, area, y);
+        } else if let Some(t) = t {
             y = region_rows(app, ui, area, y, t);
         }
     }
@@ -334,8 +377,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // Part Box:
     y = part_box(app, ui, area, y, &mut pb, &mut st);
+    let auto_on = crate::scoreattr::automation_shown(&ctx) && t.is_some();
     // the channel strips, when there's room
-    let strips = Rect::from_min_max(pos2(area.min.x, y + 6.0), pos2(area.max.x - 1.0, area.max.y - 4.0));
+    let strips = Rect::from_min_max(pos2(area.min.x, y + 6.0), pos2(area.max.x - 1.0, area.max.y - if auto_on { 40.0 } else { 4.0 }));
     if strips.height() > 260.0 {
         p.vline(strips.center().x, strips.y_range(), Stroke::new(1.0, look::line()));
         let w = strips.width() / 2.0;
@@ -346,12 +390,151 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::mixer::output_strip(app, ui, Rect::from_min_size(strips.min + vec2(w + 4.0, 0.0), vec2(w - 8.0, strips.height())));
         });
     }
+    // with automation shown: the Automation button, mode and parameter pop-ups at the bottom
+    if let (true, Some(t)) = (auto_on, t) {
+        let r = Rect::from_min_size(pos2(area.min.x + 10.0, area.max.y - 30.0), vec2(area.width() - 20.0, 22.0));
+        p.hline(area.x_range(), r.min.y - 6.0, Stroke::new(1.0, look::line()));
+        crate::automation::header(app, ui, r, t);
+    }
     ctx.data_mut(|d| d.insert_temp(pb_id(), pb));
     score::with_state(&ctx, |s| {
         s.part = st.part;
         s.dotted = st.dotted;
         s.triplet = st.triplet;
     });
+}
+
+/// Linear view: Insert (the note value inserted), Time Quantize with Strength and Swing and its
+/// Q button, Scale Quantize (the project's key) and its Q, and the selected notes' Velocity —
+/// the same quantizing as the Piano Roll's (its values shared).
+fn linear_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, st: &mut score::State, sel: Option<(usize, usize)>) -> f32 {
+    section(y);
+    let p = ui.painter().clone();
+    let id = ui.scope_id().with("si-lin");
+    y += 4.0;
+    label(&p, area, y, "Insert");
+    let values: Vec<String> = score::VALUES.iter().map(|v| v.0.to_string()).collect();
+    let cur = match st.part {
+        score::Part::Note(i) => i,
+        _ => values.len(),
+    };
+    let mut shown = values.clone();
+    if cur >= values.len() {
+        shown.push(st.part.name());
+    }
+    if let Some(k) = popup(ui, slot(area, y), id.with("insert"), cur, &shown) {
+        if k < values.len() {
+            st.part = score::Part::Note(k);
+        }
+    }
+    y += ROW;
+    label(&p, area, y, "Time Quantize");
+    let names: Vec<String> = crate::inspector::QUANTIZE.iter().map(|q| q.0.to_string()).collect();
+    let qc = crate::inspector::QUANTIZE.iter().position(|q| q.1 == app.roll_quantize).unwrap_or(0);
+    let s = slot(area, y);
+    let (pr, qb) = (Rect::from_min_max(s.min, pos2(s.max.x - 30.0, s.max.y)), Rect::from_min_max(pos2(s.max.x - 26.0, s.min.y), s.max));
+    if let Some(k) = popup(ui, pr, id.with("tq"), qc, &names) {
+        app.roll_quantize = crate::inspector::QUANTIZE[k].1;
+    }
+    let notes_of = |app: &App| sel.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).cloned();
+    if ui.put(qb, egui::Button::new("Q")).on_hover_text("Quantize the selected notes").clicked() && app.roll_quantize > 0 {
+        if let (Some((t, r)), Some(region)) = (sel, notes_of(app)) {
+            let (grid, strength, swing) = (app.roll_quantize, app.roll_strength, app.roll_swing);
+            let which = app.selected_notes.clone();
+            app.checkpoint("Quantize");
+            if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(r)) {
+                lg_core::functions::quantize(&mut x.notes, &which, region.start, grid, strength, swing);
+            }
+            app.after_edit();
+        }
+    }
+    y += ROW;
+    for (k, l) in ["Strength", "Swing"].into_iter().enumerate() {
+        label(&p, area, y, l);
+        let mut v = if k == 0 { app.roll_strength } else { app.roll_swing } as f32;
+        if value(ui, slot(area, y), id.with(("qs", k)), &mut v, 0.0, 100.0, &|v| format!("{v:.0}")) {
+            if k == 0 {
+                app.roll_strength = v as u8;
+            } else {
+                app.roll_swing = v as u8;
+            }
+        }
+        y += ROW;
+    }
+    label(&p, area, y, "Scale Quantize");
+    let key = app.project.as_ref().map(|pr| pr.key.clone()).unwrap_or_else(|| "C major".into());
+    let s = slot(area, y);
+    p.text(pos2(s.min.x + 4.0, s.center().y), egui::Align2::LEFT_CENTER, &key, look::regular(12.0), look::text_dim());
+    let sq = Rect::from_min_max(pos2(s.max.x - 26.0, s.min.y), s.max);
+    if ui.put(sq, egui::Button::new("Q")).on_hover_text("Move the selected notes onto the key's scale").clicked() {
+        if let Some((t, r)) = sel {
+            let scale = crate::pianoroll::scale_of(&key);
+            let which = app.selected_notes.clone();
+            app.checkpoint("Scale Quantize");
+            if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(r)) {
+                crate::scoreattr::scale_quantize(&mut x.notes, &which, &scale);
+            }
+            app.after_edit();
+        }
+    }
+    y += ROW;
+    // Velocity: the selected notes' (the first's shown; a change moves them all by as much)
+    label(&p, area, y, "Velocity");
+    if let (Some((t, r)), Some(region)) = (sel, notes_of(app)) {
+        let which: Vec<usize> = app.selected_notes.clone();
+        if let Some(first) = which.first().and_then(|&i| region.notes.get(i)).map(|n| n.velocity) {
+            let mut v = first as f32;
+            if value(ui, slot(area, y), id.with("vel"), &mut v, 1.0, 127.0, &|v| format!("{v:.0}")) {
+                let d = v as i32 - first as i32;
+                app.checkpoint("Change Velocity");
+                if let Some(x) = app.project.as_mut().and_then(|pr| pr.tracks.get_mut(t)?.regions.get_mut(r)) {
+                    for &i in &which {
+                        if let Some(n) = x.notes.get_mut(i) {
+                            n.velocity = (n.velocity as i32 + d).clamp(1, 127) as u8;
+                        }
+                    }
+                }
+                app.after_edit();
+            }
+        }
+    }
+    y += ROW + 6.0;
+    p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
+    y + 1.0
+}
+
+/// The Insert Defaults (no region selected): Quantize (with Default: from the LCD division),
+/// Interpretation, Syncopation, No Overlap, Max. Dots; no Style (a track's).
+fn defaults_rows(_app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
+    section(y);
+    let p = ui.painter().clone();
+    let id = ui.scope_id().with("si-defaults");
+    let mut d = crate::scoreattr::defaults();
+    let before = d.clone();
+    let mut qn: Vec<String> = vec!["Default".to_string()];
+    qn.extend(nt::Quant::CHOICES.iter().map(|q| q.0.to_string()));
+    let cur = if d.quantize.is_empty() { 0 } else { nt::Quant::CHOICES.iter().position(|q| q.0 == d.quantize).map_or(0, |k| k + 1) };
+    label(&p, area, y, "Quantize");
+    if let Some(k) = popup(ui, slot(area, y), id.with("q"), cur, &qn) {
+        d.quantize = if k == 0 { String::new() } else { nt::Quant::CHOICES[k - 1].0.to_string() };
+    }
+    y += ROW;
+    for (l, v) in [("Interpretation", &mut d.interp), ("Syncopation", &mut d.synco), ("No Overlap", &mut d.no_overlap)] {
+        label(&p, area, y, l);
+        check(ui, slot(area, y), id.with(l), v);
+        y += ROW;
+    }
+    label(&p, area, y, "Max. Dots");
+    let mut m = d.max_dots as f32;
+    if value(ui, slot(area, y), id.with("dots"), &mut m, 0.0, 3.0, &|v| format!("{v:.0}")) {
+        d.max_dots = m as u8;
+    }
+    if d != before {
+        crate::scoreattr::set_defaults(d);
+    }
+    y += ROW + 6.0;
+    p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
+    y + 1.0
 }
 
 fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize) -> f32 {
@@ -404,7 +587,18 @@ fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usiz
     if value(ui, slot(area, y), id.with("dots"), &mut d, 0.0, 3.0, &|v| format!("{v:.0}")) {
         score::region_param(app, t, "Max. Dots", |ts| ts.max_dots = d as u8 + 1);
     }
-    y += ROW + 6.0;
+    y += ROW;
+    // Score: Show / Hide (a hidden region is left out above its own display level)
+    if let Some((rt, rix)) = app.selected_region.filter(|x| x.0 == t) {
+        let start = app.project.as_ref().and_then(|p| p.tracks.get(rt)?.regions.get(rix)).map_or(0, |r| r.start);
+        let hidden = app.project.as_ref().and_then(|p| p.score.track(tid)).is_some_and(|x| x.hidden.contains(&start));
+        label(&p, area, y, "Score");
+        if let Some(k) = popup(ui, slot(area, y), id.with("score"), hidden as usize, &["Show".to_string(), "Hide".to_string()]) {
+            crate::scoreattr::set_region_hidden(app, rt, rix, k == 1);
+        }
+        y += ROW;
+    }
+    y += 6.0;
     p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
     y + 1.0
 }

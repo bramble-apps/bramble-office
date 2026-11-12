@@ -159,6 +159,7 @@ mod scorestyle;
 mod scoretuplet;
 mod scorepdf;
 mod scoretools;
+mod scoreattr;
 mod scoreglobal;
 mod scoregrid;
 mod stepseq;

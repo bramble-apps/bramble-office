@@ -527,8 +527,10 @@ pub fn command(app: &mut App, name: &str) -> bool {
             }
             if let Some(p) = kn_ui::files::FileDialog::new().set_title("Import Project Settings from a project (.logicx)").pick_folder() {
                 let p = lg_core::project::package_of(&p);
-                match settings_of(&p) {
-                    Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Movie")).map(|s| s.to_string()).collect())),
+                // (Score Sets, Staff Styles and Text Styles come from its Score data: scorefile.rs)
+                let has_score = crate::scorefile::score_of(&p).is_some();
+                match settings_of(&p).or_else(|| has_score.then(Values::default)) {
+                    Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Movie")).map(|s| s.to_string()).chain(crate::scorefile::IMPORT_PANES.iter().filter(|_| has_score).map(|s| s.to_string())).collect())),
                     None => app.tell(format!("“{}” has no project settings Studio made (only projects saved in Studio keep them)", p.file_stem().unwrap_or_default().to_string_lossy())),
                 }
             }
@@ -970,7 +972,8 @@ fn import_sheet(app: &mut App, ctx: &egui::Context) {
     let mut done = None;
     egui::Window::new("Import Project Settings").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -40.0)).show(ctx, |ui| {
         ui.label(format!("From “{}”:", path.file_stem().unwrap_or_default().to_string_lossy()));
-        for p in PANES.iter().filter(|p| !matches!(**p, "Movie")) {
+        let score = crate::scorefile::score_of(&path);
+        for p in PANES.iter().filter(|p| !matches!(**p, "Movie")).chain(crate::scorefile::IMPORT_PANES.iter().filter(|_| score.is_some())) {
             let mut on = ticked.iter().any(|t| t == p);
             if ui.checkbox(&mut on, *p).changed() {
                 if on {
@@ -993,6 +996,9 @@ fn import_sheet(app: &mut App, ctx: &egui::Context) {
         Some(true) => {
             let panes: Vec<&str> = ticked.iter().map(|s| s.as_str()).collect();
             app.proj.import(&vals, &panes);
+            if let Some(other) = crate::scorefile::score_of(&path) {
+                crate::scorefile::import(app, &other, &panes);
+            }
             apply(app);
             app.dirty = true;
         }

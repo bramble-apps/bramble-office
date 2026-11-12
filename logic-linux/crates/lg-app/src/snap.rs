@@ -41,6 +41,16 @@ fn parse_script(s: &str) -> std::collections::VecDeque<(egui::Modifiers, Vec<egu
                 }
                 out.push_back((Modifiers::NONE, vec![]));
             }
+            ("rclick", [x, y]) => {
+                // a secondary click (context menus)
+                let p = Pos2::new(*x, *y);
+                let rb = |pressed| Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+                out.push_back((Modifiers::NONE, vec![Event::PointerMoved(p)]));
+                out.push_back((Modifiers::NONE, vec![rb(true)]));
+                out.push_back((Modifiers::NONE, vec![rb(false)]));
+                out.push_back((Modifiers::NONE, vec![]));
+            }
+            ("move", [x, y]) => out.push_back((Modifiers::NONE, vec![Event::PointerMoved(Pos2::new(*x, *y))])),
             ("drag", [x, y, x2, y2]) | ("altdrag", [x, y, x2, y2]) => {
                 let m = if cmd == "altdrag" { Modifiers::ALT } else { Modifiers::NONE };
                 let (a, b) = (Pos2::new(*x, *y), Pos2::new(*x2, *y2));

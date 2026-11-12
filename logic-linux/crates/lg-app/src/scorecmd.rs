@@ -102,7 +102,16 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Color View: Show Polyphony" | "Show Voice Assignment" => view(ctx, &|s| s.colors = Colors::Voice),
         "Color View: Force Black and White" | "Force Black&White" => view(ctx, &|s| s.colors = Colors::BlackWhite),
         "Toggle Duration Bar Display" => view(ctx, &|s| s.duration_bars = (s.duration_bars + 1) % 3),
-        "Toggle Guide Line Display" => view(ctx, &|s| s.guides = !s.guides),
+        "Toggle Guide Line Display" => view(ctx, &|s| {
+            // All Objects ↔ the last mode chosen
+            if s.guide_mode == 3 {
+                s.guide_mode = if s.guide_last == 3 { 1 } else { s.guide_last };
+            } else {
+                s.guide_last = s.guide_mode;
+                s.guide_mode = 3;
+            }
+            s.guides = s.guide_mode != 0;
+        }),
         "Go to Page…" => {
             if st.view != View::Page {
                 return false;
@@ -151,7 +160,18 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         _ if name.starts_with("Part Box: ") => {
             let label = name["Part Box: ".len()..].trim_end_matches(" Note");
             let Some(i) = score::VALUES.iter().position(|v| v.0 == label) else { return false };
-            view(ctx, &|s| s.part = Part::Note(i));
+            // pressed again: the triplet value, then the dotted one, then back
+            view(ctx, &|s| {
+                if s.part == Part::Note(i) {
+                    let (t, d) = crate::scoreattr::next_value_form(s.triplet, s.dotted);
+                    s.triplet = t;
+                    s.dotted = d;
+                } else {
+                    s.part = Part::Note(i);
+                    s.triplet = false;
+                    s.dotted = false;
+                }
+            });
         }
         "Next Part Box Symbol" | "Previous Part Box Symbol" | "Next Part Box Group" | "Previous Part Box Group" => {
             let (g, i) = st.part.index();
@@ -163,9 +183,12 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                 "Previous Part Box Symbol" => {
                     if i > 0 { Part::from_index(g, i - 1) } else { let pg = (g + n - 1) % n; Part::from_index(pg, Part::GROUPS[pg] - 1) }
                 }
-                "Next Part Box Group" => Part::from_index((g + 1) % n, 0),
-                _ => Part::from_index((g + n - 1) % n, 0),
+                // (each group remembers the symbol last chosen in it)
+                "Next Part Box Group" => crate::scoreattr::group_recall(ctx, (g + 1) % n),
+                _ => crate::scoreattr::group_recall(ctx, (g + n - 1) % n),
             };
+            crate::scoreattr::group_remember(ctx, st.part);
+            crate::scoreattr::group_remember(ctx, part);
             view(ctx, &|s| s.part = part);
         }
         // ---- attached symbols

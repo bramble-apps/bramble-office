@@ -926,11 +926,13 @@ fn midi_range(app: &App, s: &Session, passes: &[Vec<Note>]) -> (u32, u32) {
 }
 
 /// Capture as Recording and MIDI recordings begun outside a session: the notes as a region.
-pub fn midi_take(app: &mut App, from: u32, notes: Vec<Note>, what: &str) {
+pub fn midi_take(app: &mut App, from: u32, mut notes: Vec<Note>, what: &str) {
     if notes.is_empty() {
         return;
     }
     let Some(t) = midi_target(app).or(app.selected_track) else { return };
+    // (Settings ▸ Score ▸ Auto split notes in polyphonic staff styles)
+    crate::scoreattr::auto_split(app, t, &mut notes);
     if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_none_or(|tr| tr.kind == TrackKind::Audio) {
         return;
     }

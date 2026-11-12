@@ -360,7 +360,8 @@ fn import_dialog(app: &mut App, title: &str, filters: &[(&str, &[&str])]) {
 pub fn import_path(app: &mut App, path: &Path) {
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     match ext.as_str() {
-        "musicxml" | "xml" | "mxl" | "fcpxml" => app.tell("Studio doesn't import that kind of file yet"),
+        "musicxml" | "xml" => crate::scorexml::import(app, path),
+        "mxl" | "fcpxml" => app.tell("Studio doesn't import that kind of file yet"),
         _ => app.import_file(path),
     }
 }
