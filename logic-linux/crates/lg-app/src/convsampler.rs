@@ -1,10 +1,12 @@
 //! Convert Regions to New Sampler Track (⌃E; the audio region shortcut menu's Convert ▸ Convert
-//! to New Sampler Track…), as Logic's: a dialog with Create Zones From Regions / Create Zones
-//! From Transient Markers, the Instrument Name and the Trigger Note Range (two pop-up menus, or
-//! Learn: play the low and the high key), OK and Cancel. OK makes a new track whose Sampler has a
-//! zone per region (in timeline order, on successive keys from the range's lowest note) or, for
-//! one region and transient markers, a zone per slice from its first transient; and a MIDI
-//! region of trigger notes at the regions' (or transients') positions, so it plays as before.
+//! to New Sampler Track…), as Logic 13's sheet: Create Zones From (Regions / Transient Markers),
+//! Instrument (Drum Machine Designer / Alchemy / Sampler), Create '1Shot' Zones, Instrument
+//! Name, Trigger Note Range (two pop-up menus; or play the low and then the high key while the
+//! sheet is open), Map evenly across trigger note range, the summary line, Cancel and OK. OK makes
+//! a new track whose Sampler has a zone per region (in timeline order, on successive keys from
+//! the range's lowest note) or, for one region and transient markers, a zone per slice from its
+//! first transient (Drum Machine Designer: a pad each); and a MIDI region of trigger notes at the
+//! regions' (or transients') positions, so it plays as before.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -33,11 +35,17 @@ pub struct Piece {
 struct Dlg {
     regions: Vec<(usize, usize)>,
     transients: bool,
+    /// 0 Drum Machine Designer, 1 Alchemy (not offered yet), 2 Sampler.
+    instrument: u8,
+    one_shot: bool,
     name: String,
     lo: u8,
     hi: u8,
-    /// Learn: 0 off, 1 waiting for the low key, 2 for the high key.
-    learn: u8,
+    even: bool,
+    /// Keys played while the sheet is open: the next one sets the low (false) or high (true) key.
+    learn_high: bool,
+    /// How many zones the choice makes (the summary line).
+    zones: usize,
 }
 
 fn dlg_id() -> egui::Id {
@@ -48,6 +56,15 @@ fn dlg_id() -> egui::Id {
 pub fn assign_keys(n: usize, lo: u8, hi: u8) -> Vec<u8> {
     let (lo, hi) = (lo.min(hi), lo.max(hi));
     (0..n).map(|k| lo as usize + k).take_while(|&k| k <= hi as usize).map(|k| k as u8).collect()
+}
+
+/// Map evenly across the trigger note range: each piece gets an equal share of the keys
+/// (low key, high key); its trigger note is the share's lowest key.
+pub fn even_ranges(n: usize, lo: u8, hi: u8) -> Vec<(u8, u8)> {
+    let (lo, hi) = (lo.min(hi) as usize, lo.max(hi) as usize);
+    let keys = hi - lo + 1;
+    let n = n.min(keys);
+    (0..n).map(|k| ((lo + k * keys / n) as u8, (lo + (k + 1) * keys / n - 1) as u8)).collect()
 }
 
 /// Slices of a region from its first transient: each runs to the next transient (the last to the
@@ -89,8 +106,8 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         return true;
     };
     let name = app.project.as_ref().map(|p| p.tracks[t].regions[r].name.clone()).unwrap_or_default();
-    let single = regions.len() == 1;
-    ctx.data_mut(|d| d.insert_temp(dlg_id(), Some(Dlg { regions, transients: single, name, lo: 36, hi: 96, learn: 0 })));
+    ctx.data_mut(|d| d.insert_temp(dlg_id(), Some(Dlg { regions, transients: false, instrument: 2, one_shot: false, name, lo: 0, hi: 127, even: false, learn_high: false, zones: 0 })));
+    app.inst.last_played = None;
     true
 }
 
@@ -127,15 +144,19 @@ fn pieces(app: &mut App, d: &Dlg) -> Vec<Piece> {
 /// OK: the new track, its Sampler and the trigger region.
 fn convert(app: &mut App, d: &Dlg) {
     let list = pieces(app, d);
-    let keys = assign_keys(list.len(), d.lo, d.hi);
+    let ranges: Vec<(u8, u8)> = if d.even { even_ranges(list.len(), d.lo, d.hi) } else { assign_keys(list.len(), d.lo, d.hi).into_iter().map(|k| (k, k)).collect() };
+    let keys: Vec<u8> = ranges.iter().map(|r| r.0).collect();
     if keys.is_empty() {
         app.tell("Nothing to convert");
         return;
     }
+    if d.instrument == 0 {
+        return convert_dmd(app, d, &list, &keys);
+    }
     let mut cache: HashMap<PathBuf, Arc<lg_synth::sampler::SampleData>> = HashMap::new();
     let mut doc = lg_synth::sampler_doc::SamplerDoc::new();
     doc.name = d.name.clone();
-    for (p, &key) in list.iter().zip(&keys) {
+    for (p, &(key, top)) in list.iter().zip(&ranges) {
         let data = match cache.get(&p.file) {
             Some(x) => x.clone(),
             None => {
@@ -149,99 +170,156 @@ fn convert(app: &mut App, d: &Dlg) {
         if let Some(&zi) = zs.first() {
             let z = &mut doc.zones[zi];
             z.key_lo = key;
-            z.key_hi = key;
+            z.key_hi = top;
             z.root = key;
             z.pitch = false;
-            z.one_shot = true;
+            z.one_shot = d.one_shot;
             z.start = p.start;
             z.end = p.end;
         }
     }
+    let Some((nt, nid)) = new_track(app, d, &list, &keys) else { return };
+    app.instrument_choice.insert(nt, "Sampler".into());
+    app.inst.docs.insert(nid, doc);
+    finish(app, nt);
+}
+
+/// The new track with the trigger region (one undo step): (index, id).
+fn new_track(app: &mut App, d: &Dlg, list: &[Piece], keys: &[u8]) -> Option<(usize, u64)> {
     app.checkpoint("Convert Regions to New Sampler Track");
-    let Some(p) = app.project.as_mut() else { return };
+    let p = app.project.as_mut()?;
     let mut tr = lg_core::Track::new(&d.name, lg_core::TrackKind::Instrument);
     tr.row = p.tracks.len() as u32 + 1;
     let at = list.iter().map(|x| x.at).min().unwrap_or(0);
     let end = list.iter().map(|x| x.at + x.len).max().unwrap_or(at + 1);
-    let notes = list.iter().zip(&keys).map(|(x, &k)| lg_core::events::Note { channel: 0, pitch: k, velocity: 100, pos: x.at, len: x.len, muted: false }).collect();
+    let notes = list.iter().zip(keys).map(|(x, &k)| lg_core::events::Note { channel: 0, pitch: k, velocity: 100, pos: x.at, len: x.len, muted: false }).collect();
     tr.regions.push(lg_core::Region { name: d.name.clone(), start: at, length: end.saturating_sub(at).max(1), notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
     p.tracks.push(tr);
     let nt = p.tracks.len() - 1;
     app.programs.push(crate::app::program_for(&d.name, lg_core::TrackKind::Instrument));
     crate::trackarea::sync(app);
-    let Some(nid) = instwin::track_id(app, nt) else { return };
-    app.instrument_choice.insert(nt, "Sampler".into());
-    app.inst.docs.insert(nid, doc);
+    Some((nt, instwin::track_id(app, nt)?))
+}
+
+fn finish(app: &mut App, nt: usize) {
     app.load_engine();
     instwin::bump(app, nt);
     app.selected_track = Some(nt);
     app.after_edit();
-    app.tell(format!("Converted {} to the Sampler track “{}”", if list.len() == 1 { "1 zone".to_string() } else { format!("{} zones", keys.len()) }, d.name));
+}
+
+/// Instrument: Drum Machine Designer — a pad per piece (its stretch of the file), on the keys.
+fn convert_dmd(app: &mut App, d: &Dlg, list: &[Piece], keys: &[u8]) {
+    let mut cache: HashMap<PathBuf, Arc<lg_synth::wav::Audio>> = HashMap::new();
+    let mut pads = crate::dmdwin::Pads::default();
+    for (k, (p, &key)) in list.iter().zip(keys).enumerate() {
+        let a = match cache.get(&p.file) {
+            Some(a) => a.clone(),
+            None => {
+                let Ok(a) = lg_synth::wav::read_audio(&p.file) else { continue };
+                let a = Arc::new(a);
+                cache.insert(p.file.clone(), a.clone());
+                a
+            }
+        };
+        let piece = lg_synth::wav::Audio { rate: a.rate, channels: a.channels.iter().map(|c| c[p.start.min(c.len())..p.end.min(c.len())].to_vec()).collect(), loop_points: None, root: None };
+        pads.pads.insert(key, crate::dmdwin::PadDoc { name: format!("{} {}", d.name, k + 1), file: None, audio: Some(Arc::new(piece)), quick: Vec::new() });
+    }
+    let Some((nt, nid)) = new_track(app, d, list, keys) else { return };
+    app.instrument_choice.insert(nt, "Drum Machine Designer".into());
+    app.inst.pads.insert(nid, pads);
+    finish(app, nt);
 }
 
 fn note_menu(ui: &mut egui::Ui, id: &str, v: &mut u8) {
-    egui::ComboBox::from_id_salt(id).selected_text(crate::app::note_name(*v)).width(70.0).height(260.0).show_ui(ui, |ui| {
+    let shown = |n: u8| format!("{}  ({n})", crate::app::note_name(n));
+    egui::ComboBox::from_id_salt(id).selected_text(shown(*v)).width(128.0).height(300.0).show_ui(ui, |ui| {
         for n in 0..=127u8 {
-            ui.selectable_value(v, n, crate::app::note_name(n));
+            ui.selectable_value(v, n, shown(n));
         }
     });
 }
 
-/// The dialog (drawn every frame while open).
+/// A form row: the label right-aligned in the left column, the control at its right.
+fn row(ui: &mut egui::Ui, label: &str, body: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(vec2(LABEL_W, 20.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(label).size(13.0));
+        });
+        body(ui);
+    });
+}
+
+const LABEL_W: f32 = 168.0;
+
+/// The sheet (drawn every frame while open).
 pub fn dialog(app: &mut App, ctx: &egui::Context) {
     let Some(mut d) = ctx.data(|x| x.get_temp::<Option<Dlg>>(dlg_id())).flatten() else { return };
-    // Learn: the next two keys played set the range
-    if d.learn > 0 {
-        if let Some(n) = app.inst.last_played.take() {
-            if d.learn == 1 {
-                d.lo = n;
-                d.learn = 2;
-            } else {
-                d.hi = n.max(d.lo);
-                d.learn = 0;
-            }
+    // keys played while the sheet is open set the Trigger Note Range: low, then high
+    if let Some(n) = app.inst.last_played.take() {
+        if d.learn_high {
+            d.lo = d.lo.min(n);
+            d.hi = n.max(d.lo);
+        } else {
+            d.lo = n;
         }
+        d.learn_high = !d.learn_high;
+    }
+    if d.zones == 0 {
+        d.zones = pieces(app, &d).len();
     }
     let mut done: Option<bool> = None;
-    egui::Window::new("Convert Regions to New Sampler Track").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
-        ui.set_width(380.0);
-        let single = d.regions.len() == 1;
-        ui.radio_value(&mut d.transients, false, "Create Zones From Regions");
-        ui.add_enabled_ui(single, |ui| {
-            ui.radio_value(&mut d.transients, true, "Create Zones From Transient Markers");
-        });
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            ui.label("Instrument Name:");
-            ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(220.0));
-        });
-        ui.horizontal(|ui| {
-            ui.label("Trigger Note Range:");
-            note_menu(ui, "conv-lo", &mut d.lo);
-            ui.label("–");
-            note_menu(ui, "conv-hi", &mut d.hi);
-            let label = match d.learn {
-                1 => "Play low key…",
-                2 => "Play high key…",
-                _ => "Learn",
-            };
-            if ui.add(egui::Button::selectable(d.learn > 0, label)).clicked() {
-                d.learn = if d.learn > 0 { 0 } else { 1 };
-                app.inst.last_played = None;
-            }
-        });
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("  OK  ").clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    done = Some(true);
-                }
-                if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    done = Some(false);
-                }
+    let single = d.regions.len() == 1;
+    let before = (d.transients, d.lo, d.hi, d.even);
+    let frame = egui::Frame::new().fill(crate::look::window_bg()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x50))).corner_radius(10.0).inner_margin(egui::Margin::symmetric(16, 14));
+    egui::Window::new("Convert Regions to New Sampler Track").title_bar(false).frame(frame).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        ui.set_width(520.0);
+        ui.spacing_mut().item_spacing.y = 6.0;
+        ui.vertical_centered(|ui| ui.label(egui::RichText::new("Convert Regions to New Sampler Track").size(13.0).strong()));
+        ui.add_space(4.0);
+        row(ui, "Create Zones From:", |ui| {
+            ui.vertical(|ui| {
+                ui.radio_value(&mut d.transients, false, "Regions");
+                ui.add_enabled_ui(single, |ui| ui.radio_value(&mut d.transients, true, "Transient Markers"));
             });
         });
+        row(ui, "Instrument:", |ui| {
+            ui.vertical(|ui| {
+                ui.radio_value(&mut d.instrument, 0, "Drum Machine Designer");
+                ui.add_enabled_ui(false, |ui| ui.radio_value(&mut d.instrument, 1, "Alchemy"));
+                ui.radio_value(&mut d.instrument, 2, "Sampler");
+            });
+        });
+        row(ui, "Create '1Shot' Zones:", |ui| {
+            ui.checkbox(&mut d.one_shot, "");
+        });
+        row(ui, "Instrument Name:", |ui| {
+            ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(320.0));
+        });
+        row(ui, "Trigger Note Range:", |ui| {
+            note_menu(ui, "conv-lo", &mut d.lo);
+            note_menu(ui, "conv-hi", &mut d.hi);
+        });
+        row(ui, "Map evenly across trigger note range:", |ui| {
+            ui.checkbox(&mut d.even, "");
+        });
+        ui.add_space(6.0);
+        let keys = (d.hi as usize).saturating_sub(d.lo as usize) + 1;
+        ui.label(egui::RichText::new(format!("OK creates an instrument with {} zones (of a maximum of {keys}) from {} selected region(s), including a MIDI trigger region.", d.zones.min(keys), d.regions.len())).size(11.5));
+        ui.add_space(10.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let ok = egui::Button::new(egui::RichText::new("OK").size(13.0).color(egui::Color32::WHITE)).fill(crate::look::accent()).min_size(vec2(66.0, 24.0));
+            if ui.add(ok).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                done = Some(true);
+            }
+            if ui.add(egui::Button::new(egui::RichText::new("Cancel").size(13.0)).min_size(vec2(66.0, 24.0))).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                done = Some(false);
+            }
+        });
     });
+    if before != (d.transients, d.lo, d.hi, d.even) {
+        d.zones = 0;
+    }
     match done {
         Some(ok) => {
             ctx.data_mut(|x| x.insert_temp::<Option<Dlg>>(dlg_id(), None));
@@ -267,6 +345,13 @@ mod tests {
         assert_eq!(assign_keys(3, 36, 96), vec![36, 37, 38]);
         assert_eq!(assign_keys(5, 60, 62), vec![60, 61, 62]);
         assert_eq!(assign_keys(2, 62, 60), vec![60, 61]);
+    }
+
+    #[test]
+    fn even_mapping_shares_the_range() {
+        assert_eq!(even_ranges(2, 0, 127), vec![(0, 63), (64, 127)]);
+        assert_eq!(even_ranges(3, 60, 62), vec![(60, 60), (61, 61), (62, 62)]);
+        assert_eq!(even_ranges(5, 60, 61).len(), 2);
     }
 
     #[test]
