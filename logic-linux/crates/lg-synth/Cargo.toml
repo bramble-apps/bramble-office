@@ -8,6 +8,7 @@ description = "Bramble Studio's software instruments: synthesized stand-ins for 
 [dependencies]
 lg-dsp = { path = "../lg-dsp" }
 lg-fx = { path = "../lg-fx" }
+lg-audio = { path = "../lg-audio" }
 rustysynth = "1"
 lg-sounds = { path = "../lg-sounds" }
 # FLAC decoding for the Sampler (pure Rust; already in the workspace through rodio)
