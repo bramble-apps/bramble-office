@@ -345,6 +345,13 @@ impl Params {
             _ => 0.0,
         }
     }
+    /// A parameter's definition by id.
+    pub fn def(&self, id: u32) -> Option<&lg_dsp::Param> {
+        match self.index.get(id as usize) {
+            Some(&i) if i >= 0 => Some(&self.defs[i as usize]),
+            _ => None,
+        }
+    }
     /// Sets (clamped); returns false for an unknown id.
     pub fn set(&mut self, id: u32, v: f32) -> bool {
         match self.index.get(id as usize) {

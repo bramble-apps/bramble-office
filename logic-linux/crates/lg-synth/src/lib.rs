@@ -12,7 +12,12 @@
 //! stay synthesized.
 
 pub mod alchemy;
+pub mod alchemy_arp;
 pub mod alchemy_extra;
+pub mod alchemy_filter;
+pub mod alchemy_fx;
+pub mod alchemy_mod;
+pub mod alchemy_partials;
 pub mod arp;
 pub mod bass;
 pub mod clav;
