@@ -255,12 +255,12 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, se
         set.push((DETAILS, if details { 0.0 } else { 1.0 }));
     }
     let ids: Vec<u32> = match (yard, page) {
-        (false, 0) => vec![REV_DELAY, DRY, REFL_LEVEL, REV_LEVEL, REFL_DELAY],
+        (false, 0) => vec![LOW, HIGH, REV_DELAY, DRY, REFL_LEVEL, REV_LEVEL, REFL_DELAY],
         (false, _) => vec![ADDA, DRIVE, DRY_SRC, REFL_SRC, REFL_PHASE, CORR, SUBSONIC],
-        (true, 0) => vec![REV_DELAY, DRY, REFL_LEVEL, REV_LEVEL, DENSITY],
+        (true, 0) => vec![LOW, LOW_XO, HIGH, HIGH_XO, REV_DELAY, DRY, REFL_LEVEL, REV_LEVEL, DENSITY],
         // (in surround the Subsonic button sits on the Secondary page)
         (true, 1) => {
-            let mut v = vec![REFL_DELAY, REFL_SPREAD, HIGH_CUT, BASS, BASS_XO, LOW_XO, HIGH_XO];
+            let mut v = vec![REFL_DELAY, REFL_SPREAD, HIGH_CUT, BASS, BASS_XO];
             if surround {
                 v.push(SUBSONIC);
             }

@@ -448,6 +448,14 @@ fn goniometer(ui: &mut egui::Ui, c: &Ctx, set: &Set, r: Rect, hold: bool, pair: 
     }
     let held_id = c.id.with("gonio-held");
     let mut held: Vec<Pos2> = if hold { ui.data(|d| d.get_temp(held_id)).unwrap_or_default() } else { Vec::new() };
+    // Reset (and playback starting, which clears the plug-in's holds) clears the dim figure
+    let reset_id = c.id.with("gonio-reset");
+    let resets = (c.get(set, mm::RESET), c.live.get("True Peak Max").unwrap_or(0.0) < -150.0);
+    let before: (f32, bool) = ui.data(|d| d.get_temp(reset_id)).unwrap_or(resets);
+    if resets.0 != before.0 || (resets.1 && !before.1) {
+        held.clear();
+    }
+    ui.data_mut(|d| d.insert_temp(reset_id, resets));
     if hold {
         if let Some(last) = trail.last() {
             held.extend(last.iter().step_by(4));
@@ -558,9 +566,13 @@ fn multimeter(ui: &mut egui::Ui, c: &Ctx, set: &mut Set) {
     let body = Rect::from_min_max(r.min + vec2(8.0, 32.0), r.max - vec2(8.0, 8.0));
     let controls_h = if view == 0 { 92.0 } else { 0.0 };
     let main_h = body.height() - controls_h;
-    // meters on the right (always in Full and Meters; Display / Compact: the mode only)
-    let meters_w = if view == 2 { 0.0 } else { (if surround { 30.0 * chans.len() as f32 + 40.0 } else { 100.0 }) + 60.0 };
+    // Full: everything; Meters: the meters only; Display (stereo): the mode only; Compact
+    // (surround): the mode and the meters, no controls
+    let show_disp = view != 1;
+    let show_meters = view != 2 || surround;
+    let meters_w = if !show_meters { 0.0 } else if !show_disp { body.width() } else { (if surround { 30.0 * chans.len() as f32 + 40.0 } else { 100.0 }) + 60.0 };
     let disp = Rect::from_min_max(body.min, pos2(body.max.x - meters_w - if meters_w > 0.0 { 8.0 } else { 0.0 }, body.min.y + main_h - if surround { 0.0 } else { 32.0 }));
+    if show_disp {
     p.rect_filled(disp, 3.0, DISPLAY);
     match mode {
         1 => {
@@ -581,6 +593,7 @@ fn multimeter(ui: &mut egui::Ui, c: &Ctx, set: &mut Set) {
         if correlation(ui, c, cr, "Correlation", "Corr Min", false, false) {
             bump(c, set, mm::RESET);
         }
+    }
     }
     if meters_w > 0.0 {
         let mr = Rect::from_min_max(pos2(body.max.x - meters_w, body.min.y + 18.0), pos2(body.max.x, body.min.y + main_h));

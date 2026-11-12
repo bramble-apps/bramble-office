@@ -425,6 +425,7 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, se
     }
     let texts: Vec<Option<String>> = pp.iter().zip(&vv).map(|(q, v)| match q.id {
         asx::RANGE_START | asx::RANGE_END => Some(note_name(*v as u8)),
+        asx::LAYERS => Some(format!("{}", v.round() as u32)),
         _ => None,
     }).collect();
     let top = ui.cursor().min.y;
@@ -498,5 +499,42 @@ mod tests {
         let zones = lg_synth::sampler::parse_sfz(&text, Path::new("/nonexistent")).unwrap_or_default();
         let _ = zones;
         assert_eq!(note_name(60), "C3");
+    }
+
+    /// Sampling a synth: one WAV per note / layer / round robin, an SFZ the Sampler reads.
+    #[test]
+    fn samples_an_instrument() {
+        let t = crate::audio::PlayTrack {
+            channel: 0,
+            program: 0,
+            notes: Vec::new(),
+            audio: Vec::new(),
+            volume: 1.0,
+            pan: 0.0,
+            mute: false,
+            solo: false,
+            eq: None,
+            instrument: Some("ES1".into()),
+            instrument_floats: Vec::new(),
+            inserts: vec![("Auto Sampler".into(), Vec::new())],
+            sends: Vec::new(),
+            auto_volume: Vec::new(),
+            auto_pan: Vec::new(),
+        };
+        let s = Settings { notes: vec![48, 60], velocities: vec![64, 127], round_robin: 1, sustain: 0.3, auto_loop: 1, loop_start: 0.2, loop_end: 0.9, one_shot: false, gain: 1.0 };
+        let dir = std::env::temp_dir().join(format!("lg-autosampler-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("Test Synth.sfz");
+        let prog = Arc::new(Mutex::new(Progress::default()));
+        let out = run(&prog, t, None, &s, &path).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(text.matches("<region>").count(), 4);
+        let zones = lg_synth::sampler::parse_sfz(&text, &dir).unwrap();
+        assert_eq!(zones.len(), 4);
+        assert!(zones.iter().any(|z| z.lovel == 65 && z.hivel == 127));
+        assert_eq!(prog.lock().unwrap().done, 4);
+        // the takes have sound
+        assert!(zones.iter().all(|z| z.end > 1000));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

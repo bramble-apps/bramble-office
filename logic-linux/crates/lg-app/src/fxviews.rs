@@ -60,7 +60,7 @@ pub enum Action {
     PlayKey(u8, u8),
 }
 
-const EDITORS: &[&str] = &["Compressor", "Quantec Room Simulator", "Auto Sampler", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Compressor", "Quantec Room Simulator", "Auto Sampler", "Phat FX", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -69,10 +69,18 @@ pub fn has_editor(name: &str) -> bool {
 pub fn default_size(name: &str) -> egui::Vec2 {
     match name {
         "Compressor" => crate::compview::SIZE,
-        "Quantec Room Simulator" => vec2(760.0, 640.0),
-        "Auto Sampler" => vec2(720.0, 640.0),
-        "Remix FX" | "Beat Breaker" | "Step FX" | "Delay Designer" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
-        "Space Designer" | "MultiMeter" => vec2(680.0, 520.0),
+        "Quantec Room Simulator" => vec2(780.0, 720.0),
+        "Auto Sampler" => vec2(740.0, 800.0),
+        "Phat FX" => vec2(780.0, 760.0),
+        "MultiMeter" => vec2(800.0, 680.0),
+        "Level Meter" => vec2(320.0, 480.0),
+        "Loudness Meter" => vec2(380.0, 480.0),
+        "Correlation Meter" => vec2(440.0, 260.0),
+        "BPM Counter" => vec2(380.0, 300.0),
+        "Tuner" => vec2(440.0, 440.0),
+        "Delay Designer" => vec2(780.0, 760.0),
+        "Remix FX" | "Beat Breaker" | "Step FX" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
+        "Space Designer" => vec2(680.0, 520.0),
         "Match EQ" => vec2(720.0, 620.0),
         // (Logic's Channel EQ window at 100 %: 1028 × 552 points with its header and footer)
         "Channel EQ" | "Linear Phase EQ" => vec2(1014.0, 540.0),
@@ -156,6 +164,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
     egui::ScrollArea::vertical().id_salt(("fx-editor", slot)).auto_shrink([false, false]).show(ui, |ui| match name {
         "Compressor" => crate::compview::view(ui, params, values, live, slot, &mut set),
         "Quantec Room Simulator" => crate::qrsview::view(ui, params, values, live, &mut set),
+        "Phat FX" => crate::phatview::view(ui, params, values, &mut set),
         "Auto Sampler" => crate::autosampler::view(ui, params, values, live, &mut set, &mut act),
         "Channel EQ" | "Linear Phase EQ" => crate::eqview::view(ui, params, values, live.curve("analyzer"), slot, &mut set),
         "Remix FX" => remix(ui, params, values, &mut set),
@@ -653,7 +662,7 @@ fn step_fx(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set
 
 fn delay_designer(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec<(u32, f32)>) {
     use lg_fx::delay_designer::*;
-    let g = |id| v(params, values, id);
+    let _ = (params, values);
     crate::ddview::display(ui, params, values, set);
     // the Tap pads
     let tp_id = ui.scope_id().with("dd-tappads");

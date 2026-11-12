@@ -24,8 +24,8 @@ use crate::look;
 const BODY_W: f32 = 1028.0;
 const BODY_H: f32 = 668.0;
 
-/// The default window size (Logic's window: 1028 × 813 points with header and footer).
-pub const SIZE: egui::Vec2 = egui::vec2(1014.0, 801.0);
+/// The default window size (Logic's window: 1028 × 813 points with title, header and footer; ours adds egui's title bar).
+pub const SIZE: egui::Vec2 = egui::vec2(1014.0, 846.0);
 
 fn val(params: &[Param], values: &[f32], id: u32) -> f32 {
     params.iter().position(|p| p.id == id).map_or(0.0, |i| values[i])

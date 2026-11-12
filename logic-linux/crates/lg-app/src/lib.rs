@@ -108,6 +108,7 @@ mod qrsview;
 mod autosampler;
 mod pbrouter;
 mod ddview;
+mod phatview;
 mod stemsplit;
 mod players;
 mod rightpane;
