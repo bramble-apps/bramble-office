@@ -306,7 +306,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 p.text(pos2(label_right, ry + 12.0), Align2::RIGHT_CENTER, &row.label, look::regular(13.0), c(0xdfdfdf));
             }
             let x0 = if same_line { last_right } else if row.label.is_empty() && matches!(row.kind.as_str(), "text" | "separator" | "table") { content_left } else { ctrl_x };
-            let disabled = row.text.ends_with("(disabled)");
+            let disabled = row.text.ends_with("(disabled)") && !crate::prefs::enabled_now(app, &key);
             let dyn_text = crate::prefs::dynamic_text(&values, &key);
             let text = dyn_text.as_deref().unwrap_or(row.text.trim_end_matches("(disabled)").trim());
             let tcol = if disabled { c(0x61605f) } else { c(0xdfdfdf) };

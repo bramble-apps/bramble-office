@@ -36,6 +36,8 @@ enum Kind {
     Num(f32, f32, &'static str),
     Text,
     Heading,
+    /// Radio buttons in a row (the choices).
+    Radio(&'static [&'static str]),
 }
 
 /// A row: (pane, sub-pane, label, kind, default). Labels double as keys ("Pane / Sub / label").
@@ -57,6 +59,7 @@ const ROWS: &[Row] = &[
     Row("Synchronization", "General", "Auto detect format of MTC", Kind::Check, "1"),
     Row("Synchronization", "General", "Bar Position 1 1 1 1 plays at SMPTE:", Kind::Text, "01:00:00:00.00"),
     Row("Synchronization", "General", "Enable separate SMPTE view offset", Kind::Check, "0"),
+    Row("Synchronization", "General", "Bar Position 1 1 1 1 displayed as SMPTE:", Kind::Text, "00:00:00:00.00"),
     Row("Synchronization", "Audio", "Core Audio:", Kind::Popup(&["MTC Continuous", "MTC Trigger + Auto Speed Detection", "MTC Trigger", "External or Free"]), "MTC Continuous"),
     Row("Synchronization", "General", "Auto enable External Sync", Kind::Check, "0"),
     Row("Synchronization", "MIDI", "Transmit MIDI Clock", Kind::Check, "0"),
@@ -104,7 +107,9 @@ const ROWS: &[Row] = &[
     Row("Metronome", "", "MIDI Port:", Kind::Text, "All"),
     Row("Metronome", "", "Tone:", Kind::Num(0.0, 100.0, "%"), "50"),
     Row("Metronome", "", "Volume:", Kind::Num(-60.0, 6.0, "dB"), "0"),
+    Row("Recording", "General", "Lead-in:", Kind::Radio(&crate::recsettings::LEADS), "Count-in"),
     Row("Recording", "General", "Count-in:", Kind::Popup(COUNT_IN), "1 Bar"),
+    Row("Recording", "General", "Pre-roll:", Kind::Num(0.0, 60.0, "s"), "1.0"),
     Row("Recording", "General", "Allow tempo change recording", Kind::Check, "0"),
     Row("Recording", "MIDI", "Automatically colorize takes", Kind::Check, "1"),
     Row("Recording", "MIDI", "Automatically erase duplicates", Kind::Check, "0"),
@@ -195,6 +200,11 @@ const ROWS: &[Row] = &[
     Row("Score", "Clefs & Signatures", "Time Signatures:", Kind::Popup(&crate::scoreset::SHOW), "First Staff on Page 1"),
     Row("Score", "Clefs & Signatures", "Hide bar lines", Kind::Check, "0"),
     Row("Smart Tempo", "", "Project Tempo Mode:", Kind::Popup(&["Keep Project Tempo", "Adapt Project Tempo", "Automatic Mode"]), "Automatic Mode"),
+    Row("Smart Tempo", "", "Set New Recordings To:", Kind::Popup(&crate::stdefaults::CHOICES), "Flex Off"),
+    Row("Smart Tempo", "", "Trim start of new regions", Kind::Check, "0"),
+    Row("Smart Tempo", "", "Set Imported Files To:", Kind::Popup(&crate::stdefaults::CHOICES), "Flex Off"),
+    Row("Smart Tempo", "", "Trim start of new regions #2", Kind::Check, "0"),
+    Row("Smart Tempo", "", "Export Tempo Resolution:", Kind::Popup(&crate::stdefaults::EXPORT), "Smoothed"),
     Row("Smart Tempo", "", "Free Tempo Recording Default Tempo Behavior:", Kind::Popup(&["Ask", "Apply region tempo to project", "Apply average region tempo to project", "Apply project tempo to region", "Don't analyze region tempo or change project tempo"]), "Ask"),
     Row("Assets", "", "Copy audio files into project", Kind::Check, "1"),
     Row("Assets", "", "Convert audio file sample rate when importing", Kind::Check, "1"),
@@ -297,19 +307,28 @@ pub fn tuning_table(v: &Values) -> [f32; 128] {
     })
 }
 
-/// The bar 1 SMPTE time in seconds and the frame rate (fps, drop-frame).
+/// The bar 1 SMPTE time as the displays show it (the separate view offset when that is on) in
+/// seconds, and the frame rate (fps, drop-frame).
 pub fn smpte(v: &Values) -> (f64, f64, bool) {
+    let (real, fps, drop) = smpte_real(v);
+    if v.on("Synchronization / General / Enable separate SMPTE view offset") {
+        (smpte_secs(&v.get("Synchronization / General / Bar Position 1 1 1 1 displayed as SMPTE:"), fps), fps, drop)
+    } else {
+        (real, fps, drop)
+    }
+}
+
+/// The bar 1 SMPTE time that is played and synchronised to (MTC, the movie, the Tempo List).
+pub fn smpte_real(v: &Values) -> (f64, f64, bool) {
     let rate = v.get("Synchronization / General / Frame Rate:");
     let drop = rate.ends_with('d');
     let fps: f64 = rate.trim_end_matches('d').parse().unwrap_or(25.0);
-    let off = if v.on("Synchronization / General / Enable separate SMPTE view offset") {
-        0.0
-    } else {
-        let t = v.get("Synchronization / General / Bar Position 1 1 1 1 plays at SMPTE:");
-        let f: Vec<f64> = t.split([':', '.', ';']).filter_map(|x| x.trim().parse().ok()).collect();
-        f.first().copied().unwrap_or(0.0) * 3600.0 + f.get(1).copied().unwrap_or(0.0) * 60.0 + f.get(2).copied().unwrap_or(0.0) + f.get(3).copied().unwrap_or(0.0) / fps.round()
-    };
-    (off, fps, drop)
+    (smpte_secs(&v.get("Synchronization / General / Bar Position 1 1 1 1 plays at SMPTE:"), fps), fps, drop)
+}
+
+fn smpte_secs(t: &str, fps: f64) -> f64 {
+    let f: Vec<f64> = t.split([':', '.', ';']).filter_map(|x| x.trim().parse().ok()).collect();
+    f.first().copied().unwrap_or(0.0) * 3600.0 + f.get(1).copied().unwrap_or(0.0) * 60.0 + f.get(2).copied().unwrap_or(0.0) + f.get(3).copied().unwrap_or(0.0) / fps.round()
 }
 
 /// A MIDI message let through by MIDI ▸ Input Filter.
@@ -387,6 +406,7 @@ pub fn apply(app: &mut App) {
         app.rec.count_in = c;
     }
     lg_dsp::set_tuning(&tuning_table(&v));
+    crate::hmt::configure(&v);
     let cfg = click_cfg(&v);
     if let Ok(mut e) = app.engine.lock() {
         e.click_cfg = cfg;
@@ -665,8 +685,13 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
         let key = key(r);
         let cur = app.proj.get(&key);
         let id = ui.scope_id().with(("ps-row", k));
+        // (" #2": a second row with the same label)
+        let r = &Row(r.0, r.1, r.2.split(" #").next().unwrap_or(r.2), r.3, r.4);
         // (Logic's pitch: checkboxes 23 pt apart, pop-ups and fields 31 pt)
         let h = if matches!(r.3, Kind::Check) { 16.0 } else { 24.0 };
+        // (rows another row switches off: dimmed, not editable)
+        let live = enabled(&app.proj, &key);
+        let text = if live { text } else { gray(0x7a7978) };
         let (row, _) = ui.allocate_exact_size(vec2(ui.max_rect().width(), h), Sense::hover());
         let cy = row.center().y;
         match r.3 {
@@ -692,7 +717,7 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
                 p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
                 let w = ch.iter().map(|c| p.layout_no_wrap(c.to_string(), f.clone(), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 44.0;
                 let pr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(w.clamp(120.0, 420.0), 24.0));
-                let resp = ui.interact(pr, id, Sense::click());
+                let resp = ui.interact(pr, id, if live { Sense::click() } else { Sense::hover() });
                 p.rect_filled(pr, 5.0, if resp.hovered() { look::mix(fill, Color32::WHITE, 0.06) } else { fill });
                 p.with_clip_rect(pr.shrink2(vec2(10.0, 0.0))).text(pos2(pr.min.x + 12.0, cy), Align2::LEFT_CENTER, &cur, f.clone(), text);
                 let m = pos2(pr.max.x - 14.0, cy);
@@ -715,9 +740,28 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
                 let mut x: f32 = cur.parse().unwrap_or(0.0);
                 let fr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(110.0, 24.0));
                 p.rect_filled(fr, 5.0, fill);
-                let resp = ui.put(fr.shrink2(vec2(8.0, 2.0)), egui::DragValue::new(&mut x).range(lo..=hi).speed((hi - lo) / 400.0).fixed_decimals(1).suffix(format!(" {unit}")));
+                let resp = ui.add_enabled_ui(live, |ui| ui.put(fr.shrink2(vec2(8.0, 2.0)), egui::DragValue::new(&mut x).range(lo..=hi).speed((hi - lo) / 400.0).fixed_decimals(1).suffix(format!(" {unit}")))).inner;
                 if resp.changed() {
                     set(&mut app.proj, &key, &format!("{x:.1}"));
+                }
+            }
+            Kind::Radio(ch) => {
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
+                let mut x = ctrl_x;
+                for (i, c) in ch.iter().enumerate() {
+                    let on = cur == *c;
+                    let g = p.layout_no_wrap(c.to_string(), f.clone(), text);
+                    let hit = Rect::from_min_size(pos2(x, cy - 8.0), vec2(22.5 + g.size().x, 16.0));
+                    let ctr = pos2(x + 8.0, cy);
+                    p.circle_filled(ctr, 8.0, if on { gray(0x397bf7) } else { gray(0x424140) });
+                    if on {
+                        p.circle_filled(ctr, 3.0, Color32::WHITE);
+                    }
+                    p.galley(pos2(x + 22.5, cy - g.size().y / 2.0), g, text);
+                    if ui.interact(hit, id.with(i), Sense::click()).clicked() {
+                        set(&mut app.proj, &key, c);
+                    }
+                    x = hit.max.x + 18.0;
                 }
             }
             Kind::Text => {
@@ -725,11 +769,24 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
                 let fr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(220.0, 24.0));
                 p.rect_filled(fr, 5.0, fill);
                 let mut t = cur.clone();
-                if ui.put(fr.shrink2(vec2(8.0, 3.0)), egui::TextEdit::singleline(&mut t).frame(egui::Frame::NONE).font(f.clone())).changed() {
+                if ui.add_enabled_ui(live, |ui| ui.put(fr.shrink2(vec2(8.0, 3.0)), egui::TextEdit::singleline(&mut t).frame(egui::Frame::NONE).font(f.clone()))).inner.changed() {
                     set(&mut app.proj, &key, &t);
                 }
             }
         }
+    }
+}
+
+/// Whether a row can be edited now (Count-in's menu with Count-in chosen, Pre-roll's slider with
+/// Pre-roll, HMT's rows with Hermode Tuning).
+fn enabled(v: &Values, key: &str) -> bool {
+    let lead = v.get(crate::recsettings::LEAD_IN);
+    match key {
+        "Recording / General / Count-in:" => lead != "Pre-roll",
+        crate::recsettings::PRE_ROLL => lead == "Pre-roll",
+        "Synchronization / General / Bar Position 1 1 1 1 displayed as SMPTE:" => v.on("Synchronization / General / Enable separate SMPTE view offset"),
+        "Tuning /  / HMT Type:" | "Tuning /  / Depth:" => v.get("Tuning /  / Software Instrument Tuning Table") == "Hermode Tuning (HMT)",
+        _ => true,
     }
 }
 

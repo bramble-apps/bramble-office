@@ -374,6 +374,7 @@ impl Engine {
         if track >= self.tracks.len() {
             return;
         }
+        crate::hmt::live(pitch, velocity > 0);
         let ch = self.tracks[track].channel;
         if let Some(ins) = self.units.get_mut(track).and_then(|u| u.instrument.as_mut()) {
             // (with the channel it came in on: the organ's manuals and pedals)
@@ -695,6 +696,19 @@ impl Engine {
                 }
             }
             self.chase_due = false;
+            // Hermode Tuning (hmt.rs): the chord sounding with this block's notes retunes them
+            if crate::hmt::active() {
+                let mut mask = 0u16;
+                for (i, t) in self.tracks.iter().enumerate() {
+                    if t.channel == 9 || !self.audible(i) {
+                        continue;
+                    }
+                    for n in t.notes.iter().filter(|n| (n.0 as f64) < to && (n.1 as f64) > from) {
+                        mask |= 1 << (n.2 % 12);
+                    }
+                }
+                crate::hmt::block(mask);
+            }
             // notes starting in this block
             for i in 0..self.tracks.len() {
                 if !self.audible(i) || self.fx.active(i) {

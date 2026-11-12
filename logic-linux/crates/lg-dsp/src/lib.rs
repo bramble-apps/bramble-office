@@ -208,10 +208,20 @@ pub fn set_tuning(cents: &[f32; 128]) {
     }
 }
 
+/// Hermode Tuning's offsets per pitch class (cents; all zero unless HMT is on), set as the
+/// chords change.
+static HMT: [std::sync::atomic::AtomicU32; 12] = [const { std::sync::atomic::AtomicU32::new(0) }; 12];
+
+pub fn set_hmt(cents: &[f32; 12]) {
+    for (k, c) in cents.iter().enumerate() {
+        HMT[k].store(c.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// The tuning table's offset for a (possibly fractional) note, in cents.
 pub fn tuning_cents(pitch: f32) -> f32 {
     let k = pitch.round().clamp(0.0, 127.0) as usize;
-    f32::from_bits(TUNING[k].load(std::sync::atomic::Ordering::Relaxed))
+    f32::from_bits(TUNING[k].load(std::sync::atomic::Ordering::Relaxed)) + f32::from_bits(HMT[k % 12].load(std::sync::atomic::Ordering::Relaxed))
 }
 
 pub fn midi_hz(pitch: f32) -> f32 {

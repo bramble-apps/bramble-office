@@ -49,6 +49,11 @@ pub const WIDE_PLAYHEAD: &str = "View / General / Wide playhead";
 pub const ANIMATIONS: &str = "View / General / Show animations";
 pub const OPEN_ON_INSERT: &str = "View / Mixer / Open plug-in window on insertion";
 pub const BRIGHT_EDITORS: &str = "View / Editors / Bright background";
+/// Linked to the control bar's Low Latency button; lasts until Studio quits (not saved).
+pub const LOW_LATENCY: &str = "Audio / General / Low Latency Monitoring Mode";
+/// Plug-in Latency Compensation: All (every strip, the engine's compensation on) or Audio and
+/// Software Instrument Tracks / Off (no compensation across the busses).
+pub const COMPENSATION: &str = "Audio / General / Compensation:";
 
 /// The key of a MIDI input port's On checkbox in Settings ▸ MIDI ▸ Inputs.
 pub fn input_key(port: &str) -> String {
@@ -416,6 +421,12 @@ fn overlap_of(s: &str) -> Option<Overlap> {
 
 const REPLACE: [(ReplaceMode, &str); 4] = [(ReplaceMode::RegionErase, "Region Erase"), (ReplaceMode::RegionPunch, "Region Punch"), (ReplaceMode::ContentErase, "Content Erase"), (ReplaceMode::ContentPunch, "Content Punch")];
 
+/// Rows Logic shows greyed until another setting allows them: the Low Latency Limit while
+/// Low Latency Monitoring Mode is on.
+pub fn enabled_now(app: &App, key: &str) -> bool {
+    key.starts_with("Audio / General / Limit:") && app.low_latency
+}
+
 /// A row whose value lives in the app (the Record menu shares it).
 pub fn live_get(app: &App, key: &str) -> Option<String> {
     let r = &app.rec;
@@ -426,6 +437,9 @@ pub fn live_get(app: &App, key: &str) -> Option<String> {
         REC_AUDIO_ON => overlap_name(r.audio_cycle_on, true, true).into(),
         REC_REPLACE => REPLACE.iter().find(|x| x.0 == r.midi_replace)?.1.into(),
         REC_FILE_TYPE => "WAVE".into(),
+        LOW_LATENCY => if app.low_latency { "1" } else { "0" }.into(),
+        COMPENSATION if !app.mix.compensate && app.logic_settings.get(COMPENSATION).starts_with("All") => "Audio and Software Instrument Tracks".into(),
+        COMPENSATION if app.mix.compensate => "All (recommended)".into(),
         _ => return None,
     })
 }
@@ -438,6 +452,17 @@ fn live_set(app: &mut App, key: &str, val: &str) {
         REC_AUDIO_OFF => r.audio_cycle_off = overlap_of(val).unwrap_or(r.audio_cycle_off),
         REC_AUDIO_ON => r.audio_cycle_on = overlap_of(val).unwrap_or(r.audio_cycle_on),
         REC_REPLACE => r.midi_replace = REPLACE.iter().find(|x| x.1 == val).map_or(r.midi_replace, |x| x.0),
+        LOW_LATENCY => {
+            app.low_latency = val == "1";
+            crate::mixengine::sync(app);
+        }
+        COMPENSATION => {
+            let all = val.starts_with("All");
+            if app.mix.compensate != all {
+                app.mix.compensate = all;
+                app.load_engine();
+            }
+        }
         _ => {}
     }
 }
@@ -541,6 +566,11 @@ pub fn button(app: &mut App, key: &str) -> bool {
 pub fn changed(app: &mut App, key: &str) {
     let val = app.logic_settings.get(key);
     live_set(app, key, &val);
+    if key == LOW_LATENCY {
+        // (Logic: for all open projects until it quits; not kept)
+        app.logic_settings.0.remove(LOW_LATENCY);
+        app.logic_settings.save();
+    }
     sync_statics(&app.logic_settings);
     match key {
         ANIMATIONS => apply_animations(app),

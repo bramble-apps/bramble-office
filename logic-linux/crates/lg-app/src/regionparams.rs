@@ -645,6 +645,25 @@ fn body(app: &mut App, ui: &mut egui::Ui, area: Rect, y0: f32, tg: Tg, id: egui:
             }
             y += ROW;
         }
+        // Audio Defaults: Flex and Smart Tempo for new recordings (Project Settings ▸ Smart
+        // Tempo ▸ Set New Recordings To, stdefaults.rs)
+        if matches!(tg, Tg::Defaults(true)) {
+            use crate::stdefaults as sd;
+            line(y);
+            check_row(app, ui, inner, y, id.with("def-flex"), tg, false, "Flex", |a, _| sd::smart_of(sd::choice(&a.proj, sd::REC_KEY)).0, |a, _, on| {
+                let (_, s) = sd::smart_of(sd::choice(&a.proj, sd::REC_KEY));
+                crate::projsettings::set(&mut a.proj, sd::REC_KEY, sd::CHOICES[sd::choice_of(on, s)]);
+                a.dirty = true;
+            });
+            y += ROW;
+            line(y);
+            let (flex, cur) = sd::smart_of(sd::choice(&app.proj, sd::REC_KEY));
+            if let Some(i) = choice_row(app, ui, inner, y, id.with("def-smart"), tg, false, "Smart Tempo", cur, &crate::tempomode::SMART) {
+                crate::projsettings::set(&mut app.proj, sd::REC_KEY, sd::CHOICES[sd::choice_of(flex || i > 0, i)]);
+                app.dirty = true;
+            }
+            y += ROW;
+        }
         // Delay: ticks or ms (the unit's pop-up switches)
         let in_ms = props(app, tg).is_some_and(|p| p.delay_ms);
         let k = if in_ms { ms_per_tick(app) } else { 1.0 };
