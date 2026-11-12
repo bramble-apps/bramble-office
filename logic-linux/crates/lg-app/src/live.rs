@@ -352,7 +352,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         let whites = [0u8, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17];
         let ww = keys.width() / whites.len() as f32;
         let down: Vec<u8> = app.live.held.keys().copied().collect();
-        let label_of = |off: u8| TYPING.iter().find(|(_, o)| *o == off).map(|(k, _)| k.name().to_string()).unwrap_or_default();
+        let label_of = |off: u8| TYPING.iter().find(|(_, o)| *o == off).map(|(k, _)| match k { egui::Key::Semicolon => ";".to_string(), egui::Key::Quote => "'".to_string(), k => k.name().to_string() }).unwrap_or_default();
         for (i, off) in whites.iter().enumerate() {
             let kr = Rect::from_min_size(pos2(keys.min.x + i as f32 * ww, keys.min.y), vec2(ww - 2.0, keys.height()));
             let lit = down.contains(&(app.live.octave_c + off));
