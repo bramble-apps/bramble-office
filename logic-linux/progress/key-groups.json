@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 74,
+  "done": 77,
   "total": 110,
-  "percent": 67.3
+  "percent": 70.0
  },
  {
   "group": "Windows Showing Audio Files",
@@ -85,9 +85,9 @@
  },
  {
   "group": "Score Editor",
-  "done": 134,
+  "done": 137,
   "total": 139,
-  "percent": 96.4
+  "percent": 98.6
  },
  {
   "group": "Event Editor",
@@ -157,9 +157,9 @@
  },
  {
   "group": "Tool Menu",
-  "done": 19,
+  "done": 20,
   "total": 29,
-  "percent": 65.5
+  "percent": 69.0
  },
  {
   "group": "Control Surface Install Window",

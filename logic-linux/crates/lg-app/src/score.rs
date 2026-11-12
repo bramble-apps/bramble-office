@@ -1194,14 +1194,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 draw_header(&headp, x, bottom, sp, fmt.clefs != crate::scoreset::Show::Hide, clef, octave, if fmt.keys != crate::scoreset::Show::Hide { key } else { nt::Key::default() }, (fmt.times != crate::scoreset::Show::Hide).then_some(sig));
                 // a click on the key or the time signature opens its window
-                header_clicks(app, ui, Rect::from_min_max(pos2(x, bottom - 4.0 * sp), pos2(head.max.x, bottom)).intersect(head), x, sp, key_at(line.b0 * bar_t as u32), sig, (rk, true), row.t);
+                header_clicks(app, ui, Rect::from_min_max(pos2(x, bottom - 4.0 * sp), pos2(head.max.x, bottom)).intersect(head), x, sp, key_at(line.b0 * bar_t as u32), sig, (rk, true), row.t, None);
             } else {
                 // (Clefs & Signatures: where clefs, keys and time signatures show)
                 let key_on = line.first || (st.key_every_line && fmt.keys.on(line.page_first, line.first));
                 let key_on = key_on && fmt.keys != crate::scoreset::Show::Hide;
                 let time_on = fmt.times.on(line.page_first, line.first);
                 draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, fmt.clefs.on(line.page_first, line.first), clef, octave, if key_on { key } else { nt::Key::default() }, time_on.then_some(sig));
-                header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false), row.t);
+                header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false), row.t, Some((row.staff as u8, line.b0 * bar_t as u32)));
             }
             if !linear && (rk == 0 || rows[rk - 1].t != row.t) {
                 let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first).map(|n| if !row.short.is_empty() && n != row.name { row.short.clone() } else { n }) };
@@ -2443,7 +2443,8 @@ pub fn apply_part(app: &mut App, st: &State, part: Part) -> bool {
 
 /// The staff header's key and time signature: a click (Linear view) or Control-click opens
 /// the Key Signature or Time Signature window.
-fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key: nt::Key, sig: (u8, u8), salt: (usize, bool), track: usize) {
+#[allow(clippy::too_many_arguments)]
+fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key: nt::Key, sig: (u8, u8), salt: (usize, bool), track: usize, clef_line: Option<(u8, u32)>) {
     if r.width() <= 0.0 {
         return;
     }
@@ -2466,7 +2467,21 @@ fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key
             None => crate::scorestyle::open_clef_menu(&ctx, resp.interact_pointer_pos().unwrap_or(r.min), track),
         }
     }
+    // (Wrapped / Page view: Control-click on the clef offers Select Clef…)
+    let flag = ui.scope_id().with(("sc-rc-clef", salt));
+    if resp.secondary_clicked() {
+        let on = resp.interact_pointer_pos().is_some_and(|pp| which(pp).is_none());
+        ctx.data_mut(|d| d.insert_temp(flag, on));
+    }
+    let rc_on_clef = ctx.data(|d| d.get_temp::<bool>(flag)).unwrap_or(false);
     resp.context_menu(|ui| {
+        if let (Some((staff, tick)), true) = (clef_line, rc_on_clef) {
+            if ui.button("Select Clef…").clicked() {
+                crate::scoreattr::open_select_clef(&ctx, track, staff, tick);
+                ui.close();
+            }
+            ui.separator();
+        }
         if ui.button("Edit Key Signature…").clicked() {
             crate::scoreinsp::open_dialog(&ctx, key_dlg.clone());
             ui.close();
@@ -2952,7 +2967,9 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             let head = (o.attr)(h.note).head;
             // (the Size attribute: the head drawn larger or smaller)
             let hsp = sp * lg_core::score::size_scale((o.attr)(h.note).size);
-            if o.vdef.head == 3 {
+            // (the gray head: grey on screen; in print only its stem, no head, accidental or tie)
+            let gray_out = head == lg_core::score::HEAD_GRAY && !o.show_hidden;
+            if o.vdef.head == 3 || gray_out {
                 // Head ▸ Hide
             } else if o.vdef.head == 1 || (o.vdef.head == 2 && (o.attr)(h.note).finger > 0) {
                 // Head ▸ Note Names / Finger Names: the name (or finger) inside the head
@@ -2966,7 +2983,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             } else {
                 notehead(p, c, hsp, it.value.base, col, REGION_PAPER);
             }
-            if let Some(a) = h.acc {
+            if let Some(a) = h.acc.filter(|_| !gray_out) {
                 if last_acc_pos != i32::MAX && (last_acc_pos - h.pos).abs() < 6 {
                     acc_x -= 1.1 * sp;
                 }
@@ -2987,7 +3004,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
                 let dy = if h.pos % 2 == 0 { -sp / 2.0 } else { 0.0 };
                 p.circle_filled(pos2(base_x + w + 0.5 * sp + d as f32 * 0.6 * sp + if shifted && it.stem_up { w } else { 0.0 }, c.y + dy), 0.18 * sp, col);
             }
-            if h.tie && !h.tie_hidden {
+            if h.tie && !h.tie_hidden && !gray_out {
                 let next = v.items.get(k + 1).and_then(|next| next.heads.iter().find(|x| x.pitch == h.pitch).map(|nh| (next, nh)));
                 // a chord's lower notes tie below, upper above; one note away from the stem
                 let below = match h.tie_dir {

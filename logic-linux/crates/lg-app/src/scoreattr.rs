@@ -373,6 +373,7 @@ pub fn edit_note(app: &mut App, t: usize, rix: usize, note: usize, what: &str, f
 
 pub fn window(app: &mut App, ctx: &egui::Context) {
     align_ask(app, ctx);
+    select_clef(app, ctx);
     let Some(w) = ctx.data(|d| d.get_temp::<Option<Win>>(win_id())).flatten() else { return };
     let Some(p) = app.project.as_ref() else { return };
     let Some(tr) = p.tracks.get(w.t) else { return };
@@ -436,6 +437,123 @@ pub fn scale_quantize(notes: &mut [lg_core::events::Note], sel: &[usize], scale:
         }
         n.pitch = if n.pitch > 0 && scale[((n.pitch - 1) % 12) as usize] { n.pitch - 1 } else { (n.pitch + 1).min(127) };
     }
+}
+
+/// The Filter pop-up's Option-click list: every MIDI track (id, its name in the Tracks area),
+/// to extract as a single part.
+pub fn part_choices(app: &App) -> Vec<(u64, String)> {
+    app.project.as_ref().map(|p| p.tracks.iter().filter(|t| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none())).map(|t| (t.extra.id, t.name.clone())).collect()).unwrap_or_default()
+}
+
+// ---------------------------------------------------------------- Auto split
+
+/// The channels Auto split gives a polyphonic style's notes: at or above the split point the
+/// first voice's MIDI channel, below it the second's (None: not a style with two channelled voices).
+pub fn split_channels(def: &lg_core::staffstyle::StaffStyleDef) -> Option<(u8, u8)> {
+    let a = def.voices.first().filter(|v| v.channel > 0)?;
+    let b = def.voices.get(1).filter(|v| v.channel > 0)?;
+    Some((a.channel - 1, b.channel - 1))
+}
+
+/// Settings ▸ Score ▸ Auto split notes in polyphonic staff styles: played notes recorded on a
+/// track with such a style take its voices' channels by Split Notes At.
+pub fn auto_split(app: &App, t: usize, notes: &mut [lg_core::events::Note]) {
+    if !app.logic_settings.on("Score /  / Auto split notes in polyphonic staff styles") {
+        return;
+    }
+    let Some((hi, lo)) = split_channels(&score::def_of(app, t)) else { return };
+    let at = app.logic_settings.get("Score /  / Split Notes At:").parse::<u8>().unwrap_or(60);
+    for n in notes.iter_mut() {
+        n.channel = if n.pitch >= at { hi } else { lo };
+    }
+}
+
+// ---------------------------------------------------------------- Part box memory
+
+/// A note value key command pressed again: plain → triplet → dotted → plain.
+pub fn next_value_form(triplet: bool, dotted: bool) -> (bool, bool) {
+    match (triplet, dotted) {
+        (false, false) => (true, false),
+        (true, _) => (false, true),
+        _ => (false, false),
+    }
+}
+
+fn group_id() -> egui::Id {
+    egui::Id::new("lg-score-partbox-memory")
+}
+
+/// Remembers a Part box symbol as its group's last chosen.
+pub fn group_remember(ctx: &egui::Context, part: score::Part) {
+    let (g, i) = part.index();
+    let mut m = ctx.data(|d| d.get_temp::<Vec<usize>>(group_id())).unwrap_or_default();
+    if m.len() <= g {
+        m.resize(g + 1, 0);
+    }
+    m[g] = i;
+    ctx.data_mut(|d| d.insert_temp(group_id(), m));
+}
+
+/// The symbol last chosen in group `g` (its first when none).
+pub fn group_recall(ctx: &egui::Context, g: usize) -> score::Part {
+    let i = ctx.data(|d| d.get_temp::<Vec<usize>>(group_id())).and_then(|m| m.get(g).copied()).unwrap_or(0);
+    score::Part::from_index(g, i.min(score::Part::GROUPS[g].saturating_sub(1)))
+}
+
+// ---------------------------------------------------------------- Select Clef
+
+fn clef_id() -> egui::Id {
+    egui::Id::new("lg-score-select-clef")
+}
+
+/// Opens the Select Clef window for a staff from a line's first bar.
+pub fn open_select_clef(ctx: &egui::Context, track: usize, staff: u8, tick: u32) {
+    ctx.data_mut(|d| d.insert_temp(clef_id(), Some((track, staff, tick, 0usize))));
+}
+
+/// Sets the clef from `tick` on (a clef change there, replacing one at the same place). One
+/// undo step.
+pub fn set_clef(app: &mut App, track: usize, staff: u8, tick: u32, name: &str) {
+    let Some(id) = app.project.as_ref().and_then(|p| p.tracks.get(track)).map(|t| t.extra.id) else { return };
+    app.checkpoint("Select Clef");
+    if let Some(p) = app.project.as_mut() {
+        let ts = p.score.track_mut(id);
+        ts.symbols.retain(|s| !(s.kind == lg_core::score::SymbolKind::Clef && s.tick == tick && s.staff == staff));
+        ts.symbols.push(lg_core::score::Symbol { tick, kind: lg_core::score::SymbolKind::Clef, text: name.to_string(), staff, ..Default::default() });
+    }
+    app.after_edit();
+}
+
+/// The Select Clef window: the clefs; OK or a double-click sets it.
+fn select_clef(app: &mut App, ctx: &egui::Context) {
+    let Some((track, staff, tick, mut k)) = ctx.data(|d| d.get_temp::<Option<(usize, u8, u32, usize)>>(clef_id())).flatten() else { return };
+    let mut open = true;
+    let mut done = None;
+    egui::Window::new("Select Clef").open(&mut open).collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
+        for (i, c) in score::CLEFS.iter().enumerate() {
+            let r = ui.selectable_label(i == k, *c);
+            if r.clicked() {
+                k = i;
+            }
+            if r.double_clicked() {
+                done = Some(true);
+            }
+        }
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("Cancel").clicked() {
+                done = Some(false);
+            }
+            if ui.button("OK").clicked() {
+                done = Some(true);
+            }
+        });
+    });
+    if done == Some(true) {
+        set_clef(app, track, staff, tick, score::CLEFS[k]);
+    }
+    let keep = open && done.is_none();
+    ctx.data_mut(|d| d.insert_temp(clef_id(), keep.then_some((track, staff, tick, k))));
 }
 
 // ---------------------------------------------------------------- automation in the Score
@@ -909,6 +1027,10 @@ mod tests {
         app.project.as_mut().unwrap().score.track_mut(id).symbols[0].dy = 30;
         assert_eq!(align_similar(&mut app, (id, 0), 1), 2);
         assert!(app.project.as_ref().unwrap().score.track(id).unwrap().symbols.iter().all(|x| x.dy == 30));
+        set_clef(&mut app, 0, 0, 3840, "Bass");
+        set_clef(&mut app, 0, 0, 3840, "Alto");
+        let clefs: Vec<String> = app.project.as_ref().unwrap().score.track(id).unwrap().symbols.iter().filter(|x| x.kind == lg_core::score::SymbolKind::Clef).map(|x| x.text.clone()).collect();
+        assert_eq!(clefs, ["Alto"], "a clef replaces one at the same place");
     }
 
     #[test]
@@ -954,6 +1076,29 @@ mod tests {
         let heads = [(t, r, 0, egui::Rect::from_center_size(egui::pos2(5.0, 5.0), egui::vec2(2.0, 2.0))), (t, r, 1, egui::Rect::from_center_size(egui::pos2(5.0, 15.0), egui::vec2(2.0, 2.0)))];
         assert_eq!(vs_apply(&mut app, &path, &heads), 1);
         assert_ne!(app.project.as_ref().unwrap().tracks[t].regions[r].notes[1].channel, ch);
+    }
+
+    #[test]
+    fn part_box_memory_and_value_cycle() {
+        assert_eq!(next_value_form(false, false), (true, false));
+        assert_eq!(next_value_form(true, false), (false, true));
+        assert_eq!(next_value_form(false, true), (false, false));
+        let ctx = egui::Context::default();
+        let p = score::Part::from_index(1, 2);
+        group_remember(&ctx, p);
+        assert_eq!(group_recall(&ctx, 1), p);
+        assert_eq!(group_recall(&ctx, 0), score::Part::from_index(0, 0));
+    }
+
+    #[test]
+    fn auto_split_channels() {
+        let mut def = lg_core::staffstyle::StaffStyleDef::dual("x");
+        assert!(def.voices.len() >= 2);
+        def.voices[0].channel = 1;
+        def.voices[1].channel = 2;
+        assert_eq!(split_channels(&def), Some((0, 1)));
+        def.voices[1].channel = 0;
+        assert_eq!(split_channels(&def), None);
     }
 
     #[test]

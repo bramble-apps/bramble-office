@@ -301,7 +301,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         names.extend(app.project.as_ref().map(|p| p.score.sets.iter().map(|s| s.name.clone()).collect::<Vec<_>>()).unwrap_or_default());
         let cur = st.set.map_or(0, |k| k + 1).min(names.len() - 1);
         let pr = Rect::from_min_max(pos2(r.min.x + 62.0, r.center().y - 11.0), pos2(r.max.x - 14.0, r.center().y + 11.0));
-        if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter"), cur, &names) {
+        // Option-click: the instruments, to extract one as a part (its track's name)
+        let ext_id = ui.scope_id().with("si-filter-extract");
+        if ui.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|pp| pr.contains(pp))) {
+            let alt = ui.input(|i| i.modifiers.alt);
+            ctx.data_mut(|d| d.insert_temp(ext_id, alt));
+        }
+        let extract = ctx.data(|d| d.get_temp::<bool>(ext_id)).unwrap_or(false);
+        let parts = crate::scoreattr::part_choices(app);
+        if extract {
+            let pn: Vec<String> = parts.iter().map(|x| x.1.clone()).collect();
+            let shown_now = st.score_set.as_ref().and_then(|v| (v.len() == 1).then(|| v[0])).and_then(|id| parts.iter().position(|x| x.0 == id)).unwrap_or(0);
+            if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter-parts"), shown_now, &pn) {
+                let id = parts[k].0;
+                st.set = None;
+                st.score_set = Some(vec![id]);
+                score::with_state(&ctx, |s| {
+                    s.set = None;
+                    s.score_set = Some(vec![id]);
+                });
+                ctx.data_mut(|d| d.insert_temp(ext_id, false));
+            }
+        } else if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter"), cur, &names) {
             st.set = (k > 0).then(|| k - 1);
             st.score_set = None;
             score::with_state(&ctx, |s| {
