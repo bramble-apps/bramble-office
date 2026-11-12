@@ -287,8 +287,12 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         // the footer: the extended parameters behind the disclosure arrow at the lower left
         crate::plughead::footer(ui, "Vintage Clav", Some(&mut ext_open));
         if ext_open {
-            pane.menu(ui, clav::MONO_MODE, "MIDI Mono Mode");
-            pane.knob(ui, clav::MONO_BEND, "Mono Mode Bend Range");
+            // the same rows as every plug-in's extended parameters
+            let list: Vec<lg_dsp::Param> = [clav::MONO_MODE, clav::MONO_BEND].iter().filter_map(|id| pane.params.iter().find(|p| p.id == *id).cloned()).collect();
+            let lv: Vec<f32> = list.iter().map(|p| pane.get(p.id)).collect();
+            let lt: Vec<Option<String>> = vec![None; list.len()];
+            let set = crate::pluginwin::controls(ui, &list, &lv, &lt, "clav-ext");
+            pane.set.extend(set);
         }
     });
     ctx.data_mut(|d| d.insert_temp(ext_id, ext_open));
