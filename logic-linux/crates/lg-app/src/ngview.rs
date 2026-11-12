@@ -4,8 +4,8 @@
 //!
 //! Positions were measured on Logic's own window (screenshots/ui-plugin-window-noise-gate.png, at
 //! 75 %): the numbers in `at` calls are that picture's pixels, turned into points by `Geo`.
-//! Logic's Characteristics pop-up and the filter's on/off button aren't shown: Studio's gate has
-//! no such parameters (its side-chain band is always on).
+//! The Characteristics pop-up (Bandpass / Band Reject) and the filter's power button, which dims
+//! the cutoff sliders when off, as Logic draws them.
 
 use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, pos2, vec2};
 use lg_dsp::Param;
@@ -239,6 +239,38 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, sl
         if let Some(nv) = slider(ui, &pt, &g, x0 + 2.0, x1 - 3.0, y + 40.0, id.with(("sl", pid)), &p, v, log) {
             set.push((pid, nv));
         }
+    }
+
+    // Characteristics: Bandpass / Band Reject (a click toggles, as the two-item pop-up does)
+    let reject = get(1002, set) >= 0.5;
+    let filter_on = get(1001, set) >= 0.5;
+    label("Characteristics", 1179.0, 322.0, Align2::LEFT_CENTER);
+    let ch = if reject { "Band Reject ⇕" } else { "Bandpass ⇕" };
+    let cr = Rect::from_min_size(g.at(1179.0, 336.0), vec2(g.pt(200.0), g.pt(40.0)));
+    pt.text(pos2(cr.min.x, cr.center().y), Align2::LEFT_CENTER, ch, look::regular(g.pt(30.0)), if filter_on { GREEN } else { GREEN.gamma_multiply(0.5) });
+    let cresp = ui.interact(cr, id.with("character"), Sense::click()).on_hover_text("Characteristics");
+    egui::Popup::menu(&cresp).show(|ui| {
+        for (k, n) in ["Bandpass", "Band Reject"].into_iter().enumerate() {
+            if ui.add(egui::Button::selectable(reject == (k == 1), n)).clicked() {
+                set.push((1002, k as f32));
+                ui.close();
+            }
+        }
+    });
+    // (filter off: the cutoffs are dimmed, as Logic's)
+    if !filter_on {
+        pt.rect_filled(g.rect(1170.0, 445.0, 1500.0, 665.0), 0.0, Color32::from_rgba_unmultiplied(0x27, 0x36, 0x4c, 150));
+    }
+    // the filter's power button, with the bracket joining the two cutoffs
+    let c = g.at(1139.0, 573.0);
+    let col = if filter_on { GREEN } else { LABEL };
+    pt.line_segment([g.at(1139.0, 510.0), g.at(1139.0, 548.0)], Stroke::new(g.pt(2.0), LABEL.gamma_multiply(0.5)));
+    pt.line_segment([g.at(1139.0, 598.0), g.at(1139.0, 636.0)], Stroke::new(g.pt(2.0), LABEL.gamma_multiply(0.5)));
+    pt.line_segment([g.at(1139.0, 510.0), g.at(1155.0, 510.0)], Stroke::new(g.pt(2.0), LABEL.gamma_multiply(0.5)));
+    pt.line_segment([g.at(1139.0, 636.0), g.at(1155.0, 636.0)], Stroke::new(g.pt(2.0), LABEL.gamma_multiply(0.5)));
+    crate::glyphs::paint(&pt, Rect::from_center_size(c, vec2(g.pt(30.0), g.pt(30.0))), crate::glyphs::ph::POWER, g.pt(26.0), col);
+    if ui.interact(Rect::from_center_size(c, vec2(g.pt(36.0), g.pt(36.0))), id.with("filter"), Sense::click()).on_hover_text("Filter").clicked() {
+        set.push((1001, if filter_on { 0.0 } else { 1.0 }));
     }
 
     // Monitor: the filtered key alone

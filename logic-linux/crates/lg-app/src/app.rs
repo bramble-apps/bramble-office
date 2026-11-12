@@ -1473,6 +1473,9 @@ impl App {
         }
         // (the Live Loops view commands from the menus and key commands; the grid's own buttons
         // and keys already reach liveloops.rs)
+        if crate::live::command(self, name) {
+            return true;
+        }
         if matches!(name, "Show/Hide Live Loops Grid" | "Switch between Live Loops Grid and Tracks View" | "Show Both, Live Loops Grid and Tracks View" | "Show Live Loops Grid only" | "Show Tracks View only" | "Toggle Grid Horizontal Zoom" | "Stop All Cells") && crate::liveloops::command(self, name) {
             return true;
         }
@@ -1538,6 +1541,8 @@ impl App {
             }
             "Show/Hide Musical Typing" | "Show Musical Typing" | "Open Musical Typing" => {
                 self.live.typing_open = !self.live.typing_open;
+                // (opened by this command: the computer keys, not the onscreen keyboard)
+                self.live.keyboard_mode = false;
                 if self.live.typing_open && self.live.input_names.is_empty() {
                     self.live.connect_midi(ctx);
                 }

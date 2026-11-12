@@ -11,7 +11,7 @@
 use crate::util::{Biquad, Coefs, Values, coef, db, plugin_impl};
 use lg_dsp::{Param, Unit};
 
-static PARAMS: [Param; 11] = [
+static PARAMS: [Param; 13] = [
     Param::new(0, "Threshold", -100.0, 0.0, -50.0, Unit::Db),
     Param::new(1, "Hysteresis", -20.0, 0.0, -3.0, Unit::Db),
     Param::new(2, "Reduction", -100.0, 0.0, -100.0, Unit::Db),
@@ -24,6 +24,9 @@ static PARAMS: [Param; 11] = [
     Param::new(9, "Monitor", 0.0, 1.0, 0.0, Unit::OnOff),
     // (our own id: Logic's Ducker-mode floats 10-14 aren't decoded)
     Param::menu(1000, "Mode", &["Noise Gate", "Ducker"], 0.0),
+    // (our own ids: the side-chain filter's on/off button and its Characteristics pop-up)
+    Param::new(1001, "Filter", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::menu(1002, "Characteristics", &["Bandpass", "Band Reject"], 0.0),
 ];
 
 pub struct NoiseGate {
@@ -153,13 +156,19 @@ impl lg_dsp::Effect for NoiseGate {
         // Ducker: the key (a voice on the side chain) turns the signal down by Reduction, and
         // the side chain is mixed into the output after processing
         let ducker = self.p.idx(1000) == 1;
+        // the side-chain filter: off = the key as it comes; Band Reject = what the band leaves out
+        let (filter, reject) = (self.p.on(1001), self.p.idx(1002) == 1);
         for i in 0..n {
             let (xl, xr) = match &side {
                 Some((a, b)) => (a.get(i).copied().unwrap_or(0.0), b.get(i).copied().unwrap_or(0.0)),
                 None => (left[i], right[i]),
             };
-            let kl = self.lp[0].run(self.hp[0].run(xl));
-            let kr = self.lp[1].run(self.hp[1].run(xr));
+            let (bl, br) = (self.lp[0].run(self.hp[0].run(xl)), self.lp[1].run(self.hp[1].run(xr)));
+            let (kl, kr) = match (filter, reject) {
+                (false, _) => (xl, xr),
+                (true, false) => (bl, br),
+                (true, true) => (xl - bl, xr - br),
+            };
             let a = kl.abs().max(kr.abs());
             self.peak = if a > self.peak { a } else { a + (self.peak - a) * self.peak_rel };
             if self.peak >= self.thr_open {
@@ -251,5 +260,25 @@ mod tests {
         let orig = loud.clone();
         g.process(&mut loud, &mut l2);
         assert!((loud[3000] - orig[3000]).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_side_chain_filter_band_or_its_reject() {
+        // a 100 Hz key, above the threshold: the band 1–20 kHz keeps it out (gate shut),
+        // Band Reject lets it in (gate open), the filter off lets it in
+        let tone: Vec<f32> = (0..9600).map(|i| 0.5 * (i as f32 * std::f32::consts::TAU * 100.0 / 48000.0).sin()).collect();
+        let run = |filter: f32, reject: f32| {
+            let mut g = NoiseGate::new(48000.0);
+            g.set(0, -30.0);
+            g.set(7, 1000.0);
+            g.set(1001, filter);
+            g.set(1002, reject);
+            let (mut l, mut r) = (tone.clone(), tone.clone());
+            g.process(&mut l, &mut r);
+            l[8000..].iter().fold(0f32, |m, x| m.max(x.abs()))
+        };
+        assert!(run(1.0, 0.0) < 0.01);
+        assert!(run(1.0, 1.0) > 0.4);
+        assert!(run(0.0, 0.0) > 0.4);
     }
 }

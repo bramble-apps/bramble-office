@@ -379,6 +379,25 @@ pub fn port_label(name: &str) -> String {
     n.to_string()
 }
 
+/// The Window menu's keyboard commands this file runs (build.rs and the checklist read it).
+pub const COMMANDS: &[&str] = &["Show Keyboard", "Show/Hide Keyboard"];
+
+/// Window ▸ Show Keyboard: the Musical Typing window in its onscreen keyboard mode (again: hides it).
+pub fn command(app: &mut App, name: &str) -> bool {
+    match name {
+        "Show Keyboard" | "Show/Hide Keyboard" => {
+            if app.live.typing_open && app.live.keyboard_mode {
+                app.live.typing_open = false;
+            } else {
+                app.live.typing_open = true;
+                app.live.keyboard_mode = true;
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 /// A note's name as Logic writes it (middle C = C3).
 fn c_name(n: u8) -> String {
     format!("C{}", n as i32 / 12 - 2)
