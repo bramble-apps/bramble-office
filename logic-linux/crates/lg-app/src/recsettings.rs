@@ -74,6 +74,36 @@ pub fn delay_regions(app: &App, regions: &mut [lg_core::Region]) {
     }
 }
 
+pub const CONVERT_RATE: &str = "Assets /  / Convert audio file sample rate when importing";
+
+/// Assets ▸ Convert audio file sample rate when importing: a WAV / AIFF at another rate than the
+/// project's is converted into the project's Audio Files folder (the copy is used; the original
+/// stays). Returns the file to use.
+pub fn import_converted(app: &App, path: &std::path::Path) -> std::path::PathBuf {
+    let rate = crate::audio::RATE as u32;
+    if !app.proj.on(CONVERT_RATE) {
+        return path.to_path_buf();
+    }
+    let Ok(a) = lg_audio::AudioFile::read(path) else { return path.to_path_buf() };
+    if a.rate == rate || a.frames() == 0 {
+        return path.to_path_buf();
+    }
+    let dir = crate::recording::audio_dir(app);
+    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Audio".into());
+    let out = dir.join(format!("{stem} ({} kHz).wav", rate as f32 / 1000.0));
+    if out.exists() {
+        return out;
+    }
+    let frames = (a.frames() as f64 * rate as f64 / a.rate as f64).round() as usize;
+    let mut b = lg_audio::AudioFile::new(rate, a.channels, lg_audio::stretch::resample(&a.data, a.channels, frames));
+    b.bits = a.bits.max(16);
+    b.float = a.float;
+    if std::fs::create_dir_all(&dir).is_err() || b.write(&out).is_err() {
+        return path.to_path_buf();
+    }
+    out
+}
+
 /// The lead-in before a recording: Some(ticks of pre-roll) when Pre-roll is chosen.
 pub fn pre_roll_ticks(app: &App, from: f64) -> Option<f64> {
     if app.proj.get(LEAD_IN) != "Pre-roll" {

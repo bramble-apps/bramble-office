@@ -421,6 +421,21 @@ fn overlap_of(s: &str) -> Option<Overlap> {
 
 const REPLACE: [(ReplaceMode, &str); 4] = [(ReplaceMode::RegionErase, "Region Erase"), (ReplaceMode::RegionPunch, "Region Punch"), (ReplaceMode::ContentErase, "Content Erase"), (ReplaceMode::ContentPunch, "Content Punch")];
 
+/// Limit Dragging to One Direction In: Piano Roll Editor and Score Editor: a note drag moves
+/// in time or in pitch, whichever way it first went.
+pub fn roll_drag_axis(app: &mut App, ui: &egui::Ui) -> Option<bool> {
+    if !app.logic_settings.on("General / Editing / Piano Roll Editor and Score Editor") {
+        return None;
+    }
+    if app.rp.axis.is_none() {
+        let d = ui.input(|i| i.pointer.press_origin().zip(i.pointer.latest_pos()).map(|(a, b)| b - a));
+        if let Some(d) = d.filter(|d| d.length() > 4.0) {
+            app.rp.axis = Some(d.x.abs() >= d.y.abs());
+        }
+    }
+    app.rp.axis
+}
+
 /// Rows Logic shows greyed until another setting allows them: the Low Latency Limit while
 /// Low Latency Monitoring Mode is on.
 pub fn enabled_now(app: &App, key: &str) -> bool {

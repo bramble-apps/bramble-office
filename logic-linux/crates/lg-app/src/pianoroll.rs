@@ -305,6 +305,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     dt = (dt / sixteenth).round() * sixteenth;
                 }
                 let dp = (pitch - from_pitch).round() as i32;
+                // (Settings ▸ General ▸ Editing ▸ Limit Dragging to One Direction In: Piano Roll)
+                let (dt, dp) = match crate::prefs::roll_drag_axis(app, ui) {
+                    Some(true) => (dt, 0),
+                    Some(false) => (0.0, dp),
+                    None => (dt, dp),
+                };
                 let orig = app.drag_notes.clone();
                 let sel = app.selected_notes.clone();
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
@@ -324,6 +330,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         if resp.drag_stopped() {
             app.drag = None;
+            app.rp.axis = None;
             app.midi.roll_drag = None;
             app.load_engine();
         }

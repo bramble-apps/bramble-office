@@ -791,6 +791,9 @@ impl App {
             self.tell(format!("Imported {n} track{}", if n == 1 { "" } else { "s" }));
             return;
         }
+        // (Project Settings ▸ Assets ▸ Convert audio file sample rate when importing)
+        let converted = crate::recsettings::import_converted(self, path);
+        let path = converted.as_path();
         let Some(seconds) = lg_core::project::wav_seconds(path).or_else(|| audio::load_audio(path).map(|s| s.len() as f64 / 2.0 / audio::RATE as f64)) else {
             self.tell("Couldn't read that audio file");
             return;
