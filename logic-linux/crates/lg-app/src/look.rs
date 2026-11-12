@@ -213,11 +213,104 @@ pub fn record_red() -> Color32 {
 /// A track's region colour by kind (Logic: software instruments green, audio blue, Drummer
 /// yellow), and the darker / lighter tones regions are drawn in.
 pub fn region_color(kind: lg_core::TrackKind) -> Color32 {
+    // (measured on Logic's MIDI region body, ui-tracks-with-pianoroll.png: #4DA043)
     match kind {
-        lg_core::TrackKind::Instrument => Color32::from_rgb(0x52, 0xc0, 0x3c),
-        lg_core::TrackKind::Audio => Color32::from_rgb(0x3d, 0x8f, 0xe0),
-        lg_core::TrackKind::Drummer => Color32::from_rgb(0xe3, 0xb3, 0x2b),
+        lg_core::TrackKind::Instrument => Color32::from_rgb(0x4d, 0xa0, 0x43),
+        lg_core::TrackKind::Audio => Color32::from_rgb(0x3b, 0x82, 0xc9),
+        lg_core::TrackKind::Drummer => Color32::from_rgb(0xd0, 0xa8, 0x2c),
     }
+}
+
+// ---- the Tracks area (measured on Logic 13 at @2x, win-tracks-1-instrument-track.png and
+// ui-tracks-global-tracks-markers-tempo-signature.png; values in points / sRGB)
+
+/// The track headers' column (and the empty space under the last header).
+pub fn ta_header() -> Color32 {
+    pick(0x262626, 0xe4e4e6)
+}
+/// The focused / selected track's header.
+pub fn ta_header_selected() -> Color32 {
+    pick(0x404040, 0xcfd6e6)
+}
+/// The line between headers (the selected header's grey, so it melts into a selected row).
+pub fn ta_header_sep() -> Color32 {
+    pick(0x404040, 0xd0d0d4)
+}
+/// The hairline after the number column.
+pub fn ta_header_line() -> Color32 {
+    if dark() { Color32::from_white_alpha(31) } else { Color32::from_black_alpha(26) }
+}
+/// The lanes (and the empty area under the tracks).
+pub fn ta_lane() -> Color32 {
+    pick(0x141414, 0xf4f4f6)
+}
+/// The selected track's lane.
+pub fn ta_lane_selected() -> Color32 {
+    pick(0x1b1b1b, 0xe6eaf2)
+}
+/// The line at the bottom of each lane.
+pub fn ta_lane_line() -> Color32 {
+    pick(0x202020, 0xdcdce0)
+}
+/// The bar lines over the track lanes (only where there are tracks).
+pub fn ta_bar_line() -> Color32 {
+    if dark() { Color32::from_white_alpha(36) } else { Color32::from_black_alpha(30) }
+}
+/// The ruler's strips, its cycle band while Cycle is off, its ticks.
+pub fn ta_ruler() -> Color32 {
+    pick(0x141414, 0xeeeef0)
+}
+pub fn ta_cycle_off() -> Color32 {
+    pick(0x303030, 0xd2d2d6)
+}
+pub fn ta_ruler_tick() -> Color32 {
+    if dark() { Color32::from_white_alpha(64) } else { Color32::from_black_alpha(70) }
+}
+pub fn ta_ruler_bar() -> Color32 {
+    if dark() { Color32::from_white_alpha(95) } else { Color32::from_black_alpha(100) }
+}
+/// The black seams: under the ruler, between headers and lanes.
+pub fn ta_seam() -> Color32 {
+    pick(0x000000, 0xb4b4b8)
+}
+
+fn to_hsl(c: Color32) -> (f32, f32, f32) {
+    let (r, g, b) = (c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0);
+    let (mx, mn) = (r.max(g).max(b), r.min(g).min(b));
+    let l = (mx + mn) / 2.0;
+    if mx == mn {
+        return (0.0, 0.0, l);
+    }
+    let d = mx - mn;
+    let s = if l > 0.5 { d / (2.0 - mx - mn) } else { d / (mx + mn) };
+    let h = if mx == r { (g - b) / d + if g < b { 6.0 } else { 0.0 } } else if mx == g { (b - r) / d + 2.0 } else { (r - g) / d + 4.0 };
+    (h / 6.0, s, l)
+}
+
+fn from_hsl(h: f32, s: f32, l: f32) -> Color32 {
+    let f = |n: f32| {
+        let k = (n + h * 12.0) % 12.0;
+        let a = s * l.min(1.0 - l);
+        ((l - a * (k - 3.0).min(9.0 - k).clamp(-1.0, 1.0)) * 255.0).round() as u8
+    };
+    Color32::from_rgb(f(0.0), f(8.0), f(4.0))
+}
+
+/// A region's light tint (Logic: the selected region's name bar and border, its notes and
+/// waveform): the colour's hue, much lighter and more saturated (#4DA043 → #CCFDCF).
+pub fn region_light(c: Color32) -> Color32 {
+    let (h, s, _) = to_hsl(c);
+    from_hsl(h, (s * 2.2).min(0.92), 0.9)
+}
+/// The dark text on a selected region's light name bar (#4DA043 → #2C6521).
+pub fn region_dark(c: Color32) -> Color32 {
+    let (h, s, _) = to_hsl(c);
+    from_hsl(h, (s * 1.25).min(0.6), 0.26)
+}
+/// A track icon's colour: the track colour, brighter (Logic's icon #63D34F over regions #4DA043).
+pub fn icon_color(c: Color32) -> Color32 {
+    let (h, s, l) = to_hsl(c);
+    from_hsl(h, (s * 1.45).min(0.62), (l * 1.25).min(0.62))
 }
 
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {

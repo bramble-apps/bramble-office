@@ -502,7 +502,7 @@ impl App {
             selected_notes: Vec::new(),
             drag_notes: Vec::new(),
             browser_w: BROWSER_W,
-            header_w: crate::tracks::HEADER_W,
+            header_w: crate::tracks::HEADER_W_DEFAULT,
             editor_h: EDITOR_H,
             mixer_h: 420.0,
             help_tag: None,

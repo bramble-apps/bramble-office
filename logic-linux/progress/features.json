@@ -71,6 +71,11 @@
  },
  {
   "area": "Main window",
+  "status": "Partial",
+  "feature": "Tracks area look (2026-11-12, studio-look; measured at @2x on win-tracks-1-instrument-track.png, ui-tracks-with-pianoroll.png, ui-tracks-global-tracks-markers-tempo-signature.png and compared headless at scale 2): 64 pt rows, 325 pt default headers, Logic's header layout (20 pt number column with its hairline, 26 pt icon, name at 72 pt, 20.5 \u00d7 17.5 pt M|S and R|I pills 6 pt apart, 20 pt volume groove with 16 pt knob, 24.5 pt pan knob with green value arc), Logic's greys (headers #262626 / selected #404040, lanes #141414 / selected #1B1B1B), no alternating lanes, bar lines on track lanes only; regions fill the row (opaque body, 3 pt corners, dark outline, light 11 pt name; selected: 18 pt light name bar with dark text and light border; notes and waveforms in the light tint), MIDI green #4DA043; ruler of two 20 pt strips (grey cycle band when Cycle is off, yellow when on, bar ticks, 8 pt beat ticks, start triangle), white playhead with Logic's grey pin head, 8 pt before bar 1; global tracks with 27 pt rows, a 155 pt Tempo track, grey / near-black lanes and filled (+). [ ] the header volume knob sits at our fader taper (0 dB \u2248 86 % of the groove, Logic \u2248 73 %); audio and Drummer default colours not measured (no reference); Logic's real track pictures (Studio's glyphs stand in); the local bar above (Edit / Functions / View) not remeasured"
+ },
+ {
+  "area": "Main window",
   "status": "Done",
   "feature": "Tracks local bar: Logic's Edit / Functions / View capsule, view buttons, tool pickers, the \u2026 menu; header row (+, duplicate, S). [ ] catch button, zoom sliders"
  },

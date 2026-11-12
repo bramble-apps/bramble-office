@@ -19,7 +19,8 @@ pub const BEAT_MAPPING: usize = 4;
 pub const SIGNATURE: usize = 5;
 pub const CHORD: usize = 6;
 
-const DEFAULT_H: [f32; 7] = [28.0, 28.0, 60.0, 64.0, 44.0, 28.0, 28.0];
+/// (Logic 13: 27 pt rows, a tall Tempo track; ui-tracks-global-tracks-markers-tempo-signature.png)
+const DEFAULT_H: [f32; 7] = [27.0, 27.0, 60.0, 155.0, 44.0, 27.0, 27.0];
 const MIN_H: f32 = 22.0;
 const MAX_H: f32 = 240.0;
 
