@@ -391,8 +391,12 @@ pub fn display(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Se
             ui.close();
         }
     });
-    // Delete: the selected taps go
-    if ui.rect_contains_pointer(area.union(idbar)) && ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && taps.len() > st.sel.len() {
+    // Delete: the selected taps go (while the display has the key focus: clicked last)
+    let focus_id = ui.scope_id().with("dd-key-focus");
+    if let Some(p) = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten()) {
+        ui.data_mut(|d| d.insert_temp(focus_id, area.union(idbar).contains(p)));
+    }
+    if ui.data(|d| d.get_temp::<bool>(focus_id)).unwrap_or(false) && ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) && taps.len() > st.sel.len() {
         for t in &st.sel {
             set.push((tap_id(*t, T_ON), 0.0));
         }

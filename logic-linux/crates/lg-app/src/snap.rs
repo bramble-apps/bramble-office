@@ -119,6 +119,10 @@ impl eframe::App for Snap {
                 }
                 self.app.after_edit();
             }
+            // LG_IMPORT=/path.wav: the file imported at the playhead (an audio region to check)
+            if let Ok(f) = std::env::var("LG_IMPORT") {
+                self.app.import_file(std::path::Path::new(&f));
+            }
             if let Ok(s) = std::env::var("LG_SELECT") {
                 let v: Vec<usize> = s.split_whitespace().filter_map(|x| x.parse().ok()).collect();
                 if let [t, r] = v[..] {

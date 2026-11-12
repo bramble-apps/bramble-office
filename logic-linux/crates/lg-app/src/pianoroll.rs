@@ -18,12 +18,7 @@ const ROLL_INSPECTOR_W: f32 = 220.0;
 const ROW: f32 = 13.0;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
-    // the key focus: the Piano Roll was clicked last (not counting menus and windows over it)
-    if let Some(pos) = ui.input(|i| (i.pointer.primary_pressed() || i.pointer.secondary_pressed()).then(|| i.pointer.interact_pos()).flatten()) {
-        if ui.ctx().layer_id_at(pos).is_none_or(|l| l.order == egui::Order::Background) {
-            app.midi.roll_focus = area.contains(pos);
-        }
-    }
+    // (the key focus, the area clicked last: focus.rs)
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));

@@ -1665,11 +1665,14 @@ fn view(app: &App, ctx: &egui::Context, f: impl FnOnce(&mut Store, usize, usize,
 /// Runs a Step Sequencer command; false when it isn't one or no pattern is shown.
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     // the Edit menu's Copy / Cut / Paste act on the selected steps
-    if matches!(name, "Copy" | "Cut" | "Paste") {
+    if matches!(name, "Copy" | "Cut" | "Paste" | "Delete") {
         let Some((t, r)) = current(app, ctx) else { return false };
         let has = with_store(ctx, |s| s.sel.is_some() || (name == "Paste" && !s.clip_steps.is_empty()));
-        if !has || !app.editor_rect.contains(app.pointer) {
+        if !has || !crate::focus::editor(app) {
             return false;
+        }
+        if name == "Delete" {
+            return command(app, ctx, "Clear Step");
         }
         if name == "Paste" {
             return command(app, ctx, "Paste Steps");

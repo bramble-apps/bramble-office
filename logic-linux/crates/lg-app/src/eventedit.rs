@@ -39,9 +39,11 @@ fn open(app: &App) -> bool {
     app.right_pane == Some(crate::app::RightPane::Lists) && app.list_tab == 0
 }
 
-pub fn hovered(app: &App, ctx: &egui::Context, p: Option<egui::Pos2>) -> bool {
-    open(app) && p.is_some_and(|p| state(ctx).rect.is_some_and(|r| r.contains(p)))
+/// The Event List's rect while it's shown (key focus: focus.rs).
+pub fn shown_rect(app: &App, ctx: &egui::Context) -> Option<egui::Rect> {
+    state(ctx).rect.filter(|_| open(app))
 }
+
 
 /// "1 2 3 4" (bar beat division tick, from 1) into ticks.
 pub fn parse_position(text: &str, sig: (u8, u8)) -> Option<u32> {

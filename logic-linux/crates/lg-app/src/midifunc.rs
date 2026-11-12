@@ -46,8 +46,6 @@ pub struct TransformWin {
 
 /// The MIDI editing state (App::midi).
 pub struct Midi {
-    /// The Piano Roll has the key focus (it was clicked last).
-    pub roll_focus: bool,
     /// A command is running from one of the Piano Roll's own menus.
     pub menu_roll: bool,
     /// Copied notes (song positions).
@@ -78,7 +76,6 @@ impl Default for Midi {
     fn default() -> Self {
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64 | 1);
         Midi {
-            roll_focus: false,
             menu_roll: false,
             clipboard: Vec::new(),
             transform: None,
@@ -147,10 +144,10 @@ fn is_midi(app: &App, t: usize, r: usize) -> bool {
     app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).is_some_and(|rg| rg.audio.is_none())
 }
 
-/// The Piano Roll is the place for the command: open on a MIDI region and focused (clicked
-/// last, under the pointer, or its own menu).
+/// The Piano Roll is the place for the command: open on a MIDI region and with the key focus
+/// (clicked last: focus.rs), or its own menu.
 pub fn roll_ctx(app: &App) -> bool {
-    app.selected_region.is_some_and(|(t, r)| is_midi(app, t, r)) && ((app.bottom == Bottom::PianoRoll && (app.midi.menu_roll || app.midi.roll_focus || app.editor_rect.contains(app.pointer))) || crate::evlist::focused(app))
+    app.selected_region.is_some_and(|(t, r)| is_midi(app, t, r)) && ((app.bottom == Bottom::PianoRoll && (app.midi.menu_roll || crate::focus::editor(app))) || crate::evlist::focused(app))
 }
 
 /// Changes notes with `f`: in the Piano Roll its region's selected notes (all when none are

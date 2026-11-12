@@ -130,7 +130,7 @@ pub fn snap_tick(app: &App, tick: f32, px_per_tick: f32) -> f32 {
     ((tick / g).round() * g).max(0.0)
 }
 
-fn ms_per_tick(app: &App) -> f64 {
+pub fn ms_per_tick(app: &App) -> f64 {
     60_000.0 / app.tempo().max(1.0) / lg_core::events::PPQ as f64
 }
 
@@ -681,7 +681,7 @@ pub fn tempo_lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x_of:
         app.after_edit();
     }
     // Delete removes the selected points (not the first)
-    if !app.arr.tempo_sel.is_empty() && resp.hovered() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
+    if !app.arr.tempo_sel.is_empty() && app.gc.focus == crate::globalclip::Focus::Tempo && crate::focus::tracks(app) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
         app.checkpoint("Delete Tempo Point");
         let sel = std::mem::take(&mut app.arr.tempo_sel);
         if let Some(p) = app.project.as_mut() {

@@ -236,7 +236,9 @@ pub fn commands_for(key: Key, m: Modifiers, focus: Focus) -> Vec<&'static str> {
     for ctrl in [false, true] {
         for area in areas(focus) {
             for b in bindings().iter().filter(|b| b.area == *area && b.ctrl == ctrl) {
-                if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
+                // (a ⌃ binding needs Ctrl held: ⌃⌫ is not ⌫)
+                let mods = if ctrl { m.command || m.ctrl } else { b.cmd == m.command };
+                if b.key == key && mods && b.alt == m.alt && b.shift == m.shift {
                     out.push(b.command.as_str());
                 }
             }
@@ -261,5 +263,13 @@ mod tests {
         assert!(commands_for(Key::ArrowLeft, Modifiers::COMMAND, Focus::Tracks).contains(&"Zoom Horizontal Out"));
         // ← selects the previous region in the tracks, the previous channel strip in the Mixer
         assert!(commands_for(Key::ArrowLeft, none, Focus::Mixer).contains(&"Select Previous (Left) Channel Strip"));
+        // a ⌃ binding never runs on the bare key: ⌫ alone is Edit ▸ Delete (focus.rs), not
+        // ⌃⌫ Delete Redundant Automation Points; Ctrl+⌫ tries ⌘⌫ (Delete Track) first
+        assert!(commands_for(Key::Backspace, none, Focus::Tracks).is_empty());
+        assert!(commands_for(Key::Backspace, none, Focus::PianoRoll).is_empty());
+        let ctrl = Modifiers::COMMAND | Modifiers::CTRL;
+        let c = commands_for(Key::Backspace, ctrl, Focus::Tracks);
+        assert_eq!(c.first(), Some(&"Delete Track"));
+        assert!(c.contains(&"Delete Redundant Automation Points"));
     }
 }

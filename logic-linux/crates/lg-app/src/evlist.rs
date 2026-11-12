@@ -1356,9 +1356,9 @@ fn paste(app: &mut App, st: &mut State, at: u32) {
     app.after_edit();
 }
 
-/// The Event List under the pointer (its key commands go to it).
+/// The Event List has the key focus (clicked last: focus.rs); its key commands go to it.
 pub fn focused(app: &App) -> bool {
-    crate::eventedit::hovered(app, &app.ctx, Some(app.pointer)) && region(app).is_some()
+    crate::focus::area(app) == crate::focus::Area::EventList && region(app).is_some()
 }
 
 /// Commands: the Event Float and time display anywhere; the edit and select commands while

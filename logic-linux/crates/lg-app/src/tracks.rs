@@ -290,12 +290,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let Some(proj) = app.project.clone() else { return };
     let rows = crate::trackarea::rows(app);
     let rows_h = crate::trackarea::total_h(&rows);
-    // Delete / Backspace over the tracks: the selection (regions, the marquee, automation points)
-    let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|h| Rect::from_min_max(headers.min, area.max).contains(h));
-    if over && !ui.ctx().egui_wants_keyboard_input() && !app.live_loops.focused && ui.input(|i| (i.key_pressed(egui::Key::Backspace) || i.key_pressed(egui::Key::Delete)) && i.modifiers.is_none()) {
-        let ctx = ui.ctx().clone();
-        app.edit_command(&ctx, "Delete");
-    }
+    // (Delete / Backspace: App::keys sends Edit ▸ Delete to the area with key focus, focus.rs)
     let hp = ui.painter_at(headers);
     let lp = ui.painter_at(lanes);
     let bgp = ui.painter_at(lanes_bg);
@@ -545,7 +540,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let xo = move |tick: f32| x_of(tick, scroll);
                 crate::regionops::draw_loops(app, &lp, rr, i, ri, &xo);
             }
-            draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted || crate::liveloops::takes_over(app, i), app);
+            if r.audio.is_some() {
+                // (its file, decoded once, for the waveform: regiontrim.rs)
+                crate::regiontrim::ensure_loaded(app, i, ri);
+            }
+            draw_region(&lp, rr, r, t.kind, sel, t.mute || r.muted || crate::liveloops::takes_over(app, i), app, (i, ri));
             crate::flex::draw_region(app, &lp, rr, i, ri);
             if let Some((rt, rri, text)) = app.renaming_region.as_mut().filter(|x| x.0 == i && x.1 == ri) {
                 let (rt, rri) = (*rt, *rri);
@@ -650,7 +649,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     let beat = bar_t / app.project.as_ref().map_or(4.0, |p| p.signature.0 as f32);
                     let free = ui.input(|i| i.modifiers.shift);
                     let end = if free { tick } else { crate::arranging::snap_tick(app, tick, px_per_tick) };
-                    let len = (end - r.start as f32).max(if free { 10.0 } else { beat.min(crate::arranging::snap_grid(app, px_per_tick)) }) as u32;
+                    let mut len = (end - r.start as f32).max(if free { 10.0 } else { beat.min(crate::arranging::snap_grid(app, px_per_tick)) }) as u32;
+                    // audio: not past its file's end (Option stretches instead)
+                    if !ui.input(|i| i.modifiers.alt) {
+                        if let Some(max) = crate::regiontrim::end_limit(app, i, ri) {
+                            len = len.min((max - r.start as f64).round().max(1.0) as u32);
+                        }
+                    }
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(i)).and_then(|t| t.regions.get_mut(ri)) {
                         rg.length = len;
                     }
@@ -672,6 +677,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             {
                 let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
                 let xo = move |tick: f32| x_of(tick, scroll);
+                // the left edge's lower half: trim the start (regiontrim.rs)
+                crate::regiontrim::left_edge(app, ui, rr, lanes, i, ri, &to, px_per_tick);
                 crate::regionops::loop_handle(app, ui, rr, lanes, i, ri, &to);
                 let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
                 if !app.show_automation {
@@ -916,7 +923,7 @@ fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
 }
 
 
-fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: TrackKind, selected: bool, muted: bool, app: &App) {
+fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: TrackKind, selected: bool, muted: bool, app: &App, at: (usize, usize)) {
     let base = crate::regionparams::region_color(app, region, kind);
     let base = if muted { Color32::from_gray(110) } else { base };
     // Logic (ui-tracks-with-pianoroll.png, …-markers-tempo-signature.png): an opaque body in the
@@ -947,15 +954,26 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
     let inner = Rect::from_min_max(pos2(r.min.x + 2.0, header.max.y + 2.0), pos2(r.max.x - 2.0, r.max.y - 3.0));
     let ink = light;
     if let Some(a) = &region.audio {
-        // the waveform (from the engine's decoded samples)
-        let samples = app.engine.lock().ok().and_then(|e| e.tracks.iter().flat_map(|t| t.audio.iter()).find(|(s, _)| *s == region.start).map(|(_, s)| s.clone()));
+        // the waveform: from the file at the region's offset, at the timeline's scale (trimming
+        // shows or hides audio, never squeezes it: regiontrim.rs)
+        let clip = p.clip_rect().intersect(inner);
+        if crate::regiontrim::draw_wave(app, p, r, inner, clip, at.0, at.1, ink) {
+            return;
+        }
+        // else the engine's render of the region (reversed, or the file not decoded)
+        let samples = app.engine.lock().ok().and_then(|e| e.tracks.get(at.0).and_then(|t| t.audio.iter().find(|(s, _)| *s == region.start).map(|(_, s)| s.clone())));
         let mid = inner.center().y;
         match samples {
             Some(s) if !s.is_empty() => {
                 // (Bramble's smoother waveforms: multi-resolution overviews, wavecache.rs)
-                // (Waveform Vertical Zoom: taller than the region, cut at its edges)
-                let clip = p.clip_rect().intersect(inner);
+                // (Waveform Vertical Zoom: taller than the region, cut at its edges); the render
+                // at its own length (seconds), not stretched over the region
+                let secs = (s.len() / 2) as f64 / crate::audio::RATE as f64;
+                let t0 = app.seconds_at(region.start as f64);
+                let end = crate::smarttempo::tick_at(app, t0 + secs) as f32;
+                let w = r.width() * (end - region.start as f32) / region.length.max(1) as f32;
                 let zr = Rect::from_center_size(inner.center(), vec2(inner.width(), inner.height() * app.keyx.wave_zoom));
+                let zr = Rect::from_min_max(pos2(r.min.x + 2.0, zr.min.y), pos2(r.min.x + w - 2.0, zr.max.y));
                 crate::wavecache::draw(&p.with_clip_rect(clip), zr, clip, &s, ink);
             }
             _ => {
@@ -973,6 +991,10 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
     let span = (hi - lo).max(12.0);
     let bar_t = app.bar_ticks() as f32;
     for n in &region.notes {
+        // (notes outside the region, trimmed off its edges, are kept but hidden: Logic)
+        if n.pos < region.start || n.pos >= region.start + region.length {
+            continue;
+        }
         let x0 = r.min.x + (n.pos.saturating_sub(region.start)) as f32 / bar_t * app.bar_w;
         let x1 = x0 + (n.len as f32 / bar_t * app.bar_w).max(1.5);
         if x0 > r.max.x {

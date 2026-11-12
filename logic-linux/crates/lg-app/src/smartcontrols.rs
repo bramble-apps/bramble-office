@@ -721,9 +721,9 @@ fn header_button(ui: &mut egui::Ui, r: Rect, id: &str, label: &str, on: bool, ti
     resp
 }
 
-/// Keys while the pointer is over Smart Controls: the Smart Controls group.
+/// Keys while Smart Controls have the key focus (clicked last): the Smart Controls group.
 pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
-    let over = app.ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| app.sc.rect.is_some_and(|r| r.contains(p))) && (app.sc.window || app.bottom == crate::app::Bottom::SmartControls);
+    let over = crate::focus::clicked_in(app, app.sc.rect) && (app.sc.window || app.bottom == crate::app::Bottom::SmartControls);
     if !over {
         return false;
     }

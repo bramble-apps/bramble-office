@@ -1823,7 +1823,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // Delete / Backspace with a symbol selected (text, bar sign, pedal marking): it goes
-    if (st.sel_symbol.is_some() || st.sel_bar.is_some() || st.sel_pedal.is_some()) && !ctx.egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
+    if (st.sel_symbol.is_some() || st.sel_bar.is_some() || st.sel_pedal.is_some()) && crate::focus::editor(app) && !ctx.egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
         ctx.data_mut(|d| d.insert_temp(state_id(), st.clone()));
         crate::scoreinsp::delete_selected(app);
         st = state(&ctx);
