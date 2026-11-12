@@ -480,6 +480,10 @@ pub fn save(p: &Project, original: &[u8]) -> Result<Saved, chunks::Error> {
     if tempo_now != tempo_was && tempo_now > 0 {
         set_tempo(&mut data, tempo_was, tempo_now);
     }
+    // the Project End marker (Song +0x1A4)
+    if let Some(end) = p.end.filter(|e| Some(*e) != before.end) {
+        crate::projend::write(&mut data, end);
+    }
     let (data, left_out) = crate::writeback::apply(p, &before, data);
     Ok(Saved { data, unsaved, unsaved_automation, left_out })
 }

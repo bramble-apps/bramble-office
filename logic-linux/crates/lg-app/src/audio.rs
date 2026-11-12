@@ -211,6 +211,10 @@ pub struct Engine {
     pub tracks: Vec<PlayTrack>,
     pub cycle: Option<(u32, u32)>,
     pub cycle_on: bool,
+    /// The Project End marker (ticks): playback stops there unless cycling or recording
+    /// (projend.rs); `ended` tells the app it did.
+    pub end: Option<u32>,
+    pub ended: bool,
     /// The metronome click (K): on every beat, higher on the bar's first (Logic's Klopfgeist).
     pub metronome: bool,
     /// Project Settings ▸ Metronome: what clicks and how it sounds.
@@ -308,7 +312,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), varispeed: 1.0, tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), varispeed: 1.0, tracks: Vec::new(), cycle: None, cycle_on: false, end: None, ended: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -785,6 +789,17 @@ impl Engine {
                     }
                 }
             }
+            // the Project End marker: playback stops there (cycling loops first; recording
+            // runs on and moves the end, projend.rs)
+            let cycling = self.cycle_on && self.cycle.is_some_and(|(a, b)| b > a);
+            if let Some(end) = self.end.filter(|_| !cycling && !self.rec.capturing && self.playing) {
+                if self.pos >= end as f64 {
+                    self.pos = end as f64;
+                    self.playing = false;
+                    self.all_off();
+                    self.ended = true;
+                }
+            }
         }
         // each strip in the routing's order (lg_dsp::routing): a track makes its sound (its
         // synthesizer and audio regions) and runs its EQ, an aux takes its bus; then the effects
@@ -1156,6 +1171,8 @@ pub fn bounce(tracks: Vec<PlayTrack>, tempo: f64, tempo_map: Vec<(u32, f64)>, so
 /// more at most, ending early once the sound has faded when `until_silent` (Bounce in Place,
 /// freeze files, exporting tracks and regions). Interleaved stereo at RATE.
 pub fn render_offline(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_silent: bool) -> Vec<f32> {
+    // (offline renders run to `to`, past the Project End marker if asked)
+    e.end = None;
     e.pos = from as f64;
     e.playing = true;
     let mut out = Vec::new();

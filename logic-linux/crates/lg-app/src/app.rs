@@ -604,7 +604,9 @@ impl App {
     }
 
     /// Shows a project and hands it to the engine.
-    pub fn set_project(&mut self, p: Project, demo: bool) {
+    pub fn set_project(&mut self, mut p: Project, demo: bool) {
+        // (no Project End read: Logic's 128 bars, or past a longer song)
+        lg_core::projend::fit(&mut p);
         // (a project's settings: Logic's defaults until projsettings::after_open reads its own)
         self.proj = Default::default();
         crate::projsettings::apply(self);
@@ -999,18 +1001,7 @@ impl App {
     pub fn choose_patch(&mut self, track: usize, category: &str, name: &str) {
         self.checkpoint("Change Patch");
         self.instrument_choice.insert(track, name.to_string());
-        let guess = match category {
-            "Bass" => 33,
-            "Guitar" => 25,
-            "Strings" => 48,
-            "Brass & Woodwind" => 61,
-            "Mallet" => 11,
-            "Synthesizer" => {
-                let p = program_for(name, TrackKind::Instrument);
-                if p == 0 { 81 } else { p }
-            }
-            _ => program_for(name, TrackKind::Instrument),
-        };
+        let guess = patch_program(category, name);
         self.set_program(track, guess, name);
         self.load_engine();
     }
@@ -1950,6 +1941,7 @@ impl App {
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);
         crate::autoext::frame(self, &ctx);
+        crate::projend::frame(self);
         crate::browser::frame(self, &ctx);
         crate::projfile::windows(self, &ctx);
         crate::surround_ui::windows(self, &ctx);
@@ -2104,6 +2096,22 @@ fn help_tag(ctx: &egui::Context, rows: &[(String, String)]) {
 
 /// A position as Logic writes it in help tags and the LCD: "bar beat division tick" (1-based;
 /// division = 1/16, ticks of 960 per quarter within it).
+/// A Library patch's General MIDI program (the SoundFont's stand-in) by its category.
+pub fn patch_program(category: &str, name: &str) -> u8 {
+    match category {
+        "Bass" => 33,
+        "Guitar" => 25,
+        "Strings" => 48,
+        "Brass & Woodwind" => 61,
+        "Mallet" => 11,
+        "Synthesizer" => {
+            let p = program_for(name, TrackKind::Instrument);
+            if p == 0 { 81 } else { p }
+        }
+        _ => program_for(name, TrackKind::Instrument),
+    }
+}
+
 pub fn bbdt(tick: u32, sig: (u8, u8)) -> String {
     let beat_t = lg_core::events::PPQ * 4 / sig.1.max(1) as u32;
     let bar_t = beat_t * sig.0.max(1) as u32;

@@ -115,6 +115,65 @@ pub fn toggle(app: &mut App, id: &str, path: &Path, gain: f32, segment: Option<(
     app.preview.looped = looped;
 }
 
+/// Samples made off the interface thread (`render`, e.g. a patch's chord), played once at
+/// `gain` as soon as they're ready; silent until then. `seconds`: how long the speaker shows.
+pub fn play_rendered(app: &mut App, id: &str, gain: f32, seconds: f64, render: impl FnOnce() -> Vec<f32> + std::marker::Send + 'static) {
+    app.preview.stop();
+    app.preview.set_volume(gain);
+    let ready = Arc::new(std::sync::OnceLock::new());
+    let r2 = ready.clone();
+    std::thread::spawn(move || {
+        let _ = r2.set(render());
+    });
+    let stop = Arc::new(AtomicBool::new(false));
+    app.output.add_source(Pending { ready, at: 0, waited: 0, gain: app.preview.gain.clone(), stop: stop.clone() });
+    app.preview.stop = Some(stop);
+    app.preview.playing = Some(id.to_string());
+    app.preview.started = app.ctx.input(|i| i.time);
+    app.preview.seconds = seconds;
+    app.preview.looped = false;
+}
+
+/// Samples still being made: silence until they're ready (two seconds at most), then them.
+struct Pending {
+    ready: Arc<std::sync::OnceLock<Vec<f32>>>,
+    at: usize,
+    waited: usize,
+    gain: Arc<AtomicU32>,
+    stop: Arc<AtomicBool>,
+}
+
+impl Iterator for Pending {
+    type Item = f32;
+    fn next(&mut self) -> Option<f32> {
+        if self.stop.load(Ordering::Relaxed) {
+            return None;
+        }
+        let Some(s) = self.ready.get() else {
+            self.waited += 1;
+            return (self.waited < 4 * crate::audio::RATE as usize).then_some(0.0);
+        };
+        let x = *s.get(self.at)?;
+        self.at += 1;
+        Some(x * f32::from_bits(self.gain.load(Ordering::Relaxed)))
+    }
+}
+
+impl rodio::Source for Pending {
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> rodio::ChannelCount {
+        std::num::NonZero::new(2).unwrap()
+    }
+    fn sample_rate(&self) -> rodio::SampleRate {
+        std::num::NonZero::new(crate::audio::RATE).unwrap()
+    }
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        None
+    }
+}
+
 /// A MIDI file's notes through the selected track's sound, at the project tempo.
 fn midi(app: &mut App, id: &str, path: &Path) {
     let Some(m) = std::fs::read(path).ok().and_then(|d| lg_core::midi::read(&d)) else {
