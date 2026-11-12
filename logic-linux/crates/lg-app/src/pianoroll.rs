@@ -13,7 +13,8 @@ use crate::look;
 const TABS_H: f32 = 40.0;
 const RULER_H: f32 = 34.0;
 const KEYS_W: f32 = 56.0;
-const LOCAL_H: f32 = 28.0;
+/// Logic's Piano Roll bar: 40 pt (ui-tracks-with-pianoroll.png).
+const LOCAL_H: f32 = 40.0;
 const ROLL_INSPECTOR_W: f32 = 220.0;
 const ROW: f32 = 13.0;
 
@@ -29,25 +30,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
     // the tabs: Piano Roll (on), Score, Smart Tempo
     let tabs = Rect::from_min_size(area.min, vec2(area.width(), TABS_H));
-    let names = ["Piano Roll", "Score", "Smart Tempo"];
-    let tw = 150.0;
-    let tx0 = tabs.center().x - tw * 1.5;
-    let pill = Rect::from_min_size(pos2(tx0, tabs.min.y + 7.0), vec2(tw * 3.0, 26.0));
-    p.rect_filled(pill, 8.0, look::group_bg());
-    for (i, n) in names.iter().enumerate() {
-        let r = Rect::from_min_size(pos2(tx0 + i as f32 * tw, tabs.min.y + 7.0), vec2(tw, 26.0));
-        if i == 0 {
-            p.rect_filled(r.shrink(2.0), 7.0, look::accent());
-        }
-        p.text(r.center(), Align2::CENTER_CENTER, *n, look::regular(13.0), if i == 0 { Color32::WHITE } else { look::text() });
-        if i > 0 && ui.interact(r, ui.scope_id().with(("edtab", i)), Sense::click()).clicked() {
-            if i == 1 {
-                crate::score::set_editor_tab(ui.ctx(), crate::score::EditorTab::Score);
-            } else {
-                app.tell(format!("The {n} editor isn't available yet"));
-            }
-        }
-    }
+    crate::edpane::tabs(app, ui, tabs, crate::score::EditorTab::PianoRoll);
     // a drummer region's Manual tab: the way back to the Session Player
     if let Some((t, _)) = app.selected_region {
         if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Drummer) {
@@ -71,28 +54,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let local = Rect::from_min_size(pos2(area.min.x, tabs.max.y), vec2(area.width(), LOCAL_H));
     p.rect_filled(local, 0.0, look::header_bg());
     p.hline(local.x_range(), local.max.y, Stroke::new(1.0, look::line()));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-        crate::menus::local_bar(app, ui, &[("Edit", "pianoroll-Edit"), ("Functions", "pianoroll-Functions"), ("View", "pianoroll-View")]);
-        let label = if app.roll_inspector { "Hide Inspector" } else { "Show Inspector" };
-        if ui.small_button("◧").on_hover_text(label).clicked() {
-            app.roll_inspector = !app.roll_inspector;
-        }
-        ui.add_space(8.0);
-        crate::artic::roll_popup(app, ui);
-        // the Piano Roll's own Snap (rollsnap.rs)
-        crate::rollsnap::popup(ui);
-        // Logic's Piano Roll buttons: MIDI Draw (the velocity lane), Collapse Mode, the scale guides
-        for (on, text, tip) in [(app.midi.velocity_lane, "Velocity", "Show / hide the velocity lane (MIDI Draw)"), (app.midi.collapse, "Collapse", "Collapse Mode: only the pitches the region uses"), (app.midi.scale_guides, "Scale", "Show the project key's scale on the rows")] {
-            if ui.add(egui::Button::new(egui::RichText::new(text).size(11.5)).selected(on).corner_radius(5.0)).on_hover_text(tip).clicked() {
-                match text {
-                    "Velocity" => app.midi.velocity_lane = !on,
-                    "Collapse" => app.midi.collapse = !on,
-                    _ => app.midi.scale_guides = !on,
-                }
-            }
-            ui.add_space(3.0);
-        }
-    });
+    // (laid out by its width: the buttons that don't fit are in "…"; barfit.rs)
+    crate::barfit::roll_bar(app, ui, local);
     let mut left = area.min.x;
     if app.roll_inspector && area.width() > 520.0 {
         let ir = Rect::from_min_max(pos2(area.min.x, local.max.y), pos2(area.min.x + ROLL_INSPECTOR_W, area.max.y));

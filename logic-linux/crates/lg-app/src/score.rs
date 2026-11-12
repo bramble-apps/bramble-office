@@ -24,7 +24,8 @@ use crate::look;
 use crate::scoreinsp::Dialog;
 
 const TABS_H: f32 = 40.0;
-const LOCAL_H: f32 = 28.0;
+/// 40 pt, as Logic's other local bars (the Piano Roll's).
+const LOCAL_H: f32 = 40.0;
 const RULER_H: f32 = 26.0;
 const HEAD_W: f32 = 120.0;
 
@@ -75,30 +76,7 @@ pub fn focus(app: &App, ctx: &egui::Context) -> crate::keymap::Focus {
 
 /// Logic's editor tabs, Piano Roll | Score | Smart Tempo, in one capsule; a click switches.
 pub fn tabs(app: &mut App, ui: &mut egui::Ui, area: Rect, current: EditorTab) {
-    let p = ui.painter_at(area);
-    let names = ["Piano Roll", "Score", "Smart Tempo"];
-    let tw = 150.0;
-    let tx0 = area.center().x - tw * 1.5;
-    let pill = Rect::from_min_size(pos2(tx0, area.min.y + 7.0), vec2(tw * 3.0, 26.0));
-    p.rect_filled(pill, 8.0, look::group_bg());
-    let on = match current {
-        EditorTab::Score => 1,
-        _ => 0,
-    };
-    for (i, n) in names.iter().enumerate() {
-        let r = Rect::from_min_size(pos2(tx0 + i as f32 * tw, area.min.y + 7.0), vec2(tw, 26.0));
-        if i == on {
-            p.rect_filled(r.shrink(2.0), 7.0, look::accent());
-        }
-        p.text(r.center(), Align2::CENTER_CENTER, *n, look::regular(13.0), if i == on { Color32::WHITE } else { look::text() });
-        if i != on && ui.interact(r, ui.scope_id().with("lg-sc").with(("edtab", i)), Sense::click()).clicked() {
-            match i {
-                0 => set_editor_tab(ui.ctx(), EditorTab::PianoRoll),
-                1 => set_editor_tab(ui.ctx(), EditorTab::Score),
-                _ => app.tell(format!("The {n} editor isn't available yet")),
-            }
-        }
-    }
+    crate::edpane::tabs(app, ui, area, current);
 }
 
 /// View ▸ View Mode.

@@ -258,7 +258,12 @@ pub(crate) fn top(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usi
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
     // ---- the title and the editor's bar
-    p.text(pos2(area.center().x, area.min.y + TITLE_H / 2.0), Align2::CENTER_CENTER, "Session Player", look::semibold(13.0), look::text());
+    // (a Bass / Keyboard Player's region: Session Player | Piano Roll | Score tabs; edpane.rs)
+    if kit.is_none() && crate::edpane::is_player_region(app) {
+        crate::edpane::tabs(app, ui, Rect::from_min_size(area.min, vec2(area.width(), TITLE_H)), crate::score::EditorTab::PianoRoll);
+    } else {
+        p.text(pos2(area.center().x, area.min.y + TITLE_H / 2.0), Align2::CENTER_CENTER, "Session Player", look::semibold(13.0), look::text());
+    }
     let bar = Rect::from_min_size(area.min + vec2(0.0, TITLE_H), vec2(area.width(), BAR_H));
     p.hline(area.x_range(), bar.min.y, Stroke::new(1.0, look::line()));
     chords_popup(app, ui, &p, Rect::from_min_size(bar.min + vec2(10.0, 3.0), vec2(84.0, 24.0)), t, r, regen);

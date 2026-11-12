@@ -39,6 +39,140 @@ fn shown(app: &App, part: &str) -> bool {
     !app.mix.hidden_parts.contains(part)
 }
 
+const KINDS: [(Kind, &str); 8] = [(Kind::Audio, "Audio"), (Kind::Inst, "Inst"), (Kind::Aux, "Aux"), (Kind::Bus, "Bus"), (Kind::Input, "Input"), (Kind::Output, "Output"), (Kind::MasterVca, "Master/VCA"), (Kind::Midi, "MIDI")];
+const VIEWS: [(MixerView, &str); 3] = [(MixerView::Single, "Single"), (MixerView::Tracks, "Tracks"), (MixerView::All, "All")];
+
+fn sof_text(app: &App) -> String {
+    match app.sends_on_faders {
+        Some(b) => format!("Sends on Faders: Bus {}", b + 1),
+        None => "Sends on Faders: Off".into(),
+    }
+}
+
+fn sof_items(app: &mut App, ui: &mut egui::Ui) {
+    if ui.add(egui::Button::selectable(app.sends_on_faders.is_none(), "Off")).clicked() {
+        app.sends_on_faders = None;
+        ui.close();
+    }
+    let mut buses: Vec<usize> = app.auxes.iter().map(|a| a.bus).collect();
+    buses.sort();
+    buses.dedup();
+    for b in buses {
+        if ui.add(egui::Button::selectable(app.sends_on_faders == Some(b), format!("Bus {}", b + 1))).clicked() {
+            app.sends_on_faders = Some(b);
+            ui.close();
+        }
+    }
+}
+
+fn toggle_kind(app: &mut App, ui: &egui::Ui, k: Kind) {
+    // (Option-click: only this type; again: all of them)
+    if ui.input(|i| i.modifiers.alt) {
+        crate::mixext::solo_kind(app, k);
+    } else {
+        crate::mixercmd::toggle_kind(app, k);
+    }
+}
+
+/// The Mixer bar: Edit / Options / View, then Sends on Faders, Single | Tracks | All, the
+/// channel-type filters and the strip width, as many as fit (the rest in "…", Logic's order).
+fn bar_controls(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
+    use crate::barfit::{cell, fit, more_button, text_popup, text_w, Slot, GAP, MORE_W};
+    let id = ui.scope_id().with("mixer-bar");
+    let cy = bar.center().y;
+    let mut end = bar.min.x + 10.0;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(bar.min.x + 14.0, bar.min.y + 3.0), pos2(bar.min.x + 320.0, bar.max.y - 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+        crate::menus::local_bar(app, ui, &[("Edit", "mixer-Edit"), ("Options", "mixer-Options"), ("View", "mixer-View")]);
+        end = ui.min_rect().max.x - 8.0;
+    });
+    let sof = sof_text(app);
+    let kinds_w: Vec<f32> = KINDS.iter().map(|(_, n)| text_w(ui, n) + 14.0).collect();
+    let widths = [GAP + text_w(ui, &sof) + 32.0, GAP + 186.0, GAP + kinds_w.iter().sum::<f32>() + 2.0 * KINDS.len() as f32, GAP + 36.0];
+    let shown = fit(&widths.iter().map(|&w| Slot { w, drop: 1 }).collect::<Vec<_>>(), bar.max.x - 10.0 - end, MORE_W + GAP);
+    let mut x = end;
+    let p = ui.painter().clone();
+    if shown[0] {
+        let r = cell(cy, x + GAP, widths[0] - GAP);
+        let resp = text_popup(ui, r, id.with("sof"), &sof, "Sends on Faders");
+        egui::Popup::menu(&resp).show(|ui| sof_items(app, ui));
+        x += widths[0];
+    }
+    if shown[1] {
+        let seg = cell(cy, x + GAP, 186.0);
+        p.rect_filled(seg, 6.0, look::group_bg());
+        for (k, (v, name)) in VIEWS.into_iter().enumerate() {
+            let r = Rect::from_min_size(pos2(seg.min.x + k as f32 * 62.0, seg.min.y), vec2(62.0, seg.height()));
+            let on = app.mixer_view == v;
+            if on {
+                p.rect_filled(r, 6.0, look::accent());
+            }
+            p.text(r.center(), Align2::CENTER_CENTER, name, look::regular(13.0), if on { Color32::WHITE } else { look::text() });
+            if ui.interact(r, id.with(("mixview", k)), Sense::click()).clicked() {
+                app.mixer_view = v;
+            }
+        }
+        x += widths[1];
+    }
+    if shown[2] {
+        let mut kx = x + GAP;
+        for (i, (k, label)) in KINDS.into_iter().enumerate() {
+            let r = cell(cy, kx, kinds_w[i]);
+            kx += kinds_w[i] + 2.0;
+            let on = !app.mix.hidden.contains(&k);
+            let resp = ui.interact(r, id.with(("kind", i)), Sense::click()).on_hover_text("Click: show or hide; Option-click: only this type");
+            p.rect_filled(r, 6.0, if on { look::button_on() } else { look::group_bg() });
+            p.text(r.center(), Align2::CENTER_CENTER, label, look::regular(12.0), if on { Color32::WHITE } else { look::text_dim() });
+            if resp.clicked() {
+                toggle_kind(app, ui, k);
+            }
+        }
+        x += widths[2];
+    }
+    if shown[3] {
+        let r = cell(cy, x + GAP, 36.0);
+        let narrow = app.mix.narrow;
+        if crate::barfit::icon_button(ui, r, id.with("width"), narrow, true, if narrow { "Wide Channel Strips" } else { "Narrow Channel Strips" }, crate::glyphs::ph::ARROWS_IN_LINE_HORIZONTAL).clicked() {
+            app.mix.narrow = !narrow;
+        }
+    }
+    if shown.iter().any(|s| !s) {
+        let mr = cell(cy, bar.max.x - 10.0 - MORE_W, MORE_W);
+        let resp = more_button(ui, mr, id.with("more"));
+        egui::Popup::menu(&resp).show(|ui| {
+            ui.set_min_width(220.0);
+            if !shown[0] {
+                ui.menu_button("Sends on Faders", |ui| sof_items(app, ui));
+            }
+            if !shown[1] {
+                ui.separator();
+                for (v, name) in VIEWS {
+                    if ui.add(egui::Button::selectable(app.mixer_view == v, name)).clicked() {
+                        app.mixer_view = v;
+                        ui.close();
+                    }
+                }
+            }
+            if !shown[2] {
+                ui.separator();
+                for (k, label) in KINDS {
+                    if ui.add(egui::Button::selectable(!app.mix.hidden.contains(&k), label)).clicked() {
+                        toggle_kind(app, ui, k);
+                    }
+                }
+            }
+            if !shown[3] {
+                ui.separator();
+                for (n, label) in [(true, "Narrow Channel Strips"), (false, "Wide Channel Strips")] {
+                    if ui.add(egui::Button::selectable(app.mix.narrow == n, label)).clicked() {
+                        app.mix.narrow = n;
+                        ui.close();
+                    }
+                }
+            }
+        });
+    }
+}
+
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
@@ -46,57 +180,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let Some(proj) = app.project.clone() else { return };
     app.mix.slot_rects.clear();
     // Logic's Mixer bar: Edit / Options / View, Sends on Faders, the filters, Single | Tracks | All
-    let bar = Rect::from_min_size(area.min, vec2(area.width(), 30.0));
+    // (40 pt as Logic's local bars; laid out by its width: what doesn't fit is in "…", in the
+    // order of Logic's Mixer "…" menu; barfit.rs)
+    let bar = Rect::from_min_size(area.min, vec2(area.width(), 40.0));
     p.rect_filled(bar, 0.0, look::header_bg());
     p.hline(bar.x_range(), bar.max.y, Stroke::new(1.0, look::line()));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-        crate::menus::local_bar(app, ui, &[("Edit", "mixer-Edit"), ("Options", "mixer-Options"), ("View", "mixer-View")]);
-        let sof = match app.sends_on_faders { Some(b) => format!("Sends on Faders: Bus {}", b + 1), None => "Sends on Faders: Off".into() };
-        ui.menu_button(sof, |ui| {
-            if ui.add(egui::Button::selectable(app.sends_on_faders.is_none(), "Off")).clicked() {
-                app.sends_on_faders = None;
-                ui.close();
-            }
-            let mut buses: Vec<usize> = app.auxes.iter().map(|a| a.bus).collect();
-            buses.sort();
-            buses.dedup();
-            for b in buses {
-                if ui.add(egui::Button::selectable(app.sends_on_faders == Some(b), format!("Bus {}", b + 1))).clicked() {
-                    app.sends_on_faders = Some(b);
-                    ui.close();
-                }
-            }
-        });
-        if app.mixer_view == MixerView::All {
-            ui.add_space(10.0);
-            for (k, label) in [(Kind::Audio, "Audio"), (Kind::Inst, "Inst"), (Kind::Aux, "Aux"), (Kind::Bus, "Bus"), (Kind::Input, "Input"), (Kind::Output, "Output"), (Kind::MasterVca, "Master/VCA"), (Kind::Midi, "MIDI")] {
-                let on = !app.mix.hidden.contains(&k);
-                let b = egui::Button::new(egui::RichText::new(label).size(11.0).color(if on { Color32::WHITE } else { look::text_dim() })).fill(if on { look::button_on() } else { look::group_bg() }).corner_radius(4.0);
-                if ui.add(b).clicked() {
-                    // (Option-click: only this type; again: all of them)
-                    if ui.input(|i| i.modifiers.alt) {
-                        crate::mixext::solo_kind(app, k);
-                    } else {
-                        crate::mixercmd::toggle_kind(app, k);
-                    }
-                }
-            }
-        }
-    });
-    // the view switch at the right
-    let seg = Rect::from_min_size(pos2(bar.max.x - 200.0, bar.min.y + 4.0), vec2(190.0, 22.0));
-    p.rect_filled(seg, 6.0, look::group_bg());
-    for (k, (v, name)) in [(MixerView::Single, "Single"), (MixerView::Tracks, "Tracks"), (MixerView::All, "All")].into_iter().enumerate() {
-        let r = Rect::from_min_size(pos2(seg.min.x + 2.0 + k as f32 * 62.0, seg.min.y + 2.0), vec2(62.0, 18.0));
-        let on = app.mixer_view == v;
-        if on {
-            p.rect_filled(r, 5.0, look::accent());
-        }
-        p.text(r.center(), Align2::CENTER_CENTER, name, look::regular(12.0), if on { Color32::WHITE } else { look::text() });
-        if ui.interact(r, ui.scope_id().with(("mixview", k)), Sense::click()).clicked() {
-            app.mixer_view = v;
-        }
-    }
+    bar_controls(app, ui, bar);
     let body = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), area.max);
     // which strips: Single = the selected track and what it feeds; Tracks = the tracks, the
     // auxes and VCAs in use; All = every channel strip; then the filters

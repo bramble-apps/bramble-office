@@ -190,50 +190,57 @@ pub fn alias_for_drag(app: &mut App, t: usize, r: usize) -> Option<usize> {
     Some(tr.regions.len() - 1)
 }
 
+/// The Snap menu's items (the Tracks area's Snap pop-up and the "…" menu's Snap submenu);
+/// `children`: the research's Snap menu, whose items after the modes are shown as they are.
+pub fn snap_items(app: &mut App, ui: &mut egui::Ui, children: &[crate::menus::Item]) {
+    ui.set_min_width(240.0);
+    if ui.button(if app.snap_on { "✓ Snap to Grid" } else { "Snap to Grid" }).clicked() {
+        app.snap_on = !app.snap_on;
+        ui.close();
+    }
+    ui.separator();
+    for m in SnapMode::ALL {
+        let on = app.arr.snap == m;
+        if ui.button(if on { format!("✓ {}", m.name()) } else { m.name().to_string() }).clicked() {
+            app.arr.snap = m;
+            ui.close();
+        }
+    }
+    ui.separator();
+    for (rel, n) in [(false, "Snap Regions to Absolute Value"), (true, "Snap Regions to Relative Value")] {
+        if ui.button(if app.arr.snap_relative == rel { format!("✓ {n}") } else { n.to_string() }).clicked() {
+            app.arr.snap_relative = rel;
+            ui.close();
+        }
+    }
+    // the rest of Logic's Snap menu, as before
+    let rest: Vec<crate::menus::Item> = children.iter().skip_while(|c| c.label != "Snap Flexed Audio Regions by First Downbeat").cloned().collect();
+    if !rest.is_empty() {
+        ui.separator();
+        crate::menus::show_items(app, ui, &rest);
+    }
+}
+
+/// The Drag menu's modes (the Tracks area's Drag pop-up and the "…" menu's Drag submenu).
+pub fn drag_items(app: &mut App, ui: &mut egui::Ui) {
+    for m in DragMode::ALL {
+        let on = app.arr.drag == m;
+        if ui.button(if on { format!("✓ {}", m.name()) } else { m.name().to_string() }).clicked() {
+            app.arr.drag = m;
+            ui.close();
+        }
+    }
+}
+
 /// The "…" menu's Snap and Drag submenus (their items share names with other menus).
 pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> bool {
     match it.label.as_str() {
         "Snap" if !it.children.is_empty() => {
-            ui.menu_button("Snap", |ui| {
-                ui.set_min_width(240.0);
-                if ui.button(if app.snap_on { "✓ Snap to Grid" } else { "Snap to Grid" }).clicked() {
-                    app.snap_on = !app.snap_on;
-                    ui.close();
-                }
-                ui.separator();
-                for m in SnapMode::ALL {
-                    let on = app.arr.snap == m;
-                    if ui.button(if on { format!("✓ {}", m.name()) } else { m.name().to_string() }).clicked() {
-                        app.arr.snap = m;
-                        ui.close();
-                    }
-                }
-                ui.separator();
-                for (rel, n) in [(false, "Snap Regions to Absolute Value"), (true, "Snap Regions to Relative Value")] {
-                    if ui.button(if app.arr.snap_relative == rel { format!("✓ {n}") } else { n.to_string() }).clicked() {
-                        app.arr.snap_relative = rel;
-                        ui.close();
-                    }
-                }
-                // the rest of Logic's Snap menu, as before
-                let rest: Vec<crate::menus::Item> = it.children.iter().skip_while(|c| c.label != "Snap Flexed Audio Regions by First Downbeat").cloned().collect();
-                if !rest.is_empty() {
-                    ui.separator();
-                    crate::menus::show_items(app, ui, &rest);
-                }
-            });
+            ui.menu_button("Snap", |ui| snap_items(app, ui, &it.children));
             true
         }
         "Drag" if !it.children.is_empty() => {
-            ui.menu_button("Drag", |ui| {
-                for m in DragMode::ALL {
-                    let on = app.arr.drag == m;
-                    if ui.button(if on { format!("✓ {}", m.name()) } else { m.name().to_string() }).clicked() {
-                        app.arr.drag = m;
-                        ui.close();
-                    }
-                }
-            });
+            ui.menu_button("Drag", |ui| drag_items(app, ui));
             true
         }
         _ => false,
