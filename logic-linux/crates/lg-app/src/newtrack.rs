@@ -645,6 +645,17 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     !made.is_empty()
 }
 
+/// Option-click (focused type) and Command-click (the other type) on the Add Tracks button: a
+/// new track with the default patch, whatever New Tracks was last set to.
+pub fn with_default_patch(app: &mut App, ctx: &egui::Context, opposite: bool) -> bool {
+    let keep = app.tm.nt.clone();
+    app.tm.nt.load_default_patch = true;
+    app.tm.nt.instrument = Inst::DefaultPatch;
+    let made = command(app, ctx, if opposite { "New Empty Track of Opposite Type" } else { "New Empty Track of Focused Type" });
+    app.tm.nt = keep;
+    made
+}
+
 fn main_icon(p: &egui::Painter, r: Rect, m: Main) {
     use crate::glyphs::{br, ph};
     let (green, yellow, blue) = (Color32::from_rgb(0x52, 0xc0, 0x3c), Color32::from_rgb(0xe3, 0xb3, 0x2b), Color32::from_rgb(0x3d, 0x8f, 0xe0));

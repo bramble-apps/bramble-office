@@ -361,7 +361,7 @@ pub fn history_window(app: &mut App, ctx: &egui::Context) {
     let (rows, cur) = history_rows(app);
     let mut go = None;
     let mut step = 0i32;
-    egui::Window::new("Undo History").id(egui::Id::unique("undo-history")).open(&mut open).default_size(vec2(300.0, 320.0)).resizable(true).collapsible(false).show(ctx, |ui| {
+    egui::Window::new("Undo History").id(egui::Id::unique("undo-history")).open(&mut open).default_pos(ctx.content_rect().center() - vec2(150.0, 160.0)).default_size(vec2(300.0, 320.0)).resizable(true).collapsible(false).show(ctx, |ui| {
         let list_h = (ui.available_height() - 34.0).max(80.0);
         egui::ScrollArea::vertical().max_height(list_h).auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
             if rows.is_empty() {

@@ -1285,7 +1285,7 @@ impl App {
             "New Software Instrument Track" | "New Audio Track" => {
                 let _ = self.key_command(ctx, cmd);
             }
-            c if c.starts_with("Undo ") => self.undo(),
+            c if c.starts_with("Undo ") && c != "Undo History…" => self.undo(),
             c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
             "1 Track as Audio File…" => crate::freeze::open_export_selected(self),
             "All MIDI Tracks as MIDI File…" => self.export_midi(),
