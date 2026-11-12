@@ -162,6 +162,9 @@ impl App {
 
     /// Moves notes with their region when it moves (notes are at song positions).
     fn shift_region(rg: &mut lg_core::Region, by: i64) {
+        if crate::regionparams::locked(rg) {
+            return;
+        }
         let to = (rg.start as i64 + by).max(0);
         let d = to - rg.start as i64;
         rg.start = to as u32;
@@ -202,6 +205,8 @@ impl App {
         if sel.is_empty() {
             return;
         }
+        // notes across a cut: Keep, Shorten or Split (asked when they reach well past it)
+        let Some(mode) = crate::regionparams::split_mode(self, &sel, cuts) else { return };
         self.checkpoint("Split Regions");
         let mut new_sel = Vec::new();
         if let Some(p) = self.project.as_mut() {
@@ -226,6 +231,7 @@ impl App {
                                 b.start = c;
                                 b.length = pc.start + pc.length - c;
                                 b.notes.retain(|n| n.pos >= c);
+                                crate::regionparams::split_notes(&mut a, &mut b, c, mode);
                                 // controllers (kept from the region's start) split with it
                                 lg_core::regions::split_events(&mut a.ext, &mut b.ext, c - pc.start);
                                 b.origin = pc.source.or(pc.origin);
@@ -256,10 +262,18 @@ impl App {
     /// Join: the selected regions on each track become one (Logic's Join Regions).
     fn join(&mut self) {
         let sel = self.region_selection();
+        if sel.len() == 1 && self.project.as_ref().is_some_and(|p| p.tracks[sel[0].0].regions[sel[0].1].props.looped) {
+            // a looped region joins with its loops
+            self.checkpoint("Join Regions");
+            crate::regionparams::before_join(self, &sel);
+            self.after_edit();
+            return;
+        }
         if sel.len() < 2 {
             return;
         }
         self.checkpoint("Join Regions");
+        crate::regionparams::before_join(self, &sel);
         let mut keep = Vec::new();
         if let Some(p) = self.project.as_mut() {
             let mut by_track: std::collections::BTreeMap<usize, Vec<usize>> = Default::default();

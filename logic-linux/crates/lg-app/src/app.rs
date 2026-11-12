@@ -293,6 +293,8 @@ pub struct App {
     pub mfx: crate::midifx::Ui,
     /// Snap and Drag modes, the tempo and signature editors (arranging.rs).
     pub arr: crate::arranging::State,
+    /// The Region inspector's extras, section clipboard, Region Solo, Gain tool (regionparams.rs).
+    pub rp: crate::regionparams::State,
     pub plugin_bypass: std::collections::HashSet<usize>,
     /// The instruments' Side Chain choices (sidechain.rs).
     pub side: crate::sidechain::State,
@@ -502,6 +504,7 @@ impl App {
             plugin_window: None,
             mfx: Default::default(),
             arr: Default::default(),
+            rp: Default::default(),
             mix: Default::default(),
             plugin_bypass: Default::default(),
             side: Default::default(),
@@ -633,10 +636,12 @@ impl App {
                     until = until.min(r.props.loop_to);
                 }
                 let mut offset = 0u32;
+                // (muted notes and notes past the region's end don't play; regparams: the
+                // region parameters as played)
+                let played = lg_core::regparams::play_notes(&r.props, &r.notes, r.start, r.start + r.length, &|tk| lg_core::regparams::key_shift(p, tk));
                 loop {
-                    // (muted notes and notes past the region's end don't play)
-                    for n in r.notes.iter().filter(|n| !n.muted && n.pos < r.start + r.length) {
-                        let mut n = r.props.apply(n, r.start);
+                    for n in &played {
+                        let mut n = *n;
                         let tp = self.track_props.get(&i).copied().unwrap_or_default();
                         if !tp.no_transpose {
                             n.pitch = (n.pitch as i16 + tp.transpose as i16).clamp(0, 127) as u8;
@@ -1377,7 +1382,7 @@ impl App {
         if crate::recording::command(self, name) {
             return true;
         }
-        if crate::stemsplit::command(self, name) {
+        if crate::stemsplit::command(self, name) || crate::regionparams::command(self, ctx, name) {
             return true;
         }
         let bar = self.bar_ticks() as f64;
@@ -1845,6 +1850,7 @@ impl App {
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
+        crate::regionparams::windows(self, &ctx);
         crate::hosting::manager(self, &ctx);
         crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);

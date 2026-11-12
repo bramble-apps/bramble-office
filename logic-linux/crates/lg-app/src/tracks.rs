@@ -495,7 +495,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
                         // Shift: no snapping (with Option-Shift: the alias's own drag)
                         let free = ui.input(|i| i.modifiers.shift && !i.modifiers.alt);
-                        let new = crate::arranging::snap_region(app, start as f32 + tick - from_tick, start, px_per_tick, free);
+                        let raw = start as f32 + tick - from_tick;
+                        let new = crate::arranging::snap_region(app, raw, start, px_per_tick, free);
+                        // Control: by divisions, Control-Shift: by ticks; Limit Dragging to One
+                        // Direction (regionparams.rs)
+                        let new = crate::regionparams::drag_snap(app, ui, raw, start).unwrap_or(new);
+                        let new = if crate::regionparams::drag_axis(app, ui) == Some(false) { start } else { new };
                         move_region(app, track, ri, new);
                         // across tracks: shown on the track under the pointer, moved there on release
                         let under = crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y).map(|r| r.t).filter(|&to| to != track);
@@ -517,6 +522,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 // the Drag mode (No Overlap, X-Fade, Shuffle…) on the track it ended on
                 if let Some(Drag::Region { track, region, start, .. }) = app.drag {
                     let under = resp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()).and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
+                    let under = under.filter(|_| crate::regionparams::drag_axis(app, ui) != Some(true));
+                    app.rp.axis = None;
                     let (t2, r2) = match under.filter(|&to| to != track).and_then(|to| crate::arranging::move_to_track(app, track, region, to).map(|k| (to, k))) {
                         Some(x) => x,
                         None => (track, region),
@@ -786,6 +793,10 @@ fn zoom_at(app: &mut App, factor: f32, at_x: f32, lanes_x: f32) {
 
 fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
     let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) else { return };
+    // (Lock Time Position: it stays)
+    if crate::regionparams::locked(rg) {
+        return;
+    }
     let d = start as i64 - rg.start as i64;
     if d == 0 {
         return;
@@ -798,7 +809,7 @@ fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
 
 
 fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: TrackKind, selected: bool, muted: bool, app: &App) {
-    let base = look::region_color(kind);
+    let base = crate::regionparams::region_color(app, region, kind);
     let base = if muted { Color32::from_gray(110) } else { base };
     let body = if selected { look::mix(base, Color32::WHITE, 0.25) } else { base };
     p.rect_filled(r, 4.0, body.gamma_multiply(0.9));
@@ -808,6 +819,8 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
         // an alias (or clone) shows an arrow, and its parent's name under its own when zoomed in
         let alias = region.ext.alias_of != 0;
         let name = if alias { format!("↪ {}", if region.name.is_empty() { &region.ext.parent_name } else { &region.name }) } else { region.name.clone() };
+        // (a muted region: its name after a small dot)
+        let name = if region.muted { format!("• {name}") } else { name };
         p.with_clip_rect(header).text(pos2(header.min.x + 4.0, header.center().y), Align2::LEFT_CENTER, name, look::semibold(10.5), Color32::from_rgb(0x10, 0x20, 0x10));
         if alias && r.height() > 40.0 && region.name != region.ext.parent_name && !region.ext.parent_name.is_empty() {
             p.with_clip_rect(r).text(pos2(header.min.x + 4.0, header.max.y + 7.0), Align2::LEFT_CENTER, &region.ext.parent_name, look::regular(9.5), Color32::from_rgb(0x10, 0x20, 0x10).gamma_multiply(0.7));

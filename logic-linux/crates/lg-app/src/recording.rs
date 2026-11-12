@@ -964,7 +964,9 @@ pub fn new_track_like(app: &mut App, t: usize) -> Option<usize> {
     Some(n)
 }
 
-fn push_region(app: &mut App, t: usize, r: Region) {
+fn push_region(app: &mut App, t: usize, mut r: Region) {
+    // (the Region inspector's MIDI / Audio Defaults)
+    crate::regionparams::apply_defaults(app, &mut r);
     app.rec.last.push((t, r.start));
     if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
         tr.regions.push(r);
