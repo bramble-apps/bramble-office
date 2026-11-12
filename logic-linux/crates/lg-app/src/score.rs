@@ -595,7 +595,7 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
         .notes
         .iter()
         .enumerate()
-        .filter(|(_, n)| !(hide_muted && n.muted) && row.def.in_range(n.pitch))
+        .filter(|(_, n)| !(hide_muted && n.muted) && row.def.in_range(n.pitch) && row.def.takes(n.channel))
         .filter(|(_, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             let staff = match a.staff {
@@ -662,7 +662,8 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 let (a, b) = (w[0], w[1]);
                 let (clef, _) = clef_at(app, row, a);
                 let key = nt::Key { fifths: p.score.key_at(a, first_key.fifths) };
-                let key = row.style.written_key(key);
+                // (a staff without its key signature: accidentals beside each note)
+                let key = if row.def.staffs.get(row.staff).is_none_or(|sd| sd.key) { row.style.written_key(key) } else { nt::Key::default() };
                 let mut opts = nt::Options::new(sig, key, nt::Quant::CHOICES[q].1, a, b);
                 opts.interpretation = interp;
                 opts.syncopation = synco;
@@ -804,7 +805,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         ui.cursor().min.x
     }).inner;
     // the Link button, the Tool menus and the zoom slider
-    crate::scoretools::bar(ui, local, menus_end + 8.0, &mut st);
+    crate::scoretools::bar(ui, local, menus_end + 8.5, &mut st);
     // (Link off: the Score keeps the region it shows; on, it follows the selection)
     if st.link == 0 {
         if st.pinned.is_none() {

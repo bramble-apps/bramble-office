@@ -170,6 +170,10 @@ impl StaffStyleDef {
         let takes = |v: &VoiceDef| v.channel == 0 || v.channel == channel + 1;
         self.voices.iter().position(|v| takes(v) && (v.split == 0 || pitch >= v.split)).or_else(|| self.voices.iter().position(takes)).unwrap_or(self.voices.len().saturating_sub(1))
     }
+    /// Whether any voice takes a note's MIDI channel (notes no voice takes are hidden, still played).
+    pub fn takes(&self, channel: u8) -> bool {
+        self.voices.iter().any(|v| v.channel == 0 || v.channel == channel + 1)
+    }
     /// The staff a note goes on.
     pub fn staff_for(&self, pitch: u8, channel: u8) -> usize {
         self.voices.get(self.voice_for(pitch, channel)).map_or(0, |v| v.staff as usize).min(self.staffs.len().saturating_sub(1))
@@ -328,6 +332,8 @@ mod tests {
         s.voices[0].channel = 2;
         // channel 2 (index 1) to the first voice, others to the second
         assert_eq!((s.voice_for(60, 1), s.voice_for(60, 0)), (0, 1));
+        s.voices[1].channel = 3;
+        assert!(s.takes(1) && s.takes(2) && !s.takes(0));
     }
 
     #[test]

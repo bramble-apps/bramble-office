@@ -16,7 +16,7 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     let p = ui.painter().clone();
     let y = bar.center().y;
     // Link: purple Same Level, yellow Content (double-click), grey off
-    let lr = Rect::from_center_size(pos2(x + 24.0, y), vec2(48.0, H));
+    let lr = Rect::from_min_size(pos2(x, y - H / 2.0), vec2(34.0, H));
     let resp = ui.interact(lr, ui.scope_id().with("sc-link"), Sense::click()).on_hover_text("Link: click for Same Level, double-click for Content");
     if resp.double_clicked() {
         st.link = 2;
@@ -25,20 +25,20 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     }
     let (fill, ink) = match st.link {
         1 => (Color32::from_rgb(0x8e, 0x4f, 0xc8), Color32::WHITE),
-        2 => (Color32::from_rgb(0xc9, 0xa2, 0x16), Color32::from_rgb(0x1e, 0x1e, 0x1e)),
+        2 => (Color32::from_rgb(0x9c, 0x83, 0x06), Color32::from_rgb(0xf0, 0xe8, 0xc4)),
         _ => (look::group_bg(), look::text()),
     };
     p.rect_filled(lr, 6.0, fill);
-    glyphs::paint(&p, lr, glyphs::ph::LINK, 17.0, ink);
+    glyphs::paint(&p, lr, glyphs::ph::LINK, 16.0, ink);
     // the Tool menus: one pill, left-click tool | Command-click tool, each with its ⌄
-    let tr = Rect::from_min_size(pos2(lr.max.x + 14.0, y - H / 2.0), vec2(116.0, H));
+    let tr = Rect::from_min_size(pos2(lr.max.x + 8.5, y - H / 2.0), vec2(84.0, H));
     p.rect_filled(tr, 6.0, look::group_bg());
-    p.vline(tr.center().x, tr.min.y + 5.0..=tr.max.y - 5.0, Stroke::new(1.0, look::line()));
+    p.vline(tr.center().x, tr.min.y + 5.0..=tr.max.y - 5.0, Stroke::new(1.0, Color32::from_gray(0x70)));
     for (k, half) in [Rect::from_min_max(tr.min, pos2(tr.center().x, tr.max.y)), Rect::from_min_max(pos2(tr.center().x, tr.min.y), tr.max)].into_iter().enumerate() {
         let cur = if k == 0 { st.tool } else { st.tool2 };
         let r = ui.interact(half, ui.scope_id().with(("sc-tool", k)), Sense::click()).on_hover_text(if k == 0 { "Left-click Tool" } else { "Command-click Tool" });
-        glyphs::paint(&p, Rect::from_center_size(pos2(half.min.x + 20.0, y), vec2(20.0, 20.0)), ICONS[cur], 16.0, look::text());
-        glyphs::paint(&p, Rect::from_center_size(pos2(half.max.x - 14.0, y), vec2(12.0, 12.0)), glyphs::ph::CARET_DOWN, 10.0, look::text());
+        glyphs::paint(&p, Rect::from_center_size(pos2(half.min.x + 14.0, y), vec2(16.0, 16.0)), ICONS[cur], 14.0, look::text());
+        glyphs::paint(&p, Rect::from_center_size(pos2(half.max.x - 11.0, y), vec2(10.0, 10.0)), glyphs::ph::CARET_DOWN, 9.0, look::text());
         egui::Popup::menu(&r).show(|ui| {
             for (t, n) in TOOLS.iter().enumerate() {
                 // the Camera works in Page view
@@ -55,9 +55,11 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
         });
     }
     // the zoom slider (vertical-zoom icon, track, knob)
-    let zr = Rect::from_min_size(pos2(bar.max.x - 112.0, y - H / 2.0), vec2(104.0, H));
-    glyphs::paint(&p, Rect::from_center_size(pos2(zr.min.x + 8.0, y), vec2(14.0, 14.0)), glyphs::ph::ARROWS_VERTICAL, 13.0, look::text());
-    let track = Rect::from_min_max(pos2(zr.min.x + 22.0, y - 2.0), pos2(zr.max.x - 4.0, y + 2.0));
+    // (Logic: a darker pill, 75 × 24 pt, 9 pt from the edge; a 48 pt track)
+    let zr = Rect::from_min_size(pos2(bar.max.x - 9.0 - 75.0, y - H / 2.0), vec2(75.0, H));
+    p.rect_filled(zr, 6.0, look::mix(look::header_bg(), Color32::BLACK, 0.2));
+    glyphs::paint(&p, Rect::from_center_size(pos2(zr.min.x + 10.0, y), vec2(14.0, 14.0)), glyphs::ph::ARROWS_VERTICAL, 12.0, look::text());
+    let track = Rect::from_min_max(pos2(zr.min.x + 22.0, y - 2.0), pos2(zr.min.x + 70.0, y + 2.0));
     let resp = ui.interact(track.expand2(vec2(6.0, 8.0)), ui.scope_id().with("sc-zoom"), Sense::click_and_drag());
     let lo = 3.0f32.ln();
     let hi = 24.0f32.ln();
@@ -69,9 +71,9 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     }
     let f = ((st.space.ln() - lo) / (hi - lo)).clamp(0.0, 1.0);
     let kx = track.min.x + f * track.width();
-    p.rect_filled(track, 2.0, look::mix(look::group_bg(), look::text_dim(), 0.3));
-    p.rect_filled(Rect::from_min_max(track.min, pos2(kx, track.max.y)), 2.0, look::accent());
-    p.circle_filled(pos2(kx, y), 7.0, Color32::from_gray(0xe8));
-    p.circle_stroke(pos2(kx, y), 7.0, Stroke::new(0.5, Color32::from_black_alpha(60)));
+    p.rect_filled(track, 2.0, Color32::from_gray(0x31));
+    p.rect_filled(Rect::from_min_max(track.min, pos2(kx, track.max.y)), 2.0, Color32::from_rgb(0x06, 0x65, 0xad));
+    p.circle_filled(pos2(kx, y), 7.5, Color32::from_gray(0xde));
+    p.circle_stroke(pos2(kx, y), 7.5, Stroke::new(0.5, Color32::from_black_alpha(60)));
     let _ = (Align2::CENTER_CENTER, score::TOOLS.len());
 }
