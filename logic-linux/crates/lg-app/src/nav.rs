@@ -411,9 +411,15 @@ pub fn follow_playhead(app: &mut App, visible_bars: f32) {
         if crate::prefs::catch_on_start(app) {
             app.catch_off = false;
         }
+        // stopped: a locate off screen (Go to Beginning, Go to End…) scrolls to the playhead
+        if std::mem::take(&mut app.reveal_playhead) {
+            let bar_pos = app.position() as f32 / app.bar_ticks() as f32;
+            app.scroll_x = follow(app.scroll_x, bar_pos, visible_bars, false);
+        }
         return;
     }
-    if app.catch_off && !app.nav.scroll_in_play {
+    let moved = std::mem::take(&mut app.reveal_playhead);
+    if app.catch_off && !app.nav.scroll_in_play && !moved {
         return;
     }
     let bar_pos = app.position() as f32 / app.bar_ticks() as f32;

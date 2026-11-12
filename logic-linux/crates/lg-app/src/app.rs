@@ -174,6 +174,8 @@ pub struct App {
     pub global_tracks: bool,
     /// Catch is off: the user scrolled while playing (back on at stop, or with `).
     pub catch_off: bool,
+    /// The playhead was moved (Go to Beginning, a locate…): the Tracks area scrolls to show it.
+    pub reveal_playhead: bool,
     /// Live Loops: the grid, its cells, what plays and what's queued.
     pub live_loops: crate::liveloops::State,
     /// Bramble's Piano Roll extras (ghost notes, more MIDI Draw lanes).
@@ -403,6 +405,7 @@ impl App {
             sur_ui: Default::default(),
             global_tracks: false,
             catch_off: false,
+            reveal_playhead: false,
             live_loops: Default::default(),
             rx: Default::default(),
             pal: crate::palette::State { name: crate::palette::load_saved(automated), ..Default::default() },
@@ -891,6 +894,7 @@ impl App {
             self.catch_off = false;
         }
         self.engine().locate(ticks);
+        self.reveal_playhead = true;
     }
 
     pub fn toggle_cycle(&mut self) {
