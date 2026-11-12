@@ -43,6 +43,8 @@ pub mod studio_bass;
 pub mod studio_piano;
 pub mod synthkit;
 pub mod ultrabeat;
+pub mod ultrabeat_dsp;
+pub mod ultrabeat_seq;
 pub mod es1;
 pub mod es_emp;
 pub mod efm1;
