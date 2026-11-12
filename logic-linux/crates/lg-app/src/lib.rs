@@ -44,6 +44,7 @@ pub mod meterball;
 pub mod scrollnum;
 pub mod autoarm;
 pub mod hotplug;
+pub mod rmb;
 pub mod syncmidi;
 pub mod syncmmc;
 pub mod linksync;

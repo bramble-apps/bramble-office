@@ -1079,7 +1079,8 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
     let roll = app.bottom == crate::app::Bottom::PianoRoll && app.editor_rect.contains(at);
     let tools: &[Tool] = if roll { &Tool::PIANO_ROLL } else { &Tool::TRACKS };
     let cur = if roll { app.roll_tool } else { app.tool };
-    let area = egui::Area::new(egui::Id::unique("tool-menu")).fixed_pos(at + vec2(8.0, 8.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
+    // (the Pointer tool, first, under the pointer)
+    let area = egui::Area::new(egui::Id::unique("tool-menu")).fixed_pos(at - vec2(24.0, 14.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_min_width(200.0);
             for t in tools {
@@ -1095,6 +1096,16 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
         });
     });
     if ui.input(|i| i.pointer.any_pressed()) && !ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p)) {
+        app.tool_menu_open = false;
+    }
+    // a tool's key picks it while the menu is open
+    let typed = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }));
+    if let Some(t) = typed.and_then(|s| crate::rmb::tool_for_key(tools, |t| t.key(), &s)) {
+        if roll {
+            app.roll_tool = t;
+        } else {
+            app.tool = t;
+        }
         app.tool_menu_open = false;
     }
 }
