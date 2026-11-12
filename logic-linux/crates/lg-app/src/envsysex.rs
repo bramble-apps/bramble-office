@@ -4,7 +4,7 @@
 //! Minus beside EOX, and the Checksum and Value (Position, Format) pop-ups at the lower right.
 //! Selected events take the fader's value; the others are sent as entered.
 
-use egui::{vec2, Color32, RichText};
+use egui::{Color32, RichText, vec2};
 use lg_core::environment::Id;
 use lg_core::sysexfader::{self as sx, SxEv, Tok};
 
@@ -24,7 +24,9 @@ pub fn midi_in(app: &mut App, ctx: &egui::Context, bytes: &[u8]) -> bool {
     let c = crate::envwin::clock(app);
     let outs = app.hub.env.env.input_sysex(bytes, c);
     crate::envwin::dispatch(app, ctx, outs);
-    let Some(id) = ctx.data(|d| d.get_temp::<Id>(midi_in_key())).filter(|i| app.hub.env.sub == Some((crate::envwin::Sub::SysEx, *i))) else { return false };
+    let Some(id) = ctx.data(|d| d.get_temp::<Id>(midi_in_key())).filter(|i| app.hub.env.sub == Some((crate::envwin::Sub::SysEx, *i))) else {
+        return false;
+    };
     let Some(ev) = sx::capture(bytes) else { return false };
     crate::envwin::checkpoint(app);
     let Some(o) = app.hub.env.env.obj_mut(id) else { return false };
@@ -47,42 +49,70 @@ pub fn window(app: &mut App, ui: &mut egui::Ui, id: Id) {
     let mut hex = ctx.data(|d| d.get_temp::<bool>(hex_key)).unwrap_or(false);
     let mut listening = ctx.data(|d| d.get_temp::<Id>(midi_in_key())) == Some(id);
     let cmd = ui.input(|i| i.modifiers.command);
-    // the event type buttons, View menu and MIDI In
+    // the View menu and MIDI In, then Logic's event type buttons (blue tiles, two rows of four)
     ui.horizontal(|ui| {
-        ui.menu_button("View", |ui| {
+        ui.menu_button("View ⌄", |ui| {
             if ui.checkbox(&mut hex, "SysEx in Hex Format").clicked() {
                 ui.close();
             }
         });
-        ui.separator();
-        for (k, n) in sx::EVENT_TYPES.iter().enumerate() {
-            let short = ["Note", "Prog", "PB", "Ctrl", "C-Press", "P-Press", "SysEx", "Meta"][k];
-            let r = ui.add(egui::Button::new(RichText::new(short).size(11.0)).min_size(vec2(0.0, 20.0))).on_hover_text(format!("{n}: Command-click to make a new event; click to select all of its type"));
-            if r.clicked() {
-                if cmd {
-                    for e in list.iter_mut() {
-                        e.set_sel(false);
-                    }
-                    let mut e = SxEv::new_of(k);
-                    if let SxEv::Sysex { toks, .. } = &mut e {
-                        sx::place(toks, o.p("sx_pos").max(0) as usize, o.p("sx_sum").max(0) as usize);
-                    }
-                    list.push(e);
-                } else {
-                    let probe = SxEv::new_of(k).status_name();
-                    for e in list.iter_mut() {
-                        let on = e.status_name() == probe;
-                        e.set_sel(on);
-                    }
-                }
-            }
-        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.selectable_label(listening, "MIDI In").on_hover_text("Captures SysEx messages from the MIDI inputs (change a parameter on the device)").clicked() {
+            if ui
+                .selectable_label(listening, "MIDI In")
+                .on_hover_text("Captures SysEx messages from the MIDI inputs (change a parameter on the device)")
+                .clicked()
+            {
                 listening = !listening;
             }
         });
     });
+    ui.add_space(4.0);
+    const LABELS: [&str; 8] = [
+        "Notes",
+        "Progr. Change",
+        "Pitch Bend",
+        "Controller",
+        "Aftertouch",
+        "Poly Aftertouch",
+        "Syst. Exclusive",
+        "Additional Info",
+    ];
+    const ORDER: [usize; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+    let bw = ((ui.available_width() - 3.0 * 6.0) / 4.0).max(60.0);
+    for row in 0..2 {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            for c in 0..4 {
+                let k = ORDER[row * 4 + c];
+                let btn = egui::Button::new(RichText::new(LABELS[k]).size(11.0).color(Color32::WHITE))
+                    .fill(look::accent().gamma_multiply(0.85))
+                    .corner_radius(4.0)
+                    .min_size(vec2(bw, 20.0));
+                let r = ui
+                    .add(btn)
+                    .on_hover_text(format!("{}: Command-click to make a new event; click to select all of its type", sx::EVENT_TYPES[k]));
+                if r.clicked() {
+                    if cmd {
+                        for e in list.iter_mut() {
+                            e.set_sel(false);
+                        }
+                        let mut e = SxEv::new_of(k);
+                        if let SxEv::Sysex { toks, .. } = &mut e {
+                            sx::place(toks, o.p("sx_pos").max(0) as usize, o.p("sx_sum").max(0) as usize);
+                        }
+                        list.push(e);
+                    } else {
+                        let probe = SxEv::new_of(k).status_name();
+                        for e in list.iter_mut() {
+                            let on = e.status_name() == probe;
+                            e.set_sel(on);
+                        }
+                    }
+                }
+            }
+        });
+    }
+    ui.add_space(4.0);
     ui.separator();
     // the list: Status, Ch, Num, Val and the SysEx bytes up to EOX
     let mut delete: Option<usize> = None;
@@ -90,7 +120,7 @@ pub fn window(app: &mut App, ui: &mut egui::Ui, id: Id) {
     egui::ScrollArea::vertical().max_height(ui.available_height() - 64.0).show(ui, |ui| {
         egui::Grid::new(("sysex-list", id)).num_columns(6).striped(true).spacing(vec2(10.0, 3.0)).show(ui, |ui| {
             for h in ["Status", "Ch", "Num", "Val", "Data", ""] {
-                ui.label(RichText::new(h).size(11.0).color(look::text_dim()));
+                ui.label(RichText::new(h).size(11.0).strong().color(look::text_dim()));
             }
             ui.end_row();
             let n = list.len();
@@ -191,40 +221,50 @@ pub fn window(app: &mut App, ui: &mut egui::Ui, id: Id) {
     }
     // Checksum and Value at the lower right
     ui.separator();
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let mut fmt = o.p("sx_fmt").max(0) as usize;
-        let mut pos = o.p("sx_pos").max(0) as usize;
-        let mut sum = o.p("sx_sum").max(0) as usize;
-        let positions = sx::positions();
-        egui::ComboBox::from_id_salt(("sx-fmt", id)).selected_text(sx::FORMATS[fmt.min(14)]).width(96.0).show_ui(ui, |ui| {
-            for (k, n) in sx::FORMATS.iter().enumerate() {
-                ui.selectable_value(&mut fmt, k, *n);
-            }
-        });
-        egui::ComboBox::from_id_salt(("sx-pos", id)).selected_text(positions[pos.min(positions.len() - 1)].clone()).width(70.0).show_ui(ui, |ui| {
-            for (k, n) in positions.iter().enumerate() {
-                ui.selectable_value(&mut pos, k, n);
-            }
-        });
-        ui.label("Value:");
-        ui.add_space(12.0);
-        egui::ComboBox::from_id_salt(("sx-sum", id)).selected_text(sx::CHECKSUMS[sum.min(5)]).width(110.0).show_ui(ui, |ui| {
-            for (k, n) in sx::CHECKSUMS.iter().enumerate() {
-                ui.selectable_value(&mut sum, k, *n);
-            }
-        });
-        ui.label("Checksum:");
-        if pos as i32 != o.p("sx_pos") || sum as i32 != o.p("sx_sum") {
-            // (VAL and SUM move in the selected SysEx strings)
-            for e in list.iter_mut() {
-                if let SxEv::Sysex { toks, sel: true } = e {
-                    sx::place(toks, pos, sum);
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(format!("{} Event{}", list.len(), if list.len() == 1 { "" } else { "s" }))
+                .size(11.0)
+                .color(look::text_dim()),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let mut fmt = o.p("sx_fmt").max(0) as usize;
+            let mut pos = o.p("sx_pos").max(0) as usize;
+            let mut sum = o.p("sx_sum").max(0) as usize;
+            let positions = sx::positions();
+            egui::ComboBox::from_id_salt(("sx-fmt", id)).selected_text(sx::FORMATS[fmt.min(14)]).width(96.0).show_ui(ui, |ui| {
+                for (k, n) in sx::FORMATS.iter().enumerate() {
+                    ui.selectable_value(&mut fmt, k, *n);
+                }
+            });
+            egui::ComboBox::from_id_salt(("sx-pos", id))
+                .selected_text(positions[pos.min(positions.len() - 1)].clone())
+                .width(70.0)
+                .show_ui(ui, |ui| {
+                    for (k, n) in positions.iter().enumerate() {
+                        ui.selectable_value(&mut pos, k, n);
+                    }
+                });
+            ui.label("Value:");
+            ui.add_space(12.0);
+            egui::ComboBox::from_id_salt(("sx-sum", id)).selected_text(sx::CHECKSUMS[sum.min(5)]).width(110.0).show_ui(ui, |ui| {
+                for (k, n) in sx::CHECKSUMS.iter().enumerate() {
+                    ui.selectable_value(&mut sum, k, *n);
+                }
+            });
+            ui.label("Checksum:");
+            if pos as i32 != o.p("sx_pos") || sum as i32 != o.p("sx_sum") {
+                // (VAL and SUM move in the selected SysEx strings)
+                for e in list.iter_mut() {
+                    if let SxEv::Sysex { toks, sel: true } = e {
+                        sx::place(toks, pos, sum);
+                    }
                 }
             }
-        }
-        o.params.insert("sx_fmt".into(), fmt as i32);
-        o.params.insert("sx_pos".into(), pos as i32);
-        o.params.insert("sx_sum".into(), sum as i32);
+            o.params.insert("sx_fmt".into(), fmt as i32);
+            o.params.insert("sx_pos".into(), pos as i32);
+            o.params.insert("sx_sum".into(), sum as i32);
+        });
     });
     ctx.data_mut(|d| {
         d.insert_temp(hex_key, hex);
