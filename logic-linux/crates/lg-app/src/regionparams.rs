@@ -53,6 +53,8 @@ pub const COMMANDS: &[&str] = &[
 ];
 
 pub const ROW: f32 = 29.0;
+/// Labels and values (Logic 13's inspector, measured: 11 pt).
+const FONT: f32 = 11.0;
 
 /// What Split does with notes across the cut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +90,8 @@ pub struct State {
     pub ask_global: Option<String>,
     /// Limit Dragging to One Direction: the drag's axis once chosen (true: horizontal).
     pub axis: Option<bool>,
+    /// Drawing in the Region Inspector Float (its header has no disclosure).
+    in_float: bool,
 }
 
 // ---------------------------------------------------------------- the parameters
@@ -261,12 +265,18 @@ fn ms_per_tick(app: &App) -> f32 {
 
 // ---------------------------------------------------------------- drawing
 
+/// Logic 13's inspector card (measured on Apple's screenshot: window 39, card 28, rows split
+/// by a 42 hairline, value boxes 20, check boxes 50 grey).
+fn card_bg() -> Color32 {
+    look::mix(look::pane_bg(), Color32::BLACK, 0.25)
+}
+
 fn row_line(p: &egui::Painter, x: egui::Rangef, y: f32) {
-    p.hline(x, y, Stroke::new(1.0, look::line().gamma_multiply(0.6)));
+    p.hline(x, y, Stroke::new(1.0, look::mix(card_bg(), Color32::WHITE, 0.06)));
 }
 
 fn label(p: &egui::Painter, area: Rect, y: f32, indent: bool, text: &str) {
-    p.text(pos2(area.min.x + if indent { 36.0 } else { 15.0 }, y + ROW / 2.0), Align2::LEFT_CENTER, text, look::regular(12.5), look::text());
+    p.text(pos2(area.min.x + if indent { 18.0 } else { 7.0 }, y + ROW / 2.0), Align2::LEFT_CENTER, text, look::regular(FONT), look::text());
 }
 
 /// A value box (Logic 13's dark rounded field: the number, its unit dimmed), with an optional
@@ -274,17 +284,17 @@ fn label(p: &egui::Painter, area: Rect, y: f32, indent: bool, text: &str) {
 #[allow(clippy::too_many_arguments)]
 fn value_box(ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, v: f32, p: P, unit: &str, shown: &dyn Fn(f32) -> String, menu: &[(String, f32)], star: bool, scale: f32) -> Option<f32> {
     let has_menu = !menu.is_empty();
-    let right = area.max.x - if has_menu { 30.0 } else { 9.0 };
+    let right = area.max.x - if has_menu { 26.0 } else { 5.0 };
     let w = if unit.len() > 2 { 82.0 } else { 64.0 };
     let b = Rect::from_min_max(pos2(right - w, y + 4.5), pos2(right, y + ROW - 4.5));
     let pnt = ui.painter().clone();
     pnt.rect_filled(b, 5.0, look::lcd_bg());
-    let uw = if unit.is_empty() { 0.0 } else { pnt.layout_no_wrap(unit.to_string(), look::regular(12.5), look::text_dim()).size().x + 4.0 };
+    let uw = if unit.is_empty() { 0.0 } else { pnt.layout_no_wrap(unit.to_string(), look::regular(FONT), look::text_dim()).size().x + 4.0 };
     if !unit.is_empty() {
-        pnt.text(pos2(b.max.x - 6.0, b.center().y), Align2::RIGHT_CENTER, unit, look::regular(12.5), look::text_dim());
+        pnt.text(pos2(b.max.x - 6.0, b.center().y), Align2::RIGHT_CENTER, unit, look::regular(FONT), look::text_dim());
     }
     if star {
-        pnt.text(pos2(b.min.x - 6.0, b.center().y), Align2::RIGHT_CENTER, "*", look::regular(12.5), look::text_dim());
+        pnt.text(pos2(b.min.x - 6.0, b.center().y), Align2::RIGHT_CENTER, "*", look::regular(FONT), look::text_dim());
     }
     let (lo, hi, step) = range(p);
     let mut val = v * scale;
@@ -294,7 +304,7 @@ fn value_box(ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, v: f32, p: P, 
         out = Some(val / scale);
     }
     if has_menu {
-        let cr = Rect::from_center_size(pos2(area.max.x - 18.0, b.center().y), vec2(16.0, 20.0));
+        let cr = Rect::from_center_size(pos2(area.max.x - 14.0, b.center().y), vec2(16.0, 20.0));
         let resp = ui.interact(cr, id.with("menu"), Sense::click());
         crate::glyphs::paint(&pnt, cr, crate::glyphs::ph::CARET_UP_DOWN, 12.0, if resp.hovered() { look::text() } else { look::text_dim() });
         egui::Popup::menu(&resp).show(|ui| {
@@ -314,8 +324,8 @@ fn group_header(ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, name: &str,
     let r = Rect::from_min_max(pos2(area.min.x, y), pos2(area.max.x, y + ROW));
     let resp = ui.interact(r, id, Sense::click());
     let p = ui.painter();
-    p.text(pos2(area.min.x + if indent { 36.0 } else { 15.0 }, r.center().y), Align2::LEFT_CENTER, name, look::regular(12.5), look::text_dim());
-    let cr = Rect::from_center_size(pos2(area.max.x - 18.0, r.center().y), vec2(14.0, 14.0));
+    p.text(pos2(area.min.x + if indent { 18.0 } else { 7.0 }, r.center().y), Align2::LEFT_CENTER, name, look::regular(FONT), look::text_dim());
+    let cr = Rect::from_center_size(pos2(area.max.x - 14.0, r.center().y), vec2(14.0, 14.0));
     crate::glyphs::paint(p, cr, if open { crate::glyphs::ph::CARET_DOWN } else { crate::glyphs::ph::CARET_RIGHT }, 12.0, if resp.hovered() { look::text() } else { look::text_dim() });
     resp.clicked()
 }
@@ -325,10 +335,20 @@ fn check_row(app: &mut App, ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id,
     let mut on = get(app, tg);
     let star = differs(app, tg, &|a, x| get(a, x).to_string());
     if star {
-        ui.painter().text(pos2(area.max.x - 26.0, y + ROW / 2.0), Align2::RIGHT_CENTER, "*", look::regular(12.5), look::text_dim());
+        ui.painter().text(pos2(area.max.x - 24.0, y + ROW / 2.0), Align2::RIGHT_CENTER, "*", look::regular(FONT), look::text_dim());
     }
-    let r = Rect::from_min_max(pos2(area.max.x - 60.0, y + 2.0), pos2(area.max.x - 7.0, y + ROW - 2.0));
-    if crate::widgets::check_slot(ui, r, id, &mut on) {
+    // Logic 13's box: a rounded grey square, blue with a white tick when on
+    let r = Rect::from_min_max(pos2(area.max.x - 60.0, y + 2.0), pos2(area.max.x - 3.0, y + ROW - 2.0));
+    let resp = ui.interact(r, id, Sense::click());
+    let b = Rect::from_center_size(pos2(area.max.x - 12.0, r.center().y), vec2(14.0, 14.0));
+    let pnt = ui.painter();
+    pnt.rect_filled(b, 4.0, if on { Color32::from_rgb(0x3d, 0x8b, 0xf7) } else { look::mix(look::pane_bg(), Color32::WHITE, if resp.hovered() { 0.14 } else { 0.08 }) });
+    if on {
+        pnt.line_segment([b.center() + vec2(-3.5, 0.0), b.center() + vec2(-1.0, 3.0)], Stroke::new(1.8, Color32::WHITE));
+        pnt.line_segment([b.center() + vec2(-1.0, 3.0), b.center() + vec2(4.0, -3.5)], Stroke::new(1.8, Color32::WHITE));
+    }
+    if resp.clicked() {
+        on = !on;
         crate::audioedit::checkpoint(app, "Region Parameter");
         for x in targets(app, tg) {
             set(app, x, on);
@@ -350,7 +370,7 @@ fn num_row(app: &mut App, ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, t
 
 fn choice_row(app: &mut App, ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, tg: Tg, indent: bool, name: &str, cur: usize, names: &[&str]) -> Option<usize> {
     label(ui.painter(), area, y, indent, name);
-    let r = Rect::from_min_max(pos2(area.max.x - 150.0, y + 3.0), pos2(area.max.x - 9.0, y + ROW - 3.0));
+    let r = Rect::from_min_max(pos2(area.max.x - 150.0, y + 3.0), pos2(area.max.x - 3.0, y + ROW - 3.0));
     let _ = (app, tg);
     crate::widgets::choice_slot(ui, r, id, cur, names)
 }
@@ -379,7 +399,7 @@ fn bbdt_row(app: &mut App, ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id, 
     let base = if length { 0 } else { 1 };
     let parts = [v / bar + base, v % bar / beat + base, v % beat / div + base, v % div + base];
     let w = 4.0 * 34.0;
-    let b = Rect::from_min_max(pos2(area.max.x - 9.0 - w, y + 4.5), pos2(area.max.x - 9.0, y + ROW - 4.5));
+    let b = Rect::from_min_max(pos2(area.max.x - 5.0 - w, y + 4.5), pos2(area.max.x - 5.0, y + ROW - 4.5));
     ui.painter().rect_filled(b, 5.0, look::lcd_bg());
     let mut newv = None;
     for (k, part) in parts.iter().enumerate() {
@@ -441,7 +461,7 @@ fn color_row(app: &mut App, ui: &mut egui::Ui, area: Rect, y: f32, id: egui::Id,
     label(ui.painter(), area, y, false, "Color");
     let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return };
     let kind = app.project.as_ref().map_or(TrackKind::Instrument, |p| p.tracks[t].kind);
-    let b = Rect::from_min_max(pos2(area.max.x - 9.0 - 64.0, y + 4.0), pos2(area.max.x - 9.0, y + ROW - 4.0));
+    let b = Rect::from_min_max(pos2(area.max.x - 5.0 - 64.0, y + 4.0), pos2(area.max.x - 5.0, y + ROW - 4.0));
     let resp = ui.interact(b, id, Sense::click());
     ui.painter().rect_filled(b, 5.0, region_color(app, &rg, kind));
     if resp.hovered() {
@@ -524,6 +544,15 @@ pub fn inspector(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f3
                 }
             }
             app.after_edit();
+        }
+        y += 33.0;
+    } else if app.rp.in_float {
+        // the float's title: "Region: name", no disclosure (a click on the name renames)
+        let p = ui.painter();
+        p.text(pos2(hr.min.x + 13.0, hr.center().y), Align2::LEFT_CENTER, lab, look::bold(13.0), look::text());
+        p.text(pos2(hr.min.x + 17.0 + lw, hr.center().y), Align2::LEFT_CENTER, &val, look::regular(13.0), look::text_dim());
+        if ui.interact(name_r, id.with("fname"), Sense::click()).clicked() && matches!(tg, Tg::Region(..)) && sel.len() <= 1 {
+            app.rp.naming = Some(val.clone());
         }
         y += 33.0;
     } else {
@@ -782,7 +811,7 @@ fn body(app: &mut App, ui: &mut egui::Ui, area: Rect, y0: f32, tg: Tg, id: egui:
     }
     app.rp.float_h = y - y0;
     let card = Rect::from_min_max(card.min, pos2(card.max.x, y));
-    bg_layer.set(bg_idx, egui::Shape::rect_filled(card, 10.0, look::group_bg().gamma_multiply(0.55)));
+    bg_layer.set(bg_idx, egui::Shape::rect_filled(card, 10.0, card_bg()));
     y + 6.0
 }
 
@@ -1138,21 +1167,23 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
     if app.rp.float {
         let mut open = true;
         let h = app.rp.float_h + 60.0;
-        egui::Window::new("Region Inspector").id(egui::Id::unique("rp-float")).title_bar(false).resizable(false).collapsible(false).default_pos(pos2(300.0, 120.0)).frame(egui::Frame::new().fill(look::pane_bg()).corner_radius(12.0).inner_margin(6.0).stroke(Stroke::new(1.0, look::line()))).show(ctx, |ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(330.0, h), Sense::hover());
+        egui::Window::new("Region Inspector").id(egui::Id::unique("rp-float")).title_bar(false).resizable(false).collapsible(false).default_pos(pos2(300.0, 120.0)).frame(egui::Frame::new().fill(look::pane_bg()).corner_radius(12.0).inner_margin(egui::Margin { left: 0, right: 0, top: 6, bottom: 6 }).stroke(Stroke::new(1.0, look::line()))).show(ctx, |ui| {
+            let (r, _) = ui.allocate_exact_size(vec2(350.0, h), Sense::hover());
             // the close button, as Logic's float
-            let c = Rect::from_center_size(r.min + vec2(9.0, 9.0), vec2(13.0, 13.0));
+            let c = Rect::from_center_size(r.min + vec2(16.0, 10.0), vec2(13.0, 13.0));
             ui.painter().circle_filled(c.center(), 6.5, Color32::from_rgb(0xff, 0x5f, 0x57));
             if ui.interact(c, ui.scope_id().with("close"), Sense::click()).clicked() {
                 open = false;
             }
-            let area = Rect::from_min_max(pos2(r.min.x, r.min.y + 22.0), r.max);
+            let area = Rect::from_min_max(pos2(r.min.x, r.min.y + 26.0), r.max);
             let was = app.inspector_region_open;
             app.inspector_region_open = true;
+            app.rp.in_float = true;
             ui.scope_builder(egui::UiBuilder::new().id_salt("rp-float-body").max_rect(area), |ui| {
                 inspector(app, ui, area, area.min.y);
             });
             app.inspector_region_open = was;
+            app.rp.in_float = false;
         });
         if !open {
             app.rp.float = false;
