@@ -18,7 +18,7 @@ use crate::app::App;
 use crate::liveloops::Cell;
 
 /// The commands this file runs (build.rs and tool/checklist.py read the list).
-pub const COMMANDS: &[&str] = &["Bounce Cells in Place…", "Bounce or Join > Bounce Cells in Place…"];
+pub const COMMANDS: &[&str] = &["Bounce Cells in Place…"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Opts {

@@ -126,13 +126,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 354 | 595 | 59% |
-| Local menus | 659 | 1191 | 55% |
-| Right-click menus | 1385 | 2575 | 53% |
-| Key commands | 1622 | 2207 | 73% |
+| Menu bar | 355 | 595 | 59% |
+| Local menus | 664 | 1191 | 55% |
+| Right-click menus | 1389 | 2575 | 53% |
+| Key commands | 1626 | 2207 | 73% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 354 of 595
+## Menu bar: 355 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -274,7 +274,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 75/166</summary>
+<details><summary>Edit — 76/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -332,7 +332,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -780,7 +780,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 659 of 1191
+## Local menus (Edit / Functions / View in each area): 664 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -870,7 +870,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 58/118</summary>
+<details><summary>audiotrack-Edit — 59/118</summary>
 
 - [ ] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -910,7 +910,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -1805,7 +1805,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 74/168</summary>
+<details><summary>tracks-Edit — 75/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1863,7 +1863,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -2094,7 +2094,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 5/25</summary>
+<details><summary>tracks-View — 8/25</summary>
 
 - [ ] Link
   - [x] Off
@@ -2103,9 +2103,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Zoom Focused Track  `⌃Z`
 - [x] Reset Individual Track Zoom  `⌥⌘⌫`
 - [ ] Live Loops
-- [ ] Try to Keep Cells Squared When Zooming
-- [ ] Show Start Positions as Offset
-- [ ] Show Length as Position
+- [x] Try to Keep Cells Squared When Zooming
+- [x] Show Start Positions as Offset
+- [x] Show Length as Position
 - [ ] Position and Length Resolution
   - [ ] Bars only
   - [ ] Bars and Beats
@@ -2124,7 +2124,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1385 of 2575
+## Right-click menus: 1389 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2331,7 +2331,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-midi-cell — 105/151</summary>
+<details><summary>liveloops-midi-cell — 106/151</summary>
 
 - [x] Record into Cell  `⌥R`
 - [x] Queue Cell Playback  `⌥↩`
@@ -2469,7 +2469,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Rec-End Action
     - [x] Play Cell
     - [x] Continue Recording
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Cells in Place…  `⌃B`
   - [x] Join Regions and Fill Cell  `⌘J`
 - [ ] Convert
@@ -4075,7 +4075,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 97/172</summary>
+<details><summary>region-audio — 98/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4181,7 +4181,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4252,7 +4252,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 123/212</summary>
+<details><summary>region-midi — 124/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4397,7 +4397,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4566,7 +4566,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 123/212</summary>
+<details><summary>take-folder-region — 124/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4711,7 +4711,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4947,7 +4947,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1622 of 2207
+## Key commands: 1626 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4956,7 +4956,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 530/679</summary>
+<details><summary>Global Commands — 533/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5634,9 +5634,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Play Next Scene
 - [x] Stop All Cells  `⌘↩`
 - [x] Toggle Activation of All Tracks  `⌃⌥⇧A`
-- [ ] Live Loops: Keep Cells Squared When Zooming
-- [ ] Live Loops: Show Start Positions as Offset
-- [ ] Live Loops: Show Length as Position
+- [x] Live Loops: Keep Cells Squared When Zooming
+- [x] Live Loops: Show Start Positions as Offset
+- [x] Live Loops: Show Length as Position
 
 </details>
 
@@ -5787,7 +5787,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 177/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 178/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -5821,7 +5821,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select All Inside Locators  `⇧L`
 - [x] Deselect Outside Locators
 - [ ] Deselect Global Tracks
-- [ ] Select Empty Regions/Cells
+- [x] Select Empty Regions/Cells
 - [ ] Select SMPTE Locked Regions
 - [x] Select Overlapped Regions/Events  `⇧O`
 - [x] Select Equal Regions/Events  `⇧E`

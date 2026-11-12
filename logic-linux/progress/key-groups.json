@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 530,
+  "done": 533,
   "total": 679,
-  "percent": 78.1
+  "percent": 78.5
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -31,9 +31,9 @@
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 177,
+  "done": 178,
   "total": 290,
-  "percent": 61.0
+  "percent": 61.4
  },
  {
   "group": "Various Editors",
