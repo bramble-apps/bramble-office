@@ -53,6 +53,9 @@ pub const COMMANDS: &[&str] = &[
     "Gain Tool",
     "Set Gain Tool",
     "Toggle Region Solo",
+    "Marquee Ruler",
+    "Split Regions at Marquee Selection",
+    "Set Locators by Selection and Enable Cycle",
 ];
 
 pub const ROW: f32 = 29.0;
@@ -98,6 +101,9 @@ pub struct State {
     pub soloed: Vec<(usize, usize)>,
     /// A Gain tool drag: the regions and their gains when it began, the dB moved.
     gain: Option<(Vec<(usize, usize, f32)>, f32)>,
+    /// View ▸ Marquee Ruler shown; its drag's start tick.
+    pub marquee_ruler: bool,
+    ruler_from: Option<u32>,
     /// Drawing in the Region Inspector Float (its header has no disclosure).
     in_float: bool,
 }
@@ -1170,6 +1176,111 @@ pub fn gain_click(app: &mut App, ui: &egui::Ui, t: usize, r: usize) -> bool {
     true
 }
 
+/// A marquee edge's tick: Control-Shift ticks, Control the division, else the Snap value
+/// (Snap off: free).
+pub fn marquee_snap(app: &App, t: f32, div: u32, px_per_tick: f32, m: egui::Modifiers) -> u32 {
+    let t = t.max(0.0);
+    if m.ctrl && m.shift {
+        return t.round() as u32;
+    }
+    if m.ctrl {
+        return ((t / div as f32).round() as u32) * div;
+    }
+    crate::arranging::snap_tick(app, t, px_per_tick).round() as u32
+}
+
+/// A click with the Marquee tool while a marquee is up: true when it was used (Shift: the
+/// nearest end moves to the click, Option-Shift the farther one, outside the range it grows
+/// and takes in the clicked track; a plain click inside: split at its borders).
+pub fn marquee_click(app: &mut App, tick: u32, track: Option<usize>, m: egui::Modifiers) -> bool {
+    let Some(mut mq) = app.ta.regions.marquee.clone() else { return false };
+    let inside = tick > mq.from && tick < mq.to && track.is_none_or(|t| mq.tracks.contains(&t));
+    if m.shift {
+        if inside {
+            let near_start = tick - mq.from <= mq.to - tick;
+            if near_start != m.alt {
+                mq.from = tick;
+            } else {
+                mq.to = tick;
+            }
+        } else {
+            mq.from = mq.from.min(tick);
+            mq.to = mq.to.max(tick);
+            if let Some(t) = track {
+                let (lo, hi) = (mq.tracks.iter().min().copied().unwrap_or(t).min(t), mq.tracks.iter().max().copied().unwrap_or(t).max(t));
+                mq.tracks = (lo..=hi).collect();
+            }
+        }
+        app.ta.regions.marquee = Some(mq);
+        return true;
+    }
+    if inside {
+        crate::regionops::apply_marquee(app, crate::regionops::Cut::Split);
+        return true;
+    }
+    false
+}
+
+/// Shift-click on a track header with a marquee up: the track leaves (or rejoins) it.
+pub fn marquee_toggle_track(app: &mut App, t: usize) {
+    if let Some(m) = app.ta.regions.marquee.as_mut() {
+        if let Some(k) = m.tracks.iter().position(|x| *x == t) {
+            m.tracks.remove(k);
+        } else {
+            m.tracks.push(t);
+            m.tracks.sort_unstable();
+        }
+    }
+}
+
+/// The marquee ruler: a thin strip along the bottom of the ruler; dragging in it makes a
+/// marquee over every track; its shortcut menu sets the locators or splits at the marquee.
+pub fn marquee_ruler(app: &mut App, ui: &mut egui::Ui, ruler: Rect, x0: f32, tick0: f32, px_per_tick: f32) {
+    if !app.rp.marquee_ruler {
+        return;
+    }
+    let strip = Rect::from_min_max(pos2(ruler.min.x, ruler.max.y - 7.0), ruler.max);
+    let p = ui.painter_at(strip);
+    p.rect_filled(strip, 0.0, look::mix(look::pane_bg(), Color32::WHITE, 0.06));
+    let x_of = |t: u32| x0 + (t as f32 - tick0) * px_per_tick;
+    if let Some(m) = &app.ta.regions.marquee {
+        p.rect_filled(Rect::from_min_max(pos2(x_of(m.from), strip.min.y), pos2(x_of(m.to), strip.max.y)), 0.0, Color32::from_white_alpha(150));
+    }
+    let resp = ui.interact(strip, ui.scope_id().with("marquee-ruler"), Sense::click_and_drag());
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+    let tick_at = |x: f32| ((x - x0) / px_per_tick + tick0).max(0.0);
+    let div = (lg_core::events::PPQ / 4) as u32;
+    let m = ui.input(|i| i.modifiers);
+    if resp.drag_started() {
+        app.rp.ruler_from = ui.input(|i| i.pointer.press_origin()).map(|o| marquee_snap(app, tick_at(o.x), div, px_per_tick, m));
+    }
+    if let (true, Some(from), Some(pp)) = (resp.dragged(), app.rp.ruler_from, resp.interact_pointer_pos()) {
+        let now = marquee_snap(app, tick_at(pp.x), div, px_per_tick, m);
+        let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
+        if now != from {
+            app.ta.regions.marquee = Some(crate::regionops::Marquee { from: from.min(now), to: from.max(now), tracks: (0..n).collect() });
+        }
+    }
+    if resp.drag_stopped() {
+        app.rp.ruler_from = None;
+    }
+    let mut run = None;
+    resp.context_menu(|ui| {
+        for c in ["Set Locators by Selection and Enable Cycle", "Split Regions at Marquee Selection"] {
+            if ui.add_enabled(app.ta.regions.marquee.is_some(), egui::Button::new(c)).clicked() {
+                run = Some(c);
+                ui.close();
+            }
+        }
+    });
+    if let Some(c) = run {
+        let ctx = ui.ctx().clone();
+        command(app, &ctx, c);
+    }
+}
+
 /// A region locked with Lock Time Position (Lock SMPTE Position) doesn't move.
 pub fn locked(rg: &lg_core::Region) -> bool {
     rg.props.locked
@@ -1229,6 +1340,17 @@ pub fn command(app: &mut App, _ctx: &egui::Context, name: &str) -> bool {
             app.after_edit();
         }
         "Region Inspector Float" => app.rp.float = !app.rp.float,
+        "Marquee Ruler" => app.rp.marquee_ruler = !app.rp.marquee_ruler,
+        "Split Regions at Marquee Selection" => {
+            crate::regionops::apply_marquee(app, crate::regionops::Cut::Split);
+        }
+        "Set Locators by Selection and Enable Cycle" => {
+            let Some(m) = app.ta.regions.marquee.clone() else { return true };
+            app.set_cycle((m.from, m.to));
+            if !app.cycle_on() {
+                app.toggle_cycle();
+            }
+        }
         "Gain Tool" | "Set Gain Tool" => app.tool = crate::edit::Tool::Gain,
         "Toggle Region Solo" => {
             // on: the selected regions solo (only they play); off: everything plays again
@@ -1616,6 +1738,29 @@ mod tests {
         assert_eq!((l.offset, l.fades.in_ms, l.fades.out_ms, l.gain_db), (0, 50, 0, -2.0));
         assert!(rr.offset > 0 && rr.fades.in_ms == 0 && rr.fades.out_ms == 80 && rr.gain_db == -2.0, "{rr:?}");
         assert!(a.rp.section.as_ref().is_some_and(|s| s.len == 3840));
+    }
+
+    #[test]
+    fn marquee_clicks() {
+        let mut a = app();
+        a.ta.regions.marquee = Some(crate::regionops::Marquee { from: 3840, to: 3 * 3840, tracks: vec![0] });
+        let shift = egui::Modifiers::SHIFT;
+        assert!(marquee_click(&mut a, 3840 + 100, Some(0), shift));
+        assert_eq!(a.ta.regions.marquee.as_ref().unwrap().from, 3940, "nearest end");
+        assert!(marquee_click(&mut a, 3940 + 100, Some(0), shift | egui::Modifiers::ALT));
+        assert_eq!(a.ta.regions.marquee.as_ref().unwrap().to, 4040, "Option-Shift: the farther end");
+        assert!(marquee_click(&mut a, 8 * 3840, Some(2), shift));
+        let m = a.ta.regions.marquee.clone().unwrap();
+        assert_eq!((m.from, m.to, m.tracks), (3940, 8 * 3840, vec![0, 1, 2]), "grows in any direction");
+        marquee_toggle_track(&mut a, 1);
+        assert_eq!(a.ta.regions.marquee.as_ref().unwrap().tracks, vec![0, 2]);
+        marquee_toggle_track(&mut a, 1);
+        assert_eq!(a.ta.regions.marquee.as_ref().unwrap().tracks, vec![0, 1, 2]);
+        let n = a.project.as_ref().unwrap().tracks[0].regions.len();
+        assert!(marquee_click(&mut a, 4 * 3840, Some(0), egui::Modifiers::NONE), "a click inside splits");
+        assert!(a.project.as_ref().unwrap().tracks[0].regions.len() > n);
+        assert_eq!(marquee_snap(&a, 250.0, 240, 0.1, egui::Modifiers::CTRL), 240);
+        assert_eq!(marquee_snap(&a, 250.4, 240, 0.1, egui::Modifiers::CTRL | egui::Modifiers::SHIFT), 250);
     }
 
     #[test]

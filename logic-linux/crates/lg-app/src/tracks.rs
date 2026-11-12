@@ -228,6 +228,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // Autopunch's punch locators (the red strip)
     crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
+    // the marquee ruler (View ▸ Marquee Ruler): a strip along the ruler's bottom
+    crate::regionparams::marquee_ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
     // ---- rows: headers and lanes
     let Some(proj) = app.project.clone() else { return };
     let rows = crate::trackarea::rows(app);
@@ -289,6 +291,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the header: number, icon, name, M S, volume (press on it and drag up or down: the
         // track moves)
         let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click_and_drag());
+        // (Shift-click: the track leaves or rejoins the marquee)
+        if row_resp.clicked() && ui.input(|i| i.modifiers.shift) {
+            crate::regionparams::marquee_toggle_track(app, i);
+        }
         if row_resp.clicked() {
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
             crate::trackarea::click_track(app, i, shift, cmd);
