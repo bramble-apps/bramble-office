@@ -42,28 +42,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let local = Rect::from_min_size(area.min, vec2(area.width(), LOCAL_H));
     p.rect_filled(local, 0.0, look::header_bg());
     p.hline(local.x_range(), local.max.y - 0.5, Stroke::new(1.0, look::ta_seam()));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-        local_menus(app, ui);
-    });
-    // on the right: the left-click and Command-click tools, and Logic's "…" menu (Snap, Drag)
-    ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
-        ui.menu_button("…", |ui| crate::menus::show_items(app, ui, crate::menus::local("tracks-more")));
-        for (cmd, label) in [(true, "⌘"), (false, "")] {
-            let cur = if cmd { app.cmd_tool } else { app.tool };
-            ui.menu_button(format!("{label}{} ⌄", crate::glyphs::tool(cur)), |ui| {
-                for t in crate::edit::Tool::TRACKS {
-                    if ui.add(egui::Button::selectable(cur == t, t.name()).shortcut_text(t.key())).clicked() {
-                        if cmd {
-                            app.cmd_tool = t;
-                        } else {
-                            app.tool = t;
-                        }
-                        ui.close();
-                    }
-                }
-            }).response.on_hover_text(if cmd { "Command-click Tool" } else { "Left-click Tool" });
-        }
-    });
+    // (laid out by its width: Logic's full set when it fits, the rest in "…"; barfit.rs)
+    crate::barfit::tracks_bar(app, ui, local);
     // ---- the list header and the ruler
     let hw = app.header_w.clamp(HEADER_W, 547.0);
     let head = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(hw, RULER_H));
@@ -111,6 +91,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // the strip shows the rows' backgrounds and the playhead's head at bar 1 in full)
     let lanes = Rect::from_min_max(pos2(ruler.min.x + LANE_INSET, global.max.y), area.max);
     let lanes_bg = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
+    crate::barfit::auto_zoom(app, lanes.height(), lanes.width());
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
     crate::browser::note_lanes(app, Rect::from_min_max(pos2(area.min.x, lanes.min.y), lanes.max));
     if app.global_tracks {
@@ -871,32 +852,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     if let (true, Some(pp)) = (e.dragged(), e.interact_pointer_pos()) {
         app.header_w = (pp.x - area.min.x).clamp(HEADER_W, 547.0);
-    }
-}
-
-/// The Tracks area's local menus: Logic's Edit, Functions and View (data/local-menus.txt), each
-/// item enabled when Studio runs it.
-fn local_menus(app: &mut App, ui: &mut egui::Ui) {
-    crate::menus::local_bar(app, ui, &[("Edit", "tracks-Edit"), ("Functions", "tracks-Functions"), ("View", "tracks-View")]);
-    // Logic's view buttons: Live Loops grid, Tracks (on), and Show/Hide Flex
-    for (i, tip) in ["Live Loops Grid (L)", "Tracks View", "Show/Hide Flex (F)"].into_iter().enumerate() {
-        let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), Sense::click());
-        let (grid_on, tracks_on) = crate::liveloops::shown(app);
-        let on = (i == 0 && grid_on) || (i == 1 && tracks_on);
-        if resp.clicked() && i < 2 {
-            crate::liveloops::command(app, if i == 0 { "Show/Hide Live Loops Grid" } else { "Show/Hide Tracks area" });
-        }
-        let p = ui.painter();
-        p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
-        let col = if on { Color32::WHITE } else { look::text() };
-        let glyph = match i {
-            0 => if on { crate::glyphs::ph_fill::DOTS_NINE } else { crate::glyphs::ph::DOTS_NINE },
-            1 => if on { crate::glyphs::ph_fill::ROWS } else { crate::glyphs::ph::ROWS },
-            _ => crate::glyphs::br::FLEX,
-        };
-        crate::glyphs::paint(p, r, glyph, 17.0, col);
-        resp.on_hover_text(tip);
-        ui.add_space(4.0);
     }
 }
 

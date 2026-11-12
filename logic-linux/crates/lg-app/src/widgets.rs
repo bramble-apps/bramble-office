@@ -171,7 +171,12 @@ pub fn disclosure(ui: &mut egui::Ui, r: Rect, id: egui::Id, label: &str, value: 
     let resp = ui.interact(r, id, Sense::click());
     p.text(pos2(r.min.x + 12.0, r.center().y), Align2::LEFT_CENTER, label, look::bold(13.0), look::text());
     let lw = p.layout_no_wrap(label.to_string(), look::bold(13.0), look::text()).size().x;
-    p.with_clip_rect(r.shrink2(vec2(8.0, 0.0))).text(pos2(r.min.x + 16.0 + lw, r.center().y), Align2::LEFT_CENTER, value, look::regular(13.0), look::text_dim());
+    // (a long name ends in "…" before the arrow, as Logic's "Region: Keyboard Player -…")
+    let room = r.max.x - 30.0 - (r.min.x + 16.0 + lw);
+    let mut job = egui::text::LayoutJob::simple_singleline(value.to_string(), look::regular(13.0), look::text_dim());
+    job.wrap = egui::text::TextWrapping { max_width: room.max(0.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+    let galley = p.layout_job(job);
+    p.galley(pos2(r.min.x + 16.0 + lw, r.center().y - galley.size().y / 2.0), galley, look::text_dim());
     let m = pos2(r.max.x - 18.0, r.center().y);
     let col = if resp.hovered() { look::text() } else { look::text_dim() };
     crate::glyphs::paint(&p, Rect::from_center_size(m, vec2(14.0, 14.0)), if open { crate::glyphs::ph::CARET_DOWN } else { crate::glyphs::ph::CARET_RIGHT }, 13.0, col);

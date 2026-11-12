@@ -420,7 +420,8 @@ pub fn follow_playhead(app: &mut App, visible_bars: f32) {
         return;
     }
     let moved = std::mem::take(&mut app.reveal_playhead);
-    if app.catch_off && !app.nav.scroll_in_play && !moved {
+    // (Catch off: the Tracks area's Catch button, barfit.rs)
+    if (app.catch_off || !app.fit.catch) && !app.nav.scroll_in_play && !moved {
         return;
     }
     let bar_pos = app.position() as f32 / app.bar_ticks() as f32;

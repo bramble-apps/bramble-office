@@ -1177,8 +1177,8 @@ pub fn note_lanes(app: &mut App, lanes: Rect) {
 fn icon_button(ui: &mut egui::Ui, r: Rect, id: &str, icon: &str, on: bool, tip: &str) -> egui::Response {
     let resp = ui.interact(r, ui.scope_id().with(("bb", id)), Sense::click()).on_hover_text(tip);
     let p = ui.painter();
-    p.rect_filled(r, 5.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
-    crate::glyphs::paint(p, r, icon, 14.0, if on { Color32::WHITE } else { look::text() });
+    p.rect_filled(r, 6.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
+    crate::glyphs::paint(p, r, icon, 16.0, if on { Color32::WHITE } else { look::text() });
     resp
 }
 
@@ -1190,22 +1190,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.rect_filled(area, 0.0, look::pane_bg());
     p.vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));
     // ---- the header: "Browser", Link to Selection, Replace Mode
-    let head = Rect::from_min_size(area.min, vec2(area.width(), 34.0));
-    p.text(pos2(head.min.x + 14.0, head.center().y), Align2::LEFT_CENTER, "Browser", look::semibold(13.0), look::text());
-    let lb = Rect::from_center_size(pos2(head.max.x - 52.0, head.center().y), vec2(24.0, 22.0));
+    // (Logic's, measured at 2x: a 41 pt header, the title centred on the panel, two 33 × 24 pt
+    // buttons 9 pt apart, 11 pt from the right edge; a narrow panel centres the title in what
+    // the buttons leave, and drops it when there's no room)
+    let head = Rect::from_min_size(area.min, vec2(area.width(), 41.0));
+    let rb = Rect::from_center_size(pos2(head.max.x - 11.0 - 16.5, head.center().y), vec2(33.0, 24.0));
+    let lb = rb.translate(vec2(-42.0, 0.0));
+    let title_w = 56.0;
+    let tx = if head.center().x + title_w / 2.0 + 8.0 < lb.min.x { head.center().x } else { (head.min.x + lb.min.x) / 2.0 };
+    if tx - title_w / 2.0 > head.min.x + 4.0 {
+        p.text(pos2(tx, head.center().y), Align2::CENTER_CENTER, "Browser", look::semibold(13.0), look::text());
+    }
     if icon_button(ui, lb, "link", ph::LINK, app.browser_link, "Link to Selection: the Browser follows the selected track").clicked() {
         app.browser_link = !app.browser_link;
         app.br.linked = None;
     }
-    let rb = Rect::from_center_size(pos2(head.max.x - 24.0, head.center().y), vec2(24.0, 22.0));
     if icon_button(ui, rb, "replace", ph::SWAP, app.browser_replace, "Replace Mode: choosing a patch replaces the selected track's").clicked() {
         app.browser_replace = !app.browser_replace;
     }
+    p.hline(head.x_range(), head.max.y, Stroke::new(1.0, look::line()));
     // ---- search, All Filters
-    let sr = Rect::from_min_size(pos2(area.min.x + 10.0, head.max.y + 4.0), vec2(area.width() - 52.0, 26.0));
+    // (Logic's: 24 pt tall, 9 pt under the header, the filter button 33 × 24 pt at the right)
+    let sr = Rect::from_min_size(pos2(area.min.x + 10.5, head.max.y + 9.0), vec2(area.width() - 10.5 - 11.0 - 33.0 - 9.5, 24.0));
     app.br.search_rect = sr;
     p.rect_filled(sr, 7.0, look::group_bg());
-    crate::glyphs::paint(&p, Rect::from_min_size(sr.min + vec2(4.0, 5.0), vec2(16.0, 16.0)), ph::MAGNIFYING_GLASS, 13.0, look::text_dim());
+    crate::glyphs::paint(&p, Rect::from_min_size(sr.min + vec2(4.0, 4.0), vec2(16.0, 16.0)), ph::MAGNIFYING_GLASS, 13.0, look::text_dim());
     let field = Rect::from_min_max(pos2(sr.min.x + 24.0, sr.min.y + 3.0), pos2(sr.max.x - 6.0, sr.max.y - 3.0));
     let te = ui.put(field, egui::TextEdit::singleline(&mut app.br.typed).id(egui::Id::unique("browser-search")).hint_text(if app.br.view == Cat::Presets { "Search Presets" } else { "Search" }).frame(egui::Frame::NONE).font(look::regular(13.0)));
     let entered = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -1218,7 +1227,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if te.has_focus() && !typed.is_empty() && app.br.view != Cat::Presets && app.br.view != Cat::SoundFonts {
         suggestions(app, ui, &te, &typed);
     }
-    let fb = Rect::from_min_size(pos2(sr.max.x + 8.0, sr.min.y), vec2(26.0, 26.0));
+    let fb = Rect::from_min_size(pos2(sr.max.x + 9.5, sr.min.y), vec2(33.0, 24.0));
     let active = !app.br.search.is_empty();
     if icon_button(ui, fb, "filters", ph::FUNNEL, app.br.all_filters || active, "All Filters: every tag for building a search").clicked() {
         app.br.all_filters = !app.br.all_filters;
@@ -1262,13 +1271,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // ---- the navigation (sidebar, or compact: an icon row)
     let compact = app.br.saved.flag("compact", false);
-    let icons_only = area.width() < 380.0;
+    // (Logic's sidebar is labelled while its labels fit beside a usable results column, about
+    // 200 pt; narrower, it collapses to icons. RESIZING.txt)
+    let label_w = ui.fonts_mut(|f| f.layout_no_wrap("Loops & One-Shots".into(), look::regular(13.0), look::text()).size().x) + 30.0 + 18.0;
+    let icons_only = area.width() - label_w.max(120.0) < 220.0;
     let (body_left, body_top) = if compact {
         let nr = Rect::from_min_size(pos2(area.min.x + 6.0, top), vec2(area.width() - 12.0, 28.0));
         compact_nav(app, ui, nr);
         (area.min.x + 1.0, nr.max.y + 4.0)
     } else {
-        let side_w = if icons_only { 44.0 } else { (area.width() * 0.36).clamp(120.0, 200.0) };
+        let side_w = if icons_only { 44.0 } else { (area.width() * 0.39).clamp(label_w.max(120.0), 200.0f32.max(label_w)) };
         let side = Rect::from_min_max(pos2(area.min.x, top), pos2(area.min.x + side_w, area.max.y - 40.0));
         sidebar(app, ui, side, icons_only);
         (side.max.x + 2.0, top)
@@ -2445,7 +2457,9 @@ fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
     p.text(pos2(foot.min.x + 10.0 + sw, foot.min.y + 13.0), Align2::LEFT_CENTER, sorted, look::semibold(11.0), look::text());
     p.text(pos2(foot.min.x + 10.0, foot.min.y + 29.0), Align2::LEFT_CENTER, format!("{} Items", thousands(count)), look::regular(11.0), look::text_dim());
     // the preview volume
-    if foot.width() > 250.0 {
+    // (only where it clears the "Sorted by" text)
+    let text_end = 10.0 + sw + p.layout_no_wrap(sorted.into(), look::semibold(11.0), look::text()).size().x;
+    if foot.width() - 150.0 - 16.0 - 8.0 > text_end {
         let vr = Rect::from_min_max(pos2(foot.max.x - 150.0, foot.min.y + 10.0), pos2(foot.max.x - 50.0, foot.min.y + 28.0));
         crate::glyphs::paint(&p, Rect::from_min_size(vr.min - vec2(16.0, 0.0), vec2(14.0, vr.height())), ph::SPEAKER_HIGH, 11.0, look::text_dim());
         let mut v = app.br.volume;

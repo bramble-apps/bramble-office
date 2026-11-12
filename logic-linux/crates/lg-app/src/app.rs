@@ -330,6 +330,8 @@ pub struct App {
     /// File menu: templates, alternatives, backups, Project Settings (projfile.rs).
     pub pf: crate::projfile::State,
     pub ta: crate::trackarea::State,
+    /// The bars' own controls (Catch, Auto Zoom…; barfit.rs).
+    pub fit: crate::barfit::State,
     /// The Browser (browser.rs, soundlib.rs), Smart Controls and the Arpeggiators
     /// (smartcontrols.rs, arp.rs), Project Audio and All Files (projaudio.rs, allfiles.rs), the
     /// Project Files pane's tab (0 Project, 1 All Files), the browsers' preview.
@@ -544,6 +546,7 @@ impl App {
             stopbtn: Default::default(),
             cb_show: Default::default(),
             ta: Default::default(),
+            fit: Default::default(),
             br: Default::default(),
             sc: Default::default(),
             ax: Default::default(),
@@ -1255,7 +1258,7 @@ impl App {
     }
 
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
-        if crate::audioedit::command(self, cmd) {
+        if crate::audioedit::command(self, cmd) || crate::barfit::command(self, cmd) {
             return;
         }
         match cmd {
@@ -1852,14 +1855,24 @@ impl App {
             let ed = Rect::from_min_max(pos2(main.min.x, main.max.y - editor_h), main.max);
             self.editor_rect = ed;
             crate::windows::area(self, ed, if self.bottom == Bottom::Mixer { "mixer" } else { "editor" });
+            // (no region selected: the pane shows the selected track's, as Logic; edpane.rs)
+            let picked = self.selected_region.is_none() && self.bottom == Bottom::PianoRoll;
+            let auto = if picked { crate::edpane::shown_region(self) } else { None };
+            if picked {
+                self.selected_region = auto;
+            }
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
                 Bottom::PianoRoll if crate::celledit::current(self).is_some() => crate::celledit::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
-                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => {
-                    let (t, r) = self.selected_region.unwrap();
-                    crate::players::show(self, ui, ed, t, r);
-                }
+                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => match crate::edpane::sp_tab(&ctx) {
+                    crate::edpane::SpTab::SessionPlayer => {
+                        let (t, r) = self.selected_region.unwrap();
+                        crate::players::show(self, ui, ed, t, r);
+                    }
+                    crate::edpane::SpTab::PianoRoll => crate::pianoroll::show(self, ui, ed),
+                    crate::edpane::SpTab::Score => crate::score::show(self, ui, ed),
+                },
                 Bottom::PianoRoll if drummer.is_some() => {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
@@ -1873,6 +1886,10 @@ impl App {
                 Bottom::Mixer => crate::mixer::show(self, ui, ed),
                 Bottom::SmartControls => crate::smartcontrols::show(self, ui, ed),
                 Bottom::None => {}
+            }
+            // (the picked region stays unselected unless the editor selected it)
+            if picked && self.selected_region == auto {
+                self.selected_region = None;
             }
             // the divider between the tracks and the editor: drag up or down
             let edge = Rect::from_min_max(pos2(ed.min.x, ed.min.y - 3.0), pos2(ed.max.x, ed.min.y + 3.0));

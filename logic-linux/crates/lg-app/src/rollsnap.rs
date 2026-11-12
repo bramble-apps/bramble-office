@@ -57,6 +57,11 @@ fn put(ctx: &egui::Context, s: State) {
     ctx.data_mut(|d| d.insert_temp(id(), s));
 }
 
+/// The Snap pop-up's current value, as its button shows it.
+pub fn current_name(ctx: &egui::Context) -> String {
+    name(state(ctx).value)
+}
+
 fn name(v: Value) -> String {
     match v {
         Value::Mode(m) => m.name().to_string(),

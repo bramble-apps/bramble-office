@@ -14,7 +14,8 @@ use crate::app::{App, Bottom, RightPane};
 use crate::glyphs::{br, ph, ph_fill, tb};
 use crate::look;
 
-const BTN: f32 = 34.0;
+/// Logic's control-bar buttons: 38 pt apart (win-tracks-1-instrument-track.png at 2x).
+const BTN: f32 = 38.0;
 const H: f32 = 38.0;
 const PAD: f32 = 3.0;
 
@@ -67,10 +68,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // ---- views
     let (b, c) = run(x, cy, &[BTN; 4]);
     caps.push(c);
-    if button(ui, b[0], "browser", app.show_browser, true, "Browser (B)", |p, r, c| icon(p, r, if app.show_browser { ph_fill::SIDEBAR } else { ph::SIDEBAR }, c)).clicked() {
+    if button(ui, b[0], "browser", app.show_browser, true, "Browser (B)", |p, r, c| crate::cbicons::browser(p, r, c, if app.show_browser { look::button_on() } else { look::capsule_fill() })).clicked() {
         app.show_browser = !app.show_browser;
     }
-    if button(ui, b[1], "inspector", app.show_inspector, true, "Inspector (I)", |p, r, c| icon(p, r, if app.show_inspector { ph_fill::SLIDERS_HORIZONTAL } else { ph::SLIDERS_HORIZONTAL }, c)).clicked() {
+    if button(ui, b[1], "inspector", app.show_inspector, true, "Inspector (I)", |p, r, c| crate::cbicons::inspector(p, r, c, if app.show_inspector { look::button_on() } else { look::capsule_fill() })).clicked() {
         app.show_inspector = !app.show_inspector;
     }
     if button(ui, b[2], "quick-help", app.quick_help, true, "Quick Help (⇧/)", |p, r, c| icon(p, r, if app.quick_help { ph_fill::QUESTION } else { ph::QUESTION }, c)).clicked() {
@@ -83,15 +84,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let (b, c) = run(x, cy, &[BTN; 3]);
     caps.push(c);
     let editors_on = matches!(app.bottom, Bottom::PianoRoll);
-    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| icon(p, r, if editors_on { ph_fill::PENCIL_SIMPLE } else { ph::PENCIL_SIMPLE }, c)).clicked() {
+    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| icon(p, r, ph::PENCIL_SIMPLE, c)).clicked() {
         app.bottom = if editors_on { Bottom::None } else { Bottom::PianoRoll };
     }
     let smart_on = app.bottom == Bottom::SmartControls;
-    if button(ui, b[1], "smart", smart_on, true, "Smart Controls (B)", |p, r, c| icon(p, r, if smart_on { ph_fill::GAUGE } else { ph::GAUGE }, c)).clicked() {
+    if button(ui, b[1], "smart", smart_on, true, "Smart Controls (B)", |p, r, c| crate::cbicons::smart_controls(p, r, c)).clicked() {
         app.bottom = if smart_on { Bottom::None } else { Bottom::SmartControls };
     }
     let mixer_on = app.bottom == Bottom::Mixer;
-    if button(ui, b[2], "mixer", mixer_on, true, "Mixer (X)", |p, r, c| icon(p, r, if mixer_on { ph_fill::FADERS } else { ph::FADERS }, c)).clicked() {
+    if button(ui, b[2], "mixer", mixer_on, true, "Mixer (X)", |p, r, c| icon(p, r, ph::FADERS, c)).clicked() {
         app.bottom = if mixer_on { Bottom::None } else { Bottom::Mixer };
     }
     let left_end = c.max.x;
@@ -113,7 +114,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let playing = app.playing();
     // (stopped, Logic's Stop button shows Go to Beginning: a bar and a triangle)
     let stop = button(ui, b[0], "stop", false, true, if playing { "Stop (Space)" } else { "Go to Beginning (Return)" }, |p, r, c| {
-        icon(p, r, if playing { ph_fill::STOP } else { ph_fill::SKIP_BACK }, c);
+        // (Logic's Stop is a square whether playing or not; stopped, a click goes to the start)
+        icon(p, r, ph_fill::STOP, c);
     });
     if stop.clicked() {
         app.stop();
@@ -137,7 +139,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     if !narrow {
         let mut slot = 3;
         if app.cb_show.capture && button(ui, b[slot], "capture", false, true, "Capture as Recording (⇧R)", |p, r, _| {
-            icon(p, r, ph::RECORD, look::record_red());
+            crate::cbicons::capture(p, r, look::record_red());
         })
         .clicked()
         {
@@ -188,11 +190,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         caps.push(c);
         x = c.max.x + 8.0;
     }
+    // (as the bar narrows, the master volume leaves first, then Low Latency / Tuner / Solo,
+    // then Count-in / Metronome; barfit.rs)
     let room = bar.max.x - 10.0 - right_w - x;
-    if room > 3.0 * BTN + 2.0 * BTN + 30.0 {
+    let fits = crate::barfit::fit(
+        &[crate::barfit::Slot { w: 3.0 * BTN + 2.0 * PAD + 8.0, drop: 2 }, crate::barfit::Slot { w: 2.0 * BTN + 2.0 * PAD + 12.0, drop: 1 }, crate::barfit::Slot { w: 74.0, drop: 3 }],
+        room,
+        0.0,
+    );
+    if fits[0] {
         let (b, c) = run(x, cy, &[BTN; 3]);
         caps.push(c);
-        if button(ui, b[0], "low-latency", app.low_latency, true, "Low Latency Mode", |p, r, c| if app.low_latency { icon(p, r, ph_fill::LIGHTNING, look::accent()) } else { icon(p, r, ph::LIGHTNING, c) }).clicked() {
+        if button(ui, b[0], "low-latency", app.low_latency, true, "Low Latency Mode", |p, r, c| crate::cbicons::low_latency(p, r, if app.low_latency { look::accent() } else { c })).clicked() {
             app.low_latency = !app.low_latency;
         }
         if button(ui, b[1], "tuner", app.show_tuner, true, "Tuner", |p, r, c| icon(p, r, br::TUNING_FORK, c)).clicked() {
@@ -208,6 +217,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             crate::regsolo::button(app, alt);
         }
         x = c.max.x + 8.0;
+    }
+    if fits[1] {
         let (b, c) = run(x, cy, &[BTN; 2]);
         caps.push(c);
         // (Logic draws these two lit purple)
@@ -233,7 +244,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             if i == 0 {
                 p.text(b[i].center(), Align2::CENTER_CENTER, "1234", look::semibold(10.0), col);
             } else {
-                icon(&p, b[i], tb::METRONOME, col);
+                icon(&p, b[i], ph::METRONOME, col);
             }
             if resp.clicked() {
                 if i == 0 {
@@ -249,7 +260,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // ---- the master volume (Logic's black bar), then the right panes
     let rg_x = bar.max.x - 10.0 - right_w;
     let vol = Rect::from_min_max(pos2(x, cy - 10.0), pos2(rg_x - 14.0, cy + 10.0));
-    if vol.width() > 60.0 {
+    if fits[2] && vol.width() > 60.0 {
         master_volume(app, ui, vol);
     }
     let (b, c) = run(rg_x, cy, &[BTN; 4]);
@@ -258,10 +269,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     for (i, (pane, tip)) in panes.into_iter().enumerate() {
         let on = app.right_pane == Some(pane);
         if button(ui, b[i], tip, on, true, tip, |p, r, c| match pane {
-            RightPane::Lists => icon(p, r, if on { ph_fill::LIST_BULLETS } else { ph::LIST_BULLETS }, c),
-            RightPane::Notes => icon(p, r, if on { ph_fill::NOTEPAD } else { ph::NOTEPAD }, c),
+            RightPane::Lists => icon(p, r, ph::LIST_BULLETS, c),
+            RightPane::Notes => icon(p, r, ph::ARTICLE, c),
             RightPane::Loops => icon(p, r, ph::ARROW_CLOCKWISE, c),
-            RightPane::Files => icon(p, r, if on { ph_fill::FOLDER } else { ph::FOLDER }, c),
+            RightPane::Files => crate::cbicons::files(p, r, c),
         })
         .clicked()
         {
