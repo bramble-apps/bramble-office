@@ -175,6 +175,11 @@ pub fn header_bg() -> Color32 {
 pub fn lane_bg() -> Color32 {
     pick(0x1e1e20, 0xf4f4f6)
 }
+/// The list editors' every other row (Event, Tempo, Signature, Marker Lists), as Logic's visible stripes.
+pub fn list_stripe() -> Color32 {
+    pick(0x2b2b2d, 0xe6e6e9)
+}
+
 pub fn lane_alt() -> Color32 {
     pick(0x242426, 0xeaeaec)
 }

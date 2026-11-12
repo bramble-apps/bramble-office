@@ -652,6 +652,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     let play_tick = app.position().max(0.0) as u32;
     let play_row = all.iter().rposition(|(p, _)| *p <= play_tick);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    // (rows touch, 24 pt apart, as Logic's stripes do)
+    child.spacing_mut().item_spacing.y = 0.0;
     child.set_clip_rect(list);
     let mut sa = egui::ScrollArea::vertical().id_salt(("evl", t, r)).auto_shrink([false, false]);
     if let Some(k) = st.scroll_to.take() {
@@ -679,7 +681,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             if sel {
                 p.rect_filled(rr, 0.0, BLUE.gamma_multiply(0.85));
             } else if k % 2 == 1 {
-                p.rect_filled(rr, 0.0, look::lane_alt());
+                p.rect_filled(rr, 0.0, look::list_stripe());
             }
             if playing && play_row == Some(k) {
                 p.hline(rr.x_range(), rr.min.y + 0.5, Stroke::new(1.5, Color32::WHITE));
@@ -1181,6 +1183,8 @@ fn region_level(app: &mut App, ui: &mut egui::Ui, st: &mut State, area: Rect) ->
     }
     let list = Rect::from_min_max(pos2(area.min.x, hr.max.y + 1.0), area.max);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    // (rows touch, 24 pt apart, as Logic's stripes do)
+    child.spacing_mut().item_spacing.y = 0.0;
     child.set_clip_rect(list);
     let sig = proj.signature;
     let mut pick: Option<((usize, usize), bool)> = None;
@@ -1196,7 +1200,7 @@ fn region_level(app: &mut App, ui: &mut egui::Ui, st: &mut State, area: Rect) ->
             if sel {
                 pp.rect_filled(rr, 0.0, BLUE.gamma_multiply(0.85));
             } else if k % 2 == 1 {
-                pp.rect_filled(rr, 0.0, look::lane_alt());
+                pp.rect_filled(rr, 0.0, look::list_stripe());
             }
             let txt = if sel { Color32::WHITE } else { look::text() };
             let mut x = rr.min.x + 8.0;

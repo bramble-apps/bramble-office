@@ -836,7 +836,7 @@ pub fn list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
         if sel {
             p.rect_filled(row, 0.0, look::accent().gamma_multiply(0.45));
         } else if i % 2 == 1 {
-            p.rect_filled(row, 0.0, look::lane_alt());
+            p.rect_filled(row, 0.0, look::list_stripe());
         }
         let len = mk::end_of(&markers, i, end_t) - m.0;
         let cells = [

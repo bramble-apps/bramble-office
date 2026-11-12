@@ -962,100 +962,191 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
 
 /// The Tempo List (also the List Editors' Tempo tab).
 pub fn tempo_list(app: &mut App, ui: &mut egui::Ui) {
-    let Some(p) = app.project.clone() else { return };
-    let m = Map::of(&p);
-    ui.horizontal(|ui| {
-        if ui.button("Add Tempo").on_hover_text("A tempo event at the playhead, at the current tempo").clicked() {
-            command(app, "Create Tempo Change");
-        }
-        let names = timeline::set_names(&p);
-        ui.menu_button(format!("{} ▾", names.get(p.global.tempo_set).cloned().unwrap_or_default()), |ui| set_menu(app, ui));
-        let mut ce = app.arr.curve_events;
-        if ui.checkbox(&mut ce, "Additional Info").on_hover_text("Shows the events tempo curves stand for").changed() {
-            app.arr.curve_events = ce;
-        }
-        let g = if app.arr.granularity == 0 { 240 } else { app.arr.granularity };
-        egui::ComboBox::from_id_salt("tempo-gran").selected_text(format!("Granularity 1/{}", 3840 / g)).show_ui(ui, |ui| {
-            for d in [4u32, 8, 16, 32] {
-                if ui.selectable_label(g == 3840 / d, format!("1/{d}")).clicked() {
-                    app.arr.granularity = 3840 / d;
-                }
-            }
-        });
-    });
-    if let Some(mut name) = app.arr.set_rename.clone() {
-        ui.horizontal(|ui| {
-            ui.label("Set name:");
-            let te = ui.text_edit_singleline(&mut name);
-            crate::widgets::focus_once(ui, &te);
-            app.arr.set_rename = Some(name.clone());
-            if ui.button("OK").clicked() || te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                let n = name.clone();
-                app.checkpoint("Rename Tempo Set");
-                if let Some(p) = app.project.as_mut() {
-                    let k = p.global.tempo_set;
-                    timeline::rename_set(p, k, &n);
-                }
-                app.arr.set_rename = None;
-            }
-        });
-    }
-    ui.separator();
+    let Some(proj) = app.project.clone() else { return };
+    let m = Map::of(&proj);
+    let sig = proj.signature;
+    const ROW: f32 = 24.0;
+    const BLUE: Color32 = Color32::from_rgb(0x0b, 0x63, 0xb8);
+    ui.set_min_size(vec2(300.0, 220.0));
+    let body = ui.max_rect();
     let gran = if app.arr.granularity == 0 { 240 } else { app.arr.granularity };
     let rows = if app.arr.curve_events { m.expanded(gran) } else { m.points.iter().map(|p| (p.0, p.1, false)).collect() };
-    let mut change: Option<(u32, Option<u32>, Option<f64>, bool)> = None;
-    egui::ScrollArea::vertical().id_salt("tempo-list").show(ui, |ui| {
-        egui::Grid::new("tempo-list-grid").striped(true).num_columns(4).show(ui, |ui| {
-            ui.label(egui::RichText::new("Position").strong());
-            ui.label(egui::RichText::new("Time").strong());
-            ui.label(egui::RichText::new("Tempo").strong());
-            ui.label("");
-            ui.end_row();
-            for (t, bpm, derived) in rows {
-                let sel = app.arr.tempo_sel.contains(&t);
-                if derived {
-                    ui.label(egui::RichText::new(crate::app::bbdt(t, p.signature)).weak());
-                    ui.label(egui::RichText::new(format!("{:.3} s", m.secs_at(t as f64))).weak());
-                    ui.label(egui::RichText::new(format!("{bpm:.4}")).weak());
-                    ui.label("");
-                    ui.end_row();
-                    continue;
+    let one_sel = app.arr.tempo_sel.len() == 1 && app.arr.tempo_sel[0] > 0;
+    // the local bar: Edit (Delete, Select All, Pickup Clock) and Options (Granularity), as Logic's
+    let bar = Rect::from_min_size(body.min, vec2(body.width(), 24.0));
+    let mut c = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    c.spacing_mut().item_spacing.x = 6.0;
+    c.menu_button("Edit ▾", |ui| {
+        let deletable: Vec<u32> = app.arr.tempo_sel.iter().copied().filter(|t| *t > 0).collect();
+        if ui.add_enabled(!deletable.is_empty(), egui::Button::new("Delete")).clicked() {
+            app.checkpoint("Delete Tempo Point");
+            if let Some(pp) = app.project.as_mut() {
+                for t in &deletable {
+                    timeline::delete_point(pp, *t);
                 }
-                // the position: drag (1/16 steps) or pickup to the playhead
-                let mut pos = t as f64 / 240.0;
-                let pr = ui.add_enabled(t > 0, egui::DragValue::new(&mut pos).speed(0.2).custom_formatter(|v, _| crate::app::bbdt((v * 240.0).round() as u32, p.signature)));
-                if pr.changed() {
-                    change = Some((t, Some((pos.max(0.0) * 240.0).round() as u32), None, pr.drag_started()));
+            }
+            app.arr.tempo_sel.clear();
+            app.after_edit();
+            ui.close();
+        }
+        if ui.button("Select All").clicked() {
+            app.arr.tempo_sel = m.points.iter().map(|p| p.0).collect();
+            ui.close();
+        }
+        ui.separator();
+        if ui.add_enabled(one_sel, egui::Button::new("Move Region/Event to Playhead Position (Pickup Clock)")).clicked() {
+            let (from, to) = (app.arr.tempo_sel[0], app.position() as u32);
+            app.checkpoint("Change Tempo");
+            if let Some(pp) = app.project.as_mut() {
+                timeline::move_point(pp, from, to);
+            }
+            app.arr.tempo_sel = vec![to];
+            app.after_edit();
+            ui.close();
+        }
+    });
+    c.menu_button("Options ▾", |ui| {
+        ui.menu_button("Granularity", |ui| {
+            for d in [4u32, 8, 16, 32] {
+                if ui.add(egui::Button::selectable(gran == 3840 / d, format!("1/{d} Note"))).clicked() {
+                    app.arr.granularity = 3840 / d;
+                    ui.close();
                 }
-                if pr.clicked() {
-                    app.arr.tempo_sel = vec![t];
-                }
-                ui.label(format!("{:.3} s", m.secs_at(t as f64)));
-                let mut b = bpm;
-                let br = ui.add(egui::DragValue::new(&mut b).speed(0.2).range(5.0..=990.0).max_decimals(4));
-                if br.changed() {
-                    change = Some((t, None, Some(b), br.drag_started()));
-                }
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(t > 0, egui::Button::new("⌫").small()).on_hover_text("Delete").clicked() {
-                        app.checkpoint("Delete Tempo Point");
-                        if let Some(pp) = app.project.as_mut() {
-                            timeline::delete_point(pp, t);
-                        }
-                        app.after_edit();
-                    }
-                    if ui.add_enabled(t > 0, egui::Button::new("⇥").small()).on_hover_text("Move Region/Event to Playhead Position (Pickup Clock)").clicked() {
-                        change = Some((t, Some(app.position() as u32), None, true));
-                    }
-                    if sel {
-                        ui.label("●");
-                    }
-                });
-                ui.end_row();
             }
         });
     });
-    if let Some((t, to, bpm, _start)) = change {
+    // the create row: + (Add Tempo), Additional Info, Tempo Set
+    let y = bar.max.y + 8.0;
+    let plus = Rect::from_min_size(pos2(body.min.x, y), vec2(34.0, 24.0));
+    let pr = ui.interact(plus, ui.scope_id().with("tl-add"), Sense::click()).on_hover_text("Add Tempo: a tempo event at the playhead, at the current tempo");
+    ui.painter().rect_filled(plus, 6.0, if pr.hovered() { look::button_on() } else { look::group_bg() });
+    crate::glyphs::paint(ui.painter(), plus, crate::glyphs::ph::PLUS, 14.0, look::text());
+    if pr.clicked() {
+        command(app, "Create Tempo Change");
+    }
+    let info = Rect::from_min_size(pos2(plus.max.x + 8.0, y), vec2(104.0, 24.0));
+    let ir = ui.interact(info, ui.scope_id().with("tl-info"), Sense::click()).on_hover_text("Additional Info: also the events tempo curves stand for");
+    ui.painter().rect_filled(info, 5.0, if app.arr.curve_events { BLUE } else if ir.hovered() { look::button_on() } else { look::group_bg() });
+    ui.painter().text(info.center(), Align2::CENTER_CENTER, "Additional Info", look::regular(12.0), if app.arr.curve_events { Color32::WHITE } else { look::text() });
+    if ir.clicked() {
+        app.arr.curve_events = !app.arr.curve_events;
+    }
+    let names = timeline::set_names(&proj);
+    let set_w = (body.max.x - info.max.x - 90.0).clamp(80.0, 140.0);
+    let set = Rect::from_min_size(pos2(body.max.x - set_w, y), vec2(set_w, 24.0));
+    if set.min.x - 70.0 > info.max.x {
+        ui.painter().text(pos2(set.min.x - 6.0, set.center().y), Align2::RIGHT_CENTER, "Tempo Set:", look::regular(12.0), look::text_dim());
+    }
+    let mut c = ui.new_child(egui::UiBuilder::new().max_rect(set));
+    c.menu_button(format!("{} ⇕", names.get(proj.global.tempo_set).cloned().unwrap_or_default()), |ui| set_menu(app, ui));
+    let mut y = y + 32.0;
+    if let Some(mut name) = app.arr.set_rename.clone() {
+        let r = Rect::from_min_size(pos2(body.min.x, y), vec2(body.width(), 24.0));
+        let mut c = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        c.label("Set name:");
+        let te = c.text_edit_singleline(&mut name);
+        crate::widgets::focus_once(&c, &te);
+        app.arr.set_rename = Some(name.clone());
+        if c.button("OK").clicked() || te.lost_focus() && c.input(|i| i.key_pressed(egui::Key::Enter)) {
+            app.checkpoint("Rename Tempo Set");
+            if let Some(p) = app.project.as_mut() {
+                let k = p.global.tempo_set;
+                timeline::rename_set(p, k, &name);
+            }
+            app.arr.set_rename = None;
+        }
+        y += 30.0;
+    }
+    // the list: Position, Tempo, SMPTE Time (real time, as Logic shows it here), 24 pt striped rows
+    let painter = ui.painter().clone();
+    let full = Rect::from_min_max(pos2(body.min.x - 8.0, y), pos2(body.max.x + 8.0, body.max.y - 24.0));
+    let w = full.width() - 16.0;
+    let cols = [("Position", w * 0.36), ("Tempo", w * 0.28), ("SMPTE Time", w * 0.36)];
+    let hr = Rect::from_min_size(full.min, vec2(full.width(), ROW));
+    painter.rect_filled(hr, 0.0, look::header_bg());
+    let mut x = hr.min.x + 8.0;
+    for (i, (n, cw)) in cols.iter().enumerate() {
+        if i > 0 {
+            painter.vline(x - 4.0, hr.y_range().shrink(5.0), Stroke::new(1.0, look::line()));
+        }
+        painter.text(pos2(x + cw / 2.0, hr.center().y), Align2::CENTER_CENTER, *n, look::regular(11.5), look::text_dim());
+        x += cw;
+    }
+    painter.hline(hr.x_range(), hr.max.y, Stroke::new(1.0, look::line()));
+    let list = Rect::from_min_max(pos2(full.min.x, hr.max.y + 1.0), full.max);
+    let mut change: Option<(u32, Option<u32>, Option<f64>)> = None;
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
+    child.set_clip_rect(list.intersect(ui.clip_rect()));
+    child.spacing_mut().item_spacing.y = 0.0;
+    let n = rows.len();
+    egui::ScrollArea::vertical().id_salt("tempo-list").auto_shrink([false, false]).show(&mut child, |ui| {
+        // (the editable values read as the list's text, not as buttons)
+        let ws = &mut ui.visuals_mut().widgets;
+        for w in [&mut ws.inactive, &mut ws.hovered] {
+            w.weak_bg_fill = Color32::TRANSPARENT;
+            w.bg_fill = Color32::TRANSPARENT;
+            w.bg_stroke = Stroke::NONE;
+        }
+        let lines = ((list.height() / ROW).ceil() as usize).max(n);
+        for k in 0..lines {
+            let (rr, resp) = ui.allocate_exact_size(vec2(list.width(), ROW), Sense::click());
+            let p = ui.painter().clone();
+            let Some(&(t, bpm, derived)) = rows.get(k) else {
+                if k % 2 == 1 {
+                    p.rect_filled(rr, 0.0, look::list_stripe());
+                }
+                continue;
+            };
+            let sel = !derived && app.arr.tempo_sel.contains(&t);
+            if sel {
+                p.rect_filled(rr, 0.0, BLUE.gamma_multiply(0.85));
+            } else if k % 2 == 1 {
+                p.rect_filled(rr, 0.0, look::list_stripe());
+            }
+            if resp.clicked() && !derived {
+                if ui.input(|i| i.modifiers.shift || i.modifiers.command) {
+                    if let Some(i) = app.arr.tempo_sel.iter().position(|s| *s == t) {
+                        app.arr.tempo_sel.remove(i);
+                    } else {
+                        app.arr.tempo_sel.push(t);
+                    }
+                } else {
+                    app.arr.tempo_sel = vec![t];
+                }
+            }
+            let col = if derived { look::text_dim() } else if sel { Color32::WHITE } else { look::text() };
+            let cell = |i: usize| {
+                let x0 = rr.min.x + 8.0 + cols[..i].iter().map(|c| c.1).sum::<f32>();
+                Rect::from_min_size(pos2(x0, rr.min.y + 2.0), vec2(cols[i].1 - 8.0, ROW - 4.0))
+            };
+            // Position (the first event, at the project start, can't move): drag or double-click
+            if derived || t == 0 {
+                p.text(cell(0).right_center(), Align2::RIGHT_CENTER, crate::app::bbdt(t, sig), look::regular(12.0), col);
+            } else {
+                let mut pos = t as f64 / 240.0;
+                let r = ui.put(cell(0), egui::DragValue::new(&mut pos).speed(0.2).custom_formatter(move |v, _| crate::app::bbdt((v * 240.0).round() as u32, sig)));
+                if r.changed() {
+                    change = Some((t, Some((pos.max(0.0) * 240.0).round() as u32), None));
+                }
+            }
+            if derived {
+                p.text(cell(1).center(), Align2::CENTER_CENTER, format!("{bpm:.4}"), look::regular(12.0), col);
+            } else {
+                let mut b = bpm;
+                let r = ui.put(cell(1), egui::DragValue::new(&mut b).speed(0.2).range(5.0..=990.0).max_decimals(4));
+                if r.changed() {
+                    change = Some((t, None, Some(b)));
+                }
+            }
+            p.text(cell(2).center(), Align2::CENTER_CENTER, crate::evlist::time_text(m.secs_at(t as f64)), look::regular(12.0), col);
+        }
+    });
+    // the footer: how many events, as the Event List's
+    let foot = Rect::from_min_max(pos2(full.min.x, full.max.y), pos2(full.max.x, body.max.y));
+    painter.rect_filled(foot, 0.0, look::header_bg());
+    let shown = rows.len();
+    painter.text(pos2(foot.max.x - 10.0, foot.center().y), Align2::RIGHT_CENTER, format!("{shown} Event{}", if shown == 1 { "" } else { "s" }), look::regular(12.0), look::text_dim());
+    if let Some((t, to, bpm)) = change {
         app.checkpoint("Change Tempo");
         if let Some(pp) = app.project.as_mut() {
             if let Some(b) = bpm {
@@ -1063,6 +1154,7 @@ pub fn tempo_list(app: &mut App, ui: &mut egui::Ui) {
             }
             if let Some(to) = to {
                 timeline::move_point(pp, t, to);
+                app.arr.tempo_sel = vec![to];
             }
         }
         app.after_edit();
@@ -1074,7 +1166,7 @@ fn tempo_list_window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Tempo List").id(egui::Id::unique("tempo-list-window")).open(&mut open).default_size(vec2(460.0, 380.0)).show(ctx, |ui| tempo_list(app, ui));
+    egui::Window::new("Tempo List").id(egui::Id::unique("tempo-list-window")).open(&mut open).collapsible(false).resizable(false).fixed_size(vec2(400.0, 420.0)).show(ctx, |ui| tempo_list(app, ui));
     if !open {
         app.arr.tempo_list = false;
     }
@@ -1291,39 +1383,140 @@ fn sig_window(app: &mut App, ctx: &egui::Context) {
 pub fn signature_list(app: &mut App, ui: &mut egui::Ui) {
     let Some(p) = app.project.clone() else { return };
     let m = Map::of(&p);
-    ui.horizontal(|ui| {
-        if ui.button("Add Time Signature").clicked() {
-            command(app, "Create Time Signature Change");
-        }
-        if ui.button("Add Key Signature").clicked() {
-            command(app, "Create Key Signature Change");
-        }
-        crate::globals::sig_set_popup(app, ui);
-    });
-    let Some(p) = app.project.clone() else { return };
-    let mut rows: Vec<(u32, String, bool)> = vec![(0, format!("Time Signature {}/{}", p.signature.0, p.signature.1), false), (0, format!("Key Signature {}", p.key), true)];
-    rows.extend(p.global.signatures.iter().map(|s| (s.0, format!("Time Signature {}/{}", s.1, s.2), false)));
-    rows.extend(p.global.keys.iter().map(|k| (k.0, format!("Key Signature {}", k.1), true)));
-    rows.sort_by_key(|r| (r.0, r.2));
-    egui::Grid::new("sig-list").striped(true).num_columns(3).show(ui, |ui| {
-        for (bar, text, key) in rows {
-            ui.label(crate::app::bbdt(m.bar_start(bar), m.sig_of_bar(bar)));
-            if ui.add(egui::Label::new(&text).sense(Sense::click())).double_clicked() {
-                let s = m.sig_of_bar(bar);
-                app.arr.sig = Some(SigDialog { bar, key, num: s.0, den: s.1, grouping: String::new(), key_name: timeline::key_at(&p, bar), editing: Some(bar) });
+    const ROW: f32 = 24.0;
+    const BLUE: Color32 = Color32::from_rgb(0x0b, 0x63, 0xb8);
+    ui.set_min_size(vec2(300.0, 220.0));
+    let body = ui.max_rect();
+    let sel_id = egui::Id::unique("sig-list-sel");
+    let mut sel: Option<(u32, bool)> = ui.data(|d| d.get_temp(sel_id)).flatten();
+    let create_id = egui::Id::unique("sig-list-create-key");
+    let mut create_key: bool = ui.data(|d| d.get_temp(create_id)).unwrap_or(false);
+    // (bar, key?, value text); Logic lists the project-start ones first, without a position
+    let mut rows: Vec<(u32, bool, String)> = vec![(0, false, format!("{}   /{}", p.signature.0, p.signature.1)), (0, true, key_text(&p.key))];
+    rows.extend(p.global.signatures.iter().filter(|s| s.0 > 0).map(|s| (s.0, false, format!("{}   /{}", s.1, s.2))));
+    rows.extend(p.global.keys.iter().filter(|k| k.0 > 0).map(|k| (k.0, true, key_text(&k.1))));
+    rows.sort_by_key(|r| (r.0, r.1));
+    let delete = |app: &mut App, (bar, key): (u32, bool)| {
+        app.checkpoint("Delete Signature");
+        if let Some(pp) = app.project.as_mut() {
+            if key {
+                pp.global.keys.retain(|k| k.0 != bar);
+            } else {
+                timeline::delete_signature(pp, bar);
             }
-            if bar > 0 && ui.small_button("⌫").on_hover_text("Delete").clicked() {
-                app.checkpoint("Delete Signature");
-                if let Some(pp) = app.project.as_mut() {
-                    if key { pp.global.keys.retain(|k| k.0 != bar); } else { timeline::delete_signature(pp, bar); }
-                }
-                app.after_edit();
-            } else if bar == 0 {
-                ui.label("");
+        }
+        app.after_edit();
+    };
+    // the local bar: Edit
+    let bar = Rect::from_min_size(body.min, vec2(body.width(), 24.0));
+    let mut c = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    c.menu_button("Edit ▾", |ui| {
+        let can = sel.is_some_and(|s| s.0 > 0);
+        if ui.add_enabled(can, egui::Button::new("Delete")).clicked() {
+            if let Some(s) = sel.take() {
+                delete(app, s);
             }
-            ui.end_row();
+            ui.close();
         }
     });
+    // the create row: +, Time / Key, Signature Set
+    let y = bar.max.y + 8.0;
+    let plus = Rect::from_min_size(pos2(body.min.x, y), vec2(34.0, 24.0));
+    let pr = ui.interact(plus, ui.scope_id().with("sl-add"), Sense::click()).on_hover_text("Create a signature of the type shown at the playhead");
+    ui.painter().rect_filled(plus, 6.0, if pr.hovered() { look::button_on() } else { look::group_bg() });
+    crate::glyphs::paint(ui.painter(), plus, crate::glyphs::ph::PLUS, 14.0, look::text());
+    if pr.clicked() {
+        command(app, if create_key { "Create Key Signature Change" } else { "Create Time Signature Change" });
+    }
+    let kind = Rect::from_min_size(pos2(plus.max.x + 8.0, y), vec2(90.0, 24.0));
+    let mut c = ui.new_child(egui::UiBuilder::new().max_rect(kind));
+    egui::ComboBox::from_id_salt("sl-kind").width(kind.width() - 8.0).selected_text(if create_key { "Key" } else { "Time" }).show_ui(&mut c, |ui| {
+        ui.selectable_value(&mut create_key, false, "Time");
+        ui.selectable_value(&mut create_key, true, "Key");
+    });
+    // (a narrow pane: the Signature Set on its own row, not cut off)
+    let narrow = body.max.x - kind.max.x < 238.0;
+    let set = if narrow { Rect::from_min_max(pos2(body.min.x, y + 30.0), pos2(body.max.x, y + 54.0)) } else { Rect::from_min_max(pos2(body.max.x - 230.0, y), pos2(body.max.x, y + 24.0)) };
+    let y = if narrow { y + 30.0 } else { y };
+    let mut c = ui.new_child(egui::UiBuilder::new().max_rect(set).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    crate::globals::sig_set_popup(app, &mut c);
+    // the list: Position, Type, Value
+    let painter = ui.painter().clone();
+    let full = Rect::from_min_max(pos2(body.min.x - 8.0, y + 32.0), pos2(body.max.x + 8.0, body.max.y - 24.0));
+    let w = full.width() - 16.0;
+    let cols = [("Position", w * 0.3), ("Type", w * 0.22), ("Value", w * 0.48)];
+    let hr = Rect::from_min_size(full.min, vec2(full.width(), ROW));
+    painter.rect_filled(hr, 0.0, look::header_bg());
+    let mut x = hr.min.x + 8.0;
+    for (i, (n, cw)) in cols.iter().enumerate() {
+        if i > 0 {
+            painter.vline(x - 4.0, hr.y_range().shrink(5.0), Stroke::new(1.0, look::line()));
+        }
+        painter.text(pos2(x + cw / 2.0, hr.center().y), Align2::CENTER_CENTER, *n, look::regular(11.5), look::text_dim());
+        x += cw;
+    }
+    painter.hline(hr.x_range(), hr.max.y, Stroke::new(1.0, look::line()));
+    let list = Rect::from_min_max(pos2(full.min.x, hr.max.y + 1.0), full.max);
+    let lines = ((list.height() / ROW).ceil() as usize).max(rows.len());
+    let pp = painter.with_clip_rect(list.intersect(ui.clip_rect()));
+    for k in 0..lines {
+        let rr = Rect::from_min_size(pos2(list.min.x, list.min.y + k as f32 * ROW), vec2(list.width(), ROW));
+        if rr.min.y > list.max.y {
+            break;
+        }
+        let Some((b, key, text)) = rows.get(k) else {
+            if k % 2 == 1 {
+                pp.rect_filled(rr, 0.0, look::list_stripe());
+            }
+            continue;
+        };
+        let on = sel == Some((*b, *key));
+        if on {
+            pp.rect_filled(rr, 0.0, BLUE.gamma_multiply(0.85));
+        } else if k % 2 == 1 {
+            pp.rect_filled(rr, 0.0, look::list_stripe());
+        }
+        let col = if on { Color32::WHITE } else { look::text() };
+        let x1 = rr.min.x + 8.0 + cols[0].1;
+        if *b > 0 {
+            pp.text(pos2(x1 - 12.0, rr.center().y), Align2::RIGHT_CENTER, crate::app::bbdt(m.bar_start(*b), m.sig_of_bar(*b)), look::regular(12.0), col);
+        }
+        pp.text(pos2(x1 + 4.0, rr.center().y), Align2::LEFT_CENTER, if *key { "Key" } else { "Time" }, look::regular(12.0), col);
+        pp.text(pos2(x1 + cols[1].1 + 4.0, rr.center().y), Align2::LEFT_CENTER, text, look::regular(12.0), col);
+        let resp = ui.interact(rr.intersect(list), ui.scope_id().with(("sl-row", k)), Sense::click());
+        if resp.clicked() {
+            sel = Some((*b, *key));
+        }
+        if resp.double_clicked() {
+            let s = m.sig_of_bar(*b);
+            app.arr.sig = Some(SigDialog { bar: *b, key: *key, num: s.0, den: s.1, grouping: String::new(), key_name: timeline::key_at(&p, *b), editing: Some(*b) });
+        }
+        resp.context_menu(|ui| {
+            if ui.add_enabled(*b > 0, egui::Button::new("Delete")).clicked() {
+                delete(app, (*b, *key));
+                sel = None;
+                ui.close();
+            }
+        });
+    }
+    let foot = Rect::from_min_max(pos2(full.min.x, full.max.y), pos2(full.max.x, body.max.y));
+    painter.rect_filled(foot, 0.0, look::header_bg());
+    painter.text(pos2(foot.max.x - 10.0, foot.center().y), Align2::RIGHT_CENTER, format!("{} Events", rows.len()), look::regular(12.0), look::text_dim());
+    ui.data_mut(|d| {
+        d.insert_temp(sel_id, sel);
+        d.insert_temp(create_id, create_key);
+    });
+}
+
+/// A key as Logic's Signature List writes it: "C Major", "F Minor".
+fn key_text(k: &str) -> String {
+    k.split_whitespace().map(|w| {
+        let mut c = w.chars();
+        match c.next() {
+            Some(f) if w.eq_ignore_ascii_case("major") || w.eq_ignore_ascii_case("minor") => f.to_uppercase().chain(c).collect(),
+            _ => w.to_string(),
+        }
+    }).collect::<Vec<_>>().join(" ")
 }
 
 // ---------------------------------------------------------------------------------------------
