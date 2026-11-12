@@ -120,6 +120,27 @@ fn clip_id(t: usize) -> egui::Id {
     egui::Id::unique(("ub-clip", t))
 }
 
+/// Export Ultrabeat patterns as MIDI regions: the pattern's notes as a MIDI region on the
+/// track, at the bar the playhead is in (one undo step).
+pub fn export_pattern(app: &mut App, t: usize, pattern: usize) -> bool {
+    let Some(notes) = instwin::with_inst::<Ultrabeat, _>(app, t, |u| u.pattern_notes(pattern)) else { return false };
+    let ppq = lg_core::events::PPQ as f64;
+    let bar = app.bar_ticks().max(1);
+    let pos = app.engine.lock().map(|e| e.pos).unwrap_or(0.0).max(0.0) as u32;
+    let at = pos / bar * bar;
+    let end = notes.iter().map(|n| ((n.0 + n.3) * ppq) as u32).max().unwrap_or(0);
+    let length = end.div_ceil(bar).max(1) * bar;
+    let Some(name) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| format!("{} Pattern {}", tr.name, pattern + 1)) else { return false };
+    app.checkpoint("Export Ultrabeat Pattern");
+    let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return false };
+    let notes = notes.iter().map(|&(b, pitch, velocity, len)| lg_core::events::Note { channel: 0, pitch, velocity, pos: at + (b * ppq).round() as u32, len: ((len * ppq).round() as u32).max(1), muted: false }).collect();
+    tr.regions.push(lg_core::Region { name, start: at, length, notes, audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
+    let r = tr.regions.len() - 1;
+    app.selected_region = Some((t, r));
+    app.after_edit();
+    true
+}
+
 fn key_note(v: usize) -> u8 {
     if v < 24 { 36 + v as u8 } else { 60 }
 }
@@ -257,6 +278,7 @@ fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
         }
         "export" => {
             ctx.data_mut(|d| d.insert_temp(egui::Id::unique((EXPORT_KEY, t)), n(1)));
+            export_pattern(app, t, n(1));
         }
         "copyp" => {
             let pat = cur_pat(app);

@@ -509,6 +509,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
             }
             x += 24.0;
         }
+        // the Side Chain pop-up (vocoder analysis, EXT sources)
+        crate::sidechain::popup(app, ui, Rect::from_min_size(pos2(x + 6.0, hr.min.y + 4.0), vec2(170.0, 20.0)), t);
         let mut x = hr.max.x - 8.0;
         for (label, act) in [("Paste", 6u8), ("Copy", 5), ("Compare", 7)] {
             let w = p.layout_no_wrap(label.into(), look::regular(12.0), look::text()).size().x + 16.0;

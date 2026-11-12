@@ -72,6 +72,7 @@ mod clavwin;
 mod mellotronwin;
 mod studiowin;
 mod synthui;
+mod sidechain;
 mod synthwin;
 mod es1win;
 mod evocwin;

@@ -137,6 +137,47 @@ fn strip_latency(u: &Units, bypass: &[bool]) -> usize {
     u.instrument.as_ref().map_or(0, |i| i.latency()) + u.inserts.iter().zip(u.insert_index.iter()).filter(|(_, k)| !bypass.get(**k).copied().unwrap_or(false)).map(|(fx, _)| fx.latency()).sum::<usize>()
 }
 
+/// Where a side chain comes from: another track's sound (after its effects), a bus, or the
+/// live input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SideSrc {
+    Track(usize),
+    Bus(usize),
+    Input,
+}
+
+/// The side-chain block for `src` (`frames` long; silence when the source has none).
+fn side_block(src: SideSrc, side_out: &[(Vec<f32>, Vec<f32>)], buses: &[(Vec<f32>, Vec<f32>)], input: Option<&[f32]>, frames: usize) -> (Vec<f32>, Vec<f32>) {
+    let mut l = vec![0f32; frames];
+    let mut r = vec![0f32; frames];
+    let copy = |l: &mut [f32], r: &mut [f32], (a, b): &(Vec<f32>, Vec<f32>)| {
+        let n = frames.min(a.len()).min(b.len());
+        l[..n].copy_from_slice(&a[..n]);
+        r[..n].copy_from_slice(&b[..n]);
+    };
+    match src {
+        SideSrc::Track(t) => {
+            if let Some(x) = side_out.get(t) {
+                copy(&mut l, &mut r, x);
+            }
+        }
+        SideSrc::Bus(b) => {
+            if let Some(x) = buses.get(b) {
+                copy(&mut l, &mut r, x);
+            }
+        }
+        SideSrc::Input => {
+            if let Some(inp) = input {
+                for f in 0..frames.min(inp.len() / 2) {
+                    l[f] = inp[2 * f];
+                    r[f] = inp[2 * f + 1];
+                }
+            }
+        }
+    }
+    (l, r)
+}
+
 pub struct Engine {
     pub playing: bool,
     /// The playhead in ticks from bar 1.
@@ -172,6 +213,14 @@ pub struct Engine {
     aux_units: Vec<Units>,
     pub aux_meters: Vec<f32>,
     buses: Vec<(Vec<f32>, Vec<f32>)>,
+    /// Each track's side-chain source (the plug-in window's Side Chain pop-up): instruments
+    /// that listen (EVOC 20 PolySynth, ES1 / ES2's EXT, Sculpture's External object,
+    /// Ultrabeat's side-chain oscillator) get its block before they render.
+    pub side_src: Vec<Option<SideSrc>>,
+    /// Each track's sound after its effects, before the fader (this block's once rendered,
+    /// else the block before), and the buses as the last block left them: side-chain sources.
+    side_out: Vec<(Vec<f32>, Vec<f32>)>,
+    bus_prev: Vec<(Vec<f32>, Vec<f32>)>,
     /// Routing set by the Mixer: each track's output and which of its effects are bypassed;
     /// the Stereo Out's own effects; gain reduction meters (dB); latency compensation on, and
     /// the plan (order, compensating delays) for the current routing.
@@ -230,7 +279,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -558,6 +607,7 @@ impl Engine {
             }
         }
         // recording: the input for this block; a count-in before bar 1 holds the playhead
+        self.rec.side_listen = self.side_src.iter().any(|s| *s == Some(SideSrc::Input));
         let input = self.rec.input(frames);
         let held = self.playing && self.rec.hold(frames, tps, self.beats_per_bar, &mut self.click);
         let was = self.was_playing;
@@ -723,6 +773,8 @@ impl Engine {
         let mut el = vec![0f32; frames];
         let mut er = vec![0f32; frames];
         let order = self.plan.order.clone();
+        self.side_out.resize_with(n_tracks, || (Vec::new(), Vec::new()));
+        self.side_src.resize(n_tracks, None);
         for node in order {
             l.fill(0.0);
             r.fill(0.0);
@@ -734,7 +786,17 @@ impl Engine {
                     }
                 }
                 let mut any = false;
+                let side = self.side_src.get(i).copied().flatten().filter(|s| *s != SideSrc::Track(i)).map(|s| side_block(s, &self.side_out, &self.bus_prev, input.as_deref(), frames));
+                if let Some((a, b)) = self.side_out.get_mut(i) {
+                    a.clear();
+                    a.resize(frames, 0.0);
+                    b.clear();
+                    b.resize(frames, 0.0);
+                }
                 if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                    if let Some((sl, sr)) = &side {
+                        ins.side_chain(sl, sr);
+                    }
                     ins.set_transport(at);
                     ins.render(&mut l, &mut r);
                     any = true;
@@ -789,6 +851,10 @@ impl Engine {
                 if let Some(u) = self.units.get_mut(i) {
                     let g = run_inserts(u, &bypass, &mut l, &mut r, at);
                     self.gr[i] = self.gr[i].max(g);
+                }
+                if let Some((a, b)) = self.side_out.get_mut(i) {
+                    a.copy_from_slice(&l);
+                    b.copy_from_slice(&r);
                 }
                 let (mut vol, mut pan) = (self.tracks[i].volume, self.tracks[i].pan.clamp(-1.0, 1.0));
                 if self.playing {
@@ -891,6 +957,10 @@ impl Engine {
                 *m = m.max(peak);
             }
             self.ext.meter(node, n_tracks, peak);
+        }
+        // (the buses as they are now: next block's bus side chains)
+        if self.side_src.iter().any(|s| matches!(s, Some(SideSrc::Bus(_)))) {
+            self.bus_prev.clone_from(&self.buses);
         }
         // the Stereo Out's own effects (Logic's master chain; deactivated in surround)
         if !self.master_units.inserts.is_empty() && self.surround.is_none() {
@@ -1231,6 +1301,50 @@ mod tests {
 
     fn peaks(out: &[f32]) -> Vec<usize> {
         (0..out.len() / 2).filter(|&f| out[2 * f].abs() > 0.05).collect()
+    }
+
+    /// An instrument that notes the loudest side-chain sample it was handed.
+    struct Probe(Arc<std::sync::atomic::AtomicU32>);
+    impl lg_dsp::Plugin for Probe {
+        fn params(&self) -> &[lg_dsp::Param] {
+            &[]
+        }
+        fn get(&self, _: u32) -> f32 {
+            0.0
+        }
+        fn set(&mut self, _: u32, _: f32) {}
+        fn reset(&mut self) {}
+    }
+    impl lg_dsp::Instrument for Probe {
+        fn note_on(&mut self, _: u8, _: u8) {}
+        fn note_off(&mut self, _: u8) {}
+        fn render(&mut self, _: &mut [f32], _: &mut [f32]) {}
+        fn side_chain(&mut self, l: &[f32], r: &[f32]) {
+            let m = l.iter().chain(r).fold(0f32, |a, x| a.max(x.abs()));
+            let old = f32::from_bits(self.0.load(std::sync::atomic::Ordering::Relaxed));
+            self.0.store(old.max(m).to_bits(), std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn side_chain_feeds_another_tracks_sound_to_the_instrument() {
+        let seen = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let mut e = Engine::new();
+        let mut quiet = click_track(100, &[]);
+        quiet.audio.clear();
+        e.tracks = vec![click_track(100, &[]), quiet];
+        e.program_changes();
+        e.units[1].instrument = Some(Box::new(Probe(seen.clone())));
+        // no side chain: nothing arrives
+        run(&mut e, 4);
+        assert_eq!(f32::from_bits(seen.load(std::sync::atomic::Ordering::Relaxed)), 0.0);
+        // Side Chain: track 1 — its click (after its effects, before the fader) arrives
+        e.pos = 0.0;
+        e.tracks[0].volume = 0.0;
+        e.side_src = vec![None, Some(SideSrc::Track(0))];
+        run(&mut e, 4);
+        let m = f32::from_bits(seen.load(std::sync::atomic::Ordering::Relaxed));
+        assert!((m - 0.5).abs() < 0.01, "the click reaches the side chain whatever the fader: {m}");
     }
 
     #[test]

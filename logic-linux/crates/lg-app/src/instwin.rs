@@ -298,6 +298,7 @@ pub fn redo(app: &mut App) -> bool {
 /// Each frame: instruments rebuilt by the engine (a new instance) or edited (a new revision)
 /// get their editor state and parameters back.
 pub fn sync(app: &mut App) {
+    crate::sidechain::sync(app);
     let Some(p) = app.project.as_ref() else { return };
     let ids: Vec<(usize, u64)> = p.tracks.iter().enumerate().map(|(i, t)| (i, t.extra.id)).filter(|(_, id)| app.inst.rev.contains_key(id) || app.inst.params.contains_key(id)).collect();
     if ids.is_empty() {
@@ -492,7 +493,7 @@ pub const SLOT_MENU: &[(&str, &[(&str, &str)])] = &[
     ("Drums", &[("Drum Kit Designer", "Drum Kit Designer"), ("Drum Synth", "Drum Synth"), ("Ultrabeat (Drum Machine)", "Ultrabeat")]),
     ("Sampler", &[("Quick Sampler (Single Sample)", "Quick Sampler"), ("Sample Alchemy", "Sample Alchemy"), ("Sampler (Multi-Sample)", "Sampler")]),
     ("Studio Instruments", &[("Studio Bass", "Studio Bass"), ("Studio Horns", "Studio Horns"), ("Studio Piano", "Studio Piano"), ("Studio Strings", "Studio Strings")]),
-    ("Synthesizer", &[("Alchemy", "Alchemy"), ("EFM1 (FM Synth)", "EFM1"), ("ES E (Ensemble Synth)", "ES E"), ("ES M (Monophonic Synth)", "ES M"), ("ES P (Polyphonic Synth)", "ES P"), ("ES1 (Synthesizer 1)", "ES1"), ("ES2 (Synthesizer 2)", "ES2"), ("EVOC 20 PolySynth", "EVOC 20 PolySynth"), ("Retro Synth", "Retro Synth"), ("Sculpture (Modeling Synth)", "Sculpture")]),
+    ("Synthesizer", &[("Alchemy", "Alchemy"), ("EFM1 (FM Synth)", "EFM1"), ("ES E (Ensemble Synth)", "ES E"), ("ES M (Monophonic Synth)", "ES M"), ("ES P (Polyphonic Synth)", "ES P"), ("ES1 (Synthesizer 1)", "ES1"), ("ES2 (Synthesizer 2)", "ES2"), ("EVOC 20 PS (Vocoder Synth)", "EVOC 20 PolySynth"), ("Retro Synth", "Retro Synth"), ("Sculpture (Modeling Synth)", "Sculpture")]),
     ("Vintage Keys", &[("Vintage B3 Organ", "Vintage B3 Organ"), ("Vintage Clav", "Vintage Clav"), ("Vintage Electric Piano", "Vintage Electric Piano"), ("Vintage Mellotron", "Vintage Mellotron")]),
 ];
 

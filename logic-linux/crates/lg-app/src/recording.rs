@@ -98,12 +98,14 @@ pub struct EngineRec {
     /// The Tuner is open: the input is read, its last samples kept (mono) for it.
     pub tuner: bool,
     pub tap: VecDeque<f32>,
+    /// An instrument's side chain listens to the live input.
+    pub side_listen: bool,
 }
 
 impl EngineRec {
     /// The input for a block of `frames` (stereo, interleaved), when something needs it.
     pub fn input(&mut self, frames: usize) -> Option<Vec<f32>> {
-        let need = self.capturing || !self.monitored.is_empty() || self.tuner;
+        let need = self.capturing || !self.monitored.is_empty() || self.tuner || self.side_listen;
         let out = match &mut self.feed {
             Feed::None => return None,
             Feed::Device(q) => {
