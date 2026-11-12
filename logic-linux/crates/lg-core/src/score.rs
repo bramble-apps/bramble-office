@@ -273,7 +273,8 @@ pub struct SetEntry {
     pub barline: bool,
 }
 
-/// A score set: instruments in score order, the Scale (25–250 %), and Part layout (else Score).
+/// A score set: instruments in score order, the Scale (25–250 %), and Part layout (else Score;
+/// kept for Logic's sets, Studio lays both out with the one Global format).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScoreSet {
     pub name: String,

@@ -260,6 +260,22 @@ fn check_symbols(app: &mut App, t: usize) {
             }
         }
         insert_break(app, b0 + 2, Break::Line);
+        // (=2: every MIDI track in a set, bracketed and joined by bar lines)
+        if std::env::var("LG_SCORE_SYMBOLS").as_deref() == Ok("2") {
+            let ids: Vec<u64> = app.project.as_ref().map(|p| p.tracks.iter().filter(|t| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none())).map(|t| t.extra.id).collect()).unwrap_or_default();
+            let k = new_set(app, "Check", &ids);
+            if let Some(set) = app.project.as_mut().and_then(|p| p.score.sets.get_mut(k)) {
+                for e in set.entries.iter_mut() {
+                    e.bracket = true;
+                    e.barline = true;
+                }
+                if let Some(e) = set.entries.first_mut() {
+                    e.full = "Keys".into();
+                }
+            }
+            let ctx = app.ctx.clone();
+            score::with_state(&ctx, |s| s.set = Some(k));
+        }
     });
 }
 
@@ -1373,7 +1389,7 @@ pub fn new_set(app: &mut App, name: &str, tracks: &[u64]) -> usize {
 /// The Score Sets window: New ▸ New Empty Set / New Complete Set / Duplicate Set / Delete Set,
 /// the sets at the left (double-click renames), the selected set's instruments in score order
 /// with Full Name, Short Name, Bracket and Bar Line (joined to the next), moved up and down or
-/// removed, an instrument added; Scale (25–250 %) and Score / Part layout. All Instruments can't
+/// removed, an instrument added; Scale (25–250 %). All Instruments can't
 /// be edited.
 fn sets_window(app: &mut App, ui: &mut egui::Ui, sel: &mut Option<usize>, renaming: &mut Option<String>) {
     let Some(p) = app.project.as_ref() else { return };
@@ -1513,11 +1529,6 @@ fn sets_window(app: &mut App, ui: &mut egui::Ui, sel: &mut Option<usize>, renami
                 let mut sc = set.scale as f32;
                 if ui.add(egui::DragValue::new(&mut sc).range(25.0..=250.0).suffix(" %")).changed() {
                     edit(app, "Scale", &mut |v| v[k].scale = sc as u16);
-                }
-                ui.label("Layout:");
-                let mut part = set.part_layout;
-                if ui.selectable_value(&mut part, false, "Score").changed() || ui.selectable_value(&mut part, true, "Part").changed() {
-                    edit(app, "Layout", &mut |v| v[k].part_layout = part);
                 }
             });
             if ui.button("Show This Set").clicked() {

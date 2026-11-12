@@ -1098,9 +1098,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let x = if linear { head.min.x + 4.0 + if names_on { 80.0 } else { 0.0 } } else { line.x_start - 1.2 * sp };
                 let pp = if linear { &headp } else { &mp };
                 let (y0, y1) = (bottom - 4.0 * sp, line.top + rows[end].off);
+                // (a bracket joins at least two instruments)
+                if rows[end].t != row.t {
                 pp.line_segment([pos2(x, y0 - 0.5 * sp), pos2(x, y1 + 0.5 * sp)], Stroke::new(0.5 * sp, INK));
                 smufl(pp, '\u{E003}', pos2(x - 0.25 * sp, y0 - 0.5 * sp), sp, INK, false);
                 smufl(pp, '\u{E004}', pos2(x - 0.25 * sp, y1 + 0.5 * sp), sp, INK, false);
+                }
             }
             if row.brace {
                 let lower = line.top + rows.get(rk + 1).map_or(row.off, |r| r.off);
@@ -1564,6 +1567,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 st.goto_page = Some(n.max(1) - 1);
             }
         }
+    }
+    // Delete / Backspace with a symbol selected (text, bar sign, pedal marking): it goes
+    if (st.sel_symbol.is_some() || st.sel_bar.is_some() || st.sel_pedal.is_some()) && !ctx.egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
+        ctx.data_mut(|d| d.insert_temp(state_id(), st.clone()));
+        crate::scoreinsp::delete_selected(app);
+        st = state(&ctx);
     }
     windows(app, &ctx, &mut st, cur_t);
     ctx.data_mut(|d| d.insert_temp(state_id(), st));
