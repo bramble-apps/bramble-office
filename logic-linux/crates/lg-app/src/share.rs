@@ -1148,6 +1148,11 @@ fn bar_text(app: &App, t: u32) -> String {
     format!("{} {} {} {}", t / bar + 1, (t % bar) / beat + 1, (t % beat) / div + 1, (t % div) * 240 / div.max(1) + 1)
 }
 
+/// A grid's label, right-aligned against its control as Logic's are.
+fn lab(ui: &mut egui::Ui, t: &str) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(t));
+}
+
 fn primary(ui: &mut egui::Ui, label: &str) -> bool {
     ui.add(egui::Button::new(egui::RichText::new(label).color(egui::Color32::WHITE)).fill(look::accent()).min_size(vec2(76.0, 22.0))).clicked()
 }
@@ -1192,6 +1197,7 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
                     ui.set_width(150.0);
                     for (d, label) in [(Dest::Pcm, "PCM"), (Dest::Mp3, "MP3"), (Dest::M4a, "M4A: AAC"), (Dest::Burn, "Burn: CD/DVD")] {
                         let sel = o.shown == d;
+                        let bg = ui.painter().add(egui::Shape::Noop);
                         let r = ui.horizontal(|ui| {
                             let mut on = match d {
                                 Dest::Pcm => o.pcm,
@@ -1219,7 +1225,10 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
                             }
                         });
                         if sel {
-                            ui.painter().rect_filled(r.response.rect.expand2(vec2(2.0, 1.0)), 3.0, look::accent().gamma_multiply(0.45));
+                            // (the whole row, as Logic's selected destination)
+                            let mut row = r.response.rect.expand2(vec2(2.0, 1.0));
+                            row.max.x = ui.max_rect().max.x + 2.0;
+                            ui.painter().set(bg, egui::Shape::rect_filled(row, 3.0, look::accent()));
                         }
                     }
                 });
@@ -1239,13 +1248,13 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
         });
         ui.separator();
         egui::Grid::new("share-bounce-common").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
-            ui.label("Start:");
+            lab(ui, "Start:");
             ui.add(egui::DragValue::new(&mut o.start).speed(bar as f64 / 8.0).custom_formatter(|_, _| starts.0.clone()));
             ui.end_row();
-            ui.label("End:");
+            lab(ui, "End:");
             ui.add(egui::DragValue::new(&mut o.end).speed(bar as f64 / 8.0).custom_formatter(|_, _| starts.1.clone()));
             ui.end_row();
-            ui.label("Mode:");
+            lab(ui, "Mode:");
             combo(ui, "share-mode", &mut o.mode, &Mode::ALL.map(|m| (m, m.name().to_string())));
             ui.end_row();
             ui.label("");
@@ -1255,7 +1264,7 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
                 ui.add_enabled(o.pcm, egui::Checkbox::new(&mut o.tempo_info, "Include Tempo Information"));
             });
             ui.end_row();
-            ui.label("Normalize:");
+            lab(ui, "Normalize:");
             combo(ui, "share-normalize", &mut o.normalize, &Normalize::ALL.map(|n| (n, n.name().to_string())));
             ui.end_row();
         });
@@ -1300,40 +1309,45 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
 
 fn pcm_options(ui: &mut egui::Ui, o: &mut Opts) {
     egui::Grid::new("share-pcm").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
-        ui.label("File Format:");
+        lab(ui, "File Format:");
         combo(ui, "share-ft", &mut o.file_type, &FileType::ALL.map(|f| (f, f.name().to_string())));
         ui.end_row();
-        ui.label("Resolution:");
+        lab(ui, "Resolution:");
         combo(ui, "share-bits", &mut o.bits, &BITS.map(|(n, b)| (b, n.to_string())));
         ui.end_row();
-        ui.label("Sample Rate:");
+        lab(ui, "Sample Rate:");
         combo(ui, "share-rate", &mut o.rate, &RATES.map(|r| (r, if r % 1000 == 0 { format!("{} kHz", r / 1000) } else { format!("{:.3} kHz", r as f64 / 1000.0).trim_end_matches('0').to_string() })));
         ui.end_row();
-        ui.label("File Type:");
+        lab(ui, "File Type:");
         combo(ui, "share-split", &mut o.split, &[(false, "Interleaved".to_string()), (true, "Split".to_string())]);
         ui.end_row();
-        ui.label("Dithering:");
+        lab(ui, "Dithering:");
         ui.add_enabled_ui(o.bits < 32, |ui| combo(ui, "share-dither", &mut o.dither, &Dither::ALL.map(|d| (d, d.name().to_string()))));
         ui.end_row();
+        // (the checkboxes in the controls' column)
+        ui.label("");
+        ui.vertical(|ui| {
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Surround Bounce")).on_disabled_hover_text("The project is stereo (File ▸ Project Settings ▸ Audio sets a surround format)");
+            ui.checkbox(&mut o.add_to_library, "Add to Music Library");
+            ui.checkbox(&mut o.add_to_project, "Add to Project");
+        });
+        ui.end_row();
     });
-    ui.add_enabled(false, egui::Checkbox::new(&mut false, "Surround Bounce")).on_disabled_hover_text("The project is stereo (File ▸ Project Settings ▸ Audio sets a surround format)");
-    ui.checkbox(&mut o.add_to_library, "Add to Music Library");
-    ui.checkbox(&mut o.add_to_project, "Add to Project");
 }
 
 fn mp3_options(ui: &mut egui::Ui, o: &mut Opts) {
     let rates = MP3_RATES.map(|r| (r, format!("{r} kbit/s")));
     egui::Grid::new("share-mp3").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
-        ui.label("Bit Rate (Mono):");
+        lab(ui, "Bit Rate (Mono):");
         combo(ui, "share-mp3-mono", &mut o.mp3_mono, &rates);
         ui.end_row();
-        ui.label("Bit Rate (Stereo):");
+        lab(ui, "Bit Rate (Stereo):");
         combo(ui, "share-mp3-stereo", &mut o.mp3_stereo, &rates);
         ui.end_row();
         ui.label("");
         ui.checkbox(&mut o.mp3_vbr, "Use Variable Bit Rate Encoding (VBR)");
         ui.end_row();
-        ui.label("Quality:");
+        lab(ui, "Quality:");
         combo(ui, "share-mp3-q", &mut o.mp3_quality, &[0, 1, 2, 3, 4].map(|k| (k, QUALITY[k].to_string())));
         ui.end_row();
         ui.label("");
@@ -1342,7 +1356,7 @@ fn mp3_options(ui: &mut egui::Ui, o: &mut Opts) {
             ui.checkbox(&mut o.mp3_filter, "Filter frequencies below 10 Hz");
         });
         ui.end_row();
-        ui.label("Stereo Mode:");
+        lab(ui, "Stereo Mode:");
         combo(ui, "share-mp3-st", &mut o.mp3_joint, &[(true, "Joint Stereo".to_string()), (false, "Normal Stereo".to_string())]);
         ui.end_row();
         ui.label("");
@@ -1353,23 +1367,27 @@ fn mp3_options(ui: &mut egui::Ui, o: &mut Opts) {
             }
         });
         ui.end_row();
+        ui.label("");
+        ui.checkbox(&mut o.add_to_library, "Add to Music Library");
+        ui.end_row();
     });
-    ui.checkbox(&mut o.add_to_library, "Add to Music Library");
 }
 
 fn m4a_options(ui: &mut egui::Ui, o: &mut Opts) {
     egui::Grid::new("share-m4a").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
-        ui.label("Encoding:");
+        lab(ui, "Encoding:");
         combo(ui, "share-m4a-enc", &mut o.m4a_lossless, &[(false, "AAC".to_string()), (true, "Apple Lossless".to_string())]);
         ui.end_row();
-        ui.label("Bit Rate:");
+        lab(ui, "Bit Rate:");
         ui.add_enabled_ui(!o.m4a_lossless, |ui| combo(ui, "share-m4a-rate", &mut o.m4a_rate, &M4A_RATES.map(|r| (r, format!("{r} kbit/s")))));
         ui.end_row();
         ui.label("");
         ui.add_enabled(!o.m4a_lossless, egui::Checkbox::new(&mut o.m4a_vbr, "Encode with variable bit rate (VBR)"));
         ui.end_row();
+        ui.label("");
+        ui.checkbox(&mut o.add_to_library, "Add to Music Library");
+        ui.end_row();
     });
-    ui.checkbox(&mut o.add_to_library, "Add to Music Library");
 }
 
 fn id3_window(app: &mut App, ctx: &egui::Context) {
@@ -1456,7 +1474,7 @@ fn share_window(app: &mut App, ctx: &egui::Context) {
         let song = !d.project;
         egui::Grid::new("share-song-grid").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
             if song {
-                ui.label("Title:");
+                lab(ui, "Title:");
                 ui.add(egui::TextEdit::singleline(&mut d.title).desired_width(260.0));
                 ui.end_row();
             }
@@ -1468,7 +1486,7 @@ fn share_window(app: &mut App, ctx: &egui::Context) {
                 }
             }
             if song {
-                ui.label("Quality:");
+                lab(ui, "Quality:");
                 combo(ui, "share-q", &mut d.quality, &[0, 1, 2, 3, 4].map(|k| (k, SHARE_QUALITY[k].to_string())));
                 ui.end_row();
             }
