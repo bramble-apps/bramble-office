@@ -153,6 +153,7 @@ mod scoretools;
 mod scoreglobal;
 mod scoregrid;
 mod stepseq;
+mod noterepeat;
 pub mod sthints;
 mod stepinsp;
 mod cellinsp;

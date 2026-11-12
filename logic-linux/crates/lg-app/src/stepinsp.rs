@@ -334,7 +334,7 @@ fn rate_names() -> Vec<&'static str> {
 }
 
 fn rate_index(v: u32) -> usize {
-    RATES.iter().position(|r| r.1 == v).unwrap_or(4)
+    RATES.iter().position(|r| r.1 == v).unwrap_or(6)
 }
 
 /// Draws the inspector into `area` and edits `pat` (rows and steps selected as given). Returns
@@ -382,7 +382,7 @@ pub fn show(ui: &mut egui::Ui, area: Rect, tab: &mut Tab, pat: &mut StepPattern,
         Tab::Pattern => {
             let o = pat.opts.clone();
             if let Some(d) = number(ui, &p, line(ROW), id.with("len"), "Pattern Length", &[pat.steps as f32], 1.0, MAX_STEPS as f32, 16.0, &|v| format!("{v:.0} Steps")) {
-                pat.steps = (pat.steps as f32 + d).clamp(1.0, MAX_STEPS as f32) as u8;
+                crate::stepseq::set_length(pat, (pat.steps as f32 + d).clamp(1.0, MAX_STEPS as f32) as u8);
                 changed = Some("Pattern Length");
             }
             let ends: Vec<f32> = pat.rows.iter().map(|r| r.start as f32 + 1.0).collect();

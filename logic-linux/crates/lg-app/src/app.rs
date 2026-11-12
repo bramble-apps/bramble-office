@@ -1448,7 +1448,7 @@ impl App {
         }
         // the MIDI editors besides the Piano Roll: Score, Step Sequencer, Step Input, Step and
         // Event Editors
-        if crate::scorecmd::command(self, ctx, name) || crate::scorepdf::command(self, ctx, name) || crate::scorestyle::command(self, ctx, name) || crate::scoregrid::command(self, ctx, name) || crate::scoreinsp::command(self, ctx, name) || crate::scorexml::command(self, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
+        if crate::scorecmd::command(self, ctx, name) || crate::scorepdf::command(self, ctx, name) || crate::scorestyle::command(self, ctx, name) || crate::scoregrid::command(self, ctx, name) || crate::scoreinsp::command(self, ctx, name) || crate::scorexml::command(self, name) || crate::stepseq::command(self, ctx, name) || crate::noterepeat::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
             return true;
         }
         if crate::surround_ui::command(self, ctx, name) {
@@ -1926,6 +1926,7 @@ impl App {
         }
         crate::dialogs::show(self, &ctx);
         crate::midiwin::windows(self, &ctx);
+        crate::noterepeat::window(self, &ctx);
         crate::stepinput::window(self, &ctx);
         crate::evlist::float_window(self, &ctx);
         crate::listwin::windows(self, &ctx);
@@ -2011,6 +2012,7 @@ impl eframe::App for App {
         self.keys(&ctx);
         crate::nav::frame(self);
         crate::liveloops::update(self);
+        crate::noterepeat::frame(self, &ctx);
         crate::recording::update(self);
         crate::flex::update(self);
         crate::hosting::idle(self, &ctx);

@@ -803,6 +803,38 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
     project_settings(app, ctx);
 }
 
+/// The Project Chooser's Details: what a new project starts with.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Details {
+    pub open: bool,
+    pub tempo: f64,
+    pub key: String,
+    pub signature: (u8, u8),
+    pub sample_rate: u32,
+    taps: Vec<f64>,
+}
+
+impl Default for Details {
+    fn default() -> Self {
+        Details { open: false, tempo: 120.0, key: "C major".into(), signature: (4, 4), sample_rate: 44_100, taps: Vec::new() }
+    }
+}
+
+fn chooser_details(ctx: &egui::Context) -> Details {
+    ctx.data(|m| m.get_temp::<Details>(egui::Id::new("pf-chooser-details"))).unwrap_or_default()
+}
+
+/// A new project from the chooser takes the Details' tempo, key, time signature and rate.
+pub fn apply_details(p: &mut lg_core::Project, d: &Details) {
+    p.tempo = d.tempo;
+    if let Some(first) = p.tempo_map.first_mut() {
+        first.1 = d.tempo;
+    }
+    p.key = d.key.clone();
+    p.signature = d.signature;
+    p.sample_rate = d.sample_rate;
+}
+
 fn chooser(app: &mut App, ctx: &egui::Context) {
     if !app.pf.chooser {
         return;
@@ -843,6 +875,61 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         });
         app.pf.pick = app.pf.pick.min(total.saturating_sub(1));
         ui.add_space(8.0);
+        // Details (the disclosure triangle at the lower left): the new project's tempo, key,
+        // time signature and sample rate
+        let mut d = chooser_details(ctx);
+        let tri = if d.open { "▾ Details" } else { "▸ Details" };
+        if ui.add(egui::Button::new(tri).frame(false)).clicked() {
+            d.open = !d.open;
+        }
+        if d.open {
+            egui::Grid::new("pf-details").num_columns(2).spacing(egui::vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.label("Tempo");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut d.tempo, 5.0..=990.0).logarithmic(true).show_value(false));
+                    ui.add(egui::DragValue::new(&mut d.tempo).range(5.0..=990.0).speed(0.5).max_decimals(1));
+                    if ui.button("Tap Tempo").clicked() {
+                        let now = ui.input(|i| i.time);
+                        d.taps.retain(|t| now - t < 2.0);
+                        d.taps.push(now);
+                        if let Some(bpm) = crate::nav::tap_tempo(&d.taps) {
+                            d.tempo = bpm.clamp(5.0, 990.0);
+                        }
+                    }
+                });
+                ui.end_row();
+                ui.label("Key Signature");
+                egui::ComboBox::from_id_salt("pf-key").selected_text(d.key.clone()).height(300.0).show_ui(ui, |ui| {
+                    for minor in [false, true] {
+                        for root in ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] {
+                            let k = format!("{root} {}", if minor { "minor" } else { "major" });
+                            ui.selectable_value(&mut d.key, k.clone(), k);
+                        }
+                    }
+                });
+                ui.end_row();
+                ui.label("Time Signature");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut d.signature.0).range(1..=64));
+                    ui.label("/");
+                    egui::ComboBox::from_id_salt("pf-sigden").selected_text(d.signature.1.to_string()).width(44.0).show_ui(ui, |ui| {
+                        for den in [2u8, 4, 8, 16, 32] {
+                            ui.selectable_value(&mut d.signature.1, den, den.to_string());
+                        }
+                    });
+                });
+                ui.end_row();
+                ui.label("Sample Rate");
+                egui::ComboBox::from_id_salt("pf-rate").selected_text(format!("{:.1} kHz", d.sample_rate as f64 / 1000.0)).show_ui(ui, |ui| {
+                    for r in [44_100u32, 48_000, 88_200, 96_000, 176_400, 192_000] {
+                        ui.selectable_value(&mut d.sample_rate, r, format!("{:.1} kHz", r as f64 / 1000.0));
+                    }
+                });
+                ui.end_row();
+            });
+        }
+        ctx.data_mut(|m| m.insert_temp(egui::Id::new("pf-chooser-details"), d));
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
             if ui.button("Open an existing project…").clicked() {
                 app.pf.chooser = false;
@@ -862,7 +949,9 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         app.pf.chooser = false;
         if k < LAYOUTS.len() {
             app.stop();
-            app.set_project(layout_project(k), false);
+            let mut p = layout_project(k);
+            apply_details(&mut p, &chooser_details(ctx));
+            app.set_project(p, false);
             app.file = None;
             app.pf.band = None;
             app.dirty = false;
@@ -1098,6 +1187,14 @@ mod tests {
         // 2026-11-09 21:02:27 UTC
         let t = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_794_258_147);
         assert_eq!(when(t), "11/9/26, 21:02:27");
+    }
+
+    #[test]
+    fn chooser_details_make_the_project() {
+        let mut p = layout_project(0);
+        let d = Details { tempo: 92.5, key: "F# minor".into(), signature: (7, 8), sample_rate: 48_000, ..Details::default() };
+        apply_details(&mut p, &d);
+        assert_eq!((p.tempo, p.key.as_str(), p.signature, p.sample_rate), (92.5, "F# minor", (7, 8), 48_000));
     }
 
     #[test]

@@ -129,8 +129,8 @@ impl Play {
 }
 
 /// The order a row's `n` playable steps are played in over `slots` slots: indices into them.
-/// Ping Pong goes forward then back without repeating the ends (1 2 3 4 3 2 …); Pendulum
-/// plays the ends twice (1 2 3 4 4 3 2 1 …); Shuffle plays every step once per pass in a
+/// Ping Pong goes forward then back playing the ends twice (1 2 3 4 4 3 2 1 …); Pendulum
+/// turns without repeating them (1 2 3 4 3 2 …), as Logic's guide describes; Shuffle plays every step once per pass in a
 /// new order; Wander moves one step forward or back at random; Random jumps anywhere.
 /// `seed` makes the random modes repeatable.
 pub fn play_order(mode: Play, n: usize, slots: usize, seed: u64, row: usize) -> Vec<usize> {
@@ -141,16 +141,18 @@ pub fn play_order(mode: Play, n: usize, slots: usize, seed: u64, row: usize) -> 
     match mode {
         Play::Forward => (0..slots).map(|k| k % n).collect(),
         Play::Reverse => (0..slots).map(|k| n - 1 - k % n).collect(),
+        // Ping-Pong plays the ends twice, so a pass is twice the row (the guide: it doubles the
+        // pattern length); Pendulum turns at the ends without repeating them
         Play::PingPong => {
+            let period = 2 * n;
+            (0..slots).map(|k| { let p = k % period; if p < n { p } else { period - 1 - p } }).collect()
+        }
+        Play::Pendulum => {
             if n == 1 {
                 return vec![0; slots];
             }
             let period = 2 * n - 2;
             (0..slots).map(|k| { let p = k % period; if p < n { p } else { period - p } }).collect()
-        }
-        Play::Pendulum => {
-            let period = 2 * n;
-            (0..slots).map(|k| { let p = k % period; if p < n { p } else { period - 1 - p } }).collect()
         }
         Play::Shuffle => {
             let mut out = Vec::with_capacity(slots);
@@ -323,6 +325,33 @@ impl StepPattern {
         out
     }
 
+    /// The pattern's musical length in ticks: how long until every row is back at its start
+    /// together. Each row loops over its own played steps (loop start to end, skipped steps
+    /// left out, each at its own rate); Ping-Pong doubles a row's pass and Pendulum plays the
+    /// ends once; rows of different lengths extend it until they realign (the least common
+    /// multiple). `None` when a row plays Random, Shuffle or Wander (it never repeats).
+    pub fn musical_len(&self) -> Option<u32> {
+        let mut total: u64 = 0;
+        for row in &self.rows {
+            let n = self.row_len(row);
+            let rate = row.rate.unwrap_or(self.rate).max(1);
+            let start = (row.start as usize).min(n - 1);
+            let active: Vec<u32> = (start..n).filter(|&k| !row.steps[k].skip).map(|k| row.steps[k].rate.unwrap_or(rate).max(1)).collect();
+            if active.is_empty() {
+                continue;
+            }
+            let pass: u32 = match row.play.unwrap_or(self.play) {
+                Play::Forward | Play::Reverse => active.iter().sum(),
+                Play::PingPong => 2 * active.iter().sum::<u32>(),
+                Play::Pendulum if active.len() > 1 => 2 * active.iter().sum::<u32>() - active[0] - active[active.len() - 1],
+                Play::Pendulum => active[0],
+                Play::Random | Play::Shuffle | Play::Wander => return None,
+            };
+            total = if total == 0 { pass as u64 } else { lcm(total, pass as u64) };
+        }
+        Some(total.min(u32::MAX as u64) as u32)
+    }
+
     /// A pattern read from a region's notes (positions from the region start): one row per
     /// pitch (highest first, as Logic sorts), notes on the 1/16 grid, longer notes tied.
     pub fn from_notes(notes: &[Note], len: u32, drums: bool) -> StepPattern {
@@ -371,6 +400,13 @@ impl StepPattern {
 }
 
 /// A repeatable 0..100 per (row, slot).
+fn lcm(a: u64, b: u64) -> u64 {
+    fn gcd(a: u64, b: u64) -> u64 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    a / gcd(a, b) * b
+}
+
 fn chance(seed: u64, row: usize, slot: u32) -> u8 {
     let mut x = seed ^ (row as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ (slot as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x ^= x >> 31;
@@ -423,7 +459,10 @@ impl Mode {
             Mode::Velocity => s.velocity as f32 / 127.0,
             Mode::Gate => s.gate as f32 / 100.0,
             Mode::Repeat => (s.repeat as f32 - 1.0) / 15.0,
-            Mode::Rate => 1.0 - RATE_ORDER.iter().position(|&r| Some(r) == s.rate).unwrap_or(7) as f32 / 11.0,
+            Mode::Rate => {
+                let o = rate_order();
+                1.0 - o.iter().position(|&r| Some(r) == s.rate).unwrap_or(sixteenth_index(&o)) as f32 / (o.len() - 1) as f32
+            }
             Mode::Chance => s.chance as f32 / 100.0,
             Mode::Offset => (s.offset as f32 + 50.0) / 100.0,
             Mode::Octave => (s.octave as f32 + 3.0) / 6.0,
@@ -437,7 +476,10 @@ impl Mode {
             Mode::Velocity => s.velocity = (f * 126.0 + 1.0).round() as u8,
             Mode::Gate => s.gate = (f * 99.0 + 1.0).round() as u8,
             Mode::Repeat => s.repeat = (f * 15.0 + 1.0).round() as u8,
-            Mode::Rate => s.rate = Some(RATE_ORDER[((1.0 - f) * 11.0).round() as usize]),
+            Mode::Rate => {
+                let o = rate_order();
+                s.rate = Some(o[((1.0 - f) * (o.len() - 1) as f32).round() as usize]);
+            }
             Mode::Chance => s.chance = (f * 100.0).round() as u8,
             Mode::Offset => s.offset = (f * 100.0 - 50.0).round() as i8,
             Mode::Octave => s.octave = (f * 6.0 - 3.0).round() as i8,
@@ -460,8 +502,24 @@ impl Mode {
     }
 }
 
-/// Step rates: Logic's /1 … /64 and the triplets.
-pub const RATES: [(&str, u32); 12] = [("/1", 3840), ("/2", 1920), ("/4", 960), ("/8", 480), ("/16", 240), ("/32", 120), ("/64", 60), ("/3", 1280), ("/6", 640), ("/12", 320), ("/24", 160), ("/48", 80)];
+/// Step rates (Logic's Step Rate menu): 4, 2 and 1 whole notes, /2 … /64, the triplets 1T … 32T
+/// and the dotted 1D … 64D (ticks per step; a whole note is 3840).
+pub const RATES: [(&str, u32); 22] = [
+    ("4", 15360), ("2", 7680), ("1", 3840), ("/2", 1920), ("/4", 960), ("/8", 480), ("/16", 240), ("/32", 120), ("/64", 60),
+    ("1T", 2560), ("2T", 1280), ("4T", 640), ("8T", 320), ("16T", 160), ("32T", 80),
+    ("1D", 5760), ("2D", 2880), ("4D", 1440), ("8D", 720), ("16D", 360), ("32D", 180), ("64D", 90),
+];
+
+/// The Pattern Length menu's sections (Logic's: lengths for 4/4, 3/4, 5/4 and 7/8 bars).
+pub const LENGTH_SECTIONS: [(&str, &[u8]); 4] = [
+    ("4 Based (4/4)", &[4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]),
+    ("3 Based (3/4)", &[3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63]),
+    ("5 Based (5/4)", &[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]),
+    ("7 Based (7/8)", &[7, 14, 21, 28, 35, 42, 49, 56, 63]),
+];
+
+/// Where the menu's groups start (straight, triplet, dotted).
+pub const RATE_GROUPS: [usize; 2] = [9, 15];
 
 fn rate_name(r: u32) -> String {
     RATES.iter().find(|x| x.1 == r).map(|x| x.0.to_string()).unwrap_or_else(|| format!("{r}t"))
@@ -483,8 +541,12 @@ struct Store {
     modes: HashMap<(usize, usize, usize), Mode>,
     selected_row: usize,
     page: usize,
-    /// The press in progress: (row, paint state for toggles).
+    /// The press in progress: (row, paint state for toggles), and whether it is a
+    /// Command-drag that ties the steps it crosses.
     press: Option<(usize, bool)>,
+    press_tie: bool,
+    /// A Command-Option-drag ramp: (first step, its value 0..1, Shift held: off steps stay off).
+    ramp: Option<(usize, f32, bool)>,
     pressed_cells: Vec<(usize, usize)>,
     changed: bool,
     seed: u64,
@@ -493,12 +555,29 @@ struct Store {
     /// Copy Row's row, and the steps copied (rows of steps).
     clip_row: Option<Row>,
     clip_steps: Vec<Vec<Step>>,
+    /// The page overview's Copy / Cut (every row's 16 steps).
+    clip_page: Vec<Vec<Step>>,
     /// The Pattern Browser shown; step colours by the region's colour; Mono Mode; Live Record;
     /// Learn waiting for a note (true: add a row, false: assign the selected row).
     browser: bool,
     by_region: bool,
     mono: bool,
     live_record: bool,
+    /// MIDI In (step recording): on, and notes entered at the current step not yet released.
+    step_rec: bool,
+    step_pending: bool,
+    /// MIDI Out: steps sound while they are edited; the note sounding (track, pitch).
+    midi_out_off: bool,
+    out_note: Option<(usize, u8)>,
+    /// Functions ▸ Live Record Options (Velocity, Note Length, Quantize), and the notes being
+    /// live-recorded: (pitch, row, step, start tick).
+    live_opts: LiveOpts,
+    live_held: Vec<(u8, usize, usize, u32)>,
+    /// The Preview button's playback.
+    preview: Option<Preview>,
+    /// View ▸ Display Edit Mode Values: 0 the selected row (Logic's default), 1 only when
+    /// editing, 2 all rows.
+    values_display: u8,
     learn: Option<bool>,
     /// The notes held last frame (Learn and Live Record listen for new ones).
     held: Vec<u8>,
@@ -511,6 +590,266 @@ struct Store {
     insp_active: bool,
     /// Sort Rows: (by type and note 0 / type 1 / type and name 2, ascending).
     sort: (u8, bool),
+    /// The Randomize dialog (Control-click a Randomize button): its rows (None: the pattern)
+    /// and where it opens; and its settings.
+    rand_dlg: Option<(Option<usize>, egui::Pos2)>,
+    rand: RandOpts,
+    /// A row was moved by hand: new rows go at the end until Sort Rows is chosen again.
+    manual_order: bool,
+}
+
+/// The Randomize dialog's settings. On/Off, Tie and Skip use the probability (how likely a step
+/// is on, tied or skipped); the value modes randomize by Offset (round the current value, a
+/// percentage of it either way) or within a Range (lower and upper limits, in the mode's units).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RandOpts {
+    pub probability: u8,
+    pub range_mode: bool,
+    pub offset: u8,
+    pub low: i32,
+    pub high: i32,
+}
+
+impl Default for RandOpts {
+    fn default() -> Self {
+        RandOpts { probability: 35, range_mode: true, offset: 50, low: 1, high: 127 }
+    }
+}
+
+/// A mode's value as a number in its own units, its limits, and setting it back.
+fn mode_units(mode: Mode, s: &Step) -> Option<(i32, i32, i32)> {
+    Some(match mode {
+        Mode::Velocity => (s.velocity as i32, 1, 127),
+        Mode::Gate => (s.gate as i32, 1, 100),
+        Mode::Repeat => (s.repeat as i32, 1, 16),
+        Mode::Chance => (s.chance as i32, 0, 100),
+        Mode::Offset => (s.offset as i32, -50, 50),
+        Mode::Octave => (s.octave as i32, -3, 3),
+        Mode::Note => (s.note as i32, -12, 12),
+        Mode::Rate => {
+            let o = rate_order();
+            (o.iter().position(|&r| Some(r) == s.rate).unwrap_or(sixteenth_index(&o)) as i32, 0, o.len() as i32 - 1)
+        }
+        _ => return None,
+    })
+}
+
+fn set_units(mode: Mode, s: &mut Step, v: i32) {
+    match mode {
+        Mode::Velocity => s.velocity = v.clamp(1, 127) as u8,
+        Mode::Gate => s.gate = v.clamp(1, 100) as u8,
+        Mode::Repeat => s.repeat = v.clamp(1, 16) as u8,
+        Mode::Chance => s.chance = v.clamp(0, 100) as u8,
+        Mode::Offset => s.offset = v.clamp(-50, 50) as i8,
+        Mode::Octave => s.octave = v.clamp(-3, 3) as i8,
+        Mode::Note => s.note = v.clamp(-12, 12) as i8,
+        Mode::Rate => {
+            let o = rate_order();
+            s.rate = Some(o[v.clamp(0, o.len() as i32 - 1) as usize]);
+        }
+        _ => {}
+    }
+}
+
+/// Command-Option-drag: values ramped evenly from step `s0` (value `f0`) to step `s1` (`f1`),
+/// in the row's edit mode; the steps are turned on unless `keep_off`.
+pub fn ramp_values(steps: &mut [Step], mode: Mode, s0: usize, f0: f32, s1: usize, f1: f32, keep_off: bool) {
+    let (a, b) = (s0.min(s1), s0.max(s1));
+    for k in a..=b.min(steps.len() - 1) {
+        let t = if s1 == s0 { 1.0 } else { (k as f32 - s0 as f32) / (s1 as f32 - s0 as f32) };
+        let st = &mut steps[k];
+        if keep_off && !st.on {
+            continue;
+        }
+        mode.set(st, f0 + (f1 - f0) * t);
+        st.on = true;
+    }
+}
+
+/// Randomizes one step with the dialog's settings; `v` is a random 0..1.
+pub fn randomize_with(mode: Mode, st: &mut Step, v: f32, o: RandOpts) {
+    let p = o.probability as f32 / 100.0;
+    match mode {
+        Mode::OnOff | Mode::Loop => st.on = v < p,
+        Mode::Tie => st.tie = st.on && v < p,
+        Mode::Skip => st.skip = v < p,
+        m => {
+            let Some((cur, lo, hi)) = mode_units(m, st) else { return };
+            if !st.on {
+                return;
+            }
+            let (a, b) = if o.range_mode {
+                (o.low.clamp(lo, hi).min(o.high.clamp(lo, hi)), o.high.clamp(lo, hi).max(o.low.clamp(lo, hi)))
+            } else {
+                let d = (cur.abs().max(1) * o.offset as i32) / 100;
+                ((cur - d).max(lo), (cur + d).min(hi))
+            };
+            set_units(m, st, a + ((b - a) as f32 * v).round() as i32);
+        }
+    }
+}
+
+/// The Preview button's playback (wall-clock seconds from `start`): notes sent so far in this
+/// pass, the ones sounding (pitch, off time).
+#[derive(Clone, Debug, Default)]
+struct Preview {
+    start: f64,
+    track: usize,
+    sent: usize,
+    sounding: Vec<(u8, f64)>,
+    pass: u64,
+}
+
+fn preview_off(app: &mut App, t: usize, notes: &[(u8, f64)]) {
+    if let Ok(mut e) = app.engine.lock() {
+        for &(pitch, _) in notes {
+            e.live(t, pitch, 0);
+        }
+    }
+}
+
+/// The notes (sorted by position) to start by `tick`, past the `sent` already started.
+pub fn preview_due(notes: &[Note], sent: usize, tick: u32) -> &[Note] {
+    let end = notes.iter().position(|n| n.pos > tick).unwrap_or(notes.len());
+    &notes[sent.min(end)..end]
+}
+
+/// Each frame while previewing: starts and stops the pattern's notes on the wall clock (the
+/// pattern loops); stops when the project starts playing.
+fn preview_frame(app: &mut App, ctx: &egui::Context, pat: &StepPattern) {
+    let Some(mut pv) = with_store(ctx, |s| s.preview.clone()) else { return };
+    if app.playing() {
+        preview_off(app, pv.track, &pv.sounding);
+        with_store(ctx, |s| s.preview = None);
+        return;
+    }
+    let now = ctx.input(|i| i.time);
+    let ticks_per_s = app.tempo() / 60.0 * 960.0;
+    let len = (pat.rate.max(1) * pat.steps.max(1) as u32).max(1);
+    let elapsed = ((now - pv.start).max(0.0) * ticks_per_s) as u64;
+    let pass = elapsed / len as u64;
+    let notes = pat.render(len, pv.pass);
+    if pass != pv.pass {
+        // the next pass from its start
+        pv.sent = 0;
+        pv.pass = pass;
+    }
+    let tick = (elapsed % len as u64) as u32;
+    let start_notes: Vec<Note> = preview_due(&notes, pv.sent, tick).to_vec();
+    pv.sent += start_notes.len();
+    let mut offs = Vec::new();
+    pv.sounding.retain(|&(p, off)| if off <= now { offs.push((p, off)); false } else { true });
+    preview_off(app, pv.track, &offs);
+    if let Ok(mut e) = app.engine.lock() {
+        for n in &start_notes {
+            e.live(pv.track, n.pitch, n.velocity);
+        }
+    }
+    for n in start_notes {
+        pv.sounding.push((n.pitch, now + n.len as f64 / ticks_per_s));
+    }
+    with_store(ctx, |s| s.preview = Some(pv));
+    ctx.request_repaint();
+}
+
+/// Functions ▸ Live Record Options (Logic's: all on by default; MPE isn't offered).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LiveOpts {
+    pub velocity: bool,
+    pub note_length: bool,
+    pub quantize: bool,
+}
+
+impl Default for LiveOpts {
+    fn default() -> Self {
+        LiveOpts { velocity: true, note_length: true, quantize: true }
+    }
+}
+
+/// Live Pattern Recording: a note played at `tick` (from the region start) turns on a step of
+/// its row (a row made when it has none). Quantize on: the nearest step; off: the step it
+/// falls in, with a Start Offset for the exact time. Velocity off: the default velocity. Mono
+/// Mode: the other rows' steps in that column go off (the last note wins). Returns (row, step).
+pub fn live_place(p: &mut StepPattern, pitch: u8, vel: u8, tick: u32, o: LiveOpts, mono: bool, order: Option<(u8, bool)>) -> Option<(usize, usize)> {
+    let rate = p.rate.max(1);
+    let steps = p.steps.max(1) as usize;
+    let (step, offset) = if o.quantize {
+        (((tick + rate / 2) / rate) as usize % steps, 0)
+    } else {
+        let s = (tick / rate) as usize;
+        let mut off = ((tick % rate) * 100 / rate) as i32;
+        // (Start Offset reaches half a step either way: late in a step is early in the next)
+        let s = if off > 50 { off -= 100; s + 1 } else { s };
+        (s % steps, off.clamp(-50, 50) as i8)
+    };
+    if !p.rows.iter().any(|x| x.pitch == pitch) {
+        place_row(p, Row::new(crate::app::note_name(pitch), pitch), order);
+    }
+    let k = p.rows.iter().position(|x| x.pitch == pitch)?;
+    let velocity = if o.velocity { vel.max(1) } else { Step::default().velocity };
+    p.rows[k].steps[step] = Step { on: true, velocity, offset, ..Step::default() };
+    if mono {
+        for (ri, row) in p.rows.iter_mut().enumerate() {
+            if ri != k {
+                row.steps[step].on = false;
+            }
+        }
+    }
+    Some((k, step))
+}
+
+/// Live Pattern Recording with Note Length: a note held `len` ticks shortens the step's Gate,
+/// or ties the steps after it (the last one's Gate for the rest).
+pub fn live_release(p: &mut StepPattern, row: usize, step: usize, len: u32) {
+    let rate = p.rate.max(1);
+    let steps = p.steps.max(1) as usize;
+    let Some(r) = p.rows.get_mut(row) else { return };
+    let whole = (len / rate) as usize;
+    let rest = len % rate;
+    if whole == 0 {
+        r.steps[step].gate = ((len * 100 / rate).max(1)) as u8;
+        return;
+    }
+    // tied steps for the whole steps after the first, the last with the leftover as its gate
+    let extra = if rest == 0 { whole - 1 } else { whole };
+    for k in 1..=extra.min(steps - 1) {
+        let st = &mut r.steps[(step + k) % steps];
+        st.on = true;
+        st.tie = true;
+        st.gate = 100;
+        if k == extra && rest > 0 {
+            st.gate = ((rest * 100 / rate).max(1)) as u8;
+        }
+    }
+}
+
+/// The Functions menu's Live Record Options submenu (its items are checkboxes).
+pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> bool {
+    if it.label == "Display Edit Mode Values" {
+        ui.menu_button("Display Edit Mode Values", |ui| {
+            let cur = with_store(ui.ctx(), |s| s.values_display);
+            for (v, name) in [(1u8, "Only when Editing Values"), (0, "Always for Selected Row"), (2, "Always for All Rows")] {
+                if ui.selectable_label(cur == v, name).clicked() {
+                    with_store(ui.ctx(), |s| s.values_display = v);
+                    ui.close();
+                }
+            }
+        });
+        return true;
+    }
+    if it.label != "Live Record Options" {
+        return false;
+    }
+    let _ = app;
+    ui.menu_button("Live Record Options", |ui| {
+        let mut o = with_store(ui.ctx(), |s| s.live_opts);
+        ui.checkbox(&mut o.velocity, "Velocity");
+        ui.checkbox(&mut o.note_length, "Note Length");
+        ui.checkbox(&mut o.quantize, "Quantize");
+        ui.add_enabled(false, egui::Checkbox::new(&mut false, "MPE"));
+        with_store(ui.ctx(), |s| s.live_opts = o);
+    });
+    true
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -741,6 +1080,43 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         ui.painter().vline(pill.center().x, pill.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
+        // MIDI In (step recording) | MIDI Out: one joined pill (Logic's; MIDI Out on by default,
+        // green when on); then Mono Mode on its own
+        ui.add_space(8.0);
+        let (pill2, _) = ui.allocate_exact_size(vec2(60.0, 26.0), Sense::hover());
+        ui.painter().rect_filled(pill2, 7.0, look::group_bg());
+        let (in_on, out_on, mono_on) = with_store(ui.ctx(), |s| (s.step_rec, !s.midi_out_off, s.mono));
+        for (k, (on, tip)) in [(in_on, "MIDI In (Step Recording)"), (out_on, "MIDI Out")].into_iter().enumerate() {
+            let b = Rect::from_min_size(pos2(pill2.min.x + k as f32 * 30.0, pill2.min.y), vec2(30.0, 26.0));
+            if on {
+                ui.painter().rect_filled(b.shrink(1.0), 6.0, Color32::from_rgb(0x2f, 0x9e, 0x44));
+            }
+            let col = if on { Color32::WHITE } else { look::text() };
+            // ›● for In (the arrow into the MIDI socket), ●› for Out
+            let (ax, ix) = if k == 0 { (b.min.x + 8.0, b.center().x + 3.0) } else { (b.max.x - 8.0, b.center().x - 3.0) };
+            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(ix, b.center().y), vec2(15.0, 15.0)), crate::glyphs::ph::GAME_CONTROLLER, 14.0, col);
+            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(ax, b.center().y), vec2(8.0, 10.0)), crate::glyphs::ph::CARET_RIGHT, 8.0, col);
+            if ui.interact(b, ui.id().with(("ss-tb2", k)), Sense::click()).on_hover_text(tip).clicked() {
+                with_store(ui.ctx(), |s| {
+                    if k == 0 {
+                        s.step_rec = !s.step_rec;
+                        s.step_pending = false;
+                    } else {
+                        s.midi_out_off = !s.midi_out_off;
+                    }
+                });
+            }
+        }
+        ui.painter().vline(pill2.center().x, pill2.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
+        ui.add_space(8.0);
+        let (mb, _) = ui.allocate_exact_size(vec2(34.0, 26.0), Sense::hover());
+        let mresp = ui.interact(mb, ui.id().with("ss-mono"), Sense::click()).on_hover_text("Mono Mode");
+        ui.painter().rect_filled(mb, 7.0, if mono_on { Color32::from_rgb(0x2f, 0x9e, 0x44) } else { look::group_bg() });
+        crate::glyphs::paint(ui.painter(), Rect::from_center_size(mb.center(), vec2(15.0, 15.0)), crate::glyphs::ph::DOTS_THREE_VERTICAL, 15.0, if mono_on { Color32::WHITE } else { look::text() });
+        if mresp.clicked() {
+            let ctx = ui.ctx().clone();
+            command(app, &ctx, "Mono Mode");
+        }
         let (learn, live, mono) = with_store(ui.ctx(), |s| (s.learn, s.live_record, s.mono));
         let mut flags = Vec::new();
         if let Some(add) = learn {
@@ -756,6 +1132,37 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             ui.label(egui::RichText::new(flags.join("  ·  ")).size(12.0).color(Color32::from_rgb(0xe8, 0xc3, 0x2e)));
         }
     });
+    // at the right of the bar: Live Pattern Recording and Preview (Logic's)
+    {
+        let cy = bar.center().y;
+        let pv = Rect::from_min_size(pos2(bar.max.x - 12.0 - 34.0, cy - 13.0), vec2(34.0, 26.0));
+        let lr = Rect::from_min_size(pos2(pv.min.x - 8.0 - 34.0, cy - 13.0), vec2(34.0, 26.0));
+        let (live_on, previewing) = with_store(&ctx, |s| (s.live_record, s.preview.is_some()));
+        let lresp = ui.interact(lr, ui.id().with("ss-live"), Sense::click()).on_hover_text("Live Pattern Recording");
+        p.rect_filled(lr, 7.0, if live_on { look::record_red() } else { look::group_bg() });
+        let lc = if live_on { Color32::WHITE } else { look::text() };
+        crate::glyphs::paint(&p, Rect::from_center_size(pos2(lr.center().x + 3.0, cy), vec2(15.0, 15.0)), crate::glyphs::ph::CIRCLE, 15.0, lc);
+        p.text(pos2(lr.center().x + 3.0, cy), Align2::CENTER_CENTER, "R", look::semibold(9.0), lc);
+        crate::glyphs::paint(&p, Rect::from_center_size(pos2(lr.min.x + 8.0, cy), vec2(8.0, 10.0)), crate::glyphs::ph::CARET_RIGHT, 8.0, lc);
+        if lresp.clicked() {
+            with_store(&ctx, |s| s.live_record = !s.live_record);
+        }
+        // Preview: plays the pattern while the project is stopped; again stops it
+        let presp = ui.interact(pv, ui.id().with("ss-preview"), Sense::click()).on_hover_text("Preview");
+        p.rect_filled(pv, 7.0, if previewing { look::accent() } else { look::group_bg() });
+        crate::glyphs::paint(&p, Rect::from_center_size(pv.center(), vec2(15.0, 15.0)), crate::glyphs::ph_fill::SPEAKER_SIMPLE_LOW, 15.0, if previewing { Color32::WHITE } else { look::text() });
+        if presp.clicked() {
+            let now = ctx.input(|i| i.time);
+            let stop = with_store(&ctx, |s| match s.preview.take() {
+                Some(pv) => pv.sounding,
+                None => {
+                    s.preview = Some(Preview { start: now, track: t, sent: 0, sounding: Vec::new(), pass: 0 });
+                    Vec::new()
+                }
+            });
+            preview_off(app, t, &stop);
+        }
+    }
     // the Pattern Browser on the left
     let area = if with_store(&ctx, |s| s.browser) {
         let br = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), pos2(area.min.x + 200.0, area.max.y));
@@ -843,12 +1250,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         for (k, (s, d)) in [(Glyph::Down, -1i32), (Glyph::Up, 1)].iter().enumerate() {
             let rr = Rect::from_min_size(pos2(tr.min.x + k as f32 * 20.0, tr.min.y), vec2(20.0, 26.0));
             glyph(&p, rr, *s, look::text());
-            if ui.interact(rr, ui.scope_id().with("lg-ss").with(("pat-tr", k)), Sense::click()).on_hover_text(if *d < 0 { "Transpose -1 Semitone" } else { "Transpose +1 Semitone" }).clicked() {
-                actions.push(Action::Transpose(None, *d));
+            let resp = ui.interact(rr, ui.scope_id().with("lg-ss").with(("pat-tr", k)), Sense::click_and_drag()).on_hover_text(if *d < 0 { "Decrement Value" } else { "Increment Value" });
+            if let Some(n) = nudge_clicks(&ui.ctx().clone(), &resp, ("pat-tr", 0), *d) {
+                actions.push(Action::Nudge(None, n));
             }
         }
         x += 44.0;
-        if small_button(ui, &p, Rect::from_min_size(pos2(x, cy - 13.0), vec2(22.0, 26.0)), Glyph::Dice, ("pat-rand", 0), "Randomize Current Edit Mode for Pattern…") {
+        let rb = Rect::from_min_size(pos2(x, cy - 13.0), vec2(22.0, 26.0));
+        let rr = small_button_resp(ui, &p, rb, Glyph::Dice, ("pat-rand", 0), "Randomize Current Edit Mode for Pattern…");
+        if rr.secondary_clicked() || rr.clicked() && ui.input(|i| i.modifiers.ctrl) {
+            with_store(&ctx, |s| s.rand_dlg = Some((None, rb.left_bottom())));
+        } else if rr.clicked() {
             actions.push(Action::Randomize(None));
         }
         x += 26.0;
@@ -868,11 +1280,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             ui.painter().rect_filled(steps_r, 7.0, look::group_bg());
             glyph(ui.painter(), Rect::from_min_max(pos2(steps_r.max.x - 22.0, steps_r.min.y), steps_r.max), Glyph::UpDown, look::text());
             ui.menu_button(egui::RichText::new(format!("{} Steps    ", pat.steps)).size(15.0).strong().color(look::text()), |ui| {
-                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                    for n in 1..=MAX_STEPS as u8 {
-                        if ui.button(format!("{n} Steps")).clicked() {
-                            actions.push(Action::Length(None, n));
-                            ui.close();
+                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                    for (k, (title, lens)) in LENGTH_SECTIONS.iter().enumerate() {
+                        if k > 0 {
+                            ui.separator();
+                        }
+                        ui.label(egui::RichText::new(*title).size(11.5).color(look::text_dim()));
+                        for &n in lens.iter() {
+                            if ui.selectable_label(n == pat.steps, format!("{n} Steps")).clicked() {
+                                actions.push(Action::Length(None, n));
+                                ui.close();
+                            }
                         }
                     }
                 });
@@ -898,9 +1316,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let c = pos2(right.min.x + 24.0 + k as f32 * 18.0, cy);
                 let rr = Rect::from_center_size(c, vec2(16.0, 16.0));
                 p.circle_filled(c, 4.5, if k == page { look::text() } else { look::text_dim().gamma_multiply(0.5) });
-                if ui.interact(rr, ui.scope_id().with("lg-ss").with(("page", k)), Sense::click()).on_hover_text(format!("Steps {}–{}", k * 16 + 1, ((k + 1) * 16).min(pat.steps as usize))).clicked() {
+                let resp = ui.interact(rr, ui.scope_id().with("lg-ss").with(("page", k)), Sense::click()).on_hover_text(format!("Steps {}–{}", k * 16 + 1, ((k + 1) * 16).min(pat.steps as usize)));
+                if resp.clicked() {
                     page = k;
                 }
+                // the page overview's shortcut menu
+                let has_clip = with_store(&ctx, |s| !s.clip_page.is_empty());
+                resp.context_menu(|ui| {
+                    for (name, op, on) in [("Cut", PageOp::Cut, true), ("Copy", PageOp::Copy, true), ("Paste", PageOp::Paste, has_clip), ("Clear", PageOp::Clear, true)] {
+                        if ui.add_enabled(on, egui::Button::new(name)).clicked() {
+                            actions.push(Action::Page(k, op));
+                            ui.close();
+                        }
+                    }
+                });
             }
             with_store(&ctx, |s| s.page = page);
         } else {
@@ -941,6 +1370,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let pointer = ui.input(|i| i.pointer.interact_pos());
     let (down, released) = ui.input(|i| (i.pointer.primary_down(), i.pointer.any_released()));
     let mut press = with_store(&ctx, |s| s.press);
+    let mut press_tie = with_store(&ctx, |s| s.press_tie);
+    let mut ramp = with_store(&ctx, |s| s.ramp);
+    let (alt, command, shift) = ui.input(|i| (i.modifiers.alt, i.modifiers.command, i.modifiers.shift));
     let mut pressed_cells = with_store(&ctx, |s| s.pressed_cells.clone());
     let mut changed = false;
     let (sel, by_region, mono) = with_store(&ctx, |s| (s.sel, s.by_region, s.mono));
@@ -964,7 +1396,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             hp.rect_filled(hr, 0.0, Color32::from_gray(0x40));
         }
         hp.hline(hr.x_range(), hr.max.y - 0.5, Stroke::new(1.0, Color32::from_gray(0x1a)));
-        let sel_resp = ui.interact(hr, ui.scope_id().with("lg-ss").with(("rowhdr", ri)), Sense::click());
+        let sel_resp = ui.interact(hr, ui.scope_id().with("lg-ss").with(("rowhdr", ri)), Sense::click_and_drag());
+        // dragging a row header up or down moves the row (and ends the automatic sort order)
+        if sel_resp.dragged() {
+            if let Some(pp) = sel_resp.interact_pointer_pos() {
+                let to = ys.iter().rposition(|&yy| yy <= pp.y).unwrap_or(0);
+                let ly = if to > ri { ys[to] + row_h(&pat.rows[to]) } else { ys[to] };
+                hp.hline(hr.x_range(), ly, Stroke::new(2.0, look::accent()));
+            }
+        }
+        if sel_resp.drag_stopped() {
+            if let Some(pp) = sel_resp.interact_pointer_pos() {
+                let to = ys.iter().rposition(|&yy| yy <= pp.y).unwrap_or(0);
+                if to != ri {
+                    actions.push(Action::MoveRow(ri, to));
+                }
+            }
+        }
         if sel_resp.clicked() || sel_resp.secondary_clicked() {
             sel_row = ri;
         }
@@ -1038,15 +1486,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         let oc = Rect::from_min_size(pos2(x, ly - 11.0), vec2(40.0, 22.0));
         hp.rect_filled(oc, 5.0, look::group_bg());
-        for (k, (s, d)) in [(Glyph::Down, -12i32), (Glyph::Up, 12)].iter().enumerate() {
+        for (k, (s, d)) in [(Glyph::Down, -1i32), (Glyph::Up, 1)].iter().enumerate() {
             let rr = Rect::from_min_size(pos2(oc.min.x + k as f32 * 20.0, oc.min.y), vec2(20.0, 22.0));
             glyph(&hp, rr, *s, look::text());
-            if ui.interact(rr, ui.scope_id().with("lg-ss").with(("oct", ri, k)), Sense::click()).on_hover_text(if *d < 0 { "Row Octave Down" } else { "Row Octave Up" }).clicked() {
-                actions.push(Action::Transpose(Some(ri), *d));
+            let resp = ui.interact(rr, ui.scope_id().with("lg-ss").with(("oct", ri, k)), Sense::click_and_drag()).on_hover_text(if *d < 0 { "Decrement Value" } else { "Increment Value" });
+            if let Some(n) = nudge_clicks(&ui.ctx().clone(), &resp, ("oct", ri), *d) {
+                actions.push(Action::Nudge(Some(ri), n));
             }
         }
         x += 44.0;
-        if small_button(ui, &hp, Rect::from_min_size(pos2(x, ly - 11.0), vec2(22.0, 22.0)), Glyph::Dice, ("rand", ri), "Randomize Current Edit Mode for Selected Rows…") {
+        let rb = Rect::from_min_size(pos2(x, ly - 11.0), vec2(22.0, 22.0));
+        let rr = small_button_resp(ui, &hp, rb, Glyph::Dice, ("rand", ri), "Randomize Current Edit Mode for Selected Rows…");
+        if rr.secondary_clicked() || rr.clicked() && ui.input(|i| i.modifiers.ctrl) {
+            with_store(&ctx, |s| s.rand_dlg = Some((Some(ri), rb.left_bottom())));
+        } else if rr.clicked() {
             actions.push(Action::Randomize(Some(ri)));
         }
         x += 26.0;
@@ -1132,8 +1585,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                 }
             }
-            // values written in the cells of the selected row (Logic's default)
-            if s.on && ri == sel_row && cr.width() > 26.0 {
+            // values written in the cells: View ▸ Display Edit Mode Values (Logic's default: the
+            // selected row's)
+            let show_value = match with_store(&ctx, |st| st.values_display) {
+                1 => pressed_cells.contains(&(ri, si)),
+                2 => true,
+                _ => ri == sel_row,
+            };
+            if s.on && show_value && cr.width() > 26.0 {
                 let txt = mode.text(&s);
                 if !txt.is_empty() {
                     gp.text(cr.center(), Align2::CENTER_CENTER, txt, look::semibold(11.0), Color32::WHITE);
@@ -1157,7 +1616,29 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     gp.rect_stroke(cr.expand(1.5), 4.0, Stroke::new(2.0, Color32::from_rgb(0xe8, 0xc3, 0x2e)), egui::StrokeKind::Outside);
                 }
             }
-            if resp.is_pointer_button_down_on() && press.is_none() && down {
+            // Option-click: the step (or every selected step, when it is one of them) back to
+            // its defaults, off (Logic's Eraser)
+            if alt && !command && resp.clicked() {
+                app.checkpoint("Delete Step");
+                let cells = match sel {
+                    Some((a, b)) if (a.0.min(b.0)..=a.0.max(b.0)).contains(&ri) && (a.1.min(b.1)..=a.1.max(b.1)).contains(&si) => sel_cells_of(a, b, pat.rows.len()),
+                    _ => vec![(ri, si)],
+                };
+                for (rr, ss) in cells {
+                    pat.rows[rr].steps[ss] = Step::default();
+                }
+                changed = true;
+                with_store(&ctx, |s| s.changed = true);
+            }
+            if alt && !command && resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+            }
+            if resp.is_pointer_button_down_on() && press.is_none() && down && (!alt || command) {
+                press_tie = command && !alt && !matches!(mode, Mode::Tie | Mode::Rate | Mode::Loop);
+                // Command-Option-drag: a ramp of values from this step to where the drag ends
+                // (with Shift as well, off steps stay off)
+                let ramp_ok = command && alt && mode_units(mode, &s).is_some();
+                ramp = ramp_ok.then(|| (si, pointer.map_or(0.5, |pp| (cr.max.y - pp.y) / cr.height()).clamp(0.0, 1.0), shift));
                 sel_row = ri;
                 sel_click = Some((ri, si));
                 let paint = match mode {
@@ -1169,6 +1650,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 press = Some((ri, paint));
                 pressed_cells.clear();
                 app.checkpoint("Change Step");
+                // MIDI Out: the step's note sounds while it is edited
+                if with_store(&ctx, |s| !s.midi_out_off) && (paint || mode != Mode::OnOff) {
+                    let pitch = (row.pitch as i32 + 12 * s.octave as i32 + s.note as i32).clamp(0, 127) as u8;
+                    if let Ok(mut e) = app.engine.lock() {
+                        e.live(t, pitch, s.velocity.max(1));
+                    }
+                    with_store(&ctx, |st| st.out_note = Some((t, pitch)));
+                }
             }
             if let (Some((pr, paint)), Some(pp)) = (press, pointer) {
                 let hot = Rect::from_min_max(pos2(cr.min.x - gap_s, gy.min.y), pos2(cr.max.x + gap_s, gy.max.y));
@@ -1177,6 +1666,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     let first_touch = !pressed_cells.contains(&(ri, si));
                     let st = &mut pat.rows[ri].steps[si];
                     let old = *st;
+                    if let Some((s0, f0, keep_off)) = ramp {
+                        ramp_values(&mut pat.rows[ri].steps, mode, s0, f0, si, f, keep_off);
+                        changed = true;
+                    } else if press_tie {
+                        // Command-drag: the first step starts the note, the others tie on to it
+                        if first_touch {
+                            st.on = true;
+                            st.tie = !pressed_cells.is_empty();
+                        }
+                    } else {
                     match mode {
                         Mode::OnOff => {
                             st.on = paint;
@@ -1207,6 +1706,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             m.set(st, f);
                             st.on = true;
                         }
+                    }
                     }
                     if pat.rows[ri].steps[si] != old || mode == Mode::Loop && first_touch {
                         changed = true;
@@ -1263,6 +1763,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             changed = true;
             with_store(&ctx, |s| s.changed = true);
         }
+        if let Some((tt, pitch)) = with_store(&ctx, |s| s.out_note.take()) {
+            if let Ok(mut e) = app.engine.lock() {
+                e.live(tt, pitch, 0);
+            }
+        }
         press = None;
         pressed_cells.clear();
     }
@@ -1271,6 +1776,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             s.sel = Some((c, c));
         }
         s.press = press;
+        s.press_tie = press_tie;
+        s.ramp = if press.is_some() { ramp } else { None };
         s.pressed_cells = pressed_cells.clone();
         s.selected_row = sel_row;
         std::mem::take(&mut s.changed)
@@ -1302,9 +1809,71 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if pat.rows.is_empty() {
         gp.text(grid.center(), Align2::CENTER_CENTER, "Add a row with +", look::regular(14.0), look::text_dim());
     }
+    preview_frame(app, &ctx, &pat);
     // Learn and Live Record listen to the keyboard
-    let step = in_region.then(|| (playing_tick as u32 / pat.rate.max(1)) as usize % (pat.steps.max(1) as usize));
-    listen(app, &ctx, t, r, step);
+    let tick = in_region.then_some(playing_tick as u32 % (pat.rate.max(1) * pat.steps.max(1) as u32));
+    listen(app, &ctx, t, r, tick);
+    // the Randomize dialog (closes on a click outside it)
+    if let Some((rows_of, at)) = with_store(&ctx, |s| s.rand_dlg) {
+        let mode = with_store(&ctx, |s| mode_of(s, t, r, rows_of.unwrap_or(s.selected_row)));
+        let mut o = with_store(&ctx, |s| s.rand);
+        let mut go = false;
+        let area = egui::Area::new(egui::Id::new(("lg-ss-rand", t, r))).order(egui::Order::Foreground).fixed_pos(at + vec2(0.0, 4.0)).show(&ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.set_width(220.0);
+                ui.label(egui::RichText::new(format!("Randomize {}", mode.name())).strong());
+                ui.add_space(4.0);
+                if matches!(mode, Mode::OnOff | Mode::Loop | Mode::Tie | Mode::Skip) {
+                    ui.horizontal(|ui| {
+                        ui.label("Probability");
+                        ui.add(egui::DragValue::new(&mut o.probability).range(0..=100).suffix(" %"));
+                    });
+                } else {
+                    let (_, lo, hi) = mode_units(mode, &Step { on: true, ..Step::default() }).unwrap_or((0, 0, 127));
+                    ui.horizontal(|ui| {
+                        ui.label("Mode");
+                        egui::ComboBox::from_id_salt("lg-ss-rand-mode").selected_text(if o.range_mode { "Range" } else { "Offset" }).show_ui(ui, |ui| {
+                            ui.selectable_value(&mut o.range_mode, false, "Offset");
+                            ui.selectable_value(&mut o.range_mode, true, "Range");
+                        });
+                    });
+                    if o.range_mode {
+                        ui.horizontal(|ui| {
+                            ui.label("Range");
+                            ui.add(egui::DragValue::new(&mut o.low).range(lo..=hi));
+                            ui.label("–");
+                            ui.add(egui::DragValue::new(&mut o.high).range(lo..=hi));
+                        });
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label("Offset");
+                            ui.add(egui::DragValue::new(&mut o.offset).range(0..=100).suffix(" %"));
+                        });
+                    }
+                }
+                ui.add_space(4.0);
+                go = ui.button("Randomize").clicked();
+            });
+        });
+        let outside = ctx.input(|i| i.pointer.any_pressed()) && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|pp| !area.response.rect.contains(pp));
+        with_store(&ctx, |s| {
+            s.rand = o;
+            if outside || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                s.rand_dlg = None;
+            }
+        });
+        if go {
+            app.checkpoint("Randomize");
+            apply(&mut pat, Action::Randomize(rows_of), &ctx, t, r);
+            with_store(&ctx, |s| {
+                if let Some(e) = s.patterns.get_mut(&(t, r)) {
+                    e.pattern = pat.clone();
+                }
+            });
+            write_notes(app, &ctx, t, r);
+            app.after_edit();
+        }
+    }
     // Rename Row / Save Pattern / Save Template
     if let Some((what, mut text)) = with_store(&ctx, |s| s.typing.clone()) {
         let mut done = None;
@@ -1383,9 +1952,14 @@ enum Action {
     RowRate(usize, u32),
     Length(Option<usize>, u8),
     Rotate(Option<usize>, i32),
-    Transpose(Option<usize>, i32),
     Randomize(Option<usize>),
     Clear(Option<usize>),
+    /// Increment / Decrement Value: the row's (else every row's) current edit mode values.
+    Nudge(Option<usize>, i32),
+    /// The page overview's shortcut menu on page k.
+    Page(usize, PageOp),
+    /// A row header dragged from one place to another.
+    MoveRow(usize, usize),
     Mute(usize),
     Solo(usize),
     RowPitch(usize, i32),
@@ -1393,21 +1967,86 @@ enum Action {
     Play(Option<usize>, Play),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PageOp {
+    Cut,
+    Copy,
+    Paste,
+    Clear,
+}
+
+/// Cut / Copy / Paste / Clear on a 16-step page of every row (`clip`: rows of steps).
+fn page_op(pat: &mut StepPattern, page: usize, op: PageOp, clip: &mut Vec<Vec<Step>>) {
+    let range = page * 16..((page + 1) * 16).min(MAX_STEPS);
+    if matches!(op, PageOp::Cut | PageOp::Copy) {
+        *clip = pat.rows.iter().map(|r| r.steps[range.clone()].to_vec()).collect();
+    }
+    match op {
+        PageOp::Cut | PageOp::Clear => pat.rows.iter_mut().for_each(|r| r.steps[range.clone()].fill(Step::default())),
+        PageOp::Paste => {
+            for (row, src) in pat.rows.iter_mut().zip(clip.iter()) {
+                for (k, st) in src.iter().enumerate() {
+                    if let Some(d) = row.steps.get_mut(range.start + k) {
+                        *d = *st;
+                    }
+                }
+            }
+        }
+        PageOp::Copy => {}
+    }
+}
+
 fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usize) {
-    let all: Vec<usize> = (0..pat.rows.len()).collect();
-    let rows = |sel: Option<usize>| sel.map(|x| vec![x]).unwrap_or_else(|| all.clone());
+    // a row header control acts on every selected row when its row is one of them
+    let selected = ctx.data(|d| d.get_temp::<Store>(store_id())).map(|s| sel_rows(&s, pat.rows.len())).unwrap_or_default();
+    let n_rows = pat.rows.len();
+    let rows = |sel: Option<usize>| header_rows(sel, &selected, n_rows);
     match a {
         Action::AddRow(name, pitch) => {
-            pat.rows.push(Row::new(name, pitch));
-            pat.rows.sort_by(|a, b| b.pitch.cmp(&a.pitch));
+            let order = with_store(ctx, |s| (!s.manual_order).then_some(s.sort));
+            place_row(pat, Row::new(name, pitch), order);
         }
         Action::PatternRate(v) => pat.rate = v,
         Action::RowRate(k, v) => {
-            if let Some(row) = pat.rows.get_mut(k) {
+            for k in rows(Some(k)) {
+                let row = &mut pat.rows[k];
                 row.rate = if v == pat.rate { None } else { Some(v) };
             }
         }
-        Action::Length(None, n) => pat.steps = n.clamp(1, MAX_STEPS as u8),
+        Action::Length(None, n) => set_length(pat, n),
+        Action::MoveRow(from, to) => {
+            if from < pat.rows.len() && to < pat.rows.len() {
+                let row = pat.rows.remove(from);
+                pat.rows.insert(to, row);
+                // the rows' edit modes move with them
+                with_store(ctx, |s| {
+                    let n = pat.rows.len();
+                    let mut order: Vec<usize> = (0..n).collect();
+                    let x = order.remove(from);
+                    order.insert(to, x);
+                    let old: Vec<Option<Mode>> = (0..n).map(|k| s.modes.remove(&(t, r, k))).collect();
+                    for (new_k, &old_k) in order.iter().enumerate() {
+                        if let Some(m) = old[old_k] {
+                            s.modes.insert((t, r, new_k), m);
+                        }
+                    }
+                    s.manual_order = true;
+                    s.selected_row = to;
+                });
+            }
+        }
+        Action::Page(k, op) => {
+            let mut clip = with_store(ctx, |s| s.clip_page.clone());
+            page_op(pat, k, op, &mut clip);
+            with_store(ctx, |s| s.clip_page = clip);
+        }
+        Action::Nudge(sel, d) => {
+            for k in rows(sel) {
+                let mode = ctx.data(|d| d.get_temp::<Store>(store_id())).and_then(|s| s.modes.get(&(t, r, k)).copied()).unwrap_or_default();
+                let n = pat.row_len(&pat.rows[k]);
+                nudge_steps(&mut pat.rows[k].steps[..n], mode, d);
+            }
+        }
         Action::Length(Some(k), n) => {
             if let Some(row) = pat.rows.get_mut(k) {
                 row.len = Some(n);
@@ -1420,36 +2059,19 @@ fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usi
                 if d > 0 { s.rotate_right(1) } else { s.rotate_left(1) }
             }
         }
-        Action::Transpose(sel, d) => {
-            for k in rows(sel) {
-                let row = &mut pat.rows[k];
-                row.pitch = (row.pitch as i32 + d).clamp(0, 127) as u8;
-                if drum_name(row.pitch).is_none() || !row.name.chars().next().is_some_and(|c| c.is_alphabetic() && c.is_lowercase()) {
-                    let looks_like_note = row.name.chars().next().is_some_and(|c| ('A'..='G').contains(&c)) && row.name.chars().any(|c| c.is_ascii_digit());
-                    if looks_like_note {
-                        row.name = crate::app::note_name(row.pitch);
-                    }
-                }
-            }
-        }
         Action::Randomize(sel) => {
             let seed = ctx.input(|i| i.time.to_bits());
-            for k in rows(sel) {
+            let (mono, o) = ctx.data(|d| d.get_temp::<Store>(store_id())).map_or((false, RandOpts::default()), |s| (s.mono, s.rand));
+            let rows_hit = rows(sel);
+            for k in rows_hit.clone() {
                 let mode = ctx.data(|d| d.get_temp::<Store>(store_id())).and_then(|s| s.modes.get(&(t, r, k)).copied()).unwrap_or_default();
                 let n = pat.row_len(&pat.rows[k]);
                 for (j, s) in pat.rows[k].steps[..n].iter_mut().enumerate() {
-                    let v = chance(seed, k, j as u32) as f32 / 99.0;
-                    match mode {
-                        Mode::OnOff | Mode::Loop => s.on = v < 0.35,
-                        Mode::Tie => s.tie = s.on && v < 0.2,
-                        Mode::Skip => s.skip = v < 0.15,
-                        m => {
-                            if s.on {
-                                m.set(s, v);
-                            }
-                        }
-                    }
+                    randomize_with(mode, s, chance(seed, k, j as u32) as f32 / 99.0, o);
                 }
+            }
+            if mono {
+                mono_columns(pat, &rows_hit);
             }
         }
         Action::Clear(sel) => {
@@ -1457,8 +2079,14 @@ fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usi
                 pat.rows[k].steps = vec![Step::default(); MAX_STEPS];
             }
         }
-        Action::Mute(k) => pat.rows[k].mute = !pat.rows[k].mute,
-        Action::Solo(k) => pat.rows[k].solo = !pat.rows[k].solo,
+        Action::Mute(k) => {
+            let v = !pat.rows[k].mute;
+            rows(Some(k)).into_iter().for_each(|k| pat.rows[k].mute = v);
+        }
+        Action::Solo(k) => {
+            let v = !pat.rows[k].solo;
+            rows(Some(k)).into_iter().for_each(|k| pat.rows[k].solo = v);
+        }
         Action::RowPitch(k, d) => {
             let row = &mut pat.rows[k];
             row.pitch = (row.pitch as i32 + d).clamp(0, 127) as u8;
@@ -1467,13 +2095,108 @@ fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usi
         Action::Play(None, m) => pat.play = m,
         Action::Play(Some(k), m) => {
             let base = pat.play;
-            if let Some(row) = pat.rows.get_mut(k) {
-                row.play = if m == base { None } else { Some(m) };
+            for k in rows(Some(k)) {
+                pat.rows[k].play = if m == base { None } else { Some(m) };
             }
         }
         Action::Mode(k, m) => with_store(ctx, |s| {
             s.modes.insert((t, r, k), m);
         }),
+    }
+}
+
+/// A new row: where View ▸ Sort Rows puts it, or (after a row was moved by hand: `order` None)
+/// at the end.
+pub fn place_row(p: &mut StepPattern, row: Row, order: Option<(u8, bool)>) {
+    p.rows.push(row);
+    if let Some((by, asc)) = order {
+        crate::stepinsp::sort_rows(p, by, asc);
+    }
+}
+
+/// An Increment / Decrement Value button: a click is one notch (`d`); dragging up or down on
+/// it changes the values continuously, a notch per 6 points.
+fn nudge_clicks(ctx: &egui::Context, resp: &egui::Response, id: (&str, usize), d: i32) -> Option<i32> {
+    let key = egui::Id::new("lg-ss-nudge").with(id);
+    if resp.drag_started() {
+        ctx.data_mut(|m| m.insert_temp(key, 0.0f32));
+    }
+    if resp.dragged() {
+        let acc = ctx.data(|m| m.get_temp::<f32>(key)).unwrap_or(0.0) - resp.drag_delta().y;
+        let notches = (acc / 6.0).trunc();
+        ctx.data_mut(|m| m.insert_temp(key, acc - notches * 6.0));
+        return (notches != 0.0).then_some(notches as i32);
+    }
+    resp.clicked().then_some(d)
+}
+
+/// The rows a header control acts on: its own row, or every selected row when it is one of
+/// several selected; `None` (the pattern's controls) is every row.
+fn header_rows(sel: Option<usize>, selected: &[usize], n: usize) -> Vec<usize> {
+    match sel {
+        Some(k) if selected.len() > 1 && selected.contains(&k) => selected.iter().copied().filter(|&x| x < n).collect(),
+        Some(k) if k < n => vec![k],
+        Some(_) => Vec::new(),
+        None => (0..n).collect(),
+    }
+}
+
+/// Pattern Length: a longer pattern repeats what it had into the added steps (Logic's), on the
+/// rows that follow the pattern's length.
+pub fn set_length(pat: &mut StepPattern, n: u8) {
+    let old = pat.steps.clamp(1, MAX_STEPS as u8) as usize;
+    let n = n.clamp(1, MAX_STEPS as u8);
+    if n as usize > old {
+        for row in pat.rows.iter_mut().filter(|r| r.len.is_none()) {
+            for k in old..n as usize {
+                row.steps[k] = row.steps[k % old];
+            }
+        }
+    }
+    pat.steps = n;
+}
+
+/// The Increment / Decrement Value buttons on a row's steps: in Step On/Off they turn every
+/// step on or off, in Tie they tie every step to the next (but the last) or untie them all;
+/// other modes move each on step's value one notch.
+pub fn nudge_steps(steps: &mut [Step], mode: Mode, d: i32) {
+    match mode {
+        Mode::OnOff => steps.iter_mut().for_each(|s| s.on = d > 0),
+        Mode::Tie => {
+            for (k, s) in steps.iter_mut().enumerate() {
+                if d > 0 {
+                    s.on = true;
+                    s.tie = k > 0;
+                } else {
+                    s.tie = false;
+                }
+            }
+        }
+        Mode::Skip => steps.iter_mut().for_each(|s| s.skip = d > 0),
+        Mode::Rate => {
+            let o = rate_order();
+            for s in steps.iter_mut().filter(|s| s.on) {
+                let k = o.iter().position(|&x| Some(x) == s.rate).unwrap_or(sixteenth_index(&o)) as i32;
+                s.rate = Some(o[(k + d).clamp(0, o.len() as i32 - 1) as usize]);
+            }
+        }
+        m => steps.iter_mut().filter(|s| s.on).for_each(|s| nudge_value(m, s, d)),
+    }
+}
+
+/// Mono Mode: one step per column. Where `keep`'s rows have a step on, the other rows' steps
+/// in that column go off (the first of `keep` wins).
+pub fn mono_columns(pat: &mut StepPattern, keep: &[usize]) {
+    for k in 0..MAX_STEPS {
+        let winner = keep.iter().copied().find(|&r| pat.rows.get(r).is_some_and(|row| row.steps[k].on))
+            .or_else(|| pat.rows.iter().position(|row| row.steps[k].on));
+        if let Some(w) = winner {
+            for (ri, row) in pat.rows.iter_mut().enumerate() {
+                if ri != w {
+                    row.steps[k].on = false;
+                }
+            }
+        }
     }
 }
 
@@ -1510,6 +2233,13 @@ fn glyph(p: &egui::Painter, r: Rect, g: Glyph, col: Color32) {
     crate::glyphs::paint(p, r, icon, size, col);
 }
 
+fn small_button_resp(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str) -> egui::Response {
+    let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), Sense::click()).on_hover_text(tip);
+    p.rect_filled(r, 5.0, if resp.hovered() { look::button_on() } else { look::group_bg() });
+    glyph(p, r, g, look::text());
+    resp
+}
+
 fn small_button(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str) -> bool {
     let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), Sense::click()).on_hover_text(tip);
     p.rect_filled(r, 5.0, if resp.hovered() { look::button_on() } else { look::group_bg() });
@@ -1525,7 +2255,10 @@ fn rate_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), rate: u32, set: &mut 
     ui.scope_builder(egui::UiBuilder::new().max_rect(r).id_salt(id), |ui| {
         plain(ui);
         ui.menu_button(egui::RichText::new(format!("{}    ", rate_name(rate))).size(13.0).color(look::text()), |ui| {
-            for (name, v) in RATES {
+            for (k, (name, v)) in RATES.into_iter().enumerate() {
+                if RATE_GROUPS.contains(&k) {
+                    ui.separator();
+                }
                 if ui.selectable_label(v == rate, name).clicked() {
                     set(v);
                     ui.close();
@@ -1555,7 +2288,7 @@ pub const COMMANDS: &[&str] = &[
     "Randomize Current Edit Mode for Selected Rows…", "Randomize Current Edit Mode for Pattern…",
     "Set Step Color by Region Color", "Set Step Color by Row Color", "By Region", "By Row",
     "Select Step Above", "Select Step Below", "Select Previous Step", "Select Next Step", "Extend Selection Up", "Extend Selection Down", "Extend Selection Left", "Extend Selection Right",
-    "Live Record", "Mono Mode", "Rename Row", "Select Next Pattern Page", "Save Pattern", "Save Template",
+    "Live Record", "MIDI In", "MIDI Out", "Mono Mode", "Rename Row", "Select Next Pattern Page", "Save Pattern", "Save Template",
     "Set Pattern Playback Mode to Forward", "Set Pattern Playback Mode to Reverse", "Set Pattern Playback Mode to Ping Pong", "Set Pattern Playback Mode to Shuffle", "Set Pattern Playback Mode to Pendulum", "Set Pattern Playback Mode to Wander", "Set Pattern Playback Mode to Random",
     "Set Row Playback Mode to Forward", "Set Row Playback Mode to Reverse", "Set Row Playback Mode to Ping Pong", "Set Row Playback Mode to Shuffle", "Set Row Playback Mode to Pendulum", "Set Row Playback Mode to Wander", "Set Row Playback Mode to Random",
     "Rotate Pattern Right", "Rotate Pattern Left", "Rotate Row Right", "Rotate Row Left", "Rotate Values for Current Edit Mode Right", "Rotate Values for Current Edit Mode Left",
@@ -1567,7 +2300,16 @@ pub const COMMANDS: &[&str] = &[
 ];
 
 /// Step rates from slow to fast (Increment = the next faster).
-const RATE_ORDER: [u32; 12] = [3840, 1920, 1280, 960, 640, 480, 320, 240, 160, 120, 80, 60];
+fn rate_order() -> Vec<u32> {
+    let mut v: Vec<u32> = RATES.iter().map(|r| r.1).collect();
+    v.sort_unstable_by(|a, b| b.cmp(a));
+    v
+}
+
+/// The index of 1/16 in `rate_order()` (a step with no own rate).
+fn sixteenth_index(order: &[u32]) -> usize {
+    order.iter().position(|&r| r == SIXTEENTH).unwrap_or(0)
+}
 
 fn current(app: &App, ctx: &egui::Context) -> Option<(usize, usize)> {
     let (t, r) = app.selected_region?;
@@ -1586,6 +2328,10 @@ fn sel_rows(s: &Store, n: usize) -> Vec<usize> {
 /// The steps selected: (row, step).
 fn sel_cells(s: &Store, n: usize) -> Vec<(usize, usize)> {
     let Some((a, b)) = s.sel else { return Vec::new() };
+    sel_cells_of(a, b, n)
+}
+
+fn sel_cells_of(a: (usize, usize), b: (usize, usize), n: usize) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     for r in a.0.min(b.0)..=a.0.max(b.0) {
         for k in a.1.min(b.1)..=a.1.max(b.1) {
@@ -1619,17 +2365,8 @@ fn clear_value(mode: Mode, st: &mut Step) {
     }
 }
 
-fn randomize(mode: Mode, st: &mut Step, v: f32) {
-    match mode {
-        Mode::OnOff | Mode::Loop => st.on = v < 0.35,
-        Mode::Tie => st.tie = st.on && v < 0.2,
-        Mode::Skip => st.skip = v < 0.15,
-        m => {
-            if st.on {
-                m.set(st, v);
-            }
-        }
-    }
+fn randomize(mode: Mode, st: &mut Step, v: f32, o: RandOpts) {
+    randomize_with(mode, st, v, o);
 }
 
 /// One step of a mode's value up or down.
@@ -1723,8 +2460,9 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     let key = app.project.as_ref().map(|p| p.key.clone()).unwrap_or_else(|| "C major".into());
     let seed = ctx.input(|i| i.time.to_bits());
     let rate_step = |cur: u32, d: i32| -> u32 {
-        let k = RATE_ORDER.iter().position(|&x| x == cur).unwrap_or(7) as i32;
-        RATE_ORDER[(k + d).clamp(0, RATE_ORDER.len() as i32 - 1) as usize]
+        let o = rate_order();
+        let k = o.iter().position(|&x| x == cur).unwrap_or(sixteenth_index(&o)) as i32;
+        o[(k + d).clamp(0, o.len() as i32 - 1) as usize]
     };
     let play_of = |n: &str| Play::ALL.iter().copied().find(|p| n.ends_with(p.name())).unwrap_or_default();
     match name {
@@ -1738,13 +2476,21 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                 "Ascending" => asc = true,
                 _ => asc = false,
             }
-            with_store(ctx, |s| s.sort = (by, asc));
+            with_store(ctx, |s| {
+                s.sort = (by, asc);
+                s.manual_order = false;
+            });
             change(app, ctx, "Sort Rows", |p, _, _, _| crate::stepinsp::sort_rows(p, by, asc))
         }
         "Show/Hide Pattern Browser" | "Pattern Browser" => view(app, ctx, |s, _, _, _| s.browser = !s.browser),
         "Set Step Color by Region Color" | "By Region" => view(app, ctx, |s, _, _, _| s.by_region = true),
         "Set Step Color by Row Color" | "By Row" => view(app, ctx, |s, _, _, _| s.by_region = false),
         "Live Record" => view(app, ctx, |s, _, _, _| s.live_record = !s.live_record),
+        "Step Input" | "MIDI In" => view(app, ctx, |s, _, _, _| {
+            s.step_rec = !s.step_rec;
+            s.step_pending = false;
+        }),
+        "MIDI Out" => view(app, ctx, |s, _, _, _| s.midi_out_off = !s.midi_out_off),
         "Learn (Add)" => view(app, ctx, |s, _, _, _| s.learn = Some(true)),
         "Learn (Assign)" => view(app, ctx, |s, _, _, _| s.learn = Some(false)),
         "Rename Row" => view(app, ctx, |s, t, r, n| {
@@ -1915,21 +2661,29 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                 p.rows[k].steps.iter_mut().for_each(|st| clear_value(m, st));
             }
         }),
+        "Randomize Current Edit Mode for Selected Rows…" | "Randomize Current Edit Mode for Pattern…" => view(app, ctx, |s, _, _, _| {
+            let rows = if name.contains("Selected Rows") { Some(s.selected_row) } else { None };
+            s.rand_dlg = Some((rows, ctx.content_rect().center() - vec2(110.0, 60.0)));
+        }),
         _ if name.starts_with("Randomize Current Edit Mode") => change(app, ctx, "Randomize", |p, s, t, r| {
             if name.ends_with("Selected Steps") {
                 for (k, (rr, st)) in sel_cells(s, p.rows.len()).into_iter().enumerate() {
                     let m = mode_of(s, t, r, rr);
-                    randomize(m, &mut p.rows[rr].steps[st], chance(seed, rr, k as u32) as f32 / 99.0);
+                    randomize(m, &mut p.rows[rr].steps[st], chance(seed, rr, k as u32) as f32 / 99.0, s.rand);
                 }
                 return;
             }
             let rows = if name.contains("Selected Rows") { sel_rows(s, p.rows.len()) } else { (0..p.rows.len()).collect() };
-            for k in rows {
+            for &k in &rows {
                 let m = mode_of(s, t, r, k);
                 let n = p.row_len(&p.rows[k]);
                 for (j, st) in p.rows[k].steps[..n].iter_mut().enumerate() {
-                    randomize(m, st, chance(seed, k, j as u32) as f32 / 99.0);
+                    randomize(m, st, chance(seed, k, j as u32) as f32 / 99.0, s.rand);
                 }
+            }
+            // Mono Mode: never two notes in a column
+            if s.mono {
+                mono_columns(p, &rows);
             }
         }),
         "Mono Mode" => change(app, ctx, "Mono Mode", |p, s, _, _| {
@@ -2020,7 +2774,8 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             let d = if name.starts_with("Increment") { 1 } else { -1 };
             for k in sel_rows(s, p.rows.len()) {
                 let m = mode_of(s, t, r, k);
-                p.rows[k].steps.iter_mut().filter(|x| x.on).for_each(|st| nudge_value(m, st, d));
+                let n = p.row_len(&p.rows[k]);
+                nudge_steps(&mut p.rows[k].steps[..n], m, d);
             }
         }),
         "Increment Pattern Step Rate" | "Decrement Pattern Step Rate" => change(app, ctx, "Step Rate", |p, _, _, _| p.rate = rate_step(p.rate, if name.starts_with("Increment") { 1 } else { -1 })),
@@ -2063,13 +2818,78 @@ fn transpose_row(row: &mut Row, d: i32) {
 
 /// New notes held on a keyboard (Musical Typing or MIDI): Learn adds or assigns a row, Live
 /// Record turns on the playing step of the note's row.
-fn listen(app: &mut App, ctx: &egui::Context, t: usize, _r: usize, playing_step: Option<usize>) {
+/// Step recording: `notes` (pitch, velocity) turned on at the selected step, rows added for
+/// notes without one (in the sort order).
+fn step_record(p: &mut StepPattern, s: &mut Store, notes: &[(u8, u8)], drums: bool) {
+    let step = s.sel.map_or(0, |(_, b)| b.1).min(MAX_STEPS - 1);
+    let mut last_row = None;
+    for &(pitch, vel) in notes {
+        if !p.rows.iter().any(|x| x.pitch == pitch) {
+            let name = drums.then(|| drum_name(pitch)).flatten().map(str::to_string).unwrap_or_else(|| crate::app::note_name(pitch));
+            place_row(p, Row::new(name, pitch), (!s.manual_order).then_some(s.sort));
+        }
+        if let Some(k) = p.rows.iter().position(|x| x.pitch == pitch) {
+            p.rows[k].steps[step] = Step { on: true, velocity: vel.max(1), ..Step::default() };
+            last_row = Some(k);
+        }
+    }
+    if let Some(k) = last_row {
+        s.sel = Some(((k, step), (k, step)));
+        s.selected_row = k;
+    }
+}
+
+/// Step recording: the next step selected (back to the first after the pattern's last).
+fn step_advance(s: &mut Store, steps: usize) {
+    let (row, step) = s.sel.map_or((s.selected_row, 0), |(_, b)| b);
+    let next = (step + 1) % steps.max(1);
+    s.sel = Some(((row, next), (row, next)));
+    s.page = next / 16;
+}
+
+fn listen(app: &mut App, ctx: &egui::Context, t: usize, _r: usize, playing_tick: Option<u32>) {
     let held: Vec<(u8, u8)> = app.live.held.iter().map(|(&p, &(_, v))| (p, v)).collect();
-    let (fresh, learn, live) = with_store(ctx, |s| {
+    let (fresh, learn, live, step_rec) = with_store(ctx, |s| {
         let fresh: Vec<(u8, u8)> = held.iter().copied().filter(|(p, _)| !s.held.contains(p)).collect();
         s.held = held.iter().map(|x| x.0).collect();
-        (fresh, s.learn, s.live_record)
+        (fresh, s.learn, s.live_record, s.step_rec)
     });
+    // MIDI In (step recording): notes go into the selected step (a row made for a note that has
+    // none); the next step is selected once every held note is released, so chords go in one step
+    if step_rec && learn.is_none() {
+        let drums = is_drums(app, t);
+        let release = held.is_empty() && with_store(ctx, |s| s.step_pending);
+        if !fresh.is_empty() {
+            change(app, ctx, "Step Record", |p, s, _, _| {
+                step_record(p, s, &fresh, drums);
+                s.step_pending = true;
+            });
+        } else if release {
+            with_store(ctx, |s| {
+                let n = s.patterns.get(&(t, _r)).map_or(16, |e| e.pattern.steps.max(1) as usize);
+                step_advance(s, n);
+                s.step_pending = false;
+            });
+        }
+        return;
+    }
+    // Live Record with Note Length: notes released set their steps' Gate and Tie
+    if live {
+        let gone: Vec<(u8, usize, usize, u32)> = with_store(ctx, |s| {
+            let (gone, keep): (Vec<_>, Vec<_>) = s.live_held.iter().copied().partition(|x| !held.iter().any(|h| h.0 == x.0));
+            s.live_held = keep;
+            if s.live_opts.note_length { gone } else { Vec::new() }
+        });
+        if let (false, Some(now)) = (gone.is_empty(), playing_tick) {
+            change(app, ctx, "Live Record", |p, _, _, _| {
+                let loop_len = p.rate.max(1) * p.steps.max(1) as u32;
+                for (_, row, step, start) in gone {
+                    let len = (now + loop_len - start) % loop_len;
+                    live_release(p, row, step, len.max(1));
+                }
+            });
+        }
+    }
     if fresh.is_empty() {
         return;
     }
@@ -2080,8 +2900,7 @@ fn listen(app: &mut App, ctx: &egui::Context, t: usize, _r: usize, playing_step:
             let name = drums.then(|| drum_name(pitch)).flatten().map(str::to_string).unwrap_or_else(|| crate::app::note_name(pitch));
             if add {
                 if !p.rows.iter().any(|x| x.pitch == pitch) {
-                    p.rows.push(Row::new(name, pitch));
-                    p.rows.sort_by(|a, b| b.pitch.cmp(&a.pitch));
+                    place_row(p, Row::new(name, pitch), (!s.manual_order).then_some(s.sort));
                 }
             } else if let Some(row) = p.rows.get_mut(s.selected_row) {
                 row.pitch = pitch;
@@ -2091,15 +2910,11 @@ fn listen(app: &mut App, ctx: &egui::Context, t: usize, _r: usize, playing_step:
         });
         return;
     }
-    if let (true, Some(step)) = (live, playing_step) {
-        change(app, ctx, "Live Record", |p, _, _, _| {
+    if let (true, Some(tick)) = (live, playing_tick) {
+        change(app, ctx, "Live Record", |p, s, _, _| {
             for (pitch, vel) in fresh {
-                if !p.rows.iter().any(|x| x.pitch == pitch) {
-                    p.rows.push(Row::new(crate::app::note_name(pitch), pitch));
-                    p.rows.sort_by(|a, b| b.pitch.cmp(&a.pitch));
-                }
-                if let Some(row) = p.rows.iter_mut().find(|x| x.pitch == pitch) {
-                    row.steps[step] = Step { on: true, velocity: vel.max(1), ..Step::default() };
+                if let Some((row, step)) = live_place(p, pitch, vel, tick, s.live_opts, s.mono, (!s.manual_order).then_some(s.sort)) {
+                    s.live_held.push((pitch, row, step, tick));
                 }
             }
         });
@@ -2671,10 +3486,10 @@ mod tests {
     fn playback_orders() {
         assert_eq!(play_order(Play::Forward, 4, 6, 0, 0), [0, 1, 2, 3, 0, 1]);
         assert_eq!(play_order(Play::Reverse, 4, 6, 0, 0), [3, 2, 1, 0, 3, 2]);
-        // ping pong turns at the ends without playing them twice; pendulum plays them twice
-        assert_eq!(play_order(Play::PingPong, 4, 8, 0, 0), [0, 1, 2, 3, 2, 1, 0, 1]);
-        assert_eq!(play_order(Play::Pendulum, 4, 10, 0, 0), [0, 1, 2, 3, 3, 2, 1, 0, 0, 1]);
-        assert_eq!(play_order(Play::PingPong, 1, 3, 0, 0), [0, 0, 0]);
+        // pendulum turns at the ends without playing them twice; ping pong plays them twice
+        assert_eq!(play_order(Play::Pendulum, 4, 8, 0, 0), [0, 1, 2, 3, 2, 1, 0, 1]);
+        assert_eq!(play_order(Play::PingPong, 4, 10, 0, 0), [0, 1, 2, 3, 3, 2, 1, 0, 0, 1]);
+        assert_eq!(play_order(Play::Pendulum, 1, 3, 0, 0), [0, 0, 0]);
         // shuffle: every step once per pass
         let s = play_order(Play::Shuffle, 8, 16, 42, 1);
         for pass in s.chunks(8) {
@@ -2708,6 +3523,219 @@ mod tests {
         let mut p = drums_with(&[(60, "x...")]);
         p.rows[0].steps[0].note = 7;
         assert_eq!(p.render(3840, 0)[0].pitch, 67);
+    }
+
+    #[test]
+    fn musical_length() {
+        // rows that loop after 4 steps at 1/16: one beat, even with 16 steps
+        let mut p = drums_with(&[(36, "x..."), (42, "xx..")]);
+        p.steps = 16;
+        p.rows.iter_mut().for_each(|r| r.len = Some(4));
+        assert_eq!(p.musical_len(), Some(960));
+        // the longest row decides when the others divide it
+        p.rows[1].len = Some(8);
+        assert_eq!(p.musical_len(), Some(1920));
+        // 3 and 4 steps realign only after 12
+        p.rows[0].len = Some(3);
+        p.rows[1].len = Some(4);
+        assert_eq!(p.musical_len(), Some(12 * 240));
+        // and playback really repeats there, not before
+        let a = p.render(12 * 240, 0);
+        let b = p.render(24 * 240, 0);
+        assert_eq!(b.len(), 2 * a.len());
+        assert!(b[a.len()..].iter().zip(&a).all(|(x, y)| x.pos == y.pos + 12 * 240 && x.pitch == y.pitch));
+        let c = p.render(4 * 240, 0);
+        assert!(b.iter().filter(|n| n.pos >= 4 * 240 && n.pos < 8 * 240).map(|n| (n.pos - 4 * 240, n.pitch)).collect::<Vec<_>>() != c.iter().map(|n| (n.pos, n.pitch)).collect::<Vec<_>>());
+        // Skip shortens a row; Ping-Pong doubles it; Random never repeats
+        let mut q = drums_with(&[(36, "x...")]);
+        q.rows[0].len = Some(4);
+        assert_eq!(q.musical_len(), Some(960));
+        q.rows[0].steps[3].skip = true;
+        assert_eq!(q.musical_len(), Some(720));
+        q.rows[0].steps[3].skip = false;
+        q.play = Play::PingPong;
+        assert_eq!(q.musical_len(), Some(1920));
+        q.play = Play::Pendulum;
+        assert_eq!(q.musical_len(), Some(6 * 240));
+        q.rows[0].play = Some(Play::Random);
+        assert_eq!(q.musical_len(), None);
+    }
+
+    #[test]
+    fn longer_pattern_repeats_and_rates() {
+        let mut p = drums_with(&[(36, "x.x.")]);
+        p.steps = 4;
+        set_length(&mut p, 12);
+        assert_eq!(p.steps, 12);
+        let on: Vec<bool> = p.rows[0].steps[..12].iter().map(|s| s.on).collect();
+        assert_eq!(on, [true, false, true, false, true, false, true, false, true, false, true, false]);
+        // the Pattern Length menu's sections
+        assert_eq!(LENGTH_SECTIONS.map(|s| s.0.split(' ').next().unwrap().to_string()), ["4", "3", "5", "7"]);
+        assert!(LENGTH_SECTIONS[3].1.iter().all(|n| n % 7 == 0));
+        // the rates: whole-note multiples, triplets, dotted
+        let tick = |n: &str| RATES.iter().find(|r| r.0 == n).unwrap().1;
+        assert_eq!((tick("4"), tick("2"), tick("1")), (4 * 3840, 2 * 3840, 3840));
+        assert_eq!(tick("8T") * 3, 480 * 2);
+        assert_eq!(tick("16D"), 240 * 3 / 2);
+        for n in ["1T", "2T", "4T", "8T", "16T", "32T", "1D", "2D", "4D", "8D", "16D", "32D", "64D", "/64"] {
+            tick(n);
+        }
+        // a dotted 1/8 step plays three sixteenths long
+        let mut d = drums_with(&[(36, "xx")]);
+        d.steps = 2;
+        d.rate = tick("8D");
+        assert_eq!(d.render(1440, 0).iter().map(|n| n.pos).collect::<Vec<_>>(), [0, 720]);
+    }
+
+    #[test]
+    fn live_recording_options() {
+        let o = LiveOpts::default();
+        let mut p = drums_with(&[(36, "....")]);
+        p.steps = 16;
+        // quantize: a note just before step 3 lands on it
+        assert_eq!(live_place(&mut p, 36, 90, 2 * 240 - 30, o, false, Some((0, false))), Some((0, 2)));
+        assert_eq!(p.rows[0].steps[2].offset, 0);
+        // quantize off: the step it falls in, offset for the exact time
+        let q = LiveOpts { quantize: false, velocity: false, ..o };
+        assert_eq!(live_place(&mut p, 36, 90, 4 * 240 + 60, q, false, Some((0, false))), Some((0, 4)));
+        assert_eq!((p.rows[0].steps[4].offset, p.rows[0].steps[4].velocity), (25, 100));
+        // a new note gets a row; mono keeps only the last note in the column
+        assert_eq!(live_place(&mut p, 38, 80, 4 * 240, o, true, Some((0, false))).map(|x| x.1), Some(4));
+        let k36 = p.rows.iter().position(|r| r.pitch == 36).unwrap();
+        assert!(!p.rows[k36].steps[4].on);
+        // note length: short notes shorten the gate, long ones tie on
+        live_release(&mut p, k36, 2, 120);
+        assert_eq!(p.rows[k36].steps[2].gate, 50);
+        live_release(&mut p, k36, 8, 240 * 2 + 120);
+        let s = &p.rows[k36].steps;
+        assert!(s[9].tie && s[10].tie && !s[11].on && s[10].gate == 50);
+        p.rows[k36].steps[8].on = true;
+        let notes: Vec<_> = p.render(16 * 240, 0).into_iter().filter(|n| n.pitch == 36 && n.pos == 8 * 240).collect();
+        assert_eq!(notes[0].len, 240 * 2 + 120);
+    }
+
+    #[test]
+    fn new_rows_follow_the_sort_order() {
+        let mut p = drums_with(&[(40, ""), (36, "")]);
+        place_row(&mut p, Row::new("x", 38), Some((0, false)));
+        assert_eq!(p.rows.iter().map(|r| r.pitch).collect::<Vec<_>>(), [40, 38, 36]);
+        place_row(&mut p, Row::new("y", 39), Some((0, true)));
+        assert_eq!(p.rows.iter().map(|r| r.pitch).collect::<Vec<_>>(), [36, 38, 39, 40]);
+        // after a row was moved by hand: at the end
+        place_row(&mut p, Row::new("z", 37), None);
+        assert_eq!(p.rows.last().unwrap().pitch, 37);
+    }
+
+    #[test]
+    fn randomize_dialog_settings() {
+        let on = Step { on: true, velocity: 64, ..Step::default() };
+        // offset: 50% of 64 gives 32–96
+        let o = RandOpts { range_mode: false, offset: 50, ..RandOpts::default() };
+        let vals: Vec<u8> = (0..=10).map(|k| { let mut s = on; randomize_with(Mode::Velocity, &mut s, k as f32 / 10.0, o); s.velocity }).collect();
+        assert_eq!((vals[0], vals[10]), (32, 96));
+        // range: between the limits (velocity 1–127, repeats 1–16)
+        let o = RandOpts { range_mode: true, low: 100, high: 200, ..RandOpts::default() };
+        let mut s = on;
+        randomize_with(Mode::Velocity, &mut s, 1.0, o);
+        assert_eq!(s.velocity, 127);
+        randomize_with(Mode::Velocity, &mut s, 0.0, o);
+        assert_eq!(s.velocity, 100);
+        randomize_with(Mode::Repeat, &mut s, 1.0, o);
+        assert_eq!(s.repeat, 16);
+        // probability for on/off, tie and skip
+        let o = RandOpts { probability: 70, ..RandOpts::default() };
+        let mut s = Step::default();
+        randomize_with(Mode::OnOff, &mut s, 0.6, o);
+        assert!(s.on);
+        randomize_with(Mode::Skip, &mut s, 0.8, o);
+        assert!(!s.skip);
+    }
+
+    #[test]
+    fn ramps() {
+        let mut steps = vec![Step::default(); 8];
+        steps[2].on = true;
+        ramp_values(&mut steps, Mode::Velocity, 0, 0.0, 4, 1.0, false);
+        assert_eq!(steps[..5].iter().map(|s| s.velocity).collect::<Vec<_>>(), [1, 33, 64, 96, 127]);
+        assert!(steps[..5].iter().all(|s| s.on) && !steps[5].on);
+        // with Shift: only the steps already on
+        let mut steps = vec![Step::default(); 8];
+        steps[2].on = true;
+        ramp_values(&mut steps, Mode::Gate, 4, 0.0, 0, 1.0, true);
+        assert!(steps.iter().filter(|s| s.on).count() == 1 && steps[2].gate == 51);
+    }
+
+    #[test]
+    fn preview_sends_notes_as_they_come() {
+        let p = drums_with(&[(36, "x...x...x...x...")]);
+        let notes = p.render(16 * 240, 0);
+        assert_eq!(preview_due(&notes, 0, 0).len(), 1);
+        assert_eq!(preview_due(&notes, 1, 959).len(), 0);
+        assert_eq!(preview_due(&notes, 1, 960).len(), 1);
+        assert_eq!(preview_due(&notes, 0, 16 * 240).len(), 4);
+    }
+
+    #[test]
+    fn step_recording() {
+        let mut p = drums_with(&[(36, "....")]);
+        let mut s = Store::default();
+        // a chord: both notes in step 1, a row made for the new pitch
+        step_record(&mut p, &mut s, &[(36, 90), (40, 70)], false);
+        assert_eq!(p.rows.len(), 2);
+        let row = |p: &StepPattern, pitch: u8| p.rows.iter().find(|r| r.pitch == pitch).unwrap().steps[0];
+        assert!(row(&p, 36).on && row(&p, 40).on && row(&p, 40).velocity == 70);
+        // released: the next step; the next note goes there
+        step_advance(&mut s, 4);
+        step_record(&mut p, &mut s, &[(36, 100)], false);
+        assert!(p.rows.iter().find(|r| r.pitch == 36).unwrap().steps[1].on);
+        // after the last step, back to the first
+        s.sel = Some(((0, 3), (0, 3)));
+        step_advance(&mut s, 4);
+        assert_eq!(s.sel.unwrap().1 .1, 0);
+    }
+
+    #[test]
+    fn page_cut_copy_paste_clear() {
+        let mut p = drums_with(&[(36, "x...............x.x.")]);
+        p.steps = 32;
+        let mut clip = Vec::new();
+        page_op(&mut p, 1, PageOp::Copy, &mut clip);
+        page_op(&mut p, 0, PageOp::Paste, &mut clip);
+        assert!(p.rows[0].steps[0].on && p.rows[0].steps[2].on && !p.rows[0].steps[1].on);
+        page_op(&mut p, 1, PageOp::Cut, &mut clip);
+        assert!(p.rows[0].steps[16..32].iter().all(|s| !s.on));
+        page_op(&mut p, 0, PageOp::Clear, &mut clip);
+        assert!(p.rows[0].steps[..16].iter().all(|s| !s.on));
+        page_op(&mut p, 1, PageOp::Paste, &mut clip);
+        assert!(p.rows[0].steps[16].on && p.rows[0].steps[18].on);
+    }
+
+    #[test]
+    fn increment_decrement_and_mono() {
+        let mut p = drums_with(&[(36, "x..."), (38, "....")]);
+        p.steps = 4;
+        nudge_steps(&mut p.rows[0].steps[..4], Mode::OnOff, 1);
+        assert!(p.rows[0].steps[..4].iter().all(|s| s.on));
+        nudge_steps(&mut p.rows[0].steps[..4], Mode::Tie, 1);
+        assert_eq!(p.rows[0].steps[..4].iter().map(|s| s.tie).collect::<Vec<_>>(), [false, true, true, true]);
+        assert_eq!(p.render(960, 0).len(), 1);
+        nudge_steps(&mut p.rows[0].steps[..4], Mode::Tie, -1);
+        assert!(p.rows[0].steps[..4].iter().all(|s| !s.tie));
+        let v0 = p.rows[0].steps[0].velocity;
+        nudge_steps(&mut p.rows[0].steps[..4], Mode::Velocity, -1);
+        assert!(p.rows[0].steps[0].velocity < v0);
+        nudge_steps(&mut p.rows[0].steps[..4], Mode::OnOff, -1);
+        assert!(p.rows[0].steps[..4].iter().all(|s| !s.on));
+        // Mono Mode: never two notes in one column
+        p.rows[0].steps[1].on = true;
+        p.rows[1].steps[1].on = true;
+        p.rows[1].steps[2].on = true;
+        mono_columns(&mut p, &[1]);
+        assert!(!p.rows[0].steps[1].on && p.rows[1].steps[1].on && p.rows[1].steps[2].on);
+        // a header control acts on every selected row when its row is one of them
+        assert_eq!(header_rows(Some(2), &[1, 2, 3], 5), [1, 2, 3]);
+        assert_eq!(header_rows(Some(4), &[1, 2, 3], 5), [4]);
+        assert_eq!(header_rows(None, &[], 2), [0, 1]);
     }
 
     #[test]
