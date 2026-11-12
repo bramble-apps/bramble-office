@@ -299,7 +299,11 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
     let mut fired = None;
     let mut right = ui.min_rect().min.x;
     egui::MenuBar::new().ui(ui, |ui| {
+        // as the suite's other apps (Keydeck's menu bar): the hover highlight roomy at the
+        // sides, the gap between titles shrunk to keep the bar's width
+        let gap = ui.spacing().item_spacing.x;
         ui.spacing_mut().button_padding.x = 7.0;
+        ui.spacing_mut().item_spacing.x = (gap - 10.0).max(0.0);
         for m in menus() {
             // the app menu (left of File): the update notice and the thank-you line
             let app_menu = m.label == "Bramble Studio";
