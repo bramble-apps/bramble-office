@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use lg_dsp::{Effect, Param, Unit};
 
-use crate::arp::{ARP_MODES, ARP_RATES, ArpSettings, MsegShape, STEPS};
+use crate::arp::{ARP_RATES, ArpSettings, MsegShape, STEPS};
 
 pub const ARP: u32 = 1000;
 pub const STEP_ON: u32 = 1010;
@@ -34,22 +34,9 @@ pub fn params() -> Vec<Param> {
     let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
     static RATES: OnceLock<Vec<&'static str>> = OnceLock::new();
     let rates: &'static [&'static str] = RATES.get_or_init(|| ARP_RATES.iter().map(|r| r.0).collect()).as_slice();
-    let mut v = vec![
-        Param::new(ARP, "Arp On", 0.0, 1.0, 0.0, Unit::OnOff),
-        Param::menu(ARP + 1, "Arp Mode", ARP_MODES, 0.0),
-        Param::new(ARP + 2, "Arp Octaves", 1.0, 4.0, 1.0, Unit::None),
-        Param::menu(ARP + 3, "Arp Rate", rates, 7.0),
-        Param::new(ARP + 4, "Arp Note Length", 0.05, 1.0, 0.5, Unit::Ratio),
-        Param::new(ARP + 5, "Arp Swing", 0.0, 1.0, 0.0, Unit::Ratio),
-        Param::new(ARP + 6, "Arp Latch", 0.0, 1.0, 0.0, Unit::OnOff),
-        Param::new(ARP + 7, "Arp Steps", 1.0, 16.0, 16.0, Unit::None),
-        Param::new(ARP + 8, "Arp Step Velocity", 0.0, 1.0, 0.0, Unit::OnOff),
-    ];
-    for k in 0..STEPS {
-        v.push(Param::new(STEP_ON + k as u32, leak(format!("Step {} On", k + 1)), 0.0, 1.0, 1.0, Unit::OnOff));
-        v.push(Param::new(STEP_VEL + k as u32, leak(format!("Step {} Velocity", k + 1)), 0.0, 1.0, 1.0, Unit::Ratio));
-        v.push(Param::new(STEP_LEN + k as u32, leak(format!("Step {} Length", k + 1)), 0.05, 1.0, 1.0, Unit::Ratio));
-    }
+    // the old 16-step arpeggiator's settings are gone (alchemy_arp is the arpeggiator now)
+    let _ = rates;
+    let mut v: Vec<Param> = Vec::new();
     v.extend([
         Param::new(MSEG, "MSEG On", 0.0, 1.0, 0.0, Unit::OnOff),
         Param::new(MSEG + 1, "MSEG to Cutoff", -1.0, 1.0, 0.0, Unit::None),

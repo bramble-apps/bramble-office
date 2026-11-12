@@ -43,6 +43,7 @@ pub struct St {
     pub rect_sel: Option<Pos2>,
     /// Each source page's element view (0: the element that plays, then VA … Formant).
     pub elem: [u8; 4],
+    pub arp_scroll: usize,
 }
 
 /// Live values read from the running instrument for the displays.
@@ -826,7 +827,7 @@ fn panel_head(p: &mut Pane, ix: &Ix, st: &mut St, kind: u32, x: f32, y: f32) -> 
     Some(st.cur[tab])
 }
 
-fn mod_dir(ext: &str) -> Option<std::path::PathBuf> {
+pub fn mod_dir(ext: &str) -> Option<std::path::PathBuf> {
     crate::pluginwin::settings_dir("Alchemy").map(|d| d.join("modulators").join(ext))
 }
 
@@ -839,7 +840,7 @@ fn saved(kind: u32) -> Vec<(String, std::path::PathBuf)> {
     v
 }
 
-fn read_fields(path: &std::path::Path) -> Vec<(u32, f32)> {
+pub fn read_fields(path: &std::path::Path) -> Vec<(u32, f32)> {
     std::fs::read_to_string(path).unwrap_or_default().lines().filter_map(|l| {
         let mut w = l.split_whitespace();
         Some((w.next()?.parse().ok()?, w.next()?.parse().ok()?))

@@ -160,7 +160,7 @@ pub const SEQ_EDIT: &[&str] = &["Value", "Length", "Swing"];
 pub const ENVF_SOURCES: &[&str] = &["Source A", "Source B", "Source C", "Source D", "Main Filter 1", "Main Filter 2", "Output Pre FX", "Output Post FX", "Side Chain"];
 pub const MIDI_SOURCES: &[&str] = &["Pitchbend", "ModWheel", "Ctrl A", "Ctrl B", "Ctrl C", "Ctrl D"];
 pub const NOTE_SOURCES: &[&str] = &[
-    "Velocity", "Key Follow", "Key Follow Fixed", "Aftertouch", "Speed", "Held", "Flip Flop", "Flip Flop 2", "Stepped A2", "Stepped A3", "Stepped A4", "Stepped 4", "Stepped 8", "Stepped 16", "Random 1", "Random 2", "Random 3", "Random 4", "Max", "Polyphony",
+    "Velocity", "Key Follow", "Key Follow Fixed", "Aftertouch", "Speed", "Held", "Flip Flop", "Flip Flop 2", "Stepped A2", "Stepped A3", "Stepped A4", "Stepped 4", "Stepped 8", "Stepped 16", "Random 1", "Random 2", "Random 3", "Random 4", "Max", "Polyphony", "ArpMod 1", "ArpMod 2", "Playhead",
 ];
 pub const PERF_SOURCES: &[&str] = &[
     "Control 1", "Control 2", "Control 3", "Control 4", "Control 5", "Control 6", "Control 7", "Control 8", "XYPad 1X", "XYPad 1Y", "XYPad 2X", "XYPad 2Y", "Mod Attack", "Mod Decay", "Mod Sustain", "Mod Release",
@@ -916,6 +916,9 @@ pub struct ModVoice {
     pub index: u32,
     pub arp_index: u32,
     pub speed: f32,
+    /// The arpeggiator step's Arp Mod 1–2 values and its place in the pattern (0..1).
+    pub arp_mod: [f32; 2],
+    pub playhead: f32,
     pub key: f32,
     pub t: f32,
     pub lfo_ph: [f32; N],
@@ -939,6 +942,8 @@ impl Default for ModVoice {
             index: 0,
             arp_index: 0,
             speed: 0.0,
+            arp_mod: [0.0; 2],
+            playhead: 0.0,
             key: 60.0,
             t: 0.0,
             lfo_ph: [0.0; N],
@@ -1281,7 +1286,10 @@ impl ModVoice {
             13 => (i % 16) as f32 / 15.0,
             14..=17 => self.rnd[k - 14],
             18 => 1.0,
-            _ => g.voices as f32 / g.max_voices.max(1) as f32,
+            19 => g.voices as f32 / g.max_voices.max(1) as f32,
+            20 => self.arp_mod[0],
+            21 => self.arp_mod[1],
+            _ => self.playhead,
         }
     }
 }

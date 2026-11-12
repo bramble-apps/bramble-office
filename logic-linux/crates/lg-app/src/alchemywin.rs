@@ -9,7 +9,7 @@
 //! search field; Simple view is the Name bar and the Perform section.
 
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
-use lg_synth::alchemy_extra::{self as ax, FX, FX_PARAM, FX_SLOTS, FX_TYPES};
+use lg_synth::alchemy_extra::{FX, FX_PARAM, FX_SLOTS, FX_TYPES};
 use lg_synth::alchemy_mod as am;
 
 use crate::alchemyrack::{self as rack, g, Ix, Live, St, BLUE, ORANGE};
@@ -70,6 +70,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 }
             }
             "seq-import" => seq_import(app, t, arg),
+            "arp-import" => arp_import(app, t, arg),
             _ => {}
         }
     }
@@ -150,6 +151,25 @@ fn seq_import(app: &mut App, t: usize, arg: &str) {
     let beats = am::SEQ_RATE_BEATS[(rate.round().max(0.0) as usize).min(am::SEQ_RATE_BEATS.len() - 1)];
     let pairs: Vec<(u32, f32)> = am::seq_import(&notes, 960, beats, mode).into_iter().map(|(f, v)| (am::seq(i, f), v)).collect();
     instwin::checkpoint(app, t, "Import to Sequencer");
+    instwin::set_params(app, t, &pairs);
+}
+
+/// The arpeggiator's File > Import MIDI: a monophonic file onto the pattern's sequences.
+fn arp_import(app: &mut App, t: usize, arg: &str) {
+    use lg_synth::alchemy_arp as aa;
+    let Ok(pi) = arg.parse::<usize>() else { return };
+    let Some(path) = kn_ui::files::FileDialog::new().set_title("Import MIDI File").add_filter("MIDI", &["mid", "midi", "MID"]).pick_file() else { return };
+    let Some(imp) = std::fs::read(&path).ok().and_then(|d| lg_core::midi::read(&d)) else {
+        app.tell(format!("Couldn't read {}", path.display()));
+        return;
+    };
+    let mut notes: Vec<(u32, u8, u8)> = imp.tracks.iter().flat_map(|(_, _, n)| n.iter().map(|n| (n.pos, n.pitch, n.velocity))).collect();
+    notes.sort();
+    let Some((params, vals)) = instwin::values(app, t) else { return };
+    let rate = params.iter().position(|p| p.id == aa::RATE).map(|k| vals[k]).unwrap_or(5.0);
+    let beats = aa::RATE_BEATS[(rate.round().max(0.0) as usize).min(aa::RATE_BEATS.len() - 1)];
+    let pairs: Vec<(u32, f32)> = aa::import_midi(&notes, 960, beats).into_iter().map(|(s, k, v)| if s == usize::MAX { (aa::pat(pi, 0), v) } else { (aa::step(pi, s, k), v) }).collect();
+    instwin::checkpoint(app, t, "Import MIDI to Arpeggiator");
     instwin::set_params(app, t, &pairs);
 }
 
@@ -477,6 +497,11 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
             st.lower = k as u8;
         }
     }
+    if st.lower == 1 {
+        p.ui.painter().rect_filled(p.rect(80.0, y0, W - 88.0, 200.0), 0.0, rgb(0x23272e));
+        arp_pane(p, ix, st, 86.0, y0);
+        return;
+    }
     if st.lower != 0 {
         let r = p.rect(80.0, y0, W - 88.0, 200.0);
         p.ui.painter().rect_filled(r, 0.0, rgb(0x23272e));
@@ -485,11 +510,7 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         let mut set = Vec::new();
         let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(6.0)).layout(egui::Layout::top_down(egui::Align::Min)));
         egui::ScrollArea::vertical().id_salt(("alch-lower-pane", p.t, st.lower)).show(&mut child, |ui| {
-            if st.lower == 1 {
-                arp_page(ui, &get, &mut set);
-            } else {
-                fx_page(ui, &get, fx, &mut set);
-            }
+            fx_page(ui, &get, fx, &mut set);
         });
         p.set.extend(set);
         return;
@@ -589,56 +610,6 @@ fn check(ui: &mut egui::Ui, label: &str, pid: u32, get: &dyn Fn(u32) -> f32, set
     let mut on = get(pid) >= 0.5;
     if ui.checkbox(&mut on, label).changed() {
         set.push((pid, if on { 1.0 } else { 0.0 }));
-    }
-}
-
-fn arp_page(ui: &mut egui::Ui, get: &dyn Fn(u32) -> f32, set: &mut Vec<(u32, f32)>) {
-    let rates: Vec<&str> = lg_synth::arp::ARP_RATES.iter().map(|r| r.0).collect();
-    ui.horizontal(|ui| {
-        check(ui, "Arpeggiator On", ax::ARP, get, set);
-        check(ui, "Latch", ax::ARP + 6, get, set);
-        check(ui, "Step Velocity", ax::ARP + 8, get, set);
-    });
-    menu(ui, "Mode", ax::ARP + 1, lg_synth::arp::ARP_MODES, get, set);
-    menu(ui, "Rate", ax::ARP + 3, &rates, get, set);
-    row(ui, "Octaves", ax::ARP + 2, 1.0, 4.0, get, set);
-    row(ui, "Note Length", ax::ARP + 4, 0.05, 1.0, get, set);
-    row(ui, "Swing", ax::ARP + 5, 0.0, 1.0, get, set);
-    row(ui, "Steps", ax::ARP + 7, 1.0, 16.0, get, set);
-    ui.add_space(6.0);
-    ui.label(egui::RichText::new("Sequencer: click a step to turn it on or off, drag its bar for the velocity; the lower strip is its length").size(11.0).color(look::text_dim()));
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 150.0), Sense::hover());
-    let p = ui.painter().clone();
-    p.rect_filled(r, 6.0, look::lane_bg());
-    let steps = get(ax::ARP + 7).round().clamp(1.0, 16.0) as usize;
-    let w = r.width() / 16.0;
-    for k in 0..16 {
-        let cell = Rect::from_min_size(pos2(r.min.x + k as f32 * w, r.min.y), vec2(w, r.height()));
-        let bar = Rect::from_min_max(cell.min + vec2(3.0, 4.0), pos2(cell.max.x - 3.0, cell.max.y - 30.0));
-        let len_r = Rect::from_min_max(pos2(cell.min.x + 3.0, cell.max.y - 24.0), cell.max - vec2(3.0, 4.0));
-        let on = get(ax::STEP_ON + k as u32) >= 0.5;
-        let vel = get(ax::STEP_VEL + k as u32);
-        let len = get(ax::STEP_LEN + k as u32);
-        let used = k < steps;
-        let col = if !used { Color32::from_gray(0x40) } else if on { look::accent() } else { Color32::from_gray(0x60) };
-        p.rect_filled(Rect::from_min_max(pos2(bar.min.x, bar.max.y - bar.height() * vel), bar.max), 3.0, col);
-        p.rect_stroke(bar, 3.0, Stroke::new(1.0, look::line()), egui::StrokeKind::Inside);
-        p.rect_filled(Rect::from_min_size(len_r.min, vec2(len_r.width() * len, len_r.height())), 2.0, col.gamma_multiply(0.7));
-        let resp = ui.interact(bar, ui.scope_id().with(("step", k)), Sense::click_and_drag());
-        if resp.clicked() {
-            set.push((ax::STEP_ON + k as u32, if on { 0.0 } else { 1.0 }));
-        }
-        if resp.dragged()
-            && let Some(pp) = resp.interact_pointer_pos()
-        {
-            set.push((ax::STEP_VEL + k as u32, ((bar.max.y - pp.y) / bar.height()).clamp(0.0, 1.0)));
-        }
-        let lresp = ui.interact(len_r, ui.scope_id().with(("steplen", k)), Sense::click_and_drag());
-        if (lresp.dragged() || lresp.clicked())
-            && let Some(pp) = lresp.interact_pointer_pos()
-        {
-            set.push((ax::STEP_LEN + k as u32, ((pp.x - len_r.min.x) / len_r.width()).clamp(0.05, 1.0)));
-        }
     }
 }
 
@@ -850,6 +821,319 @@ fn spec_strip(p: &mut Pane, ix: &Ix, st: &mut St, x: f32, y: f32, s: usize, b: u
     for (j, n) in ap::spec_knobs(ty).iter().enumerate() {
         if !n.is_empty() {
             rack::knob(p, ix, st, x + 110.0 + j as f32 * 70.0, y + 40.0, 32.0, id(s, b + 3 + j as u32), n);
+        }
+    }
+}
+
+/// Studio's arpeggiator patterns (File > Preset): (name, steps, per step: velocity, tune, tie).
+fn arp_presets() -> Vec<(&'static str, usize, Vec<(f32, f32, f32)>)> {
+    vec![
+        ("Straight 16", 16, vec![(1.0, 0.0, 0.0); 16]),
+        ("Accents", 16, (0..16).map(|k| (if k % 4 == 0 { 1.0 } else { 0.6 }, 0.0, 0.0)).collect()),
+        ("Offbeat", 8, (0..8).map(|k| (if k % 2 == 1 { 1.0 } else { 0.0 }, 0.0, 0.0)).collect()),
+        ("Gallop", 12, (0..12).map(|k| (if k % 3 == 1 { 0.0 } else { 0.9 }, 0.0, 0.0)).collect()),
+        ("Octave Bounce", 8, (0..8).map(|k| (0.9, if k % 2 == 1 { 12.0 } else { 0.0 }, 0.0)).collect()),
+        ("Long Short", 8, (0..8).map(|k| (0.9, 0.0, if k % 4 == 0 { 1.0 } else { 0.0 })).collect()),
+    ]
+}
+
+/// The Arpeggiator pane: All / A–D, Sync, Key Trigger, Cycle Reset, the nine knobs, File, and
+/// the sequencer (Step mode: one sequence as bars with Target and Value Snap; Multi mode: On,
+/// Tie, Tune and Pan rows), its end marker and scroll bar.
+fn arp_pane(p: &mut Pane, ix: &Ix, st: &mut St, x0: f32, y0: f32) {
+    use lg_synth::alchemy_arp as aa;
+    rack::flat(p, p.rect(x0, y0 + 6.0, 30.0, 20.0), "All", true, true, "arp-all");
+    for (k, l) in ["A", "B", "C", "D"].iter().enumerate() {
+        rack::flat(p, p.rect(x0 + 34.0 + k as f32 * 22.0, y0 + 6.0, 20.0, 20.0), l, false, false, ("arp-src", k));
+    }
+    let sync = g(p, ix, aa::SYNC) >= 0.5;
+    if rack::flat(p, p.rect(x0 + 130.0, y0 + 6.0, 44.0, 20.0), "Sync", sync, true, "arp-sync") {
+        p.put(aa::SYNC, if sync { 0.0 } else { 1.0 });
+    }
+    p.text(x0 + 182.0, y0 + 16.0, Align2::LEFT_CENTER, "Key Trigger", 10.5, p.skin.dim);
+    p.menu(x0 + 248.0, y0 + 6.0, 90.0, 20.0, aa::KEY_TRIG);
+    let cr = g(p, ix, aa::CYCLE_RESET) >= 0.5;
+    if rack::flat(p, p.rect(x0 + 344.0, y0 + 6.0, 80.0, 20.0), "Cycle Reset", cr, true, "arp-cr") {
+        p.put(aa::CYCLE_RESET, if cr { 0.0 } else { 1.0 });
+    }
+    // the nine knobs
+    let knobs: [(u32, &str); 9] = [(aa::MODE, "Mode"), (if sync { aa::RATE } else { aa::HZ }, "Rate"), (aa::OCTAVE, "Octave"), (aa::LENGTH, "Length"), (aa::PATTERN, "Pattern"), (aa::SWING, "Swing"), (aa::NOTE_VEL, "Note Vel"), (aa::SPLIT, "Split"), (aa::LATCH, "Latch")];
+    for (k, (id, l)) in knobs.iter().enumerate() {
+        rack::knob(p, ix, st, x0 + 470.0 + k as f32 * 64.0, y0 + 2.0, 30.0, *id, l);
+    }
+    let pi = (g(p, ix, aa::PATTERN).round().clamp(1.0, 16.0) as usize) - 1;
+    // edit mode, target, snap, File
+    let y = y0 + 54.0;
+    p.seg(x0, y, 100.0, 20.0, aa::EDIT, aa::EDIT_MODES, false);
+    let multi = g(p, ix, aa::EDIT) >= 0.5;
+    if !multi {
+        p.text(x0 + 110.0, y + 10.0, Align2::LEFT_CENTER, "Target", 10.5, p.skin.dim);
+        p.menu(x0 + 150.0, y, 90.0, 20.0, aa::TARGET);
+        p.text(x0 + 250.0, y + 10.0, Align2::LEFT_CENTER, "Value Snap", 10.5, p.skin.dim);
+        rack::menu_arrows(p, ix, x0 + 312.0, y, 50.0, aa::SNAP);
+    }
+    arp_file(p, ix, rect_at(p, x0 + 400.0, y, 48.0, 20.0), pi);
+    p.text(x0 + 460.0, y + 10.0, Align2::LEFT_CENTER, &format!("Pattern {}", pi + 1), 10.5, p.skin.dim);
+    // the steps
+    let steps = (g(p, ix, aa::pat(pi, 0)).round().max(1.0) as usize).min(aa::STEPS);
+    let cols = 32usize;
+    let total = (steps + 4).min(aa::STEPS).max(cols);
+    st.arp_scroll = st.arp_scroll.min(total.saturating_sub(cols));
+    let first = st.arp_scroll;
+    let area = p.rect(x0, y0 + 80.0, W - 100.0, 112.0);
+    let cw = area.width() / cols as f32;
+    // the end marker (drag: steps)
+    let mk = Rect::from_min_size(area.min, vec2(area.width(), 8.0));
+    p.ui.painter().rect_filled(mk, 2.0, rgb(0x15181d));
+    let ex = (mk.min.x + (steps as f32 - first as f32) * cw).clamp(mk.min.x, mk.max.x);
+    p.ui.painter().rect_filled(Rect::from_min_max(mk.min, pos2(ex, mk.max.y)), 2.0, rgb(0x6a6f78));
+    let resp = p.ui.interact(mk, egui::Id::unique(("arp-end", p.t)), Sense::click_and_drag());
+    if (resp.dragged() || resp.clicked())
+        && let Some(q) = resp.interact_pointer_pos()
+    {
+        p.put(aa::pat(pi, 0), (first as f32 + (q.x - mk.min.x) / cw).round().clamp(1.0, aa::STEPS as f32));
+    }
+    let body = Rect::from_min_max(pos2(area.min.x, area.min.y + 12.0), pos2(area.max.x, area.max.y - 22.0));
+    p.ui.painter().rect_filled(body, 0.0, rgb(0x0f1216));
+    let alt = p.ui.input(|i| i.modifiers.alt);
+    if !multi {
+        let seq = g(p, ix, aa::TARGET).round().max(0.0) as usize;
+        let (lo, hi, _) = aa::seq_range(seq);
+        let snap = aa::SNAP_N[(g(p, ix, aa::SNAP).round().max(0.0) as usize).min(aa::SNAP_N.len() - 1)];
+        let resp = p.ui.interact(body, egui::Id::unique(("arp-bars", p.t)), Sense::click_and_drag());
+        if let Some(q) = resp.interact_pointer_pos()
+            && (resp.dragged() || resp.clicked())
+        {
+            let k = first + ((q.x - body.min.x) / cw).floor().max(0.0) as usize;
+            if k < aa::STEPS {
+                let mut f = ((body.max.y - q.y) / body.height()).clamp(0.0, 1.0);
+                if snap > 0 {
+                    f = (f * snap as f32).round() / snap as f32;
+                }
+                // Option-click: zero (a rest for Velocity)
+                let v = if alt && resp.clicked() { if lo < 0.0 { 0.0 } else { lo } } else { lo + f * (hi - lo) };
+                p.put(aa::step(pi, seq, k), if seq == aa::S_TUNE { v.round() } else { v });
+            }
+        }
+        let pc = p.ui.painter().with_clip_rect(body);
+        for c in 0..cols {
+            let k = first + c;
+            if k >= aa::STEPS {
+                break;
+            }
+            let cx = body.min.x + c as f32 * cw;
+            let v = g(p, ix, aa::step(pi, seq, k));
+            let col = if k < steps { ORANGE } else { ORANGE.gamma_multiply(0.3) };
+            let f = (v - lo) / (hi - lo);
+            let zero = if lo < 0.0 { 0.5 } else { 0.0 };
+            let (ya, yb) = (body.max.y - f * body.height(), body.max.y - zero * body.height());
+            if (ya - yb).abs() > 0.5 {
+                pc.rect_filled(Rect::from_min_max(pos2(cx + 2.0, ya.min(yb)), pos2(cx + cw - 2.0, ya.max(yb))), 1.0, col);
+            }
+        }
+    } else {
+        // Multi: On / Tie buttons, Tune fields, Pan knobs per step
+        // rows: On, Tie, Tune (small), Pan (the rest)
+        let rh = 15.0;
+        for c in 0..cols {
+            let k = first + c;
+            if k >= aa::STEPS {
+                break;
+            }
+            let cx = body.min.x + c as f32 * cw;
+            let vel = g(p, ix, aa::step(pi, aa::S_VEL, k));
+            let r0 = Rect::from_min_size(pos2(cx + 2.0, body.min.y + 2.0), vec2(cw - 4.0, rh - 4.0));
+            let on = vel > 0.0;
+            let resp = p.ui.interact(r0, egui::Id::unique(("arp-m-on", p.t, k)), Sense::click());
+            p.ui.painter().rect_filled(r0, 2.0, if on { ORANGE } else { rgb(0x2a2e35) });
+            if resp.clicked() {
+                // back on: full velocity
+                p.put(aa::step(pi, aa::S_VEL, k), if on { 0.0 } else { 1.0 });
+            }
+            let r1 = r0.translate(vec2(0.0, rh));
+            let tie = g(p, ix, aa::step(pi, aa::S_TIE, k)) >= 0.5;
+            let resp = p.ui.interact(r1, egui::Id::unique(("arp-m-tie", p.t, k)), Sense::click());
+            p.ui.painter().rect_filled(r1, 2.0, if tie { BLUE } else { rgb(0x2a2e35) });
+            p.ui.painter().text(r1.center(), Align2::CENTER_CENTER, "⁀", look::regular(10.0), p.skin.text);
+            if resp.clicked() {
+                p.put(aa::step(pi, aa::S_TIE, k), if tie { 0.0 } else { 1.0 });
+            }
+            let r2 = r1.translate(vec2(0.0, rh));
+            let tune = g(p, ix, aa::step(pi, aa::S_TUNE, k));
+            let resp = p.ui.interact(r2, egui::Id::unique(("arp-m-tune", p.t, k)), Sense::click_and_drag());
+            p.ui.painter().rect_filled(r2, 2.0, rgb(0x1a1d22));
+            p.ui.painter().text(r2.center(), Align2::CENTER_CENTER, format!("{tune:+.0}"), look::regular(9.5), p.skin.text);
+            if resp.dragged() {
+                let acc_id = egui::Id::unique(("arp-m-tune-acc", p.t, k));
+                let mut acc: f32 = p.ui.data(|d| d.get_temp(acc_id)).unwrap_or(tune);
+                acc = (acc - resp.drag_delta().y / 6.0).clamp(-24.0, 24.0);
+                p.ui.data_mut(|d| d.insert_temp(acc_id, acc));
+                p.put(aa::step(pi, aa::S_TUNE, k), acc.round());
+            }
+            if resp.drag_stopped() {
+                p.ui.data_mut(|d| d.remove::<f32>(egui::Id::unique(("arp-m-tune-acc", p.t, k))));
+            }
+            if resp.double_clicked() {
+                p.put(aa::step(pi, aa::S_TUNE, k), 0.0);
+            }
+            let pr = Rect::from_min_max(pos2(cx + 2.0, r2.max.y + 3.0), pos2(cx + cw - 2.0, body.max.y - 1.0));
+            let mut pan = g(p, ix, aa::step(pi, aa::S_PAN, k));
+            let d = pr.height().min(pr.width());
+            let kr = Rect::from_min_size(pos2(pr.center().x - d / 2.0 - 2.0, pr.min.y - 2.0), vec2(d + 4.0, d + 18.0));
+            if crate::widgets::knob(p.ui, kr, egui::Id::unique(("arp-m-pan", p.t, k)), &mut pan, -1.0, 1.0, 0.0, "", &|v| format!("{:.0}", v * 100.0)) {
+                p.put(aa::step(pi, aa::S_PAN, k), pan);
+            }
+        }
+    }
+    // ties under the steps (Step mode) and the step numbers
+    for c in 0..cols {
+        let k = first + c;
+        if k >= aa::STEPS {
+            break;
+        }
+        let cx = body.min.x + c as f32 * cw;
+        let tr = Rect::from_min_size(pos2(cx + 2.0, body.max.y + 2.0), vec2(cw - 4.0, 8.0));
+        if !multi {
+            let tie = g(p, ix, aa::step(pi, aa::S_TIE, k)) >= 0.5;
+            p.ui.painter().rect_filled(tr, 2.0, if tie { BLUE } else { rgb(0x2a2e35) });
+            if p.ui.interact(tr, egui::Id::unique(("arp-tie", p.t, k)), Sense::click()).on_hover_text("Tie to the next step").clicked() {
+                p.put(aa::step(pi, aa::S_TIE, k), if tie { 0.0 } else { 1.0 });
+            }
+        }
+        p.text(cx + cw / 2.0 - p.o.x, body.max.y + 16.0 - p.o.y, Align2::CENTER_CENTER, &(k + 1).to_string(), 8.5, p.skin.dim);
+    }
+    if total > cols {
+        let sb = Rect::from_min_size(pos2(area.min.x, area.max.y - 4.0), vec2(area.width(), 4.0));
+        p.ui.painter().rect_filled(sb, 2.0, rgb(0x15181d));
+        let th = Rect::from_min_size(pos2(sb.min.x + first as f32 / total as f32 * sb.width(), sb.min.y), vec2(cols as f32 / total as f32 * sb.width(), 4.0));
+        p.ui.painter().rect_filled(th, 2.0, rgb(0x6a6f78));
+        let resp = p.ui.interact(sb.expand2(vec2(0.0, 4.0)), egui::Id::unique(("arp-sb", p.t)), Sense::click_and_drag());
+        if let Some(q) = resp.interact_pointer_pos()
+            && (resp.dragged() || resp.clicked())
+        {
+            st.arp_scroll = (((q.x - sb.min.x) / sb.width() * total as f32) as usize).saturating_sub(cols / 2).min(total - cols);
+        }
+    }
+}
+
+fn rect_at(p: &Pane, x: f32, y: f32, w: f32, h: f32) -> Rect {
+    p.rect(x, y, w, h)
+}
+
+/// The arpeggiator's File menu for the shown pattern.
+fn arp_file(p: &mut Pane, ix: &Ix, r: Rect, pi: usize) {
+    use lg_synth::alchemy_arp as aa;
+    let resp = p.ui.interact(r, egui::Id::unique(("arp-file", p.t)), Sense::click());
+    p.ui.painter().rect_filled(r, 3.0, if resp.hovered() { rgb(0x4a4f58) } else { rack::BTN });
+    p.ui.painter().text(r.center(), Align2::CENTER_CENTER, "File", look::regular(11.0), p.skin.text);
+    let fields = |p: &Pane| -> Vec<(u32, f32)> {
+        let mut v = vec![(0u32, g(p, ix, aa::pat(pi, 0)))];
+        for s in 0..aa::SEQS.len() {
+            for k in 0..aa::STEPS {
+                v.push((aa::SEQ0 + (s * aa::STEPS + k) as u32, g(p, ix, aa::step(pi, s, k))));
+            }
+        }
+        v
+    };
+    let mut act = 0u8;
+    let mut load: Option<Vec<(u32, f32)>> = None;
+    let files: Vec<(String, std::path::PathBuf)> = rack::mod_dir("arp").and_then(|d| std::fs::read_dir(d).ok()).into_iter().flatten().flatten().map(|e| e.path()).filter(|x| x.extension().is_some_and(|e| e == "arp")).map(|x| (x.file_stem().unwrap_or_default().to_string_lossy().into_owned(), x)).collect();
+    let name_id = egui::Id::unique(("arp-save-name", p.t));
+    let mut name: String = p.ui.data(|d| d.get_temp(name_id)).unwrap_or_default();
+    egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.menu_button("Preset", |ui| {
+            for (n, steps, list) in arp_presets() {
+                if ui.button(n).clicked() {
+                    let mut v = vec![(0u32, steps as f32)];
+                    for (k, (vel, tune, tie)) in list.iter().enumerate() {
+                        v.push((aa::SEQ0 + (aa::S_VEL * aa::STEPS + k) as u32, *vel));
+                        v.push((aa::SEQ0 + (aa::S_TUNE * aa::STEPS + k) as u32, *tune));
+                        v.push((aa::SEQ0 + (aa::S_TIE * aa::STEPS + k) as u32, *tie));
+                    }
+                    load = Some(v);
+                    ui.close();
+                }
+            }
+            if !files.is_empty() {
+                ui.separator();
+            }
+            for (n, path) in &files {
+                if ui.button(n).clicked() {
+                    load = Some(rack::read_fields(path));
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("Save…", |ui| {
+            let te = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Name").desired_width(150.0));
+            let enter = te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.button("Save").clicked() || enter) && !name.trim().is_empty() {
+                act = 1;
+                ui.close();
+            }
+        });
+        ui.separator();
+        for (k, n) in ["Copy", "Paste", "Clear", "Randomize"].iter().enumerate() {
+            if ui.button(*n).clicked() {
+                act = 2 + k as u8;
+                ui.close();
+            }
+        }
+        ui.separator();
+        if ui.button("Import MIDI…").clicked() {
+            p.actions.push(format!("arp-import:{pi}"));
+            ui.close();
+        }
+    });
+    let clip = egui::Id::unique("alchemy-arp-clipboard");
+    match act {
+        1 => {
+            if let Some(dir) = rack::mod_dir("arp") {
+                let _ = std::fs::create_dir_all(&dir);
+                let body: String = fields(p).iter().map(|(f, v)| format!("{f} {v}\n")).collect();
+                let _ = std::fs::write(dir.join(format!("{}.arp", name.trim().replace('/', "-"))), body);
+            }
+            name.clear();
+        }
+        2 => {
+            let v = fields(p);
+            p.ui.data_mut(|d| d.insert_temp(clip, v));
+        }
+        3 => load = p.ui.data(|d| d.get_temp::<Vec<(u32, f32)>>(clip)),
+        4 => {
+            let mut v = vec![(0u32, 16.0)];
+            for s in 0..aa::SEQS.len() {
+                let d = aa::seq_range(s).2;
+                for k in 0..aa::STEPS {
+                    v.push((aa::SEQ0 + (s * aa::STEPS + k) as u32, d));
+                }
+            }
+            load = Some(v);
+        }
+        5 => {
+            // random values for the sequence shown
+            let seq = g(p, ix, aa::TARGET).round().max(0.0) as usize;
+            let (lo, hi, _) = aa::seq_range(seq);
+            let seed = (p.ui.input(|i| i.time) * 1000.0) as u32;
+            let steps = g(p, ix, aa::pat(pi, 0)).round() as usize;
+            let mut x = seed | 1;
+            let mut v = Vec::new();
+            for k in 0..steps.min(aa::STEPS) {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                let f = (x & 0xFFFF) as f32 / 65535.0;
+                let val = lo + f * (hi - lo);
+                v.push((aa::SEQ0 + (seq * aa::STEPS + k) as u32, if seq == aa::S_TUNE || seq == aa::S_TIE { val.round() } else { val }));
+            }
+            load = Some(v);
+        }
+        _ => {}
+    }
+    p.ui.data_mut(|d| d.insert_temp(name_id, name));
+    if let Some(v) = load {
+        for (f, val) in v {
+            p.put(aa::pat(pi, f), val);
         }
     }
 }

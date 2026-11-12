@@ -178,7 +178,7 @@ fn alchemy_arpeggiator_and_effects() {
     use lg_synth::alchemy::Alchemy;
     use lg_synth::alchemy_extra as ax;
     let mut a = Alchemy::new(RATE);
-    a.set(ax::ARP, 1.0);
+    a.set(lg_synth::alchemy_arp::MODE, 1.0);
     a.set_tempo(120.0);
     a.note_on(60, 100);
     a.note_on(64, 100);

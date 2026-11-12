@@ -169,6 +169,10 @@ pub(crate) struct AlchShared {
     note_index: u32,
     arp_index: u32,
     speed: f32,
+    /// The arpeggiator step's pan, Arp Mod values and playhead for the next note.
+    note_pan: f32,
+    arp_mod: [f32; 2],
+    playhead: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -237,6 +241,8 @@ pub(crate) struct AlchVoice {
     /// (sources A–D, main filters 1–2) for the envelope followers.
     pub(crate) mv: crate::alchemy_mod::ModVoice,
     legato: bool,
+    /// The arpeggiator step's pan for this note.
+    npan: f32,
     own: Option<AlchShared>,
     ov: crate::alchemy_mod::Overlay,
     lv: [f32; 6],
@@ -266,6 +272,7 @@ impl AlchVoice {
             mix2: [(0.0, 0.0); CHUNK],
             mv: Default::default(),
             legato: false,
+            npan: 0.0,
             own: None,
             ov: Default::default(),
             lv: [0.0; 6],
@@ -298,6 +305,9 @@ impl Voice<AlchShared> for AlchVoice {
         self.mv.index = sh.note_index;
         self.mv.arp_index = sh.arp_index;
         self.mv.speed = sh.speed;
+        self.mv.arp_mod = sh.arp_mod;
+        self.mv.playhead = sh.playhead;
+        self.npan = sh.note_pan;
         if !self.legato {
             self.mv.key = note as f32;
         }
@@ -614,7 +624,8 @@ impl Voice<AlchShared> for AlchVoice {
         let vel_g = 1.0 - sh.vel_sens + sh.vel_sens * self.vel * self.vel;
         let mut peak = 0.0f32;
         let (mut f1p, mut f2p) = (0.0f32, 0.0f32);
-        let (pl, pr) = ((1.0 - sh.pan).clamp(0.0, 1.0).sqrt() * std::f32::consts::SQRT_2, (1.0 + sh.pan).clamp(0.0, 1.0).sqrt() * std::f32::consts::SQRT_2);
+        let pan = (sh.pan + self.npan).clamp(-1.0, 1.0);
+        let (pl, pr) = ((1.0 - pan).sqrt() * std::f32::consts::SQRT_2, (1.0 + pan).sqrt() * std::f32::consts::SQRT_2);
         let (pl, pr) = (pl.min(1.0), pr.min(1.0));
         for i in 0..n {
             let (mut xl, mut xr) = self.mix[i];
@@ -716,6 +727,10 @@ pub struct Alchemy {
     bpm: f32,
     side: f32,
     limiter: bool,
+    /// The arpeggiator (alchemy_arp).
+    pub arp_cfg: crate::alchemy_arp::ArpCfg,
+    pub arp: crate::alchemy_arp::Arp,
+    playing: bool,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -730,6 +745,7 @@ pub fn all_params() -> &'static [Param] {
         }
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
         v.extend(crate::alchemy_partials::params());
+        v.extend(crate::alchemy_arp::params());
         for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
             let b = SRC_FILT + s as u32 * 16;
             let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
@@ -787,6 +803,9 @@ impl Alchemy {
                 note_index: 0,
                 arp_index: 0,
                 speed: 0.0,
+                note_pan: 0.0,
+                arp_mod: [0.0; 2],
+                playhead: 0.0,
             };
         let mut a = Alchemy {
             params,
@@ -822,11 +841,16 @@ impl Alchemy {
             bpm: 120.0,
             side: 0.0,
             limiter: true,
+            arp_cfg: Default::default(),
+            arp: Default::default(),
+            playing: false,
         };
         a.room.feedback = 0.82;
         let params = &a.params;
         a.mods.read_all(&|i| params.get(i));
         a.used = crate::alchemy_mod::used(&a.mods);
+        let params = &a.params;
+        a.arp_cfg.read_all(&|i| params.get(i));
         a.update();
         a
     }
@@ -891,6 +915,9 @@ impl Alchemy {
             note_index: 0,
             arp_index: 0,
             speed: 0.0,
+            note_pan: 0.0,
+            arp_mod: [0.0; 2],
+            playhead: 0.0,
         };
         let envt = |x: f32, lo: f32, hi: f32| lo * (hi / lo).powf(x.clamp(0.0, 1.0));
         for s in 0..4 {
@@ -1182,6 +1209,9 @@ impl Plugin for Alchemy {
     fn params(&self) -> &[Param] {
         all_params()
     }
+    fn value_text(&self, id: u32, value: f32) -> Option<String> {
+        crate::alchemy_arp::value_text(id, value)
+    }
     fn get(&self, id: u32) -> f32 {
         if (crate::alchemy_extra::FX_PARAM..crate::alchemy_extra::MOD).contains(&id) {
             return self.extra.fx_param(id).unwrap_or(0.0);
@@ -1200,6 +1230,9 @@ impl Plugin for Alchemy {
                 self.transform = false;
             }
             let params = &self.params;
+            if self.arp_cfg.read_changed(id, &|i| params.get(i)) {
+                return;
+            }
             if self.mods.read_changed(id, &|i| params.get(i)) {
                 self.mods_changed();
                 // the knobs that are both a modulator's and the voices' (LFO 1–2, AHDSR 1–2)
@@ -1220,6 +1253,8 @@ impl Plugin for Alchemy {
         self.room.reset();
         self.ch.reset();
         self.extra.reset();
+        let mut ev = [crate::alchemy_arp::ArpEv::Off(0); 32];
+        self.arp.clear(&mut ev);
         self.update();
     }
     fn tail(&self) -> f32 {
@@ -1235,15 +1270,17 @@ impl Instrument for Alchemy {
         if self.extra.held == 0 {
             self.extra.mseg_t = 0.0;
         }
-        if self.extra.arp_set.on {
-            if self.extra.held == 0 {
+        if self.arp_cfg.mode != 0 {
+            if self.arp.held() == 0 {
                 self.mg.arp_count = 0;
             }
-            self.extra.held += 1;
-            let s = self.extra.arp_set;
-            self.extra.arp.note_on(&s, pitch, velocity);
-            return;
+            if self.arp.note_on(&self.arp_cfg, pitch, velocity, self.mg.beats, self.bpm, self.playing) {
+                self.extra.held += 1;
+                return;
+            }
         }
+        self.sh.note_pan = 0.0;
+        self.sh.arp_mod = [0.0; 2];
         self.count_note();
         self.extra.held += 1;
         self.mg.held = self.extra.held;
@@ -1255,9 +1292,7 @@ impl Instrument for Alchemy {
             self.mg.held = 0;
             self.mg.all_released();
         }
-        if self.extra.arp_set.on {
-            let s = self.extra.arp_set;
-            self.extra.arp.note_off(&s, pitch);
+        if self.arp_cfg.mode != 0 && self.arp.note_off(&self.arp_cfg, pitch) {
             return;
         }
         self.poly.note_off(pitch, &self.sh, &self.ch.ctl);
@@ -1269,7 +1304,18 @@ impl Instrument for Alchemy {
     fn set_transport(&mut self, t: lg_dsp::Transport) {
         if t.playing {
             self.mg.beats = t.beats;
+        } else if self.playing {
+            // stopping the transport stops the arpeggiator
+            let mut ev = [crate::alchemy_arp::ArpEv::Off(0); 32];
+            let k = self.arp.clear(&mut ev);
+            for e in &ev[..k] {
+                if let crate::alchemy_arp::ArpEv::Off(p) = *e {
+                    self.poly.note_off(p, &self.sh, &self.ch.ctl);
+                }
+            }
+            self.extra.held = 0;
         }
+        self.playing = t.playing;
         self.bpm = t.bpm as f32;
     }
     fn side_chain(&mut self, left: &[f32], right: &[f32]) {
@@ -1314,24 +1360,44 @@ impl Instrument for Alchemy {
             self.sh.lfo2 = self
                 .lfo2
                 .step(1, self.p(101).max(0.05) * 0.1 * dt, &mut self.rng);
-            // the Arpeggiator plays the held keys
-            if self.extra.arp_set.on {
-                let s = self.extra.arp_set;
-                let mut ev = [crate::arp::ArpEvent::Off(0); 16];
-                let beats = dt as f64 * self.extra.bpm / 60.0;
-                let k = self.extra.arp.advance(&s, beats, &mut ev);
+            // the Arpeggiator plays the held keys (its knobs as the modulation section moves them)
+            if self.arp_cfg.mode != 0 || self.arp.running {
+                use crate::alchemy_arp as aa;
+                let keep = (self.arp_cfg.mode, self.arp_cfg.pattern, self.arp_cfg.rate, self.arp_cfg.length, self.arp_cfg.swing, self.arp_cfg.octaves, self.arp_cfg.note_vel);
+                let ov = &self.mg.ov;
+                if ov.n > 0 {
+                    let pr = &self.params;
+                    let m = |id: u32| {
+                        let (lo, hi) = pr.def(id).map(|d| (d.min, d.max)).unwrap_or((0.0, 1.0));
+                        ov.apply(id, pr.get(id), lo, hi)
+                    };
+                    let c = &mut self.arp_cfg;
+                    c.mode = m(aa::MODE).round() as u8;
+                    c.pattern = (m(aa::PATTERN).round().clamp(1.0, 16.0) as usize) - 1;
+                    c.rate = (m(aa::RATE).round().max(0.0) as usize).min(aa::RATES.len() - 1);
+                    c.length = m(aa::LENGTH);
+                    c.swing = m(aa::SWING);
+                    c.octaves = m(aa::OCTAVE).round().clamp(1.0, 4.0) as u8;
+                    c.note_vel = m(aa::NOTE_VEL);
+                }
+                let mut ev = [aa::ArpEv::Off(0); 32];
+                let k = if self.arp_cfg.mode == 0 { self.arp.clear(&mut ev) } else { self.arp.advance(&self.arp_cfg, dt, self.bpm, &mut ev) };
+                (self.arp_cfg.mode, self.arp_cfg.pattern, self.arp_cfg.rate, self.arp_cfg.length, self.arp_cfg.swing, self.arp_cfg.octaves, self.arp_cfg.note_vel) = keep;
                 for e in &ev[..k] {
                     match *e {
-                        crate::arp::ArpEvent::On(p, v) => {
-                            if self.extra.arp.current_step() == 0 {
+                        aa::ArpEv::On(nt) => {
+                            if nt.step == 0 {
                                 self.mg.arp_count = 0;
                             }
                             let held = self.mg.held;
                             self.count_note();
                             self.mg.held = held.max(1);
-                            self.poly.note_on(p, v, &self.sh, &self.ch.ctl)
+                            self.sh.note_pan = nt.pan;
+                            self.sh.arp_mod = [nt.m1, nt.m2];
+                            self.sh.playhead = nt.step as f32 / nt.steps.max(1) as f32;
+                            self.poly.note_on(nt.pitch, nt.vel, &self.sh, &self.ch.ctl)
                         }
-                        crate::arp::ArpEvent::Off(p) => self.poly.note_off(p, &self.sh, &self.ch.ctl),
+                        aa::ArpEv::Off(p) => self.poly.note_off(p, &self.sh, &self.ch.ctl),
                     }
                 }
             }
