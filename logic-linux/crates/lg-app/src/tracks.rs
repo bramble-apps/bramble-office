@@ -650,6 +650,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         crate::stretch::option_resize(app, track, region, length);
                     } else {
                         crate::arranging::after_resize(app, track, region, length);
+                        if let Some((t2, r2)) = app.selected_region.filter(|x| x.0 == track) {
+                            crate::regiontrim::after_trim(app, &ui.ctx().clone(), t2, r2);
+                        }
                     }
                 }
                 app.drag = None;

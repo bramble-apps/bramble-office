@@ -188,12 +188,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let shift_down = ui.input(|i| i.modifiers.shift);
     // Bramble's ghost notes: the other regions' notes faintly behind
     crate::rollextras::draw_ghosts(app, &gp, grid, ti, ri, &x_of, &tick_at, &|pitch| rows.note_y(pitch), ROW);
+    let mut note_rects: Vec<(usize, Rect)> = Vec::new();
     for (k, n) in region.notes.iter().enumerate() {
         let Some(y) = rows.note_y(n.pitch) else { continue };
         let r = Rect::from_min_max(pos2(x_of(n.pos as f32), y - ROW + 1.5), pos2(x_of((n.pos + n.len) as f32).max(x_of(n.pos as f32) + 3.0), y - 1.5));
         if !r.intersects(grid) {
             continue;
         }
+        note_rects.push((k, r));
         let selected = app.selected_notes.contains(&k);
         let c = if app.artic.color_by { crate::artic::color(crate::artic::note_artic(&region, n)) } else { note_color(app.midi.note_color, n, base) };
         // (muted notes grey, as Logic's)
@@ -207,19 +209,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let w = (r.width() - 4.0) * n.velocity as f32 / 127.0;
             gp.hline(r.min.x + 2.0..=r.min.x + 2.0 + w, r.center().y, Stroke::new(1.0, look::mix(c, Color32::BLACK, 0.5)));
         }
-        let resp = ui.interact(r.intersect(grid), ui.scope_id().with(("note", k)), Sense::click_and_drag());
+        // (the Brush and the Eraser drag over notes: the grid takes their drags, rolltools.rs)
+        let sense = if matches!(tool, Tool::Brush | Tool::Eraser) { Sense::click() } else { Sense::click_and_drag() };
+        let resp = ui.interact(r.intersect(grid), ui.scope_id().with(("note", k)), sense);
         if resp.secondary_clicked() && !app.selected_notes.contains(&k) {
             app.selected_notes = vec![k];
         }
         crate::menus::context_menu(app, &resp, "pianoroll-note");
         let near_end = resp.hover_pos().is_some_and(|h| h.x > r.max.x - 5.0 && r.width() > 10.0);
-        if resp.hovered() {
-            ui.ctx().set_cursor_icon(match tool {
-                Tool::Pointer | Tool::Pencil if near_end => egui::CursorIcon::ResizeHorizontal,
-                Tool::Velocity => egui::CursorIcon::ResizeVertical,
-                Tool::Scissors => egui::CursorIcon::Crosshair,
-                _ => egui::CursorIcon::PointingHand,
-            });
+        if resp.hovered() && matches!(tool, Tool::Pointer | Tool::Pencil) && near_end {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         }
         if resp.clicked() || resp.drag_started() {
             pressed_note = Some((k, resp.drag_started(), resp.interact_pointer_pos(), near_end));
@@ -229,10 +228,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             match (app.midi.roll_drag.clone(), pp) {
                 (Some(RollDrag::Velocity { from_y, orig, targets }), Some(pp)) => {
                     let d = ((from_y - pp.y) / 2.0).round() as i32;
+                    // (Option-Shift: every selected note to the pressed note's velocity)
+                    let same = ui.input(|i| i.modifiers.alt && i.modifiers.shift);
+                    let to = orig.get(k).map(|o| (o.velocity as i32 + d).clamp(1, 127) as u8);
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
                         for &i in &targets {
                             if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
-                                n.velocity = (o.velocity as i32 + d).clamp(1, 127) as u8;
+                                n.velocity = match (same, to) {
+                                    (true, Some(v)) => v,
+                                    _ => (o.velocity as i32 + d).clamp(1, 127) as u8,
+                                };
                             }
                         }
                         if let Some(n) = rg.notes.get(k) {
@@ -271,6 +276,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     None => (dt, dp),
                 };
                 let sel = app.selected_notes.clone();
+                let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
                     for &i in &sel {
                         if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
@@ -280,7 +286,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                     // Logic's help tag: the pressed note's position, length and pitch
                     if let Some(n) = rg.notes.get(k) {
-                        let sig = (4, 4);
                         app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(n.pos, sig)), ("Length:".into(), crate::app::bbdt_len(n.len, sig)), ("Pitch:".into(), crate::app::note_name(n.pitch))]);
                     }
                 }
@@ -307,6 +312,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let click_tick = pp.map(|p| tick_at(p.x));
         match tool {
             Tool::Eraser => app.delete_selection(),
+            // Mute: the clicked note's new state for every selected note (Logic)
+            Tool::Mute if !drag => {
+                let on = !region.notes.get(k).is_some_and(|n| n.muted);
+                crate::midifunc::edit(app, "Mute Notes", |notes, sel, _| {
+                    for &i in sel.iter() {
+                        if let Some(n) = notes.get_mut(i) {
+                            n.muted = on;
+                        }
+                    }
+                });
+            }
+            // Solo: the note plays
+            Tool::Solo => {
+                if let Some(n) = region.notes.get(k) {
+                    preview(app, ti, n.pitch);
+                }
+            }
             Tool::Scissors if !drag => {
                 if let Some(t) = click_tick {
                     let at = crate::rollsnap::round(app, ui.ctx(), t, ppt) as u32;
@@ -331,14 +353,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     app.midi.roll_drag = Some(RollDrag::Velocity { from_y: pp.y, orig, targets: app.selected_notes.clone() });
                 }
             }
-            Tool::Pointer | Tool::Pencil if drag && near_end => {
+            Tool::Pointer | Tool::Pencil | Tool::Finger if drag && (near_end || tool == Tool::Finger) => {
                 if let Some(pp) = pp {
                     app.checkpoint("Resize Notes");
                     let orig = app.project.as_ref().and_then(|p| p.tracks.get(ti)?.regions.get(ri)).map(|r| r.notes.clone()).unwrap_or_default();
                     app.midi.roll_drag = Some(RollDrag::Resize { from_x: pp.x, orig, targets: app.selected_notes.clone() });
                 }
             }
-            _ if drag => {
+            _ if drag && !matches!(tool, Tool::Mute | Tool::Solo | Tool::Zoom) => {
                 if let Some(pp) = pp {
                     let copy = ui.input(|i| i.modifiers.alt);
                     app.checkpoint(if copy { "Copy Notes" } else { "Move Notes" });
@@ -361,14 +383,27 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             _ => {}
         }
-    } else if bg.drag_started() && matches!(tool, Tool::Brush | Tool::Pencil) {
-        // Brush: paint notes (or the brush pattern) along the drag at the grid's steps; Pencil:
-        // a new note whose length follows the drag
+    } else if bg.drag_started() && matches!(tool, Tool::Pointer | Tool::Marquee | Tool::Eraser) {
+        // Pointer: a rubber band selects the notes it touches (Shift: adds to the selection);
+        // Eraser: the notes dragged over go
         if let Some(pp) = bg.interact_pointer_pos() {
-            app.checkpoint(if tool == Tool::Brush { "Brush Notes" } else { "Create Note" });
+            if tool == Tool::Eraser {
+                app.checkpoint("Delete Notes");
+                app.midi.roll_drag = Some(RollDrag::Erase);
+            } else {
+                let keep = if shift_down { app.selected_notes.clone() } else { Vec::new() };
+                app.midi.roll_drag = Some(RollDrag::Band { from: pp, keep });
+            }
+        }
+    } else if bg.drag_started() && matches!(tool, Tool::Brush | Tool::Pencil) {
+        // Brush (and Pencil with Shift): paint notes (or the brush pattern) along the drag at
+        // the Time Quantize steps; Pencil: a new note whose length follows the drag
+        if let Some(pp) = bg.interact_pointer_pos() {
+            let brush = tool == Tool::Brush || shift_down;
+            app.checkpoint(if brush { "Brush Notes" } else { "Create Note" });
             let pitch = rows.pitch_at(pp.y);
             let step = if app.roll_quantize > 0 { app.roll_quantize } else { sixteenth as u32 };
-            if tool == Tool::Pencil {
+            if !brush {
                 let at = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32;
                 let (len, vel) = app.midi.default_note;
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
@@ -377,7 +412,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     app.midi.roll_drag = Some(RollDrag::Pencil { index: rg.notes.len() - 1, start: at });
                 }
             } else {
-                app.midi.roll_drag = Some(RollDrag::Brush { pitch, step, done: Vec::new() });
+                // (Pencil + Shift: every note on the pitch it started on)
+                app.midi.roll_drag = Some(RollDrag::Brush { pitch, step, done: Vec::new(), last: None, fixed: tool == Tool::Pencil });
             }
         }
     }
@@ -390,10 +426,41 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         n.len = end - start;
                     }
                 }
-                RollDrag::Brush { pitch, step, mut done } => {
-                    let at = (tick_at(pp.x).max(0.0) as u32) / step * step;
-                    if !done.contains(&at) {
-                        done.push(at);
+                RollDrag::Band { from, keep } => {
+                    let mut v = keep.clone();
+                    for k in crate::rolltools::band(from, pp, &note_rects) {
+                        if !v.contains(&k) {
+                            v.push(k);
+                        }
+                    }
+                    app.selected_notes = v;
+                    let r = Rect::from_two_pos(from, pp);
+                    gp.rect_filled(r, 0.0, Color32::from_white_alpha(24));
+                    gp.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_white_alpha(160)), egui::StrokeKind::Inside);
+                }
+                RollDrag::Erase => {
+                    if let Some(k) = crate::rolltools::hit(pp, &note_rects) {
+                        if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
+                            if k < rg.notes.len() {
+                                rg.notes.remove(k);
+                            }
+                        }
+                        app.selected_notes.clear();
+                    }
+                }
+                RollDrag::Brush { pitch, step, mut done, last, fixed } => {
+                    // the pitch follows the pointer (Shift, or the Pencil: the first pitch)
+                    let fixed = fixed || shift_down;
+                    let row = if fixed { rows.row_of(pitch).map_or(rows.row_at(pp.y), |r| r + 0.5) } else { rows.row_at(pp.y) };
+                    let steps = crate::rolltools::brush_steps(last, tick_at(pp.x).max(0.0) as u32, row, step);
+                    let mut last = last;
+                    for (at, row) in steps {
+                        last = Some((at, row));
+                        let pitch = if fixed { pitch } else { rows.pitch_at(rows.y_of_row(row.floor()) - ROW * 0.5) };
+                        if done.contains(&(at, pitch)) {
+                            continue;
+                        }
+                        done.push((at, pitch));
                         let pattern = app.midi.brush.clone();
                         let vel = app.midi.default_note.1;
                         if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
@@ -415,7 +482,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             }
                         }
                     }
-                    app.midi.roll_drag = Some(RollDrag::Brush { pitch, step, done });
+                    app.midi.roll_drag = Some(RollDrag::Brush { pitch, step, done, last, fixed });
                 }
                 _ => {}
             }
@@ -431,7 +498,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let pitch = rows.pitch_at(pp.y);
             app.checkpoint("Create Note");
             if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
-                rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: 80, pos: tick.max(0.0) as u32, len: sixteenth as u32, muted: false });
+                let (len, vel) = app.midi.default_note;
+                rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: tick.max(0.0) as u32, len, muted: false });
                 app.selected_notes = vec![rg.notes.len() - 1];
             }
             app.load_engine();
@@ -439,13 +507,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     } else if pressed_note.is_none() && bg.clicked() {
         if tool == Tool::Pencil {
             if let Some(pp) = bg.interact_pointer_pos() {
-                let at = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32;
+                // (Control-Shift: exactly where clicked, Snap ignored)
+                let exact = ui.input(|i| i.modifiers.ctrl && i.modifiers.shift);
+                let at = if exact { tick_at(pp.x).max(0.0) as u32 } else { crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32 };
                 let pitch = rows.pitch_at(pp.y);
                 let (len, vel) = app.midi.default_note;
                 crate::midifunc::edit(app, "Create Note", |notes, sel, _| {
                     notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len, muted: false });
                     *sel = vec![notes.len() - 1];
                 });
+            }
+        } else if tool == Tool::Zoom {
+            // Zoom: a click zooms in around it, Option-click out
+            if let Some(pp) = bg.interact_pointer_pos() {
+                let at = tick_at(pp.x) / bar_t;
+                let k = if ui.input(|i| i.modifiers.alt) { 1.0 / 1.5 } else { 1.5 };
+                app.roll_bar_w = (app.roll_bar_w * k).clamp(30.0, 3000.0);
+                app.roll_scroll_x = (at - (pp.x - grid.min.x) / app.roll_bar_w).max(0.0);
             }
         } else {
             app.selected_notes.clear();
@@ -497,6 +575,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         velocity_lane(app, ui, lane, ti, ri, &x_of, &tick_at, left);
         crate::rollextras::lanes(app, ui, lane, &mut |app, ui, r| velocity_lane(app, ui, r, ti, ri, &x_of, &tick_at, left));
     }
+    // the pointer takes the tool's shape over the grid (rolltools.rs)
+    if let Some(h) = ui.input(|i| i.pointer.hover_pos()).filter(|h| grid.contains(*h)) {
+        if ui.ctx().layer_id_at(h).is_none_or(|l| l.order == egui::Order::Background) {
+            crate::rolltools::cursor(ui.ctx(), tool, h);
+        }
+    }
     // the playhead
     let ph = x_of(app.position() as f32);
     if grid.x_range().contains(ph) {
@@ -516,8 +600,13 @@ pub enum RollDrag {
     Handle { right: bool, span: (u32, u32), orig: Vec<lg_core::events::Note> },
     /// Pencil: the note made, its start.
     Pencil { index: usize, start: u32 },
-    /// Brush: the pitch, the step, the steps painted.
-    Brush { pitch: u8, step: u32, done: Vec<u32> },
+    /// Brush: the pitch it started on, the step, the (step, pitch)s painted, the last step and
+    /// row, the pitch kept (Pencil + Shift).
+    Brush { pitch: u8, step: u32, done: Vec<(u32, u8)>, last: Option<(u32, f32)>, fixed: bool },
+    /// The Pointer's rubber band: where it started, the selection it adds to (Shift).
+    Band { from: egui::Pos2, keep: Vec<usize> },
+    /// The Eraser dragged over notes.
+    Erase,
     /// The velocity lane being painted.
     Lane,
 }
@@ -555,9 +644,10 @@ impl Rows {
         self.row_of(pitch).map(|r| self.y_of_row(r))
     }
 
-    /// The row number under `y` (fractional, as the note drags use it).
+    /// The row number under `y` (fractional, as the note drags use it): row `r` is drawn from
+    /// `y_of_row(r) - ROW` to `y_of_row(r)`, so its middle is `r + 0.5`.
     fn row_at(&self, y: f32) -> f32 {
-        self.top - (y - self.y0) / ROW + 1.0
+        self.top - (y - self.y0) / ROW
     }
 
     fn pitch_at(&self, y: f32) -> u8 {
@@ -841,4 +931,32 @@ pub fn scale_of(key: &str) -> [bool; 12] {
         out[(r + s) % 12] = true;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_click_in_a_drawn_row_is_that_rows_pitch() {
+        // every vertical scroll (fractional too) and both row layouts
+        for top in [127.0, 84.0, 72.5, 60.25, 30.0] {
+            let rows = Rows::new(None, top, 200.0);
+            for (row, pitch) in rows.visible(400.0) {
+                let y = rows.y_of_row(row);
+                // the row is drawn from y - ROW to y: its middle, and just inside both edges
+                for yy in [y - ROW * 0.5, y - ROW + 0.5, y - 0.5] {
+                    assert_eq!(rows.pitch_at(yy), pitch, "top {top} row {row} y {yy}");
+                }
+            }
+        }
+        let rows = Rows::new(Some(vec![40, 52, 67]), 0.0, 100.0);
+        for (row, pitch) in rows.visible(400.0) {
+            assert_eq!(rows.pitch_at(rows.y_of_row(row) - ROW * 0.5), pitch);
+        }
+        // a note is drawn in its pitch's row
+        let rows = Rows::new(None, 80.0, 0.0);
+        let y = rows.note_y(64).unwrap();
+        assert_eq!(rows.pitch_at(y - ROW * 0.5), 64);
+    }
 }

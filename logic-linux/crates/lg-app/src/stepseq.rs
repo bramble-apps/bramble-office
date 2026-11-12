@@ -626,6 +626,14 @@ fn write(app: &mut App, ctx: &egui::Context, t: usize, r: usize, what: &str) {
     app.after_edit();
 }
 
+/// A pattern region resized (regiontrim.rs): its pattern played again from its start, for its
+/// new length.
+pub fn rerender(app: &mut App, ctx: &egui::Context, t: usize, r: usize) {
+    if is_pattern(ctx, t, r) {
+        write_notes(app, ctx, t, r);
+    }
+}
+
 fn write_notes(app: &mut App, ctx: &egui::Context, t: usize, r: usize) {
     let Some((start, len)) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).map(|rg| (rg.start, rg.length)) else { return };
     let Some((notes, _)) = with_store(ctx, |s| {

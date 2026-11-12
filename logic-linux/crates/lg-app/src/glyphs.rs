@@ -82,6 +82,7 @@ pub fn tool(t: crate::edit::Tool) -> &'static str {
         Tool::Velocity => ph::CHART_BAR,
         Tool::Quantize => ph::MAGNET,
         Tool::Brush => ph::PAINT_BRUSH,
+        Tool::Finger => ph::HAND_POINTING,
         Tool::Gain => ph::SPEAKER_HIGH,
     }
 }

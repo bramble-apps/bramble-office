@@ -53,6 +53,9 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Key Commands window (keycmds.rs, ⌥K, Logic Pro ▸ Key Commands ▸ Edit Assignments…): Logic's layout (More menu, filter buttons All / Used / Key / Touch Bar / Unused / Customized / Multi-Used / Conflicts (n) / Pressed, search with recent searches, Command / Key / Touch Bar / Control Surface list grouped and collapsible by area, Keyboard / Touch Bar / Control Surface pane); all 2207 commands; Learn by Key Label / Position with the Cancel / Replace / OK conflict alert, Delete; Learn New Assignment from MIDI (note / CC / program; releases ignored) and Delete Assignment, the message then runs the command; Presets (U.S. + saved sets, ticked), Import / Import to Selection / Merge, Save / Save As… / Save Customized As… in Studio's .bskc format, Copy to Clipboard (only matches while searching), Expand / Collapse All, Scroll to Selection, Initialize All / Selection / Unused; the edited set drives every key press and the menus' shortcuts at once and is kept across launches; Ctrl-choosing a menu item opens it there. [ ] Touch Bar (none on Linux), Logic's .logikcs files and other language presets, keypad keys told apart
 
 ## 3. Editing
+- [~] Key focus (focus.rs, tested; checked headless): the area clicked last (Tracks area, the editor, Mixer, Browser, Event List, Step Editor, windows, Smart Controls, Project Audio) gets Delete, Select All, Cut / Copy / Paste, the arrow keys and every key command, wherever the pointer is. Menus and popovers keep it; ⇥ / ⇧⇥ (Cycle Through Window Views) move it; Logic's 2 pt blue frame marks it. Delete in an editor removes its selected notes or steps, never the region (the reported "deleting a note deletes the track" bug: the pointer used to pick the area). ⌘C / ⌘X / ⌘V from the keyboard reach the commands (egui-winit sends them as clipboard events, which Studio used to ignore). Region Copy / Paste takes every selected region on every track, pasted at the playhead with their track offsets and spacing (regionclip.rs). ⌃ key bindings no longer fire on the bare key. [ ] ⌘V does nothing when the system clipboard is empty (egui-winit sends no event); the focus frame isn't checked in the light theme
+- [~] Piano Roll tools (rolltools.rs, pianoroll.rs, tested): notes land in the row clicked (the pitch under the pointer was one row too high: row_at had +1); the pointer takes the tool's shape over the grid with Logic's hotspot (Pencil / Eraser / Brush tip, Finger fingertip, centred tools; Marquee crosshair, Zoom magnifier); the Brush paints along the drag at the Time Quantize steps following the pointer's pitch (Shift: the pitch it started on), also starting on a note; Pencil Shift-drag paints, Control-Shift-click ignores Snap; Pointer drag on the background is a rubber band (Shift adds); the Eraser deletes what it's dragged over; Mute toggles (the clicked note's state for all selected), Solo plays the note, Zoom click / Option-click, Velocity Option-Shift sets all to one, the Finger tool (F) resizes from anywhere on a note; double-click makes the default note. [ ] Velocity Option (overwrite to max/min), Control fine moves, Automation tool in the Piano Roll
+- [~] Region resize from both edges (regiontrim.rs, tested; checked headless on an imported WAV): the left edge trims the start of any region (audio keeps its timeline position through its file offset; not before the file's start), the right edge stops at the audio file's end; Option on either edge time-stretches (MIDI notes scale, audio through Flex); Drummer, Session Player and pattern regions remake their contents for the new span; one undo step each with Position / Length help tags. Tracks-area waveforms are drawn from the file at the region's offset and the timeline's scale (never squeezed). [ ] Option-drag left on audio isn't checked by ear; aliases follow their original's length (lg-core), not their own trims
 - [x] Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo
 - [~] Loop (inspector and by dragging the region's upper right corner: repetitions drawn as ghosts, end where dropped), split, join, trims. Audio regions: fades (Fade tool, Pointer corner handles, Ctrl-Shift / Option-drag curve, drawn on the regions), crossfades (Fade tool across touching regions, Apply Default Crossfade; X / EqP / X S math, touching regions lengthened into each other from their files), Remove Fades / Fade-In / Fade-Out / Crossfade, Apply Last Edited Fade Again, Region Gain ±1 / ±0.1 dB, Normalize Region Gain… and Again, Reverse (non-destructive). Bounce in Place (regions or tracks → WAV in the project, new audio track, originals muted). [ ] Bounce in Place sheet options (tail, normalize, bypass effects), audio fades/gain/reverse still app-only (not written to the .logicx), crossfade of regions that don't touch
 - [~] T tool menu, left / Command-click tools; Pencil, Eraser, Scissors, Join, Mute, Solo, Zoom, Text, Fade, Marquee (range over tracks: Delete, Split, Crop, Set Locators, Set Marquee to Selection, automation range moves), Automation Select (rubber band) work. [ ] Flex, Gain, Slip, Rotate tools; the Automation Curve tool is the Automation tool + Option / Ctrl-Shift
@@ -144,8 +147,8 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 |---|---:|---:|---:|
 | Menu bar | 389 | 595 | 65% |
 | Local menus | 731 | 1191 | 61% |
-| Right-click menus | 1451 | 2575 | 56% |
-| Key commands | 1767 | 2207 | 80% |
+| Right-click menus | 1452 | 2575 | 56% |
+| Key commands | 1768 | 2207 | 80% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
 ## Menu bar: 389 of 595
@@ -2140,7 +2143,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1451 of 2575
+## Right-click menus: 1452 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4799,12 +4802,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tool-menu-T-key-piano-roll — 12/14</summary>
+<details><summary>tool-menu-T-key-piano-roll — 13/14</summary>
 
 - [x] Pointer Tool  `T`
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
-- [ ] Finger Tool  `F`
+- [x] Finger Tool  `F`
 - [x] Scissors Tool  `I`
 - [x] Join Tool  `J`
 - [x] Mute Tool  `M`
@@ -4963,7 +4966,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1767 of 2207
+## Key commands: 1768 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -7272,13 +7275,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Tool Menu — 18/29</summary>
+<details><summary>Tool Menu — 19/29</summary>
 
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
 - [x] Scissors Tool  `I`
 - [x] Join Tool  `J`
-- [ ] Finger Tool  `F`
+- [x] Finger Tool  `F`
 - [x] Text Tool  `⇧T`
 - [x] Zoom Tool  `Y`
 - [x] Solo Tool  `S`
