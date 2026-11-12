@@ -108,6 +108,24 @@ fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usiz
         changed = true;
     }
     y += ROW;
+    if audio {
+        // Smart Tempo (tempomode.rs)
+        label(&p, area, y, "Smart Tempo");
+        let cur = crate::tempomode::smart_tempo(app, t, r);
+        if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("smart-tempo"), cur, &crate::tempomode::SMART) {
+            crate::flex::checkpoint(app, "Smart Tempo");
+            crate::tempomode::set_smart_tempo(app, t, r, i);
+        }
+        y += ROW;
+    } else {
+        // Pitch Source (globals.rs)
+        label(&p, area, y, "Pitch Source");
+        if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("pitch-source"), props.pitch_source as usize, &crate::globals::PITCH_SOURCES) {
+            props.pitch_source = i as u8;
+            changed = true;
+        }
+        y += ROW;
+    }
     let pct_or = |dflt: f32| move |v: f32| if v == 0.0 { "Fixed".to_string() } else if v == dflt { String::new() } else { format!("{v:.0} %") };
     let mut rows: Vec<(&str, f32, f32, f32, f32, Shown)> = vec![
         ("Q-Swing", props.swing as f32, 0.0, 100.0, 50.0, Box::new(|v: f32| format!("{v:.0} %"))),

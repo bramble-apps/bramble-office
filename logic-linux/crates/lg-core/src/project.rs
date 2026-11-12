@@ -161,11 +161,13 @@ pub struct RegionProps {
     pub fade_in: (u16, i8),
     pub fade_out: (u16, i8),
     pub audio_offset: u32,
+    /// Pitch Source (Logic 12+): 0 Off, 1 Key Signature, 2 Region Chords, 3 Chord Track.
+    pub pitch_source: u8,
 }
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, pitch_source: 0 }
     }
 }
 

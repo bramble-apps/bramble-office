@@ -394,6 +394,32 @@ pub fn beat_mapping_lane(app: &App, p: &egui::Painter, lane: Rect, x_of: &dyn Fn
     }
 }
 
+// ---- Pitch Source ------------------------------------------------------------------------------
+
+pub const PITCH_SOURCES: [&str; 4] = ["Off", "Key Signature", "Region Chords", "Chord Track"];
+
+/// What a MIDI region's Pitch Source adds to a note at `tick`: Key Signature follows the key
+/// signature changes (from the project's key), Chord Track the Chord track's chord roots;
+/// Off (the default) and Region Chords (Studio's regions carry no chords) keep the notes.
+pub fn pitch_source_shift(app: &App, props: &lg_core::project::RegionProps, tick: u32) -> i16 {
+    let Some(p) = app.project.as_ref() else { return 0 };
+    let map = lg_core::timeline::Map::of(p);
+    let bar = map.bar_of(tick).0;
+    match props.pitch_source {
+        1 => lg_core::timeline::key_shift(p, bar) as i16,
+        3 => {
+            let text = if app.chord_text.trim().is_empty() { "C Am F G".to_string() } else { app.chord_text.clone() };
+            let chords: Vec<&str> = text.split_whitespace().collect();
+            let Some(c) = chords.get(bar as usize).or(chords.last()) else { return 0 };
+            match (lg_core::timeline::root_of(&p.key), lg_core::timeline::root_of(c)) {
+                (Some(a), Some(b)) => lg_core::timeline::shift_between(a, b) as i16,
+                _ => 0,
+            }
+        }
+        _ => 0,
+    }
+}
+
 // ---- signature sets ------------------------------------------------------------------------------
 
 /// The Signature List's Signature Set pop-up: the sets (up to nine), New Set, Rename Set…,
@@ -478,6 +504,13 @@ pub fn extras_text(p: &lg_core::Project) -> String {
     if !g.sig_sets.is_empty() {
         out += &format!("scur\t{}\n", g.sig_set);
     }
+    for (t, tr) in p.tracks.iter().enumerate() {
+        for (r, rg) in tr.regions.iter().enumerate() {
+            if rg.props.pitch_source != 0 {
+                out += &format!("psrc\t{t}\t{r}\t{}\n", rg.props.pitch_source);
+            }
+        }
+    }
     out
 }
 
@@ -491,6 +524,12 @@ pub fn apply_extras(p: &mut lg_core::Project, l: &str) -> bool {
             });
             let keys = keys.split(',').filter_map(|x| x.split_once(':')).filter_map(|(a, b)| Some((a.parse().ok()?, b.to_string())));
             p.global.sig_sets.push(lg_core::timeline::SigSet { name: name.to_string(), signatures: signatures.collect(), keys: keys.collect() });
+            true
+        }
+        ["psrc", t, r, v] => {
+            if let Some(rg) = t.parse::<usize>().ok().zip(r.parse::<usize>().ok()).and_then(|(t, r)| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+                rg.props.pitch_source = v.parse().unwrap_or(0);
+            }
             true
         }
         ["scur", k] => {

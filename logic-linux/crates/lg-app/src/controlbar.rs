@@ -375,7 +375,7 @@ fn tempo_cell(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, c2: Rect) {
             app.tempo_edit = Some(format!("{tempo:.2}").trim_end_matches('0').trim_end_matches('.').to_string());
         }
     }
-    p.text(pos2(c2.center().x, c2.min.y + 30.0), Align2::CENTER_CENTER, "KEEP", look::semibold(8.0), look::lcd_dim());
+    crate::tempomode::lcd_label(app, ui, &p, pos2(c2.center().x, c2.min.y + 30.0));
     p.text(pos2(c2.center().x, c2.max.y - 8.0), Align2::CENTER_CENTER, "TEMPO", look::semibold(9.0), look::lcd_dim());
 }
 

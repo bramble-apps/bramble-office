@@ -75,6 +75,9 @@ pub struct RegionAudio {
     pub pitch: Vec<lg_audio::flexpitch::Note>,
     /// Flex & Follow: the file's Smart Tempo beats follow the project tempo (flex.rs).
     pub follow: bool,
+    /// The Region inspector's Smart Tempo setting (tempomode.rs): 1 On, 2 On + Align Bars,
+    /// 3 On + Align Bars and Beats (with `follow`).
+    pub smart_tempo: u8,
 }
 
 /// A decoded file: its samples at its own rate, the overview, its transients.

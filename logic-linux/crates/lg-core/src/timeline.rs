@@ -757,6 +757,45 @@ pub fn move_signature(p: &mut Project, from: u32, to: u32) -> bool {
 }
 
 /// The key at `bar`.
+/// The pitch class (0 = C) of a key or chord name's root ("F# minor", "Bb", "Am7").
+pub fn root_of(name: &str) -> Option<i8> {
+    let mut c = name.trim().chars();
+    let base = match c.next()?.to_ascii_uppercase() {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let acc = match c.next() {
+        Some('#') | Some('♯') => 1,
+        Some('b') | Some('♭') => -1,
+        _ => 0,
+    };
+    Some((base + acc + 12) % 12)
+}
+
+/// Semitones from root `from` to root `to`, the nearer way (−6..=5).
+pub fn shift_between(from: i8, to: i8) -> i8 {
+    let d = (to - from).rem_euclid(12);
+    if d > 5 {
+        d - 12
+    } else {
+        d
+    }
+}
+
+/// Pitch Source Key Signature: how far the key at `bar` is from the project's key.
+pub fn key_shift(p: &Project, bar: u32) -> i8 {
+    match (root_of(&p.key), root_of(&key_at(p, bar))) {
+        (Some(a), Some(b)) => shift_between(a, b),
+        _ => 0,
+    }
+}
+
 pub fn key_at(p: &Project, bar: u32) -> String {
     p.global.keys.iter().rev().find(|k| k.0 <= bar).map_or(p.key.clone(), |k| k.1.clone())
 }
@@ -773,6 +812,17 @@ pub fn set_key(p: &mut Project, bar: u32, key: &str) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn key_shifts() {
+        assert_eq!(root_of("F# minor"), Some(6));
+        assert_eq!(root_of("Bb major"), Some(10));
+        assert_eq!(shift_between(0, 7), -5);
+        assert_eq!(shift_between(0, 2), 2);
+        let mut p = Project { key: "C major".into(), ..Default::default() };
+        set_key(&mut p, 4, "D major");
+        assert_eq!((key_shift(&p, 2), key_shift(&p, 5)), (0, 2));
+    }
 
     #[test]
     fn signature_sets() {

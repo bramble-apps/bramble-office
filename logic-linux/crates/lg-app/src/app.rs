@@ -297,6 +297,8 @@ pub struct App {
     pub mk: crate::markers::State,
     /// The global tracks shown, their order and heights (globals.rs).
     pub gt: crate::globals::State,
+    /// Project Tempo mode, free tempo recording (tempomode.rs).
+    pub tm2: crate::tempomode::State,
     pub plugin_bypass: std::collections::HashSet<usize>,
     /// The instruments' Side Chain choices (sidechain.rs).
     pub side: crate::sidechain::State,
@@ -508,6 +510,7 @@ impl App {
             arr: Default::default(),
             mk: Default::default(),
             gt: Default::default(),
+            tm2: Default::default(),
             mix: Default::default(),
             plugin_bypass: Default::default(),
             side: Default::default(),
@@ -658,6 +661,10 @@ impl App {
                         }
                         // the Transposition track
                         n.pitch = (n.pitch as i16 + crate::trackarea::transposition(self, i, at)).clamp(0, 127) as u8;
+                        // the region's Pitch Source (globals.rs)
+                        if r.props.pitch_source != 0 {
+                            n.pitch = (n.pitch as i16 + crate::globals::pitch_source_shift(self, &r.props, at)).clamp(0, 127) as u8;
+                        }
                         notes.push((at, at + n.len.max(1), n.pitch, n.velocity));
                     }
                     offset += r.length.max(1);
@@ -1350,7 +1357,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) {
+        if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
         if crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
@@ -1864,6 +1871,7 @@ impl App {
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);
+        crate::tempomode::frame(self, &ctx);
         crate::hosting::manager(self, &ctx);
         crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);

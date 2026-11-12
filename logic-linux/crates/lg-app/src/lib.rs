@@ -42,6 +42,7 @@ mod midiwin;
 pub mod liveloops;
 pub mod globals;
 pub mod look;
+pub mod tempomode;
 pub mod markers;
 pub mod menus;
 mod mixer;
