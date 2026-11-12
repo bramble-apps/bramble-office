@@ -1080,8 +1080,8 @@ pub fn sampler_instrument(choice: &str, rate: f32) -> Option<Box<dyn lg_dsp::Ins
             let f = parts.next()?;
             let a = lg_synth::wav::read_audio(Path::new(f)).ok()?;
             let mono: Vec<f32> = (0..a.frames()).map(|i| a.channels.iter().map(|c| c.get(i).copied().unwrap_or(0.0)).sum::<f32>() / a.channels.len().max(1) as f32).collect();
-            let mut al = lg_synth::alchemy::Alchemy::new(rate);
-            al.set_granular_sample(mono, a.rate as f32, 261.63);
+            let mut al = lg_synth::sample_alchemy::SampleAlchemy::new(rate);
+            al.set_sample(mono, a.rate as f32);
             Some(Box::new(al))
         }
         "Drum Machine Designer" => {

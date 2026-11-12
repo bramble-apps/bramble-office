@@ -735,6 +735,7 @@ impl Engine {
                 }
                 let mut any = false;
                 if let Some(ins) = self.units.get_mut(i).and_then(|u| u.instrument.as_mut()) {
+                    ins.set_transport(at);
                     ins.render(&mut l, &mut r);
                     any = true;
                 } else if let Some(Some(sy)) = self.synths.get_mut(i) {

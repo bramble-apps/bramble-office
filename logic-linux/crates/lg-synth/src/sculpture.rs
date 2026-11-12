@@ -357,6 +357,12 @@ impl Plugin for Sculpture {
 }
 
 impl Instrument for Sculpture {
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn note_on(&mut self, pitch: u8, velocity: u8) {
         if velocity == 0 {
             return self.note_off(pitch);
