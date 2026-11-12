@@ -21,49 +21,49 @@ use crate::players::Player;
 pub fn yellow() -> Color32 {
     Color32::from_rgb(0xff, 0xd6, 0x0a)
 }
-fn panel_bg() -> Color32 {
+pub(crate) fn panel_bg() -> Color32 {
     Color32::from_gray(0x12)
 }
-fn strip_bg() -> Color32 {
+pub(crate) fn strip_bg() -> Color32 {
     Color32::from_gray(0x18)
 }
-fn button_bg() -> Color32 {
+pub(crate) fn button_bg() -> Color32 {
     Color32::from_gray(0x36)
 }
-fn label_col() -> Color32 {
+pub(crate) fn label_col() -> Color32 {
     Color32::from_gray(0xd8)
 }
 
 /// What the editor shows at the top (in points).
 const TITLE_H: f32 = 30.0;
 const BAR_H: f32 = 30.0;
-const RULER_H: f32 = 16.0;
+const RULER_H: f32 = 20.0;
 const CHORDS_H: f32 = 16.0;
-const REGION_H: f32 = 50.0;
+const REGION_H: f32 = 58.0;
 /// The panel's width (Logic: 459 points) and corner radius.
-const PANEL_W: f32 = 459.0;
-const PANEL_R: f32 = 21.0;
+pub(crate) const PANEL_W: f32 = 459.0;
+pub(crate) const PANEL_R: f32 = 21.0;
 
 /// The ids and painter the controls share.
-struct Cx {
-    p: egui::Painter,
-    base: egui::Id,
+pub(crate) struct Cx {
+    pub p: egui::Painter,
+    pub base: egui::Id,
 }
 
 impl Cx {
-    fn id(&self, s: &str) -> egui::Id {
+    pub(crate) fn id(&self, s: &str) -> egui::Id {
         self.base.with(s)
     }
 
     /// A label (grey-white, 13 pt) centred at `c`.
-    fn label(&self, c: Pos2, s: &str) {
+    pub(crate) fn label(&self, c: Pos2, s: &str) {
         self.p.text(c, Align2::CENTER_CENTER, s, look::regular(13.0), label_col());
     }
 
     /// Logic's knob: the label above, a 44-point body in a ring lit yellow from the start (from
     /// the middle when bipolar); drag up or down, Option-click / double-click for the default.
     #[allow(clippy::too_many_arguments)]
-    fn knob(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, v: &mut f32, min: f32, max: f32, default: f32, shown: &dyn Fn(f32) -> String) -> bool {
+    pub(crate) fn knob(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, v: &mut f32, min: f32, max: f32, default: f32, shown: &dyn Fn(f32) -> String) -> bool {
         self.label(c, label);
         let kc = c + vec2(0.0, 46.0);
         let d = 58.0;
@@ -107,7 +107,7 @@ impl Cx {
     }
 
     /// A switch button: yellow with black text when on, grey when off.
-    fn toggle(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, on: &mut bool) -> bool {
+    pub(crate) fn toggle(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, on: &mut bool) -> bool {
         let w = ui.fonts_mut(|f| f.layout_no_wrap(label.into(), look::regular(13.0), Color32::WHITE).size().x) + 20.0;
         let r = Rect::from_center_size(c, vec2(w, 24.0));
         let resp = ui.interact(r, self.id(key), Sense::click());
@@ -121,7 +121,7 @@ impl Cx {
     }
 
     /// A pop-up: the label above, the value in yellow with the up-down chevrons.
-    fn popup(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, options: &[&str], cur: &mut usize) -> bool {
+    pub(crate) fn popup(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, options: &[&str], cur: &mut usize) -> bool {
         self.label(c, label);
         let val = options.get(*cur).copied().unwrap_or("");
         let w = ui.fonts_mut(|f| f.layout_no_wrap(val.into(), look::regular(13.0), Color32::WHITE).size().x);
@@ -145,7 +145,7 @@ impl Cx {
 
     /// A value: the label above, the number in yellow; drag up or down to change it.
     #[allow(clippy::too_many_arguments)]
-    fn value(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, v: &mut f32, min: f32, max: f32, default: f32, shown: &dyn Fn(f32) -> String) -> bool {
+    pub(crate) fn value(&self, ui: &mut egui::Ui, c: Pos2, key: &str, label: &str, v: &mut f32, min: f32, max: f32, default: f32, shown: &dyn Fn(f32) -> String) -> bool {
         self.label(c, label);
         let vr = Rect::from_center_size(c + vec2(0.0, 17.0), vec2(70.0, 18.0));
         self.p.text(vr.center(), Align2::CENTER_CENTER, shown(*v), look::regular(13.0), yellow());
@@ -166,7 +166,7 @@ impl Cx {
 
     /// Logic's vertical slider: a thin track, yellow below the thumb (a grey pill with a yellow
     /// line).
-    fn vslider(&self, ui: &mut egui::Ui, track: Rect, key: &str, v: &mut f32) -> bool {
+    pub(crate) fn vslider(&self, ui: &mut egui::Ui, track: Rect, key: &str, v: &mut f32) -> bool {
         let resp = ui.interact(track.expand2(vec2(14.0, 6.0)), self.id(key), Sense::click_and_drag());
         let mut changed = false;
         if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
@@ -185,7 +185,7 @@ impl Cx {
     }
 
     /// A horizontal slider (LFO / Slides Amount).
-    fn hslider(&self, ui: &mut egui::Ui, track: Rect, key: &str, label: &str, v: &mut f32) -> bool {
+    pub(crate) fn hslider(&self, ui: &mut egui::Ui, track: Rect, key: &str, label: &str, v: &mut f32) -> bool {
         self.p.text(pos2(track.min.x, track.min.y - 10.0), Align2::LEFT_CENTER, label, look::regular(13.0), label_col());
         self.p.text(pos2(track.max.x, track.min.y - 10.0), Align2::RIGHT_CENTER, format!("{:.0}", *v * 100.0), look::regular(13.0), yellow());
         let resp = ui.interact(track.expand2(vec2(6.0, 8.0)), self.id(key), Sense::click_and_drag());
@@ -205,7 +205,7 @@ impl Cx {
     }
 
     /// A segmented control (yellow selected segment).
-    fn seg(&self, ui: &mut egui::Ui, r: Rect, key: &str, items: &[&str], cur: &mut usize) -> bool {
+    pub(crate) fn seg(&self, ui: &mut egui::Ui, r: Rect, key: &str, items: &[&str], cur: &mut usize) -> bool {
         self.p.rect_filled(r, r.height() / 2.0, panel_bg());
         let w = r.width() / items.len() as f32;
         let mut changed = false;
@@ -216,6 +216,10 @@ impl Cx {
                 self.p.rect_filled(sr, sr.height() / 2.0, yellow());
             }
             self.p.text(sr.center(), Align2::CENTER_CENTER, *n, look::regular(13.0), if on { Color32::BLACK } else { label_col() });
+            // a thin divider between two unselected segments
+            if i > 0 && !on && *cur != i - 1 {
+                self.p.vline(sr.min.x - 1.0, sr.y_range().shrink(5.0), Stroke::new(1.0, Color32::from_gray(0x44)));
+            }
             if ui.interact(sr, self.id(key).with(i), Sense::click()).clicked() && !on {
                 *cur = i;
                 changed = true;
@@ -225,7 +229,7 @@ impl Cx {
     }
 
     /// The More button (an ellipsis in a circle) at `c`; returns its response.
-    fn more(&self, ui: &mut egui::Ui, c: Pos2, key: &str) -> egui::Response {
+    pub(crate) fn more(&self, ui: &mut egui::Ui, c: Pos2, key: &str) -> egui::Response {
         let r = Rect::from_center_size(c, vec2(20.0, 20.0));
         let resp = ui.interact(r, self.id(key), Sense::click()).on_hover_text("More");
         glyphs::paint(&self.p, r, glyphs::ph::DOTS_THREE_CIRCLE, 19.0, if resp.hovered() { Color32::WHITE } else { label_col() });
@@ -233,9 +237,9 @@ impl Cx {
     }
 
     /// A row of 16 pattern dots (bright: main accents, dim: probable ones).
-    fn dots(&self, at: Pos2, dots: &synth::Dots, spacing: f32) {
+    pub(crate) fn dots(&self, at: Pos2, dots: &synth::Dots, spacing: f32) {
         for (i, d) in dots.iter().enumerate() {
-            let c = at + vec2(i as f32 * spacing + if i >= 4 { (i / 4) as f32 * 4.0 } else { 0.0 }, 0.0);
+            let c = at + vec2(i as f32 * spacing + (i / 4) as f32 * spacing * 0.6, 0.0);
             let (rad, col) = match d {
                 2 => (4.5, yellow()),
                 1 => (3.5, yellow().gamma_multiply(0.45)),
@@ -247,9 +251,9 @@ impl Cx {
 }
 
 /// The editor.
-pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
-    let Some(mut player) = app.players.get(&(t, r)).cloned() else { return };
-    let before = player.clone();
+/// The editor's top: the title, the bar (Chords pop-up), the ruler with the Play button, the
+/// region chords and the region (a drummer's hits by kit piece). Returns the controls' area.
+pub(crate) fn top(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize, kit: Option<lg_players::kit::KitMap>, regen: &mut bool) -> Option<Rect> {
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
@@ -257,15 +261,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     p.text(pos2(area.center().x, area.min.y + TITLE_H / 2.0), Align2::CENTER_CENTER, "Session Player", look::semibold(13.0), look::text());
     let bar = Rect::from_min_size(area.min + vec2(0.0, TITLE_H), vec2(area.width(), BAR_H));
     p.hline(area.x_range(), bar.min.y, Stroke::new(1.0, look::line()));
-    let mut regen = false;
-    chords_popup(app, ui, &p, Rect::from_min_size(bar.min + vec2(10.0, 3.0), vec2(84.0, 24.0)), t, r, &mut regen);
-    // the Session Player type and the Preset pop-ups (spx.rs), at the bar's right
-    let head = Rect::from_min_max(pos2(area.max.x - 600.0, bar.min.y - 2.0), pos2(area.max.x, bar.max.y));
-    let style_before = player.clone();
-    crate::spx::header(app, ui, head, t, &mut player);
+    chords_popup(app, ui, &p, Rect::from_min_size(bar.min + vec2(10.0, 3.0), vec2(84.0, 24.0)), t, r, regen);
     // ---- the ruler with the Play button, the chords lane, the region
     let ruler = Rect::from_min_size(pos2(area.min.x, bar.max.y), vec2(area.width(), RULER_H));
-    let Some(region) = app.project.as_ref().and_then(|pr| pr.tracks.get(t)?.regions.get(r)).cloned() else { return };
+    let region = app.project.as_ref().and_then(|pr| pr.tracks.get(t)?.regions.get(r)).cloned()?;
     let lane = Rect::from_min_max(pos2(area.min.x + 30.0, ruler.min.y), pos2(area.max.x - 10.0, ruler.max.y + CHORDS_H + REGION_H));
     p.rect_filled(Rect::from_min_max(ruler.min, pos2(ruler.max.x, ruler.max.y)), 0.0, look::header_bg());
     let bar_t = app.bar_ticks().max(1);
@@ -308,12 +307,45 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     for n in &region.notes {
         let x0 = x_of(n.pos);
         let x1 = x_of(n.pos + n.len).max(x0 + 2.0);
-        let y = reg.max.y - 4.0 - (n.pitch.saturating_sub(lo)) as f32 / (hi.saturating_sub(lo).max(1)) as f32 * (reg.height() - 22.0);
-        p.hline(x0..=x1, y, Stroke::new(1.5, ink));
+        let y = match kit {
+            // a drummer's hits by kit piece: cymbals high, kick low
+            Some(k) => {
+                use lg_players::kit::Family;
+                let row = match k.piece(n.pitch).map(|pc| pc.family()) {
+                    Some(Family::Kick) => 0.95,
+                    Some(Family::Snare) => 0.7,
+                    Some(Family::Tom) => 0.55,
+                    Some(Family::HiHat) => 0.3,
+                    Some(Family::Cymbal) => 0.1,
+                    _ => 0.45,
+                };
+                reg.min.y + 16.0 + row * (reg.height() - 20.0)
+            }
+            None => reg.max.y - 4.0 - (n.pitch.saturating_sub(lo)) as f32 / (hi.saturating_sub(lo).max(1)) as f32 * (reg.height() - 22.0),
+        };
+        if kit.is_some() {
+            // a drum hit: a triangle, taller when harder
+            let hh = 2.0 + n.velocity as f32 / 127.0 * 5.0;
+            p.add(Shape::convex_polygon(vec![pos2(x0, y - hh), pos2(x0 + 3.5, y), pos2(x0, y + hh)], ink, Stroke::NONE));
+        } else {
+            p.hline(x0..=x1, y, Stroke::new(1.5, ink));
+        }
     }
-    // ---- the scrolled controls
     let body = Rect::from_min_max(pos2(area.min.x, reg.max.y + 6.0), area.max);
     p.hline(body.x_range(), body.min.y - 2.0, Stroke::new(1.0, look::line()));
+    Some(body)
+}
+
+pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
+    let Some(mut player) = app.players.get(&(t, r)).cloned() else { return };
+    let before = player.clone();
+    let mut regen = false;
+    let Some(body) = top(app, ui, area, t, r, None, &mut regen) else { return };
+    // the Session Player type and the Preset pop-ups (spx.rs), at the bar's right
+    let head = Rect::from_min_max(pos2(area.max.x - 600.0, area.min.y + TITLE_H - 2.0), pos2(area.max.x, area.min.y + TITLE_H + BAR_H));
+    let style_before = player.clone();
+    crate::spx::header(app, ui, head, t, &mut player);
+    // ---- the scrolled controls
     let mut pattern_changed = false;
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
     egui::ScrollArea::vertical().id_salt(("sp-scroll", t, r)).auto_shrink([false, false]).show(&mut child, |ui| {
@@ -713,7 +745,7 @@ fn set_pattern(player: &mut Player, v: Option<usize>) {
     }
 }
 
-fn swing_type(ui: &mut egui::Ui, cx: &Cx, c: Pos2, st: &mut SwingType) {
+pub(crate) fn swing_type(ui: &mut egui::Ui, cx: &Cx, c: Pos2, st: &mut SwingType) {
     let mut i = if *st == SwingType::Eighths { 0 } else { 1 };
     if cx.seg(ui, Rect::from_center_size(c, vec2(84.0, 20.0)), "swingtype", &["8th", "16th"], &mut i) {
         *st = if i == 0 { SwingType::Eighths } else { SwingType::Sixteenths };
@@ -721,7 +753,7 @@ fn swing_type(ui: &mut egui::Ui, cx: &Cx, c: Pos2, st: &mut SwingType) {
 }
 
 /// The Fill Amount / Swing locks (kept when presets or styles change).
-fn locks(app: &mut App, ui: &mut egui::Ui, cx: &Cx, c: Pos2) {
+pub(crate) fn locks(app: &mut App, ui: &mut egui::Ui, cx: &Cx, c: Pos2) {
     for (i, (name, on)) in [("Fills", app.spx.lock_fills), ("Swing", app.spx.lock_swing)].into_iter().enumerate() {
         let r = Rect::from_center_size(c + vec2(if i == 0 { -16.0 } else { 16.0 }, 0.0), vec2(26.0, 20.0));
         let resp = ui.interact(r, cx.id("lock").with(i), Sense::click()).on_hover_text(format!("Lock {name}: kept when switching presets or styles"));
@@ -848,7 +880,7 @@ fn lfo_view(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, lfo: &mut Lfo, pads: bo
 }
 
 /// A MIDI CC pop-up.
-fn cc_target(ui: &mut egui::Ui, label: &str, cc: &mut u8) {
+pub(crate) fn cc_target(ui: &mut egui::Ui, label: &str, cc: &mut u8) {
     let names = |n: u8| match n {
         1 => "1 Modulation".to_string(),
         7 => "7 Volume".to_string(),

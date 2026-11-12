@@ -207,6 +207,7 @@ impl PlayerSettings {
                 follow: if j.get("FollowEnabled").and_then(Json::bool).unwrap_or(false) { 1.0 } else { 0.0 },
                 seed,
                 channel: d.channel,
+                ..d.clone()
             }));
         }
         if ty.contains("Bass") {

@@ -105,6 +105,7 @@ mod fxviews;
 mod stemsplit;
 mod players;
 mod spedit;
+mod spdrum;
 mod rightpane;
 mod screensets;
 mod score;

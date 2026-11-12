@@ -93,6 +93,11 @@ impl KitSection {
     pub const OFF: KitSection = KitSection { enabled: false, variation: 0 };
 }
 
+/// The Details pop-ups' choices (index 0: Automatic).
+pub const TOM_CHOICES: [&str; 5] = ["Automatic", "High Toms", "Low Toms", "Floor Tom", "All Toms"];
+pub const CYMBAL_CHOICES: [&str; 5] = ["Automatic", "Crash", "Crash & Splash", "China", "Ride"];
+pub const PERC_CHOICES: [&str; 4] = ["Automatic", "Tambourine", "Shaker", "Claps"];
+
 /// The number of pattern variations of each kit section.
 pub const KICK_SNARE_VARIATIONS: u8 = 6;
 pub const CYMBAL_VARIATIONS: u8 = 6;
@@ -129,6 +134,23 @@ pub struct DrummerParams {
     pub tempo: TempoFeel,
     /// Follow: how strongly the kick and snare follow the rhythm given to [`generate`] (0 off .. 1)
     pub follow: f32,
+    /// Fill Complexity: 0.5 follows the pad's complexity; lower simpler, higher busier fills
+    pub fill_complexity: f32,
+    /// The Toms and Cymbals kit pieces on (Main view): off, no hits on them
+    pub toms_on: bool,
+    pub crashes_on: bool,
+    /// Details pop-ups (acoustic): Toms ([`TOM_CHOICES`]), Cymbals ([`CYMBAL_CHOICES`]),
+    /// Percussion ([`PERC_CHOICES`]); 0 is Automatic
+    pub toms: u8,
+    pub cymbal_choice: u8,
+    pub perc_choice: u8,
+    /// Brush drummers: Brush Taps (false: Brush Sweep)
+    pub brush_taps: bool,
+    /// Electronic drummers: each kit piece's complexity (Kick, Snare / Clap, Hi-Hat,
+    /// Percussion), 1 = as the pad says
+    pub piece_complexity: [f32; 4],
+    /// Electronic drummers: Phrase Variation, how much the bars of a region change (0..1)
+    pub phrase_variation: f32,
     pub seed: u64,
     /// MIDI channel of the notes (0-15)
     pub channel: u8,
@@ -155,6 +177,15 @@ impl Default for DrummerParams {
             humanize: 0.22,
             tempo: TempoFeel::Standard,
             follow: 0.0,
+            fill_complexity: 0.5,
+            toms_on: true,
+            crashes_on: true,
+            toms: 0,
+            cymbal_choice: 0,
+            perc_choice: 0,
+            brush_taps: false,
+            piece_complexity: [1.0; 4],
+            phrase_variation: 0.3,
             seed: 1,
             channel: 9,
         }
@@ -426,7 +457,15 @@ pub fn generate(params: &DrummerParams, region: &RegionSpec, follow: Option<&[u3
         }
 
         // brushes: the sweep, a soft stroke on every eighth
-        if style.groove == Groove::Brush && params.kick_snare.enabled {
+        if style.groove == Groove::Brush && params.kick_snare.enabled && params.brush_taps {
+            // Brush Taps: short taps on the beats instead of the sweep
+            for k in 0..beats {
+                let s = k * beat_t / STEP;
+                if s < fill_from {
+                    hits.push(Hit { tick: t0 + k * beat_t, piece: Piece::SideStick, vel: v::at(v::GHOST, i) + 18.0, len: STEP / 2 });
+                }
+            }
+        } else if style.groove == Groove::Brush && params.kick_snare.enabled {
             let half = (beat_t / 2).max(STEP);
             for k in 0..(bar_t / half) {
                 let s = k * half / STEP;
@@ -478,10 +517,12 @@ pub fn generate(params: &DrummerParams, region: &RegionSpec, follow: Option<&[u3
 
         // the fill
         if fill_bar && params.kick_snare.enabled && !percussion_only {
-            fill(&mut hits, &mut detail, params, ch, t0, fill_from, steps, beat_t, i, c);
+            let fc = (c + (params.fill_complexity - 0.5) * 1.2).clamp(0.0, 1.0);
+            fill(&mut hits, &mut detail, params, ch, t0, fill_from, steps, beat_t, i, fc);
         }
     }
 
+    let hits = kit_choices(hits, params, ch, region, bar_t, beat_t);
     // timing: swing, feel, humanize
     let mut out = Vec::with_capacity(hits.len());
     let mut hr = Rng::derive(params.seed, 2);
@@ -509,6 +550,73 @@ pub fn generate(params: &DrummerParams, region: &RegionSpec, follow: Option<&[u3
         out.push(Note { channel: params.channel, pitch: kit.note(hit.piece), velocity: vel(vv), pos, len: hit.len, muted: false });
     }
     finish(out, region)
+}
+
+/// The kit-piece switches and Details pop-ups on the hits: toms and cymbals off, which toms,
+/// cymbals and percussion play; for electronic drummers each piece's complexity and the phrase
+/// variation from bar to bar.
+fn kit_choices(mut hits: Vec<Hit>, p: &DrummerParams, ch: &Character, region: &RegionSpec, bar_t: u32, beat_t: u32) -> Vec<Hit> {
+    use crate::kit::Family;
+    hits.retain(|h| (p.toms_on || h.piece.family() != Family::Tom) && (p.crashes_on || !matches!(h.piece, Piece::Crash | Piece::Crash2 | Piece::Splash | Piece::China)));
+    for h in hits.iter_mut() {
+        h.piece = match (h.piece.family(), h.piece) {
+            (Family::Tom, t) => match p.toms {
+                1 => if matches!(t, Piece::TomLow | Piece::TomFloor) { Piece::TomMid } else { t },
+                2 => if matches!(t, Piece::TomHigh | Piece::TomMid) { Piece::TomLow } else { t },
+                3 => Piece::TomFloor,
+                4 => t,
+                _ => t,
+            },
+            (_, Piece::Crash | Piece::Crash2 | Piece::Splash | Piece::China) => match p.cymbal_choice {
+                1 => Piece::Crash,
+                2 => if h.piece == Piece::Crash2 { Piece::Splash } else { Piece::Crash },
+                3 => Piece::China,
+                4 => Piece::RideBell,
+                _ => h.piece,
+            },
+            (Family::Percussion, _) => match p.perc_choice {
+                1 => Piece::Tambourine,
+                2 => Piece::Shaker,
+                3 => Piece::Clap,
+                _ => h.piece,
+            },
+            (_, x) => x,
+        };
+    }
+    if ch.electronic() {
+        let mut r = Rng::derive(p.seed, 0xE1E);
+        let slot = |f: Family| match f {
+            Family::Kick => Some(0),
+            Family::Snare => Some(1),
+            Family::HiHat => Some(2),
+            Family::Percussion => Some(3),
+            _ => None,
+        };
+        // each piece's complexity: fewer of its off-beat hits
+        hits.retain(|h| {
+            let Some(k) = slot(h.piece.family()) else { return true };
+            let off = (h.tick - region.start) % beat_t != 0;
+            !off || r.chance(p.piece_complexity[k].clamp(0.0, 1.0).powf(0.7))
+        });
+        // phrase variation: now and then a bar moves a hit a sixteenth or drops one
+        let bars = region.length.div_ceil(bar_t.max(1));
+        for b in 1..bars {
+            if !r.chance(p.phrase_variation.clamp(0.0, 1.0) * 0.6) {
+                continue;
+            }
+            let t0 = region.start + b * bar_t;
+            let idx: Vec<usize> = hits.iter().enumerate().filter(|(_, h)| h.tick > t0 && h.tick < t0 + bar_t && (h.tick - t0) % beat_t != 0).map(|(i, _)| i).collect();
+            if let Some(&i) = idx.get(r.below(idx.len().max(1) as u32) as usize) {
+                if r.chance(0.5) {
+                    hits[i].tick = (hits[i].tick + STEP).min(t0 + bar_t - 1);
+                } else {
+                    hits[i].vel = 0.0;
+                }
+            }
+        }
+        hits.retain(|h| h.vel > 0.0);
+    }
+    hits
 }
 
 /// Builds a section's groove.
@@ -800,5 +908,30 @@ mod tests {
         let r = RegionSpec::new(0, 3840 * 8, (4, 4));
         let n = generate(&DrummerParams::default(), &r, None);
         assert!(n.len() > 60, "{}", n.len());
+    }
+
+    #[test]
+    fn kit_piece_choices() {
+        let region = RegionSpec::new(0, 3840 * 8, (4, 4));
+        let fam = |n: &[Note], p: &DrummerParams, f: crate::kit::Family| n.iter().filter(|x| p.character().kit_map().piece(x.pitch).map(|pc| pc.family()) == Some(f)).count();
+        let base = DrummerParams { fills: 0.9, complexity: 0.2, ..Default::default() };
+        let with = generate(&base, &region, None);
+        assert!(fam(&with, &base, crate::kit::Family::Tom) > 0, "fills on toms");
+        let off = DrummerParams { toms_on: false, ..base.clone() };
+        assert_eq!(fam(&generate(&off, &region, None), &off, crate::kit::Family::Tom), 0);
+        let floor = DrummerParams { toms: 3, ..base.clone() };
+        let kit = floor.character().kit_map();
+        assert!(generate(&floor, &region, None).iter().filter_map(|x| kit.piece(x.pitch)).filter(|p| p.family() == crate::kit::Family::Tom).all(|p| p == Piece::TomFloor));
+        let nocrash = DrummerParams { crashes_on: false, ..base.clone() };
+        assert!(generate(&nocrash, &region, None).iter().all(|x| !matches!(kit.piece(x.pitch), Some(Piece::Crash | Piece::Crash2))));
+        // Fill Complexity: busier fills when higher
+        let simple = generate(&DrummerParams { fill_complexity: 0.0, ..base.clone() }, &region, None).len();
+        let busy = generate(&DrummerParams { fill_complexity: 1.0, ..base.clone() }, &region, None).len();
+        assert!(busy >= simple, "{busy} >= {simple}");
+        // electronic: a piece's complexity thins its off-beat hits
+        let edm = DrummerParams { character: "Trap".into(), complexity: 0.8, ..Default::default() };
+        let full = generate(&edm, &region, None).len();
+        let thin = generate(&DrummerParams { piece_complexity: [1.0, 1.0, 0.0, 1.0], ..edm.clone() }, &region, None).len();
+        assert!(thin < full);
     }
 }

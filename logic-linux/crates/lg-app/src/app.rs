@@ -333,6 +333,7 @@ pub struct App {
     pub ax: crate::autoext::State,
     /// Session Player presets, custom patterns, hands (spx.rs).
     pub spx: crate::spx::State,
+    pub spdrum: crate::spdrum::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -529,6 +530,7 @@ impl App {
             sc: Default::default(),
             ax: Default::default(),
             spx: Default::default(),
+            spdrum: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -1835,7 +1837,7 @@ impl App {
                     let (t, r) = self.selected_region.unwrap();
                     crate::players::show(self, ui, ed, t, r);
                 }
-                Bottom::PianoRoll if drummer.is_some() && self.drum_tab != 2 => {
+                Bottom::PianoRoll if drummer.is_some() => {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
                 }
