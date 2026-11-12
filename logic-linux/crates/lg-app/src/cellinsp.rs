@@ -22,6 +22,8 @@ use crate::widgets;
 pub const COMMANDS: &[&str] = &[
     "Live Loops: Show Start Positions as Offset",
     "Live Loops: Show Length as Position",
+    "Live Loops: Keep Cells Squared When Zooming",
+    "Try to Keep Cells Squared When Zooming",
     "Show Start Positions as Offset",
     "Show Length as Position",
     "Select Muted Regions/Cells/Events",
@@ -147,20 +149,20 @@ fn pos_slot(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: u32, bar: u32, res:
     }
     let resp = ui.interact(r, id, Sense::click_and_drag());
     let p = ui.painter();
+    // (Logic's: a dark rounded field, each unit in its own column, right-aligned)
+    let parts: Vec<&str> = shown.split(' ').collect();
+    let col = 28.0;
+    let field = Rect::from_min_max(pos2(r.max.x - 6.0 - col * parts.len() as f32, r.min.y), r.max);
+    p.rect_filled(field, 5.0, look::lcd_bg());
     if resp.hovered() || resp.dragged() {
-        p.rect_filled(r, 3.0, look::group_bg());
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
     }
-    // the parts laid out right to left, so the pointer's part is known
-    let parts: Vec<&str> = shown.split(' ').collect();
     let font = look::regular(12.0);
-    let mut x = r.max.x - 4.0;
     let mut spans = Vec::new();
-    for (k, part) in parts.iter().enumerate().rev() {
-        let w = p.layout_no_wrap(part.to_string(), font.clone(), look::text()).size().x;
-        p.text(pos2(x, r.center().y), Align2::RIGHT_CENTER, *part, font.clone(), look::text());
-        spans.push((k, x - w - 3.0, x));
-        x -= w + 6.0;
+    for (k, part) in parts.iter().enumerate() {
+        let x1 = field.min.x + 3.0 + col * (k + 1) as f32 - 6.0;
+        p.text(pos2(x1, r.center().y), Align2::RIGHT_CENTER, *part, font.clone(), look::text());
+        spans.push((k, x1 - col + 6.0, x1 + 3.0));
     }
     let unit_id = id.with("unit");
     if resp.drag_started() {
@@ -275,6 +277,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
     if !open {
         return y;
     }
+    // the shortcut menu (display options): under the rows, so they get the clicks first
+    let body_h: f32 = ui.data(|d| d.get_temp(id.with("body-h"))).unwrap_or(0.0);
+    let body = Rect::from_min_size(pos2(area.min.x, body_top), vec2(area.width(), body_h));
+    ui.interact(body, id.with("body-menu"), Sense::click()).context_menu(|ui| {
+        display_menu(app, ui);
+    });
     // the cells' values (the first's shown; changes go to all selected)
     let keys: Vec<(usize, usize)> = app.live_loops.selected.iter().copied().filter(|k| app.live_loops.cells.contains_key(k)).collect();
     let Some(c) = keys.first().and_then(|k| app.live_loops.cells.get(k)).cloned() else {
@@ -283,6 +291,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
     let bar = app.bar_ticks().max(1);
     let (res, as_pos, offset) = (res_of(app.live_loops.resolution), app.live_loops.length_as_position, app.live_loops.start_as_offset);
     let mut edit: Option<(&'static str, Box<dyn Fn(&mut Cell)>)> = None;
+    // (a disclosure's rows indented, as Logic's)
+    let sub = Rect::from_min_max(pos2(area.min.x + 10.0, area.min.y), area.max);
     let mut b = c.muted;
     label(&p, area, y, "Mute");
     if widgets::check_slot(ui, slot_rect(area, y), id.with("mute"), &mut b) {
@@ -329,7 +339,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
             if as_pos { ("Cell End", c.length, 0, 0, bar * 1024) } else { ("Cell Length", c.length, 0, 0, bar * 1024) },
         ];
         for (k, (name, val, _, base, max)) in rows.into_iter().enumerate() {
-            label(&p, area, y, name);
+            label(&p, sub, y, name);
             // starts as positions unless "as Offset"; lengths as lengths unless "as Position"
             let position = if k < 2 { !offset } else { as_pos };
             let min = if k >= 2 { 1 } else { 0 };
@@ -347,7 +357,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
             }
             y += ROW;
         }
-        label(&p, area, y, "Q Loop Start");
+        label(&p, sub, y, "Q Loop Start");
         if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("ql"), c.q_loop as usize, &Q_LOOP) {
             edit = Some(("Quantize to Loop Start", Box::new(move |c| c.q_loop = i as u8)));
         }
@@ -372,7 +382,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
     }
     y += ROW;
     if app.live_loops.trigger_open {
-        label(&p, area, y, "Speed");
+        label(&p, sub, y, "Speed");
         let names: Vec<&str> = SPEEDS.iter().map(|s| s.0).collect();
         let cur = SPEEDS.iter().position(|s| (s.1 - c.speed).abs() < 1e-6).unwrap_or(3);
         if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("speed"), cur, &names) {
@@ -381,7 +391,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
         }
         y += ROW;
         let mut b = c.reversed;
-        label(&p, area, y, "Reverse");
+        label(&p, sub, y, "Reverse");
         if widgets::check_slot(ui, slot_rect(area, y), id.with("rev"), &mut b) {
             edit = Some(("Reverse Cell", Box::new(move |c| c.reversed = b)));
         }
@@ -395,11 +405,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
             }
         }
     }
-    // the shortcut menu: display options
-    let body = Rect::from_min_max(pos2(area.min.x, body_top), pos2(area.max.x, y));
-    ui.interact(body, id.with("body-menu"), Sense::click()).context_menu(|ui| {
-        display_menu(app, ui);
-    });
+    ui.data_mut(|d| d.insert_temp(id.with("body-h"), y - body_top));
     y += 4.0;
     p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
     y + 1.0
@@ -431,6 +437,12 @@ pub fn display_menu(app: &mut App, ui: &mut egui::Ui) {
 pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> bool {
     let s = &mut app.live_loops;
     match it.label.as_str() {
+        "Try to Keep Cells Squared When Zooming" => {
+            if ui.add(egui::Button::selectable(!s.not_square, "Try to Keep Cells Squared When Zooming")).clicked() {
+                s.not_square = !s.not_square;
+                ui.close();
+            }
+        }
         "Show Start Positions as Offset" => {
             if ui.add(egui::Button::selectable(s.start_as_offset, "Show Start Positions as Offset")).clicked() {
                 s.start_as_offset = !s.start_as_offset;
@@ -479,6 +491,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
     let s = &mut app.live_loops;
     match name {
         "Live Loops: Show Start Positions as Offset" | "Show Start Positions as Offset" => s.start_as_offset = !s.start_as_offset,
+        "Live Loops: Keep Cells Squared When Zooming" | "Try to Keep Cells Squared When Zooming" => s.not_square = !s.not_square,
         "Live Loops: Show Length as Position" | "Show Length as Position" => s.length_as_position = !s.length_as_position,
         n if RESOLUTIONS.contains(&n) => s.resolution = RESOLUTIONS.iter().position(|r| *r == n).unwrap_or(1) as u8 + 1,
         "Select Muted Regions/Cells/Events" | "Muted Cells" => {

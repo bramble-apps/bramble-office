@@ -196,6 +196,9 @@ pub struct State {
     /// Bounce Cells in Place: the dialog open (its choices), and the choices remembered.
     pub bounce: Option<crate::cellbounce::Opts>,
     pub bounce_opts: crate::cellbounce::Opts,
+    /// Try to Keep Cells Squared When Zooming off; the square's side (the rows' height).
+    pub not_square: bool,
+    pub square_w: f32,
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1664,6 +1667,7 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
 /// of it with the grid only.
 pub fn grid_width(app: &mut App, avail: f32) -> f32 {
     sync(app);
+    app.live_loops.square_w = crate::trackarea::rows(app).first().map_or(CELL_W, |r| r.h - 4.0);
     let s = &app.live_loops;
     match s.view {
         View::TracksOnly => 0.0,
@@ -1677,7 +1681,9 @@ pub fn grid_width(app: &mut App, avail: f32) -> f32 {
 }
 
 fn col_w(s: &State) -> f32 {
-    if s.wide { CELL_W * 2.0 + CELL_GAP } else { CELL_W }
+    // (Try to Keep Cells Squared When Zooming: as wide as the tracks are tall)
+    let w = if s.not_square { CELL_W } else { s.square_w.max(CELL_W) };
+    if s.wide { w * 2.0 + CELL_GAP } else { w }
 }
 
 fn grid_bg() -> Color32 {

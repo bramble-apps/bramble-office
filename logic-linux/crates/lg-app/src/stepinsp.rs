@@ -312,7 +312,16 @@ fn play_buttons(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, cur
         if on {
             p.rect_filled(b.shrink(2.0), 5.0, if inherited { look::text_dim().gamma_multiply(0.4) } else { look::accent() });
         }
-        p.text(b.center(), Align2::CENTER_CENTER, m.arrow(), look::regular(13.0), if on { Color32::WHITE } else { look::text() });
+        let icon = match m {
+            Play::Forward => crate::glyphs::ph::ARROW_RIGHT,
+            Play::Reverse => crate::glyphs::ph::ARROW_LEFT,
+            Play::PingPong => crate::glyphs::ph::ARROWS_LEFT_RIGHT,
+            Play::Pendulum => crate::glyphs::ph::ARROW_U_UP_LEFT,
+            Play::Wander => crate::glyphs::ph::PATH,
+            Play::Shuffle => crate::glyphs::ph::SHUFFLE,
+            Play::Random => crate::glyphs::ph::DICE_FIVE,
+        };
+        crate::glyphs::paint(p, Rect::from_center_size(b.center(), vec2(14.0, 14.0)), icon, 13.0, if on { Color32::WHITE } else { look::text() });
         if ui.interact(b, id.with(k), Sense::click()).on_hover_text(m.name()).clicked() {
             out = Some(*m);
         }
@@ -349,7 +358,20 @@ pub fn show(ui: &mut egui::Ui, area: Rect, tab: &mut Tab, pat: &mut StepPattern,
             *tab = *tb;
         }
     }
-    let mut y = seg.max.y + 10.0;
+    // the rows scroll under the tabs (wheel)
+    let rows_clip = Rect::from_min_max(pos2(area.min.x, seg.max.y + 4.0), area.max);
+    ui.set_clip_rect(rows_clip);
+    let p = ui.painter_at(rows_clip);
+    let (scroll_id, total_id) = (id.with("scroll"), id.with("total"));
+    let total: f32 = ui.data(|d| d.get_temp(total_id)).unwrap_or(0.0);
+    let mut scroll: f32 = ui.data(|d| d.get_temp(scroll_id)).unwrap_or(0.0);
+    if ui.input(|i| i.pointer.hover_pos()).is_some_and(|h| rows_clip.contains(h)) {
+        scroll -= ui.input(|i| i.smooth_scroll_delta.y);
+    }
+    scroll = scroll.clamp(0.0, (total - rows_clip.height() + 16.0).max(0.0));
+    ui.data_mut(|d| d.insert_temp(scroll_id, scroll));
+    let top = seg.max.y + 10.0;
+    let mut y = top - scroll;
     let mut line = |h: f32| {
         let r = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), h));
         y += h;
@@ -616,6 +638,7 @@ pub fn show(ui: &mut egui::Ui, area: Rect, tab: &mut Tab, pat: &mut StepPattern,
             }
         }
     }
+    ui.data_mut(|d| d.insert_temp(total_id, y + scroll - top));
     changed
 }
 

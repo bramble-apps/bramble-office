@@ -141,23 +141,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ruler = Rect::from_min_max(pos2(body.min.x, head.max.y), pos2(body.max.x, body.min.y));
     let bar = app.bar_ticks().max(1);
     let span = (cell.length.max(cell.notes.iter().map(|n| n.pos + n.len).max().unwrap_or(0)).div_ceil(bar) * bar + bar).max(bar * 2);
+    // (the scale holds still while a marker is dragged)
+    let span_id = id.with("span");
+    let span = if app.live_loops.marker_drag.is_some() { ui.data(|d| d.get_temp(span_id)).unwrap_or(span) } else {
+        ui.data_mut(|d| d.insert_temp(span_id, span));
+        span
+    };
     let px = (body.width() - 12.0).max(50.0) / span as f32;
     let x_of = |t: u32| body.min.x + 6.0 + t as f32 * px;
     let t_of = |x: f32| (((x - body.min.x - 6.0) / px).max(0.0) as u32 + SNAP / 2) / SNAP * SNAP;
     // ruler
     p.rect_filled(ruler, 0.0, look::pane_bg());
     p.hline(ruler.x_range(), ruler.max.y, Stroke::new(1.0, look::line()));
+    // the loop: the cycle area in the track's colour (light), as Logic's Cell Editor ruler
+    let (ls, le) = (cell.loop_start, cell.loop_end());
+    let band = Rect::from_min_max(pos2(x_of(ls), ruler.min.y + 3.0), pos2(x_of(le), ruler.max.y - 3.0));
+    let tcol = crate::liveloops::track_color(app, key.0);
+    p.rect_filled(band, 2.0, if cell.looped { look::mix(tcol, Color32::WHITE, 0.45) } else { Color32::from_gray(0x5a) });
     let mut b = 0;
     while b <= span {
         let x = x_of(b);
-        p.vline(x, (ruler.max.y - 10.0)..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
-        p.text(pos2(x + 3.0, ruler.min.y + 8.0), Align2::LEFT_CENTER, format!("{}", b / bar + 1), look::regular(11.0), look::text_dim());
+        let inside = cell.looped && band.x_range().contains(x + 3.0);
+        p.vline(x, (ruler.max.y - 8.0)..=ruler.max.y, Stroke::new(1.0, if inside { Color32::from_gray(0x30) } else { look::text_dim() }));
+        p.text(pos2(x + 3.0, ruler.center().y), Align2::LEFT_CENTER, format!("{}", b / bar + 1), look::regular(11.0), if inside { Color32::from_gray(0x20) } else { look::text_dim() });
         b += bar;
     }
-    let (ls, le) = (cell.loop_start, cell.loop_end());
-    let band = Rect::from_min_max(pos2(x_of(ls), ruler.min.y + 14.0), pos2(x_of(le), ruler.max.y - 2.0));
-    let loop_col = Color32::from_rgb(0xe8, 0xc3, 0x2e);
-    p.rect_filled(band, 3.0, if cell.looped { loop_col.gamma_multiply(0.85) } else { Color32::from_gray(0x60) });
     // markers: start (a flag), end (a line with a handle)
     let start_x = x_of(cell.start_pos());
     p.add(egui::Shape::convex_polygon(vec![pos2(start_x, ruler.min.y + 2.0), pos2(start_x + 9.0, ruler.min.y + 7.0), pos2(start_x, ruler.min.y + 12.0)], look::accent(), Stroke::NONE));
@@ -176,7 +184,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if near(end_x) {
                 return Some(Marker::End);
             }
-            return None;
         }
         if near(band.min.x) {
             Some(Marker::LoopStart)
@@ -196,7 +203,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     if resp.drag_started() {
-        if let Some(pp) = resp.interact_pointer_pos() {
+        // (where the press began: the drag starts a few points later)
+        if let Some(pp) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()) {
             if let Some(m) = hit(pp.x, pp.y) {
                 crate::cellinsp::checkpoint(app, "Change Cell Loop");
                 let grab = if m == Marker::LoopMove { t_of(pp.x).saturating_sub(ls) } else { 0 };
@@ -222,7 +230,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     if resp.clicked() {
         // a click in the cycle area turns looping off (and on again)
-        if resp.interact_pointer_pos().is_some_and(|pp| pp.y >= ruler.min.y + 13.0 && band.x_range().contains(pp.x)) {
+        if resp.interact_pointer_pos().is_some_and(|pp| hit(pp.x, pp.y) == Some(Marker::LoopMove)) {
             crate::cellinsp::checkpoint(app, "Loop Cell");
             if let Some(c) = app.live_loops.cells.get_mut(&key) {
                 c.looped = !c.looped;
@@ -330,7 +338,7 @@ fn notes_body(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, area: Rect, b
         }
         if resp.drag_started() {
             crate::cellinsp::checkpoint(app, "Move Note");
-            let pp = resp.interact_pointer_pos().unwrap_or(r.min);
+            let pp = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()).unwrap_or(r.min);
             ui.data_mut(|d| d.insert_temp(drag_id, (pp.x - r.min.x, n.pos, n.pitch)));
         }
         if resp.dragged() {
