@@ -200,6 +200,13 @@ pub fn prepare(mut tracks: Vec<PlayTrack>, what: &What) -> Vec<PlayTrack> {
     tracks
 }
 
+/// `job` with the engine's tracks changed first (Live Loops cells bounced in place, cellbounce.rs).
+pub fn job_with(app: &App, what: &What, f: impl FnOnce(&mut Vec<PlayTrack>)) -> Job {
+    let mut j = job(app, what);
+    f(&mut j.engine.tracks);
+    j
+}
+
 pub fn job(app: &App, what: &What) -> Job {
     let (tracks, sf, param_auto) = {
         let e = app.engine.lock().unwrap_or_else(|e| e.into_inner());
@@ -341,7 +348,7 @@ fn unique(dir: &std::path::Path, base: &str, ext: &str) -> PathBuf {
 }
 
 /// Writes a bounce in place file: 24-bit at the engine's rate.
-fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option<(PathBuf, f64)> {
+pub(crate) fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option<(PathBuf, f64)> {
     let dir = audio_dir(app);
     let _ = std::fs::create_dir_all(&dir);
     let path = unique(&dir, base, "wav");
@@ -358,7 +365,7 @@ fn audio_region(name: &str, start: u32, length: u32, file: PathBuf, seconds: f64
     Region { name: name.into(), start, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file, seconds }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
 }
 
-fn ticks_of(app: &App, from: u32, frames: usize) -> u32 {
+pub(crate) fn ticks_of(app: &App, from: u32, frames: usize) -> u32 {
     // the length in ticks of `frames` rendered from `from` (at the tempo there)
     let secs = frames as f64 / RATE as f64;
     let bpm = app.project.as_ref().map_or(120.0, |p| p.tempo_map.iter().rev().find(|t| t.0 <= from).map_or(p.tempo, |t| t.1));

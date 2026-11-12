@@ -231,6 +231,7 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
     crate::trackhdr::windows(app, ctx);
     crate::trackops::windows(app, ctx);
     crate::freeze::windows(app, ctx);
+    crate::cellbounce::window(app, ctx);
     crate::mixext::windows(app, ctx);
 }
 

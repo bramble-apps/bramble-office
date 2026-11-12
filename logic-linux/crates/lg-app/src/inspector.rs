@@ -48,14 +48,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut y = area.min.y;
     let region_name = app.selected_region.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone());
     let track_name = app.selected_track.and_then(|t| app.project.as_ref()?.tracks.get(t)).map(|t| t.name.clone());
-    let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));
-    if widgets::disclosure(ui, hr, ui.scope_id().with("insp-region"), "Region:", region_name.as_deref().unwrap_or(""), app.inspector_region_open) {
-        app.inspector_region_open = !app.inspector_region_open;
-    }
-    y += 33.0;
-    if app.inspector_region_open {
-        if let Some((t, r)) = app.selected_region {
-            y = region_rows(app, ui, area, y, t, r);
+    // (Live Loops cells selected: the Cell inspector in the Region inspector's place)
+    if crate::cellinsp::active(app) {
+        y = crate::cellinsp::show(app, ui, area, y);
+    } else {
+        let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));
+        if widgets::disclosure(ui, hr, ui.scope_id().with("insp-region"), "Region:", region_name.as_deref().unwrap_or(""), app.inspector_region_open) {
+            app.inspector_region_open = !app.inspector_region_open;
+        }
+        y += 33.0;
+        if app.inspector_region_open {
+            if let Some((t, r)) = app.selected_region {
+                y = region_rows(app, ui, area, y, t, r);
+            }
         }
     }
     let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));

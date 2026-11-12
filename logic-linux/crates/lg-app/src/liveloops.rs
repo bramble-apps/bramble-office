@@ -68,11 +68,30 @@ pub struct Cell {
     /// Bramble's follow action (follow.rs) and after how many plays.
     pub follow: crate::follow::Action,
     pub follow_count: u32,
+    /// Loop settings (the Cell inspector's Play From section, cellinsp.rs): the start position
+    /// (None: the loop start), the loop start, the loop length (None: to the cell's end), and
+    /// Q Loop Start (0 Off, 1 On, 2 On, Preserve Start).
+    pub start: Option<u32>,
+    pub loop_start: u32,
+    pub loop_len: Option<u32>,
+    pub q_loop: u8,
+}
+
+impl Cell {
+    pub fn loop_len(&self) -> u32 {
+        self.loop_len.unwrap_or(self.length.saturating_sub(self.loop_start)).max(1)
+    }
+    pub fn loop_end(&self) -> u32 {
+        self.loop_start + self.loop_len()
+    }
+    pub fn start_pos(&self) -> u32 {
+        self.start.unwrap_or(self.loop_start)
+    }
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1 }
+        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1, start: None, loop_start: 0, loop_len: None, q_loop: 0 }
     }
 }
 
@@ -154,10 +173,29 @@ pub struct State {
     was_playing: bool,
     was_recording: bool,
     audio: Arc<Mutex<HashMap<PathBuf, Option<Arc<Vec<f32>>>>>>,
-    loops: HashMap<(PathBuf, usize), Arc<Vec<f32>>>,
+    loops: HashMap<(PathBuf, usize, usize), Arc<Vec<f32>>>,
     momentary: Option<(usize, usize)>,
     /// Follow actions already queued: (track, scene, its start).
     pub follow_queued: BTreeSet<(usize, usize, u32)>,
+    /// Cell edits' undo (cellinsp.rs): the app's undo depth when taken, and the cells then.
+    pub cell_undo: Vec<(usize, BTreeMap<(usize, usize), Cell>)>,
+    pub cell_redo: Vec<(usize, BTreeMap<(usize, usize), Cell>)>,
+    /// The Cell inspector's display options (View ▸ Live Loops: …).
+    pub length_as_position: bool,
+    pub start_as_offset: bool,
+    /// Position and Length Resolution: 1 bars, 2 + beats, 3 + division, 4 + ticks.
+    pub resolution: u8,
+    pub play_from_open: bool,
+    pub trigger_open: bool,
+    /// The Cell Editor's ruler drag: (which marker, the cell).
+    pub marker_drag: Option<(u8, (usize, usize))>,
+    /// Marquee selection from an empty cell: its first cell.
+    pub marquee: Option<(usize, usize)>,
+    /// Cells are the selection (the Inspector shows the Cell inspector, the editor the Cell Editor).
+    pub cell_sel: bool,
+    /// Bounce Cells in Place: the dialog open (its choices), and the choices remembered.
+    pub bounce: Option<crate::cellbounce::Opts>,
+    pub bounce_opts: crate::cellbounce::Opts,
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -258,29 +296,77 @@ pub fn sounding(c: &Cell) -> Vec<Note> {
         .collect()
 }
 
-/// The notes of `cell` looping from `start` (song ticks), cut at `end`, that begin in
+/// Q Loop Start: (how long to wait, the cell position to play from) when a cell starts on a
+/// boundary of `q` ticks. Off: from the start position at once; On: from a later position so the
+/// loop start falls on a boundary (content skipped); On, Preserve Start: from the start
+/// position, a little later, so the loop start falls on a boundary.
+pub fn first_pass(c: &Cell, q: Option<u32>) -> (u32, u32) {
+    let st = c.start_pos();
+    let Some(q) = q.filter(|q| *q > 0 && c.q_loop > 0 && c.loop_start > st) else { return (0, st) };
+    let speed = if c.speed > 0.0 { c.speed } else { 1.0 };
+    let qc = ((q as f32 * speed) as u32).max(1);
+    let d = c.loop_start - st;
+    if c.q_loop == 1 {
+        (0, st + d % qc)
+    } else {
+        ((((qc - d % qc) % qc) as f32 / speed) as u32, st)
+    }
+}
+
+/// The cell's pieces from `start` (song ticks) that sound in [from, to): (song tick, cell
+/// position from, to). The first plays from the start position (`first_pass`) to the loop end,
+/// then the loop over and over (a non-looping cell plays once, to its end).
+pub fn pieces(c: &Cell, q: Option<u32>, start: u32, from: u32, to: u32) -> Vec<(u32, u32, u32)> {
+    let mut out = Vec::new();
+    let speed = if c.speed > 0.0 { c.speed } else { 1.0 };
+    let sc = |ticks: u32| ((ticks as f32 / speed) as u32).max(1);
+    let (delay, p0) = first_pass(c, q);
+    let (ls, le) = (c.loop_start.min(c.length.max(1) - 1), c.loop_end());
+    let first_end = if c.looped && p0 < le { le } else { c.length.max(p0 + 1) };
+    let t0 = start + delay;
+    if t0 < to && t0 + sc(first_end - p0) > from {
+        out.push((t0, p0, first_end));
+    }
+    if !c.looped {
+        return out;
+    }
+    let t1 = t0 + sc(first_end - p0);
+    let len = sc(le - ls);
+    let mut k = if from > t1 { (from - t1) / len } else { 0 };
+    loop {
+        let at = t1 as u64 + k as u64 * len as u64;
+        if at >= to as u64 || at >= u32::MAX as u64 {
+            break;
+        }
+        if at + len as u64 > from as u64 {
+            out.push((at as u32, ls, le));
+        }
+        k += 1;
+    }
+    out
+}
+
+/// The notes of `cell` playing from `start` (song ticks), cut at `end`, that begin in
 /// [from, to): (start, end, pitch, velocity) as the engine plays them.
 pub fn loop_notes(c: &Cell, start: u32, end: Option<u32>, from: u32, to: u32) -> Vec<(u32, u32, u8, u8)> {
+    loop_notes_q(c, None, start, end, from, to)
+}
+
+/// `loop_notes` with the boundary the cell started on (for Q Loop Start).
+pub fn loop_notes_q(c: &Cell, q: Option<u32>, start: u32, end: Option<u32>, from: u32, to: u32) -> Vec<(u32, u32, u8, u8)> {
     let mut out = Vec::new();
     if c.muted || c.length == 0 || to <= from {
         return out;
     }
     let speed = if c.speed > 0.0 { c.speed } else { 1.0 };
-    let len = ((c.length as f32 / speed) as u32).max(1);
     let to = end.map_or(to, |e| e.min(to));
     if to <= start {
         return out;
     }
     let notes = sounding(c);
-    let first = if from > start { (from - start) / len } else { 0 };
-    let last = (to - start).div_ceil(len);
-    for k in first..=last {
-        if !c.looped && k > 0 {
-            break;
-        }
-        let base = start as u64 + k as u64 * len as u64;
-        for n in &notes {
-            let at = base + (n.pos as f32 / speed) as u64;
+    for (ps, cf, ct) in pieces(c, q, start, from.saturating_sub(c.length * 2), to) {
+        for n in notes.iter().filter(|n| n.pos >= cf && n.pos < ct) {
+            let at = ps as u64 + ((n.pos - cf) as f32 / speed) as u64;
             if at < from as u64 || at >= to as u64 || at >= u32::MAX as u64 {
                 continue;
             }
@@ -293,15 +379,21 @@ pub fn loop_notes(c: &Cell, start: u32, end: Option<u32>, from: u32, to: u32) ->
         }
     }
     out.sort_by_key(|n| (n.0, n.2));
+    out.dedup();
     out
 }
 
 /// How far into its loop a cell is at `pos` (0..1).
 pub fn progress(c: &Cell, start: u32, pos: f64) -> f32 {
     let speed = if c.speed > 0.0 { c.speed } else { 1.0 };
-    let len = (c.length as f64 / speed as f64).max(1.0);
-    let d = (pos - start as f64).max(0.0);
-    ((d % len) / len) as f32
+    if pos < start as f64 {
+        return 0.0;
+    }
+    let p = pos as u32;
+    let Some(&(ps, cf, _)) = pieces(c, None, start, p, p + 1).last() else { return 0.0 };
+    let cell_pos = cf as f64 + (pos - ps as f64).max(0.0) * speed as f64;
+    let (ls, ll) = if c.looped { (c.loop_start as f64, c.loop_len() as f64) } else { (0.0, c.length.max(1) as f64) };
+    (((cell_pos - ls) / ll).clamp(0.0, 1.0) % 1.0) as f32
 }
 
 /// Notes (song ticks) that begin in [from, to) cut out as a cell: positions from `from`.
@@ -364,6 +456,7 @@ pub fn sync(app: &mut App) {
     }
     s.file = grid;
     crate::follow::load(app, &mut s);
+    crate::cellinsp::load(app, &mut s);
     app.live_loops = s;
 }
 
@@ -378,6 +471,7 @@ pub fn keep_after_save_as(app: &mut App) {
 pub fn save_into(app: &App, data: &[u8]) -> (Vec<u8>, Vec<String>) {
     use lg_core::liveloops::Edit;
     crate::follow::save(app);
+    crate::cellinsp::save(app);
     let s = &app.live_loops;
     let Some(g) = &s.file else {
         return (data.to_vec(), s.cells.values().map(|c| c.name.clone()).collect());
@@ -438,7 +532,7 @@ fn start_at(app: &App, t: usize, cell_q: &str, pos: f64) -> u32 {
             // Cell End: when the track's playing cell ends its loop
             if let Some(Some((sc, st, _))) = s.plays.get(&t).map(|p| p.current) {
                 if let Some(c) = s.cells.get(&(t, sc)) {
-                    let len = ((c.length as f32 / c.speed.max(0.01)) as u32).max(1);
+                    let len = ((c.loop_len() as f32 / c.speed.max(0.01)) as u32).max(1);
                     return next_boundary(pos - st as f64, Some(len)) + st;
                 }
             }
@@ -446,6 +540,12 @@ fn start_at(app: &App, t: usize, cell_q: &str, pos: f64) -> u32 {
         }
         q => next_boundary(pos, q),
     }
+}
+
+/// The boundary a cell starts on, for Q Loop Start (Cell End and Off: none).
+fn q_of(app: &App, _t: usize, c: &Cell) -> Option<u32> {
+    let label = if c.quantize_start == "Global" { app.live_loops.quantize.as_str() } else { c.quantize_start.as_str() };
+    quantize_ticks(label, bar(app)).filter(|q| *q > 0)
 }
 
 /// The looping notes of the track's playing (and queued) cell that begin in [from_tick, to_tick),
@@ -461,13 +561,13 @@ pub fn notes_for(app: &App, track: usize, from_tick: u32, to_tick: u32) -> Vec<(
                 (Some(a), Some(b)) => Some(a.min(b)),
                 (a, b) => a.or(b),
             };
-            out.extend(loop_notes(c, start, end, from_tick, to_tick));
+            out.extend(loop_notes_q(c, q_of(app, track, c), start, end, from_tick, to_tick));
         }
     }
     match play.next {
         Some((scene, Some(at))) => {
             if let Some(c) = s.cells.get(&(track, scene)) {
-                out.extend(loop_notes(c, at, None, from_tick, to_tick));
+                out.extend(loop_notes_q(c, q_of(app, track, c), at, None, from_tick, to_tick));
             }
         }
         Some((scene, None)) if play.current.is_none() => {
@@ -503,24 +603,47 @@ fn audio_for(app: &mut App, track: usize, from_tick: u32, to_tick: u32) -> Vec<(
         }
         let Some(samples) = audio_samples(&mut app.live_loops, &path) else { continue };
         let speed = c.speed.max(0.01);
-        let len = ((c.length as f32 / speed) as u32).max(1);
-        let frames = (len as f64 / lg_core::events::PPQ as f64 * 60.0 / tempo * crate::audio::RATE as f64) as usize;
-        let key = (path.clone(), frames);
-        let piece = app.live_loops.loops.entry(key).or_insert_with(|| Arc::new(samples.iter().copied().take(frames * 2).collect())).clone();
-        let first = from_tick.saturating_sub(start) / len;
-        let mut k = first.saturating_sub(1);
-        loop {
-            let at = start + k * len;
-            if at >= to_tick || end.is_some_and(|e| at >= e) || (!c.looped && k > 0) {
+        let frames = |ticks: f64| (ticks / lg_core::events::PPQ as f64 * 60.0 / tempo * crate::audio::RATE as f64) as usize;
+        let q = q_of(app, track, &c);
+        for (at, cf, ct) in pieces(&c, q, start, from_tick, to_tick) {
+            if end.is_some_and(|e| at >= e) {
                 break;
             }
-            if at + len > from_tick {
-                out.push((at, piece.clone()));
-            }
-            k += 1;
+            let (f0, n) = (frames(cf as f64), frames((ct - cf) as f64 / speed as f64));
+            let key = (path.clone(), f0, n);
+            let piece = app.live_loops.loops.entry(key).or_insert_with(|| Arc::new(samples.iter().copied().skip(f0 * 2).take(n * 2).collect())).clone();
+            out.push((at, piece));
         }
     }
     out
+}
+
+/// A cell's audio pieces from `start` (song ticks) up to `to` (bounces: cellbounce.rs).
+pub(crate) fn cell_audio(app: &mut App, c: &Cell, start: u32, to: u32) -> Vec<(u32, Arc<Vec<f32>>)> {
+    let Some(path) = c.audio.clone() else { return Vec::new() };
+    // (read now: a bounce can't wait for the background reader)
+    let samples = match audio_samples(&mut app.live_loops, &path) {
+        Some(s) => s,
+        None => match crate::audio::load_audio(&path) {
+            Some(v) => Arc::new(v),
+            None => return Vec::new(),
+        },
+    };
+    let tempo = app.tempo();
+    let speed = c.speed.max(0.01);
+    let frames = |ticks: f64| (ticks / lg_core::events::PPQ as f64 * 60.0 / tempo * crate::audio::RATE as f64) as usize;
+    pieces(c, None, start, start, to)
+        .into_iter()
+        .map(|(at, cf, ct)| {
+            let (f0, n) = (frames(cf as f64), frames((ct - cf) as f64 / speed as f64));
+            (at, Arc::new(samples.iter().copied().skip(f0 * 2).take(n * 2).collect::<Vec<f32>>()))
+        })
+        .collect()
+}
+
+/// An audio cell's samples (None while they're being read): for the Cell Editor.
+pub(crate) fn samples(app: &mut App, path: &std::path::Path) -> Option<Arc<Vec<f32>>> {
+    audio_samples(&mut app.live_loops, path)
 }
 
 /// An audio file's samples (read in the background the first time).
@@ -1031,10 +1154,13 @@ fn selection_or(app: &App, at: Option<(usize, usize)>) -> Vec<(usize, usize)> {
 /// Stop All Cells, Record into Cell, Copy to Live Loops Scene, and the cell menus' plain items on
 /// the selected cells); false when it isn't one.
 pub fn command(app: &mut App, name: &str) -> bool {
-    command_at(app, name, None, None)
+    crate::cellinsp::undoable(app, name, |app| command_at(app, name, None, None))
 }
 
 fn command_at(app: &mut App, name: &str, cell: Option<(usize, usize)>, scene: Option<usize>) -> bool {
+    if crate::cellinsp::command(app, name) || crate::celledit::command(app, name) || crate::cellbounce::command(app, name) {
+        return true;
+    }
     sync(app);
     let n_tracks = app.project.as_ref().map_or(0, |p| p.tracks.len());
     let sel_or_focus = |app: &App| -> Vec<(usize, usize)> {
@@ -1378,6 +1504,10 @@ fn submenu(app: &mut App, path: &str, item: &str, cell: Option<(usize, usize)>, 
         ("Quantize Start", false) => set(app, &|c| c.quantize_start = item.to_string()),
         ("Trigger Mode", false) => set(app, &|c| c.trigger = item.to_string()),
         ("Play From", _) => set(app, &|c| c.play_from = item.to_string()),
+        ("Quantize to Loop Start", _) => {
+            let v = crate::cellinsp::Q_LOOP.iter().position(|q| *q == item).unwrap_or(0) as u8;
+            set(app, &|c| c.q_loop = v);
+        }
         ("Speed", _) => {
             let Some(v) = SPEEDS.iter().find(|s| s.0 == item).map(|s| s.1) else { return false };
             set(app, &|c| c.speed = v);
@@ -1390,7 +1520,7 @@ fn submenu(app: &mut App, path: &str, item: &str, cell: Option<(usize, usize)>, 
         ("Mode", _) => app.live_loops.rec_mode = item.to_string(),
         ("Rec-Length", _) => app.live_loops.rec_length = item.to_string(),
         ("Rec-End Action", _) => app.live_loops.rec_end = item.to_string(),
-        ("Playback", _) | ("Edit", _) | ("Select", _) | ("Name and Color", _) => return command_at(app, item, cell, scene),
+        ("Playback", _) | ("Edit", _) | ("Select", _) | ("Name and Color", _) | ("Bounce or Join", _) => return command_at(app, item, cell, scene),
         _ => return false,
     }
     true
@@ -1398,8 +1528,8 @@ fn submenu(app: &mut App, path: &str, item: &str, cell: Option<(usize, usize)>, 
 
 /// What the menus can run (others are greyed, as in the rest of Studio).
 fn handled(path: &str, item: &str) -> bool {
-    let unbuilt = ["Create Pattern Cell", "Create Session Player Cell", "Takes", "Cell Length", "Automatic (Beats)", "Continue Recording", "Bounce Cells in Place…", "Join Regions and Fill Cell", "Convert to Pattern Cell", "Replace with Session Player Cell", "Stem Splitter…", "Add to Browser…", "Export as Audio File…", "Quantize to Loop Start", "Same-Colored Cells", "Color Cell by Track"];
-    if unbuilt.contains(&item) || path.contains("Quantize to Loop Start") {
+    let unbuilt = ["Create Pattern Cell", "Create Session Player Cell", "Takes", "Cell Length", "Automatic (Beats)", "Continue Recording", "Join Regions and Fill Cell", "Convert to Pattern Cell", "Replace with Session Player Cell", "Stem Splitter…", "Add to Browser…", "Export as Audio File…", "Color Cell by Track"];
+    if unbuilt.contains(&item) {
         return false;
     }
     if path.contains("Play From") {
@@ -1425,7 +1555,7 @@ fn checked(app: &App, path: &str, item: &str, cell: Option<(usize, usize)>, scen
         ("Speed", _) => c.is_some_and(|c| SPEEDS.iter().any(|s| s.0 == item && (s.1 - c.speed).abs() < 1e-6)),
         ("Quantize", _) => c.is_some_and(|c| c.quantize == item),
         ("Transpose", _) => c.is_some_and(|c| item.replace('±', "").replace('+', "").parse::<i8>().ok() == Some(c.transpose)),
-        ("Quantize to Loop Start", "Off") => true,
+        ("Quantize to Loop Start", _) => c.is_some_and(|c| crate::cellinsp::Q_LOOP.get(c.q_loop as usize) == Some(&item)),
         ("Playback", "Mute") => c.is_some_and(|c| c.muted),
         ("Playback", "Loop") => c.is_some_and(|c| c.looped),
         ("Playback", "Reverse") => c.is_some_and(|c| c.reversed),
@@ -1450,11 +1580,7 @@ fn context_menu(app: &mut App, resp: &egui::Response, place: &str, cell: Option<
             crate::follow::menu(app, ui, k);
         }
         if let Some((path, item)) = fired {
-            if path.is_empty() || path == "Scene" {
-                command_at(app, &item, cell, scene);
-            } else {
-                submenu(app, &path, &item, cell, scene);
-            }
+            crate::cellinsp::undoable(app, &item, |app| if path.is_empty() || path == "Scene" { command_at(app, &item, cell, scene) } else { submenu(app, &path, &item, cell, scene) });
         }
     });
 }
@@ -1508,7 +1634,9 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
                 _ => matches!(
                     b.command.as_str(),
                     "Switch between Live Loops Grid and Tracks View" | "Show Both, Live Loops Grid and Tracks View" | "Copy to Live Loops Scene" | "Stop All Cells" | "Record into Cell" | "Insert Scenes at Playhead"
-                ) || (focused && matches!(b.command.as_str(), "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All")),
+                ) || (focused && matches!(b.command.as_str(), "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All" | "Select Muted Regions/Cells/Events" | "Select Same-Colored Regions/Cells/Events" | "Select Empty Regions/Cells"))
+                    || (crate::cellinsp::active(app) && b.command == "Bounce Regions/Cells in Place…")
+                    || (crate::celledit::active(app) && matches!(b.command.as_str(), "Move Locators Forward by Cycle Length / Loop Forward by Loop Length" | "Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length" | "Double Cycle/Loop Length" | "Halve Cycle/Loop Length")),
             };
             if !ours {
                 continue;
@@ -1569,7 +1697,7 @@ fn focus_blue() -> Color32 {
 }
 
 /// The track's colour for its cells (Logic: the region colour by kind).
-fn track_color(app: &App, t: usize) -> Color32 {
+pub(crate) fn track_color(app: &App, t: usize) -> Color32 {
     app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(look::region_color(lg_core::TrackKind::Instrument), |tr| look::region_color(tr.kind))
 }
 
@@ -1803,6 +1931,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
     let held = app.live_loops.drag;
     let pointer = ui.input(|i| i.pointer.hover_pos());
     let mut drop_target = None;
+    let mut under: Option<(usize, usize)> = None;
     let alt = ui.input(|i| i.modifiers.alt);
     let cp = ui.painter_at(Rect::from_min_max(cells_r.min, pos2(cells_r.max.x, cells_r.max.y)));
     let audio_cache: HashMap<PathBuf, Option<Arc<Vec<f32>>>> = app.live_loops.audio.lock().map(|m| m.clone()).unwrap_or_default();
@@ -1829,6 +1958,9 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             let rec = app.live_loops.rec.filter(|r| r.track == t && r.scene == sc);
             if pointer.is_some_and(|pp| r.contains(pp)) && (held.is_some() || app.live_loops.region_drag.is_some()) {
                 drop_target = Some(key);
+            }
+            if pointer.is_some_and(|pp| r.contains(pp)) {
+                under = Some(key);
             }
             match &cell {
                 None => {
@@ -1905,9 +2037,12 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                         let new = text.trim().to_string();
                         app.live_loops.renaming = None;
                         if !cancel {
-                            if let Some(c) = app.live_loops.cells.get_mut(&key) {
-                                c.name = new;
-                            }
+                            crate::cellinsp::undoable(app, "Rename Cell", |app| {
+                                if let Some(c) = app.live_loops.cells.get_mut(&key) {
+                                    c.name = new;
+                                }
+                                true
+                            });
                         }
                     }
                 }
@@ -1916,6 +2051,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
             if resp.clicked() {
                 app.selected_track = Some(t);
+                app.selected_region = None;
+                app.live_loops.cell_sel = true;
                 app.live_loops.focused_scene = Some(sc);
                 let s = &mut app.live_loops;
                 if shift || cmd {
@@ -1949,9 +2086,22 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             }
             if resp.double_clicked() && cell.is_none() {
                 command_at(app, "Create MIDI Cell", Some(key), None);
+            } else if resp.double_clicked() {
+                // a cell opens in the Cell Editor
+                app.bottom = crate::app::Bottom::PianoRoll;
             }
             if resp.drag_started() && cell.is_some() {
                 app.live_loops.drag = Some(key);
+            } else if resp.drag_started() {
+                // a drag from an empty cell: a marquee selecting the cells it encloses
+                // (Shift: added to the selection)
+                app.live_loops.marquee = Some(key);
+                app.live_loops.cell_sel = true;
+                app.selected_region = None;
+                if !shift {
+                    app.live_loops.selected.clear();
+                }
+                ui.data_mut(|d| d.insert_temp(egui::Id::new("ll-marquee-base"), app.live_loops.selected.clone()));
             }
             context_menu(app, &resp, if cell.is_some() { "liveloops-midi-cell" } else { "liveloops-empty-cell" }, Some(key), None);
         }
@@ -1975,10 +2125,39 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             stop_track(app, t);
         }
     }
-    // a cell dragged onto another: moved (⌥: copied)
+    // the marquee: the cells between where it began and the pointer
+    if let Some(from) = app.live_loops.marquee {
+        if let Some(to) = under {
+            let base: BTreeSet<(usize, usize)> = ui.data(|d| d.get_temp(egui::Id::new("ll-marquee-base"))).unwrap_or_default();
+            app.live_loops.selected = marquee_cells(from, to).chain(base).collect();
+        }
+        if ui.input(|i| i.pointer.any_released()) {
+            app.live_loops.marquee = None;
+        }
+    }
+    // a cell dragged onto another: moved (⌥: copied; ⌃: the two swapped)
+    let ctrl = ui.input(|i| i.modifiers.ctrl);
+    if let (Some(_), Some(to), true) = (app.live_loops.drag, drop_target, ctrl) {
+        if let Some(pp) = pointer {
+            let lp = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ll-swap")));
+            lp.text(pp + vec2(14.0, 14.0), Align2::LEFT_TOP, "⇄", look::semibold(16.0), Color32::WHITE);
+            let _ = to;
+        }
+    }
+    if ui.input(|i| i.pointer.any_released()) && ctrl {
+        if let (Some(from), Some(to)) = (app.live_loops.drag, drop_target.filter(|k| Some(*k) != app.live_loops.drag)) {
+            app.live_loops.drag = None;
+            let same_kind = |a: usize, b: usize| app.project.as_ref().is_some_and(|p| p.tracks.get(a).map(|t| t.kind == lg_core::TrackKind::Audio) == p.tracks.get(b).map(|t| t.kind == lg_core::TrackKind::Audio));
+            if same_kind(from.0, to.0) {
+                crate::cellinsp::checkpoint(app, "Swap Cells");
+                swap_cells(&mut app.live_loops, from, to);
+            }
+        }
+    }
     if ui.input(|i| i.pointer.any_released()) {
         if let Some(from) = app.live_loops.drag.take() {
             if let Some(to) = drop_target.filter(|k| *k != from) {
+                crate::cellinsp::checkpoint(app, if alt { "Copy Cell" } else { "Move Cell" });
                 let s = &mut app.live_loops;
                 if let Some(c) = s.cells.get(&from).cloned() {
                     if !alt {
@@ -2067,6 +2246,32 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         ui.painter().vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));
     }
     let _ = pos;
+}
+
+/// The cells a marquee from `a` to `b` encloses.
+pub fn marquee_cells(a: (usize, usize), b: (usize, usize)) -> impl Iterator<Item = (usize, usize)> {
+    (a.0.min(b.0)..=a.0.max(b.0)).flat_map(move |t| (a.1.min(b.1)..=a.1.max(b.1)).map(move |sc| (t, sc)))
+}
+
+/// Two cells change places (Control-drop); an empty target just takes the cell.
+pub fn swap_cells(s: &mut State, a: (usize, usize), b: (usize, usize)) {
+    let ca = s.cells.remove(&a);
+    let cb = s.cells.remove(&b);
+    if let Some(c) = ca {
+        s.cells.insert(b, c);
+    }
+    if let Some(c) = cb {
+        s.cells.insert(a, c);
+    }
+    for k in [a, b] {
+        if let Some(pl) = s.plays.get_mut(&k.0) {
+            if pl.current.is_some_and(|x| x.0 == k.1) {
+                pl.current = None;
+            }
+        }
+    }
+    s.selected = [b].into();
+    s.scenes = s.scenes.max(a.1.max(b.1) + 1);
 }
 
 /// A region dragged from the tracks onto a cell: the cell gets a copy, the region goes back.
