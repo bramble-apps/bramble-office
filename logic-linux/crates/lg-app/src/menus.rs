@@ -372,7 +372,8 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
     let r = egui::Rect::from_min_max(egui::pos2(start - 4.0, cy - h / 2.0), egui::pos2(end + 4.0, cy + h / 2.0));
     let mut shapes = vec![egui::Shape::rect_filled(r, 6.0, crate::look::group_bg())];
     for x in seps {
-        shapes.push(egui::Shape::line_segment([egui::pos2(x, cy - 7.0), egui::pos2(x, cy + 7.0)], egui::Stroke::new(1.0, crate::look::line())));
+        // (Logic's dividers between the menus: a light grey hairline)
+        shapes.push(egui::Shape::line_segment([egui::pos2(x, cy - 7.0), egui::pos2(x, cy + 7.0)], egui::Stroke::new(1.0, crate::look::text_dim().gamma_multiply(0.55))));
     }
     ui.painter().set(bg, egui::Shape::Vec(shapes));
     ui.add_space(12.0);

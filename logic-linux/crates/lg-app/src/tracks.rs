@@ -295,6 +295,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         Some(bars) => bars.iter().map(|b| x_of(b.0 as f32, scroll)).collect(),
         None => (first..first + visible).map(|b| x_of(b as f32 * bar_t, scroll)).collect(),
     };
+    // (the rows' widgets are clipped below the "+ / duplicate / S" row and the ruler, as the
+    // lanes are: a track scrolled half out of view doesn't draw over them)
+    let rows_clip_saved = ui.clip_rect();
+    ui.set_clip_rect(rows_clip_saved.intersect(Rect::from_min_max(pos2(area.min.x, headers.min.y), area.max)));
     for (vis, row_info) in rows.iter().enumerate() {
         let i = row_info.t;
         let t = &proj.tracks[i];
@@ -335,7 +339,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // track moves)
         // (Logic's header at its default 64 pt: the name's caps from 12 pt, the controls' centre
         // line at 41 pt; taller or shorter rows keep the block centred)
-        let dy = ((rh - ROW_H) / 2.0).max(-10.0);
+        // (a tall row keeps its name, icon and controls at the top, as Logic's: ui-take-folder-
+        // expanded.png; a short one moves them up a little)
+        let dy = ((rh - ROW_H) / 2.0).clamp(-10.0, 0.0);
         let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click_and_drag());
         // (Shift-click: the track leaves or rejoins the marquee)
         if row_resp.clicked() && ui.input(|i| i.modifiers.shift) {
@@ -376,8 +382,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let indent = crate::trackarea::header_extras(app, ui, row, i) + edge;
         let stack_shift = if t.extra.stack.is_some() { 12.0 } else { 0.0 };
         // (Logic: a 26 pt icon centred 47 pt in and 30 pt down)
-        let isz = if large { (rh - 8.0).clamp(34.0, 64.0) } else { 26.0 };
-        let icon_y = if large { row.min.y + rh / 2.0 } else { row.min.y + 30.0 + dy };
+        let top_h = rh.min(ROW_H);
+        let isz = if large { (top_h - 8.0).clamp(34.0, 64.0) } else { 26.0 };
+        let icon_y = if large { row.min.y + top_h / 2.0 } else { row.min.y + 30.0 + dy };
         let icon = Rect::from_center_size(pos2(row.min.x + 33.75 + indent + stack_shift + isz / 2.0, icon_y), vec2(isz, isz));
         // (Track Icons off: none; an icon chosen in the Icon palette over the patch's own)
         let drew = crate::trackhdr::icon(app, ui, &hp, icon, i, large);
@@ -691,6 +698,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::autoext::subtracks(app, ui, (row.min.x, row.max.x), lanes, y + rh, i, &xo, &to);
         }
     }
+    ui.set_clip_rect(rows_clip_saved);
     // the empty header area under the tracks (double-click: a track like the selected one)
     crate::trackhdr::below_headers(app, ui, Rect::from_min_max(pos2(headers.min.x, (headers.min.y + rows_h - app.scroll_y).max(headers.min.y)), headers.max));
     // the Marquee tool (or a marquee already made): a time range over tracks

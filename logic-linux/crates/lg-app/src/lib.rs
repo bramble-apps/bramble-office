@@ -185,6 +185,7 @@ mod trackarea;
 mod barfit;
 mod edpane;
 mod cbicons;
+mod listwin;
 mod toolbar;
 mod tracks;
 mod focus;

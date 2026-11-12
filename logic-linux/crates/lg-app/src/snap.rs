@@ -101,6 +101,10 @@ impl eframe::App for Snap {
         let Some(out) = std::env::var_os("LG_SNAP") else { return };
         self.frames += 1;
         let ctx = ui.ctx().clone();
+        // LG_FRAMELOG=1: each frame's time and the zooms (smoothness checks)
+        if std::env::var_os("LG_FRAMELOG").is_some() {
+            eprintln!("frame {} dt {:.4} bar_w {:.3} v_zoom {:.4} scroll_x {:.4}", self.frames, ctx.input(|i| i.unstable_dt), self.app.bar_w, self.app.ta.v_zoom, self.app.scroll_x);
+        }
         if self.frames == 1 {
             // (egui's "widget ID used twice" warnings, as debug builds show them)
             ctx.options_mut(|o| o.warn_on_id_clash = true);

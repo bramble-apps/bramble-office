@@ -477,7 +477,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     let mut run: Option<&'static str> = None;
     {
         let mut c = ui.new_child(egui::UiBuilder::new().max_rect(menus.shrink2(vec2(6.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        c.spacing_mut().item_spacing.x = if narrow { 4.0 } else { 10.0 };
+        // (Logic's capsule is 228 pt at a 452 pt window: tight buttons so View fits before Catch)
+        c.spacing_mut().item_spacing.x = 4.0;
+        c.spacing_mut().button_padding.x = 3.0;
         c.menu_button("Edit ⌄", |ui| edit_menu(ui, &mut run));
         c.menu_button("Functions ⌄", |ui| {
             for n in ["Lock SMPTE Position", "Unlock SMPTE Position"] {

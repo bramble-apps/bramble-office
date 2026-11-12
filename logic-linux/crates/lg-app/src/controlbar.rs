@@ -84,7 +84,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let (b, c) = run(x, cy, &[BTN; 3]);
     caps.push(c);
     let editors_on = matches!(app.bottom, Bottom::PianoRoll);
-    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| icon(p, r, ph::PENCIL_SIMPLE, c)).clicked() {
+    if button(ui, b[0], "editors", editors_on, true, "Editors (E)", |p, r, c| crate::cbicons::pencil(p, r, c)).clicked() {
         app.bottom = if editors_on { Bottom::None } else { Bottom::PianoRoll };
     }
     let smart_on = app.bottom == Bottom::SmartControls;

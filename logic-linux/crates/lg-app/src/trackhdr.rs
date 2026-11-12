@@ -414,7 +414,8 @@ pub fn number(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect, i
     let selected = app.ta.selected.contains(&i);
     // (Logic: white numbers; inside a multiple selection the others a shade dimmer)
     let col = if dim { look::text_dim().gamma_multiply(0.5) } else if selected && !focused && app.ta.selected.len() > 1 { look::mix(look::text(), look::text_dim(), 0.5) } else { look::text() };
-    let c = pos2(row.min.x + 10.0 + x, row.center().y - 3.0);
+    // (a tall row: level with the name and controls at the top)
+    let c = pos2(row.min.x + 10.0 + x, row.min.y + row.height().min(crate::tracks::ROW_H) / 2.0 - 3.0);
     hp.text(c, Align2::CENTER_CENTER, format!("{}", i + 1), look::regular(13.0), col);
     // (Logic's hairline between the number and the rest of the header)
     hp.line_segment([pos2(row.min.x + 20.5 + x, row.min.y), pos2(row.min.x + 20.5 + x, row.max.y)], Stroke::new(1.0, look::ta_header_line()));
