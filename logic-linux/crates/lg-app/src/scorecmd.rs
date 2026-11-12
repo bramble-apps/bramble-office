@@ -102,7 +102,16 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Color View: Show Polyphony" | "Show Voice Assignment" => view(ctx, &|s| s.colors = Colors::Voice),
         "Color View: Force Black and White" | "Force Black&White" => view(ctx, &|s| s.colors = Colors::BlackWhite),
         "Toggle Duration Bar Display" => view(ctx, &|s| s.duration_bars = (s.duration_bars + 1) % 3),
-        "Toggle Guide Line Display" => view(ctx, &|s| s.guides = !s.guides),
+        "Toggle Guide Line Display" => view(ctx, &|s| {
+            // All Objects ↔ the last mode chosen
+            if s.guide_mode == 3 {
+                s.guide_mode = if s.guide_last == 3 { 1 } else { s.guide_last };
+            } else {
+                s.guide_last = s.guide_mode;
+                s.guide_mode = 3;
+            }
+            s.guides = s.guide_mode != 0;
+        }),
         "Go to Page…" => {
             if st.view != View::Page {
                 return false;

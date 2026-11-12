@@ -264,7 +264,7 @@ impl Default for Quant {
 
 impl Quant {
     /// Logic's Quantize choices for the Score: 4, 8, 16, 32, 64, 12, 24, 48, 8,12 16,12 16,24 …
-    pub const CHOICES: [(&'static str, Quant); 11] = [
+    pub const CHOICES: [(&'static str, Quant); 13] = [
         ("4", Quant { straight: 960, triplet: None }),
         ("8", Quant { straight: 480, triplet: None }),
         ("16", Quant { straight: 240, triplet: None }),
@@ -277,6 +277,9 @@ impl Quant {
         ("16,24", Quant { straight: 240, triplet: Some(320) }),
         // (after the default's index 9)
         ("128", Quant { straight: 30, triplet: None }),
+        // (the LCD divisions 1/12 and 1/24 give these as the Insert Defaults' Quantize)
+        ("4,12", Quant { straight: 960, triplet: Some(640) }),
+        ("8,24", Quant { straight: 480, triplet: Some(320) }),
     ];
 }
 

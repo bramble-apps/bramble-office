@@ -224,9 +224,16 @@ pub struct State {
     pub explode_folders: bool,
     pub names: bool,
     pub rulers: bool,
+    /// Page Display Options: Show Margins (onscreen only), Show Pages in Pairs.
+    pub margins_shown: bool,
+    pub pairs: bool,
     /// Duration bars: 0 off, 1 selected notes, 2 all notes.
     pub duration_bars: u8,
     pub guides: bool,
+    /// View ▸ Guides: 0 Off, 1 Dragged Objects, 2 Selected Objects, 3 All Objects; and the
+    /// mode Toggle Guide Line Display goes back to from All Objects.
+    pub guide_mode: u8,
+    pub guide_last: u8,
     pub snap: bool,
     pub diatonic: bool,
     /// Tracks shown by a score set (track ids); None: the selected track.
@@ -304,8 +311,12 @@ impl Default for State {
             explode_folders: false,
             names: false,
             rulers: false,
+            margins_shown: false,
+            pairs: false,
             duration_bars: 0,
             guides: true,
+            guide_mode: 1,
+            guide_last: 1,
             snap: true,
             diatonic: false,
             score_set: None,
@@ -352,6 +363,17 @@ fn select_instrument(app: &mut App, shown: &[usize], t: usize) {
     app.selected_region = Some(first);
     app.selected_track = Some(t);
     app.selected_notes.clear();
+}
+
+/// Where page `k` goes: its row and left edge (in pairs: odd pages left, even right, as a book
+/// opens, page 1 alone on the right).
+fn page_slot(k: usize, paired: bool, x0: f32, music: Rect, page_w: f32, gap: f32) -> (usize, f32) {
+    if !paired {
+        return (k, x0);
+    }
+    let left = music.min.x + ((music.width() - 2.0 * page_w - gap) / 2.0).max(12.0);
+    let n = k + 1; // page number
+    (n / 2, if n % 2 == 0 { left } else { left + page_w + gap })
 }
 
 /// The notes a rubber band takes: those of the first region it touches, in order.
@@ -526,15 +548,17 @@ pub fn def_of(app: &App, t: usize) -> lg_core::staffstyle::StaffStyleDef {
 /// The display Quantize a track reads with.
 pub(crate) fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
     let ts = app.project.as_ref().and_then(|p| p.score.track(id));
-    let q = ts.and_then(|t| nt::Quant::CHOICES.iter().position(|c| c.0 == t.quantize)).unwrap_or(9);
-    (q, ts.is_none_or(|t| !t.no_interpretation), ts.is_some_and(|t| t.syncopation))
+    // (a region with no parameters of its own: the Insert Defaults)
+    let Some(t) = ts else { return crate::scoreattr::defaults_quant(app) };
+    let q = nt::Quant::CHOICES.iter().position(|c| c.0 == t.quantize).unwrap_or(9);
+    (q, !t.no_interpretation, t.syncopation)
 }
 
 /// The tracks the Score shows: the score set, every MIDI track (Explode Folders), or the
 /// selected region's track.
 /// The region's Max. Dots (Score inspector), 1 by default.
 pub fn max_dots_of(app: &App, id: u64) -> u8 {
-    app.project.as_ref().and_then(|p| p.score.track(id)).map_or(1, |t| if t.max_dots == 0 { 1 } else { t.max_dots - 1 })
+    app.project.as_ref().and_then(|p| p.score.track(id)).map_or_else(|| crate::scoreattr::defaults().max_dots, |t| if t.max_dots == 0 { 1 } else { t.max_dots - 1 })
 }
 
 fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
@@ -682,7 +706,7 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.syncopation = synco;
                 opts.max_dots = max_dots_of(app, row.id);
                 opts.tuplets = crate::scoretuplet::specs(app, row.id);
-                opts.no_overlap = p.score.track(row.id).is_none_or(|x| !x.overlap);
+                opts.no_overlap = p.score.track(row.id).map_or_else(|| crate::scoreattr::defaults().no_overlap, |x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
                     None if two => vec![0, 1],
@@ -962,19 +986,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             };
             let n_pages = tops.last().map_or(1, |t| t.0 + 1);
             st.pages = n_pages;
+            // (Show Pages in Pairs: facing pages side by side when two fit)
+            let gap = 2.0 * sp;
+            let paired = st.pairs && music.width() >= 2.0 * page_w + gap + 24.0;
             if let Some(pg) = st.goto_page.take() {
-                st.scroll_y = (pg.min(n_pages - 1) as f32 * (page_h + 4.0 * sp)).max(0.0);
+                let row = if paired { pg.min(n_pages - 1) / 2 } else { pg.min(n_pages - 1) };
+                st.scroll_y = (row as f32 * (page_h + 4.0 * sp)).max(0.0);
             }
             if st.view == View::Page {
                 for k in 0..n_pages {
-                    let r = Rect::from_min_size(pos2(x0, music.min.y + 12.0 + k as f32 * (page_h + 4.0 * sp) - st.scroll_y), vec2(page_w, page_h));
+                    let (row, px) = page_slot(k, paired, x0, music, page_w, gap);
+                    let r = Rect::from_min_size(pos2(px, music.min.y + 12.0 + row as f32 * (page_h + 4.0 * sp) - st.scroll_y), vec2(page_w, page_h));
                     pages.push(r);
                 }
             }
             for (li, &(b, n, scale)) in systems.iter().enumerate() {
                 let (pg, y) = tops[li];
                 let base_y = if st.view == View::Page { pages[pg].min.y } else { music.min.y - st.scroll_y };
-                let xs_start = x0 + margins(pg).0;
+                let xs_start = if st.view == View::Page { pages[pg].min.x } else { x0 } + margins(pg).0;
                 let page_first = li == 0 || tops[li - 1].0 != pg;
                 let key = key_at((bar_lo + b as u32) * bar_t as u32);
                 let key_on = li == 0 || (st.key_every_line && fmt.keys.on(page_first, li == 0));
@@ -1012,6 +1041,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 _ => (pr.max.x - hd, if fmt.page_top { Align2::RIGHT_TOP } else { Align2::RIGHT_BOTTOM }),
             };
             mp.text(pos2(x, y), al, text, look::regular(1.6 * sp), INK);
+        }
+        if st.margins_shown && !st.printing {
+            // Show Margins: the page's margins, onscreen only
+            let cm = crate::scoreset::SP_PER_CM * sp;
+            let (l, r) = fmt.margins(k);
+            let inner = Rect::from_min_max(pos2(pr.min.x + l * sp, pr.min.y + fmt.top * cm), pos2(pr.max.x - r * sp, pr.max.y - fmt.bottom * cm));
+            mp.rect_stroke(inner, 0.0, Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 150)), egui::StrokeKind::Middle);
         }
         if st.rulers {
             // centimetres (a staff space is 1.75 mm on a 21 cm page)
@@ -1423,6 +1459,30 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                                 let y = y_at(bottom, h.pos, sp);
                                 let (a, b) = (x_of(n.pos as f32) + 0.8 * sp, x_of((n.pos + n.len) as f32) + 0.8 * sp);
                                 mp.rect_filled(Rect::from_min_max(pos2(a, y - 0.18 * sp), pos2(b, y + 0.18 * sp)), 1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 140));
+                                // its end point: drag to change the note's length
+                                let er = Rect::from_center_size(pos2(b, y), vec2(8.0, (0.8 * sp).max(6.0)));
+                                if er.intersects(music) {
+                                    let resp = ui.interact(er, ui.scope_id().with(("sc-dur", li, row.t, seg.rix, h.note)), Sense::drag());
+                                    if resp.hovered() || resp.dragged() {
+                                        ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                                    }
+                                    if resp.drag_started() {
+                                        app.checkpoint("Change Note Length");
+                                    }
+                                    if let (true, Some(pp)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                                        let (q, _, _) = quant_of(app, row.id);
+                                        let grid = if st.snap { nt::Quant::CHOICES[q].1.straight as f32 } else { 10.0 };
+                                        let end = ((line.tick_of(pp.x - 0.8 * sp, bar_t) - n.pos as f32) / grid).round() * grid;
+                                        let len = end.max(grid) as u32;
+                                        if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(row.t)?.regions.get_mut(seg.rix)?.notes.get_mut(h.note)) {
+                                            x.len = len;
+                                        }
+                                        app.help_tag = Some(vec![("Length:".into(), crate::app::bbdt_len(len, sig))]);
+                                    }
+                                    if resp.drag_stopped() {
+                                        app.after_edit();
+                                    }
+                                }
                             }
                         }
                     }
@@ -1468,8 +1528,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             crate::scoreattr::double_click(app, &ctx, row.t, seg.rix, h.note);
                         }
                     }
-                    if dragging && st.guides && selected(h.note) && *piece == 1 {
+                    if dragging && st.guide_mode == 1 && selected(h.note) && *piece == 1 {
                         guide_x = Some(c.x);
+                    }
+                    // Guides ▸ Selected Objects / All Objects: a line at every such note's position
+                    if *piece == 1 && !st.printing && (st.guide_mode == 3 || (st.guide_mode == 2 && selected(h.note))) {
+                        let col = if selected(h.note) { sel_color } else { Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 110) };
+                        mp.vline(c.x, line.top - 5.0 * sp..=line.top + block_h, Stroke::new(1.0, col));
                     }
                 }
             }
@@ -1587,6 +1652,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         app.selected_notes.clear();
                         symbol_clicked = true;
                     }
+                    // double-click (Pointer) or a Text tool click: edit its text in place
+                    let editable = matches!(s.kind, SymbolKind::Text | SymbolKind::Lyric | SymbolKind::Chord);
+                    if editable && (resp.double_clicked() || (resp.clicked() && tool == 3)) {
+                        st.typing = Some((row.t, s.tick, s.kind, s.staff, s.text.clone(), r.left_bottom() + vec2(0.0, 4.0)));
+                        crate::scoreattr::set_editing(&ctx, Some((row.id, si)));
+                    }
                     if resp.dragged() || resp.drag_stopped() {
                         let (from, now) = ctx.input(|i| (i.pointer.press_origin(), i.pointer.interact_pos()));
                         if let (Some(from), Some(now)) = (from, now) {
@@ -1693,6 +1764,27 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if let Some(x) = guide_x {
         mp.vline(x, music.y_range(), Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 160)));
     }
+    // the Voice Separation tool: a line drawn between notes; those below it go to the next
+    // lower voice (its MIDI channel)
+    if tool == 6 {
+        let mut path = crate::scoreattr::vs_path(&ctx);
+        if bg.drag_started() {
+            path.clear();
+        }
+        if bg.dragged() {
+            if let Some(pp) = ctx.input(|i| i.pointer.interact_pos()) {
+                crate::scoreattr::vs_extend(&mut path, pp);
+            }
+        }
+        if path.len() > 1 {
+            mp.add(Shape::line(path.clone(), Stroke::new(1.5, Color32::from_rgb(0xd0, 0x30, 0x30))));
+        }
+        if bg.drag_stopped() {
+            crate::scoreattr::vs_apply(app, &path, &head_rects);
+            path.clear();
+        }
+        crate::scoreattr::vs_store(&ctx, path);
+    }
     // a rubber band on the background (Pointer): selects the notes inside it (Shift adds)
     if tool == 0 && pressed.is_none() && (bg.dragged() || bg.drag_stopped()) {
         if let (Some(a), Some(b)) = (ctx.input(|i| i.pointer.press_origin()), ctx.input(|i| i.pointer.interact_pos())) {
@@ -1758,7 +1850,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_notes = vec![note];
             }
         }
-        if drag && attr_tool {
+        let vel = ui.input(|i| i.modifiers.ctrl && (i.modifiers.mac_cmd || i.modifiers.command) && i.modifiers.alt == false);
+        if drag && vel && tool != 2 {
+            // Control-Command-drag: the selected notes' velocity
+            if let Some(pp) = ui.input(|i| i.pointer.press_origin()) {
+                crate::scoreattr::start_velocity(app, &ctx, t, rix, pp);
+            }
+        } else if drag && attr_tool {
             if let Some(pp) = ui.input(|i| i.pointer.press_origin()) {
                 crate::scoreattr::start_drag(app, &ctx, tool == crate::scoreattr::RESIZE, pp);
             }
@@ -1774,6 +1872,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     crate::scoreattr::follow_drag(app, &ctx, sp);
+    crate::scoreattr::follow_velocity(app, &ctx);
     // a drag: diatonic steps up and down, time on the display grid (or the tick with Snap off)
     if let Some(d) = st.drag.clone() {
         let (pointer, down) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.primary_down()));
@@ -1885,7 +1984,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // (the Text tool: a text object where clicked)
         let keep_part = st.part;
         if one_click && tool == 3 {
-            st.part = Part::Text(0);
+            // (the Part box's text object chosen is used — Lyric, Chord…; Option: a chord
+            // symbol whenever a text object is chosen; else plain text)
+            st.part = match st.part {
+                Part::Text(_) if ui.input(|i| i.modifiers.alt) => Part::Text(2),
+                Part::Text(k) => Part::Text(k),
+                _ => Part::Text(0),
+            };
         }
         if let Some(part) = dropped {
             st.part = part;
@@ -1928,7 +2033,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if let Some((t, tick, kind, staff, mut text, at)) = st.typing.clone() {
         let mut done = None;
         let mut tab = false;
-        egui::Area::new(egui::Id::unique("lg-score-typing")).fixed_pos(at).order(egui::Order::Foreground).show(&ctx, |ui| {
+        let area_resp = egui::Area::new(egui::Id::unique("lg-score-typing")).fixed_pos(at).order(egui::Order::Foreground).show(&ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.label(egui::RichText::new(match kind {
                     SymbolKind::Lyric => "Lyric",
@@ -1947,11 +2052,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             });
         });
+        // (a click outside the field ends Text Entry, keeping the text)
+        let outside = ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !area_resp.response.rect.contains(p)));
+        if outside && done.is_none() {
+            done = Some(true);
+        }
         st.typing = Some((t, tick, kind, staff, text.clone(), at));
         if let Some(ok) = done {
             st.typing = None;
+            let editing = crate::scoreattr::take_editing(&ctx);
             if ok && !text.trim().is_empty() {
-                add_symbol(app, t, Symbol { tick, kind, text: text.trim().to_string(), len: 0, staff, ..Default::default() }, "Insert Text");
+                if let Some((rid, si)) = editing {
+                    crate::scoreattr::edit_symbol_text(app, rid, si, text.trim());
+                } else {
+                    add_symbol(app, t, Symbol { tick, kind, text: text.trim().to_string(), len: 0, staff, ..Default::default() }, "Insert Text");
+                }
             }
             // Tab: on to the next note for the next chord symbol or syllable
             if tab {
@@ -3204,6 +3319,16 @@ pub(crate) fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pages_in_pairs() {
+        let music = Rect::from_min_size(pos2(0.0, 0.0), vec2(1000.0, 800.0));
+        assert_eq!(page_slot(3, false, 50.0, music, 400.0, 20.0), (3, 50.0));
+        // page 1 alone on the right, then 2 | 3, 4 | 5
+        assert_eq!(page_slot(0, true, 0.0, music, 400.0, 20.0), (0, 510.0));
+        assert_eq!(page_slot(1, true, 0.0, music, 400.0, 20.0), (1, 90.0));
+        assert_eq!(page_slot(2, true, 0.0, music, 400.0, 20.0), (1, 510.0));
+    }
 
     #[test]
     fn rubber_band_takes_one_regions_notes() {

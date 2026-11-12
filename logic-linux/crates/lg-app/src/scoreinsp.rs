@@ -331,13 +331,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // Region:
     let n_regions = { let mut v = app.selected_regions.clone(); v.extend(app.selected_region); v.sort_unstable(); v.dedup(); v.len() };
-    let rname = if n_regions > 1 { format!("{n_regions} selected") } else { sel.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone()).unwrap_or_default() };
+    let rname = if sel.is_none() { "Insert Defaults".to_string() } else if n_regions > 1 { format!("{n_regions} selected") } else { sel.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone()).unwrap_or_default() };
     if header(ui, area, y, "si-region", "Region:", &rname, pb.region_open) {
         pb.region_open = !pb.region_open;
     }
     y += HEAD + 1.0;
     if pb.region_open {
-        if let Some(t) = t {
+        if sel.is_none() {
+            // no region selected: the Insert Defaults new regions take
+            y = defaults_rows(app, ui, area, y);
+        } else if let Some(t) = t {
             y = region_rows(app, ui, area, y, t);
         }
     }
@@ -466,6 +469,40 @@ fn linear_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, st: &mu
                 app.after_edit();
             }
         }
+    }
+    y += ROW + 6.0;
+    p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
+    y + 1.0
+}
+
+/// The Insert Defaults (no region selected): Quantize (with Default: from the LCD division),
+/// Interpretation, Syncopation, No Overlap, Max. Dots; no Style (a track's).
+fn defaults_rows(_app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32) -> f32 {
+    section(y);
+    let p = ui.painter().clone();
+    let id = ui.scope_id().with("si-defaults");
+    let mut d = crate::scoreattr::defaults();
+    let before = d.clone();
+    let mut qn: Vec<String> = vec!["Default".to_string()];
+    qn.extend(nt::Quant::CHOICES.iter().map(|q| q.0.to_string()));
+    let cur = if d.quantize.is_empty() { 0 } else { nt::Quant::CHOICES.iter().position(|q| q.0 == d.quantize).map_or(0, |k| k + 1) };
+    label(&p, area, y, "Quantize");
+    if let Some(k) = popup(ui, slot(area, y), id.with("q"), cur, &qn) {
+        d.quantize = if k == 0 { String::new() } else { nt::Quant::CHOICES[k - 1].0.to_string() };
+    }
+    y += ROW;
+    for (l, v) in [("Interpretation", &mut d.interp), ("Syncopation", &mut d.synco), ("No Overlap", &mut d.no_overlap)] {
+        label(&p, area, y, l);
+        check(ui, slot(area, y), id.with(l), v);
+        y += ROW;
+    }
+    label(&p, area, y, "Max. Dots");
+    let mut m = d.max_dots as f32;
+    if value(ui, slot(area, y), id.with("dots"), &mut m, 0.0, 3.0, &|v| format!("{v:.0}")) {
+        d.max_dots = m as u8;
+    }
+    if d != before {
+        crate::scoreattr::set_defaults(d);
     }
     y += ROW + 6.0;
     p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));

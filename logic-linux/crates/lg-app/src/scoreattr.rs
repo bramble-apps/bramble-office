@@ -9,7 +9,7 @@ use crate::app::App;
 use crate::score;
 use lg_core::score::{NoteAttr, NOTE_HEADS};
 
-pub const COMMANDS: &[&str] = &["Set Resize Tool", "Resize Tool", "Align Object Positions Vertically", "Align Object Positions Horizontally", "Align Object Positions"];
+pub const COMMANDS: &[&str] = &["Set Resize Tool", "Resize Tool", "Align Object Positions Vertically", "Align Object Positions Horizontally", "Align Object Positions", "Show Margins", "Show Pages in Pairs", "Set Pointer Tool", "Set Pencil Tool", "Set Eraser Tool", "Set Text Tool", "Set Layout Tool", "Set Zoom Tool", "Set Voice Separation Tool", "Set Solo Tool"];
 
 /// The Resize tool's index in `score::TOOLS`.
 pub const RESIZE: usize = 9;
@@ -17,6 +17,23 @@ pub const RESIZE: usize = 9;
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     if !COMMANDS.contains(&name) {
         return false;
+    }
+    if let Some(tool) = name.strip_prefix("Set ").and_then(|n| n.strip_suffix(" Tool")).filter(|n| *n != "Resize") {
+        // the tools' key commands pick the Score's tool while it has key focus
+        if crate::focus::keymap_focus(app, ctx) != crate::keymap::Focus::Score {
+            return false;
+        }
+        let Some(k) = score::TOOLS.iter().position(|t| *t == tool) else { return false };
+        score::with_state(ctx, |s| s.tool = k);
+        return true;
+    }
+    if matches!(name, "Show Margins" | "Show Pages in Pairs") {
+        // (Page Display Options: Page view only)
+        if score::state(ctx).view != score::View::Page {
+            return false;
+        }
+        score::with_state(ctx, |s| if name == "Show Margins" { s.margins_shown = !s.margins_shown } else { s.pairs = !s.pairs });
+        return true;
     }
     if name.starts_with("Align Object Positions") {
         // one object selected: Logic asks whether all similar objects take its position
@@ -213,8 +230,43 @@ fn items_sub(app: &mut App, ui: &mut egui::Ui, items: &[crate::menus::Item], sub
     }
 }
 
-/// menus.rs hook: the local Functions menu's Note Attributes submenu, run by submenu.
+/// View ▸ Guides and Duration Bars (their items share "Off"): the mode, checked.
+fn view_modes(ui: &mut egui::Ui, it: &crate::menus::Item) -> bool {
+    let guides = it.label == "Guides";
+    if !(guides || it.label == "Duration Bars") || it.children.is_empty() {
+        return false;
+    }
+    let ctx = ui.ctx().clone();
+    let st = score::state(&ctx);
+    let cur = if guides { st.guide_mode } else { st.duration_bars };
+    ui.menu_button(it.label.clone(), |ui| {
+        for (k, c) in it.children.iter().filter(|c| !c.separator).enumerate() {
+            let label = if k as u8 == cur { format!("✓ {}", c.label) } else { c.label.clone() };
+            if ui.button(label).clicked() {
+                score::with_state(&ctx, |s| {
+                    if guides {
+                        s.guide_mode = k as u8;
+                        s.guides = k != 0;
+                        if k != 3 {
+                            s.guide_last = k as u8;
+                        }
+                    } else {
+                        s.duration_bars = k as u8;
+                    }
+                });
+                ui.close();
+            }
+        }
+    });
+    true
+}
+
+/// menus.rs hook: the local Functions menu's Note Attributes submenu, run by submenu; View ▸
+/// Guides and Duration Bars.
 pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> bool {
+    if view_modes(ui, it) {
+        return true;
+    }
     if it.label != "Note Attributes" || it.children.is_empty() {
         return false;
     }
@@ -325,7 +377,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     let mut change: Option<(usize, usize)> = None;
     let fields = fields();
     let mut done = false;
-    egui::Window::new("Note Attributes").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+    egui::Window::new("Note Attributes").open(&mut open).resizable(false).collapsible(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
         ui.label(egui::RichText::new(format!("{}  ·  {}", crate::app::note_name(n.pitch), crate::app::bbdt(n.pos, p.signature))).strong());
         ui.add_space(4.0);
         egui::Grid::new("lg-note-attr-grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -347,9 +399,11 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             if ui.button("Reset All Attributes").clicked() {
                 change = Some((usize::MAX, 0));
             }
-            if ui.button("OK").clicked() {
-                done = true;
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add(egui::Button::new("OK").min_size(egui::vec2(64.0, 0.0))).clicked() {
+                    done = true;
+                }
+            });
         });
     });
     if let Some((k, c)) = change {
@@ -374,6 +428,142 @@ pub fn scale_quantize(notes: &mut [lg_core::events::Note], sel: &[usize], scale:
         }
         n.pitch = if n.pitch > 0 && scale[((n.pitch - 1) % 12) as usize] { n.pitch - 1 } else { (n.pitch + 1).min(127) };
     }
+}
+
+// ---------------------------------------------------------------- editing a text in place
+
+fn edit_id() -> egui::Id {
+    egui::Id::new("lg-score-text-edit")
+}
+
+/// The text symbol being edited (track id, index), while Text Entry runs.
+pub fn set_editing(ctx: &egui::Context, target: Option<(u64, usize)>) {
+    ctx.data_mut(|d| d.insert_temp(edit_id(), target));
+}
+
+pub fn take_editing(ctx: &egui::Context) -> Option<(u64, usize)> {
+    ctx.data_mut(|d| d.remove_temp::<Option<(u64, usize)>>(edit_id())).flatten()
+}
+
+/// A text, lyric or chord symbol's new text (one undo step).
+pub fn edit_symbol_text(app: &mut App, track_id: u64, si: usize, text: &str) {
+    app.checkpoint("Edit Text");
+    if let Some(x) = app.project.as_mut().and_then(|p| p.score.track_mut(track_id).symbols.get_mut(si)) {
+        x.text = text.to_string();
+    }
+    app.after_edit();
+}
+
+// ---------------------------------------------------------------- the Voice Separation tool
+
+/// Adds a point to a Voice Separation line: moving back left erases the line right of it.
+pub fn vs_extend(path: &mut Vec<egui::Pos2>, p: egui::Pos2) {
+    path.retain(|q| q.x <= p.x);
+    path.push(p);
+}
+
+/// Whether a point is below the line (None: outside its span).
+pub fn vs_below(path: &[egui::Pos2], c: egui::Pos2) -> Option<bool> {
+    let w = path.windows(2).find(|w| c.x >= w[0].x && c.x <= w[1].x)?;
+    let f = if w[1].x > w[0].x { (c.x - w[0].x) / (w[1].x - w[0].x) } else { 0.0 };
+    Some(c.y > w[0].y + (w[1].y - w[0].y) * f)
+}
+
+/// The channel the Voice Separation line gives a note below it: the next lower voice's (its
+/// MIDI channel), else the note's channel + 1.
+pub fn vs_channel(def: &lg_core::staffstyle::StaffStyleDef, pitch: u8, channel: u8) -> u8 {
+    let vi = def.voice_for(pitch, channel);
+    match def.voices.get(vi + 1) {
+        Some(v) if v.channel > 0 => v.channel - 1,
+        _ => (channel + 1).min(15),
+    }
+}
+
+/// Applies a finished line to the heads drawn (track, region, note, rect): the notes below it
+/// in the region it crosses first go to the next lower voice. One undo step; how many moved.
+pub fn vs_apply(app: &mut App, path: &[egui::Pos2], heads: &[(usize, usize, usize, egui::Rect)]) -> usize {
+    let Some(&(t, r, _, _)) = heads.iter().find(|h| vs_below(path, h.3.center()).is_some()) else { return 0 };
+    let below: Vec<usize> = heads.iter().filter(|h| (h.0, h.1) == (t, r) && vs_below(path, h.3.center()) == Some(true)).map(|h| h.2).collect();
+    if below.is_empty() {
+        return 0;
+    }
+    let def = score::def_of(app, t);
+    app.checkpoint("Voice Separation");
+    let mut n = 0;
+    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+        let mut done: Vec<usize> = Vec::new();
+        for i in below {
+            if done.contains(&i) {
+                continue;
+            }
+            done.push(i);
+            if let Some(nn) = rg.notes.get_mut(i) {
+                nn.channel = vs_channel(&def, nn.pitch, nn.channel);
+                n += 1;
+            }
+        }
+    }
+    app.after_edit();
+    n
+}
+
+fn vs_id() -> egui::Id {
+    egui::Id::new("lg-score-voice-sep")
+}
+
+/// The line being drawn (Voice Separation tool), kept between frames.
+pub fn vs_path(ctx: &egui::Context) -> Vec<egui::Pos2> {
+    ctx.data(|d| d.get_temp::<Vec<egui::Pos2>>(vs_id())).unwrap_or_default()
+}
+
+pub fn vs_store(ctx: &egui::Context, path: Vec<egui::Pos2>) {
+    ctx.data_mut(|d| d.insert_temp(vs_id(), path));
+}
+
+// ---------------------------------------------------------------- Insert Defaults
+
+/// The region parameters new regions take (Logic: the Region inspector with no region
+/// selected); kept until Studio quits. Quantize "" = Default (from the LCD division).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Defaults {
+    pub quantize: String,
+    pub interp: bool,
+    pub synco: bool,
+    pub no_overlap: bool,
+    pub max_dots: u8,
+}
+
+static DEFAULTS: std::sync::Mutex<Option<Defaults>> = std::sync::Mutex::new(None);
+
+pub fn defaults() -> Defaults {
+    DEFAULTS.lock().ok().and_then(|d| d.clone()).unwrap_or(Defaults { quantize: String::new(), interp: true, synco: false, no_overlap: true, max_dots: 1 })
+}
+
+pub fn set_defaults(d: Defaults) {
+    if let Ok(mut x) = DEFAULTS.lock() {
+        *x = Some(d);
+    }
+}
+
+/// Quantize Default: the LCD division's duple value with the next triple value (1/8 → 8,12,
+/// 1/12 → 4,12, 1/16 → 16,24, 1/24 → 8,24; finer → 16,24).
+pub fn quant_for_division(div: u32) -> &'static str {
+    match div {
+        960.. => "4",
+        480..=959 if div != 640 => "8,12",
+        640 | 320 => "4,12",
+        240 => "16,24",
+        160 => "8,24",
+        _ => "16,24",
+    }
+}
+
+/// The display Quantize, Interpretation and Syncopation a region without its own parameters reads.
+pub fn defaults_quant(app: &App) -> (usize, bool, bool) {
+    let d = defaults();
+    let name = if d.quantize.is_empty() { quant_for_division(app.nav.division) } else { d.quantize.as_str() };
+    let q = lg_notation::Quant::CHOICES.iter().position(|c| c.0 == name).unwrap_or(9);
+    (q, d.interp, d.synco)
 }
 
 // ---------------------------------------------------------------- symbol drags
@@ -447,6 +637,68 @@ pub fn apply_symbol_drag(app: &mut App, track_id: u64, si: usize, m: &SymMove, c
         }
     }
     app.after_edit();
+}
+
+// ---------------------------------------------------------------- velocity drags
+
+/// A Control-Command drag on a selected note: the selected notes' velocities, up / down.
+#[derive(Clone)]
+struct VelDrag {
+    t: usize,
+    rix: usize,
+    notes: Vec<usize>,
+    orig: Vec<u8>,
+    from: egui::Pos2,
+    started: bool,
+}
+
+fn vel_id() -> egui::Id {
+    egui::Id::new("lg-score-vel-drag")
+}
+
+pub fn start_velocity(app: &App, ctx: &egui::Context, t: usize, rix: usize, from: egui::Pos2) {
+    let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(rix)) else { return };
+    let notes = app.selected_notes.clone();
+    let orig = notes.iter().map(|&i| rg.notes.get(i).map_or(64, |n| n.velocity)).collect();
+    ctx.data_mut(|d| d.insert_temp(vel_id(), Some(VelDrag { t, rix, notes, orig, from, started: false })));
+}
+
+/// A velocity after dragging `dy` points (up raises it, a point a step).
+pub fn dragged_velocity(orig: u8, dy: f32) -> u8 {
+    (orig as i32 - dy.round() as i32).clamp(1, 127) as u8
+}
+
+/// Follows a running velocity drag; true while one runs.
+pub fn follow_velocity(app: &mut App, ctx: &egui::Context) -> bool {
+    let Some(mut d) = ctx.data(|x| x.get_temp::<Option<VelDrag>>(vel_id())).flatten() else { return false };
+    let (pos, down) = ctx.input(|i| (i.pointer.interact_pos(), i.pointer.primary_down()));
+    if let Some(pp) = pos {
+        let dy = pp.y - d.from.y;
+        if !d.started && dy.abs() > 1.0 {
+            app.checkpoint("Change Velocity");
+            d.started = true;
+        }
+        if d.started {
+            if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(d.t)?.regions.get_mut(d.rix)) {
+                for (k, &i) in d.notes.iter().enumerate() {
+                    if let Some(n) = rg.notes.get_mut(i) {
+                        n.velocity = dragged_velocity(d.orig[k], dy);
+                    }
+                }
+            }
+            let v = dragged_velocity(d.orig.first().copied().unwrap_or(64), dy);
+            app.help_tag = Some(vec![("Velocity:".into(), v.to_string())]);
+        }
+    }
+    if !down {
+        if d.started {
+            app.after_edit();
+        }
+        ctx.data_mut(|x| x.insert_temp::<Option<VelDrag>>(vel_id(), None));
+        return false;
+    }
+    ctx.data_mut(|x| x.insert_temp(vel_id(), Some(d)));
+    true
 }
 
 // ---------------------------------------------------------------- Region ▸ Score Show / Hide
@@ -607,6 +859,8 @@ mod tests {
         let id = app.project.as_ref().unwrap().tracks[0].extra.id;
         app.project.as_mut().unwrap().score.track_mut(id).symbols.push(s.clone());
         apply_symbol_drag(&mut app, id, 0, &m, true);
+        edit_symbol_text(&mut app, id, 1, "cresc.");
+        assert_eq!(app.project.as_ref().unwrap().score.track(id).unwrap().symbols[1].text, "cresc.");
         assert_eq!(app.project.as_ref().unwrap().score.track(id).unwrap().symbols.len(), 2, "Option copies");
         // Align Object Positions Vertically: the similar objects take the first's height
         app.project.as_mut().unwrap().score.track_mut(id).symbols[0].dy = 30;
@@ -615,7 +869,53 @@ mod tests {
     }
 
     #[test]
+    fn insert_defaults_follow_the_division() {
+        assert_eq!(quant_for_division(480), "8,12");
+        assert_eq!(quant_for_division(320), "4,12");
+        assert_eq!(quant_for_division(240), "16,24");
+        assert_eq!(quant_for_division(160), "8,24");
+        for q in ["8,12", "4,12", "16,24", "8,24"] {
+            assert!(lg_notation::Quant::CHOICES.iter().any(|c| c.0 == q), "{q}");
+        }
+        let mut app = crate::tm::test_app();
+        app.nav.division = 160;
+        assert_eq!(lg_notation::Quant::CHOICES[defaults_quant(&app).0].0, "8,24");
+        // a set value wins over the division
+        set_defaults(Defaults { quantize: "8".into(), interp: false, synco: true, no_overlap: false, max_dots: 2 });
+        let (q, i, s) = defaults_quant(&app);
+        assert_eq!((lg_notation::Quant::CHOICES[q].0, i, s), ("8", false, true));
+        set_defaults(Defaults { quantize: String::new(), interp: true, synco: false, no_overlap: true, max_dots: 1 });
+    }
+
+    #[test]
+    fn voice_separation_line() {
+        let mut path = Vec::new();
+        for (x, y) in [(0.0, 10.0), (10.0, 10.0), (20.0, 20.0), (30.0, 20.0)] {
+            vs_extend(&mut path, egui::pos2(x, y));
+        }
+        // moving back left erases the part to its right
+        vs_extend(&mut path, egui::pos2(15.0, 12.0));
+        assert_eq!(path.len(), 3);
+        assert_eq!(vs_below(&path, egui::pos2(5.0, 12.0)), Some(true));
+        assert_eq!(vs_below(&path, egui::pos2(5.0, 8.0)), Some(false));
+        assert_eq!(vs_below(&path, egui::pos2(40.0, 8.0)), None);
+        let def = lg_core::staffstyle::StaffStyleDef::dual("x");
+        assert!(vs_channel(&def, 60, 0) <= 15);
+        let mut app = crate::tm::test_app();
+        let (t, r) = {
+            let p = app.project.as_ref().unwrap();
+            let t = p.tracks.iter().position(|t| t.regions.iter().any(|r| r.audio.is_none() && r.notes.len() > 1)).unwrap();
+            (t, p.tracks[t].regions.iter().position(|r| r.audio.is_none() && r.notes.len() > 1).unwrap())
+        };
+        let ch = app.project.as_ref().unwrap().tracks[t].regions[r].notes[1].channel;
+        let heads = [(t, r, 0, egui::Rect::from_center_size(egui::pos2(5.0, 5.0), egui::vec2(2.0, 2.0))), (t, r, 1, egui::Rect::from_center_size(egui::pos2(5.0, 15.0), egui::vec2(2.0, 2.0)))];
+        assert_eq!(vs_apply(&mut app, &path, &heads), 1);
+        assert_ne!(app.project.as_ref().unwrap().tracks[t].regions[r].notes[1].channel, ch);
+    }
+
+    #[test]
     fn colors_and_drags() {
+        assert_eq!((dragged_velocity(80, -10.0), dragged_velocity(5, 50.0), dragged_velocity(120, -40.0)), (90, 1, 127));
         assert_eq!(color_value("Color 0"), Some(1));
         assert_eq!(color_value("Color 15"), Some(16));
         assert_eq!(color_value("Color 16"), None);
