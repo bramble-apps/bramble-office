@@ -1033,6 +1033,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // files dropped from the desktop onto the pane
     let dropped: Vec<PathBuf> = ui.ctx().input(|i| if i.pointer.hover_pos().is_some_and(|p| area.contains(p)) { i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| crate::soundlib::is_audio(p)).collect() } else { Vec::new() });
     if !dropped.is_empty() {
+        crate::share::took_drop();
         add_files(app, dropped);
     }
     dialogs(app, ui.ctx());
