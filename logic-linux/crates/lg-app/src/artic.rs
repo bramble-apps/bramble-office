@@ -1001,3 +1001,24 @@ mod tests {
         assert_eq!(note_artic(&r, &r.notes[0].clone()), None);
     }
 }
+
+/// Whether track `t` has an articulation set (the Score's note menu shows Articulation ▸).
+pub fn has_set(app: &mut App, t: usize) -> bool {
+    load(app);
+    app.artic.tracks.get(&t).is_some_and(|s| !s.artics.is_empty())
+}
+
+/// The Score's note Control-click Articulation submenu: the track's set, for the selected notes.
+pub fn note_menu(app: &mut App, ui: &mut egui::Ui, t: usize) {
+    let Some(set) = app.artic.tracks.get(&t).cloned() else { return };
+    if ui.button("No Articulation").clicked() {
+        command(app, "Set No Articulation");
+        ui.close();
+    }
+    for a in &set.artics {
+        if ui.button(format!("{} {}", a.id, a.name)).clicked() {
+            command(app, &format!("Set Articulation {:>2}", a.id));
+            ui.close();
+        }
+    }
+}

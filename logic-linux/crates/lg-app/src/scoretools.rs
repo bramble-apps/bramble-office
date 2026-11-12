@@ -7,7 +7,7 @@ use crate::score::{self, State, View, TOOLS};
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 
 /// The tools' icons, in `TOOLS` order.
-pub const ICONS: [&str; 9] = [glyphs::ph_fill::CURSOR, glyphs::ph::PENCIL_SIMPLE, glyphs::ph::ERASER, glyphs::ph::TEXT_T, glyphs::ph::LAYOUT, glyphs::ph::MAGNIFYING_GLASS, glyphs::ph::ARROWS_SPLIT, glyphs::ph::HEADPHONES, glyphs::ph::CAMERA];
+pub const ICONS: [&str; 10] = [glyphs::ph_fill::CURSOR, glyphs::ph::PENCIL_SIMPLE, glyphs::ph::ERASER, glyphs::ph::TEXT_T, glyphs::ph::LAYOUT, glyphs::ph::MAGNIFYING_GLASS, glyphs::ph::ARROWS_SPLIT, glyphs::ph::HEADPHONES, glyphs::ph::CAMERA, glyphs::ph::ARROWS_OUT_SIMPLE];
 
 const H: f32 = 24.0;
 
@@ -49,7 +49,8 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
         glyphs::paint(&p, Rect::from_center_size(pos2(half.min.x + 14.0, y), vec2(16.0, 16.0)), ICONS[cur], 14.0, look::text());
         glyphs::paint(&p, Rect::from_center_size(pos2(half.max.x - 11.0, y), vec2(10.0, 10.0)), glyphs::ph::CARET_DOWN, 9.0, look::text());
         egui::Popup::menu(&r).show(|ui| {
-            for (t, n) in TOOLS.iter().enumerate() {
+            for t in score::TOOL_ORDER {
+                let n = TOOLS[t];
                 // the Camera works in Page view
                 let ok = t != 8 || st.view == View::Page;
                 if ui.add_enabled(ok, egui::Button::selectable(cur == t, format!("{}  {n}", ICONS[t]))).clicked() {

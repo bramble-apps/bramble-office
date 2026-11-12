@@ -276,7 +276,9 @@ pub struct State {
 }
 
 /// The Score Editor's tools (Tool menus).
-pub const TOOLS: [&str; 9] = ["Pointer", "Pencil", "Eraser", "Text", "Layout", "Zoom", "Voice Separation", "Solo", "Camera"];
+pub const TOOLS: [&str; 10] = ["Pointer", "Pencil", "Eraser", "Text", "Layout", "Zoom", "Voice Separation", "Solo", "Camera", "Resize"];
+/// The Tool menus' order (Resize after Layout, as Logic lists it).
+pub const TOOL_ORDER: [usize; 10] = [0, 1, 2, 3, 4, 9, 5, 6, 7, 8];
 
 impl State {
     /// The tool a click uses now (Command held: the Command-click tool).
@@ -333,6 +335,33 @@ impl Default for State {
             pinned: None,
         }
     }
+}
+
+/// Selects every MIDI region shown of track `t` and of the shown tracks on its channel strip.
+fn select_instrument(app: &mut App, shown: &[usize], t: usize) {
+    let Some(p) = app.project.as_ref() else { return };
+    let strip = |k: usize| crate::tm::strip_owner(app, k);
+    let mine = strip(t);
+    let regions: Vec<(usize, usize)> = shown
+        .iter()
+        .filter(|&&k| k == t || strip(k) == mine)
+        .flat_map(|&k| p.tracks.get(k).into_iter().flat_map(move |tr| tr.regions.iter().enumerate().filter(|(_, r)| r.audio.is_none()).map(move |(ri, _)| (k, ri))))
+        .collect();
+    let Some(&first) = regions.first() else { return };
+    app.selected_regions = regions;
+    app.selected_region = Some(first);
+    app.selected_track = Some(t);
+    app.selected_notes.clear();
+}
+
+/// The notes a rubber band takes: those of the first region it touches, in order.
+fn band_select(heads: &[(usize, usize, usize, Rect)], band: Rect) -> Option<((usize, usize), Vec<usize>)> {
+    let first = heads.iter().find(|h| band.intersects(h.3))?;
+    let region = (first.0, first.1);
+    let mut notes: Vec<usize> = heads.iter().filter(|h| (h.0, h.1) == region && band.intersects(h.3)).map(|h| h.2).collect();
+    notes.sort_unstable();
+    notes.dedup();
+    Some((region, notes))
 }
 
 #[derive(Clone, Debug)]
@@ -625,8 +654,14 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
         cuts.sort_unstable();
         cuts.dedup();
         let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_regions;
+        let alone = rows.iter().all(|r| r.t == row.t);
         for (rix, region) in track.regions.iter().enumerate() {
             if region.audio.is_some() || (hide_muted && region.muted) {
+                continue;
+            }
+            // (Region inspector ▸ Score ▸ Hide: shown only at the region's own level)
+            let hidden = p.score.track(row.id).is_some_and(|x| x.hidden.contains(&region.start));
+            if crate::scoreattr::region_left_out(hidden, alone && app.selected_region == Some((row.t, rix))) {
                 continue;
             }
             let from = region.start / bar_t * bar_t;
@@ -747,7 +782,13 @@ fn note_color(colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
             egui::ecolor::Hsva::new(h, 0.85, 0.75, 1.0).into()
         }
         Colors::Voice => if voice == 0 { Color32::from_rgb(0x20, 0x50, 0xc0) } else { Color32::from_rgb(0xc0, 0x40, 0x20) },
-        Colors::Normal => PALETTE[attr.color as usize % 16],
+        Colors::Normal => match attr.color {
+            // (a note's own Pitch / Velocity Color, Color 0–15)
+            17 => note_color(Colors::Pitch, n, voice, attr),
+            18 => note_color(Colors::Velocity, n, voice, attr),
+            0 => INK,
+            c => PALETTE[(c as usize - 1) % 16],
+        },
     }
 }
 
@@ -1051,6 +1092,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let project_tracks: Vec<lg_core::Track> = app.project.as_ref().map(|p| tracks.iter().map(|&t| p.tracks[t].clone()).collect()).unwrap_or_default();
     let track_of = |t: usize| -> Option<&lg_core::Track> { tracks.iter().position(|&x| x == t).and_then(|k| project_tracks.get(k)) };
     let dragging = st.drag.is_some();
+    // (every head drawn, for a rubber-band selection: track, region, note, rect)
+    let mut head_rects: Vec<(usize, usize, usize, Rect)> = Vec::new();
+    // (instrument names drawn: a click selects the track's regions)
+    let mut name_hits: Vec<(Rect, usize)> = Vec::new();
     let mut guide_x: Option<f32> = None;
     let mut symbol_clicked = false;
     let repeated = score.repeated_bars(bar_t as u32);
@@ -1106,7 +1151,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let name = if st.names { Some(row.name.clone()) } else { fmt.name_for(&row.name, true) };
                 if let (Some(name), true) = (name, rk == 0 || rows[rk - 1].t != row.t) {
                     let (nx, al) = if fmt.names_right && !st.names { (head.min.x + 84.0, Align2::RIGHT_CENTER) } else { (head.min.x + 6.0, Align2::LEFT_CENTER) };
-                    headp.text(pos2(nx, bottom - 2.0 * sp), al, name, look::regular(12.0), INK);
+                    let nr = headp.text(pos2(nx, bottom - 2.0 * sp), al, name, look::regular(12.0), INK);
+                    name_hits.push((nr, row.t));
                 }
                 draw_header(&headp, x, bottom, sp, fmt.clefs != crate::scoreset::Show::Hide, clef, octave, if fmt.keys != crate::scoreset::Show::Hide { key } else { nt::Key::default() }, (fmt.times != crate::scoreset::Show::Hide).then_some(sig));
                 // a click on the key or the time signature opens its window
@@ -1123,11 +1169,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first).map(|n| if !row.short.is_empty() && n != row.name { row.short.clone() } else { n }) };
                 if let Some(name) = name {
                     if names_beside {
-                        mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, name, look::regular(1.5 * sp), INK);
+                        let nr = mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, name, look::regular(1.5 * sp), INK);
+                        name_hits.push((nr, row.t));
                     } else {
                         // (above the staff, at the left or the right of the line)
                         let x = if fmt.names_right { line_x1 } else { line.x_start };
-                        mp.text(pos2(x, bottom - 4.0 * sp - 2.2 * sp), if fmt.names_right { Align2::RIGHT_BOTTOM } else { Align2::LEFT_BOTTOM }, name, look::regular(1.5 * sp), INK);
+                        let nr = mp.text(pos2(x, bottom - 4.0 * sp - 2.2 * sp), if fmt.names_right { Align2::RIGHT_BOTTOM } else { Align2::LEFT_BOTTOM }, name, look::regular(1.5 * sp), INK);
+                        name_hits.push((nr, row.t));
                     }
                 }
             }
@@ -1346,7 +1394,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     return match seg.vdef.color {
                         1 => note_color(Colors::Pitch, &n, 0, &a),
                         2 => note_color(Colors::Velocity, &n, 0, &a),
-                        c => note_color(Colors::Normal, &n, 0, &NoteAttr { color: (c - 2) % 16, ..a }),
+                        c => note_color(Colors::Normal, &n, 0, &NoteAttr { color: (c - 3) % 16 + 1, ..a }),
                     };
                 }
                 note_color(st.colors, &n, voice_of(i), &a)
@@ -1389,11 +1437,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if !in_line(it.tick) {
                         continue;
                     }
-                    let c = head_center(it, h, &staff, sp, x_of(it.tick as f32));
-                    let r = Rect::from_center_size(c, vec2(sp * 1.6, sp * 1.2));
+                    let hdx = it.heads.first().map_or(0.0, |h0| attr(h0.note).hpos as f32 * 0.1 * sp);
+                    let c = head_center(it, h, &staff, sp, x_of(it.tick as f32) + hdx);
+                    let r = Rect::from_center_size(c, vec2(sp * 1.6, sp * 1.2) * lg_core::score::size_scale(attr(h.note).size));
                     if !r.intersects(music) {
                         continue;
                     }
+                    head_rects.push((row.t, seg.rix, h.note, r));
                     let resp = ui.interact(r.intersect(music), ui.scope_id().with("lg-sc").with(("sc-head", li, row.t, seg.rix, seg.row, h.note, *piece)), Sense::click_and_drag());
                     if resp.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -1405,6 +1455,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         app.selected_region = Some((row.t, seg.rix));
                         if !app.selected_notes.contains(&h.note) {
                             app.selected_notes = vec![h.note];
+                        }
+                    }
+                    // Control-click: the note's menu (Attributes ▸ …); double-click: the Note
+                    // Attributes window (the Resize tool: back to the original size)
+                    let t_here = row.t;
+                    resp.context_menu(|ui| crate::scoreattr::note_menu(app, ui, t_here));
+                    if resp.double_clicked() {
+                        if tool == crate::scoreattr::RESIZE {
+                            crate::scoreattr::edit_note(app, row.t, seg.rix, h.note, "Reset Size", |a| a.size = 0);
+                        } else {
+                            crate::scoreattr::double_click(app, &ctx, row.t, seg.rix, h.note);
                         }
                     }
                     if dragging && st.guides && selected(h.note) && *piece == 1 {
@@ -1498,11 +1559,48 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         });
                         continue;
                     }
-                    let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-sym", li, row.id, si)), Sense::click());
-                    if resp.clicked() {
+                    let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-sym", li, row.id, si)), Sense::click_and_drag());
+                    // lines (slurs, crescendi): square handles at the ends when selected
+                    let line_kind = matches!(s.kind, SymbolKind::SlurUp | SymbolKind::SlurDown | SymbolKind::Crescendo | SymbolKind::Decrescendo);
+                    if line_kind && st.sel_symbol == Some((row.id, si)) {
+                        for hx in [r.min.x, r.max.x] {
+                            mp.rect_filled(Rect::from_center_size(pos2(hx, r.center().y), vec2(5.0, 5.0)), 0.0, sel_color);
+                        }
+                    }
+                    if resp.clicked() && tool == 2 {
+                        // the Eraser deletes it
+                        let rid = row.id;
+                        app.checkpoint("Erase Symbol");
+                        if let Some(p) = app.project.as_mut() {
+                            let ts = p.score.track_mut(rid);
+                            if si < ts.symbols.len() {
+                                ts.symbols.remove(si);
+                            }
+                        }
+                        st.sel_symbol = None;
+                        app.after_edit();
+                        symbol_clicked = true;
+                        continue;
+                    }
+                    if resp.clicked() || resp.drag_started() {
                         st.sel_symbol = Some((row.id, si));
                         app.selected_notes.clear();
                         symbol_clicked = true;
+                    }
+                    if resp.dragged() || resp.drag_stopped() {
+                        let (from, now) = ctx.input(|i| (i.pointer.press_origin(), i.pointer.interact_pos()));
+                        if let (Some(from), Some(now)) = (from, now) {
+                            let (q, _, _) = quant_of(app, row.id);
+                            let grid = nt::Quant::CHOICES[q].1.straight as f32;
+                            let mv = crate::scoreattr::symbol_drag(s, tool == 4, line_kind && (from.x - r.max.x).abs() < 6.0, from, now, sp, grid, &|x| line.tick_of(x, bar_t));
+                            // the outline where it goes, and a help tag
+                            mp.rect_stroke(r.translate(if mv.resize { vec2(0.0, 0.0) } else { now - from }), 2.0, Stroke::new(1.0, sel_color), egui::StrokeKind::Outside);
+                            app.help_tag = Some(mv.tag(sig));
+                            if resp.drag_stopped() && now.distance(from) > 2.0 {
+                                let copy = ctx.input(|i| i.modifiers.alt);
+                                crate::scoreattr::apply_symbol_drag(app, row.id, si, &mv, copy);
+                            }
+                        }
                     }
                 }
             }
@@ -1585,8 +1683,42 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if bar_drag_done {
         app.after_edit();
     }
+    // a click on an instrument name: every region of that track shown, and of the tracks
+    // playing through the same channel strip
+    for (k, (r, t)) in name_hits.iter().enumerate() {
+        if ui.interact(r.expand(2.0), ui.scope_id().with(("sc-name", k)), Sense::click()).clicked() {
+            select_instrument(app, &tracks, *t);
+        }
+    }
     if let Some(x) = guide_x {
         mp.vline(x, music.y_range(), Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 160)));
+    }
+    // a rubber band on the background (Pointer): selects the notes inside it (Shift adds)
+    if tool == 0 && pressed.is_none() && (bg.dragged() || bg.drag_stopped()) {
+        if let (Some(a), Some(b)) = (ctx.input(|i| i.pointer.press_origin()), ctx.input(|i| i.pointer.interact_pos())) {
+            let band = Rect::from_two_pos(a, b);
+            mp.rect_filled(band, 0.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 40));
+            mp.rect_stroke(band, 0.0, Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 200)), egui::StrokeKind::Inside);
+            if bg.drag_stopped() {
+                let shift = ctx.input(|i| i.modifiers.shift);
+                let hit = band_select(&head_rects, band);
+                if let Some((region, notes)) = hit {
+                    if shift && app.selected_region == Some(region) {
+                        for n in notes {
+                            if !app.selected_notes.contains(&n) {
+                                app.selected_notes.push(n);
+                            }
+                        }
+                    } else {
+                        app.selected_region = Some(region);
+                        app.selected_track = Some(region.0);
+                        app.selected_notes = notes;
+                    }
+                } else if !shift {
+                    app.selected_notes.clear();
+                }
+            }
+        }
     }
 
     // a press: select (Shift toggles), start a move
@@ -1604,6 +1736,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     if let Some((t, rix, note, drag)) = pressed {
         st.sel_symbol = None;
+        // (the Resize and Layout tools drag a note's Size / Horizontal Position)
+        let attr_tool = tool == crate::scoreattr::RESIZE || tool == 4;
         st.sel_bar = None;
         let shift = ui.input(|i| i.modifiers.shift);
         if app.selected_region != Some((t, rix)) {
@@ -1624,7 +1758,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_notes = vec![note];
             }
         }
-        if drag {
+        if drag && attr_tool {
+            if let Some(pp) = ui.input(|i| i.pointer.press_origin()) {
+                crate::scoreattr::start_drag(app, &ctx, tool == crate::scoreattr::RESIZE, pp);
+            }
+        } else if drag {
             if let (Some(pp), Some(orig)) = (ui.input(|i| i.pointer.press_origin()), app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(rix)).map(|r| r.notes.clone())) {
                 st.drag = Some(DragState { region: (t, rix), orig, from: pp, moved: false });
             }
@@ -1635,16 +1773,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     }
+    crate::scoreattr::follow_drag(app, &ctx, sp);
     // a drag: diatonic steps up and down, time on the display grid (or the tick with Snap off)
     if let Some(d) = st.drag.clone() {
         let (pointer, down) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.primary_down()));
         let line = lines.iter().find(|l| d.from.y >= l.top - 8.0 * sp && d.from.y <= l.top + block_h + 6.0 * sp).or(lines.first()).cloned();
         if let (Some(pp), true, Some(line)) = (pointer, down, line) {
-            let dy = pp.y - d.from.y;
+            let mut dy = pp.y - d.from.y;
+            // Shift (or Settings ▸ Limit Dragging to One Direction In: … Score Editor): one
+            // direction only, whichever the drag first went
+            let mut horizontal_only = None;
+            if ui.input(|i| i.modifiers.shift) {
+                horizontal_only = Some((pp.x - d.from.x).abs() >= dy.abs());
+            } else if let Some(h) = crate::prefs::roll_drag_axis(app, ui) {
+                horizontal_only = Some(h);
+            }
+            let mut px = pp.x;
+            match horizontal_only {
+                Some(true) => dy = 0.0,
+                Some(false) => px = d.from.x,
+                None => {}
+            }
             let steps = -(dy / (sp / 2.0)).round() as i32;
             let (q, _, _) = quant_of(app, app.project.as_ref().and_then(|p| p.tracks.get(d.region.0)).map_or(0, |t| t.extra.id));
             let grid = if st.snap { nt::Quant::CHOICES[q].1.straight as f32 } else { 10.0 };
-            let dt = ((line.tick_of(pp.x, bar_t) - line.tick_of(d.from.x, bar_t)) / grid).round() * grid;
+            let dt = ((line.tick_of(px, bar_t) - line.tick_of(d.from.x, bar_t)) / grid).round() * grid;
             if (steps != 0 || dt != 0.0) && !d.moved {
                 app.checkpoint("Move Notes");
                 if let Some(x) = st.drag.as_mut() {
@@ -1675,12 +1828,33 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         if !down {
+            app.rp.axis = None;
             if st.drag.as_ref().is_some_and(|d| d.moved) {
                 // the moved notes keep their score attributes
                 let (t, r) = d.region;
                 let id = app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(0, |t| t.extra.id);
                 let now = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).map(|r| r.notes.clone()).unwrap_or_default();
-                if let Some(p) = app.project.as_mut() {
+                let copy = ui.input(|i| i.modifiers.alt);
+                if copy {
+                    // Option-drag: copies at the new place, the originals stay (and keep their
+                    // attributes, which the copies take too)
+                    let sel = app.selected_notes.clone();
+                    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+                        let copies: Vec<Note> = sel.iter().filter_map(|&i| now.get(i).copied()).collect();
+                        rg.notes = d.orig.clone();
+                        let base = rg.notes.len();
+                        rg.notes.extend(copies.iter().copied());
+                        app.selected_notes = (base..base + copies.len()).collect();
+                    }
+                    if let Some(p) = app.project.as_mut() {
+                        for &i in &sel {
+                            if let (Some(o), Some(n)) = (d.orig.get(i), now.get(i)) {
+                                let a = p.score.attr(id, o.pos, o.pitch);
+                                p.score.edit(id, n.pos, n.pitch, |x| *x = a);
+                            }
+                        }
+                    }
+                } else if let Some(p) = app.project.as_mut() {
                     for &i in &app.selected_notes {
                         if let (Some(o), Some(n)) = (d.orig.get(i), now.get(i)) {
                             p.score.moved(id, (o.pos, o.pitch), (n.pos, n.pitch));
@@ -1692,9 +1866,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             st.drag = None;
         }
     }
+    // Option-click on a staff (stopped): the playhead goes there, a help tag shows where
+    let option_click = bg.clicked() && ui.input(|i| i.modifiers.alt) && !app.playing();
+    if option_click {
+        if let Some(pp) = bg.interact_pointer_pos() {
+            if let Some(line) = lines.iter().find(|l| pp.y >= l.top - 9.0 * sp && pp.y <= l.top + block_h + 7.0 * sp && pp.x >= l.x_start) {
+                let tick = line.tick_of(pp.x, bar_t).max(0.0);
+                app.locate(tick as f64);
+                app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(tick as u32, sig))]);
+            }
+        }
+    }
     // a Part box symbol dropped on the score, or a double-click with one selected
     let dropped = bg.dnd_release_payload::<Part>().map(|p| *p);
-    if pressed.is_none() {
+    if pressed.is_none() && !option_click {
         let one_click = bg.clicked() && (tool == 1 || tool == 3);
         let at = if dropped.is_some() { ui.input(|i| i.pointer.interact_pos()) } else if bg.double_clicked() || one_click { bg.interact_pointer_pos() } else { None };
         // (the Text tool: a text object where clicked)
@@ -1880,6 +2065,7 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     }
     crate::scorestyle::clef_menu(app, ctx);
     crate::scoretuplet::window(app, ctx);
+    crate::scoreattr::window(app, ctx);
     crate::scorepdf::dialogs(app, ctx, st);
     crate::scoreglobal::window(app, ctx);
     crate::scoregrid::window(app, ctx);
@@ -2586,7 +2772,8 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
     let mut tied_in: Vec<u8> = Vec::new();
     for (k, it) in v.items.iter().enumerate() {
         let here = (o.in_line)(it.tick);
-        let x = x_of(it.tick as f32);
+        // (a note's Horizontal Position attribute moves it, not its bar position)
+        let x = x_of(it.tick as f32) + it.heads.first().map_or(0.0, |h| (o.attr)(h.note).hpos as f32 * 0.1 * sp);
         if it.is_rest() {
             if here && !o.hide_rests && o.vdef.rest == 2 && it.dur >= o.beat {
                 // Rest ▸ Slash: a beat slash per beat (rests shorter than a beat stay)
@@ -2638,6 +2825,8 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             let c = head_center(it, h, staff, sp, x);
             let col = (o.color)(h.note);
             let head = (o.attr)(h.note).head;
+            // (the Size attribute: the head drawn larger or smaller)
+            let hsp = sp * lg_core::score::size_scale((o.attr)(h.note).size);
             if o.vdef.head == 3 {
                 // Head ▸ Hide
             } else if o.vdef.head == 1 || (o.vdef.head == 2 && (o.attr)(h.note).finger > 0) {
@@ -2646,22 +2835,24 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
                 let label = if o.vdef.head == 1 { const N: [&str; 7] = ["C", "D", "E", "F", "G", "A", "B"]; N[(h.spelled.letter % 7) as usize].to_string() } else { (o.attr)(h.note).finger.to_string() };
                 p.text(c, Align2::CENTER_CENTER, label, look::bold(sp * 1.0), col);
             } else if head != 0 {
-                special_head(p, c, sp, it.value.base, head, col);
+                special_head(p, c, hsp, it.value.base, head, col);
             } else if h.cross {
-                smufl(p, '\u{E0A9}', c, sp, col, true);
+                smufl(p, '\u{E0A9}', c, hsp, col, true);
             } else {
-                notehead(p, c, sp, it.value.base, col, REGION_PAPER);
+                notehead(p, c, hsp, it.value.base, col, REGION_PAPER);
             }
             if let Some(a) = h.acc {
                 if last_acc_pos != i32::MAX && (last_acc_pos - h.pos).abs() < 6 {
                     acc_x -= 1.1 * sp;
                 }
+                // (Accidental Position: moved from the Acc./Note Distance)
+                let ax = acc_x + (o.attr)(h.note).acc_pos as f32 * 0.1 * sp;
                 if h.guide {
                     // a guide accidental, in brackets
-                    p.text(pos2(acc_x - 0.9 * sp, c.y), Align2::CENTER_CENTER, "(", egui::FontId::proportional(2.2 * sp), col);
-                    p.text(pos2(acc_x + 0.75 * sp, c.y), Align2::CENTER_CENTER, ")", egui::FontId::proportional(2.2 * sp), col);
+                    p.text(pos2(ax - 0.9 * sp, c.y), Align2::CENTER_CENTER, "(", egui::FontId::proportional(2.2 * sp), col);
+                    p.text(pos2(ax + 0.75 * sp, c.y), Align2::CENTER_CENTER, ")", egui::FontId::proportional(2.2 * sp), col);
                 }
-                accidental(p, pos2(acc_x, c.y), sp, a, col);
+                accidental(p, pos2(ax, c.y), sp, a, col);
                 if h.guide {
                     acc_x -= 0.9 * sp;
                 }
@@ -3013,6 +3204,15 @@ pub(crate) fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rubber_band_takes_one_regions_notes() {
+        let r = |x: f32| Rect::from_min_size(pos2(x, 0.0), vec2(5.0, 5.0));
+        let heads = [(0, 0, 3, r(0.0)), (0, 0, 1, r(10.0)), (0, 1, 0, r(12.0)), (0, 0, 1, r(40.0)), (0, 0, 2, r(100.0))];
+        let band = Rect::from_min_max(pos2(-1.0, -1.0), pos2(50.0, 3.0));
+        assert_eq!(band_select(&heads, band), Some(((0, 0), vec![1, 3])));
+        assert_eq!(band_select(&heads, Rect::from_min_max(pos2(200.0, 0.0), pos2(210.0, 3.0))), None);
+    }
 
     #[test]
     fn spline_passes_through_points() {

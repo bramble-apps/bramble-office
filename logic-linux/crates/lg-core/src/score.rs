@@ -40,12 +40,25 @@ pub struct NoteAttr {
     /// Fingering: main finger 1–5, pick finger P I M A C (1–5).
     pub finger: u8,
     pub pick: u8,
-    /// Note colour (Colors ▸ Color 0–15), 0 = default.
+    /// Note colour: 0 default, 1–16 Colors ▸ Color 0–15, 17 Pitch Color, 18 Velocity Color.
     pub color: u8,
     /// Auto slur: 1 above, −1 below, 2 automatic direction (slurs to the next note).
     pub slur: i8,
     /// Note head (index into `NOTE_HEADS`), 0 = the normal head.
     pub head: u8,
+    /// Accidental Position: the accidental moved left (−) or right (+) of the project's
+    /// Acc./Note Distance, in tenths of a staff space.
+    pub acc_pos: i8,
+    /// Size: −3 (smallest) … +3 (largest), 0 normal (the Resize tool, Note Attributes window).
+    pub size: i8,
+    /// Horizontal Position: the note moved left (−) or right (+) in tenths of a staff space
+    /// without changing its bar position (the Layout tool, Note Attributes window).
+    pub hpos: i8,
+}
+
+/// The Size steps' scale factors (Size −3 … +3).
+pub fn size_scale(size: i8) -> f32 {
+    1.0 + size.clamp(-3, 3) as f32 * 0.15
 }
 
 /// The Part box's note heads (visual only). "Gray" shows grey on screen and is left out of print.
@@ -285,6 +298,9 @@ pub struct TrackScore {
     pub overlap: bool,
     pub notes: BTreeMap<(u32, u8), NoteAttr>,
     pub symbols: Vec<Symbol>,
+    /// Regions whose Region inspector Score parameter is Hide (by their start tick): left out
+    /// of the Score at display levels above the region (and of its printout).
+    pub hidden: std::collections::BTreeSet<u32>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -497,9 +513,12 @@ impl Score {
             out += &format!("strack\t{i}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&t.style), esc(&t.quantize), t.no_interpretation as u8, t.syncopation as u8, t.max_dots, t.overlap as u8);
             for (&(pos, pitch), a) in &t.notes {
                 out += &format!(
-                    "sattr\t{i}\t{pos}\t{pitch}\t{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n",
-                    a.stem, a.stem_pos, a.stem_end, a.tie, a.beam, a.accidental, a.spell, a.interp, a.synco, a.independent, a.staff, a.artic, a.finger, a.pick, a.color, a.slur, a.head
+                    "sattr\t{i}\t{pos}\t{pitch}\t{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n",
+                    a.stem, a.stem_pos, a.stem_end, a.tie, a.beam, a.accidental, a.spell, a.interp, a.synco, a.independent, a.staff, a.artic, a.finger, a.pick, a.color, a.slur, a.head, a.acc_pos, a.size, a.hpos
                 );
+            }
+            for r in &t.hidden {
+                out += &format!("shide\t{i}\t{r}\n");
             }
             for s in &t.symbols {
                 let k = KINDS.iter().find(|k| k.0 == s.kind).map_or("text", |k| k.1);
@@ -561,8 +580,15 @@ impl Score {
                         let a = NoteAttr {
                             stem: g(0) as i8, stem_pos: g(1) as u8, stem_end: g(2) as i8, tie: g(3) as i8, beam: g(4) as i8, accidental: g(5) as u8, spell: g(6) as i8, interp: g(7) as i8, synco: g(8) as i8,
                             independent: g(9) as u8, staff: g(10) as i8, artic: g(11) as u32, finger: g(12) as u8, pick: g(13) as u8, color: g(14) as u8, slur: g(15) as i8, head: g(16) as u8,
+                            acc_pos: g(17) as i8, size: g(18) as i8, hpos: g(19) as i8,
                         };
                         self.track_mut(id).notes.insert((num(2) as u32, num(3) as u8), a);
+                        any = true;
+                    }
+                }
+                Some("shide") if w.len() >= 3 => {
+                    if let Some(id) = track(1) {
+                        self.track_mut(id).hidden.insert(num(2) as u32);
                         any = true;
                     }
                 }
@@ -642,7 +668,11 @@ mod tests {
             a.head = 3;
             a.artic = 5;
             a.stem = -1;
+            a.acc_pos = -4;
+            a.size = 2;
+            a.hpos = 7;
         });
+        s.track_mut(5).hidden.insert(7680);
         s.track_mut(5).style = "Piano".into();
         s.track_mut(5).max_dots = 3;
         s.track_mut(5).overlap = true;

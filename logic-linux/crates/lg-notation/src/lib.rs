@@ -7,6 +7,7 @@
 //! Ticks are 960 per quarter note, from bar 1 (tick 0), as everywhere in Studio.
 
 pub mod musicxml;
+pub mod musicxml_in;
 
 pub const PPQ: u32 = 960;
 

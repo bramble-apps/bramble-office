@@ -42,6 +42,57 @@ pub fn after_open(app: &mut App) {
     }
 }
 
+/// Import Project Settings: the Score data another project keeps, its tracks by index.
+pub fn score_of(project: &std::path::Path) -> Option<lg_core::score::Score> {
+    let side = crate::hosting::sidecar_path(project)?;
+    let f = side.parent()?.parent()?.join("score-extras").join(side.file_name()?);
+    let t = std::fs::read_to_string(f).ok()?;
+    let mut s = lg_core::score::Score::default();
+    s.apply_text(&t, |i| Some(i as u64 + 1_000_000)).then_some(s)
+}
+
+/// The Import Settings dialog's Score checkboxes.
+pub const IMPORT_PANES: [&str; 3] = ["Score Sets", "Staff Styles", "Text Styles"];
+
+/// Imports the ticked Score panes of `other` (from `score_of`): every score set (its
+/// instruments by track position here), every staff style and every text style, a same-named
+/// one replaced. One undo step; false when nothing was ticked.
+pub fn import(app: &mut App, other: &lg_core::score::Score, panes: &[&str]) -> bool {
+    if !panes.iter().any(|p| IMPORT_PANES.contains(p)) || app.project.is_none() {
+        return false;
+    }
+    app.checkpoint("Import Project Settings");
+    let Some(p) = app.project.as_mut() else { return false };
+    let ids: Vec<u64> = p.tracks.iter().map(|t| t.extra.id).collect();
+    if panes.contains(&"Score Sets") {
+        for set in &other.sets {
+            let mut set = set.clone();
+            set.entries.retain_mut(|e| match ids.get((e.track - 1_000_000) as usize) {
+                Some(&id) => {
+                    e.track = id;
+                    true
+                }
+                None => false,
+            });
+            p.score.sets.retain(|x| x.name != set.name);
+            p.score.sets.push(set);
+        }
+    }
+    if panes.contains(&"Staff Styles") {
+        for d in &other.staff_styles {
+            p.score.staff_styles.retain(|x| x.name != d.name);
+            p.score.staff_styles.push(d.clone());
+        }
+    }
+    if panes.contains(&"Text Styles") {
+        for t in &other.text_styles {
+            p.score.set_style(t.clone());
+        }
+    }
+    app.after_edit();
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +111,23 @@ mod tests {
         assert!(s.apply_text(&t, |i| [7u64, 8][..].get(i).copied()));
         assert_eq!(s.tracks[&8].style, "Bass");
         assert_eq!(s.breaks.get(&3), Some(&lg_core::score::Break::Line));
+    }
+
+    #[test]
+    fn import_brings_sets_and_styles() {
+        let mut app = crate::tm::test_app();
+        let mut other = lg_core::score::Score::default();
+        other.sets.push(lg_core::score::ScoreSet::new("Winds", &[1_000_000, 1_000_099]));
+        other.staff_styles.push(lg_core::staffstyle::StaffStyleDef::dual("Imported Duo"));
+        other.set_style(lg_core::score::TextStyle { name: "Big".into(), family: "Serif".into(), size: 30.0, bold: true, italic: false, underline: false });
+        assert!(!import(&mut app, &other, &["MIDI"]));
+        assert!(import(&mut app, &other, &["Score Sets", "Staff Styles", "Text Styles"]));
+        let p = app.project.as_ref().unwrap();
+        let set = p.score.sets.iter().find(|s| s.name == "Winds").unwrap();
+        // the first track here takes the first entry; a track it doesn't have is left out
+        assert_eq!(set.entries.len(), 1);
+        assert_eq!(set.entries[0].track, p.tracks[0].extra.id);
+        assert!(p.score.staff_styles.iter().any(|d| d.name == "Imported Duo"));
+        assert!(p.score.text_styles.iter().any(|t| t.name == "Big"));
     }
 }
