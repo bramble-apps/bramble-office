@@ -60,7 +60,7 @@ pub enum Action {
     PlayKey(u8, u8),
 }
 
-const EDITORS: &[&str] = &["Compressor", "Quantec Room Simulator", "Auto Sampler", "Phat FX", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Compressor", "Noise Gate", "Limiter", "Quantec Room Simulator", "Auto Sampler", "Phat FX", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -69,6 +69,8 @@ pub fn has_editor(name: &str) -> bool {
 pub fn default_size(name: &str) -> egui::Vec2 {
     match name {
         "Compressor" => crate::compview::SIZE,
+        "Noise Gate" => crate::ngview::SIZE,
+        "Limiter" => crate::limview::SIZE,
         "Quantec Room Simulator" => vec2(780.0, 720.0),
         "Auto Sampler" => vec2(740.0, 800.0),
         "Phat FX" => vec2(780.0, 760.0),
@@ -163,6 +165,8 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
     let mut act = None;
     egui::ScrollArea::vertical().id_salt(("fx-editor", slot)).auto_shrink([false, false]).show(ui, |ui| match name {
         "Compressor" => crate::compview::view(ui, params, values, live, slot, &mut set),
+        "Noise Gate" => crate::ngview::view(ui, params, values, live, slot, &mut set),
+        "Limiter" => crate::limview::view(ui, params, values, live, slot, &mut set),
         "Quantec Room Simulator" => crate::qrsview::view(ui, params, values, live, &mut set),
         "Phat FX" => crate::phatview::view(ui, params, values, &mut set),
         "Auto Sampler" => crate::autosampler::view(ui, params, values, live, &mut set, &mut act),

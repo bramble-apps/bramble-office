@@ -16,8 +16,8 @@ pub(crate) fn fmt(p: &lg_dsp::Param, v: f32) -> String {
         Menu => p.choices.get(v.round().max(0.0) as usize).copied().unwrap_or("").to_string(),
         OnOff => if v >= 0.5 { "On".into() } else { "Off".into() },
         Db => format!("{v:.1} dB"),
-        Hz => if v >= 1000.0 { format!("{:.2} kHz", v / 1000.0) } else { format!("{v:.0} Hz") },
-        Ms => format!("{v:.0} ms"),
+        Hz => if v >= 1000.0 { format!("{:.2} kHz", v / 1000.0) } else if v < 10.0 { format!("{v:.2} Hz") } else if v < 100.0 { format!("{v:.1} Hz") } else { format!("{v:.0} Hz") },
+        Ms => if v < 10.0 { format!("{v:.1} ms") } else { format!("{v:.0} ms") },
         Seconds => format!("{v:.2} s"),
         Percent => format!("{v:.0} %"),
         Ratio => format!("{v:.1} : 1"),
@@ -25,6 +25,8 @@ pub(crate) fn fmt(p: &lg_dsp::Param, v: f32) -> String {
         Cents => format!("{v:+.0} ct"),
         Octaves => format!("{v:.2} oct"),
         Pan => format!("{:+.0}", v * 64.0),
+        // (a delay's note value: 4 = a quarter note, shown as Logic does, "1/4")
+        None if p.name.ends_with("Note") && v > 0.0 => if v >= 1.0 { format!("1/{}", v.round()) } else { format!("{}/1", (1.0 / v).round()) },
         None => format!("{v:.2}"),
     }
 }
@@ -82,6 +84,10 @@ pub(crate) fn control_rows(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: 
                         set.push((prm.id, prm.min + nf * (prm.max - prm.min)));
                     }
                 }
+            }
+            // (a pop-up or a checkbox shows its own state: no second copy of it at the right)
+            if matches!(prm.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) && texts.get(n).cloned().flatten().is_none() {
+                continue;
             }
             let shown = texts.get(n).cloned().flatten().unwrap_or_else(|| fmt(prm, v));
             p.text(pos2(row.max.x - 4.0, row.center().y), Align2::RIGHT_CENTER, shown, look::regular(12.0), look::text());
@@ -589,8 +595,10 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
                 }
             }
         });
-        ui.add_space(4.0);
-        // the body scrolls; the footer stays at the bottom
+        // the body scrolls; the footer stays at the bottom (the body touches the header and the
+        // footer, as Logic's plug-in windows: no gaps)
+        let spacing = ui.spacing().item_spacing.y;
+        ui.spacing_mut().item_spacing.y = 0.0;
         let room = (ui.available_height() - crate::plughead::FOOTER - 6.0).max(120.0);
         egui::ScrollArea::vertical().id_salt(("fx-body", s, k)).max_height(room).auto_shrink([false, true]).show(ui, |ui| {
         if hosted {
@@ -599,7 +607,9 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
             ui.add_space(4.0);
             set.extend(controls(ui, &params, &values, &texts, "fx"));
         } else {
-            ui.add_space(4.0);
+            if !editor {
+                ui.add_space(4.0);
+            }
             if editor {
                 let live = app.engine.lock().map(|e| {
                     let strip = crate::mixer::fx_strip(s);
@@ -629,6 +639,7 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
         let ext_id = egui::Id::unique(("fx-ext", s, k));
         let mut ext_open = ui.ctx().data(|d| d.get_temp::<bool>(ext_id)).unwrap_or(false);
         crate::plughead::footer(ui, &name, (!ext_names.is_empty()).then_some(&mut ext_open));
+        ui.spacing_mut().item_spacing.y = spacing;
         ui.ctx().data_mut(|d| d.insert_temp(ext_id, ext_open));
         if ext_open && !ext_names.is_empty() {
             let (ep, ev, et) = split_params(&params, &values, &texts, ext_names, true);
@@ -766,5 +777,24 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     }
     if !open {
         app.mix.fx_window = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use lg_dsp::{Param, Unit};
+
+    #[test]
+    fn values_read_as_logic_writes_them() {
+        let rate = Param::new(0, "Rate", 0.0, 20.0, 0.5, Unit::Hz);
+        assert_eq!(super::fmt(&rate, 0.5), "0.50 Hz");
+        assert_eq!(super::fmt(&rate, 12.0), "12.0 Hz");
+        let note = Param::new(1, "Left Note", 0.25, 128.0, 4.0, Unit::None);
+        assert_eq!(super::fmt(&note, 4.0), "1/4");
+        assert_eq!(super::fmt(&note, 16.0), "1/16");
+        assert_eq!(super::fmt(&note, 0.5), "2/1");
+        let t = Param::new(2, "Attack", 0.0, 200.0, 3.0, Unit::Ms);
+        assert_eq!(super::fmt(&t, 3.0), "3.0 ms");
+        assert_eq!(super::fmt(&t, 40.0), "40 ms");
     }
 }

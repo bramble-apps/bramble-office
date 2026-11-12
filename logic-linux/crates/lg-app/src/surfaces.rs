@@ -1355,18 +1355,18 @@ fn setup_inspector(app: &mut App, ui: &mut egui::Ui) {
     egui::CollapsingHeader::new(format!("Device: {}", dev.model.name())).default_open(true).show(ui, |ui| {
         egui::Grid::new("cs-dev").num_columns(2).show(ui, |ui| {
             ui.label("Output Port:");
-            egui::ComboBox::from_id_salt("cs-out").selected_text(if dev.out_port.is_empty() { "Off".to_string() } else { dev.out_port.clone() }).width(170.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("cs-out").selected_text(if dev.out_port.is_empty() { "Off".to_string() } else { crate::live::port_label(&dev.out_port) }).width(170.0).show_ui(ui, |ui| {
                 ui.selectable_value(&mut dev.out_port, String::new(), "Off");
                 for p in &outs {
-                    ui.selectable_value(&mut dev.out_port, p.clone(), p);
+                    ui.selectable_value(&mut dev.out_port, p.clone(), crate::live::port_label(p));
                 }
             });
             ui.end_row();
             ui.label("Input Port:");
-            egui::ComboBox::from_id_salt("cs-in").selected_text(if dev.in_port.is_empty() { "Off".to_string() } else { dev.in_port.clone() }).width(170.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("cs-in").selected_text(if dev.in_port.is_empty() { "Off".to_string() } else { crate::live::port_label(&dev.in_port) }).width(170.0).show_ui(ui, |ui| {
                 ui.selectable_value(&mut dev.in_port, String::new(), "Off");
                 for p in &ins {
-                    ui.selectable_value(&mut dev.in_port, p.clone(), p);
+                    ui.selectable_value(&mut dev.in_port, p.clone(), crate::live::port_label(p));
                 }
             });
             ui.end_row();
@@ -2058,10 +2058,10 @@ fn assignment_params(app: &mut App, ui: &mut egui::Ui) {
     ui.strong("MIDI");
     egui::Grid::new("cs-midi").num_columns(2).spacing(vec2(8.0, 4.0)).show(ui, |ui| {
         ui.label("Input:");
-        egui::ComboBox::from_id_salt("cs-in-port").selected_text(if a.port.is_empty() { "Any".to_string() } else { a.port.clone() }).width(180.0).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt("cs-in-port").selected_text(if a.port.is_empty() { "Any".to_string() } else { crate::live::port_label(&a.port) }).width(180.0).show_ui(ui, |ui| {
             ui.selectable_value(&mut a.port, String::new(), "Any");
             for p in &ins {
-                ui.selectable_value(&mut a.port, p.clone(), p);
+                ui.selectable_value(&mut a.port, p.clone(), crate::live::port_label(p));
             }
         });
         ui.end_row();

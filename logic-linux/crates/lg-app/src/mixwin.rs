@@ -460,7 +460,7 @@ pub fn midi_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
         let small = |s: &str| egui::RichText::new(s).size(10.0);
         if crate::mixext::midi_comp(app, "Instrument Name") {
-            ui.label(small(if e.port.is_empty() { "Virtual Out" } else { &e.port }).color(look::text_dim()));
+            ui.label(small(&if e.port.is_empty() { "Virtual Out".to_string() } else { crate::live::port_label(&e.port) }).color(look::text_dim()));
         }
         ui.label(small(&format!("Ch {}", e.channel)).color(look::text_dim()));
         if crate::mixext::midi_comp(app, "Program") {

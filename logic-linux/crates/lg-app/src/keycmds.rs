@@ -784,13 +784,12 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 let (rr, _) = ui.allocate_exact_size(vec2(body.width(), ROW), Sense::hover());
                 let p = ui.painter();
                 match &rows[ri] {
-                    R::Group(area, n) => {
+                    R::Group(area, _) => {
                         let open = !app.keycmds.collapsed.contains(area);
                         p.rect_filled(rr, 0.0, c(0x2a2928));
                         let dr = Rect::from_center_size(pos2(rr.min.x + 12.0, rr.center().y), vec2(12.0, 12.0));
                         crate::glyphs::paint(p, dr, if open { crate::glyphs::ph::CARET_DOWN } else { crate::glyphs::ph::CARET_RIGHT }, 10.0, c(0xa0a09f));
                         p.text(pos2(rr.min.x + 26.0, rr.center().y), Align2::LEFT_CENTER, format!("{area}"), look::semibold(12.0), c(0xc8c7c6));
-                        p.text(pos2(rr.max.x - 10.0, rr.center().y), Align2::RIGHT_CENTER, format!("{n}"), look::regular(11.0), c(0x6f6e6d));
                         if ui.interact(rr, ui.scope_id().with(("g", ri)), Sense::click()).clicked() {
                             // (Option-click: all groups)
                             if alt {
@@ -919,7 +918,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             (Some(Learn::Midi), _) => "Learn New Assignment: send a message from a MIDI controller (a key, button or knob)".to_string(),
             (Some(_), _) => "Learn: press a key, with any of Shift, Option and Ctrl (Esc: stop learning)".to_string(),
             (None, Filter::Pressed) => format!("Pressed: press a key to list the commands on it{}", app.keycmds.pressed.as_ref().map(|k| format!(" — {k}")).unwrap_or_default()),
-            _ => format!("{} of {} commands · Ctrl and ⌘ are one key on Linux; keypad keys can't be told apart", shown.len(), all.len()),
+            // (Logic shows no line under the list when nothing is being learnt)
+            _ => String::new(),
         };
         p.text(pos2(list.min.x, r.max.y - 18.0), Align2::LEFT_CENTER, status, look::regular(11.0), c(0x9a9998));
     });

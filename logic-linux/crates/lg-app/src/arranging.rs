@@ -1166,6 +1166,8 @@ pub fn tempo_list(app: &mut App, ui: &mut egui::Ui) {
         }
         app.after_edit();
     }
+    // (the window is as big as the list it draws)
+    ui.advance_cursor_after_rect(body);
 }
 
 fn tempo_list_window(app: &mut App, ctx: &egui::Context) {
@@ -1327,45 +1329,67 @@ fn sig_window(app: &mut App, ctx: &egui::Context) {
     let mut open = true;
     let mut ok = false;
     egui::Window::new(if d.key { "Key Signature" } else { "Time Signature" }).id(egui::Id::unique("sig-dialog")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            ui.label("Bar");
+        // Logic's layout: right-aligned labels, the values beside them, Cancel / OK (default) at the bottom right
+        ui.set_width(280.0);
+        let label = |ui: &mut egui::Ui, t: &str| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(t));
+        };
+        egui::Grid::new("sig-dialog-grid").num_columns(2).spacing(vec2(8.0, 8.0)).min_col_width(110.0).show(ui, |ui| {
+            label(ui, "Bar:");
             let mut b = d.bar + 1;
             if ui.add(egui::DragValue::new(&mut b).range(1..=9999)).changed() {
                 d.bar = b - 1;
             }
-        });
-        if d.key {
-            egui::ComboBox::from_label("Key").selected_text(&d.key_name).show_ui(ui, |ui| {
-                for k in KEYS {
-                    ui.selectable_value(&mut d.key_name, k.to_string(), k);
-                }
-            });
-        } else {
-            ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut d.num).range(1..=99));
-                ui.label("/");
-                egui::ComboBox::from_id_salt("sig-den").selected_text(format!("{}", d.den)).show_ui(ui, |ui| {
+            ui.end_row();
+            if d.key {
+                label(ui, "Key:");
+                egui::ComboBox::from_id_salt("sig-key").width(130.0).selected_text(&d.key_name).show_ui(ui, |ui| {
+                    for k in KEYS {
+                        ui.selectable_value(&mut d.key_name, k.to_string(), k);
+                    }
+                });
+                ui.end_row();
+            } else {
+                label(ui, "Number of Beats:");
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    if ui.small_button("⌄").clicked() && d.num > 1 {
+                        d.num -= 1;
+                        d.grouping.clear();
+                    }
+                    if ui.add(egui::DragValue::new(&mut d.num).range(1..=99)).changed() {
+                        d.grouping.clear();
+                    }
+                    if ui.small_button("⌃").clicked() && d.num < 99 {
+                        d.num += 1;
+                        d.grouping.clear();
+                    }
+                });
+                ui.end_row();
+                label(ui, "Note Value:");
+                egui::ComboBox::from_id_salt("sig-den").width(70.0).selected_text(format!("{}", d.den)).show_ui(ui, |ui| {
                     for v in [1u8, 2, 4, 8, 16, 32] {
                         ui.selectable_value(&mut d.den, v, format!("{v}"));
                     }
                 });
-            });
-            ui.horizontal(|ui| {
-                ui.label("Beat Grouping");
-                ui.add(egui::TextEdit::singleline(&mut d.grouping).desired_width(80.0).hint_text("e.g. 223"));
-            });
-            // a grouping sets the numerator (2+2+3 = 7)
-            let sum: u32 = d.grouping.chars().filter_map(|c| c.to_digit(10)).sum();
-            if sum > 0 {
-                d.num = sum.min(99) as u8;
+                ui.end_row();
+                label(ui, "Beat Grouping:");
+                ui.add(egui::TextEdit::singleline(&mut d.grouping).desired_width(90.0));
+                ui.end_row();
             }
+        });
+        // a grouping sets the numerator (2+2+3 = 7)
+        let sum: u32 = d.grouping.chars().filter_map(|c| c.to_digit(10)).sum();
+        if !d.key && sum > 0 {
+            d.num = sum.min(99) as u8;
         }
-        ui.horizontal(|ui| {
-            if ui.button("Cancel").clicked() {
-                app.arr.sig = None;
-            }
-            if ui.button("OK").clicked() {
+        ui.add_space(10.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(egui::Button::new(egui::RichText::new("OK").color(Color32::WHITE)).fill(look::accent()).min_size(vec2(70.0, 24.0))).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 ok = true;
+            }
+            if ui.add(egui::Button::new("Cancel").min_size(vec2(70.0, 24.0))).clicked() {
+                app.arr.sig = None;
             }
         });
     });
@@ -1513,6 +1537,7 @@ pub fn signature_list(app: &mut App, ui: &mut egui::Ui) {
         d.insert_temp(sel_id, sel);
         d.insert_temp(create_id, create_key);
     });
+    ui.advance_cursor_after_rect(body);
 }
 
 /// A key as Logic's Signature List writes it: "C Major", "F Minor".

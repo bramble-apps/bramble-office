@@ -1091,13 +1091,13 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, w: usize) {
             let shown = match o.port.as_str() {
                 "" => "Off".to_string(),
                 "*" => "All".to_string(),
-                p => p.to_string(),
+                p => crate::live::port_label(p),
             };
             egui::ComboBox::from_id_salt(("env-port", w)).selected_text(shown).width(104.0).show_ui(ui, |ui| {
                 ui.selectable_value(&mut o.port, String::new(), "Off");
                 ui.selectable_value(&mut o.port, "*".to_string(), "All");
                 for p in &ports {
-                    ui.selectable_value(&mut o.port, p.clone(), p);
+                    ui.selectable_value(&mut o.port, p.clone(), crate::live::port_label(p));
                 }
             });
             ui.end_row();

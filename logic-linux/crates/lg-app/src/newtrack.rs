@@ -157,7 +157,7 @@ fn midi_destinations(app: &App) -> Vec<(String, String)> {
     let mut v = vec![(String::new(), crate::midiout::VIRTUAL.to_string())];
     for p in app.hub.outs.ports() {
         if p != crate::midiout::VIRTUAL {
-            v.push((p.clone(), p));
+            v.push((p.clone(), crate::live::port_label(&p)));
         }
     }
     v

@@ -526,19 +526,27 @@ pub fn dialogs(app: &mut App, ctx: &egui::Context) {
     let Some(mut kind) = app.ta.stack_dialog else { return };
     let mut open = true;
     let mut create = false;
-    egui::Window::new("Create Track Stack").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, -80.0)).open(&mut open).show(ctx, |ui| {
-        ui.set_width(380.0);
-        ui.radio_value(&mut kind, StackKind::Folder, egui::RichText::new("Folder stack").font(look::semibold(13.0)));
-        ui.label(egui::RichText::new("Groups the tracks under a main track: its fader, mute and solo act on all of them.").color(look::text_dim()));
+    // (a sheet, as Logic's: no title bar, the question as its heading, Details under a disclosure)
+    egui::Window::new("Create Track Stack").title_bar(false).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_TOP, vec2(0.0, 90.0)).open(&mut open).show(ctx, |ui| {
+        ui.set_width(340.0);
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("Which kind of track stack do you want to create?").font(look::bold(13.0)));
         ui.add_space(6.0);
-        ui.radio_value(&mut kind, StackKind::Summing, egui::RichText::new("Summing stack").font(look::semibold(13.0)));
-        ui.label(egui::RichText::new("The tracks play into the main track's aux channel, mixed as one.").color(look::text_dim()));
+        ui.radio_value(&mut kind, StackKind::Folder, "Folder stack");
+        ui.radio_value(&mut kind, StackKind::Summing, "Summing stack");
+        ui.add_space(4.0);
+        egui::CollapsingHeader::new("Details").id_salt("stack-details").default_open(true).show(ui, |ui| {
+            ui.label(egui::RichText::new(match kind {
+                StackKind::Folder | StackKind::PackedFolder => "Groups the tracks under a main track whose fader, mute and solo act on all of them. Use it to tidy up the Tracks area.",
+                StackKind::Summing => "The tracks play into the main track's aux channel and are mixed there as one sound, so effects on the main track process them all.",
+            }).color(look::text_dim()).size(11.5));
+        });
         ui.add_space(10.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Create").clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(egui::Button::new(egui::RichText::new("Create").color(egui::Color32::WHITE)).fill(look::accent()).min_size(vec2(76.0, 24.0))).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 create = true;
             }
-            if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if ui.add(egui::Button::new("Cancel").min_size(vec2(76.0, 24.0))).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 app.ta.stack_dialog = None;
             }
         });

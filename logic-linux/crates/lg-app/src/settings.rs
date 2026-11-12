@@ -500,7 +500,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                                 p.line_segment([b.center() + vec2(-1.2, 3.2), b.center() + vec2(4.5, -3.8)], Stroke::new(2.0, Color32::WHITE));
                             }
                             let cx = rrw.min.x + rrw.width() / n as f32;
-                            p.text(pos2(cx + 8.0, rrw.center().y), Align2::LEFT_CENTER, port, look::regular(13.0), c(0xdfdfdf));
+                            p.text(pos2(cx + 8.0, rrw.center().y), Align2::LEFT_CENTER, crate::live::port_label(port), look::regular(13.0), c(0xdfdfdf));
                             if ui.interact(b.expand(2.0), id.with(("port", ri)), Sense::click()).clicked() {
                                 values.0.insert(pk.clone(), if on { "0".into() } else { "1".into() });
                                 changed = true;
