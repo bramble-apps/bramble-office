@@ -26,7 +26,7 @@ fn ch_slot(c: Ch) -> usize {
 }
 
 /// Every surround effect here (Logic's names) with a native surround version.
-pub const NATIVE: &[&str] = &["Multichannel Gain", "Down Mixer", "Surround Compressor", "Spatial Audio Monitoring"];
+pub const NATIVE: &[&str] = &["Multichannel Gain", "Down Mixer", "Surround Compressor", "Spatial Audio Monitoring", "MultiMeter", "Level Meter", "Loudness Meter", "Quantec Room Simulator"];
 
 pub fn by_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
     Some(match name {
