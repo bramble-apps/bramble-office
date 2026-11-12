@@ -356,9 +356,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
         // the Session Player button (type over style), the sliders, Regenerate
         let y0 = top.y + 22.0;
         let type_name = match &player {
-            Player::Bass(b) if b.style.synth().is_some() => "Synth Bass Player",
+            Player::Bass(b) if b.style.synth().is_some() => "Synth Bass",
             Player::Bass(_) => "Bass Player",
-            Player::Keys(k) if k.style.synth().is_some() => "Synth Keyboard Player",
+            Player::Keys(k) if k.style.synth().is_some() => "Synth Keyboard",
             Player::Keys(_) => "Keyboard Player",
         };
         style_button(ui, &cxs, pos2(cx - 83.0, y0), type_name, &mut player);
@@ -627,7 +627,14 @@ fn main_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, t: usi
         let (kind, sel) = pattern_of(player);
         let custom = app.spx.patterns.get(&(t, r)).is_some_and(|p| p.steps.iter().any(|s| *s));
         let list = synth::patterns(kind);
-        let dots = sel.and_then(|i| list.get(i)).map_or(list[0].1, |p| p.1);
+        // (the style's own pattern when none is chosen)
+        let own = match &*player {
+            Player::Bass(b) if b.style == BassStyle::Synth808 => 5,
+            Player::Bass(b) if b.style == BassStyle::SynthPump => 3,
+            Player::Keys(k) if k.style == KeysStyle::SynthRhythmic => 3,
+            _ => 0,
+        };
+        let dots = sel.and_then(|i| list.get(i)).map_or(list[own.min(list.len() - 1)].1, |p| p.1);
         let name = if custom { "Custom".to_string() } else { sel.and_then(|i| list.get(i)).map_or("Style Default".to_string(), |p| p.0.to_string()) };
         let pr = Rect::from_min_size(pos2(o.x + 22.0, y - 10.0), vec2(w - 44.0, 28.0));
         let resp = ui.interact(pr, cx.id("patterns-btn"), Sense::click()).on_hover_text("Patterns");
