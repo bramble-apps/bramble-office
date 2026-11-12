@@ -182,6 +182,23 @@ pub fn send_paced(outs: &crate::midiout::Outs, port: &str, pct: f32, msgs: Vec<V
     })
 }
 
+// ---- Feedback Format on LED rings ---------------------------------------------------------------
+
+/// An assignment's feedback: on a Mackie-style V-Pot ring (controller 0x30–0x37) the value in the
+/// assignment's Feedback Format (Single Dot/Line, Left to Right Bar, Bar from Center, Q/Spread,
+/// the bars; Automatic: a dot for pan, a bar for the rest); otherwise its value message.
+pub fn feedback_bytes(a: &lg_core::ctrlsurf::Assignment, v: f32) -> Option<Vec<u8>> {
+    use lg_core::ctrlsurf as cs;
+    let m = cs::feedback_msg(a, v)?;
+    if m.len() == 3 && m[0] & 0xF0 == 0xB0 && (0x30..0x38).contains(&m[1]) {
+        let pan = matches!(&a.class, cs::Class::Strip { param: cs::StripParam::Pan, .. });
+        let mode = cs::ring_mode(a.feedback, pan)?;
+        let pos = cs::ring_position(a.feedback, v).min(11);
+        return Some(vec![m[0], m[1], (mode << 4) | pos]);
+    }
+    Some(m)
+}
+
 // ---- Jog resolution ----------------------------------------------------------------------------
 
 /// Ticks one jog-wheel step moves: a 16th note, or with Jog resolution depends on horizontal
@@ -519,6 +536,35 @@ mod tests {
         c.pace(t0, 100.0, vec![msg.clone(); 20]);
         let n = c.pace(t0 + Duration::from_millis(200), 100.0, Vec::new()).len();
         assert_eq!(n, 7);
+    }
+
+    #[test]
+    fn ring_feedback_formats() {
+        use lg_core::ctrlsurf::{parse_msg, Assignment, Class, Strip, StripParam};
+        let mut a = Assignment::learned("P", parse_msg("B0 30 Lo7"), Class::Strip { strip: Strip::Selected, param: StripParam::Volume });
+        a.min = 0;
+        a.max = 127;
+        let ring = |a: &Assignment, v: f32| feedback_bytes(a, v).unwrap()[2];
+        // Single Dot/Line (mode 0), Left to Right Bar (2), Bar from Center (1), Q/Spread (3)
+        for (fmt, mode) in [(2usize, 0u8), (3, 2), (4, 1), (6, 3), (7, 2)] {
+            a.feedback = fmt;
+            assert_eq!(ring(&a, 0.5) >> 4, mode, "format {fmt}");
+            assert_eq!(ring(&a, 0.5) & 15, 6);
+        }
+        // Automatic: a bar for volume, a dot for pan
+        a.feedback = 1;
+        assert_eq!(ring(&a, 1.0), (2 << 4) | 11);
+        a.class = Class::Strip { strip: Strip::Selected, param: StripParam::Pan };
+        assert_eq!(ring(&a, 0.0) >> 4, 0);
+        // None / Text Only: nothing
+        a.feedback = 0;
+        assert!(feedback_bytes(&a, 0.5).is_none());
+        // a plain controller: its value
+        let mut b = Assignment::learned("P", parse_msg("B0 07 Lo7"), Class::Strip { strip: Strip::Selected, param: StripParam::Volume });
+        b.min = 0;
+        b.max = 127;
+        b.feedback = 3;
+        assert_eq!(feedback_bytes(&b, 1.0), Some(vec![0xB0, 0x07, 127]));
     }
 
     #[test]

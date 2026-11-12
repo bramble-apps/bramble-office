@@ -773,6 +773,15 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 return;
             }
             let strip = |base: u8| (n >= base && n < base + 8).then(|| n - base);
+            // a dialog open: Enter, Cancel and the buttons under the display answer it
+            let dlg = match n {
+                mcu::ENTER => Some(crate::surfdialog::Press::Enter),
+                mcu::CANCEL => Some(crate::surfdialog::Press::Cancel),
+                _ => strip(mcu::SELECT).or(strip(mcu::VPOT_PUSH)).map(|k| crate::surfdialog::Press::Strip((device_offset(&app.hub.surf, d) + k as i32) as usize)),
+            };
+            if dlg.is_some_and(crate::surfdialog::press) {
+                return;
+            }
             let mode_was = app.hub.surf.groups[row].strip_param;
             if mode_was >= crate::surfpref::MODE_PLUGIN && (n == mcu::BANK_LEFT || n == mcu::BANK_RIGHT) {
                 crate::surfpref::plugin_bank(app, d, if n == mcu::BANK_LEFT { -1 } else { 1 });
@@ -977,6 +986,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
         return;
     }
     crate::surfpref::follow(app);
+    crate::surfdialog::tick();
     let focused = ctx.input(|i| i.focused);
     if !focused && app.logic_settings.on("Control Surfaces / General / Bypass all while in background") {
         return;
@@ -1056,6 +1066,8 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
         }
         let names = top.unwrap_or(names);
         let values = bottom.unwrap_or(values);
+        // a modal dialog: its text above, its buttons below
+        let (names, values) = crate::surfdialog::lcd().unwrap_or((names, values));
         // the LCD: names above; values below (Display Mode Value: both rows show values)
         if dev.model != Model::Hui {
             let lcd = if g.show_value { format!("{values}{values}") } else { format!("{names}{values}") };

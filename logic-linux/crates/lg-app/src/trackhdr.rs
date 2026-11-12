@@ -1180,7 +1180,8 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
     icon_palette(app, ctx);
     search(app, ctx);
     if let Some(text) = app.tm.ui.alert.clone() {
-        let mut close = false;
+        // (on control surface displays too: Enter or the strip under OK closes it)
+        let mut close = crate::surfdialog::offer(&text, &["OK"], 0, Some(0)).is_some();
         egui::Window::new("Track Locked").id(egui::Id::unique("tm-alert")).title_bar(false).resizable(false).collapsible(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, -60.0)).show(ctx, |ui| {
             ui.set_width(300.0);
             ui.add_space(6.0);

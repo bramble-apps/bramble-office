@@ -105,6 +105,9 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
             }
         });
     });
+    if let Some(k) = crate::surfdialog::offer(&format!("New audio device: {name}. Use it?"), &["Use", "Ignore"], 0, Some(1)) {
+        answer = Some(k == 0);
+    }
     if let Some(yes) = answer {
         STATE.with(|st| st.borrow_mut().pending = None);
         if yes {

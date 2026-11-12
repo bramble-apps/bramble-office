@@ -230,14 +230,16 @@ pub fn fades(app: &mut App, ui: &egui::Ui, rr: Rect, clip: Rect, t: usize, r: us
     }
     let shift_ctrl = ui.input(|i| (i.modifiers.ctrl && i.modifiers.shift) || i.modifiers.alt);
     // the zones: the Fade tool takes the whole region (a press near a touching neighbour's edge:
-    // a crossfade); the Pointer the upper corners
+    // a crossfade); the Pointer the upper corners (Settings ▸ Editing ▸ Fade tool click zones)
     let next = app.project.as_ref().and_then(|pp| {
         pp.tracks[t].regions.iter().enumerate().find(|(k, o)| *k != r && o.audio.is_some() && o.start <= rg.start + rg.length + 2 && o.start + 2 >= rg.start + rg.length.saturating_sub(rg.length / 2) && o.start > rg.start).map(|(k, _)| k)
     });
     let zones: Vec<(Rect, &str)> = if tool == Tool::Fade {
         vec![(Rect::from_min_max(rr.min, pos2(rr.center().x, rr.max.y)), "in"), (Rect::from_min_max(pos2(rr.center().x, rr.min.y), rr.max), "out")]
-    } else {
+    } else if app.logic_settings.on("General / Editing / Fade tool click zones") {
         vec![(Rect::from_min_size(rr.min, vec2(10.0, 12.0)), "in"), (Rect::from_min_max(pos2(rr.max.x - 18.0, rr.min.y), pos2(rr.max.x - 7.0, rr.min.y + 12.0)), "out")]
+    } else {
+        Vec::new()
     };
     for (zone, side) in zones {
         let zone = zone.intersect(clip);
