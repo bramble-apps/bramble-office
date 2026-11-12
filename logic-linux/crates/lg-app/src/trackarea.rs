@@ -169,6 +169,9 @@ pub fn sync(app: &mut App) {
     crate::autoext::remap(app, &map);
     remap_pair(&mut app.players, &map);
     remap_pair(&mut app.drum_params, &map);
+    remap_pair(&mut app.spx.region_chords, &map);
+    remap_pair(&mut app.spx.patterns, &map);
+    remap_pair(&mut app.spx.hands, &map);
     remap_pair(&mut app.audio_edit.regions, &map);
     remap_map(&mut app.flex.tracks, &map);
     remap_set(&mut app.armed, &map);
@@ -423,6 +426,13 @@ pub fn command(app: &mut App, name: &str) -> bool {
             if sel.is_empty() {
                 return false;
             }
+            // (groups linking Track Zoom: their tracks zoom with the selected ones)
+            let mut sel = sel.clone();
+            for k in sel.clone() {
+                sel.extend(crate::mixstate::linked(app, k, (2, 0x02)));
+            }
+            sel.sort();
+            sel.dedup();
             if let Some(p) = app.project.as_mut() {
                 for &i in &sel {
                     let t = &mut p.tracks[i];

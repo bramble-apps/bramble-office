@@ -19,6 +19,7 @@ use crate::players::Player;
 pub const COMMANDS: &[&str] = &[
     "Regenerate", "Convert to MIDI Region", "Convert to MIDI Region/Cell", "To MIDI Region", "Replace with Session Player Region", "Replace with Session Player Region/Cell", "To Session Player Region",
     "Create Session Player Region", "Create Session Player Region/Cell", "Populate Track with Session Player Regions",
+    "Apply Region Chords to Chord Track", "Cut Region Chords", "Copy Region Chords", "Delete Region Chords", "Paste Region Chords",
 ];
 
 /// A custom pattern: sixteenth-note steps (16 a bar), looped over the region.
@@ -44,6 +45,87 @@ pub struct State {
     page_clip: Option<Vec<bool>>,
     pattern_clip: Option<Pattern>,
     save_name: Option<String>,
+    /// Region chords: (the region follows them, the chords one per bar from the region's start).
+    pub region_chords: HashMap<(usize, usize), (bool, String)>,
+    /// Follow Rhythm Of ▸ Track: the track a region follows.
+    pub follow_track: HashMap<(usize, usize), usize>,
+    /// New Tracks ▸ Use Default Chord Progression for New Regions is off (new regions start on
+    /// the key's tonic chord).
+    pub tonic_only: bool,
+    /// The editor's Main view: 0 the main controls, 1 LFO, 2 Slides / Envelope.
+    pub view: u8,
+    /// The Patterns dialog / More pop-over / region-chord editor open.
+    pub patterns_open: bool,
+    pub more_open: bool,
+    pub chord_edit: Option<String>,
+    /// Cut / Copy Region Chords
+    pub chord_clip: Option<String>,
+    /// The preview Play button's saved state (region solo, soloed regions, cycle on, cycle).
+    pub preview: Option<(bool, Vec<(usize, usize)>, bool, (u32, u32))>,
+}
+
+/// The project key: tonic pitch class and minor.
+pub fn project_key(app: &App) -> (u8, bool) {
+    let k = app.project.as_ref().map(|p| p.key.clone()).unwrap_or_default();
+    let pc = lg_players::chords::pitch_class(k.trim()).map_or(0, |x| x.0);
+    let low = k.to_ascii_lowercase();
+    (pc, low.contains("min") || (low.len() > 1 && low.trim_end().ends_with('m')))
+}
+
+/// The style's default chord progression in the project key, as chord names (one per bar).
+pub fn default_progression(app: &App) -> String {
+    let (key, minor) = project_key(app);
+    // a minor key: the relative major's progression
+    let major = if minor { (key + 3) % 12 } else { key };
+    lg_players::chords::Progression::Default.chords(major, 0, 1, 4).iter().map(|c| c.chord.name()).collect::<Vec<_>>().join(" ")
+}
+
+/// The chords a player region plays over: its region chords when it follows them, else the
+/// Chord track's; with neither, the tonic chord of the project key.
+pub fn region_chords(app: &App, t: usize, r: usize) -> Vec<lg_players::chords::ChordAt> {
+    use lg_players::chords::{parse_bars, Chord, ChordAt};
+    let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)) else { return Vec::new() };
+    let (start, end) = (rg.start, rg.start + rg.length);
+    let bar = app.bar_ticks().max(1);
+    if let Some((true, text)) = app.spx.region_chords.get(&(t, r)) {
+        let one = parse_bars(text, 0, bar);
+        if !one.is_empty() {
+            let span = one.len() as u32 * bar;
+            let mut out = Vec::new();
+            let mut off = 0;
+            while start + off < end {
+                out.extend(one.iter().map(|c| ChordAt { pos: start + off + c.pos, chord: c.chord }));
+                off += span;
+            }
+            return out;
+        }
+    }
+    if !app.chord_text.trim().is_empty() {
+        return crate::players::chords(app, end + 4 * bar);
+    }
+    let (key, minor) = project_key(app);
+    vec![ChordAt { pos: start, chord: if minor { Chord::minor(key) } else { Chord::major(key) } }]
+}
+
+/// New player regions get the default progression as region chords (unless the New Tracks
+/// checkbox is off: then the tonic chord).
+pub fn init_region_chords(app: &mut App, t: usize, r: usize) {
+    if !app.spx.tonic_only && app.chord_text.trim().is_empty() {
+        let text = default_progression(app);
+        app.spx.region_chords.insert((t, r), (true, text));
+    }
+}
+
+/// The onsets of the track a region follows (Follow Rhythm Of ▸ Track), inside the region.
+pub fn follow_onsets(app: &App, t: usize, r: usize) -> Vec<u32> {
+    let Some(&src) = app.spx.follow_track.get(&(t, r)) else { return Vec::new() };
+    let Some(p) = app.project.as_ref() else { return Vec::new() };
+    let Some(rg) = p.tracks.get(t).and_then(|x| x.regions.get(r)) else { return Vec::new() };
+    let (a, b) = (rg.start, rg.start + rg.length);
+    let mut v: Vec<u32> = p.tracks.get(src).map(|tr| tr.regions.iter().filter(|x| !x.muted).flat_map(|x| x.notes.iter().filter(|n| !n.muted).map(|n| n.pos)).filter(|&pos| pos >= a && pos < b).collect()).unwrap_or_default();
+    v.sort();
+    v.dedup();
+    v
 }
 
 /// Studio's included presets (they can't be deleted): settings over the style's defaults.
@@ -296,22 +378,6 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, head: Rect, t: usize, player: &m
     if let Some(x) = pick {
         *player = apply_settings(app, player, &x);
     }
-    // the locks (Fills, Swing kept when presets or styles change)
-    let lr = Rect::from_min_size(pos2(pr.max.x + 8.0, pr.min.y), vec2(66.0, 22.0));
-    for (i, (name, on)) in [("Fills", app.spx.lock_fills), ("Swing", app.spx.lock_swing)].into_iter().enumerate() {
-        let r = Rect::from_min_size(pos2(lr.min.x + i as f32 * 70.0, lr.min.y), vec2(66.0, 22.0));
-        let resp = ui.interact(r, ui.scope_id().with(("spx-lock", i)), Sense::click()).on_hover_text(format!("Lock {name}: kept when switching presets or styles"));
-        p.rect_filled(r, 5.0, if on { Color32::from_rgb(0x52, 0xc0, 0x3c).gamma_multiply(0.5) } else { look::group_bg() });
-        crate::glyphs::paint(&p, Rect::from_min_size(r.min + vec2(4.0, 3.0), vec2(16.0, 16.0)), if on { crate::glyphs::ph::LOCK } else { crate::glyphs::ph::LOCK_OPEN }, 12.0, look::text());
-        p.text(pos2(r.min.x + 24.0, r.center().y), Align2::LEFT_CENTER, name, look::regular(11.5), look::text());
-        if resp.clicked() {
-            if i == 0 {
-                app.spx.lock_fills = !app.spx.lock_fills;
-            } else {
-                app.spx.lock_swing = !app.spx.lock_swing;
-            }
-        }
-    }
     // Save…: the name
     if let Some(mut name) = app.spx.save_name.clone() {
         let mut done = None;
@@ -345,10 +411,10 @@ pub fn hand_buttons(app: &mut App, ui: &mut egui::Ui, at: egui::Pos2, t: usize, 
     let p = ui.painter().clone();
     let mut changed = false;
     for (i, (name, muted)) in [("Left Hand", l), ("Right Hand", rr)].into_iter().enumerate() {
-        let b = Rect::from_min_size(at + vec2(i as f32 * 92.0, 0.0), vec2(86.0, 22.0));
+        let b = Rect::from_min_size(at + vec2(i as f32 * 98.0 - 96.0, -12.0), vec2(92.0, 24.0));
         let resp = ui.interact(b, ui.scope_id().with(("spx-hand", t, r, i)), Sense::click()).on_hover_text(format!("{name}: click to mute or unmute"));
-        p.rect_filled(b, 5.0, if muted { look::group_bg() } else { Color32::from_rgb(0x52, 0xc0, 0x3c) });
-        p.text(b.center(), Align2::CENTER_CENTER, name, look::regular(11.5), if muted { look::text_dim() } else { Color32::BLACK });
+        p.rect_filled(b, 6.0, if muted { Color32::from_gray(0x36) } else { crate::spedit::yellow() });
+        p.text(b.center(), Align2::CENTER_CENTER, name, look::regular(13.0), if muted { look::text_dim() } else { Color32::BLACK });
         if resp.clicked() {
             let e = app.spx.hands.entry((t, r)).or_default();
             if i == 0 {
@@ -552,10 +618,11 @@ fn new_region(app: &mut App, t: usize, start: u32, len: u32, name: Option<String
     if tr.kind != lg_core::TrackKind::Instrument {
         return None;
     }
-    let region = lg_core::Region { name: name.unwrap_or_else(|| player.style_name()), start, length: len, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
+    let region = lg_core::Region { name: name.unwrap_or_else(|| player.region_name()), start, length: len, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
     tr.regions.push(region);
     let r = tr.regions.len() - 1;
     app.players.insert((t, r), player);
+    init_region_chords(app, t, r);
     crate::players::regenerate(app, t, r);
     Some(r)
 }
@@ -571,6 +638,36 @@ pub fn command(app: &mut App, name: &str) -> bool {
         return false;
     }
     match name {
+        "Apply Region Chords to Chord Track" | "Cut Region Chords" | "Copy Region Chords" | "Delete Region Chords" | "Paste Region Chords" => {
+            let sel = player_regions(app);
+            let Some(&first) = sel.first() else { return false };
+            let text = app.spx.region_chords.get(&first).map(|x| x.1.clone()).unwrap_or_default();
+            match name {
+                "Apply Region Chords to Chord Track" if !text.is_empty() => {
+                    app.checkpoint("Apply Region Chords to Chord Track");
+                    app.chord_text = text;
+                }
+                "Copy Region Chords" => app.spx.chord_clip = Some(text),
+                "Paste Region Chords" => {
+                    let Some(c) = app.spx.chord_clip.clone() else { return false };
+                    app.checkpoint("Paste Region Chords");
+                    for k in &sel {
+                        app.spx.region_chords.insert(*k, (true, c.clone()));
+                    }
+                }
+                _ => {
+                    app.checkpoint(name);
+                    if name == "Cut Region Chords" {
+                        app.spx.chord_clip = Some(text);
+                    }
+                    for k in &sel {
+                        app.spx.region_chords.remove(k);
+                    }
+                }
+            }
+            crate::players::regenerate_all(app);
+            app.dirty = true;
+        }
         "Regenerate" => {
             let sel = player_regions(app);
             let drums: Vec<(usize, usize)> = app.region_selection().into_iter().filter(|(t, _)| app.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Drummer)).collect();

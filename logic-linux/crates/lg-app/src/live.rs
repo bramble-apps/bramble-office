@@ -219,6 +219,10 @@ pub fn sequencer_in(app: &mut App, ctx: &egui::Context, status: u8, a: u8, b: u8
         if !crate::projsettings::input_passes(&app.proj, status) {
             return;
         }
+        // an Articulation Set's switches take their messages (artic.rs)
+        if crate::artic::midi_in(app, t, status, a, b) {
+            return;
+        }
         // MIDI ▸ General: CC 7 / 10 move the track's fader and pan
         if status & 0xF0 == 0xB0 && (a == 7 || a == 10) && crate::projsettings::cc_moves_strip(&app.proj) {
             if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {

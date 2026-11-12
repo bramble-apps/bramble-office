@@ -200,7 +200,8 @@ pub fn prepare(mut tracks: Vec<PlayTrack>, what: &What) -> Vec<PlayTrack> {
     tracks
 }
 
-/// `job` with the engine's tracks changed first (Live Loops cells bounced in place, cellbounce.rs).
+/// `job` with the engine's tracks changed first (Live Loops cells bounced in place, cellbounce.rs;
+/// Selection-Based Processing's other plug-ins, sbp.rs).
 pub fn job_with(app: &App, what: &What, f: impl FnOnce(&mut Vec<PlayTrack>)) -> Job {
     let mut j = job(app, what);
     f(&mut j.engine.tracks);
@@ -361,7 +362,7 @@ pub(crate) fn write_bounce(app: &mut App, base: &str, samples: &[f32]) -> Option
     Some((path, samples.len() as f64 / 2.0 / RATE as f64))
 }
 
-fn audio_region(name: &str, start: u32, length: u32, file: PathBuf, seconds: f64) -> Region {
+pub(crate) fn audio_region(name: &str, start: u32, length: u32, file: PathBuf, seconds: f64) -> Region {
     Region { name: name.into(), start, length, notes: Vec::new(), audio: Some(lg_core::project::AudioRef { file, seconds }), muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
 }
 

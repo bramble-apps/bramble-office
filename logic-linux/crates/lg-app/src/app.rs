@@ -333,6 +333,9 @@ pub struct App {
     pub ax: crate::autoext::State,
     /// Session Player presets, custom patterns, hands (spx.rs).
     pub spx: crate::spx::State,
+    pub spdrum: crate::spdrum::State,
+    pub artic: crate::artic::State,
+    pub sbp: crate::sbp::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -529,6 +532,9 @@ impl App {
             sc: Default::default(),
             ax: Default::default(),
             spx: Default::default(),
+            spdrum: Default::default(),
+            artic: Default::default(),
+            sbp: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -682,6 +688,7 @@ impl App {
             }
             notes.sort_by_key(|n| n.0);
             crate::arp::for_playback(self, i, &mut notes);
+            crate::artic::for_playback(self, i, &mut notes);
             tracks.push(PlayTrack { channel, program: self.programs.get(i).copied().unwrap_or(0), notes, audio: Vec::new(), volume: db_to_gain(t.volume_db), pan: t.pan, mute: t.mute, solo: t.solo, eq: self.eqs.get(&i).copied(), instrument: self.instrument_for(i), instrument_floats: t.plugins.iter().find(|u| u.slot == 2 && !self.instrument_choice.contains_key(&i)).map(|u| u.params.clone()).unwrap_or_default(), inserts: t.plugins.iter().filter(|u| u.slot >= 3 && u.name != "Channel EQ" && !u.name.is_empty()).map(|u| (u.name.clone(), u.params.clone())).collect(), sends: self.sends.get(&i).map(|v| v.iter().map(|s| audio::Send { bus: s.bus, gain: db_to_gain(s.level_db), pre: s.pre }).collect()).unwrap_or_default(), auto_volume: crate::automation::for_engine(self, i).0, auto_pan: crate::automation::for_engine(self, i).1 });
         }
         crate::trackarea::stack_mix(self, &mut tracks);
@@ -1373,7 +1380,7 @@ impl App {
         if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
-        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
+        if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) || crate::sbp::command(self, name) {
             return true;
         }
         if crate::envhub::command(self, ctx, name) {
@@ -1838,11 +1845,11 @@ impl App {
             match self.bottom {
                 Bottom::PianoRoll if crate::celledit::current(self).is_some() => crate::celledit::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
-                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) && self.drum_tab != 2 => {
+                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => {
                     let (t, r) = self.selected_region.unwrap();
                     crate::players::show(self, ui, ed, t, r);
                 }
-                Bottom::PianoRoll if drummer.is_some() && self.drum_tab != 2 => {
+                Bottom::PianoRoll if drummer.is_some() => {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
                 }
@@ -1882,6 +1889,8 @@ impl App {
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
+        crate::artic::window(self, &ctx);
+        crate::sbp::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);

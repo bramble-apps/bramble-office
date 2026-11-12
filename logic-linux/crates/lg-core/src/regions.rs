@@ -21,6 +21,9 @@ pub struct RegionExt {
     /// Region automation of channel and plug-in parameters (ticks from the region's start):
     /// it moves and copies with the region and plays over the track's own automation.
     pub automation: Vec<crate::project::AutoLane>,
+    /// Notes' articulation IDs: (ticks from the region's start, pitch, ID 1-255); notes not
+    /// listed have none. (Studio keeps them here; not yet written into Logic's file.)
+    pub artics: Vec<(u32, u8, u8)>,
 }
 
 /// One MIDI FX slot of a channel strip.

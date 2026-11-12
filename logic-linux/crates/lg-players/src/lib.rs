@@ -25,6 +25,7 @@ pub mod json;
 pub mod keys;
 pub mod kit;
 pub mod measured;
+pub mod synth;
 
 pub use lg_core::events::{Note, PPQ};
 
@@ -45,11 +46,16 @@ pub struct RegionSpec {
     pub ending: bool,
     /// The region follows another player region (a crash may open it).
     pub continues: bool,
+    /// The project tempo (Tempo ▸ Automatic compares it with the style's own).
+    pub bpm: f32,
+    /// Onsets (song ticks) of the track the region follows (Follow Rhythm Of ▸ Track); empty:
+    /// none.
+    pub follow: Vec<u32>,
 }
 
 impl RegionSpec {
     pub fn new(start: u32, length: u32, signature: (u8, u8)) -> Self {
-        RegionSpec { start, length, signature, markers: Vec::new(), ending: false, continues: false }
+        RegionSpec { start, length, signature, markers: Vec::new(), ending: false, continues: false, bpm: 120.0, follow: Vec::new() }
     }
 
     pub fn end(&self) -> u32 {

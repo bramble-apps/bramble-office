@@ -41,7 +41,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (⌥⇧B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. Step Sequencer inspector (stepinsp.rs; View ▸ Show Local Inspector or the toolbar's Pattern Browser | Inspector pill): Pattern / Row / Step tabs, "*" for differing values with relative changes; pattern Legato, Swing (1/8 or 1/16), Key / Scale with No Transpose, Scale Quantize and the Q button, MIDI channel for pattern / row / step, Latch / Slide; step Condition (Always, Recurrence n of m, First / Last Loop), per-step Step Rate (also an edit mode), Articulation, Note Repeat 1–16 with Velocity Ramp / Curve / Distribution, all played and saved in pattern files; editing an off step's value turns it on; View ▸ Sort Rows (By Type / Type and Note / Type and Name, Ascending / Descending). [ ] automation rows (Latch / Slide only stored), chord-degree rows, articulation IDs don't reach instruments, the inspector's settings aren't in the region on undo (an undo re-reads the pattern from the notes), Zoom Focused Row, Display Edit Mode Values options, row drag to reorder, DMD sort, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)
 - [~] Step Input Keyboard (stepinput.rs, ⌥⌘K): Logic's window (chord, values 1/1–1/64, dot, triplet, rest, ppp–fff, Q, channel, keyboard C0–C7), all 49 key commands while it is open, notes from MIDI keyboards, into the selected region at the playhead (the region grows), Diatonic Insert in the Score. [ ] the Score's own step-input cursor
 - [~] Step Editor (stepedit.rs, Window ▸ Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project
-- [~] Event Editor (eventedit.rs, the List Editors' Events): ↑ ↓, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (notes have no articulation ID yet)
+- [~] Event Editor (eventedit.rs, the List Editors' Events): ↑ ↓, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (articulation IDs exist since 2026-11-12, artic.rs, but the Event List doesn't show them)
 - [ ] Drum Machine Designer key commands: no pad view in Studio yet
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only) Mixer additions (mixext.rs, mixwin.rs, mixengine.rs; 2026-11-11): Channel Mode button (mono / stereo / left / right in the engine), Pan Law wired, Stereo Pan, Binaural Panner (strip and window; a spherical-head model, not Apple's HRTF), Independent Pan / Post Pan / bypassed / Low Latency Safe sends, Low Latency Monitoring in the engine, solo-safe and exclusive solo, flashing mute / solo, held peak display with clip colours, segmented meters, typed fader and pan values, Shift fine fader, Toggle Level, Dim, output Bounce button, R / I on audio strips, rename / colour strips, several groups per strip, automation mode menu on strips, MIDI channel strips (program, bank, Assign 1-5 sent as MIDI), Studio channel strip settings (.cst text) with performances, I/O Labels window, Configure Channel Strip Components, Search and Add Plug-in and menu search, Follow Hide / Track Stacks / Autoscroll / Sends only view options, drag strips to reorder. [ ] multi-output instruments, side chain, plug-in window link modes, bus / input / output strips, Plug-in Manager for Logic's plug-ins
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
@@ -86,8 +86,8 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops
 
 ## 5. Session Players
-- [x] Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM
-- [x] Bass Player and Keyboard Player: tracks from the New Track sheet, their editor (style, XY pad, knobs, Details), the Chord track drives them. spx.rs (2026-11-11): Preset pop-up (Studio's included presets, user presets saved to ~/.config/bramble-studio, Delete, Recall Default, Copy / Paste, Keep Settings when Changing Style; a new style loads its defaults), type pop-up (Keyboard / Bass Player, Change Patch), Fills / Swing locks, Left / Right Hand buttons, Lowest Note to B0, Manual view custom pattern (16th steps, Length, pages, Copy / Paste Page and Pattern, Reset); Regenerate, Convert to MIDI Region, Replace with Session Player Region, Create Session Player Region (marquee / cycle / playhead), Populate Track with Session Player Regions (arrangement markers). [ ] Logic-measured styles beyond Pop Songwriter / Strummed, region chords, Patterns dialog, Drummer Manual rows, preview Play, the per-style Details controls (Melody, Octaves, Phrasing, voicing lists, Synth players)
+- [x] Drummer (lg-players): 33 characters by genre, XY pad, kit sections and variations, Fills, Swing, Feel, Ghost Notes, Hi-Hat, Humanize, Follow, Snare, Half/Double; section-aware; within 4% of Logic's measured notes per bar. [ ] other genres measured, Follow measured, writing settings back to Logic's GenM spdrum.rs (2026-11-12): the editor as Logic 13's (Complexity / Intensity sliders, Regenerate, Main / Details / Manual, dark panel; critic-checked against Apple's drummer screenshots): kit-piece buttons for Percussion / Hi-Hat / Cymbals / Toms / Kick & Snare (lit plays, dimmed mutes), pattern dots from the region (brighter = harder) and variation badges, Fill Amount + Fill Complexity, Details Snare / Percussion (Tambourine, Shaker, Claps) / Hi-Hat pop-ups, Cymbals and Toms pop-ups when selected, electronic per-piece complexity and Phrase Variation, Tempo Automatic, Manual rows per kit piece with mute buttons, kick & snare Patterns dialog (Follow Rhythm Of Track / Chords, Brush Sweep / Taps). [ ] Drum Kit Designer piece swaps, multi-channel kits, per-group Patterns dialogs, drummer region chords
+- [x] Bass Player and Keyboard Player: tracks from the New Track sheet, their editor (style, XY pad, knobs, Details), the Chord track drives them. spx.rs (2026-11-11): Preset pop-up (Studio's included presets, user presets saved to ~/.config/bramble-studio, Delete, Recall Default, Copy / Paste, Keep Settings when Changing Style; a new style loads its defaults), type pop-up (Keyboard / Bass Player, Change Patch), Fills / Swing locks, Left / Right Hand buttons, Lowest Note to B0, Manual view custom pattern (16th steps, Length, pages, Copy / Paste Page and Pattern, Reset); Regenerate, Convert to MIDI Region, Replace with Session Player Region, Create Session Player Region (marquee / cycle / playhead), Populate Track with Session Player Regions (arrangement markers). [ ] Logic-measured styles beyond Pop Songwriter / Strummed spedit.rs + lg-players synth.rs (2026-11-12): Logic 13 editor layout (bar with Chords pop-up, ruler Play preview: cycle + region solo, region chords lane, scrolled controls), Synth Players: Synth Bass 808 / Pump / Sequenced (XY pad, note range, Phrase Length, Rhythm / Octave / Melody, Repeats, Triplets, ducking as CC 11, accents, Chord Response, Add Notes) and Synth Keyboard Rhythmic Chords / Modulated Pad / Simple Pad (Tie Notes, Note Start / Length, Strum, Velocity, Phrasing); LFO view (Amount, 4 waveforms, Phase, Symmetry, Rate + Sync Region / Chord / Beats / Free / Random, More: Curve, S Curve, Offset, To Velocity / Length, CC Target), Slides view (Amount, Time, Auto, Legato, Start, Curve, S Curve; More: Slide Mode, MIDI Mono Mode, Pitch Bend Range), Envelope view (drag nodes, curves, Shift Start, Align, Invert, Length modes, CC Target, Offset); Bass Melody / Octaves / Phrasing, Slide Mode, Pickup Hits on 2 and 4, per-style Buzz Trills / Double Stops / Laid Back / Blue Notes / Slaps; Keyboard Left / Right-Hand Voicing, Style and Movement lists, linked hand range, Block Chords Phrasing (sustain pedal) and Steady 8ths, Arpeggio Mode; Patterns dialog (Studio-made dot patterns, Follow Rhythm Of Track / Chords); region chords (Follow Chord Track / Region Chords, Edit, progressions, Copy / Cut / Paste / Delete, Apply to Chord Track), the key's tonic chord when there are none, Use Default Chord Progression wired; Tempo Automatic. [ ] Alchemy patches for Synth styles, Session Player loops, the players' settings and region chords saved into the .logicx, Studio instruments' response to CC 74 / 11 / pitch bend unverified
 - [~] Instrument editors (instwin.rs, plug-in undo with ⌘Z over the window, state kept by track id and re-applied when the engine rebuilds; the Mixer's instrument slot right-click picks Logic's instruments): **Sampler** (samplerwin, sampler_doc, sampler_synth): Navigation bar (LEDs, maximize, Option-click, Action menu, Chromatic / Optimized dropzones), Synth pane (two filters, 19 types, Series / Parallel, Blend, Drive, Details), Mod Matrix (20 routings, Via with Min / Max, filter, sort), Modulators (5 envelopes, 4 LFOs), Mapping (Key Mapping Editor with drags, splits, rubber band, files on keys; Group view and Zone view with every column, sorting, hide / show; Edit / Group / Zone / View menus: remaps, automaps, fill gaps, round robin, merge, loops, crop, retune, normalize), Zone pane (waveform, markers, Option-drags, loop area, auto-loop, snap, zoom), groups' keyswitches / articulations / controller / bend / tempo filters, release triggers, voices, exclusive classes, crossfades; Mono / Legato / Unison / Glide; instruments saved and opened as SFZ in ~/Music/Audio Music Apps/Sampler Instruments (SF2 / EXS there converted), key / output label sets; all 36 Sampler key commands. **Quick Sampler** (quickwin): modes, markers, manual slices, Open in Sampler. **Drum Machine Designer** (dmdwin): 4×4 pad grid (3 pages, 48 pads), pad menu, samples dropped on pads (each a Quick Sampler), mute / solo / exclusive groups / resample, all 16 key commands. **Drum Kit Designer** (dkdwin): kit stage, pieces from other kits, per-piece Tune / Damp / Gain, Mapping view. [ ] Convert Regions to New Sampler Track, Flex in Sampler / Quick Sampler, Quick Sampler Recorder, LFO and Mod Matrix panes, fades and settings menu, DMD pads as a real summing stack of tracks, Producer Kits and multi-output, editor state saved into the .logicx (the Sampler instrument is kept as an SFZ; the rest only for the session), drags of regions / Browser loops into the editors
 
 ## 6. Files
@@ -123,6 +123,8 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 - [~] Cut / Insert Time (regionparams.rs, lg-core regparams, tested): Cut / Copy / Delete / Repeat Section Between Locators, Insert Silence, Insert Section at Playhead (Global, and Selection asking about global events), with tempo changes, markers, arrangement markers, chords, Transposition and whole-bar key / signature changes moved; audio regions cut keep their file offset, gain and fades; toolbar section buttons work. Region Length Double / Halve / Change… (0.25-16), Repeat Regions dialog (copies, adjustment, copies / aliases), Paste at Original Position, Split's Keep / Shorten / Split dialog (Shorten by default), Join normalizes Transpose / Velocity / Dynamics and joins a looped region with its loops; Control / Control-Shift drags; Limit Dragging to One Direction; Gain tool; Toggle Region Solo; marquee ruler, marquee Shift-click ends / grow, click inside splits, Shift-click header toggles a track. [ ] (Selection) works per track, not per region; audio Join mixdown; region solo button and Solo tool hold-to-play; Gain on a marquee
 - [~] Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog
 - [~] Bounce and share (share.rs, 2026-11-12, tested): Logic's Bounce window for stereo projects — Destination list (PCM, MP3, M4A: AAC; the clicked row shows its options), PCM AIFF / WAVE / CAF, 8–32-bit float, 11.025–192 kHz (anti-aliased), Interleaved / Split (Bounce Extensions), Dithering (None, POWr #1–#3, UV22HR: Studio's own algorithms in their spirit, not Apple's), MP3 (mono / stereo bit rates, VBR, Quality, best encoding, 10 Hz filter, Joint / Normal stereo, ID3 tags with the ID3 Settings window and default values), M4A (AAC bit rate / VBR, Apple Lossless), Start / End from cycle, selection or project, Mode Automatic / Offline / Realtime (paced, not monitored), Bounce 2nd Cycle Pass, Include Audio Tail, Include Tempo Information (acid chunk: project tempo only), Normalize, Add to Project, Add to Music Library (~/Music/Bramble Studio), remembered folder; MP3 / M4A through ffmpeg. Share ▸ Song to Music (tags, artist/album folders, .m3u playlist), Song to Voice Memos (a folder), Mail (song, or the project zipped; xdg-email). Export ▸ Selection as MIDI File; Import ▸ Audio File / MIDI File / Other; audio and MIDI files dropped from the file manager import at the playhead. Surround projects keep surround_ui's Bounce window. [ ] Burn CD/DVD, AirDrop, GarageBand for iOS / iPad, AAF, Final Cut Pro XML, MusicXML import, Export Selection as Audio File, My Info tags, mono outputs; Bnc bounces the one output (Studio has no other outputs)
+- [~] Articulation sets (artic.rs, 2026-11-12): Articulation Set Editor (Articulations / Switches / Output panes, + − Revert, Local / global MIDI Remote, channel, octave offset, 9 switch modes, up to three outputs), Track inspector Articulation Set pop-up, note articulation IDs (region ext), Piano Roll Articulation pop-up and colours, Set / Next / Previous / No Articulation, Select Same Articulation, Separate by Articulation, Keyswitches view and window, MIDI input switches. [ ] Retrigger / Trigger acting on sounding notes, outputs other than Note On on playback, plug-in header pop-up, Event List / Score, saving IDs into the .logicx
+- [~] Selection-Based Processing (sbp.rs, 2026-11-12): sets A / B of Studio effects, selected audio regions or the marquee, Split at Marquee Borders, Create New Take, Add Effect Tail, Gain modes, Preview with volume, Apply, Apply Again. [ ] Audio Units, Channel Strip Setting pop-up, plug-in windows for its slots
 
 <!-- GENERATED: tool/checklist.py rewrites everything below -->
 
@@ -133,13 +135,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 377 | 595 | 63% |
-| Local menus | 693 | 1191 | 58% |
-| Right-click menus | 1413 | 2575 | 54% |
-| Key commands | 1671 | 2207 | 75% |
+| Menu bar | 378 | 595 | 63% |
+| Local menus | 700 | 1191 | 58% |
+| Right-click menus | 1436 | 2575 | 55% |
+| Key commands | 1715 | 2207 | 77% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 377 of 595
+## Menu bar: 378 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -281,7 +283,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 85/166</summary>
+<details><summary>Edit — 86/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -427,7 +429,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Separate MIDI Events
   - [ ] Separate by Note Pitch
   - [ ] Separate by MIDI Channel
-  - [ ] Separate by Articulation
+  - [x] Separate by Articulation
 - [ ] Cut/Insert Time
   - [x] Cut Section Between Locators  `⌃⌘X`
   - [x] Copy Section Between Locators
@@ -787,7 +789,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 693 of 1191
+## Local menus (Edit / Functions / View in each area): 700 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -1000,11 +1002,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Functions — 7/11</summary>
+<details><summary>audiotrack-Functions — 9/11</summary>
 
 - [ ] Rename Regions  `⇧N`
-- [ ] Selection-Based Processing…  `⌥⇧P`
-- [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+- [x] Selection-Based Processing…  `⌥⇧P`
+- [x] Apply Selection-Based Processing Again  `⌃⌥P`
 - [x] Remove Silence…  `⌃X`
 - [x] Normalize Region Gain…  `⌃⌥G`
 - [x] Apply Normalize Region Gain Again  `⌃G`
@@ -1028,7 +1030,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Edit — 62/100</summary>
+<details><summary>eventlist-Edit — 63/100</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1053,7 +1055,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Equal Events  `⇧E`
   - [x] Same MIDI Channel  `⇧H`
   - [x] Same Subposition  `⇧P`
-  - [ ] Same Articulation  `⇧A`
+  - [x] Same Articulation  `⇧A`
   - [x] Highest Notes  `⇧↑`
   - [x] Lowest Notes  `⇧↓`
   - [x] Next Event  `→`
@@ -1309,7 +1311,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-Edit — 72/100</summary>
+<details><summary>pianoroll-Edit — 73/100</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1333,7 +1335,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Same Note Pitch  `⇧E`
   - [x] Same MIDI Channel  `⇧H`
   - [x] Same Subposition  `⇧P`
-  - [ ] Same Articulation  `⇧A`
+  - [x] Same Articulation  `⇧A`
   - [x] Highest Notes  `⇧↑`
   - [x] Lowest Notes  `⇧↓`
   - [x] Next Event  `→`
@@ -1812,7 +1814,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 84/168</summary>
+<details><summary>tracks-Edit — 85/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1959,7 +1961,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Separate MIDI Events
   - [ ] Separate by Note Pitch
   - [ ] Separate by MIDI Channel
-  - [ ] Separate by Articulation
+  - [x] Separate by Articulation
 - [ ] Cut/Insert Time
   - [x] Cut Section Between Locators  `⌃⌘X`
   - [x] Copy Section Between Locators
@@ -1985,7 +1987,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Functions — 48/61</summary>
+<details><summary>tracks-Functions — 50/61</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -1996,8 +1998,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Color Regions/Cells by Track Color  `⌥⇧C`
 - [ ] Color Track by Region/Cell Color  `⌥⇧⌘C`
 - [x] Stem Splitter…
-- [ ] Selection-Based Processing…  `⌥⇧P`
-- [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+- [x] Selection-Based Processing…  `⌥⇧P`
+- [x] Apply Selection-Based Processing Again  `⌃⌥P`
 - [x] Remove Silence from Audio Region…  `⌃X`
 - [x] Normalize Region Gain…  `⌃⌥G`
 - [x] Apply Normalize Region Gain Again  `⌃G`
@@ -2131,7 +2133,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1413 of 2575
+## Right-click menus: 1436 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -3741,7 +3743,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-note — 42/321</summary>
+<details><summary>pianoroll-note — 43/321</summary>
 
 - [x] Define as Default Note
 - [x] Cut  `⌘X`
@@ -3752,7 +3754,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select All Following  `⇧F`
 - [x] All Following of Same Pitch  `⌃⇧F`
 - [x] Select Same Subpositions  `⇧P`
-- [ ] Select Same Articulation  `⇧A`
+- [x] Select Same Articulation  `⇧A`
 - [x] Same Note Pitch  `⇧E`
 - [x] Same Note Name  `⇧S`
 - [x] Same-Colored Notes  `⇧C`
@@ -4082,7 +4084,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 102/172</summary>
+<details><summary>region-audio — 109/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4201,20 +4203,20 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate by MIDI Channel
   - [ ] Separate by Note Pitch
   - [ ] Separate Pattern Region by Kit Piece
-  - [ ] Separate by Articulation
+  - [x] Separate by Articulation
   - [x] Convert to MIDI Region  `⌃⌥⌘M`
   - [x] Replace with Session Player Region
 - [ ] Chords
-  - [ ] Apply Region Chords to Chord Track
+  - [x] Apply Region Chords to Chord Track
   - [ ] Analyze Chords
   - [ ] Analyze Key Signature
-  - [ ] Cut Region Chords
-  - [ ] Copy Region Chords
-  - [ ] Delete Region Chords
+  - [x] Cut Region Chords
+  - [x] Copy Region Chords
+  - [x] Delete Region Chords
 - [ ] Processing
   - [x] Stem Splitter…
-  - [ ] Selection-Based Processing…  `⌥⇧P`
-  - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+  - [x] Selection-Based Processing…  `⌥⇧P`
+  - [x] Apply Selection-Based Processing Again  `⌃⌥P`
   - [x] Normalize Region Gain…  `⌃⌥G`
   - [x] Apply Normalize Region Gain Again  `⌃G`
 - [ ] Automation
@@ -4259,7 +4261,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 128/212</summary>
+<details><summary>region-midi — 135/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4417,21 +4419,21 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate by MIDI Channel
   - [ ] Separate by Note Pitch
   - [ ] Separate Pattern Region by Kit Piece
-  - [ ] Separate by Articulation
+  - [x] Separate by Articulation
   - [x] Convert to MIDI Region  `⌃⌥⌘M`
   - [x] Convert to Pattern Region
   - [x] Replace with Session Player Region
 - [ ] Chords
-  - [ ] Apply Region Chords to Chord Track
+  - [x] Apply Region Chords to Chord Track
   - [ ] Analyze Chords
   - [ ] Analyze Key Signature
-  - [ ] Cut Region Chords
-  - [ ] Copy Region Chords
-  - [ ] Delete Region Chords
+  - [x] Cut Region Chords
+  - [x] Copy Region Chords
+  - [x] Delete Region Chords
 - [ ] Processing
   - [x] Stem Splitter…
-  - [ ] Selection-Based Processing…  `⌥⇧P`
-  - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+  - [x] Selection-Based Processing…  `⌥⇧P`
+  - [x] Apply Selection-Based Processing Again  `⌃⌥P`
   - [x] Normalize Region Gain…  `⌃⌥G`
   - [x] Apply Normalize Region Gain Again  `⌃G`
 - [ ] Automation
@@ -4510,7 +4512,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>session-player-chords-menu — 0/17</summary>
+<details><summary>session-player-chords-menu — 1/17</summary>
 
 - [ ] Chord Progressions
   - [ ] ii - V - I
@@ -4519,7 +4521,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] ii - I - vi - V
   - [ ] IV - I - vi - V
   - [ ] vi - IV - I - V
-- [ ] Apply Region Chords to Chord Track
+- [x] Apply Region Chords to Chord Track
 - [ ] Apply Chords from Chord Track
 - [ ] Analyze Chords
 - [ ] Analyze Key Signature
@@ -4573,7 +4575,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 128/212</summary>
+<details><summary>take-folder-region — 135/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4731,21 +4733,21 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate by MIDI Channel
   - [ ] Separate by Note Pitch
   - [ ] Separate Pattern Region by Kit Piece
-  - [ ] Separate by Articulation
+  - [x] Separate by Articulation
   - [x] Convert to MIDI Region  `⌃⌥⌘M`
   - [x] Convert to Pattern Region
   - [x] Replace with Session Player Region
 - [ ] Chords
-  - [ ] Apply Region Chords to Chord Track
+  - [x] Apply Region Chords to Chord Track
   - [ ] Analyze Chords
   - [ ] Analyze Key Signature
-  - [ ] Cut Region Chords
-  - [ ] Copy Region Chords
-  - [ ] Delete Region Chords
+  - [x] Cut Region Chords
+  - [x] Copy Region Chords
+  - [x] Delete Region Chords
 - [ ] Processing
   - [x] Stem Splitter…
-  - [ ] Selection-Based Processing…  `⌥⇧P`
-  - [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+  - [x] Selection-Based Processing…  `⌥⇧P`
+  - [x] Apply Selection-Based Processing Again  `⌃⌥P`
   - [x] Normalize Region Gain…  `⌃⌥G`
   - [x] Apply Normalize Region Gain Again  `⌃G`
 - [ ] Automation
@@ -4954,7 +4956,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1671 of 2207
+## Key commands: 1715 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4963,7 +4965,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 541/679</summary>
+<details><summary>Global Commands — 544/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5226,8 +5228,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Main Window
 - [x] Show/Hide Mixer  `X`
 - [x] Show/Hide Smart Controls  `Y`
-- [ ] Show/Hide Keyswitches
-- [ ] Show/Hide Keyswitches Window
+- [x] Show/Hide Keyswitches
+- [x] Show/Hide Keyswitches Window
 - [x] Show/Hide Score Editor  `N`
 - [ ] Show/Hide Staff Style Window  `⌃⌥⇧S`
 - [x] Show/Hide Score Sets Window  `⌃⌥⇧I`
@@ -5266,7 +5268,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Show/Hide Colors  `⌥C`
 - [x] Enter/Exit Full Screen  `⌃⌘F`
 - [x] Show/Hide Tuner
-- [ ] Toggle MIDI Remote for Articulation Switches
+- [x] Toggle MIDI Remote for Articulation Switches
 - [x] Open Movie…  `⌥⌘O`
 - [x] Show/Hide Movie Window
 - [x] Remove Movie
@@ -5659,7 +5661,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 66/110</summary>
+<details><summary>Various Windows — 67/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5756,7 +5758,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Link View to Content
 - [ ] Toggle MIDI Out (Note Preview)  `⌥O`
 - [ ] Toggle MIDI In (Step Record)  `⌥I`
-- [ ] Apply Region Chords to Chord Track
+- [x] Apply Region Chords to Chord Track
 - [ ] Analyze Chords
 - [ ] Global Chords: Analyze Key Signature
 - [ ] Region Chords: Analyze Key Signature
@@ -5774,14 +5776,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Windows Showing Audio Files — 12/15</summary>
+<details><summary>Windows Showing Audio Files — 13/15</summary>
 
 - [x] Show Files in Finder  `⇧⌘R`
 - [x] Toggle Snap Edits to Zero Crossings  `⌃0`
 - [ ] Add to Tracks…  `⌘;`
 - [x] Remove Silence from Audio Region…  `⌃X`
 - [ ] Show/Hide Selection-Based Processing  `⌥⇧P`
-- [ ] Apply Selection-Based Processing Again  `⌃⌥P`
+- [x] Apply Selection-Based Processing Again  `⌃⌥P`
 - [x] Stem Splitter…
 - [x] Stem Splitter Preset 1 (Acapella)
 - [x] Stem Splitter Preset 2 (Instrumental)
@@ -5794,7 +5796,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 183/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 184/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -6085,14 +6087,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Create Time Signature Change  `⌃⌥⇧T`
 - [x] Create Key Signature Change  `⌃⌥⇧K`
 - [ ] Create Chord
-- [ ] Open Articulation Editor
+- [x] Open Articulation Editor
 
 </details>
 
-<details><summary>Various Editors — 29/67</summary>
+<details><summary>Various Editors — 65/67</summary>
 
 - [x] Select Same Channels  `⇧H`
-- [ ] Select Same Articulation  `⇧A`
+- [x] Select Same Articulation  `⇧A`
 - [x] Trim Note End to Remove Overlaps to Following Notes (8 Ticks Gap)  `\`
 - [x] Trim Note End to Following Notes (8 Ticks Gap)  `⇧\`
 - [x] Trim Note End to Following Notes (4 Ticks Overlap)
@@ -6122,41 +6124,41 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Event Channel = 14
 - [x] Event Channel = 15
 - [x] Event Channel = 16
-- [ ] Set Next Articulation
-- [ ] Set Previous Articulation
-- [ ] Set No Articulation
-- [ ] Set Articulation  1
-- [ ] Set Articulation  2
-- [ ] Set Articulation  3
-- [ ] Set Articulation  4
-- [ ] Set Articulation  5
-- [ ] Set Articulation  6
-- [ ] Set Articulation  7
-- [ ] Set Articulation  8
-- [ ] Set Articulation  9
-- [ ] Set Articulation 10
-- [ ] Set Articulation 11
-- [ ] Set Articulation 12
-- [ ] Set Articulation 13
-- [ ] Set Articulation 14
-- [ ] Set Articulation 15
-- [ ] Set Articulation 16
-- [ ] Set Articulation 17
-- [ ] Set Articulation 18
-- [ ] Set Articulation 19
-- [ ] Set Articulation 20
-- [ ] Set Articulation 21
-- [ ] Set Articulation 22
-- [ ] Set Articulation 23
-- [ ] Set Articulation 24
-- [ ] Set Articulation 25
-- [ ] Set Articulation 26
-- [ ] Set Articulation 27
-- [ ] Set Articulation 28
-- [ ] Set Articulation 29
-- [ ] Set Articulation 30
-- [ ] Set Articulation 31
-- [ ] Set Articulation 32
+- [x] Set Next Articulation
+- [x] Set Previous Articulation
+- [x] Set No Articulation
+- [x] Set Articulation  1
+- [x] Set Articulation  2
+- [x] Set Articulation  3
+- [x] Set Articulation  4
+- [x] Set Articulation  5
+- [x] Set Articulation  6
+- [x] Set Articulation  7
+- [x] Set Articulation  8
+- [x] Set Articulation  9
+- [x] Set Articulation 10
+- [x] Set Articulation 11
+- [x] Set Articulation 12
+- [x] Set Articulation 13
+- [x] Set Articulation 14
+- [x] Set Articulation 15
+- [x] Set Articulation 16
+- [x] Set Articulation 17
+- [x] Set Articulation 18
+- [x] Set Articulation 19
+- [x] Set Articulation 20
+- [x] Set Articulation 21
+- [x] Set Articulation 22
+- [x] Set Articulation 23
+- [x] Set Articulation 24
+- [x] Set Articulation 25
+- [x] Set Articulation 26
+- [x] Set Articulation 27
+- [x] Set Articulation 28
+- [x] Set Articulation 29
+- [x] Set Articulation 30
+- [x] Set Articulation 31
+- [x] Set Articulation 32
 - [ ] Show Event Position and Length as Time or Bars/Beats  `⌃⌥R`
 
 </details>
@@ -6273,7 +6275,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 144/249</summary>
+<details><summary>Main Window Tracks — 145/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6409,7 +6411,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Copy Scenes to Playhead
 - [ ] Separate MIDI Region by MIDI Channel
 - [ ] Separate MIDI Region by Note Pitch
-- [ ] Separate MIDI Region by Articulation
+- [x] Separate MIDI Region by Articulation
 - [x] Rename Track  `⇧↩`
 - [ ] Delete Track Name
 - [ ] Move Selected Regions to Focused Track  `⌃⇧T`
@@ -6696,7 +6698,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Piano Roll — 7/12</summary>
+<details><summary>Piano Roll — 8/12</summary>
 
 - [ ] Include Non-Note MIDI Events
 - [ ] View Mode: One Track
@@ -6706,7 +6708,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Set Note Color By Region Color
 - [x] Set Note Color By Velocity
 - [x] Set Note Color By MIDI Channel
-- [ ] Set Note Color By Articulation
+- [x] Set Note Color By Articulation
 - [x] Define Brush Pattern and Set Brush Tool  `⌃⇧B`
 - [x] Reset Brush Pattern  `⌃⇧⌫`
 - [x] Toggle Collapse Mode

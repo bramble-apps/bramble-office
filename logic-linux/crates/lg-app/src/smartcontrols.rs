@@ -794,6 +794,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             x += 58.0;
         }
     }
+    // a track with an Articulation Set: the Keyswitches button (artic.rs)
+    if let View::Track(t) = v {
+        if app.artic.tracks.contains_key(&t) {
+            let on = app.artic.keys_view;
+            if header_button(ui, b(x, 92.0), "keys", "Keyswitches", on, "Show the Keyswitches view").clicked() {
+                app.artic.keys_view = !on;
+            }
+            x += 100.0;
+            if app.artic.keys_view {
+                crate::artic::keyswitch_view(app, ui, Rect::from_min_max(pos2(area.min.x, head.max.y), area.max), t);
+                return;
+            }
+        }
+    }
     let title = match v {
         View::Track(t) => {
             let name = app.project.as_ref().map(|p| p.tracks[t].name.clone()).unwrap_or_default();

@@ -473,6 +473,7 @@ pub fn create_tracks(app: &mut App, ctx: &egui::Context, d: &Details, n: usize) 
                         }
                     }
                     k => {
+                        app.spx.tonic_only = !d.default_chords;
                         crate::players::new_track(app, k == 2);
                         let t = app.selected_track.unwrap_or(0);
                         if let Some(pl) = app.players.get_mut(&(t, 0)) {
@@ -480,10 +481,11 @@ pub fn create_tracks(app: &mut App, ctx: &egui::Context, d: &Details, n: usize) 
                                 crate::players::Player::Bass(b) => b.style = lg_players::bass::BassStyle::ALL[d.style.min(lg_players::bass::BassStyle::ALL.len() - 1)],
                                 crate::players::Player::Keys(b) => b.style = lg_players::keys::KeysStyle::ALL[d.style.min(lg_players::keys::KeysStyle::ALL.len() - 1)],
                             }
-                            let name = pl.style_name();
+                            let name = pl.region_name();
                             if let Some(r) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.first_mut()) {
                                 r.name = name;
                             }
+                            crate::players::regenerate(app, t, 0);
                         }
                     }
                 }
