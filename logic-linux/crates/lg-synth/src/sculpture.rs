@@ -109,6 +109,18 @@ pub const V_CURVE: u32 = 3;
 pub const fn vmod(i: usize, f: u32) -> u32 {
     VM_BASE + i as u32 * 5 + f
 }
+// ---- Controller A / B modulation (two targets)
+pub const CAB_BASE: u32 = 340;
+pub const C_ON: u32 = 0;
+pub const C_TARGET: u32 = 1;
+pub const C_SRC: u32 = 2;
+pub const C_MODE: u32 = 3;
+pub const C_AMT: u32 = 4;
+pub const fn cab(i: usize, f: u32) -> u32 {
+    CAB_BASE + i as u32 * 6 + f
+}
+pub const CAB_SOURCES: &[&str] = &["Ctrl A", "Ctrl B", "Ctrl A+B"];
+pub const CAB_MODES: &[&str] = &["Continue", "Note On"];
 // ---- control envelopes (two)
 pub const ENV_BASE: u32 = 360;
 pub const ENV_STRIDE: u32 = 64;
@@ -416,6 +428,14 @@ fn build_params() -> Vec<Param> {
             v.push(n(lfo_r(i, rt, R_VIAAMT), nr_("Via Amount"), -1.0, 1.0, 0.0, r));
         }
     }
+    for i in 0..2usize {
+        let nm = |s: &str| leak(format!("Controller {} {s}", i + 1));
+        v.push(n(cab(i, C_ON), nm("On"), 0.0, 1.0, 0.0, o));
+        v.push(Param::menu(cab(i, C_TARGET), nm("Target"), TARGETS, 0.0));
+        v.push(Param::menu(cab(i, C_SRC), nm("Source"), CAB_SOURCES, i as f32));
+        v.push(Param::menu(cab(i, C_MODE), nm("Mode"), CAB_MODES, 0.0));
+        v.push(n(cab(i, C_AMT), nm("Amount"), -1.0, 1.0, 0.0, r));
+    }
     // jitter
     for i in 0..2usize {
         let nm = |s: &str| leak(format!("Jitter {} {s}", i + 1));
@@ -646,6 +666,7 @@ struct Sh {
     jit: [JitCfg; 2],
     nr: [(bool, usize, f32); 2],
     vm: [(bool, usize, f32, usize); 2],
+    cab: [(bool, usize, usize, usize, f32); 2],
     env: [EnvCfg; 2],
     menv: MenvCfg,
     cc_a: u32,
@@ -802,6 +823,10 @@ impl Sh {
             vm: [
                 (b(vmod(0, V_ON)), u(vmod(0, V_TARGET)), g(vmod(0, V_AMT)), u(vmod(0, V_CURVE))),
                 (b(vmod(1, V_ON)), u(vmod(1, V_TARGET)), g(vmod(1, V_AMT)), u(vmod(1, V_CURVE))),
+            ],
+            cab: [
+                (b(cab(0, C_ON)), u(cab(0, C_TARGET)), u(cab(0, C_SRC)), u(cab(0, C_MODE)), g(cab(0, C_AMT))),
+                (b(cab(1, C_ON)), u(cab(1, C_TARGET)), u(cab(1, C_SRC)), u(cab(1, C_MODE)), g(cab(1, C_AMT))),
             ],
             env: envs,
             menv,
@@ -1307,12 +1332,25 @@ struct MorphOut {
     y: f32,
 }
 
-fn morph_weights(x: f32, y: f32) -> [f32; 5] {
+/// The weights of the points A, B, C, D and Center at a pad position.
+pub fn morph_weights(x: f32, y: f32) -> [f32; 5] {
     let u = (2.0 * x - 1.0).abs();
     let w = (2.0 * y - 1.0).abs();
     let r = u.max(w).clamp(0.0, 1.0);
     let (x, y) = (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
     [(1.0 - x) * y * r, x * y * r, (1.0 - x) * (1.0 - y) * r, x * (1.0 - y) * r, 1.0 - r]
+}
+
+/// The morph values (as stored per point) at a pad position.
+pub fn morph_values(points: &[[f32; MORPH_N]; 5], x: f32, y: f32) -> [f32; MORPH_N] {
+    let w = morph_weights(x, y);
+    let mut v = [0.0f32; MORPH_N];
+    for (i, wi) in w.iter().enumerate() {
+        for k in 0..MORPH_N {
+            v[k] += wi * points[i][k];
+        }
+    }
+    v
 }
 
 /// The pad position of morph point `p` (A top left, B top right, C bottom left, D bottom
@@ -1364,6 +1402,7 @@ struct SVoice {
     vib: LfoState,
     jit: [LfoState; 2],
     nr: [f32; 2],
+    cab_latch: [f32; 2],
     envs: [EnvRun; 2],
     menv: EnvRun,
     src: [f32; 12],
@@ -1414,6 +1453,7 @@ impl SVoice {
             vib: LfoState::new(seed + 5),
             jit: [LfoState::new(seed + 6), LfoState::new(seed + 7)],
             nr: [0.0; 2],
+            cab_latch: [0.0; 2],
             envs: [EnvRun::new(); 2],
             menv: EnvRun::new(),
             src: [0.0; 12],
@@ -1506,6 +1546,15 @@ impl SVoice {
         self.menv = EnvRun::new();
         for k in 0..2 {
             self.nr[k] = self.rng.bipolar();
+        }
+        // Controller A/B in Note On mode: the value at the start of the note
+        let (ca, cb) = (self.cc(g, sh.cc_a), self.cc(g, sh.cc_b));
+        for k in 0..2 {
+            self.cab_latch[k] = match sh.cab[k].2 {
+                0 => ca,
+                1 => cb,
+                _ => (ca + cb).min(1.0),
+            };
         }
         let att = dsp::lerp(sh.a_soft, sh.a_hard, self.vel);
         self.env.set(att, sh.a_decay, sh.a_sus, sh.a_rel, sh.rate);
@@ -1667,6 +1716,18 @@ impl SVoice {
             let (on, tg, amt, cv) = sh.vm[k];
             if on && tg > 0 && tg < NT {
                 mods[tg] += curve_of(vel, cv) * amt;
+            }
+        }
+        // Controller A / B: two targets, continuous or only at note-on
+        for k in 0..2 {
+            let (on, tg, src, mode, amt) = sh.cab[k];
+            if on && tg > 0 && tg < NT {
+                let live = match src {
+                    0 => ca,
+                    1 => cb,
+                    _ => (ca + cb).min(1.0),
+                };
+                mods[tg] += if mode == 1 { self.cab_latch[k] } else { live } * amt;
             }
         }
         // control envelope routes
@@ -2022,6 +2083,7 @@ pub struct Sculpture {
     rec: [RecState; 2],
     mrec: RecState,
     delay_dirty: bool,
+    dirty: bool,
     pub bpm: f32,
 }
 
@@ -2065,6 +2127,7 @@ impl Sculpture {
             rec: [RecState::new(), RecState::new()],
             mrec: RecState::new(),
             delay_dirty: true,
+            dirty: false,
             bpm: 120.0,
         };
         s.refresh();
@@ -2128,6 +2191,11 @@ impl Sculpture {
             None => false,
         }
     }
+    /// True once after the instrument changed its own parameters (a recording finished, a
+    /// randomise): the window then copies them into the project's settings.
+    pub fn take_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.dirty)
+    }
     pub fn active_voices(&self) -> usize {
         self.voices.iter().filter(|v| v.on).count()
     }
@@ -2154,6 +2222,7 @@ impl Sculpture {
     /// Randomises morph points (`points`) in a group of parameters by an intensity (0..1).
     pub fn randomize(&mut self, points: &[usize], group: usize, intensity: f32, seed: u32) {
         let mut rng = Rng::new(seed);
+        self.dirty = true;
         for &pt in points {
             for k in 0..MORPH_N {
                 let take = match group {
@@ -2311,6 +2380,7 @@ impl Sculpture {
         self.params.set(env(i, E_USEREC), 1.0);
         self.params.set(env(i, E_ENV), 1.0);
         self.params.set(env(i, E_CTRL), 0.0);
+        self.dirty = true;
         // the handles are placed for you: the peak, then a loop and a sustain point
         let mut peak = 0.0;
         let mut tp = 0.0;
@@ -2351,6 +2421,7 @@ impl Sculpture {
             }
         }
         self.params.set(MENV_MODE, 2.0);
+        self.dirty = true;
         self.refresh();
     }
 

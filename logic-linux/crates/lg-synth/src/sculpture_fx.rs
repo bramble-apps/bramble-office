@@ -467,3 +467,23 @@ impl Limiter {
 pub fn cut_hz(c: f32) -> f32 {
     20.0 * 1000f32.powf(c.clamp(0.0, 1.0))
 }
+
+/// The body EQ's response in dB at `hz` for the drawing (the same model as `BodyEq::set`).
+pub fn body_response_db(model: usize, p1: f32, p2: f32, p3: f32, p4: f32, hz: f32) -> f32 {
+    let x = (hz / 1000.0).max(1e-3).ln();
+    let bump = |f0: f32, db: f32, q: f32| db * (-(((hz / f0).max(1e-3).ln()) * q * 0.9).powi(2)).exp();
+    if model == 0 {
+        let mid = 100.0 * 100f32.powf(p4.clamp(0.0, 1.0));
+        let low = p1 * 18.0 / (1.0 + (hz / 180.0).powi(2));
+        let high = p3 * 18.0 * (hz / 5000.0).powi(2) / (1.0 + (hz / 5000.0).powi(2));
+        return low + high + bump(mid, p2 * 18.0, 1.1);
+    }
+    let _ = x;
+    let shift = 10f32.powf(p2);
+    let mut db = 0.0;
+    for &(f, g, q) in formants(model) {
+        let st = (f / 1000.0).powf(1.0 + p3 * 0.8) * 1000.0;
+        db += bump(st * shift, g * p1 * 1.5, q);
+    }
+    db + p4.clamp(0.0, 1.0) * 2.5 * (hz * 0.037).sin()
+}

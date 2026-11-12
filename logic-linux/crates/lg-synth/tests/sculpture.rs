@@ -1569,3 +1569,41 @@ fn midi_mono_mode_and_extended() {
     // the Surround parameters exist (a stereo instance only keeps them)
     assert!(s::params_table().iter().any(|p| p.name == "Surround Range" && p.max == 360.0));
 }
+
+#[test]
+fn controller_a_b_modulation() {
+    // two targets driven by Ctrl A, Ctrl B or both; Continue follows the controller, Note On keeps its value from the start
+    let pitch_with = |src: f32, mode: f32, wheel_at_start: u8, wheel_later: u8, foot: u8| {
+        let mut m = sc();
+        m.set(s::cab(0, s::C_ON), 1.0);
+        m.set(s::cab(0, s::C_TARGET), tgt("Pitch"));
+        m.set(s::cab(0, s::C_SRC), src);
+        m.set(s::cab(0, s::C_MODE), mode);
+        m.set(s::cab(0, s::C_AMT), 0.5);
+        m.set(s::MEDIA_LOSS, 0.05);
+        m.set(s::VIB_AMT, 0.0);
+        m.controller(1, wheel_at_start);
+        m.controller(4, foot);
+        m.note_on(60, 100);
+        render(&mut m, 0.1);
+        m.controller(1, wheel_later);
+        let x = render(&mut m, 0.5);
+        12.0 * (pitch(win(&x, 0.2, 0.5), 150.0, 560.0) / 261.63).log2()
+    };
+    // Ctrl A (the mod wheel): +6 semitones at full travel; Ctrl B is not heard
+    assert!((pitch_with(0.0, 0.0, 127, 127, 0) - 6.0).abs() < 0.2);
+    assert!(pitch_with(0.0, 0.0, 127, 127, 127) > 5.5 && pitch_with(1.0, 0.0, 0, 0, 0).abs() < 0.2);
+    assert!((pitch_with(1.0, 0.0, 0, 0, 127) - 6.0).abs() < 0.2);
+    // Continue follows the wheel; Note On holds what it was at the start
+    assert!((pitch_with(0.0, 0.0, 0, 127, 0) - 6.0).abs() < 0.3);
+    assert!(pitch_with(0.0, 1.0, 0, 127, 0).abs() < 0.3);
+    assert!((pitch_with(0.0, 1.0, 127, 0, 0) - 6.0).abs() < 0.3);
+    // the second target
+    let mut m = sc();
+    m.set(s::cab(1, s::C_ON), 1.0);
+    m.set(s::cab(1, s::C_TARGET), tgt("Level"));
+    m.set(s::cab(1, s::C_AMT), -1.0);
+    m.controller(4, 127);
+    m.note_on(60, 100);
+    assert!(peak(&render(&mut m, 0.3)) < 1e-3);
+}
