@@ -221,6 +221,21 @@
  },
  {
   "area": "Editing",
+  "status": "Partial",
+  "feature": "Region inspector as Logic 13's (regionparams.rs, lg-core regparams, tested; measured against Apple's Region Inspector Float screenshot): General / Quantize / Fades / Details groups with More areas, name field, colour swatch (region colours drawn; Region Color \u25b8 As Track Color; Color Regions by Track Color), Gain, Delay in ticks or ms, Transpose with octave pop-up, Fine Tune (10-cent pop-up), Velocity, Dynamics (Fixed), Gate Time (Fixed / Legato), Pitch Source (Off / Key Signature: follows key changes), Clip Length, Flex, Reverse, Q-Swing / Q-Strength / Q-Range / Q-Flam (played), fade lengths, curves and type, Position / Length (bar beat division tick), Lock Time Position (Lock / Unlock SMPTE Position); every selected region edited (relative, Option-Shift absolute, asterisk where they differ); MIDI / Audio Defaults for new recordings; Region Inspector Float (\u2325\u21e7R); the new parameters kept in a project sidecar. [ ] Q-Velocity / Q-Length (no groove templates), Smart Quantize, Smart Tempo / File Tempo / Is a Loop / Speed rows, Fade In Speed Up, Session Player pitch sources, writing the new parameters into Logic's file"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Cut / Insert Time (regionparams.rs, lg-core regparams, tested): Cut / Copy / Delete / Repeat Section Between Locators, Insert Silence, Insert Section at Playhead (Global, and Selection asking about global events), with tempo changes, markers, arrangement markers, chords, Transposition and whole-bar key / signature changes moved; audio regions cut keep their file offset, gain and fades; toolbar section buttons work. Region Length Double / Halve / Change\u2026 (0.25-16), Repeat Regions dialog (copies, adjustment, copies / aliases), Paste at Original Position, Split's Keep / Shorten / Split dialog (Shorten by default), Join normalizes Transpose / Velocity / Dynamics and joins a looped region with its loops; Control / Control-Shift drags; Limit Dragging to One Direction; Gain tool; Toggle Region Solo; marquee ruler, marquee Shift-click ends / grow, click inside splits, Shift-click header toggles a track. [ ] (Selection) works per track, not per region; audio Join mixdown; region solo button and Solo tool hold-to-play; Gain on a marquee"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog"
+ },
+ {
+  "area": "Editing",
   "status": "Done",
   "feature": "Smart Tempo analysis and its editor (smarttempo.rs, audioedit.rs): all 32 Smart Tempo Editor key commands run (checked headless with LG_RUN)"
  },
