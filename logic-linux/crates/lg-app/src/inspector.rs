@@ -47,8 +47,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));
     let mut y = area.min.y;
     let track_name = app.selected_track.and_then(|t| app.project.as_ref()?.tracks.get(t)).map(|t| t.name.clone());
-    // the Region part (Logic 13's groups, every selected region, the defaults): regionparams.rs
-    y = crate::regionparams::inspector(app, ui, area, y);
+    // (Live Loops cells selected: the Cell inspector in the Region inspector's place)
+    if crate::cellinsp::active(app) {
+        y = crate::cellinsp::show(app, ui, area, y);
+    } else {
+        // the Region part (Logic 13's groups, every selected region, the defaults): regionparams.rs
+        y = crate::regionparams::inspector(app, ui, area, y);
+    }
     let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));
     if widgets::disclosure(ui, hr, ui.scope_id().with("insp-track"), "Track:", track_name.as_deref().unwrap_or(""), app.inspector_track_open) {
         app.inspector_track_open = !app.inspector_track_open;

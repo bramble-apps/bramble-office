@@ -44,11 +44,22 @@ pub struct Step {
     pub skip: bool,
     /// Note mode: semitones from the row's note.
     pub note: i8,
+    /// The inspector's: play condition (Recurrence: iteration of cycles), own rate (ticks),
+    /// MIDI channel (1–16), articulation ID, note-repeat velocity ramp / curve / distribution.
+    pub cond: crate::stepinsp::Cond,
+    pub iter: u8,
+    pub cycles: u8,
+    pub rate: Option<u32>,
+    pub channel: Option<u8>,
+    pub articulation: u8,
+    pub ramp: i8,
+    pub curve: i8,
+    pub dist: i8,
 }
 
 impl Default for Step {
     fn default() -> Self {
-        Step { on: false, velocity: 100, gate: 100, repeat: 1, chance: 100, offset: 0, tie: false, octave: 0, skip: false, note: 0 }
+        Step { on: false, velocity: 100, gate: 100, repeat: 1, chance: 100, offset: 0, tie: false, octave: 0, skip: false, note: 0, cond: crate::stepinsp::Cond::Always, iter: 1, cycles: 2, rate: None, channel: None, articulation: 0, ramp: 0, curve: 0, dist: 0 }
     }
 }
 
@@ -68,11 +79,13 @@ pub struct Row {
     pub play: Option<Play>,
     /// Subrows shown (velocity, gate and chance lanes under the row).
     pub sub: bool,
+    /// The inspector's row settings (MIDI channel, automation mode).
+    pub opts: crate::stepinsp::RowOpts,
 }
 
 impl Row {
     pub fn new(name: impl Into<String>, pitch: u8) -> Row {
-        Row { name: name.into(), pitch, mute: false, solo: false, len: None, rate: None, steps: vec![Step::default(); MAX_STEPS], start: 0, play: None, sub: false }
+        Row { name: name.into(), pitch, mute: false, solo: false, len: None, rate: None, steps: vec![Step::default(); MAX_STEPS], start: 0, play: None, sub: false, opts: Default::default() }
     }
 }
 
@@ -177,6 +190,8 @@ pub struct StepPattern {
     pub rows: Vec<Row>,
     /// The pattern's playback mode.
     pub play: Play,
+    /// The inspector's pattern settings (legato, swing, key, channel …).
+    pub opts: crate::stepinsp::PatternOpts,
 }
 
 impl Default for StepPattern {
@@ -223,13 +238,13 @@ impl StepPattern {
     /// A new pattern for a software instrument: C3 down the C major scale to C2 (Logic's).
     pub fn melodic() -> StepPattern {
         let rows = [72u8, 71, 69, 67, 65, 64, 62, 60].iter().map(|&p| Row::new(crate::app::note_name(p - 12), p - 12)).collect();
-        StepPattern { steps: 16, rate: SIXTEENTH, rows, play: Play::Forward }
+        StepPattern { steps: 16, rate: SIXTEENTH, rows, play: Play::Forward, opts: Default::default() }
     }
 
     /// A new pattern for drums: Logic's kit rows.
     pub fn drums() -> StepPattern {
         let rows = [36u8, 38, 37, 39, 42, 44, 46, 45, 47, 50, 49, 51].iter().map(|&p| Row::new(drum_name(p).unwrap_or_default(), p)).collect();
-        StepPattern { steps: 16, rate: SIXTEENTH, rows, play: Play::Forward }
+        StepPattern { steps: 16, rate: SIXTEENTH, rows, play: Play::Forward, opts: Default::default() }
     }
 
     pub fn row_len(&self, r: &Row) -> usize {
@@ -253,37 +268,55 @@ impl StepPattern {
             if active.is_empty() {
                 continue;
             }
-            let slots = len.div_ceil(rate) as usize;
+            // (steps can have their own rate: enough slots for the shortest)
+            let min_rate = active.iter().filter_map(|&k| row.steps[k].rate).min().unwrap_or(rate).min(rate).max(1);
+            let slots = len.div_ceil(min_rate) as usize;
             let order = play_order(row.play.unwrap_or(self.play), active.len(), slots, seed, ri);
+            // loop passes over the region (Condition: First / Last Loop, Recurrence)
+            let pass_len: u32 = active.iter().map(|&k| row.steps[k].rate.unwrap_or(rate)).sum::<u32>().max(1);
+            let passes = len.div_ceil(pass_len) as usize;
+            let o = &self.opts;
             // the note a tie carries on, as an index into `out`
             let mut last: Option<usize> = None;
+            let mut t = 0u32;
             for (slot, &oi) in order.iter().enumerate() {
+                if t >= len {
+                    break;
+                }
                 let slot = slot as u32;
                 let s = row.steps[active[oi]];
-                let t = slot * rate;
+                let step_len = s.rate.unwrap_or(rate).max(1);
+                let pass = slot as usize / active.len();
+                let at = crate::stepinsp::swing(t, o.swing, o.swing_div);
+                let gate_len = |l: u32, g: u8| if g >= 100 && o.legato { l + 1 } else { l * g.clamp(1, 100) as u32 / 100 };
                 if s.on && s.tie && last.is_some() {
                     if let Some(prev) = last.and_then(|k| out.get_mut(k)) {
                         let prev: &mut Note = prev;
-                        let end = (t + rate * s.gate.clamp(1, 100) as u32 / 100).min(len);
+                        let end = (at + gate_len(step_len, s.gate)).min(len);
                         prev.len = end.saturating_sub(prev.pos).max(prev.len);
                     }
-                } else if s.on && chance(seed, ri, slot) < s.chance {
+                } else if s.on && chance(seed, ri, slot) < s.chance && crate::stepinsp::cond_plays(s.cond, s.iter, s.cycles, pass, passes) {
                     let reps = s.repeat.clamp(1, 16) as u32;
-                    let sub = rate / reps;
-                    let off = (rate as i64 * s.offset.clamp(-50, 50) as i64 / 100) as i64;
+                    let off = (step_len as i64 * s.offset.clamp(-50, 50) as i64 / 100) as i64;
                     let pitch = (row.pitch as i32 + 12 * s.octave as i32 + s.note as i32).clamp(0, 127) as u8;
+                    let channel = crate::stepinsp::channel(self, row, s.channel);
                     for k in 0..reps {
-                        let pos = (t as i64 + k as i64 * sub as i64 + off).max(0) as u32;
+                        let f0 = crate::stepinsp::repeat_at(k, reps, s.dist);
+                        let f1 = crate::stepinsp::repeat_at(k + 1, reps, s.dist);
+                        let pos = (at as i64 + (f0 * step_len as f32) as i64 + off).max(0) as u32;
                         if pos >= len {
                             break;
                         }
-                        let l = (sub * s.gate.clamp(1, 100) as u32 / 100).max(1).min(len - pos);
-                        out.push(Note { channel: 0, pitch, velocity: s.velocity.clamp(1, 127), pos, len: l, muted: false });
+                        let sub = (((f1 - f0) * step_len as f32) as u32).max(1);
+                        let l = gate_len(sub, s.gate).max(1).min(len - pos);
+                        let velocity = crate::stepinsp::ramp_velocity(s.velocity.clamp(1, 127), k, reps, s.ramp, s.curve);
+                        out.push(Note { channel, pitch, velocity, pos, len: l, muted: false });
                     }
                     last = Some(out.len() - 1);
                 } else {
                     last = None;
                 }
+                t += step_len;
             }
         }
         out.sort_by_key(|n| (n.pos, std::cmp::Reverse(n.pitch)));
@@ -303,7 +336,7 @@ impl StepPattern {
             if drums { StepPattern::drums() } else { StepPattern::melodic() }
         } else {
             let name = |p: u8| drums.then(|| drum_name(p)).flatten().map(str::to_string).unwrap_or_else(|| crate::app::note_name(p));
-            StepPattern { steps: 16, rate: SIXTEENTH, rows: pitches.iter().map(|&p| Row::new(name(p), p)).collect(), play: Play::Forward }
+            StepPattern { steps: 16, rate: SIXTEENTH, rows: pitches.iter().map(|&p| Row::new(name(p), p)).collect(), play: Play::Forward, opts: Default::default() }
         };
         if !notes.is_empty() {
             pat.steps = steps;
@@ -362,10 +395,12 @@ pub enum Mode {
     Skip,
     Loop,
     Note,
+    /// Step Rate: the step's own note value (stepinsp's per-step rate).
+    Rate,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 11] = [Mode::OnOff, Mode::Velocity, Mode::Gate, Mode::Tie, Mode::Note, Mode::Octave, Mode::Loop, Mode::Repeat, Mode::Chance, Mode::Offset, Mode::Skip];
+    pub const ALL: [Mode; 12] = [Mode::OnOff, Mode::Velocity, Mode::Gate, Mode::Tie, Mode::Note, Mode::Octave, Mode::Loop, Mode::Repeat, Mode::Chance, Mode::Offset, Mode::Skip, Mode::Rate];
     pub fn name(self) -> &'static str {
         match self {
             Mode::OnOff => "On/Off",
@@ -379,6 +414,7 @@ impl Mode {
             Mode::Skip => "Skip",
             Mode::Loop => "Loop Start/End",
             Mode::Note => "Note",
+            Mode::Rate => "Step Rate",
         }
     }
     /// The value of a step in this mode, 0..1 (for the bar drawn in the cell).
@@ -386,7 +422,8 @@ impl Mode {
         match self {
             Mode::Velocity => s.velocity as f32 / 127.0,
             Mode::Gate => s.gate as f32 / 100.0,
-            Mode::Repeat => (s.repeat as f32 - 1.0) / 7.0,
+            Mode::Repeat => (s.repeat as f32 - 1.0) / 15.0,
+            Mode::Rate => 1.0 - RATE_ORDER.iter().position(|&r| Some(r) == s.rate).unwrap_or(7) as f32 / 11.0,
             Mode::Chance => s.chance as f32 / 100.0,
             Mode::Offset => (s.offset as f32 + 50.0) / 100.0,
             Mode::Octave => (s.octave as f32 + 3.0) / 6.0,
@@ -399,7 +436,8 @@ impl Mode {
         match self {
             Mode::Velocity => s.velocity = (f * 126.0 + 1.0).round() as u8,
             Mode::Gate => s.gate = (f * 99.0 + 1.0).round() as u8,
-            Mode::Repeat => s.repeat = (f * 7.0 + 1.0).round() as u8,
+            Mode::Repeat => s.repeat = (f * 15.0 + 1.0).round() as u8,
+            Mode::Rate => s.rate = Some(RATE_ORDER[((1.0 - f) * 11.0).round() as usize]),
             Mode::Chance => s.chance = (f * 100.0).round() as u8,
             Mode::Offset => s.offset = (f * 100.0 - 50.0).round() as i8,
             Mode::Octave => s.octave = (f * 6.0 - 3.0).round() as i8,
@@ -416,6 +454,7 @@ impl Mode {
             Mode::Offset => format!("{:+}%", s.offset),
             Mode::Octave => format!("{:+}", s.octave),
             Mode::Note => format!("{:+}", s.note),
+            Mode::Rate => s.rate.map_or("–".into(), rate_name),
             _ => String::new(),
         }
     }
@@ -465,6 +504,13 @@ struct Store {
     held: Vec<u8>,
     /// Rename Row / Save Pattern / Save Template being typed.
     typing: Option<(Typing, String)>,
+    /// The local inspector (stepinsp.rs) shown, its tab, and an edit in it still going on
+    /// (one undo step per drag).
+    inspector: bool,
+    insp_tab: crate::stepinsp::Tab,
+    insp_active: bool,
+    /// Sort Rows: (by type and note 0 / type 1 / type and name 2, ascending).
+    sort: (u8, bool),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -671,6 +717,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut sel_row = with_store(&ctx, |s| s.selected_row).min(pat.rows.len().saturating_sub(1));
     ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(12.0, 6.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
         crate::menus::local_bar(app, ui, &[("Edit", "stepseq-Edit"), ("Functions", "stepseq-Functions"), ("View", "stepseq-View")]);
+        // Pattern Browser | Inspector: one joined pill of two toggles (Logic's)
+        ui.add_space(10.0);
+        let (pill, _) = ui.allocate_exact_size(vec2(60.0, 26.0), Sense::hover());
+        ui.painter().rect_filled(pill, 7.0, look::group_bg());
+        let (b_on, i_on) = with_store(ui.ctx(), |s| (s.browser, s.inspector));
+        for (k, (icon, on, tip)) in [(crate::glyphs::ph::TABLE, b_on, "Pattern Browser"), (crate::glyphs::ph::SLIDERS_HORIZONTAL, i_on, "Show/Hide Local Inspector")].into_iter().enumerate() {
+            let b = Rect::from_min_size(pos2(pill.min.x + k as f32 * 30.0, pill.min.y), vec2(30.0, 26.0));
+            if on {
+                ui.painter().rect_filled(b.shrink(2.0), 6.0, look::button_on());
+            }
+            crate::glyphs::paint(ui.painter(), Rect::from_center_size(b.center(), vec2(16.0, 16.0)), icon, 15.0, if on { look::accent() } else { look::text() });
+            if ui.interact(b, ui.id().with(("ss-tb", k)), Sense::click()).on_hover_text(tip).clicked() {
+                with_store(ui.ctx(), |s| if k == 0 { s.browser = !s.browser } else { s.inspector = !s.inspector });
+            }
+        }
+        ui.painter().vline(pill.center().x, pill.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
         let (learn, live, mono) = with_store(ui.ctx(), |s| (s.learn, s.live_record, s.mono));
         let mut flags = Vec::new();
         if let Some(add) = learn {
@@ -691,6 +753,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let br = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), pos2(area.min.x + 200.0, area.max.y));
         browser(app, ui, br);
         Rect::from_min_max(pos2(br.max.x + 1.0, area.min.y), area.max)
+    } else {
+        area
+    };
+    // the local inspector (Pattern / Row / Step)
+    let area = if with_store(&ctx, |s| s.inspector) && area.width() > crate::stepinsp::WIDTH + 300.0 {
+        let ir = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), pos2(area.min.x + crate::stepinsp::WIDTH, area.max.y));
+        let (mut tab, rows, cells) = with_store(&ctx, |s| (s.insp_tab, sel_rows(s, pat.rows.len()), sel_cells(s, pat.rows.len())));
+        let project_key = app.project.as_ref().map(|p| p.key.clone()).unwrap_or_else(|| "C major".into());
+        let changed = ui.scope_builder(egui::UiBuilder::new().id_salt(("lg-ss-insp", t, r)).max_rect(ir), |ui| crate::stepinsp::show(ui, ir, &mut tab, &mut pat, &rows, &cells, &project_key)).inner;
+        let down = ui.input(|i| i.pointer.primary_down());
+        let first = with_store(&ctx, |s| {
+            s.insp_tab = tab;
+            let first = changed.is_some() && !s.insp_active;
+            s.insp_active = down && (changed.is_some() || s.insp_active);
+            first
+        });
+        if let (true, Some(what)) = (first, changed) {
+            app.checkpoint(what);
+        }
+        Rect::from_min_max(pos2(ir.max.x + 1.0, area.min.y), area.max)
     } else {
         area
     };
@@ -1028,7 +1110,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         }
                     }
                 }
-                Mode::Velocity | Mode::Chance | Mode::Octave | Mode::Note => {
+                Mode::Velocity | Mode::Chance | Mode::Octave | Mode::Note | Mode::Rate => {
                     if s.on {
                         gp.rect_filled(cr, 3.0, look::mix(on_col, cell_off(), 0.6));
                         let f = mode.get(&s);
@@ -1113,9 +1195,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                             }
                         }
                         m => {
-                            if st.on {
-                                m.set(st, f);
-                            }
+                            // (changing an off step's value turns it on, as Logic's)
+                            m.set(st, f);
+                            st.on = true;
                         }
                     }
                     if pat.rows[ri].steps[si] != old || mode == Mode::Loop && first_touch {
@@ -1157,9 +1239,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if resp.drag_started() || resp.clicked() {
                         app.checkpoint("Change Step");
                     }
-                    if (resp.dragged() || resp.clicked()) && st.on {
+                    if resp.dragged() || resp.clicked() {
                         if let Some(pp) = resp.interact_pointer_pos() {
                             m.set(&mut pat.rows[ri].steps[si], (cr.max.y - pp.y) / cr.height());
+                            pat.rows[ri].steps[si].on = true;
                             changed = true;
                         }
                     }
@@ -1524,6 +1607,7 @@ fn clear_value(mode: Mode, st: &mut Step) {
         Mode::Octave => st.octave = 0,
         Mode::Skip => st.skip = false,
         Mode::Note => st.note = 0,
+        Mode::Rate => st.rate = None,
     }
 }
 
@@ -1545,7 +1629,7 @@ fn nudge_value(mode: Mode, st: &mut Step, d: i32) {
     match mode {
         Mode::Velocity => st.velocity = (st.velocity as i32 + d * 8).clamp(1, 127) as u8,
         Mode::Gate => st.gate = (st.gate as i32 + d * 10).clamp(1, 100) as u8,
-        Mode::Repeat => st.repeat = (st.repeat as i32 + d).clamp(1, 8) as u8,
+        Mode::Repeat => st.repeat = (st.repeat as i32 + d).clamp(1, 16) as u8,
         Mode::Chance => st.chance = (st.chance as i32 + d * 10).clamp(0, 100) as u8,
         Mode::Offset => st.offset = (st.offset as i32 + d * 5).clamp(-50, 50) as i8,
         Mode::Octave => st.octave = (st.octave as i32 + d).clamp(-3, 3) as i8,
@@ -1633,6 +1717,19 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     };
     let play_of = |n: &str| Play::ALL.iter().copied().find(|p| n.ends_with(p.name())).unwrap_or_default();
     match name {
+        "Show Local Inspector" | "Hide Local Inspector" | "Show/Hide Local Inspector" => view(app, ctx, |s, _, _, _| s.inspector = !s.inspector),
+        "By Type" | "By Type and Note" | "By Type and Name" | "Ascending" | "Descending" => {
+            let (mut by, mut asc) = with_store(ctx, |s| s.sort);
+            match name {
+                "By Type" => by = 1,
+                "By Type and Note" => by = 0,
+                "By Type and Name" => by = 2,
+                "Ascending" => asc = true,
+                _ => asc = false,
+            }
+            with_store(ctx, |s| s.sort = (by, asc));
+            change(app, ctx, "Sort Rows", |p, _, _, _| crate::stepinsp::sort_rows(p, by, asc))
+        }
         "Show/Hide Pattern Browser" | "Pattern Browser" => view(app, ctx, |s, _, _, _| s.browser = !s.browser),
         "Set Step Color by Region Color" | "By Region" => view(app, ctx, |s, _, _, _| s.by_region = true),
         "Set Step Color by Row Color" | "By Row" => view(app, ctx, |s, _, _, _| s.by_region = false),
@@ -1941,6 +2038,7 @@ fn set_mode_value(mode: Mode, st: &mut Step, from: &Step) {
         Mode::Octave => st.octave = from.octave,
         Mode::Skip => st.skip = from.skip,
         Mode::Note => st.note = from.note,
+        Mode::Rate => st.rate = from.rate,
     }
 }
 
@@ -2010,10 +2108,27 @@ fn default_path() -> std::path::PathBuf {
 
 /// A pattern as text: its length, rate and playback mode, then each row and its set steps.
 pub fn to_text(p: &StepPattern) -> String {
-    let mut out = format!("pattern\t{}\t{}\t{}\n", p.steps, p.rate, p.play.name());
+    let o = &p.opts;
+    let opt = |v: Option<String>| v.unwrap_or_else(|| "-".into());
+    let auto = |a: crate::stepinsp::AutoMode| if a == crate::stepinsp::AutoMode::Slide { "slide" } else { "latch" };
+    let mut out = format!(
+        "pattern\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+        p.steps,
+        p.rate,
+        p.play.name(),
+        o.legato as u8,
+        o.swing,
+        o.swing_div,
+        opt(o.key.map(|k| k.0.to_string())),
+        opt(o.key.map(|k| k.1.to_string())),
+        o.no_transpose as u8,
+        o.scale_quantize as u8,
+        o.channel,
+        auto(o.auto_mode)
+    );
     for r in &p.rows {
         out += &format!(
-            "row\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "row\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             r.pitch,
             r.name.replace('\t', " "),
             r.mute as u8,
@@ -2021,11 +2136,18 @@ pub fn to_text(p: &StepPattern) -> String {
             r.len.map_or("-".into(), |x| x.to_string()),
             r.rate.map_or("-".into(), |x| x.to_string()),
             r.start,
-            r.play.map_or("-", |x| x.name())
+            r.play.map_or("-", |x| x.name()),
+            opt(r.opts.channel.map(|c| c.to_string())),
+            r.opts.auto_mode.map_or("-", auto)
         );
         for (k, s) in r.steps.iter().enumerate() {
             if *s != Step::default() {
-                out += &format!("step\t{k}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", s.on as u8, s.velocity, s.gate, s.repeat, s.chance, s.offset, s.tie as u8, s.octave, s.skip as u8, s.note);
+                let cond = crate::stepinsp::Cond::ALL.iter().position(|c| *c == s.cond).unwrap_or(0);
+                out += &format!(
+                    "step\t{k}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{cond}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                    s.on as u8, s.velocity, s.gate, s.repeat, s.chance, s.offset, s.tie as u8, s.octave, s.skip as u8, s.note,
+                    s.iter, s.cycles, opt(s.rate.map(|x| x.to_string())), opt(s.channel.map(|x| x.to_string())), s.articulation, s.ramp, s.curve, s.dist
+                );
             }
         }
     }
@@ -2038,7 +2160,20 @@ pub fn from_text(text: &str) -> Option<StepPattern> {
     for line in text.lines() {
         let f: Vec<&str> = line.split('\t').collect();
         match f.first().copied() {
-            Some("pattern") if f.len() >= 4 => p = Some(StepPattern { steps: f[1].parse().ok()?, rate: f[2].parse().ok()?, rows: Vec::new(), play: play(f[3]).unwrap_or_default() }),
+            Some("pattern") if f.len() >= 4 => {
+                p = Some(StepPattern { steps: f[1].parse().ok()?, rate: f[2].parse().ok()?, rows: Vec::new(), play: play(f[3]).unwrap_or_default(), opts: Default::default() });
+                if f.len() >= 13 {
+                    let o = &mut p.as_mut()?.opts;
+                    o.legato = f[4] == "1";
+                    o.swing = f[5].parse().unwrap_or(0);
+                    o.swing_div = f[6].parse().unwrap_or(240);
+                    o.key = f[7].parse().ok().zip(f[8].parse().ok());
+                    o.no_transpose = f[9] == "1";
+                    o.scale_quantize = f[10] == "1";
+                    o.channel = f[11].parse().unwrap_or(1);
+                    o.auto_mode = if f[12] == "slide" { crate::stepinsp::AutoMode::Slide } else { crate::stepinsp::AutoMode::Latch };
+                }
+            }
             Some("row") if f.len() >= 9 => {
                 let mut r = Row::new(f[2], f[1].parse().ok()?);
                 r.mute = f[3] == "1";
@@ -2047,12 +2182,32 @@ pub fn from_text(text: &str) -> Option<StepPattern> {
                 r.rate = f[6].parse().ok();
                 r.start = f[7].parse().unwrap_or(0);
                 r.play = play(f[8]);
+                if f.len() >= 11 {
+                    r.opts.channel = f[9].parse().ok();
+                    r.opts.auto_mode = match f[10] {
+                        "slide" => Some(crate::stepinsp::AutoMode::Slide),
+                        "latch" => Some(crate::stepinsp::AutoMode::Latch),
+                        _ => None,
+                    };
+                }
                 p.as_mut()?.rows.push(r);
             }
             Some("step") if f.len() >= 12 => {
                 let k: usize = f[1].parse().ok()?;
                 let n = |i: usize| f[i].parse::<i32>().unwrap_or(0);
-                let s = Step { on: n(2) == 1, velocity: n(3) as u8, gate: n(4) as u8, repeat: n(5) as u8, chance: n(6) as u8, offset: n(7) as i8, tie: n(8) == 1, octave: n(9) as i8, skip: n(10) == 1, note: n(11) as i8 };
+                let s = Step { on: n(2) == 1, velocity: n(3) as u8, gate: n(4) as u8, repeat: n(5) as u8, chance: n(6) as u8, offset: n(7) as i8, tie: n(8) == 1, octave: n(9) as i8, skip: n(10) == 1, note: n(11) as i8, ..Step::default() };
+                let mut s = s;
+                if f.len() >= 21 {
+                    s.cond = crate::stepinsp::Cond::ALL.get(n(12) as usize).copied().unwrap_or_default();
+                    s.iter = n(13).max(1) as u8;
+                    s.cycles = n(14).max(1) as u8;
+                    s.rate = f[15].parse().ok();
+                    s.channel = f[16].parse().ok();
+                    s.articulation = n(17) as u8;
+                    s.ramp = n(18) as i8;
+                    s.curve = n(19) as i8;
+                    s.dist = n(20) as i8;
+                }
                 if let Some(slot) = p.as_mut()?.rows.last_mut()?.steps.get_mut(k) {
                     *slot = s;
                 }
@@ -2328,7 +2483,7 @@ fn pattern_from_archive(v: &Val) -> Option<StepPattern> {
     let end = seq.get("kStepSequenceEndIndexKey").and_then(Val::num).unwrap_or(16.0) as u8;
     let start = seq.get("kStepSequenceStartIndexKey").and_then(Val::num).unwrap_or(0.0) as u8;
     let Val::List(rows) = seq.get("kStepSequenceRowsKey")? else { return None };
-    let mut pat = StepPattern { steps: end.saturating_sub(start).clamp(1, MAX_STEPS as u8), rate: SIXTEENTH, rows: Vec::new(), play: Play::Forward };
+    let mut pat = StepPattern { steps: end.saturating_sub(start).clamp(1, MAX_STEPS as u8), rate: SIXTEENTH, rows: Vec::new(), play: Play::Forward, opts: Default::default() };
     for r in rows {
         let nk = r.get("propertyNodeKey").and_then(|p| p.get("kStepSequenceNoteKey"));
         let note = nk.and_then(|n| n.get("kStepSequenceNoteKey")).and_then(Val::num).unwrap_or(60.0);
@@ -2396,7 +2551,7 @@ mod tests {
     use super::*;
 
     fn drums_with(rows: &[(u8, &str)]) -> StepPattern {
-        let mut p = StepPattern { steps: 16, rate: SIXTEENTH, rows: Vec::new(), play: Play::Forward };
+        let mut p = StepPattern { steps: 16, rate: SIXTEENTH, rows: Vec::new(), play: Play::Forward, opts: Default::default() };
         for (pitch, grid) in rows {
             let mut r = Row::new(drum_name(*pitch).unwrap_or("x"), *pitch);
             for (k, c) in grid.chars().enumerate() {
@@ -2549,7 +2704,7 @@ mod tests {
         let mut p = drums_with(&[(36, "x...x..."), (42, "xxxxxxxx")]);
         p.play = Play::PingPong;
         p.rate = 480;
-        p.rows[0].steps[4] = Step { on: true, velocity: 40, gate: 50, repeat: 3, chance: 70, offset: -10, tie: false, octave: 1, skip: false, note: -2 };
+        p.rows[0].steps[4] = Step { on: true, velocity: 40, gate: 50, repeat: 3, chance: 70, offset: -10, tie: false, octave: 1, skip: false, note: -2, ..Step::default() };
         p.rows[1].len = Some(6);
         p.rows[1].start = 1;
         p.rows[1].play = Some(Play::Wander);

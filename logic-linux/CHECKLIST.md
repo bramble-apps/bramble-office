@@ -38,14 +38,14 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Smart Controls (Y; Window ▸ Open Smart Controls) (smartcontrols.rs, arp.rs): layouts by patch type (Keyboard, Synthesizer, Drums, Orchestral, Guitar & Bass, Audio / Master Effects, Basic, Faders), screen controls mapped to one or more parameters with ranges (channel strip, EQ, sends, instrument, Audio FX), inspector (layout, mapping list, Add Mapping, Learn, external assignment Learn with MIDI CC), header Track / Master / Compare / subviews / routing destinations, the Arpeggiator (Up, Down, Up & Down, Outside In, Random, As Played, Chord; 14 rates; 1–4 octaves; Reflex / Latch / Latch Transpose; note length, velocity) on playback and on live keys; all 6 Smart Controls key commands. 2026-11-11: parameter mapping graphs (scgraph.rs: Scaling ▸ Open, presets, points, bends, Invert / Reset / Copy / Paste), Range Max / Min sliders and Invert Range, the mapping pop-up (Copy / Paste Mapping(s), Delete Mapping, Map all (Unmapped) Controls), three-dot reorder, plug-in window buttons and Control-click Open Plug-in Window, Automatic Smart Controls, Master Effects pop-up, Tuner button on audio tracks, external assignment Learn for several controls, screen control automation (lanes recorded and replayed). [ ] Logic's own per-patch layouts and mappings (not available), arp/mapping state saved in the .logicx, plug-in parameter edits in undo
 - [~] Editors pane: Piano Roll, Score (see below), Step Sequencer (see below), Session Player editors. [ ] audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
 - [~] Score editor (score.rs, scorecmd.rs, lg-notation, lg-core score): Linear, Wrapped and Page views (lines laid out by content, pages with title, page numbers, page rulers, Go to Page), staff styles (Treble, 8va / 8vb, Bass, Piano grand staff, Alto, Tenor, Drums with the GM drum map and cross heads, Guitar, Bass Guitar, B♭ Trumpet / Clarinet / Tenor Sax, E♭ Alto Sax, F Horn: written transposition and key), the region's Quantize / Interpretation / Syncopation, voice separation (two voices per staff, Explode Polyphony), Explode Folders (every MIDI track), score sets, instrument names, colour views (pitch, velocity, voice, B&W, note colours), duration bars, drag guides; Part box (notes with dot and triplet, articulations, dynamics with MIDI Meaning velocities, slurs, hairpins, clef changes, text, lyrics, chord symbols, key changes); note attributes (stems up / down / hidden / centred / end moved, ties up / down, Beam / Unbeam Selected, accidentals force / hide / guide, enharmonic shifts, Flats↔Sharps, interpretation / syncopation per note, staff assignment, fingering, pick fingers, auto slurs); Fix Displayed Note Positions (and Durations), Assign MIDI Channels based on Score Split, Nudge Position, Paste Multiple; Score Project Settings window (staff size, bar numbers, chord size, key on every line, MIDI Meaning, colours) and Staff Style window; 133/139 of Logic's Score Editor key commands; every edit one undo step (attributes live in the project). Since studio-score3: the Score inspector (scoreinsp.rs) in the main inspector while the Score is shown: Filter (All Instruments and the project's score sets), Region (Style, Quantize, Interpretation, Syncopation, Max. Dots), Event (notes: MIDI Channel, Pitch, Velocity, Length, asterisks for differing values, drags change all; a clicked text object: Staff, Style, Align, Vertical / Horizontal Pos, Lyric), the Part box as Logic's (group buttons, All, Part Box sets New / Rename / Delete, groups reordered by their handles, symbols dragged into the score), channel strips below; new groups: note heads (12, gray), sustain pedal (CC 64 events, alternating, drawn from the region's data), Bars and Repeats (bar lines, repeats, double repeat split at line breaks, one- and two-bar repeats hiding their bars, first / second endings moved and lengthened by dragging, segno, coda; global), Trills (trills, trill line, mordents, turns, arpeggio, tremolos, trill accidentals), key and time signatures (A/B asks), Line / Page / No Line / No Page Break (the layout honours them; bar line Control-click menu, Reset Line Layout), automatic text (REGION, INSTR, SONG, DATE); Key Signature and Time Signature windows (click in Linear view, Control-click elsewhere); Text Styles window (Logic's 18 default styles + the user's, used by text, lyrics, chord root / extension, repeat endings); chord symbols with raised extensions, comma split, Tab to the next note; Score Sets window (sets, order, full / short names, brackets, bar line joins, leave out, Scale 25–250 %); Delete removes a selected symbol; the Score's data (attributes, symbols, bars, breaks, styles, sets, staff styles) saved beside the project (scorefile.rs); File ▸ Export ▸ Score as MusicXML (lg-notation musicxml.rs). [ ] Stem Position Automatic / Side and Independent / Independent Grace are stored but not drawn differently; user-defined staff styles (Duplicate Staff Style only pins the current one), tablature, Extended Layout, Align Object Positions, Layout tool; time signature changes (inserted into the project, the Score lays bars out in the first); No Overlap; user rests, multiple rests, tuplets beyond triplets; chord grids; global / margin text; the Score Sets' Part layout and line-start-only joins; text styles not yet used for page / bar numbers, names, tuplets; fonts beyond Studio's own; floating Part box windows; text of endings not typed; key / clef changes are at bar lines only; score data kept beside the project, not inside the .logicx (and attributes keyed by note position are lost when a note is moved outside the Score); print / PDF; MusicXML import; Logic's exact engraving distances unmeasured
-- [~] Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (⌥⇧B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. [ ] automation rows, per-step Step Rate mode, Zoom Focused Row, Display Edit Mode Values options, Sort Rows, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)
+- [~] Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (⌥⇧B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. Step Sequencer inspector (stepinsp.rs; View ▸ Show Local Inspector or the toolbar's Pattern Browser | Inspector pill): Pattern / Row / Step tabs, "*" for differing values with relative changes; pattern Legato, Swing (1/8 or 1/16), Key / Scale with No Transpose, Scale Quantize and the Q button, MIDI channel for pattern / row / step, Latch / Slide; step Condition (Always, Recurrence n of m, First / Last Loop), per-step Step Rate (also an edit mode), Articulation, Note Repeat 1–16 with Velocity Ramp / Curve / Distribution, all played and saved in pattern files; editing an off step's value turns it on; View ▸ Sort Rows (By Type / Type and Note / Type and Name, Ascending / Descending). [ ] automation rows (Latch / Slide only stored), chord-degree rows, articulation IDs don't reach instruments, the inspector's settings aren't in the region on undo (an undo re-reads the pattern from the notes), Zoom Focused Row, Display Edit Mode Values options, row drag to reorder, DMD sort, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)
 - [~] Step Input Keyboard (stepinput.rs, ⌥⌘K): Logic's window (chord, values 1/1–1/64, dot, triplet, rest, ppp–fff, Q, channel, keyboard C0–C7), all 49 key commands while it is open, notes from MIDI keyboards, into the selected region at the playhead (the region grows), Diatonic Insert in the Score. [ ] the Score's own step-input cursor
 - [~] Step Editor (stepedit.rs, Window ▸ Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project
 - [~] Event Editor (eventedit.rs, the List Editors' Events): ↑ ↓, Relative Position, Length as Absolute Position, Numerical Edit (and Duplicate Event and Numerical Edit), Copy Value to All Following Events, Create Event. [ ] Articulation column (notes have no articulation ID yet)
 - [ ] Drum Machine Designer key commands: no pad view in Studio yet
 - [~] Mixer (X): Logic's bar (Edit / Options / View, Sends on Faders, filter buttons Audio / Inst / Aux / Bus / Input / Output / Master/VCA / MIDI, Single / Tracks / All), sideways scroll, narrow / wide strips, strips with Setting menu (copy / paste / reset channel strip setting), gain reduction meter (Compressor, Limiter, Adaptive Limiter), EQ thumbnail, input menu (audio tracks: one slot shared with recording: Input 1, Input 2, Input 1-2, No Input, a bus; auxes: their bus), Audio FX slots (Logic's plug-in menu with what Studio has, hover bypass, Option-click bypass, the arrow menu: replace / No Plug-in, drag to move, Option-drag to copy, across strips), sends (level knob, pre/post, No Send, change bus), output menu (Stereo Output, No Output, Bus 1-256, an aux made for a new bus), Group slot and Group Settings window (name, enabled, Volume / Pan / Mute / Solo / Selection / Sends 1-8 linked; Enable Groups), Automation mode shown, pan, VCA slot and VCA strips (volume, mute, solo of the members), fader, meters (Pre-Fader Metering), Mute / Solo, the name (select, Shift-select, Create New VCA, components); Channel Strip Components shown / hidden; Mixer Undo / Redo with its own history (⌘Z over the Mixer, Include … in Project Undo); Select Audio / Instrument / Aux / Output / Muted / Same-Colored strips; Sends on Faders drives the faders (On/Off, Next, Previous, Cycle). Mixer state read from projects (see 4. Audio). [ ] Bus / Input / Output / MIDI strips themselves (the filters exist, those strip kinds aren't drawn), Assign Channel Strip Color, Rename Channel Strip, Track Stacks, Long Faders, Configure Channel Strip Components, Mixer Undo for selected strips only, automation mode menu on the strip, independent / post-pan sends, send bypass, mixer state saved back beyond faders / pan / mute / solo / groups / plug-in values (sends, outputs, new strips: see 6. Files), pan law and panner types (menu shown, Balance only) Mixer additions (mixext.rs, mixwin.rs, mixengine.rs; 2026-11-11): Channel Mode button (mono / stereo / left / right in the engine), Pan Law wired, Stereo Pan, Binaural Panner (strip and window; a spherical-head model, not Apple's HRTF), Independent Pan / Post Pan / bypassed / Low Latency Safe sends, Low Latency Monitoring in the engine, solo-safe and exclusive solo, flashing mute / solo, held peak display with clip colours, segmented meters, typed fader and pan values, Shift fine fader, Toggle Level, Dim, output Bounce button, R / I on audio strips, rename / colour strips, several groups per strip, automation mode menu on strips, MIDI channel strips (program, bank, Assign 1-5 sent as MIDI), Studio channel strip settings (.cst text) with performances, I/O Labels window, Configure Channel Strip Components, Search and Add Plug-in and menu search, Follow Hide / Track Stacks / Autoscroll / Sends only view options, drag strips to reorder. [ ] multi-output instruments, side chain, plug-in window link modes, bus / input / output strips, Plug-in Manager for Logic's plug-ins
 - [~] Editors pane: Piano Roll, Score (lg-notation: clefs by range, key spelling, beams, ties, rests, editing), Step Sequencer (rows, edit modes, paint, mute/solo, per-row rate and length, reads Logic's saved patterns), Session Player editors. [ ] Score page view, staff styles, articulations, chord symbols; Step Sequencer playback modes, Pattern Browser; Step Editor, audio region parameters into lg-core (offset, fades, gain, flex are app-only), Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis); all 55 Audio File Editor key commands run (checked headless with LG_RUN; state-dependent ones do nothing when there is no transient that way). [x] Project Audio Browser (projaudio.rs; Project Files ▸ Project, ⌘8 window): files with their regions, Icon / Info / Bpm columns, waveform overviews, Play / Cycle / volume, Edit / View / Audio File local menus, all 20 Project Audio key commands (rename regions and files, add files and regions, delete to the Trash, optimize, backup, copy/convert to WAV, move out, select used/unused, groups, sort, region information export/import as a sidecar file). [ ] its pool of added files and regions isn't saved in the .logicx yet
-- [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. [ ] cell play mode and Quantize Start from the file (not decoded), Pattern and Session Player cells, takes, Remix FX, cells made here saved, undo
+- [~] Live Loops: the grid read from projects (lg-core liveloops) beside the tracks (L / ⌥L), cells in track colours, queue / play / stop with Logic's rings, scene triggers, Stop All, Record into Cell, drag regions to cells, move / copy cells, scene and cell menus, Quantize Start, Trigger Modes, Performance Recording, cells written back on Save. Cell inspector (cellinsp.rs) in the Region inspector's place while cells are selected (name or count, rename, Mute, Loop, Quantize, Transpose, Play From ▸ Start / Loop Start / Loop Length / Cell Length / Q Loop Start Off / On / On, Preserve Start, Quantize Start, Trigger Mode ▸ Speed / Reverse; positions dragged per unit or typed; View ▸ Show Start Positions as Offset, Show Length as Position, Position and Length Resolution, Try to Keep Cells Squared When Zooming); the loop settings play (liveloops pieces / first_pass); Cell Editor (celledit.rs: E / Show Editor / double-click; ruler start, loop and end markers dragged, loop moved, click toggles Loop, Set … Here menu, Move Loop Forward / Backward by Loop Length, Double / Halve; MIDI notes moved / added / deleted, audio waveform); marquee from an empty cell (Shift adds), Control-drop swaps cells, Select Muted / Same-Colored / Empty Cells; undo for cell edits (cells kept beside the app's undo steps); Bounce Cells in Place (cellbounce.rs, ⌃B: Logic's range rules and dialog, rendered by freeze.rs into a new audio cell); the cells' settings kept beside the project (live-loops-cells). [ ] Play From modes other than Start, Smart Pickup, cell Flex, multi-region cells, the Cell Editor isn't the full Piano Roll / Audio editor, Pattern and Session Player cells, takes, Remix FX, cells made here saved into the .logicx, Normalize Cell Gain
 - [x] Right panes: List Editors (Events editable, Markers, Tempo, Signature), Notes, Loop Browser, Project Files (Project Audio; All Files Browser with Back/Forward, Computer/Home/Project, List/Column view, name search with kind/format/length/date/size filters, Action menu, Play, drag to tracks)
 - [~] Settings (settings.rs draws, prefs.rs wires): all 27 tabs drawn as Logic's (measured), values saved, popups with Logic's choices (devices, templates, threads from the system). Wired: Project Handling (Startup Action's seven choices, Default Template, Auto Backup count, Recent Items + File ▸ Open Recent / Clear Menu), Editing (Undo Steps, Double-Clicking a MIDI Region Opens Score / Event List / Piano Roll, Select regions on track selection incl. cycle area and Option-click, Select tracks on region selection), Catch (on play start / on locate), Audio ▸ Devices (Enabled, Output / Input Device lists, I/O Buffer Size, Resulting Latency, Apply when changed), Recording (Bit Depth, the overlapping-recording and Replace popups shared two-way with the Record menu, Recording Project Settings…), MIDI (Reset All MIDI Drivers, Reset Messages for software instruments on Stop-while-stopped and Send Reset Controllers, Inputs table with per-port On and Bramble Studio Virtual In, MIDI Sync Project Settings…), Score / Movie Project Settings… buttons, View (help tags, middle C, Wide playhead, Show animations, Display Time As / Zeros as spaces / Clock Format in the control bar), Mixer (Open plug-in window on insertion), Editors (Bright background), Reset All Settings Except Key Command Assignments…. [ ] Sampler / Movie / Automation / Score tab rows, Audio ▸ General (overload message, compensation choice, Low Latency Mode, Dim, pre-roll), Audio ▸ Editing crossfades / scrub, File Editor rows, I/O Assignments and Bounce Extensions, Recording Delay, File Type (WAVE only), Auto Record Enable, Track / Region / Marker colour modes, Tracks background / grid / shaded loops / scroll numbers, meter Peak Hold and Return Time, Accessibility announcements, Notifications (Studio has no suppressible warnings), My Info, Sound Library
 - [~] Project Settings (projsettings.rs, File ▸ Project Settings ▸ / ⌥P): all of Logic's panes and sub-panes (General, Synchronization General / Audio / MIDI, Metronome, Recording, Tuning, Audio General / Channel Strips, MIDI General / Input Filter / Chase / Clip Length, Score, Movie, Smart Tempo, Assets), kept per project beside it (~/.config/bramble-studio/project-settings) and Import Project Settings… (pick a project, tick panes). Real effect: Use musical grid, frame rate and bar 1 SMPTE time (time display, drop-frame semicolon), Metronome (Simple mode, while recording, only during count-in, Bar / Beat / Division, Klopfgeist on/off, Tone, Volume in the engine), Count-in, Automatically erase duplicates, Audio Recording Path (Project / Set…), Tuning (Tune cents, Equal / six Fixed historic scales / User per semitone, Root Key, Copy to User, Reset, Stretch: every instrument tuning through lg_dsp::midi_hz), CC 7/10 move fader / pan, Input Filter, Smart Tempo Keep Project Tempo (loops), Copy audio files. Since studio-settings2: Chase (chase.rs: notes, pedal-held notes, No Transpose strips, program / bend / the three CC ranges / aftertouch / poly aftertouch as the last event before the start point, per channel, on cycle jump, full reset on stop), Synchronization ▸ MIDI's ten destination rows (Clock, Delay, PDC, MTC, MMC) with the four Clock Modes, Clock Start and pattern length, MMC ignored during MTC, Full Frame locates; Metronome laid out as Logic's (Group in compound meters, Polyphonic clicks, Note / Velocity per level, MIDI Click with Channel / Note / Velocity and Port, source and Simple mode kept app-wide, Control-click menu and the grey/purple button); Clip Length resets at region ends; General: region automation priority, preset value outside regions, record enable state kept (and reset for instrument tracks); Score ▸ Global / Numbers & Names / Clefs & Signatures laying out the Score (scoreset.rs: margins, header, line distance, bars per line, justify, page / bar numbers, names, where clefs / keys / times show, hide bar lines, hide muted); Movie Position; erase duplicates within 100 ticks; Settings ▸ View ▸ Tracks auto-assigned track colours. [ ] not inside the .logicx (Logic's project-settings chunks undecoded), Ableton Link / Manual sync, HMT, plug-in loading options, Pre-roll, MIDI data reduction, Smart Tempo defaults for new recordings / imports, Score Layout / Chords & Grids / Tablature panes, the Click channel strip, Project Settings window not yet drawn in Logic's own style (plain controls) Drawn as Logic's settings windows (title band with icon tabs, segmented sub-panes on the group box, right-aligned labels; no Logic screenshot of Project Settings, modelled on Settings).
@@ -132,13 +132,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 369 | 595 | 62% |
-| Local menus | 688 | 1191 | 57% |
-| Right-click menus | 1406 | 2575 | 54% |
-| Key commands | 1666 | 2207 | 75% |
+| Menu bar | 370 | 595 | 62% |
+| Local menus | 693 | 1191 | 58% |
+| Right-click menus | 1410 | 2575 | 54% |
+| Key commands | 1670 | 2207 | 75% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 369 of 595
+## Menu bar: 370 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -280,7 +280,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 84/166</summary>
+<details><summary>Edit — 85/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -338,7 +338,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -786,7 +786,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 688 of 1191
+## Local menus (Edit / Functions / View in each area): 693 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -876,7 +876,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 60/118</summary>
+<details><summary>audiotrack-Edit — 61/118</summary>
 
 - [ ] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -916,7 +916,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -1811,7 +1811,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 83/168</summary>
+<details><summary>tracks-Edit — 84/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1869,7 +1869,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split
   - [ ] Regions at Playhead  `⌘T`
   - [ ] Regions at Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Regions in Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Tracks  `J`
@@ -2100,7 +2100,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 6/25</summary>
+<details><summary>tracks-View — 9/25</summary>
 
 - [ ] Link
   - [x] Off
@@ -2109,9 +2109,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Zoom Focused Track  `⌃Z`
 - [x] Reset Individual Track Zoom  `⌥⌘⌫`
 - [ ] Live Loops
-- [ ] Try to Keep Cells Squared When Zooming
-- [ ] Show Start Positions as Offset
-- [ ] Show Length as Position
+- [x] Try to Keep Cells Squared When Zooming
+- [x] Show Start Positions as Offset
+- [x] Show Length as Position
 - [ ] Position and Length Resolution
   - [ ] Bars only
   - [ ] Bars and Beats
@@ -2130,7 +2130,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1406 of 2575
+## Right-click menus: 1410 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2337,7 +2337,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>liveloops-midi-cell — 105/151</summary>
+<details><summary>liveloops-midi-cell — 106/151</summary>
 
 - [x] Record into Cell  `⌥R`
 - [x] Queue Cell Playback  `⌥↩`
@@ -2475,7 +2475,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Rec-End Action
     - [x] Play Cell
     - [x] Continue Recording
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce Cells in Place…  `⌃B`
   - [x] Join Regions and Fill Cell  `⌘J`
 - [ ] Convert
@@ -4081,7 +4081,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 100/172</summary>
+<details><summary>region-audio — 101/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4187,7 +4187,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4258,7 +4258,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 126/212</summary>
+<details><summary>region-midi — 127/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4403,7 +4403,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4572,7 +4572,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 126/212</summary>
+<details><summary>take-folder-region — 127/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4717,7 +4717,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Remove Silence from Audio Region…  `⌃X`
   - [ ] Split at Playhead  `⌘T`
   - [x] Split by Locators  `⌥⌘T`
-- [ ] Bounce or Join
+- [x] Bounce or Join
   - [x] Bounce In Place…  `⌃B`
   - [x] Join  `⌘J`
   - [ ] Join per Track  `J`
@@ -4953,7 +4953,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1666 of 2207
+## Key commands: 1670 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4962,7 +4962,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 538/679</summary>
+<details><summary>Global Commands — 541/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5640,9 +5640,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Play Next Scene
 - [x] Stop All Cells  `⌘↩`
 - [x] Toggle Activation of All Tracks  `⌃⌥⇧A`
-- [ ] Live Loops: Keep Cells Squared When Zooming
-- [ ] Live Loops: Show Start Positions as Offset
-- [ ] Live Loops: Show Length as Position
+- [x] Live Loops: Keep Cells Squared When Zooming
+- [x] Live Loops: Show Start Positions as Offset
+- [x] Live Loops: Show Length as Position
 
 </details>
 
@@ -5793,7 +5793,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 181/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 182/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -5827,7 +5827,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Select All Inside Locators  `⇧L`
 - [x] Deselect Outside Locators
 - [x] Deselect Global Tracks
-- [ ] Select Empty Regions/Cells
+- [x] Select Empty Regions/Cells
 - [ ] Select SMPTE Locked Regions
 - [x] Select Overlapped Regions/Events  `⇧O`
 - [x] Select Equal Regions/Events  `⇧E`

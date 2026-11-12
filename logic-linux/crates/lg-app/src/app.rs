@@ -1142,6 +1142,7 @@ impl App {
             self.undo.remove(0);
         }
         self.redo.clear();
+        self.live_loops.cell_redo.clear();
     }
 
     pub fn undo(&mut self) {
@@ -1153,6 +1154,7 @@ impl App {
         self.markers = p.markers.clone();
         self.project = Some(p);
         self.programs = progs;
+        crate::cellinsp::undone(self);
         self.after_edit();
         self.tell(format!("Undo {what}"));
     }
@@ -1166,6 +1168,7 @@ impl App {
         self.markers = p.markers.clone();
         self.project = Some(p);
         self.programs = progs;
+        crate::cellinsp::redone(self);
         self.after_edit();
         self.tell(format!("Redo {what}"));
     }
@@ -1830,6 +1833,7 @@ impl App {
             crate::windows::area(self, ed, if self.bottom == Bottom::Mixer { "mixer" } else { "editor" });
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
+                Bottom::PianoRoll if crate::celledit::current(self).is_some() => crate::celledit::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) && self.drum_tab != 2 => {
                     let (t, r) = self.selected_region.unwrap();
