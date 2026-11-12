@@ -190,6 +190,7 @@ mod tracks;
 mod focus;
 mod regiontrim;
 mod regionclip;
+mod rolltools;
 mod hosting;
 pub mod units;
 pub mod wavecache;

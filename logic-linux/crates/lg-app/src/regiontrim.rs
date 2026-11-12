@@ -100,6 +100,8 @@ pub fn left_edge(app: &mut App, ui: &egui::Ui, rr: Rect, lanes: Rect, t: usize, 
         let audio = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).is_some_and(|x| x.audio.is_some());
         let rate = if audio { ensure_loaded(app, t, r).map_or(0.0, |x| x.0) } else { 0.0 };
         let (ns, nl, off) = trim_start(d.start, d.length, d.offset, rate, to as f64, &|k| app.seconds_at(k), &|s| crate::smarttempo::tick_at(app, s));
+        // Option: a time stretch on release; the audio isn't trimmed meanwhile
+        let off = if ui.input(|i| i.modifiers.alt) { d.offset } else { off };
         if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
             rg.start = ns;
             rg.length = nl;
@@ -116,6 +118,9 @@ pub fn left_edge(app: &mut App, ui: &egui::Ui, rr: Rect, lanes: Rect, t: usize, 
     }
     if resp.drag_stopped() {
         ctx.data_mut(|d| d.insert_temp::<Option<Left>>(id(), None));
+        if ui.input(|i| i.modifiers.alt) {
+            stretch_left(app, d);
+        }
         let (mode, mpt) = (app.arr.drag, crate::arranging::ms_per_tick(app));
         let len = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).map_or(d.length, |x| x.length);
         let k = match app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
@@ -132,8 +137,61 @@ pub fn left_edge(app: &mut App, ui: &egui::Ui, rr: Rect, lanes: Rect, t: usize, 
             app.selected_region = Some((t, k));
             app.selected_regions = vec![(t, k)];
         }
+        if !ui.input(|i| i.modifiers.alt) {
+            after_trim(app, &ctx, t, k);
+        }
         app.after_edit();
     }
+}
+
+/// A region resized at either edge: what's made from its span is made again for the new one, as
+/// Logic's — a Drummer or Session Player region's performance, a pattern region's pattern from
+/// its start. (Plain MIDI and audio keep their contents in place.)
+pub fn after_trim(app: &mut App, ctx: &egui::Context, t: usize, r: usize) {
+    if app.drum_params.contains_key(&(t, r)) {
+        crate::drummer::regenerate(app, t, r);
+    } else if app.players.contains_key(&(t, r)) {
+        crate::players::regenerate(app, t, r);
+    } else {
+        crate::stepseq::rerender(app, ctx, t, r);
+    }
+}
+
+/// Option-drag of the left edge, released: the region's end stays and its contents (notes, or
+/// the audio through Flex) scale to the new length, as Logic's time stretch.
+fn stretch_left(app: &mut App, d: Left) {
+    let Some((ns, nl, audio)) = app.project.as_ref().and_then(|p| p.tracks.get(d.t)?.regions.get(d.r)).map(|x| (x.start, x.length, x.audio.is_some())) else { return };
+    if (ns, nl) == (d.start, d.length) {
+        return;
+    }
+    if audio {
+        // back to the region before the drag (its audio untouched), stretched, then moved
+        if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(d.t)?.regions.get_mut(d.r)) {
+            x.start = d.start;
+            x.length = d.length;
+        }
+        crate::flex::stretch_region(app, d.t, d.r, nl);
+        if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(d.t)?.regions.get_mut(d.r)) {
+            x.start = ns;
+            x.length = nl;
+        }
+    } else if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(d.t)?.regions.get_mut(d.r)) {
+        scale_from_end(x, d.start, d.length);
+    }
+}
+
+/// A MIDI region whose start and length were changed from (`old_start`, `old_len`), its end kept:
+/// its notes and controller events scaled into the new span.
+pub fn scale_from_end(rg: &mut lg_core::Region, old_start: u32, old_len: u32) {
+    let (ns, nl) = (rg.start, rg.length);
+    rg.start = old_start;
+    crate::stretch::scale_notes(rg, old_len, nl);
+    // (the scaled contents now start at the old start: moved to the new one)
+    let dd = ns as i64 - old_start as i64;
+    for n in &mut rg.notes {
+        n.pos = (n.pos as i64 + dd).max(0) as u32;
+    }
+    rg.start = ns;
 }
 
 /// An audio region's waveform from its file, at the timeline's scale: the file offset at the
@@ -215,6 +273,21 @@ mod tests {
         // MIDI: anywhere back to the project's start, no offset
         let (s, l, off) = trim_start(3840, 960, 0, 0.0, 0.0, &secs, &tick);
         assert_eq!((s, l, off), (0, 4800, 0));
+    }
+
+    #[test]
+    fn option_on_the_left_edge_scales_the_notes_to_the_end() {
+        let mut rg = crate::freeze::audio_region("m", 3840, 3840, std::path::PathBuf::new(), 1.0);
+        rg.audio = None;
+        rg.notes.push(lg_core::events::Note { channel: 0, pitch: 60, velocity: 90, pos: 3840, len: 480, muted: false });
+        rg.notes.push(lg_core::events::Note { channel: 0, pitch: 62, velocity: 90, pos: 3840 + 1920, len: 480, muted: false });
+        // the left edge dragged a bar earlier: twice as long, the end where it was
+        rg.start = 0;
+        rg.length = 7680;
+        scale_from_end(&mut rg, 3840, 3840);
+        assert_eq!((rg.notes[0].pos, rg.notes[0].len), (0, 960));
+        assert_eq!(rg.notes[1].pos, 3840);
+        assert_eq!(rg.start + rg.length, 7680);
     }
 
     #[test]
