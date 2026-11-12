@@ -669,7 +669,7 @@ const PANE_ICONS: [&str; 11] = [
 /// The pane's rows as Logic's: labels right-aligned at one column, checkboxes, pop-ups,
 /// values and text fields after it (settings.rs's look).
 fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
-    let list: Vec<&Row> = ROWS.iter().filter(|r| r.0 == pane && r.1 == sub && !custom(r.0, r.1)).filter(|r| !(matches!(r.3, Kind::Text) && key(r).ends_with("Folder:"))).collect();
+    let list: Vec<&Row> = ROWS.iter().filter(|r| r.0 == pane && r.1 == sub && !custom(r.0, r.1)).filter(|r| !(matches!(r.3, Kind::Text) && key(r).ends_with("Folder:"))).filter(|r| key(r) != crate::recsettings::LEAD_IN).collect();
     if list.is_empty() {
         return;
     }
@@ -678,6 +678,8 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
     let label_w = list.iter().filter(|r| !matches!(r.3, Kind::Check | Kind::Heading)).map(|r| p.layout_no_wrap(r.2.to_string(), f.clone(), Color32::WHITE).size().x).fold(75.0f32, f32::max);
     let left = ui.max_rect().min.x;
     let label_right = left + label_w + 10.0;
+    // (Logic's settings panes give their pop-ups one width: the widest one's)
+    let popup_w = list.iter().filter_map(|r| if let Kind::Popup(ch) = r.3 { Some(ch) } else { None }).flat_map(|ch| ch.iter()).map(|c| p.layout_no_wrap(c.to_string(), f.clone(), Color32::WHITE).size().x + 44.0).fold(0.0f32, f32::max).clamp(120.0, 420.0);
     let ctrl_x = label_right + 9.5;
     let fill = gray(0x3d3c3b);
     let text = gray(0xdfdfdf);
@@ -714,9 +716,10 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
                 }
             }
             Kind::Popup(ch) => {
-                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
-                let w = ch.iter().map(|c| p.layout_no_wrap(c.to_string(), f.clone(), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 44.0;
-                let pr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(w.clamp(120.0, 420.0), 24.0));
+                lead_radio(app, ui, &p, &key, label_right, cy, r.2, &f, id);
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), gray(0xdfdfdf));
+                let _ = ch;
+                let pr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(popup_w, 24.0));
                 let resp = ui.interact(pr, id, if live { Sense::click() } else { Sense::hover() });
                 p.rect_filled(pr, 5.0, if resp.hovered() { look::mix(fill, Color32::WHITE, 0.06) } else { fill });
                 p.with_clip_rect(pr.shrink2(vec2(10.0, 0.0))).text(pos2(pr.min.x + 12.0, cy), Align2::LEFT_CENTER, &cur, f.clone(), text);
@@ -736,7 +739,8 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
                 });
             }
             Kind::Num(lo, hi, unit) => {
-                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
+                lead_radio(app, ui, &p, &key, label_right, cy, r.2, &f, id);
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), if lead_row(&key) { gray(0xdfdfdf) } else { text });
                 let mut x: f32 = cur.parse().unwrap_or(0.0);
                 let fr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(110.0, 24.0));
                 p.rect_filled(fr, 5.0, fill);
@@ -777,6 +781,30 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
     }
 }
 
+fn lead_row(key: &str) -> bool {
+    key == "Recording / General / Count-in:" || key == crate::recsettings::PRE_ROLL
+}
+
+/// Recording ▸ Count-in / Pre-roll: Logic's radio buttons before the two labels pick the lead-in.
+#[allow(clippy::too_many_arguments)]
+fn lead_radio(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, key: &str, label_right: f32, cy: f32, label: &str, f: &egui::FontId, id: egui::Id) {
+    if !lead_row(key) {
+        return;
+    }
+    let mine = if key == crate::recsettings::PRE_ROLL { "Pre-roll" } else { "Count-in" };
+    let on = app.proj.get(crate::recsettings::LEAD_IN) == mine;
+    let w = p.layout_no_wrap(label.to_string(), f.clone(), Color32::WHITE).size().x;
+    let ctr = pos2(label_right - w - 14.0, cy);
+    p.circle_filled(ctr, 8.0, if on { gray(0x397bf7) } else { gray(0x424140) });
+    if on {
+        p.circle_filled(ctr, 3.0, Color32::WHITE);
+    }
+    let hit = Rect::from_min_max(pos2(ctr.x - 8.0, cy - 9.0), pos2(label_right, cy + 9.0));
+    if ui.interact(hit, id.with("lead"), Sense::click()).clicked() {
+        set(&mut app.proj, crate::recsettings::LEAD_IN, mine);
+    }
+}
+
 /// Whether a row can be edited now (Count-in's menu with Count-in chosen, Pre-roll's slider with
 /// Pre-roll, HMT's rows with Hermode Tuning).
 fn enabled(v: &Values, key: &str) -> bool {
@@ -785,6 +813,7 @@ fn enabled(v: &Values, key: &str) -> bool {
         "Recording / General / Count-in:" => lead != "Pre-roll",
         crate::recsettings::PRE_ROLL => lead == "Pre-roll",
         "Synchronization / General / Bar Position 1 1 1 1 displayed as SMPTE:" => v.on("Synchronization / General / Enable separate SMPTE view offset"),
+        "Tuning /  / Type:" => v.get("Tuning /  / Software Instrument Tuning Table") == "Fixed",
         "Tuning /  / HMT Type:" | "Tuning /  / Depth:" => v.get("Tuning /  / Software Instrument Tuning Table") == "Hermode Tuning (HMT)",
         _ => true,
     }
@@ -872,7 +901,7 @@ fn body(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui, pane: &str, sub: 
             ("Synchronization", "General") => "Sync Mode MTC: with external sync on (Toggle Sync intern/extern) Studio follows incoming MIDI Time Code. Ableton Link and Manual (Tempo Interpreter) aren't available. The frame rate and bar 1's SMPTE time set MTC, MMC and the time display.",
             ("Synchronization", "Audio") => "Studio has no word clock: Core Audio's choice is kept with the project only.",
             ("Audio", "Channel Strips") => "Automatic management keeps one channel strip object per track on the Environment's Mixer layer (Window ▸ Open MIDI Environment).",
-            ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning isn't built (plays equal tempered).",
+            ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning retunes each note as it starts, to the chord sounding.",
             ("MIDI", "Clip Length") => "At a MIDI region's end, a reset for each ticked kind the region holds and played.",
             ("Audio", "General") => "Pan Law: the level of a centred mono signal (Compensated: centre unchanged, hard pans raised instead).",
             _ => "",

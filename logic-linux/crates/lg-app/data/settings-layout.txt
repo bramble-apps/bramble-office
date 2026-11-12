@@ -140,7 +140,7 @@ row		button	Apply (disabled)
 
 === Audio / General ===
 # window: 750x587 points
-# label column right edge x≈241.5, controls at x≈251.5; popups 291 wide
+# label column right edge x≈241.5, controls at x≈251.5; popups 291 wide; slider 209 wide; stepper 72 wide
 row		check	Display audio engine overload message	1	
 row	Sample Accurate Automation:	popup	Volume, Pan, Sends, Plug-in Parameters	Volume, Pan, Sends, Plug-in Parameters	~Off|Volume|Volume, Pan|Volume, Pan, Sends|Volume, Pan, Sends, Plug-in Parameters
 row	Automatic Bus Assignment Uses:	popup	All Busses	All Busses	~All Busses|Busses 9 and above|Busses 17 and above|Busses 33 and above|Busses 65 and above

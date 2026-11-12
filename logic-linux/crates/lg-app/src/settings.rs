@@ -321,17 +321,20 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                         p.line_segment([b.center() + vec2(-4.0, 0.0), b.center() + vec2(-1.2, 3.2)], Stroke::new(2.0, tick));
                         p.line_segment([b.center() + vec2(-1.2, 3.2), b.center() + vec2(4.5, -3.8)], Stroke::new(2.0, tick));
                     }
-                    let tg = p.layout_no_wrap(text.to_string(), look::regular(13.0), tcol);
+                    // (long labels wrap at the box's right, the box beside their first line)
+                    let line_h = p.layout_no_wrap("A".into(), look::regular(13.0), tcol).size().y;
+                    let tg = p.layout(text.to_string(), look::regular(13.0), tcol, (r.max.x - 45.0 - x0 - 22.5).max(100.0));
                     let tw = tg.size().x;
-                    p.galley(pos2(x0 + 22.5, ry + 12.0 - tg.size().y / 2.0), tg, tcol);
-                    let hit = Rect::from_min_size(b.min, vec2(22.5 + tw, 16.0));
+                    let extra = (tg.size().y - line_h).max(0.0);
+                    p.galley(pos2(x0 + 22.5, ry + 12.0 - line_h / 2.0), tg, tcol);
+                    let hit = Rect::from_min_size(b.min, vec2(22.5 + tw, 16.0 + extra));
                     if !disabled && ui.interact(hit, id, Sense::click()).clicked() {
                         values.0.insert(key.clone(), if on { "0".into() } else { "1".into() });
                         changed = true;
                         touched.push(key.clone());
                     }
                     right = hit.max.x;
-                    pitch = 22.0;
+                    pitch = 22.0 + extra;
                 }
                 "popup" => {
                     let w = if row.default.len() > 26 { sec.popup_w.max(309.0) } else { sec.popup_w };
@@ -396,7 +399,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     let f = ((v - lo) / (hi - lo).max(1e-6)).clamp(0.0, 1.0);
                     let track = Rect::from_center_size(sr.center(), vec2(w, 6.0));
                     p.rect_filled(track, 3.0, c(0x424140));
-                    p.rect_filled(Rect::from_min_size(track.min, vec2(w * f, 6.0)), 3.0, c(0x397bf7));
+                    // (a disabled slider has no blue fill)
+                    if !disabled {
+                        p.rect_filled(Rect::from_min_size(track.min, vec2(w * f, 6.0)), 3.0, c(0x397bf7));
+                    }
                     p.rect_filled(Rect::from_center_size(pos2(track.min.x + w * f, track.center().y), vec2(20.0, 16.0)), 8.0, c(0xe0e0e0));
                     let resp = ui.interact(sr.expand(4.0), id, Sense::click_and_drag());
                     if let (false, true, Some(pp)) = (disabled, resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
