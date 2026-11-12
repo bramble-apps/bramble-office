@@ -55,7 +55,7 @@ pub enum Action {
     LoadPattern(std::path::PathBuf),
 }
 
-const EDITORS: &[&str] = &["Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -65,6 +65,8 @@ pub fn default_size(name: &str) -> egui::Vec2 {
     match name {
         "Remix FX" | "Beat Breaker" | "Step FX" | "Delay Designer" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
         "Space Designer" | "Match EQ" | "MultiMeter" => vec2(680.0, 520.0),
+        // (Logic's Channel EQ window at 100 %: 1028 × 552 points with its header and footer)
+        "Channel EQ" | "Linear Phase EQ" => vec2(1014.0, 540.0),
         _ => vec2(520.0, 460.0),
     }
 }
@@ -74,6 +76,7 @@ pub fn curves_for(name: &str) -> &'static [&'static str] {
         "Mastering Assistant" => &["spectrum", "eq"],
         "Space Designer" => &["ir"],
         "Match EQ" => &["current", "reference", "eq"],
+        "Channel EQ" | "Linear Phase EQ" => &["analyzer"],
         "MultiMeter" => &["spectrum", "goniometer"],
         _ => &[],
     }
@@ -142,6 +145,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
     let mut set = Vec::new();
     let mut act = None;
     egui::ScrollArea::vertical().id_salt(("fx-editor", slot)).auto_shrink([false, false]).show(ui, |ui| match name {
+        "Channel EQ" | "Linear Phase EQ" => crate::eqview::view(ui, params, values, live.curve("analyzer"), slot, &mut set),
         "Remix FX" => remix(ui, params, values, &mut set),
         "Beat Breaker" => beat_breaker(ui, params, values, live, &mut set, &mut act),
         "Step FX" => step_fx(ui, params, values, live, &mut set),

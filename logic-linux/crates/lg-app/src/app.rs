@@ -1859,7 +1859,8 @@ impl App {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;
             let mut p = self.eqs.get(&t).copied().unwrap_or_default();
-            if crate::eq::window(&ctx, &mut open, &name, &mut p) {
+            let analyzer = self.engine().eq_analyzer(t);
+            if crate::eq::window(&ctx, &mut open, t, &name, &mut p, &analyzer) {
                 self.eqs.insert(t, p);
                 if let Some(tr) = self.engine().tracks.get_mut(t) {
                     tr.eq = Some(p);

@@ -116,14 +116,44 @@ fn follow_link(app: &mut App, ctx: &egui::Context) {
 /// opens its window; LG_FX_SIDE=1 also picks Bus 1 as its side chain.
 fn test_hook(app: &mut App) {
     static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if app.project.is_none() {
+        return;
+    }
+    // LG_EQ=1: the first track's Channel EQ window (LG_FX_SET applies to it)
+    static EQ_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if std::env::var_os("LG_EQ").is_some() && !EQ_DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        let mut p = crate::eq::Params::default();
+        if let Ok(v) = std::env::var("LG_FX_SET") {
+            for (id, x) in v.split(';').filter_map(|q| q.split_once('=')).filter_map(|(a, b)| Some((a.trim().parse::<u32>().ok()?, b.trim().parse::<f32>().ok()?))) {
+                p.set_value(id, x);
+            }
+        }
+        app.eqs.insert(0, p);
+        app.eq_window = Some(0);
+        app.load_engine();
+    }
     let Ok(name) = std::env::var("LG_FX") else { return };
-    if app.project.is_none() || DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+    if DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     crate::mixstate::edit_inserts(app, 0, |v| v.push(crate::mixstate::new_plugin(&name)));
     app.load_engine();
     let k = crate::mixstate::inserts(app, 0).len().saturating_sub(1);
     app.mix.fx_window = Some((0, k));
+    // LG_FX_SET="18=6;22=-4": parameter values (id=value)
+    if let Ok(v) = std::env::var("LG_FX_SET")
+        && let Some((n2, params, values)) = effect_state(app, 0, k)
+    {
+        let mut vals = values.clone();
+        for (id, x) in v.split(';').filter_map(|p| p.split_once('=')).filter_map(|(a, b)| Some((a.trim().parse::<u32>().ok()?, b.trim().parse::<f32>().ok()?))) {
+            if let Some(i) = params.iter().position(|p| p.id == id) {
+                vals[i] = x;
+            }
+        }
+        let base = crate::mixstate::inserts(app, 0).get(k).map(|u| u.params.clone()).unwrap_or_default();
+        let _ = n2;
+        apply_floats(app, 0, k, floats_of(&params, &vals, &base), None);
+    }
     if std::env::var_os("LG_FX_SIDE").is_some() {
         app.side.by_slot.insert((0, k), crate::sidechain::Choice::Bus(0));
         crate::sidechain::sync(app);
@@ -363,6 +393,30 @@ pub fn step_setting(app: &mut App, s: usize, k: usize, by: i32) {
 
 type History = (Vec<Vec<f32>>, Vec<Vec<f32>>);
 
+/// The effects' extended parameters (shown under the footer's disclosure chevron, as Logic's
+/// Extended Parameters area).
+pub fn extended(name: &str) -> &'static [&'static str] {
+    match name {
+        "Channel EQ" | "Linear Phase EQ" => &["Analyzer Decay"],
+        "GoldVerb" => &["Diffusion"],
+        "PlatinumVerb" => &["ER Scale"],
+        _ => &[],
+    }
+}
+
+/// The parameters in (`ext` = true) or out of the extended list.
+fn split_params(params: &[lg_dsp::Param], values: &[f32], texts: &[Option<String>], ext: &[&str], want: bool) -> (Vec<lg_dsp::Param>, Vec<f32>, Vec<Option<String>>) {
+    let mut out = (Vec::new(), Vec::new(), Vec::new());
+    for (i, p) in params.iter().enumerate() {
+        if ext.contains(&p.name) == want {
+            out.0.push(p.clone());
+            out.1.push(values.get(i).copied().unwrap_or(0.0));
+            out.2.push(texts.get(i).cloned().flatten());
+        }
+    }
+    out
+}
+
 /// Whether an effect has a side chain input (its header shows the Side Chain pop-up).
 pub fn has_side_chain(name: &str) -> bool {
     thread_local! {
@@ -446,6 +500,7 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     let mut fx_action: Option<crate::fxviews::Action> = None;
     let size = crate::fxviews::default_size(&name);
     let has_editor = crate::fxviews::has_editor(&name) && !hosted;
+    let ext_names = extended(&name);
     let side_ok = !hosted && has_side_chain(&name);
     let view_id = egui::Id::unique(("fx-view", s, k));
     let mut editor = has_editor && ctx.data(|d| d.get_temp::<bool>(view_id)).unwrap_or(true);
@@ -563,11 +618,20 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
                 fx_action = act;
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(40));
             } else {
-                set.extend(controls(ui, &params, &values, &texts, "fx"));
+                // (the extended parameters go under the footer's disclosure chevron)
+                let (mp, mv, mt) = split_params(&params, &values, &texts, ext_names, false);
+                set.extend(controls(ui, &mp, &mv, &mt, "fx"));
             }
         }
         });
-        crate::plughead::footer(ui, &name, None);
+        let ext_id = egui::Id::unique(("fx-ext", s, k));
+        let mut ext_open = ui.ctx().data(|d| d.get_temp::<bool>(ext_id)).unwrap_or(false);
+        crate::plughead::footer(ui, &name, (!ext_names.is_empty()).then_some(&mut ext_open));
+        ui.ctx().data_mut(|d| d.insert_temp(ext_id, ext_open));
+        if ext_open && !ext_names.is_empty() {
+            let (ep, ev, et) = split_params(&params, &values, &texts, ext_names, true);
+            set.extend(controls(ui, &ep, &ev, &et, "fx-ext"));
+        }
     });
     if let Some(r) = &wresp {
         crate::plughead::apply_scale(ctx, r.response.layer_id, r.response.rect.min, scale);

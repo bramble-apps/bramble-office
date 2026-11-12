@@ -403,6 +403,7 @@ const LP_TAPS: usize = 4096;
 
 pub struct LinearPhaseEq {
     rate: f32,
+    dry: [Delay; 2],
     eq: ChannelEq,
     conv: [Convolver; 2],
     fir: Vec<f32>,
@@ -410,7 +411,7 @@ pub struct LinearPhaseEq {
 
 impl LinearPhaseEq {
     pub fn new(rate: f32) -> LinearPhaseEq {
-        let mut e = LinearPhaseEq { rate, eq: ChannelEq::new(rate), conv: [Convolver::new(LP_TAPS), Convolver::new(LP_TAPS)], fir: vec![0.0; LP_TAPS] };
+        let mut e = LinearPhaseEq { rate, dry: [Delay::new(LP_TAPS / 2 + 4), Delay::new(LP_TAPS / 2 + 4)], eq: ChannelEq::new(rate), conv: [Convolver::new(LP_TAPS), Convolver::new(LP_TAPS)], fir: vec![0.0; LP_TAPS] };
         e.design(rate);
         e
     }
@@ -469,10 +470,27 @@ impl Plugin for LinearPhaseEq {
 
 impl Effect for LinearPhaseEq {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
-        for i in 0..left.len().min(right.len()) {
-            left[i] = self.conv[0].run(left[i]);
-            right[i] = self.conv[1].run(right[i]);
+        use crate::channel_eq::{from_proc, to_proc};
+        let mode = self.eq.processing();
+        let (analyze, post, size, rms, decay) = self.eq.analyzer_settings();
+        if analyze && !post {
+            self.eq.analyzer.push(left, right, self.rate, size, rms, decay);
         }
+        for i in 0..left.len().min(right.len()) {
+            let (a, b) = to_proc(mode, left[i], right[i]);
+            let e = (self.conv[0].run(a), self.conv[1].run(b));
+            // (the dry part waits for the FIR's latency so the halves stay aligned)
+            self.dry[0].push(a);
+            self.dry[1].push(b);
+            let d = (self.dry[0].tap(LP_TAPS / 2), self.dry[1].tap(LP_TAPS / 2));
+            (left[i], right[i]) = from_proc(mode, d, e);
+        }
+        if analyze && post {
+            self.eq.analyzer.push(left, right, self.rate, size, rms, decay);
+        }
+    }
+    fn curve(&self, name: &str) -> Vec<f32> {
+        self.eq.curve(name)
     }
     fn latency(&self) -> usize {
         LP_TAPS / 2

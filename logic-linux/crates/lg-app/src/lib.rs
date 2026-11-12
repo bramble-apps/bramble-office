@@ -65,6 +65,7 @@ mod snap;
 mod newtrack;
 mod pluginwin;
 pub mod plughead;
+mod eqview;
 pub mod plugbrowser;
 mod instwin;
 mod samplerwin;

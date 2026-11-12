@@ -118,6 +118,13 @@ fn build_inserts(list: &[(String, Vec<f32>)], tempo: f64) -> (Vec<Box<dyn lg_dsp
     (fx, at)
 }
 
+impl Engine {
+    /// The track's Channel EQ analyzer (dB per band), for its window.
+    pub fn eq_analyzer(&self, t: usize) -> Vec<f32> {
+        self.eqs.get(t).and_then(|e| e.as_ref()).map(|e| e.analyzer()).unwrap_or_default()
+    }
+}
+
 /// Hands each effect with a side chain choice its block (before `run_inserts`).
 fn feed_side(u: &mut Units, strip: FxStrip, fx_side: &std::collections::HashMap<(FxStrip, usize), SideSrc>, block: &dyn Fn(SideSrc) -> (Vec<f32>, Vec<f32>)) {
     if fx_side.is_empty() {
