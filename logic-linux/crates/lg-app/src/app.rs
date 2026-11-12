@@ -1375,7 +1375,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) {
+        if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) {
             return true;
         }
         if crate::share::command(self, name) {
@@ -1891,6 +1891,7 @@ impl App {
         crate::stepinput::window(self, &ctx);
         crate::evlist::float_window(self, &ctx);
         crate::joinaudio::window(self, &ctx);
+        crate::regsolo::frame(self, &ctx);
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);

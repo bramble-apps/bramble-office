@@ -337,6 +337,31 @@ fn region_transients(app: &mut App, g: &Reg) -> Vec<usize> {
     audioedit::transients_of(app, &g.file).into_iter().filter(|&f| f > g.x.offset && f < end).map(|f| f - g.x.offset).collect()
 }
 
+fn stretch_reg(app: &mut App, g: Reg, len: f64) {
+    let src_end = g.map.src(g.frames);
+    let new_frames = (app.seconds_at(g.rg.start as f64 + len) - g.start_sec) * g.rate;
+    let k = new_frames / g.frames.max(1.0);
+    let mut x = g.x.clone();
+    x.flex = x.flex.iter().filter(|m| (m.0 as f64) < src_end - 1.0).map(|m| (m.0, ((m.1 as f64) * k).round().max(1.0) as usize)).collect();
+    x.flex.push((src_end.round() as usize, new_frames.round() as usize));
+    audioedit::set_extras(app, g.t, g.r, x);
+    if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(g.t)?.regions.get_mut(g.r)) {
+        rg.length = len.round() as u32;
+    }
+    // the Time Stretching Algorithm on a track without Flex of its own (stretch.rs)
+    if !app.flex.tracks.contains_key(&g.t) {
+        let mode = crate::stretch::mode(&app.ctx);
+        app.flex.tracks.insert(g.t, TrackFlex { on: true, mode });
+    }
+}
+
+/// Time stretches an audio region to `len` ticks (no undo step of its own).
+pub fn stretch_region(app: &mut App, t: usize, r: usize, len: u32) -> bool {
+    let Some(g) = reg(app, t, r) else { return false };
+    stretch_reg(app, g, len as f64);
+    true
+}
+
 /// An audio region's transients as project ticks (groove templates take them as positions).
 pub fn transient_ticks(app: &mut App, t: usize, r: usize) -> Vec<u32> {
     let Some(g) = reg(app, t, r) else { return Vec::new() };
@@ -682,16 +707,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             }
             checkpoint(app, "Time Stretch Region");
             for (g, len) in todo {
-                let src_end = g.map.src(g.frames);
-                let new_frames = (app.seconds_at(g.rg.start as f64 + len) - g.start_sec) * g.rate;
-                let k = new_frames / g.frames.max(1.0);
-                let mut x = g.x.clone();
-                x.flex = x.flex.iter().filter(|m| (m.0 as f64) < src_end - 1.0).map(|m| (m.0, ((m.1 as f64) * k).round().max(1.0) as usize)).collect();
-                x.flex.push((src_end.round() as usize, new_frames.round() as usize));
-                audioedit::set_extras(app, g.t, g.r, x);
-                if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(g.t)?.regions.get_mut(g.r)) {
-                    rg.length = len.round() as u32;
-                }
+                stretch_reg(app, g, len);
             }
             app.after_edit();
             true

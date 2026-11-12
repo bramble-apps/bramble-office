@@ -1394,6 +1394,8 @@ pub fn command(app: &mut App, _ctx: &egui::Context, name: &str) -> bool {
         "Toggle Region Solo" => {
             // on: the selected regions solo (only they play); off: everything plays again
             app.rp.region_solo = !app.rp.region_solo;
+            // the control bar's Solo button shows it (regsolo.rs)
+            app.solo_mode = app.rp.region_solo;
             app.rp.soloed = if app.rp.region_solo { app.region_selection() } else { Vec::new() };
             app.load_engine();
         }

@@ -197,7 +197,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         })
         .clicked()
         {
-            app.solo_mode = !app.solo_mode;
+            // Option-click: Set Solo Lock Mode (regsolo.rs)
+            let alt = ui.input(|i| i.modifiers.alt);
+            crate::regsolo::button(app, alt);
         }
         x = c.max.x + 8.0;
         let (b, c) = run(x, cy, &[BTN; 2]);
