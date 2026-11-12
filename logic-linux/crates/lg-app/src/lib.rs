@@ -33,6 +33,7 @@ pub mod follow;
 mod inspector;
 pub mod keymap;
 pub mod keycmds;
+pub mod keyextra;
 pub mod prefs;
 pub mod projsettings;
 mod live;

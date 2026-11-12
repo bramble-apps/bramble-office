@@ -336,6 +336,7 @@ pub struct App {
     pub spdrum: crate::spdrum::State,
     pub artic: crate::artic::State,
     pub sbp: crate::sbp::State,
+    pub keyx: crate::keyextra::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -535,6 +536,7 @@ impl App {
             spdrum: Default::default(),
             artic: Default::default(),
             sbp: Default::default(),
+            keyx: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -904,9 +906,14 @@ impl App {
                     e.locate(a as f64);
                 }
             }
-            e.playing = true;
             // (Logic's last locate position: where playback started)
             let at = e.pos;
+            // Settings ▸ Audio ▸ General ▸ Playback pre-roll: start early by the compensation
+            let early = crate::prefs::playback_preroll(&self.logic_settings, e.latency(), self.project.as_ref().map_or(120.0, |p| p.tempo_at(at as u32)));
+            if early > 0.0 {
+                e.locate(at - early);
+            }
+            e.playing = true;
             drop(e);
             self.stopbtn.last_pos = at;
         }
@@ -1384,7 +1391,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::share::command(self, name) {
+        if crate::share::command(self, name) || crate::keyextra::command(self, ctx, name) {
             return true;
         }
         if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
@@ -1901,6 +1908,7 @@ impl App {
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);
         crate::sbp::window(self, &ctx);
+        crate::keyextra::history_window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);

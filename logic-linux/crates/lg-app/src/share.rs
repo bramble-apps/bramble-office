@@ -983,7 +983,10 @@ fn finish(app: &mut App, then: After, res: Result<Vec<PathBuf>, String>) {
 fn open_share(app: &mut App, kind: ShareKind) {
     let Some(p) = &app.project else { return };
     let part = app.cycle_on() || !app.region_selection().is_empty();
-    let d = ShareDlg { kind, title: p.name.clone(), artist: String::new(), composer: String::new(), album: String::new(), playlist: "Bramble Studio".into(), quality: 2, part, project: false, ask_save: false };
+    // (Settings ▸ My Info fills the artist, composer, album and playlist)
+    let me = |k: &str| app.logic_settings.get(&format!("My Info /  / {k}")).trim().to_string();
+    let playlist = Some(me("Playlist:")).filter(|s| !s.is_empty()).unwrap_or_else(|| "Bramble Studio".into());
+    let d = ShareDlg { kind, title: p.name.clone(), artist: me("Artist Name:"), composer: me("Composer Name:"), album: me("Album Name:"), playlist, quality: 2, part, project: false, ask_save: false };
     with(|s| s.share = Some(d));
 }
 

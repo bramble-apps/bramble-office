@@ -247,6 +247,16 @@ row	^	button	Choose...
 row		button	Remove		
 # Remove: 72 wide, under the field's left edge
 
+=== My Info ===
+# window: 750x290 points (Bramble: Logic's My Info pane wasn't captured; drawn in the Recording tab's style)
+# label column right edge x≈184.5, controls at x≈193.5
+# small
+row		text	Your details for songs shared to the Music app (Share ▸ Song to Music).		
+row	Composer Name:	field			
+row	Artist Name:	field			
+row	Album Name:	field			
+row	Playlist:	field			
+
 === Recording ===
 # window: 750x498 points
 # no box; label column right edge x≈142.5, controls at x≈149; headings at x=20 with full-width separators
