@@ -119,6 +119,7 @@ mod hosting;
 pub mod units;
 pub mod wavecache;
 mod widgets;
+mod viewprefs;
 mod windows;
 
 pub fn run() -> eframe::Result {

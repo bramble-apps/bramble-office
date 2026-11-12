@@ -31,6 +31,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
     crate::syncmidi::frame(app, ctx);
     crate::surfaces::frame(app, ctx);
     crate::movie::frame(app, ctx);
+    crate::viewprefs::frame(app);
 }
 
 /// The windows: Environment, its object windows, Control Surfaces Setup, Controller
