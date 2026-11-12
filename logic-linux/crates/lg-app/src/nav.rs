@@ -381,6 +381,7 @@ fn now() -> f64 {
 /// The project's screensets once it opens, and Auto Set Locators.
 pub fn frame(app: &mut App) {
     crate::screensets::frame(app);
+    crate::screensets::autosave(app);
     if app.nav.auto_locators {
         let sel = app.region_selection();
         let mq = marquee(app);

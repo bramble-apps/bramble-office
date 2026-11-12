@@ -56,6 +56,9 @@ pub struct State {
     pub sheet: Option<Sheet>,
     /// The project file the screensets were read from.
     loaded_for: Option<Option<PathBuf>>,
+    /// The layout text last written (autosave), and when the layout was last checked.
+    written: String,
+    checked: Option<std::time::Instant>,
 }
 
 /// Recalls `slot` in `sets` (pure, for the tests and the app): the current one keeps `now`
@@ -525,6 +528,27 @@ pub fn parse_store(t: &str, base: Layout) -> Option<(Vec<Set>, u32)> {
 
 /// Keeps the layout (at Save, and at quit): the current screenset takes what's shown unless
 /// it's locked.
+/// Every couple of seconds: a changed layout is written straight away, so it comes back even
+/// when Studio didn't quit normally.
+pub fn autosave(app: &mut App) {
+    if app.automated || app.screens.loaded_for.is_none() {
+        return;
+    }
+    if app.screens.checked.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+        return;
+    }
+    app.screens.checked = Some(std::time::Instant::now());
+    let mut sets = app.screens.sets.clone();
+    let now = layout(app);
+    let cur = app.screens.current;
+    if let Some(c) = sets.iter_mut().find(|s| s.slot == cur && !s.locked) {
+        c.layout = now;
+    }
+    if store_text(&sets, cur) != app.screens.written {
+        remember(app);
+    }
+}
+
 pub fn remember(app: &mut App) {
     if app.automated {
         return;
@@ -541,7 +565,9 @@ pub fn remember(app: &mut App) {
     if let Some(d) = path.parent() {
         let _ = std::fs::create_dir_all(d);
     }
-    let _ = std::fs::write(path, store_text(&app.screens.sets, cur));
+    let text = store_text(&app.screens.sets, cur);
+    let _ = std::fs::write(path, &text);
+    app.screens.written = text;
 }
 
 #[cfg(test)]

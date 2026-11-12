@@ -91,6 +91,11 @@ impl eframe::App for Snap {
         eframe::App::clear_color(&self.app, v)
     }
 
+    // (quitting: the app keeps its window layout; this wrapper is always in front of it)
+    fn on_exit(&mut self) {
+        eframe::App::on_exit(&mut self.app);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         eframe::App::ui(&mut self.app, ui, frame);
         let Some(out) = std::env::var_os("LG_SNAP") else { return };
