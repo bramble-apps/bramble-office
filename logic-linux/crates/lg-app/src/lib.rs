@@ -54,6 +54,7 @@ pub mod keycmds;
 pub mod keyextra;
 pub mod prefs;
 pub mod projsettings;
+mod limview;
 mod live;
 pub mod midifunc;
 pub mod midifx;

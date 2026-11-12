@@ -22,33 +22,37 @@ const BODY_H: f32 = 502.0;
 /// Logic's window at 100 %: 1028 × 527 points with its header and footer; ours adds egui's title bar.
 pub const SIZE: egui::Vec2 = egui::vec2(1014.0, 515.0);
 
-const GREEN: Color32 = Color32::from_rgb(0xb1, 0xfc, 0xb2);
-const LABEL: Color32 = Color32::from_rgb(0xb4, 0xbd, 0xca);
-const SCALE: Color32 = Color32::from_rgb(0xa6, 0xae, 0xba);
+pub(crate) const GREEN: Color32 = Color32::from_rgb(0xb1, 0xfc, 0xb2);
+pub(crate) const LABEL: Color32 = Color32::from_rgb(0xb4, 0xbd, 0xca);
+pub(crate) const SCALE: Color32 = Color32::from_rgb(0xa6, 0xae, 0xba);
 const KNOB: Color32 = Color32::from_rgb(0x39, 0x44, 0x55);
 
-struct Geo {
-    o: Pos2,
-    s: f32,
+/// A Logic screenshot's pixels → points in the window: `o` is the body's top left, (`x0`, `y0`)
+/// the same spot in the picture, `s` points per picture pixel.
+pub(crate) struct Geo {
+    pub o: Pos2,
+    pub s: f32,
+    pub x0: f32,
+    pub y0: f32,
 }
 
 impl Geo {
-    fn at(&self, x: f32, y: f32) -> Pos2 {
-        self.o + vec2((x - X0) * self.s, (y - Y0) * self.s)
+    pub fn at(&self, x: f32, y: f32) -> Pos2 {
+        self.o + vec2((x - self.x0) * self.s, (y - self.y0) * self.s)
     }
-    fn pt(&self, px: f32) -> f32 {
+    pub fn pt(&self, px: f32) -> f32 {
         px * self.s
     }
-    fn rect(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
+    pub fn rect(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
         Rect::from_min_max(self.at(x0, y0), self.at(x1, y1))
     }
 }
 
-fn val(params: &[Param], values: &[f32], id: u32) -> f32 {
+pub(crate) fn val(params: &[Param], values: &[f32], id: u32) -> f32 {
     params.iter().position(|p| p.id == id).and_then(|i| values.get(i).copied()).unwrap_or(0.0)
 }
 
-fn prm(params: &[Param], id: u32) -> Param {
+pub(crate) fn prm(params: &[Param], id: u32) -> Param {
     params.iter().find(|p| p.id == id).cloned().unwrap_or_else(|| Param::new(id, "", 0.0, 1.0, 0.0, lg_dsp::Unit::None))
 }
 
@@ -60,7 +64,7 @@ fn number(id: u32, v: f32) -> String {
     }
 }
 
-fn unit(u: lg_dsp::Unit) -> &'static str {
+pub(crate) fn unit(u: lg_dsp::Unit) -> &'static str {
     match u {
         lg_dsp::Unit::Db => "dB",
         lg_dsp::Unit::Ms => "ms",
@@ -70,7 +74,7 @@ fn unit(u: lg_dsp::Unit) -> &'static str {
 }
 
 /// The value line: the number large, its unit smaller, as Logic sets it.
-fn value_text(pt: &egui::Painter, g: &Geo, pos: Pos2, align: Align2, num: &str, unit: &str) {
+pub(crate) fn value_text(pt: &egui::Painter, g: &Geo, pos: Pos2, align: Align2, num: &str, unit: &str) {
     let big = pt.layout_no_wrap(num.to_string(), look::regular(g.pt(30.0)), GREEN);
     let small = pt.layout_no_wrap(format!(" {unit}"), look::regular(g.pt(24.0)), GREEN);
     let w = big.size().x + small.size().x;
@@ -86,7 +90,7 @@ fn value_text(pt: &egui::Painter, g: &Geo, pos: Pos2, align: Align2, num: &str, 
 }
 
 /// A drag on a knob or slider: up / right raises; Shift is fine; double-click resets.
-fn drag(ui: &egui::Ui, resp: &egui::Response, p: &Param, v: f32, span: f32, vertical: bool) -> Option<f32> {
+pub(crate) fn drag(ui: &egui::Ui, resp: &egui::Response, p: &Param, v: f32, span: f32, vertical: bool) -> Option<f32> {
     if resp.double_clicked() {
         return Some(p.default);
     }
@@ -103,7 +107,7 @@ fn drag(ui: &egui::Ui, resp: &egui::Response, p: &Param, v: f32, span: f32, vert
 }
 
 #[allow(clippy::too_many_arguments)]
-fn knob(ui: &mut egui::Ui, pt: &egui::Painter, g: &Geo, c: (f32, f32), r: f32, id: egui::Id, p: &Param, v: f32, marks: (&str, &str)) -> Option<f32> {
+pub(crate) fn knob(ui: &mut egui::Ui, pt: &egui::Painter, g: &Geo, c: (f32, f32), r: f32, id: egui::Id, p: &Param, v: f32, marks: (&str, &str)) -> Option<f32> {
     const START: f32 = std::f32::consts::PI * 0.75;
     const SWEEP: f32 = std::f32::consts::PI * 1.5;
     let c = g.at(c.0, c.1);
@@ -132,7 +136,7 @@ fn knob(ui: &mut egui::Ui, pt: &egui::Painter, g: &Geo, c: (f32, f32), r: f32, i
 }
 
 #[allow(clippy::too_many_arguments)]
-fn slider(ui: &mut egui::Ui, pt: &egui::Painter, g: &Geo, x0: f32, x1: f32, y: f32, id: egui::Id, p: &Param, v: f32, log: bool) -> Option<f32> {
+pub(crate) fn slider(ui: &mut egui::Ui, pt: &egui::Painter, g: &Geo, x0: f32, x1: f32, y: f32, id: egui::Id, p: &Param, v: f32, log: bool) -> Option<f32> {
     let frac = |v: f32| if log { ((v.max(p.min) / p.min).ln() / (p.max / p.min).ln()).clamp(0.0, 1.0) } else { ((v - p.min) / (p.max - p.min)).clamp(0.0, 1.0) };
     let f = frac(v);
     let (a, b) = (g.at(x0, y), g.at(x1, y));
@@ -162,7 +166,7 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, sl
     let s = w / BODY_W;
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), BODY_H * s), Sense::hover());
     let body = Rect::from_min_max(pos2(r.min.x - margin.left as f32, r.min.y), pos2(r.max.x + margin.right as f32, r.max.y));
-    let g = Geo { o: body.min, s };
+    let g = Geo { o: body.min, s, x0: X0, y0: Y0 };
     let pt = ui.painter().with_clip_rect(body);
     let id = egui::Id::unique(("noise-gate-view", slot));
     // the panel: Logic's blue, darker at the bottom

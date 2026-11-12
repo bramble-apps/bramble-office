@@ -153,6 +153,9 @@ pub struct Limiter {
     env: f32,
     /// current reduction (dB, positive) for a meter
     pub reduction: f32,
+    /// the last block's input and output peaks (linear), for the window's meters
+    in_peak: f32,
+    out_peak: f32,
 }
 
 impl Limiter {
@@ -187,6 +190,8 @@ impl Limiter {
             att: 0.0,
             env: 1.0,
             reduction: 0.0,
+            in_peak: 0.0,
+            out_peak: 0.0,
         };
         l.update();
         l.clear();
@@ -232,6 +237,11 @@ impl lg_dsp::Effect for Limiter {
         self.reduction
     }
 
+    /// The window's Input / Reduction / Output meters (dB; reduction positive).
+    fn readouts(&self) -> Vec<(&'static str, f32)> {
+        vec![("Input", lg_dsp::gain_to_db(self.in_peak.max(1e-6))), ("Reduction", self.reduction), ("Output", lg_dsp::gain_to_db(self.out_peak.max(1e-6)))]
+    }
+
     fn latency(&self) -> usize {
         self.latency_samples()
     }
@@ -241,7 +251,9 @@ impl lg_dsp::Effect for Limiter {
         let precision = self.p.idx(2) == 1;
         let true_peak = self.p.on(6);
         let cap = self.delay[0].len();
+        let (mut pin, mut pout) = (0f32, 0f32);
         for i in 0..n {
+            pin = pin.max(left[i].abs()).max(right[i].abs());
             let (l, r) = (left[i] * self.gain, right[i] * self.gain);
             let pk = if true_peak { self.tp.peak(0, l).max(self.tp.peak(1, r)) } else { l.abs().max(r.abs()) };
             let want = if pk > self.ceiling { self.ceiling / pk } else { 1.0 };
@@ -286,7 +298,10 @@ impl lg_dsp::Effect for Limiter {
             }
             left[i] = yl;
             right[i] = yr;
+            pout = pout.max(yl.abs()).max(yr.abs());
         }
+        self.in_peak = pin;
+        self.out_peak = pout;
     }
 }
 
