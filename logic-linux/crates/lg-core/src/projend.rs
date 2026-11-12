@@ -47,6 +47,13 @@ pub fn snap_end(p: &Project, tick: f32) -> u32 {
     ((tick / bar).round().max(1.0) * bar) as u32
 }
 
+/// Where a dragged Project Start lands: on a bar, never after bar 1 (it moves right only back
+/// to 1 1 1 1).
+pub fn snap_start(p: &Project, tick: f32) -> i32 {
+    let bar = bar_ticks(p.signature).max(1) as f32;
+    ((tick / bar).round().min(0.0) * bar) as i32
+}
+
 /// The end as stored in ProjectData (None: no Song chunk or no room for it).
 pub fn read(data: &[u8]) -> Option<u32> {
     let chunks = chunks::walk(data).ok()?;
@@ -110,6 +117,13 @@ mod tests {
         let p = Project { signature: (4, 4), ..Default::default() };
         assert_eq!(snap_end(&p, 3840.0 * 5.4), 5 * 3840);
         assert_eq!(snap_end(&p, -100.0), 3840);
+    }
+
+    #[test]
+    fn start_moves_earlier_by_bars_never_after_bar_1() {
+        let p = Project { signature: (4, 4), ..Default::default() };
+        assert_eq!(snap_start(&p, -3840.0 * 1.6), -2 * 3840);
+        assert_eq!(snap_start(&p, 3840.0 * 3.0), 0);
     }
 
     #[test]

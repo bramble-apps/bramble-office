@@ -114,7 +114,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             zoom_at(app, zoom, ui.input(|i| i.pointer.hover_pos()).map_or(lanes.min.x, |h| h.x), lanes.min.x);
         } else {
             let (dx, dy) = if shift { (scroll.y, 0.0) } else { (scroll.x, scroll.y) };
-            app.scroll_x = (app.scroll_x - dx / app.bar_w).max(0.0);
+            app.scroll_x = (app.scroll_x - dx / app.bar_w).max(crate::projend::min_scroll(app));
             // scrolling by hand while playing turns Catch off until playback stops or ` is
             // pressed, as Logic does (otherwise the view jumps back to the playhead)
             if dx != 0.0 && app.playing() {
@@ -145,14 +145,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         rp.rect_filled(crect, 0.0, if cycle_on { look::cycle() } else { look::ta_cycle_off() });
     }
     rp.hline(lower_r.x_range(), lower_r.min.y + 0.5, Stroke::new(1.0, Color32::from_black_alpha(110)));
-    // (the project start: a small grey triangle before bar 1)
-    let x0 = x_of(0.0, scroll);
-    if x0 >= ruler.min.x - 1.0 {
-        // (Logic at 2x: 7 × 11 pt, flat side 8 pt before bar 1, tip 1 pt before, centred 7.5 pt
-        // down the upper strip)
-        let cy = upper_r.min.y + 7.5;
-        rp.add(egui::Shape::convex_polygon(vec![pos2(x0 - 8.0, cy - 5.5), pos2(x0 - 1.0, cy), pos2(x0 - 8.0, cy + 5.5)], Color32::from_gray(0x54), Stroke::NONE));
-    }
+    // (the Project Start and End triangles: projend.rs, after the bars)
     let beats = app.project.as_ref().map_or(4, |p| p.signature.0.max(1)) as f32;
     let num_col = |x: f32| if cycle_on && x > crect.min.x && x < crect.max.x { Color32::from_gray(0x20) } else { Color32::from_gray(0xf7) };
     // (the Project End marker sits right of its bar line: that bar's number moves past it)
@@ -175,11 +168,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     for b in first..first + visible {
-        if sig_bars.is_some() {
+        // (with signature changes the map draws from bar 1; bars before it, from a Project Start
+        // moved earlier, count back in the first signature)
+        if sig_bars.is_some() && b >= 0 {
             break;
         }
         let x = x_of(b as f32 * bar_t, scroll);
-        bar_mark(&rp, x, b + 1, b % step == 0);
+        bar_mark(&rp, x, b + 1, b.rem_euclid(step) == 0);
         if beat_w >= 6.0 {
             for k in 1..beats as i32 {
                 rp.vline(x + k as f32 * beat_w, lower_r.max.y - 8.0..=lower_r.max.y, Stroke::new(1.0, look::ta_ruler_tick()));
@@ -869,7 +864,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 fn zoom_at(app: &mut App, factor: f32, at_x: f32, lanes_x: f32) {
     let bar_at = (at_x - lanes_x) / app.bar_w + app.scroll_x;
     app.bar_w = (app.bar_w * factor).clamp(8.0, 1200.0);
-    app.scroll_x = (bar_at - (at_x - lanes_x) / app.bar_w).max(0.0);
+    app.scroll_x = (bar_at - (at_x - lanes_x) / app.bar_w).max(crate::projend::min_scroll(app));
 }
 
 fn move_region(app: &mut App, t: usize, r: usize, start: u32) {

@@ -19,6 +19,67 @@ pub struct Preview {
     pub started: f64,
     pub seconds: f64,
     pub looped: bool,
+    /// The last audio file previewed, for the Browser's Preview Player (prevplayer.rs): its
+    /// id, path, samples and peaks; where in it this preview started (seconds).
+    pub wave: Option<Wave>,
+    pub offset: f64,
+}
+
+pub struct Wave {
+    pub id: String,
+    pub samples: Arc<Vec<f32>>,
+    pub peaks: Vec<f32>,
+    pub looped: bool,
+    pub gain: f32,
+}
+
+/// `n` peaks (0..1) across stereo samples.
+pub fn peaks(samples: &[f32], n: usize) -> Vec<f32> {
+    let frames = samples.len() / 2;
+    if frames == 0 || n == 0 {
+        return Vec::new();
+    }
+    (0..n)
+        .map(|k| {
+            let a = k * frames / n;
+            let b = ((k + 1) * frames / n).max(a + 1).min(frames);
+            samples[a * 2..b * 2].iter().fold(0f32, |m, x| m.max(x.abs())).min(1.0)
+        })
+        .collect()
+}
+
+/// Where the preview is now, as a fraction of the file (None: not playing it).
+pub fn wave_position(app: &App, now: f64) -> Option<f32> {
+    let w = app.preview.wave.as_ref()?;
+    if !app.preview.is_playing(&w.id, now) {
+        return None;
+    }
+    let len = w.samples.len() as f64 / 2.0 / crate::audio::RATE as f64;
+    if len <= 0.0 {
+        return None;
+    }
+    let t = app.preview.offset + now - app.preview.started;
+    Some(((if w.looped { t.rem_euclid(len) } else { t.min(len) }) / len) as f32)
+}
+
+/// The Preview Player: play the last previewed file from `frac` (0..1) of its length.
+pub fn play_wave_from(app: &mut App, frac: f32) {
+    let Some(w) = app.preview.wave.as_ref() else { return };
+    let (id, samples, looped, gain) = (w.id.clone(), w.samples.clone(), w.looped, w.gain);
+    app.preview.stop();
+    app.preview.set_volume(gain);
+    let frames = samples.len() / 2;
+    let at = ((frac.clamp(0.0, 1.0) as f64 * frames as f64) as usize).min(frames.saturating_sub(1)) * 2;
+    let stop = Arc::new(AtomicBool::new(false));
+    let len = samples.len();
+    app.output.add_source(Source { samples, from: 0, to: len, at, looped, gain: app.preview.gain.clone(), stop: stop.clone() });
+    let rate = crate::audio::RATE as f64;
+    app.preview.stop = Some(stop);
+    app.preview.playing = Some(id);
+    app.preview.started = app.ctx.input(|i| i.time);
+    app.preview.offset = at as f64 / 2.0 / rate;
+    app.preview.seconds = (len - at) as f64 / 2.0 / rate;
+    app.preview.looped = looped;
 }
 
 impl Preview {
@@ -106,7 +167,10 @@ pub fn toggle(app: &mut App, id: &str, path: &Path, gain: f32, segment: Option<(
         None => (0, samples.len()),
     };
     let stop = Arc::new(AtomicBool::new(false));
-    let src = Source { samples: Arc::new(samples), from, to, at: from, looped, gain: app.preview.gain.clone(), stop: stop.clone() };
+    let samples = Arc::new(samples);
+    app.preview.wave = Some(Wave { id: id.to_string(), peaks: peaks(&samples, 400), samples: samples.clone(), looped, gain });
+    app.preview.offset = from as f64 / 2.0 / rate;
+    let src = Source { samples, from, to, at: from, looped, gain: app.preview.gain.clone(), stop: stop.clone() };
     app.output.add_source(src);
     app.preview.stop = Some(stop);
     app.preview.playing = Some(id.to_string());

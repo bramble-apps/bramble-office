@@ -236,25 +236,26 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
         let mut open = true;
         let mut done = false;
         egui::Window::new("Customize Control Bar and Display").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, vec2(0.0, 90.0)).show(ctx, |ui| {
-            use crate::controlbar::LcdMode;
             egui::Grid::new("cb-grid").num_columns(3).spacing([40.0, 6.0]).show(ui, |ui| {
                 for h in ["View", "Transport", "Display"] {
                     ui.label(egui::RichText::new(h).font(look::bold(12.0)));
                 }
                 ui.end_row();
-                let modes = [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Time, "Time")];
-                for i in 0..4 {
+                let modes = crate::controlbar::LCD_MODES;
+                for i in 0..5 {
                     match i {
                         0 => ui.checkbox(&mut app.show_browser, "Browser"),
                         1 => ui.checkbox(&mut app.show_inspector, "Inspector"),
                         2 => ui.checkbox(&mut app.quick_help, "Quick Help"),
-                        _ => ui.checkbox(&mut app.show_toolbar, "Toolbar"),
+                        3 => ui.checkbox(&mut app.show_toolbar, "Toolbar"),
+                        _ => ui.label(""),
                     };
                     match i {
                         0 => ui.checkbox(&mut app.cb_show.capture, "Capture as Recording"),
                         1 => ui.checkbox(&mut app.cb_show.replace, "Replace"),
                         2 => ui.checkbox(&mut app.cb_show.autopunch, "Autopunch"),
-                        _ => ui.add_enabled(false, egui::Checkbox::new(&mut true, "Stop, Play, Record, Cycle")),
+                        3 => ui.add_enabled(false, egui::Checkbox::new(&mut true, "Stop, Play, Record, Cycle")),
+                        _ => ui.label(""),
                     };
                     if let Some((m, label)) = modes.get(i) {
                         if ui.radio(app.lcd_mode == *m, *label).clicked() {
@@ -263,6 +264,11 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
                     }
                     ui.end_row();
                 }
+                // (Custom: its columns)
+                ui.label("");
+                ui.label("");
+                ui.vertical(|ui| crate::lcdcustom::customize(app, ui));
+                ui.end_row();
             });
             // Modes and Functions: Sync (syncmidi.rs; hidden by default)
             ui.horizontal(|ui| {

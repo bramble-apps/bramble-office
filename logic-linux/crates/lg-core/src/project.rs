@@ -62,6 +62,8 @@ pub struct Project {
     pub grooves: Vec<crate::groove::Groove>,
     /// The Project End marker, ticks from bar 1 (None: Logic's default, bar 129; projend.rs).
     pub end: Option<u32>,
+    /// The Project Start marker, ticks from bar 1: 0, or earlier (bars 0, -1 …) for upbeats.
+    pub start: i32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

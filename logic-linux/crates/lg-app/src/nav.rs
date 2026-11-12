@@ -549,12 +549,12 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             } else {
                 app.nudge.max(1) as f64
             };
-            let to = if name.starts_with("Rewind") { (pos - step).max(0.0) } else { pos + step };
+            let to = if name.starts_with("Rewind") { (pos - step).max(crate::projend::start(app) as f64) } else { pos + step };
             app.locate(to);
         }
         "Play from Beginning" => {
             halt(app);
-            app.locate(0.0);
+            app.locate(crate::projend::start(app) as f64);
             play(app);
         }
         "Play from Previous Bar" => {
@@ -580,7 +580,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         }
         "Stop and Go to Beginning" => {
             halt(app);
-            app.locate(0.0);
+            app.locate(crate::projend::start(app) as f64);
         }
         "Go to Position…" | "Position…" => app.nav.ask = Some(Ask::GoToPosition(String::new())),
         "Go to Beginning of First Region" => {

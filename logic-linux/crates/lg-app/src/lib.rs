@@ -180,6 +180,8 @@ mod scgraph;
 pub mod soundlib;
 mod stopbutton;
 mod projend;
+mod lcdcustom;
+mod prevplayer;
 mod brpreview;
 mod trackarea;
 mod barfit;

@@ -963,6 +963,31 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
     if !over || !app.show_browser {
         return false;
     }
+    // the columns view: the arrows move through the folders
+    let columns = app.br.saved.flag("columns", false) && matches!(app.br.view, Cat::Instruments | Cat::Effects) && app.br.search.is_empty() && !app.br.all_filters;
+    if columns && matches!(key, egui::Key::ArrowUp | egui::Key::ArrowDown | egui::Key::ArrowLeft | egui::Key::ArrowRight) && !m.command && !m.alt {
+        let items = results(app);
+        let cols = column_lists(&items, &app.br.column_path);
+        let chosen = cols.get(2).and_then(|c| {
+            let sel = app.br.selected.first()?;
+            let it = items.iter().find(|i| &i.id == sel)?;
+            c.iter().position(|n| *n == it.name)
+        });
+        let (path, pick) = column_key(&cols, &app.br.column_path, chosen, key);
+        app.br.column_path = path;
+        match pick {
+            Some(k) if pick != chosen => {
+                let cols = column_lists(&items, &app.br.column_path);
+                if let Some(it) = cols.get(2).and_then(|c| c.get(k)).and_then(|n| items.iter().find(|i| &i.name == n)).cloned() {
+                    app.br.selected = vec![it.id.clone()];
+                    click_item(app, &it, false);
+                }
+            }
+            None => app.br.selected.clear(),
+            _ => {}
+        }
+        return true;
+    }
     if matches!(key, egui::Key::ArrowUp | egui::Key::ArrowDown) && !m.command && !m.alt {
         let r = results(app);
         if r.is_empty() {
@@ -1306,7 +1331,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     });
     // ---- the results and the footer
-    let list = Rect::from_min_max(pos2(body_left, body_top), pos2(area.max.x - 1.0, area.max.y - 42.0));
+    // (the Preview Player, when shown, sits between the results and the footer: prevplayer.rs)
+    let player_h = crate::prevplayer::height(app);
+    let list = Rect::from_min_max(pos2(body_left, body_top), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h));
     p.rect_filled(list, 0.0, look::lane_bg());
     let count = if app.br.all_filters {
         all_filters(app, ui, list)
@@ -1328,7 +1355,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     };
-    footer(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y), pos2(list.max.x, area.max.y)), count);
+    if player_h > 0.0 {
+        crate::prevplayer::show(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y), pos2(list.max.x, list.max.y + player_h)));
+    }
+    footer(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y + player_h), pos2(list.max.x, area.max.y)), count);
     // folders dropped from the desktop onto the Browser: new locations
     let dropped: Vec<PathBuf> = ui.ctx().input(|i| if i.pointer.hover_pos().is_some_and(|p| area.contains(p)) { i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| p.is_dir()).collect() } else { Vec::new() });
     for d in dropped {
@@ -1912,26 +1942,92 @@ fn item_menu(app: &mut App, ui: &mut egui::Ui, it: &Item) -> Option<String> {
 }
 
 /// Columns view: patches by category, then subcategory, then name.
-fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
-    let items: Vec<Item> = results(app);
-    let col_w = (list.width() / 3.0).max(120.0);
-    let p = ui.painter().clone();
+/// The columns view's columns for the open path: categories, then the chosen category's
+/// subcategories, then the chosen subcategory's patches.
+pub(crate) fn column_lists(items: &[Item], path: &[String]) -> Vec<Vec<String>> {
     let cat_of = |i: &Item| -> (String, String) { patches().iter().find(|p| p.2 == i.name).map(|p| (p.0.clone(), p.1.clone())).unwrap_or((i.category.clone(), String::new())) };
     let mut cols: Vec<Vec<String>> = Vec::new();
     let mut cats: Vec<String> = items.iter().map(|i| cat_of(i).0).collect();
     cats.sort_by_key(|c| (relevance(c), c.clone()));
     cats.dedup();
     cols.push(cats);
-    if let Some(c) = app.br.column_path.first().cloned() {
+    if let Some(c) = path.first().cloned() {
         let mut subs: Vec<String> = items.iter().filter(|i| cat_of(i).0 == c).map(|i| cat_of(i).1).collect();
         subs.sort();
         subs.dedup();
         cols.push(subs);
-        if let Some(s) = app.br.column_path.get(1).cloned() {
+        if let Some(s) = path.get(1).cloned() {
             cols.push(items.iter().filter(|i| cat_of(i) == (c.clone(), s.clone())).map(|i| i.name.clone()).collect());
         }
     }
+    cols
+}
+
+/// Arrow keys in the columns view (Logic: they move through the folders): ↑ / ↓ within the
+/// focused column, → into the chosen folder, ← back out. Returns the new path and the patch
+/// chosen in the last column (by its index there).
+pub(crate) fn column_key(cols: &[Vec<String>], path: &[String], chosen: Option<usize>, key: egui::Key) -> (Vec<String>, Option<usize>) {
+    let mut path = path.to_vec();
+    // the focused column: the patches when one is chosen, else the last folder opened
+    let focus = if chosen.is_some() && cols.len() == 3 { 2 } else { path.len().saturating_sub(1) };
+    let pick = |col: &[String], cur: Option<usize>, down: bool| -> Option<usize> {
+        if col.is_empty() {
+            return None;
+        }
+        Some(match (cur, down) {
+            (None, _) => 0,
+            (Some(i), true) => (i + 1).min(col.len() - 1),
+            (Some(i), false) => i.saturating_sub(1),
+        })
+    };
+    match key {
+        egui::Key::ArrowUp | egui::Key::ArrowDown => {
+            let down = key == egui::Key::ArrowDown;
+            if focus == 2 {
+                return (path, pick(&cols[2], chosen, down).or(chosen));
+            }
+            let col = cols.get(focus).cloned().unwrap_or_default();
+            let cur = path.get(focus).and_then(|n| col.iter().position(|c| c == n));
+            if let Some(i) = pick(&col, cur, down) {
+                path.truncate(focus);
+                path.push(col[i].clone());
+            }
+            (path, None)
+        }
+        egui::Key::ArrowRight => {
+            if focus == 2 || path.is_empty() {
+                return (path, chosen);
+            }
+            // into the folder: its first entry (a subfolder, or the first patch)
+            match cols.get(focus + 1) {
+                Some(next) if !next.is_empty() && focus + 1 < 2 => {
+                    path.push(next[0].clone());
+                    (path, None)
+                }
+                Some(next) if !next.is_empty() => (path, Some(0)),
+                _ => (path, None),
+            }
+        }
+        egui::Key::ArrowLeft => {
+            if focus == 2 {
+                return (path, None);
+            }
+            if path.len() > 1 {
+                path.pop();
+            }
+            (path, None)
+        }
+        _ => (path, chosen),
+    }
+}
+
+fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
+    let items: Vec<Item> = results(app);
+    let col_w = (list.width() / 3.0).max(120.0);
+    let p = ui.painter().clone();
+    let cols = column_lists(&items, &app.br.column_path);
     let current = current_patch(app);
+    let chosen_name = app.br.selected.first().and_then(|s| items.iter().find(|i| &i.id == s)).map(|i| i.name.clone());
     let mut pick: Option<(usize, String)> = None;
     for (ci, col) in cols.iter().enumerate() {
         let cr = Rect::from_min_size(pos2(list.min.x + ci as f32 * col_w, list.min.y), vec2(col_w, list.height()));
@@ -1941,7 +2037,7 @@ fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             for k in range {
                 let name = &col[k];
                 let (r, resp) = ui.allocate_exact_size(vec2(col_w, 22.0), Sense::click());
-                let on = app.br.column_path.get(ci) == Some(name) || (ci == 2 && current.as_deref() == Some(name.as_str()));
+                let on = app.br.column_path.get(ci) == Some(name) || (ci == 2 && (current.as_deref() == Some(name.as_str()) || chosen_name.as_deref() == Some(name.as_str())));
                 if on {
                     ui.painter().rect_filled(r, 0.0, look::accent().gamma_multiply(0.45));
                 }
@@ -2456,17 +2552,11 @@ fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
     let sw = p.layout_no_wrap("Sorted by: ".into(), look::regular(11.0), look::text_dim()).size().x;
     p.text(pos2(foot.min.x + 10.0 + sw, foot.min.y + 13.0), Align2::LEFT_CENTER, sorted, look::semibold(11.0), look::text());
     p.text(pos2(foot.min.x + 10.0, foot.min.y + 29.0), Align2::LEFT_CENTER, format!("{} Items", thousands(count)), look::regular(11.0), look::text_dim());
-    // the preview volume
-    // (only where it clears the "Sorted by" text)
-    let text_end = 10.0 + sw + p.layout_no_wrap(sorted.into(), look::semibold(11.0), look::text()).size().x;
-    if foot.width() - 150.0 - 16.0 - 8.0 > text_end {
-        let vr = Rect::from_min_max(pos2(foot.max.x - 150.0, foot.min.y + 10.0), pos2(foot.max.x - 50.0, foot.min.y + 28.0));
-        crate::glyphs::paint(&p, Rect::from_min_size(vr.min - vec2(16.0, 0.0), vec2(14.0, vr.height())), ph::SPEAKER_HIGH, 11.0, look::text_dim());
-        let mut v = app.br.volume;
-        if ui.put(vr, egui::Slider::new(&mut v, 0.0..=1.5).show_value(false)).on_hover_text("Preview volume").changed() {
-            app.br.volume = v;
-            app.preview.set_volume(v);
-        }
+    // the Preview Volume button (views with loops and one-shots; Logic's Instruments footer
+    // has only More): its slider in a pop-up (prevplayer.rs)
+    if matches!(app.br.view, Cat::Loops | Cat::All | Cat::Location(_) | Cat::YourLoops) {
+        let vr = Rect::from_min_size(pos2(foot.max.x - 76.0, foot.min.y + 8.0), vec2(30.0, 24.0));
+        crate::prevplayer::volume_button(app, ui, vr);
     }
     let more = Rect::from_min_size(pos2(foot.max.x - 40.0, foot.min.y + 8.0), vec2(30.0, 24.0));
     let mresp = ui.interact(more, ui.scope_id().with("bmore"), Sense::click()).on_hover_text("More");
@@ -2490,6 +2580,7 @@ fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
                 flag_item(ui, app, "use_project_tempo", "Use Project Tempo", true);
                 flag_item(ui, app, "auto_level", "Auto Leveling", true);
             });
+            flag_item(ui, app, "show_waveform", "Show Waveform", true);
             ui.menu_button("Loop Chords", |ui| {
                 let cur = app.br.saved.settings.get("chords").cloned().unwrap_or_else(|| "Automatic".into());
                 for c in ["Keep Region Chords on Import", "Replace Global Chords with Region Chords", "Automatic"] {
@@ -2756,6 +2847,25 @@ fn delete_item(app: &mut App, id: &str) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn column_arrows_move_through_the_folders() {
+        use egui::Key::*;
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let cols = vec![s(&["Bass", "Keys"]), s(&["Electric", "Synth"]), s(&["P1", "P2"])];
+        // nothing open: ↓ opens the first category
+        assert_eq!(super::column_key(&cols[..1], &[], None, ArrowDown), (s(&["Bass"]), None));
+        // → into the category: its first subcategory; → again: the first patch
+        assert_eq!(super::column_key(&cols[..2], &s(&["Bass"]), None, ArrowRight), (s(&["Bass", "Electric"]), None));
+        assert_eq!(super::column_key(&cols, &s(&["Bass", "Electric"]), None, ArrowRight), (s(&["Bass", "Electric"]), Some(0)));
+        // ↓ / ↑ among the patches
+        assert_eq!(super::column_key(&cols, &s(&["Bass", "Electric"]), Some(0), ArrowDown).1, Some(1));
+        // ← out of the patches, then out of the subcategory
+        assert_eq!(super::column_key(&cols, &s(&["Bass", "Electric"]), Some(1), ArrowLeft), (s(&["Bass", "Electric"]), None));
+        assert_eq!(super::column_key(&cols, &s(&["Bass", "Electric"]), None, ArrowLeft), (s(&["Bass"]), None));
+        // ↓ in the subcategory column changes it
+        assert_eq!(super::column_key(&cols, &s(&["Bass", "Electric"]), None, ArrowDown).0, s(&["Bass", "Synth"]));
+    }
+
     use super::*;
 
     #[test]

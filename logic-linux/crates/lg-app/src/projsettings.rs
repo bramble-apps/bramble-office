@@ -464,6 +464,7 @@ pub fn after_open(app: &mut App) {
     app.proj = project_path(app).and_then(|p| file_for(&p)).and_then(|f| std::fs::read_to_string(f).ok()).map(|t| Values::from_text(&t)).unwrap_or_default();
     crate::metroset::after_open(app);
     restore_armed(app);
+    crate::projend::after_open(app);
     apply(app);
     crate::surround::after_open(app);
 }
@@ -493,6 +494,7 @@ pub fn save(app: &mut App) {
         app.proj.0.insert(ARMED.into(), list);
     }
     crate::surround::store(app);
+    crate::projend::store(app);
     if app.automated {
         return;
     }
