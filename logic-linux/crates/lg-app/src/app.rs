@@ -1228,7 +1228,12 @@ impl App {
         self.load_engine();
     }
 
+    /// A menu item's text as shown: the live label, with the app's working name.
     pub fn menu_label(&self, label: &str) -> String {
+        crate::shown_name(&self.menu_label_live(label))
+    }
+
+    fn menu_label_live(&self, label: &str) -> String {
         if let Some(l) = crate::nav::menu_label(self, label) {
             return l;
         }

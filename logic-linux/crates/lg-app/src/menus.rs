@@ -237,7 +237,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
         return;
     }
     if !it.children.is_empty() {
-        ui.menu_button(&it.label, |ui| {
+        ui.menu_button(crate::shown_name(&it.label), |ui| {
             for c in &it.children {
                 item_ui(app, ui, c, fired);
             }
@@ -313,7 +313,7 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
         for m in menus() {
             // the app menu (left of File): the update notice and the thank-you line
             let app_menu = m.label == "Bramble Studio";
-            // the app menu shows Studio's mark (a vinyl record) instead of its name, as Keydeck,
+            // the app menu shows the app's mark (the Echoes rings) instead of its name, as Keydeck,
             // Values, Letters and Notes do
             let label = if app_menu { "\u{2003}\u{2002}".to_string() } else { m.label.clone() };
             let r = ui.menu_button(label, |ui| {
@@ -329,10 +329,10 @@ pub fn menu_bar(app: &mut App, ui: &mut egui::Ui) -> f32 {
             crate::screensets::IN_WINDOW_MENU.with(|c| c.set(false));
             if app_menu {
                 let b = r.response.rect;
-                crate::glyphs::paint(ui.painter(), egui::Rect::from_center_size(b.center() + egui::vec2(0.0, 1.0), egui::vec2(20.0, 20.0)), crate::glyphs::ph::VINYL_RECORD, 21.0, crate::look::text());
+                echoes_mark(ui.painter(), b.center() + egui::vec2(0.0, 1.0), crate::look::text());
                 kn_ui::update::title_dot(ui, b);
-                let resp = r.response.clone().on_hover_text("Bramble Studio");
-                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Bramble Studio"));
+                let resp = r.response.clone().on_hover_text(crate::APP_NAME);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, crate::APP_NAME));
             }
             right = right.max(r.response.rect.max.x);
         }
@@ -376,4 +376,12 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
     }
     ui.painter().set(bg, egui::Shape::Vec(shapes));
     ui.add_space(12.0);
+}
+
+/// The app's mark in line form: three rings touching at the bottom, as on the app icon.
+pub fn echoes_mark(p: &egui::Painter, c: egui::Pos2, col: egui::Color32) {
+    let bottom = c.y + 8.4;
+    for r in [8.4f32, 5.5, 2.7] {
+        p.circle_stroke(egui::pos2(c.x, bottom - r), r, egui::Stroke::new(1.3, col));
+    }
 }

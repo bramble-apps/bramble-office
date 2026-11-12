@@ -75,7 +75,7 @@ fn help_text(which: &str) -> (&'static str, &'static str) {
         "editor" => ("Editors", "The selected region's editor: Piano Roll, Score, Step Sequencer, the audio editors or the Session Player's settings."),
         "mixer" => ("Mixer", "A channel strip for every track, aux and output: inserts, sends, pan, the fader and meters."),
         "right-pane" => ("Lists and Browsers", "List editors (events, markers, tempo, signature), the note pad, the loop browser and the project's files."),
-        _ => ("Bramble Studio", "Point at a part of the window to see what it does."),
+        _ => (crate::APP_NAME, "Point at a part of the window to see what it does."),
     }
 }
 
@@ -306,7 +306,7 @@ fn tuner(app: &mut App, ctx: &egui::Context) {
     ctx.request_repaint_after(std::time::Duration::from_millis(50));
 }
 
-/// About Bramble Studio: the gold record, the version, the credits.
+/// About the app: its icon, the version, the credits.
 fn about(app: &mut App, ctx: &egui::Context) {
     if !app.show_about {
         return;
@@ -315,17 +315,21 @@ fn about(app: &mut App, ctx: &egui::Context) {
     egui::Window::new("About Bramble Studio").title_bar(false).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, vec2(0.0, 120.0)).show(ctx, |ui| {
         ui.set_width(300.0);
         ui.vertical_centered(|ui| {
+            // the app icon
             let (r, _) = ui.allocate_exact_size(vec2(96.0, 96.0), Sense::hover());
-            let p = ui.painter();
-            let c = r.center();
-            p.circle_filled(c, 46.0, Color32::from_rgb(0xc9, 0x9a, 0x2e));
-            for k in 0..6 {
-                p.circle_stroke(c, 40.0 - k as f32 * 5.0, Stroke::new(0.8, Color32::from_rgb(0x9c, 0x73, 0x1c)));
+            let id = egui::Id::new("about-app-icon");
+            let tex = ctx.data_mut(|d| d.get_temp::<egui::TextureHandle>(id)).or_else(|| {
+                let img = image::load_from_memory(include_bytes!("../data/icons/studio-256.png")).ok()?.to_rgba8();
+                let ci = egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw());
+                let t = ctx.load_texture("about-app-icon", ci, egui::TextureOptions::LINEAR);
+                ctx.data_mut(|d| d.insert_temp(id, t.clone()));
+                Some(t)
+            });
+            if let Some(t) = tex {
+                ui.painter().image(t.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
             }
-            p.circle_filled(c, 12.0, Color32::from_rgb(0x2a, 0x22, 0x18));
-            p.circle_filled(c, 2.5, Color32::from_rgb(0xe8, 0xd5, 0xa0));
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Bramble Studio").font(look::bold(20.0)));
+            ui.label(egui::RichText::new(crate::APP_NAME).font(look::bold(20.0)));
             ui.label(egui::RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(look::text_dim()));
             ui.add_space(8.0);
             ui.label("A music studio that opens Logic Pro and GarageBand projects, plays them with its own instruments and effects, and edits them.");

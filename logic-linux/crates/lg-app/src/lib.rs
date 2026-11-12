@@ -2,6 +2,15 @@
 //! projects. The window, its parts and their behaviour follow the Logic research
 //! (logic-research: menus, key commands, screenshots); the files are read by lg-core.
 
+/// The app's working name, as shown in its menus, windows and help tags. (Commands, file
+/// formats and folders keep "Bramble Studio" inside, so nothing saved changes.)
+pub const APP_NAME: &str = "Echoes Pro Studio";
+
+/// `text` with the app's old display name swapped for the working name.
+pub fn shown_name(text: &str) -> String {
+    text.replace("Bramble Studio", APP_NAME)
+}
+
 pub mod allfiles;
 pub mod app;
 pub mod arp;
@@ -206,7 +215,7 @@ pub fn run() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(system_title_bar)
             .with_transparent(!system_title_bar || cfg!(target_os = "linux"))
-            .with_title("Studio")
+            .with_title(APP_NAME)
             .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "bramble-studio".into()))
             .with_inner_size([size.0 + 2.0 * m, size.1 + 2.0 * m])
             .with_min_inner_size([900.0, 560.0])
