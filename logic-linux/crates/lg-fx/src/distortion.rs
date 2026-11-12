@@ -359,9 +359,11 @@ impl Exciter {
 
 impl lg_dsp::Effect for Exciter {
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let amt = self.p.get(2) / 100.0 * 2.0;
         let color2 = self.p.idx(1) == 1;
         let dry = if self.p.on(3) { 1.0 } else { 0.0 };
+        // Harmonics is the effect-to-original ratio: with Dry Signal off only the effect plays,
+        // at a fixed level, so Harmonics no longer changes anything
+        let amt = if self.p.on(3) { self.p.get(2) / 100.0 * 2.0 } else { 1.0 };
         for i in 0..left.len().min(right.len()) {
             for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
                 let h0 = self.hp_in[s][0].run(*x);
@@ -377,3 +379,24 @@ impl lg_dsp::Effect for Exciter {
 }
 
 plugin_impl!(Exciter);
+
+#[cfg(test)]
+mod exciter_tests {
+    use super::*;
+    use lg_dsp::{Effect, Plugin};
+
+    #[test]
+    fn harmonics_has_no_effect_with_dry_signal_off() {
+        let x: Vec<f32> = (0..9600).map(|i| 0.5 * (crate::util::TAU * 3000.0 * i as f32 / 48000.0).sin()).collect();
+        let run = |h: f32, dry: f32| {
+            let mut e = Exciter::new(48000.0);
+            e.set(2, h);
+            e.set(3, dry);
+            let (mut l, mut r) = (x.clone(), x.clone());
+            e.process(&mut l, &mut r);
+            l
+        };
+        assert_eq!(run(10.0, 0.0), run(90.0, 0.0));
+        assert_ne!(run(10.0, 1.0), run(90.0, 1.0));
+    }
+}

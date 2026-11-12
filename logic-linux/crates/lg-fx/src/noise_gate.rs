@@ -6,7 +6,8 @@
 //! closes only when it falls below Threshold + Hysteresis (hysteresis is negative), after Hold.
 //! Opening ramps over Attack, closing over Release, down to Reduction (-100 dB = silence).
 //! Lookahead delays the audio so the gate is open before a transient arrives; Monitor plays the
-//! filtered key instead. The newer versions' Ducker mode floats (10-14) aren't modelled.
+//! filtered key instead. Reduction runs up to +20 dB (a boost). The newer versions' Ducker mode
+//! floats (10-14) aren't decoded; Mode, Filter and Characteristics use our own ids.
 
 use crate::util::{Biquad, Coefs, Values, coef, db, plugin_impl};
 use lg_dsp::{Param, Unit};
@@ -14,7 +15,7 @@ use lg_dsp::{Param, Unit};
 static PARAMS: [Param; 13] = [
     Param::new(0, "Threshold", -100.0, 0.0, -50.0, Unit::Db),
     Param::new(1, "Hysteresis", -20.0, 0.0, -3.0, Unit::Db),
-    Param::new(2, "Reduction", -100.0, 0.0, -100.0, Unit::Db),
+    Param::new(2, "Reduction", -100.0, 20.0, -100.0, Unit::Db),
     Param::new(3, "Attack", 0.0, 200.0, 3.0, Unit::Ms),
     Param::new(4, "Hold", 0.0, 2000.0, 40.0, Unit::Ms),
     Param::new(5, "Release", 2.0, 10000.0, 10.0, Unit::Ms),
@@ -184,10 +185,11 @@ impl lg_dsp::Effect for NoiseGate {
                 self.hold_left = self.hold;
             }
             if self.open {
-                self.gain = (self.gain + self.att_step).min(1.0);
+                // ramp to unity (from below, or down from a boosting Reduction above 0 dB)
+                self.gain = if self.gain < 1.0 { (self.gain + self.att_step).min(1.0) } else { (self.gain - self.att_step * self.floor.max(1.0)).max(1.0) };
             } else {
                 self.gain = self.floor + (self.gain - self.floor) * self.rel_k;
-                if self.gain - self.floor < 1e-7 {
+                if (self.gain - self.floor).abs() < 1e-7 {
                     self.gain = self.floor;
                 }
             }
@@ -245,6 +247,46 @@ mod tests {
         g.side_chain(&vec![0.0; 9600], &vec![0.0; 9600]);
         g.process(&mut l, &mut r);
         assert!((l[9500] - 0.2).abs() < 0.01);
+    }
+
+    #[test]
+    fn reduction_can_boost_and_filter_characteristics() {
+        // Reduction +20 dB: the signal under the threshold is boosted, not cut
+        let mut g = NoiseGate::new(48000.0);
+        g.set(0, -30.0);
+        g.set(2, 20.0);
+        assert_eq!(g.get(2), 20.0);
+        let mut q: Vec<f32> = (0..9600).map(|i| 0.005 * (i as f32 * 0.1).sin()).collect();
+        let orig = q.clone();
+        let mut q2 = q.clone();
+        g.process(&mut q, &mut q2);
+        let r = q[8000..].iter().map(|x| x.abs()).fold(0.0, f32::max) / orig[8000..].iter().map(|x| x.abs()).fold(0.0, f32::max);
+        assert!((r - 10.0).abs() < 0.3, "{r}");
+        // a loud key opens it back to unity
+        let mut l: Vec<f32> = (0..9600).map(|i| 0.5 * (i as f32 * 0.1).sin()).collect();
+        let o = l.clone();
+        let mut l2 = l.clone();
+        g.process(&mut l, &mut l2);
+        assert!((l[9000] - o[9000]).abs() < 1e-4);
+        // key = 4 kHz tone; Bandpass 100-1000 Hz hides it (gate stays shut), Band Reject sees it,
+        // Filter off sees it
+        let tone: Vec<f32> = (0..9600).map(|i| 0.5 * (std::f32::consts::TAU * 4000.0 * i as f32 / 48000.0).sin()).collect();
+        let level = |set: &[(u32, f32)]| {
+            let mut g = NoiseGate::new(48000.0);
+            g.set(0, -20.0);
+            g.set(6, 1000.0);
+            g.set(7, 100.0);
+            for &(id, v) in set {
+                g.set(id, v);
+            }
+            let mut a = tone.clone();
+            let mut b = tone.clone();
+            g.process(&mut a, &mut b);
+            a[8000..].iter().map(|x| x.abs()).fold(0.0, f32::max)
+        };
+        assert!(level(&[]) < 0.01);
+        assert!(level(&[(1002, 1.0)]) > 0.4);
+        assert!(level(&[(1001, 0.0)]) > 0.4);
     }
 
     #[test]

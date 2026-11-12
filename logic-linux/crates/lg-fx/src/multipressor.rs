@@ -3,7 +3,7 @@
 //! The signal splits at three crossovers (Linkwitz-Riley 24 dB/oct, the lower bands phase-
 //! matched with all-passes so the bands sum flat). Each band has a downward expander (Exp.
 //! Threshold, Exp. Ratio, its depth limited by Reduction) and a compressor (Threshold, Ratio,
-//! Attack, Release, Make Up), a level detector with its own Response time, and Bypass / Solo.
+//! Attack, Release, Make Up), a level detector with its own Peak/RMS time, and Bypass / Solo.
 //! Then Output Gain, Auto Gain and a peak limiter.
 //!
 //! Positions (best effort from the research map, which pins only some rows): float 2 and the
@@ -30,9 +30,10 @@ static PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
         let (resp, thr, ratio, rel) = defaults[k];
         let b = names[k];
         v.extend([
-            Param::new(at, leak(b, "Response"), 1.0, 1000.0, resp, Unit::Ms),
+            // Logic's Peak/RMS field: 0 ms = peak detection, up to 200 ms = RMS-like averaging
+            Param::new(at, leak(b, "Peak/RMS"), 0.0, 200.0, resp, Unit::Ms),
             Param::new(at + 1, leak(b, "Reduction"), -100.0, 0.0, 0.0, Unit::Db),
-            Param::new(at + 2, leak(b, "Exp. Threshold"), -100.0, 0.0, -50.0, Unit::Db),
+            Param::new(at + 2, leak(b, "Exp. Threshold"), -60.0, 0.0, -50.0, Unit::Db),
             Param::new(at + 3, leak(b, "Exp. Ratio"), 1.0, 10.0, 1.0, Unit::Ratio),
             Param::new(at + 4, leak(b, "Comp. Threshold"), -60.0, 0.0, thr, Unit::Db),
             Param::new(at + 5, leak(b, "Comp. Ratio"), 1.0, 30.0, ratio, Unit::Ratio),
@@ -131,7 +132,7 @@ impl Multipressor {
         for k in 0..4 {
             let at = BAND_AT[k];
             let b = &mut self.bands[k];
-            b.resp = coef(r, p.get(at).max(1.0) * 0.2);
+            b.resp = coef(r, p.get(at).max(0.0) * 0.2);
             b.att = coef(r, p.get(at + 7).max(0.05));
             b.rel = coef(r, p.get(at + 8));
             b.ethr = p.get(at + 2);
@@ -237,6 +238,23 @@ plugin_impl!(Multipressor);
 mod tests {
     use super::*;
     use lg_dsp::{Effect, Plugin};
+
+    #[test]
+    fn peak_rms_and_expansion_threshold_ranges() {
+        let m = Multipressor::new(48000.0);
+        let find = |n: &str| m.params().iter().find(|p| p.name == n).unwrap().clone();
+        let pr = find("Band 1 Peak/RMS");
+        assert_eq!((pr.min, pr.max), (0.0, 200.0));
+        let et = find("Band 2 Exp. Threshold");
+        assert_eq!(et.min, -60.0);
+        // 0 ms: the detector follows peaks at once
+        let mut m = Multipressor::new(48000.0);
+        m.set(pr.id, 0.0);
+        assert_eq!(m.get(pr.id), 0.0);
+        assert!(m.bands[0].resp.abs() < 1e-6);
+        m.set(pr.id, 200.0);
+        assert!(m.bands[0].resp > 0.99);
+    }
 
     /// With every band neutral the bands sum back to the input's level at any frequency.
     #[test]

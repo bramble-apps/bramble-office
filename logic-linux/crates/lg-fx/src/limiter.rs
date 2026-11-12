@@ -4,7 +4,7 @@
 //! - Precision mode never lets a peak through: the gain needed for each sample is held as a
 //!   running minimum over the look-ahead window and then averaged over that same window, so the
 //!   gain is already down when the delayed peak arrives. Release is exponential.
-//! - Traditional mode follows peaks with a smooth one-pole attack the length of the look-ahead
+//! - Legacy mode follows peaks with a smooth one-pole attack the length of the look-ahead
 //!   and catches what slips through with a soft clip at the ceiling (Logic's older, warmer one).
 //! - True Peak Detection measures 4x-oversampled (inter-sample) peaks.
 //!
@@ -21,12 +21,14 @@ use lg_dsp::{Param, Unit};
 
 const MAX_LOOKAHEAD_MS: f32 = 20.0;
 
-static LIMITER_PARAMS: [Param; 6] = [
+static LIMITER_PARAMS: [Param; 7] = [
     Param::new(0, "Gain", 0.0, 20.0, 0.0, Unit::Db),
     Param::new(1, "Lookahead", 0.0, 20.0, 5.0, Unit::Ms),
-    Param::menu(2, "Mode", &["Traditional", "Precision"], 1.0),
+    Param::menu(2, "Mode", &["Legacy", "Precision"], 1.0),
     Param::new(3, "Release", 0.01, 1000.0, 250.0, Unit::Ms),
     Param::new(4, "Output Level", -30.0, 0.0, 0.0, Unit::Db),
+    // Legacy mode only: a gradual (nonlinear) move into full limiting over the last few dB
+    Param::new(5, "Soft Knee", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(6, "True Peak Detection", 0.0, 1.0, 1.0, Unit::OnOff),
 ];
 
@@ -250,13 +252,24 @@ impl lg_dsp::Effect for Limiter {
         let n = left.len().min(right.len());
         let precision = self.p.idx(2) == 1;
         let true_peak = self.p.on(6);
+        let soft = !precision && self.p.on(5);
         let cap = self.delay[0].len();
         let (mut pin, mut pout) = (0f32, 0f32);
         for i in 0..n {
             pin = pin.max(left[i].abs()).max(right[i].abs());
             let (l, r) = (left[i] * self.gain, right[i] * self.gain);
             let pk = if true_peak { self.tp.peak(0, l).max(self.tp.peak(1, r)) } else { l.abs().max(r.abs()) };
-            let want = if pk > self.ceiling { self.ceiling / pk } else { 1.0 };
+            let want = if soft {
+                // a 12 dB wide soft knee centred on the ceiling (infinite ratio above it)
+                const W: f32 = 6.0;
+                let x = lg_dsp::gain_to_db(pk.max(1e-9) / self.ceiling);
+                let gr = if x <= -W { 0.0 } else if x < W { -(x + W).powi(2) / (4.0 * W) } else { -x };
+                db(gr)
+            } else if pk > self.ceiling {
+                self.ceiling / pk
+            } else {
+                1.0
+            };
             let g = if precision {
                 // hold the lowest gain over the look-ahead, then ramp into it over the same window
                 let m = self.win_min.min(want, self.look + 1);
@@ -464,6 +477,26 @@ mod tests {
         l.process(&mut a, &mut b);
         let c = db(-1.0);
         assert!(a.iter().all(|x| x.abs() <= c + 1e-6));
+    }
+
+    #[test]
+    fn legacy_soft_knee_eases_into_limiting() {
+        // a steady tone 1.5 dB under the ceiling: untouched with a hard knee, turned down a
+        // little with Soft Knee (Legacy mode only)
+        let level = |mode: f32, soft: f32| {
+            let mut l = Limiter::new(48000.0);
+            l.set(2, mode);
+            l.set(5, soft);
+            l.set(6, 0.0);
+            let mut a: Vec<f32> = (0..24000).map(|i| db(-1.5) * (i as f32 * 0.05).sin()).collect();
+            let mut b = a.clone();
+            l.process(&mut a, &mut b);
+            a[12000..].iter().map(|x| x.abs()).fold(0.0, f32::max)
+        };
+        assert!((level(0.0, 0.0) - db(-1.5)).abs() < 0.01);
+        assert!(level(0.0, 1.0) < db(-1.5) * 0.95, "{}", level(0.0, 1.0));
+        assert!((level(1.0, 1.0) - db(-1.5)).abs() < 0.01);
+        assert_eq!(LIMITER_PARAMS[2].choices, &["Legacy", "Precision"]);
     }
 
     #[test]

@@ -610,8 +610,9 @@ static SG_P: [Param; 11] = [
     Param::new(B + 1, "Speed", 0.1, 20.0, 2.0, Unit::Hz),
     Param::new(B + 2, "CF Modulation", 0.0, 100.0, 0.0, Unit::Percent),
     Param::new(B + 3, "BW Modulation", 0.0, 100.0, 0.0, Unit::Percent),
-    Param::new(B + 4, "Center Frequency", 50.0, 15000.0, 1500.0, Unit::Hz),
-    Param::new(B + 5, "Bandwidth", 0.1, 5.0, 2.0, Unit::Octaves),
+    Param::new(B + 4, "Center Frequency", 20.0, 20000.0, 1500.0, Unit::Hz),
+    // in hertz, as Logic's: the band runs from Center − Bandwidth/2 to Center + Bandwidth/2
+    Param::new(B + 5, "Bandwidth", 1.0, 20000.0, 2250.0, Unit::Hz),
     Param::new(B + 6, "Low Level", 0.0, 100.0, 100.0, Unit::Percent),
     Param::new(B + 7, "Super Energy", 0.0, 100.0, 100.0, Unit::Percent),
     Param::new(B + 8, "Sub Energy", 0.0, 100.0, 0.0, Unit::Percent),
@@ -627,22 +628,30 @@ pub struct SpectralGate {
     env: Follower,
     ph: Phase,
     k: u32,
+    band: (f32, f32),
 }
 
 impl SpectralGate {
     pub fn new(rate: f32) -> SpectralGate {
-        let mut g = SpectralGate { p: Values::new(&SG_P), rate, lo: [Crossover::default(); 2], hi: [Crossover::default(); 2], env: Follower::new(rate, 2.0, 60.0), ph: Phase::default(), k: 0 };
+        let mut g = SpectralGate { p: Values::new(&SG_P), rate, lo: [Crossover::default(); 2], hi: [Crossover::default(); 2], env: Follower::new(rate, 2.0, 60.0), ph: Phase::default(), k: 0, band: (0.0, 0.0) };
         g.place(0.0);
         g
     }
     fn place(&mut self, m: f32) {
         let cf = self.p.get(B + 4) * 2f32.powf(m * 2.0 * self.p.get(B + 2) / 100.0);
         let bw = self.p.get(B + 5) * (1.0 + m * self.p.get(B + 3) / 100.0).max(0.1);
-        let (a, b) = (cf * 2f32.powf(-bw / 2.0), cf * 2f32.powf(bw / 2.0));
+        // (clipped at 20 Hz at the bottom, the band keeps its width upwards)
+        let a = (cf - bw / 2.0).max(20.0);
+        let b = (a + bw).max(a * 1.01);
         for s in 0..2 {
             self.lo[s].set(self.rate, a.max(20.0));
             self.hi[s].set(self.rate, b.min(self.rate * 0.45));
         }
+        self.band = (a.max(20.0), b.min(self.rate * 0.45));
+    }
+    /// The band's edges (Hz) as last placed.
+    pub fn band(&self) -> (f32, f32) {
+        self.band
     }
     fn update(&mut self) {
         self.place(0.0);
@@ -1052,7 +1061,7 @@ plugin_impl!(Spreader);
 static RC_P: [Param; 13] = [
     Param::menu(B, "Cabinet", &["Real Cabinet", "Wood", "Proline", "Single Cabinet", "Split Horn"], 0.0),
     Param::menu(B + 1, "Rotation", &["Slow", "Brake", "Fast"], 0.0),
-    Param::menu(B + 2, "Motor Control", &["Normal", "Inv", "Sync"], 0.0),
+    Param::menu(B + 2, "Motor Control", &["Normal", "Inv", "Sync", "910"], 0.0),
     Param::new(B + 3, "Acceleration", 0.0, 100.0, 50.0, Unit::Percent),
     Param::new(B + 4, "Max Rate", 3.0, 9.0, 6.7, Unit::Hz),
     Param::menu(B + 5, "Mic Position", &["Front", "Rear"], 0.0),
@@ -1102,17 +1111,28 @@ impl Effect for RotorCabinet {
         let n = left.len().min(right.len());
         let max = self.p.get(B + 4);
         let (slow_h, slow_d) = (0.8, 0.67);
-        let (ht, dt) = match (self.p.idx(B + 1), self.p.idx(B + 2)) {
+        let single = self.p.idx(B) == 3;
+        // Motor Control does nothing for the single cabinet (it has no separate rotors)
+        let motor = if single { 0 } else { self.p.idx(B + 2) };
+        let (ht, dt) = match (self.p.idx(B + 1), motor) {
             (1, _) => (0.0, 0.0),
             (2, 1) => (slow_h, max * 0.9),
             (0, 1) => (max, slow_d),
+            // 910 (Memphis): the bass drum stands still at slow speed; the horn still switches
+            (0, 3) => (slow_h, 0.0),
             (2, _) => (max, max * 0.9),
             _ => (slow_h, slow_d),
         };
-        let acc = 0.2 + 4.0 * self.p.get(B + 3) / 100.0;
-        let sync = self.p.idx(B + 2) == 2;
-        self.rotor.spin(ht, dt, acc * 0.5, if sync { acc * 0.5 } else { acc * 1.6 }, n);
-        let single = self.p.idx(B) == 3;
+        let acc_pct = self.p.get(B + 3);
+        let acc = 0.2 + 4.0 * acc_pct / 100.0;
+        let sync = motor == 2;
+        if acc_pct <= 0.0 {
+            // Acceleration fully left: straight to the target speed
+            self.rotor.horn_hz = ht;
+            self.rotor.drum_hz = dt;
+        } else {
+            self.rotor.spin(ht, dt, acc * 0.5, if sync { acc * 0.5 } else { acc * 1.6 }, n);
+        }
         let rear = self.p.idx(B + 5) == 1;
         let spread = if self.p.idx(B) == 0 { self.p.get(B + 8) / 100.0 } else { self.p.get(B + 11) / 180.0 };
         let bal = self.p.get(B + 12) / 100.0;
@@ -1173,7 +1193,7 @@ impl Hilbert {
     }
 }
 
-static RS_P: [Param; 21] = [
+static RS_P: [Param; 24] = [
     Param::menu(B, "Mode", &["Single Freq Shift", "Dual Freq Shift", "OSC Ring Mod", "Side Chain Ring Mod"], 0.0),
     Param::new(B + 1, "Frequency", -5000.0, 5000.0, 50.0, Unit::Hz),
     Param::menu(B + 2, "Scaling", &["Lin", "Exp"], 1.0),
@@ -1195,7 +1215,20 @@ static RS_P: [Param; 21] = [
     Param::new(B + 18, "Feedback", 0.0, 100.0, 0.0, Unit::Percent),
     Param::new(B + 19, "Stereo Width", 0.0, 100.0, 0.0, Unit::Percent),
     Param::new(B + 20, "Mix Env Follow", -100.0, 100.0, 0.0, Unit::Percent),
+    // Output section's LFO slider: how far the LFO moves Dry/Wet
+    Param::new(B + 21, "Mix LFO", -100.0, 100.0, 0.0, Unit::Percent),
+    // LFO Smooth rounds the waveform's corners (0 = the straight-sided shape Symmetry gives)
+    Param::new(B + 22, "LFO Smooth", 0.0, 100.0, 0.0, Unit::Percent),
+    // LFO Sync: the rate locks to the nearest note value at the project tempo
+    Param::new(B + 23, "LFO Sync", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
+
+/// Ringshifter's LFO at a phase: Symmetry moves the peak (saw down, triangle, saw up), Smooth
+/// bends the straight ramps into rounded (sine-like) ones.
+fn rs_lfo(p: f32, sym: f32, smooth: f32) -> f32 {
+    let t = if p < sym.max(0.01) { 2.0 * p / sym.max(0.01) - 1.0 } else { 1.0 - 2.0 * (p - sym) / (1.0 - sym).max(0.01) };
+    t * (1.0 - smooth) + (0.5 * std::f32::consts::PI * t).sin() * smooth
+}
 
 pub struct Ringshifter {
     p: Values,
@@ -1259,21 +1292,23 @@ impl Effect for Ringshifter {
         let fbk = self.p.get(B + 18) / 100.0 * 0.9;
         let width = self.p.get(B + 19) / 100.0;
         let mixenv = self.p.get(B + 20) / 100.0;
+        let mixlfo = self.p.get(B + 21) / 100.0;
+        let smooth = self.p.get(B + 22) / 100.0;
+        let lfo_hz = if self.p.on(B + 23) { crate::util::nearest_sync_hz(self.p.get(B + 15), self.bpm) } else { self.p.get(B + 15) };
         let dsec = if self.p.on(B + 6) { (self.p.get(B + 5) / 250.0).round().max(1.0) * 0.25 * 60.0 / self.bpm as f32 } else { self.p.get(B + 5) * 0.001 };
         let d = (dsec * self.rate).clamp(1.0, 2.0 * self.rate);
         let dlevel = self.p.get(B + 7) / 100.0;
         for i in 0..left.len().min(right.len()) {
             let e = if env_on { (self.env.run(left[i].abs().max(right[i].abs())) * sens).min(1.0) } else { 0.0 };
             let l = if lfo_on {
-                let p = self.lfo.step(self.rate, self.p.get(B + 15));
-                if p < sym.max(0.01) { 2.0 * p / sym.max(0.01) - 1.0 } else { 1.0 - 2.0 * (p - sym) / (1.0 - sym).max(0.01) }
+                rs_lfo(self.lfo.step(self.rate, lfo_hz), sym, smooth)
             } else {
                 0.0
             };
             let f = base * (1.0 + envamt * e * 2.0) + lfoamt * l * 500.0;
             let ph = self.osc.step(self.rate, f.abs()) * if f < 0.0 { -1.0 } else { 1.0 };
             let (c, s_) = ((TAU * ph).cos(), (TAU * ph).sin());
-            let mix = (mix0 + mixenv * e).clamp(0.0, 1.0);
+            let mix = (mix0 + mixenv * e + mixlfo * l * 0.5).clamp(0.0, 1.0);
             let mut wet = [0f32; 2];
             for (s, x) in [left[i], right[i]].into_iter().enumerate() {
                 let inp = x + self.fb[s] * fbk;
@@ -1581,6 +1616,77 @@ mod tests {
     }
     fn peak(x: &[f32]) -> f32 {
         x.iter().fold(0.0f32, |m, v| m.max(v.abs()))
+    }
+
+    #[test]
+    fn spectral_gate_full_range() {
+        let g = SpectralGate::new(48000.0);
+        let cf = g.params().iter().find(|p| p.name == "Center Frequency").unwrap().clone();
+        let bw = g.params().iter().find(|p| p.name == "Bandwidth").unwrap().clone();
+        assert_eq!((cf.min, bw.max), (20.0, 20000.0));
+        // Center at minimum, Bandwidth at maximum: the band covers everything
+        let mut g = SpectralGate::new(48000.0);
+        g.set(cf.id, 20.0);
+        g.set(bw.id, 20000.0);
+        let (lo, hi) = g.band();
+        assert!(lo <= 20.0 && hi >= 20000.0, "{lo} {hi}");
+    }
+
+    #[test]
+    fn rotor_motor_910_instant_acceleration_and_single_cabinet() {
+        let spin = |set: &[(u32, f32)]| {
+            let mut r = RotorCabinet::new(48000.0);
+            for &(id, v) in set {
+                r.set(id, v);
+            }
+            let (mut l, mut rr) = (vec![0.1; 512], vec![0.1; 512]);
+            for _ in 0..400 {
+                r.process(&mut l, &mut rr);
+            }
+            (r.rotor.horn_hz, r.rotor.drum_hz)
+        };
+        // 910 at slow: drum stopped, horn turning; fast: both run
+        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 0.0), (B + 3, 0.0)]);
+        assert!(h > 0.5 && d.abs() < 1e-3, "{h} {d}");
+        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 2.0), (B + 3, 0.0)]);
+        assert!(h > 5.0 && d > 5.0);
+        // single cabinet: Motor Control (Inv) has no effect
+        assert_eq!(spin(&[(B, 3.0), (B + 2, 1.0), (B + 1, 2.0)]), spin(&[(B, 3.0), (B + 2, 0.0), (B + 1, 2.0)]));
+        // Acceleration 0: the new speed at once (one block)
+        let mut r = RotorCabinet::new(48000.0);
+        r.set(B + 3, 0.0);
+        r.set(B + 1, 2.0);
+        let (mut l, mut rr) = (vec![0.1; 64], vec![0.1; 64]);
+        r.process(&mut l, &mut rr);
+        assert!((r.rotor.horn_hz - r.p.get(B + 4)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn ringshifter_lfo_moves_dry_wet_smooth_and_sync() {
+        // Mix LFO: with the oscillator at 0 Hz in ring mod (wet = input), Dry/Wet 0 and a mix
+        // LFO, a constant input… use OSC ring mod at 1 kHz: the output level swings with the LFO
+        let run = |set: &[(u32, f32)]| {
+            let mut r = Ringshifter::new(48000.0);
+            for &(id, v) in [(B, 2.0), (B + 1, 1000.0), (B + 2, 0.0), (B + 17, 50.0), (B + 14, 1.0), (B + 15, 2.0)].iter().chain(set) {
+                r.set(id, v);
+            }
+            let x = sine(48000, 1000.0, 0.5);
+            let (mut l, mut rr) = (x.clone(), x);
+            r.process(&mut l, &mut rr);
+            let lv: Vec<f32> = l.chunks(2400).map(|c| (c.iter().map(|v| v * v).sum::<f32>() / c.len() as f32).sqrt()).collect();
+            lv.iter().cloned().fold(0.0, f32::max) - lv.iter().cloned().fold(1.0, f32::min)
+        };
+        assert!(run(&[]) < 0.02, "{}", run(&[]));
+        assert!(run(&[(B + 21, 100.0)]) > 0.08, "{}", run(&[(B + 21, 100.0)]));
+        // Smooth rounds the triangle: three-eighths of the way up it sits higher
+        assert!((rs_lfo(0.375, 0.5, 0.0) - 0.5).abs() < 1e-5);
+        assert!(rs_lfo(0.375, 0.5, 1.0) > 0.7);
+        assert!((rs_lfo(0.5, 0.5, 1.0) - 1.0).abs() < 1e-5);
+        let mut r = Ringshifter::new(48000.0);
+        // Sync: a 1.9 Hz rate locks to a quarter note at 120 bpm
+        assert!((crate::util::nearest_sync_hz(1.9, 120.0) - 2.0).abs() < 1e-4);
+        r.set(B + 23, 1.0);
+        assert!(r.p.on(B + 23));
     }
 
     #[test]

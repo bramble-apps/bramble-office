@@ -117,6 +117,39 @@ macro_rules! plugin_impl {
 }
 pub(crate) use plugin_impl;
 
+/// Like `plugin_impl!`, but user edits go through the type's own `edit(id, value)` (for
+/// Logic's linked buttons: momentary :2 / x2, Stereo Link …); loading floats stays direct.
+macro_rules! plugin_impl_edit {
+    ($t:ty) => {
+        impl lg_dsp::Plugin for $t {
+            fn params(&self) -> &[lg_dsp::Param] {
+                self.p.defs
+            }
+            fn get(&self, id: u32) -> f32 {
+                self.p.get(id)
+            }
+            fn set(&mut self, id: u32, value: f32) {
+                self.edit(id, value);
+            }
+            fn reset(&mut self) {
+                self.clear();
+            }
+            fn tail(&self) -> f32 {
+                self.tail_secs()
+            }
+            fn load_floats(&mut self, floats: &[f32]) {
+                for d in self.p.defs {
+                    if let Some(v) = floats.get(d.id as usize) {
+                        self.p.set(d.id, *v);
+                    }
+                }
+                self.update();
+            }
+        }
+    };
+}
+pub(crate) use plugin_impl_edit;
+
 /// One-pole smoothing towards a target (for gains and times that must not click).
 #[derive(Clone, Copy, Debug)]
 pub struct Smooth {
@@ -522,6 +555,13 @@ pub fn sync_index_name(index: f32) -> String {
 /// A rate in Hz from a "beats per cycle" length at `bpm`.
 pub fn beats_hz(beats: f32, bpm: f64) -> f32 {
     (bpm as f32 / 60.0) / beats.max(1e-3)
+}
+
+/// A free rate locked to the nearest synced note value (sync indices 2-26: 1/64 to four bars,
+/// straight, triplet and dotted) at a tempo.
+pub fn nearest_sync_hz(hz: f32, bpm: f64) -> f32 {
+    let want = hz.max(1e-3);
+    (2..=26).map(|k| beats_hz(sync_index_beats(-(k as f32)), bpm)).min_by(|a, b| (a / want).ln().abs().total_cmp(&(b / want).ln().abs())).unwrap_or(want)
 }
 
 #[cfg(test)]

@@ -153,16 +153,23 @@ impl Fdn {
 pub struct Shifter {
     line: Delay,
     phase: f32,
-    window: f32,
+    pub(crate) window: f32,
+    /// Crossfade share of each grain (1 = the full sine window; smaller = flatter grains with
+    /// shorter fades, gain-normalised).
+    fade: f32,
 }
 
 impl Shifter {
     pub fn new(rate: f32, window_ms: f32) -> Shifter {
         let window = (window_ms * 0.001 * rate).max(64.0);
-        Shifter { line: Delay::new(window as usize * 2 + 8), phase: 0.0, window }
+        Shifter { line: Delay::new(window as usize * 2 + 8), phase: 0.0, window, fade: 1.0 }
     }
     pub fn set_window(&mut self, rate: f32, ms: f32) {
         self.window = (ms * 0.001 * rate).clamp(64.0, (self.line.capacity() / 2) as f32);
+    }
+    /// The crossfade share of each grain, 0.02-1.
+    pub fn set_fade(&mut self, fade: f32) {
+        self.fade = fade.clamp(0.02, 1.0);
     }
     #[inline]
     pub fn run(&mut self, x: f32, ratio: f32) -> f32 {
@@ -171,13 +178,21 @@ impl Shifter {
         self.phase += (1.0 - ratio) / self.window;
         self.phase -= self.phase.floor();
         let mut y = 0.0;
+        let mut sum = 0.0;
         for k in 0..2 {
             let p = (self.phase + 0.5 * k as f32).fract();
             let d = 1.0 + p * self.window;
-            let w = (PI * p).sin();
+            let w = if self.fade >= 1.0 {
+                (PI * p).sin()
+            } else {
+                // a flat-topped grain: sine fades over `fade` / 2 at each end
+                let e = (p.min(1.0 - p) / (0.5 * self.fade)).min(1.0);
+                (0.5 * PI * e).sin().max(1e-3)
+            };
             y += self.line.read_lin(d) * w * w;
+            sum += w * w;
         }
-        y
+        if self.fade >= 1.0 { y } else { y / sum }
     }
     pub fn clear(&mut self) {
         self.line.clear();

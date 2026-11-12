@@ -344,14 +344,16 @@ impl Compressor {
 fn distort(kind: usize, x: f32) -> f32 {
     match kind {
         1 => {
-            // soft: a gentle tanh that leaves low levels nearly clean
-            (x * 1.2).tanh() / 1.2f32.tanh()
+            // soft: clean up to -6 dBFS, then rounds off ever more as it nears 0 dB
+            let a = x.abs();
+            if a <= 0.5 { x } else { (0.5 + 0.5 * ((a - 0.5) / 0.5).tanh()).copysign(x) }
         }
         2 => {
-            // hard: a cubic that flattens sharply at full scale
-            let x = x.clamp(-1.5, 1.5);
-            x - x * x * x * 4.0 / 27.0
+            // hard: transistor-style, clean almost to full scale, then limits abruptly
+            let a = x.abs();
+            if a <= 0.9 { x } else { (0.9 + 0.1 * ((a - 0.9) / 0.1).tanh()).copysign(x) }
         }
+        // clip: straight off at 0 dB
         3 => x.clamp(-1.0, 1.0),
         _ => x,
     }
@@ -489,6 +491,20 @@ plugin_impl!(Compressor);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distortion_soft_hard_clip_shapes() {
+        // Soft leaves low levels alone and rounds off towards 0 dB
+        assert_eq!(distort(1, 0.3), 0.3);
+        assert!(distort(1, 0.9) < 0.85 && distort(1, 3.0) <= 1.0);
+        // Hard stays clean nearly to full scale, then limits abruptly just above it
+        assert_eq!(distort(2, 0.85), 0.85);
+        assert!(distort(2, 1.5) <= 1.0 && distort(2, 1.5) > 0.99);
+        // Clip cuts straight at 0 dB
+        assert_eq!(distort(3, 0.99), 0.99);
+        assert_eq!(distort(3, 1.5), 1.0);
+        assert_eq!(distort(3, -2.0), -1.0);
+    }
     use lg_dsp::{Effect, Plugin};
 
     /// An external side chain triggers the reduction; its audio isn't heard.

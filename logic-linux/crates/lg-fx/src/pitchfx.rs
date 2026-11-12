@@ -51,7 +51,9 @@ static PS_P: [Param; 8] = [
     Param::new(B, "Semi Tones", -24.0, 24.0, 0.0, Unit::Semitones),
     Param::new(B + 1, "Cents", -100.0, 100.0, 0.0, Unit::Cents),
     Param::new(B + 2, "Mix", 0.0, 100.0, 100.0, Unit::Percent),
-    Param::menu(B + 3, "Timing", &["Automatic", "Manual"], 0.0),
+    // Drums / Speech / Vocals: fixed grain sizes for groove, balance or intonation; Manual:
+    // Grain Size, Delay and Crossfade; Pitch Tracking: grains follow the detected pitch
+    Param::menu(B + 3, "Timing", &["Drums", "Speech", "Vocals", "Manual", "Pitch Tracking"], 4.0),
     Param::new(B + 4, "Grain Size", 5.0, 100.0, 30.0, Unit::Ms),
     Param::new(B + 5, "Delay", 0.0, 100.0, 0.0, Unit::Ms),
     Param::new(B + 6, "Crossfade", 0.0, 100.0, 50.0, Unit::Percent),
@@ -85,13 +87,26 @@ impl Effect for PitchShifter {
         let st = self.p.get(B) + self.p.get(B + 1) / 100.0;
         let ratio = 2f32.powf(st / 12.0);
         let mix = self.p.get(B + 2) / 100.0;
-        let auto = self.p.idx(B + 3) == 0;
+        let timing = self.p.idx(B + 3);
+        let manual = timing == 3;
         let inv = self.p.idx(B + 7) == 1;
-        let delay = self.p.get(B + 5) * 0.001 * self.rate;
+        // Delay and Crossfade only work in Manual
+        let delay = if manual { self.p.get(B + 5) * 0.001 * self.rate } else { 0.0 };
+        let fade = if manual { self.p.get(B + 6) / 100.0 } else { 1.0 };
+        for s in 0..2 {
+            self.sh[s].set_fade(fade);
+        }
         for i in 0..left.len().min(right.len()) {
             self.tr.push(0.5 * (left[i] + right[i]), self.rate);
-            // Automatic: grains of two periods of the detected pitch; Manual: Grain Size
-            let ms = if auto { self.tr.hz.map_or(30.0, |f| (2000.0 / f).clamp(5.0, 60.0)) } else { self.p.get(B + 4) };
+            let ms = match timing {
+                // short grains keep the groove, long ones the intonation
+                0 => 12.0,
+                1 => 30.0,
+                2 => 60.0,
+                3 => self.p.get(B + 4),
+                // Pitch Tracking: grains of two periods of the detected pitch
+                _ => self.tr.hz.map_or(30.0, |f| (2000.0 / f).clamp(5.0, 60.0)),
+            };
             for s in 0..2 {
                 self.sh[s].set_window(self.rate, ms);
             }
@@ -250,17 +265,23 @@ plugin_impl!(PitchCorrection);
 // ---------------------------------------------------------------------------------------------
 // Vocal Transformer
 
-static VT_P: [Param; 10] = [
+static VT_P: [Param; 14] = [
     Param::new(B, "Pitch", -24.0, 24.0, 0.0, Unit::Semitones),
     Param::new(B + 1, "Robotize", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(B + 2, "Pitch Base", -24.0, 24.0, 0.0, Unit::Semitones),
-    Param::new(B + 3, "Tracking", -100.0, 100.0, 100.0, Unit::Percent),
+    Param::new(B + 3, "Tracking", -100.0, 200.0, 100.0, Unit::Percent),
     Param::new(B + 4, "Mix", 0.0, 100.0, 100.0, Unit::Percent),
     Param::new(B + 5, "Formant", -24.0, 24.0, 0.0, Unit::Semitones),
     Param::new(B + 6, "Glide", 0.0, 1000.0, 0.0, Unit::Ms),
-    Param::new(B + 7, "Grain Size", 1.0, 8.0, 4.0, Unit::None),
+    // 0 = Auto (two periods of the detected pitch)
+    Param::new(B + 7, "Grain Size", 0.0, 8.0, 4.0, Unit::None),
     Param::menu(B + 8, "Formants", &["Process always", "Keep unvoiced formants"], 0.0),
     Param::new(B + 9, "Detune", -100.0, 100.0, 0.0, Unit::Cents),
+    // the Tracking buttons: -1, 0, 1 and 2 set Tracking to -100, 0, 100 and 200 % (momentary)
+    Param::new(B + 10, "Tracking -1", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(B + 11, "Tracking 0", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(B + 12, "Tracking 1", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(B + 13, "Tracking 2", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 pub struct VocalTransformer {
@@ -317,7 +338,9 @@ impl Effect for VocalTransformer {
             self.ratio.target = 2f32.powf(st / 12.0);
             let rp = self.ratio.next();
             let voiced = self.tr.hz.is_some();
-            let ms = self.tr.hz.map_or(30.0, |f| (1000.0 * self.p.get(B + 7) / 2.0 / f).clamp(5.0, 60.0));
+            let gs = self.p.get(B + 7);
+            let gs = if gs < 0.5 { 4.0 } else { gs };
+            let ms = self.tr.hz.map_or(30.0, |f| (1000.0 * gs / 2.0 / f).clamp(5.0, 60.0));
             for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
                 let dry = *x;
                 // formants: a very short grain shift moves the spectral envelope (and pitch);
@@ -332,7 +355,20 @@ impl Effect for VocalTransformer {
         }
     }
 }
-plugin_impl!(VocalTransformer);
+impl VocalTransformer {
+    pub fn edit(&mut self, id: u32, value: f32) {
+        if (B + 10..=B + 13).contains(&id) {
+            if value > 0.5 {
+                self.p.set(B + 3, [-100.0, 0.0, 100.0, 200.0][(id - B - 10) as usize]);
+            }
+            return;
+        }
+        if self.p.set(id, value) {
+            self.update();
+        }
+    }
+}
+crate::util::plugin_impl_edit!(VocalTransformer);
 
 pub fn by_name(name: &str, rate: f32) -> Option<Box<dyn Effect>> {
     Some(match name {
@@ -366,6 +402,69 @@ mod tests {
         p.process(&mut l, &mut r);
         let f = yin(&l[30000..34096], 48000.0, 60.0, 1500.0).unwrap();
         assert!((f - 220.0 * 2f32.powf(7.0 / 12.0)).abs() < 6.0, "{f}");
+    }
+
+    #[test]
+    fn pitch_shifter_timing_modes() {
+        assert_eq!(PS_P[3].choices, &["Drums", "Speech", "Vocals", "Manual", "Pitch Tracking"]);
+        let run = |set: &[(u32, f32)]| {
+            let mut p = PitchShifter::new(48000.0);
+            p.set(B, 7.0);
+            for &(id, v) in set {
+                p.set(id, v);
+            }
+            let mut l = tone(48000, 220.0);
+            let mut r = l.clone();
+            p.process(&mut l, &mut r);
+            (l, p.sh[0].window)
+        };
+        // every mode shifts a fifth; the grain size follows the mode
+        let mut sizes = vec![];
+        for m in 0..5 {
+            let (l, w) = run(&[(B + 3, m as f32)]);
+            // (Drums' short grains are for percussive material: a tone only has to come out)
+            if m == 0 {
+                assert!(l[30000..].iter().any(|x| x.abs() > 0.05));
+            } else {
+                let f = yin(&l[30000..34096], 48000.0, 60.0, 1500.0).unwrap();
+                assert!((f - 220.0 * 2f32.powf(7.0 / 12.0)).abs() < 8.0, "mode {m}: {f}");
+            }
+            sizes.push(w);
+        }
+        assert!(sizes[0] < sizes[1] && sizes[1] < sizes[2]);
+        // Delay and Crossfade only count in Manual
+        let (a, _) = run(&[(B + 3, 1.0), (B + 5, 50.0), (B + 6, 10.0)]);
+        let (b, _) = run(&[(B + 3, 1.0)]);
+        assert_eq!(a, b);
+        let (c, _) = run(&[(B + 3, 3.0), (B + 4, 30.0), (B + 6, 10.0)]);
+        let (d, _) = run(&[(B + 3, 3.0), (B + 4, 30.0), (B + 6, 100.0)]);
+        assert_ne!(c, d);
+        let (e, _) = run(&[(B + 3, 3.0), (B + 4, 30.0), (B + 5, 50.0)]);
+        let (g, _) = run(&[(B + 3, 3.0), (B + 4, 30.0)]);
+        assert!(e[..2000].iter().map(|x| x.abs()).sum::<f32>() < g[..2000].iter().map(|x| x.abs()).sum::<f32>());
+    }
+
+    #[test]
+    fn vocal_transformer_tracking_buttons_and_auto_grain() {
+        let mut v = VocalTransformer::new(48000.0);
+        for (b, want) in [(B + 10, -100.0), (B + 11, 0.0), (B + 13, 200.0), (B + 12, 100.0)] {
+            v.set(b, 1.0);
+            assert_eq!(v.get(B + 3), want);
+            assert_eq!(v.get(b), 0.0);
+        }
+        // 200 %: an interval doubled around Pitch Base (C4 = 60): A3 (57) -> 54
+        v.set(B + 13, 1.0);
+        v.set(B + 1, 1.0);
+        let f = 440.0 * 2f32.powf((57.0 - 69.0) / 12.0);
+        let mut l: Vec<f32> = (0..48000).map(|i| 0.4 * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect();
+        let mut r = l.clone();
+        v.process(&mut l, &mut r);
+        let out = yin(&l[36000..40096], 48000.0, 60.0, 1500.0).unwrap();
+        let want = 440.0 * 2f32.powf((54.0 - 69.0) / 12.0);
+        assert!((out - want).abs() < 4.0, "{out} {want}");
+        // Grain Size 0 = Auto
+        v.set(B + 7, 0.0);
+        assert_eq!(v.get(B + 7), 0.0);
     }
 
     #[test]
