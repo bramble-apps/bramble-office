@@ -23,7 +23,9 @@ pub mod bass;
 pub mod clav;
 pub mod dmd;
 pub mod drums;
+pub mod drum_synth;
 pub mod dsp;
+pub mod legacy;
 pub mod ensemble;
 pub mod ep;
 pub mod es2;
@@ -280,11 +282,6 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         "Vintage B3 Organ" | "Vintage B3" | "Tonewheel Organ" | NAME_B3 => {
             Box::new(organ::TonewheelB3::new(rate))
         }
-        "Church Organ" => with(
-            Engine::TonewheelB3,
-            &[(3, 8.0), (4, 6.0), (5, 8.0), (8, 6.0), (18, 0.0), (15, 0.0)],
-            rate,
-        ),
         "Vintage Clav" | "Electric Clav" | NAME_CLAV => Box::new(clav::VintageClav::new(rate)),
         "ES2" | NAME_ES2 => Box::new(es2::Es2::new(rate)),
         "Alchemy" | NAME_ALCHEMY => Box::new(alchemy::Alchemy::new(rate)),
@@ -303,7 +300,8 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         }
         "Drum Machine Designer" | NAME_DMD => Box::new(dmd::DrumMachineDesigner::new(rate)),
         "Ultrabeat" | NAME_ULTRABEAT => Box::new(ultrabeat::Ultrabeat::new(rate)),
-        "Drum Synth" => Box::new(drums::StudioDrumKit::with_kit(rate, 4)),
+        "Drum Synth" => Box::new(drum_synth::DrumSynth::new(rate)),
+        n if legacy::variant_of(n).is_some() => Box::new(legacy::Legacy::new(legacy::variant_of(n).unwrap_or(legacy::Variant::AnalogBasic), rate)),
         "Bass" => Box::new(bass::StudioBass::new(rate)),
         "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),
         "Studio Strings" => Box::new(studio::StudioSection::with_samples(studio::Kind::Strings, rate, false)),

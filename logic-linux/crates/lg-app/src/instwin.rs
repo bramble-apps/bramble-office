@@ -392,7 +392,7 @@ fn test_hook(app: &mut App) {
         }
         "Quick Sampler" => {
             if let Some(a) = files.first().and_then(|f| lg_synth::wav::read_audio(f).ok()) {
-                app.inst.quick.insert(id, crate::quickwin::QuickDoc { file: files.first().cloned(), audio: Some(std::sync::Arc::new(a)), slices: None });
+                app.inst.quick.insert(id, crate::quickwin::QuickDoc { file: files.first().cloned(), audio: Some(std::sync::Arc::new(a)), history: files.first().cloned().into_iter().collect(), ..Default::default() });
             }
         }
         "Drum Machine Designer" => {
@@ -501,6 +501,12 @@ pub const SLOT_MENU: &[(&str, &[(&str, &str)])] = &[
 pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
     let mut pick: Option<Option<&str>> = None;
     let mut hosted: Option<String> = None;
+    let legacy_id = egui::Id::unique(("slot-legacy", t));
+    if resp.secondary_clicked() || resp.clicked() {
+        let alt = resp.ctx.input(|i| i.modifiers.alt);
+        resp.ctx.data_mut(|d| d.insert_temp(legacy_id, alt));
+    }
+    let legacy: bool = resp.ctx.data(|d| d.get_temp(legacy_id)).unwrap_or(false);
     resp.context_menu(|ui| {
         ui.set_min_width(200.0);
         if ui.button("No Plug-in").clicked() {
@@ -512,6 +518,19 @@ pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
             ui.menu_button(*cat, |ui| {
                 for (label, name) in *items {
                     ui.menu_button(*label, |ui| {
+                        if ui.button("Stereo").clicked() {
+                            pick = Some(Some(name));
+                            ui.close();
+                        }
+                    });
+                }
+            });
+        }
+        // Option-click: the Legacy submenu (below Vintage Keys, as Logic's under Vintage Mellotron)
+        if legacy {
+            ui.menu_button("Legacy", |ui| {
+                for (name, _) in lg_synth::legacy::VARIANTS {
+                    ui.menu_button(*name, |ui| {
                         if ui.button("Stereo").clicked() {
                             pick = Some(Some(name));
                             ui.close();

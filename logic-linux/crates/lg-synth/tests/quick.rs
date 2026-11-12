@@ -183,3 +183,86 @@ fn pitch_env_depth_moves_the_pitch() {
     let zc = x.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count() as f32 / 0.2;
     assert!((zc - 880.0).abs() < 30.0, "pitch {zc}");
 }
+
+#[test]
+fn drum_synth_groups_modes_and_controls() {
+    use lg_synth::drum_synth::*;
+    // every sound type sounds, stays finite and decays
+    for (i, s) in SOUNDS.iter().enumerate() {
+        let mut d = DrumSynth::with_sound(RATE, i);
+        assert!(s.controls.len() <= 8, "{}", s.name);
+        d.note_on(60, 110);
+        let mut l = vec![0.0; 48000];
+        let mut r = vec![0.0; 48000];
+        d.render(&mut l, &mut r);
+        assert!(l.iter().all(|x| x.is_finite()), "{}", s.name);
+        assert!(rms(&l[..4800]) > 1e-3, "{} silent", s.name);
+    }
+    // a group change picks its first sound; Pitch moves a kick's pitch
+    let mut d = DrumSynth::new(RATE);
+    d.set(GROUP, 3.0);
+    assert_eq!(d.sound().group, 3);
+    // Key Tracking: off plays the root pitch on any key, on plays chromatically
+    let zc = |d: &mut DrumSynth, key: u8| {
+        d.note_on(key, 110);
+        let mut l = vec![0.0; 9600];
+        let mut r = vec![0.0; 9600];
+        d.render(&mut l, &mut r);
+        d.reset();
+        l[2400..].windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count()
+    };
+    let mut k = DrumSynth::with_sound(RATE, 0);
+    k.set(SWEEP, 0.0);
+    let (a, b) = (zc(&mut k, 60), zc(&mut k, 72));
+    assert_eq!(a, b, "no key tracking");
+    k.set(KEY_TRACK, 1.0);
+    let c = zc(&mut k, 72);
+    assert!(c as f32 > a as f32 * 1.6, "key tracking: {a} -> {c}");
+    // Gate stops on release; Poly lets two notes ring
+    let mut g = DrumSynth::with_sound(RATE, 16);
+    g.set(MODE, 2.0);
+    g.note_on(60, 110);
+    let mut l = vec![0.0; 2400];
+    let mut r = vec![0.0; 2400];
+    g.render(&mut l, &mut r);
+    g.note_off(60);
+    let mut l = vec![0.0; 4800];
+    let mut r = vec![0.0; 4800];
+    g.render(&mut l, &mut r);
+    assert!(rms(&l[2400..]) < 1e-4, "gate");
+}
+
+#[test]
+fn legacy_instruments_play_and_respond() {
+    use lg_synth::legacy::*;
+    for (name, v) in VARIANTS {
+        let mut l = Legacy::new(*v, RATE);
+        l.note_on(48, 100);
+        let mut a = vec![0.0; 24000];
+        let mut b = vec![0.0; 24000];
+        l.render(&mut a, &mut b);
+        assert!(a.iter().all(|x| x.is_finite()), "{name}");
+        assert!(rms(&a[4800..]) > 1e-3, "{name} silent");
+        l.note_off(48);
+        let mut a = vec![0.0; 240000];
+        let mut b = vec![0.0; 240000];
+        l.render(&mut a, &mut b);
+        assert!(rms(&a[200000..]) < 1e-3, "{name} doesn't stop");
+    }
+    // Cutoff darkens: less energy in the upper half of the spectrum (zero crossings)
+    let zc = |cut: f32| {
+        let mut l = Legacy::new(Variant::AnalogBasic, RATE);
+        l.set(CUTOFF, cut);
+        l.note_on(48, 100);
+        let mut a = vec![0.0; 9600];
+        let mut b = vec![0.0; 9600];
+        l.render(&mut a, &mut b);
+        a.windows(2).filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0)).count()
+    };
+    assert!(zc(0.1) < zc(0.9), "cutoff");
+    // Mono: one voice
+    let mut m = Legacy::new(Variant::AnalogMono, RATE);
+    m.note_on(48, 100);
+    m.note_on(55, 100);
+    assert!(bass_off(4) && !bass_off(1));
+}

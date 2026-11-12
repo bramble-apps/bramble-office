@@ -906,6 +906,10 @@ impl Sampler {
     pub fn zones(&self) -> &[Zone] {
         &self.sh.zones
     }
+    /// Where the sounding voices are: (zone index, frame), the newest last.
+    pub fn play_positions(&self) -> Vec<(usize, f64)> {
+        self.poly.voices.iter().filter(|v| v.on).map(|v| (v.zone, v.pos)).collect()
+    }
     /// Voices sounding now (the Synth Details' Used Voices).
     pub fn used_voices(&self) -> usize {
         self.poly.voices.iter().filter(|v| v.on).count()

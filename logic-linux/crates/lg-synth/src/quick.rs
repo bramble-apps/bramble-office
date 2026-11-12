@@ -582,6 +582,13 @@ impl QuickSampler {
     pub fn zones(&self) -> &[Zone] {
         &self.zones
     }
+    /// The playback position (frame in the sample) of a sounding voice, without Flex.
+    pub fn play_position(&self) -> Option<usize> {
+        if self.flex_on() {
+            return None;
+        }
+        self.inner.play_positions().last().map(|&(_, pos)| pos.max(0.0) as usize)
+    }
     /// Voices sounding now.
     pub fn used_voices(&self) -> usize {
         self.inner.used_voices()
@@ -878,6 +885,12 @@ impl Plugin for QuickSampler {
     }
     fn tail(&self) -> f32 {
         self.params.get(ss::ENV1 + 7) + 0.1
+    }
+    fn value_text(&self, id: u32, v: f32) -> Option<String> {
+        match id {
+            ROOT | START_KEY => Some(crate::sampler_doc::note_name(v.round().clamp(0.0, 127.0) as u8)),
+            _ => None,
+        }
     }
 }
 

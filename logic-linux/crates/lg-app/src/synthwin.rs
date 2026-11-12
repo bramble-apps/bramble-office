@@ -16,6 +16,8 @@ pub enum Synth {
     Evoc,
     Ultrabeat,
     SampleAlchemy,
+    DrumSynth,
+    Legacy,
 }
 
 pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
@@ -41,6 +43,10 @@ pub fn kind_of(any: &dyn std::any::Any) -> Option<Synth> {
         Some(Synth::Ultrabeat)
     } else if any.is::<lg_synth::sample_alchemy::SampleAlchemy>() {
         Some(Synth::SampleAlchemy)
+    } else if any.is::<lg_synth::drum_synth::DrumSynth>() {
+        Some(Synth::DrumSynth)
+    } else if any.is::<lg_synth::legacy::Legacy>() {
+        Some(Synth::Legacy)
     } else {
         None
     }
@@ -59,5 +65,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, s: Synth) {
         Synth::Evoc => crate::evocwin::window(app, ctx, t),
         Synth::Ultrabeat => crate::ubwin::window(app, ctx, t),
         Synth::SampleAlchemy => crate::salchwin::window(app, ctx, t),
+        Synth::DrumSynth => crate::drumsynthwin::window(app, ctx, t),
+        Synth::Legacy => crate::legacywin::window(app, ctx, t),
     }
 }
