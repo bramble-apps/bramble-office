@@ -15,7 +15,8 @@ pub const CONTROL_H: f32 = 62.0;
 pub const BROWSER_W: f32 = 520.0;
 pub const INSPECTOR_W: f32 = 236.0;
 /// The panes on the right (List Editors, Notes, Loop Browser, Browsers).
-pub const RIGHT_W: f32 = 330.0;
+/// The right panes (List Editors, Notes, Loops, Browsers): Logic's 450 pt (ui-list-editors-event.png).
+pub const RIGHT_W: f32 = 450.0;
 pub const EDITOR_H: f32 = 300.0;
 
 const PPQ_F: f64 = lg_core::events::PPQ as f64;
@@ -1263,7 +1264,7 @@ impl App {
     }
 
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
-        if crate::audioedit::command(self, cmd) || crate::barfit::command(self, cmd) {
+        if crate::audioedit::command(self, cmd) || crate::barfit::command(self, cmd) || crate::listwin::command(self, ctx, cmd) {
             return;
         }
         match cmd {
@@ -1418,7 +1419,7 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
-        if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
+        if crate::listwin::command(self, ctx, name) || crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
             return true;
         }
         if crate::focus::command(self, name) || crate::share::command(self, name) || crate::keyextra::command(self, ctx, name) {
@@ -1829,6 +1830,11 @@ impl App {
                 }
             }
         }
+        // (as Logic: when a right pane leaves the Tracks area under its ~360 pt minimum, the
+        // Inspector hides itself, and stays hidden; RESIZING.txt)
+        if self.show_inspector && self.right_pane.is_some() && body.max.x - RIGHT_W.min(body.width() * 0.5) - (left + INSPECTOR_W) < 360.0 {
+            self.show_inspector = false;
+        }
         if self.show_inspector {
             let r = Rect::from_min_max(pos2(left, body.min.y), pos2(left + INSPECTOR_W, body.max.y));
             crate::inspector::show(self, ui, r);
@@ -1866,18 +1872,19 @@ impl App {
             if picked {
                 self.selected_region = auto;
             }
+            self.fit.picked = picked;
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
+            let created = picked && self.bottom == Bottom::PianoRoll && crate::celledit::current(self).is_none() && crate::edpane::create_view(self, ui, ed);
             match self.bottom {
+                Bottom::PianoRoll if created => {}
                 Bottom::PianoRoll if crate::celledit::current(self).is_some() => crate::celledit::show(self, ui, ed),
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
-                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => match crate::edpane::sp_tab(&ctx) {
-                    crate::edpane::SpTab::SessionPlayer => {
-                        let (t, r) = self.selected_region.unwrap();
-                        crate::players::show(self, ui, ed, t, r);
-                    }
-                    crate::edpane::SpTab::PianoRoll => crate::pianoroll::show(self, ui, ed),
-                    crate::edpane::SpTab::Score => crate::score::show(self, ui, ed),
-                },
+                // (no region selected on an instrument track: Logic's four tabs; Step Sequencer
+                // and Session Player offer to make that kind of region; edpane.rs)
+                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => {
+                    let (t, r) = self.selected_region.unwrap();
+                    crate::players::show(self, ui, ed, t, r);
+                }
                 Bottom::PianoRoll if drummer.is_some() => {
                     let (t, r) = drummer.unwrap();
                     crate::drummer::show(self, ui, ed, t, r);
@@ -1896,6 +1903,7 @@ impl App {
             if picked && self.selected_region == auto {
                 self.selected_region = None;
             }
+            self.fit.picked = false;
             // the divider between the tracks and the editor: drag up or down
             let edge = Rect::from_min_max(pos2(ed.min.x, ed.min.y - 3.0), pos2(ed.max.x, ed.min.y + 3.0));
             let e = ui.interact(edge, ui.scope_id().with("editor-edge"), egui::Sense::drag());
@@ -1920,6 +1928,7 @@ impl App {
         crate::midiwin::windows(self, &ctx);
         crate::stepinput::window(self, &ctx);
         crate::evlist::float_window(self, &ctx);
+        crate::listwin::windows(self, &ctx);
         crate::joinaudio::window(self, &ctx);
         crate::regsolo::frame(self, &ctx);
         crate::varispeed::frame(self, &ctx);

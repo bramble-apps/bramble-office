@@ -11,7 +11,7 @@
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 
 use crate::app::App;
-use crate::glyphs::{self, ph, ph_fill};
+use crate::glyphs::{self, ph};
 use crate::look;
 
 /// The commands this file runs (build.rs and tool/checklist.py read the list).
@@ -22,10 +22,15 @@ pub const COMMANDS: &[&str] = &["Horizontal Auto Zoom", "Vertical Auto Zoom", "C
 pub struct State {
     /// Catch (the Tracks area's Catch button): the view follows the playhead while playing.
     pub catch: bool,
+    /// The editor pane shows a region nobody selected (the track's; edpane.rs).
+    pub picked: bool,
     pub v_auto: bool,
     pub h_auto: bool,
     /// The waveform zoom the Waveform Zoom button turns back on.
     pub wave_level: f32,
+    /// Where the zoom sliders were dragged to (slider units 0..1); the zoom eases there.
+    pub v_goal: Option<f32>,
+    pub h_goal: Option<f32>,
     /// What the auto zooms last fitted: the track count and area height, the project's end.
     v_seen: (usize, i32),
     h_seen: u32,
@@ -33,7 +38,7 @@ pub struct State {
 
 impl Default for State {
     fn default() -> State {
-        State { catch: true, v_auto: false, h_auto: false, wave_level: 2.0, v_seen: (usize::MAX, 0), h_seen: u32::MAX }
+        State { catch: true, picked: false, v_auto: false, h_auto: false, wave_level: 2.0, v_goal: None, h_goal: None, v_seen: (usize::MAX, 0), h_seen: u32::MAX }
     }
 }
 
@@ -183,7 +188,70 @@ pub fn h_fit(bars: f32, width: f32) -> f32 {
 
 /// Vertical / Horizontal Auto Zoom: refit when tracks come or go (or the area changes size),
 /// and when the project's content grows or shrinks (tracks.rs calls this every frame).
+/// One step of the zoom easing: the share of the way to the goal covered in `dt` seconds with
+/// a time constant of `tau` (about 95 % in 3 τ; 30 ms: there in about 90 ms). Pure: for tests.
+pub fn ease_step(cur: f32, goal: f32, dt: f32, tau: f32) -> f32 {
+    let k = 1.0 - (-dt.max(0.0) / tau.max(1e-4)).exp();
+    let next = cur + (goal - cur) * k;
+    // (close enough: land exactly, so it never trails behind)
+    if (goal - next).abs() < 1e-4 { goal } else { next }
+}
+
+/// The scroll that keeps `anchor` (bars) at the same place on screen when the bar width goes
+/// from `old_w` to `new_w` (pure: for tests).
+pub fn keep_anchor(scroll: f32, anchor: f32, old_w: f32, new_w: f32) -> f32 {
+    let x = (anchor - scroll) * old_w;
+    (anchor - x / new_w.max(0.001)).max(0.0)
+}
+
+const TAU: f32 = 0.03;
+
+/// The zoom sliders' easing (every frame, from tracks.rs): the slider's log value eases to the
+/// dragged one; horizontally the playhead stays put (the view's left edge when the playhead is
+/// off screen), vertically the selected track (else the top row).
+fn ease_zoom(app: &mut App, lanes_w: f32) {
+    let dt = app.ctx.input(|i| i.stable_dt).clamp(0.0, 0.1);
+    if let Some(goal) = app.fit.h_goal {
+        let cur = h_value(app);
+        let next = ease_step(cur, goal, dt, TAU);
+        let old_w = app.bar_w;
+        set_h(app, next);
+        let ph = app.position() as f32 / app.bar_ticks().max(1) as f32;
+        let on_screen = ph >= app.scroll_x && ph <= app.scroll_x + lanes_w / old_w;
+        let anchor = if on_screen { ph } else { app.scroll_x };
+        app.scroll_x = keep_anchor(app.scroll_x, anchor, old_w, app.bar_w);
+        if next == goal {
+            app.fit.h_goal = None;
+        } else {
+            app.ctx.request_repaint();
+        }
+    }
+    if let Some(goal) = app.fit.v_goal {
+        let cur = v_value(app);
+        let next = ease_step(cur, goal, dt, TAU);
+        // the anchor row: the selected track when it's on screen, else the top row
+        let before = crate::trackarea::rows(app);
+        let anchor = app.selected_track.and_then(|t| before.iter().find(|r| r.t == t && r.y + r.h > app.scroll_y)).or_else(|| before.iter().find(|r| r.y + r.h > app.scroll_y)).copied();
+        set_v(app, next);
+        if let Some(a) = anchor {
+            let after = crate::trackarea::rows(app);
+            if let Some(b) = after.iter().find(|r| r.t == a.t) {
+                // (the same point of the row stays at the same height on screen)
+                let frac = ((app.scroll_y - a.y) / a.h.max(1.0)).clamp(0.0, 1.0);
+                let screen = a.y - app.scroll_y;
+                app.scroll_y = if screen >= 0.0 { (b.y - screen).max(0.0) } else { (b.y + frac * b.h).max(0.0) };
+            }
+        }
+        if next == goal {
+            app.fit.v_goal = None;
+        } else {
+            app.ctx.request_repaint();
+        }
+    }
+}
+
 pub fn auto_zoom(app: &mut App, lanes_h: f32, lanes_w: f32) {
+    ease_zoom(app, lanes_w);
     let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
     if app.fit.v_auto {
         let seen = (n, lanes_h as i32);
@@ -238,63 +306,83 @@ pub fn command(app: &mut App, name: &str) -> bool {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TrackCtl {
-    Automation,
+    Views,
+    AutoFlex,
     Catch,
     Tools,
-    Snap,
-    Drag,
     WaveZoom,
     AutoZoom,
-    VZoom,
-    HZoom,
+    Zoom,
 }
 
-/// The right-hand controls in Logic's order, left to right; they leave from the right.
-pub const TRACK_RIGHT: [TrackCtl; 9] = [TrackCtl::Automation, TrackCtl::Catch, TrackCtl::Tools, TrackCtl::Snap, TrackCtl::Drag, TrackCtl::WaveZoom, TrackCtl::AutoZoom, TrackCtl::VZoom, TrackCtl::HZoom];
+/// Logic 13's Tracks bar at full width (ui-take-folder-expanded.png): after the menus the view
+/// buttons, Automation | Flex in one capsule and Catch (lit); the tool menus in the middle; at
+/// the right end "…" (Snap, Drag and whatever left the bar), Waveform Zoom, Vertical |
+/// Horizontal Auto Zoom in one capsule and the two zoom sliders in one dark capsule.
+pub const TRACK_CTLS: [TrackCtl; 7] = [TrackCtl::Views, TrackCtl::AutoFlex, TrackCtl::Catch, TrackCtl::Tools, TrackCtl::WaveZoom, TrackCtl::AutoZoom, TrackCtl::Zoom];
+/// How many of TRACK_CTLS sit after the menus (then the tools, then the right end).
+const TRACK_LEFT: usize = 3;
+const TOOLS: usize = 3;
+
+/// When each leaves (higher first): the zooms from the right end, then the tools together with
+/// Automation | Flex, then Catch, then the view buttons (Logic's 630 pt bar keeps only the view
+/// buttons and Catch: ui-tracks-with-pianoroll.png).
+fn track_drop(c: TrackCtl) -> u8 {
+    match c {
+        TrackCtl::Views => 1,
+        TrackCtl::Catch => 2,
+        TrackCtl::AutoFlex | TrackCtl::Tools => 3,
+        TrackCtl::WaveZoom | TrackCtl::AutoZoom | TrackCtl::Zoom => 4,
+    }
+}
 
 const SLIDER_W: f32 = 75.0;
+const PAIR_W: f32 = 2.0 * ICON_W;
 
-fn snap_text(app: &App) -> String {
-    app.arr.snap.name().to_string()
-}
-
-fn drag_text(app: &App) -> String {
-    app.arr.drag.name().to_string()
-}
-
-/// Each right-hand control's width (with the gap before it).
-fn track_slot_w(app: &App, ui: &egui::Ui, c: TrackCtl) -> f32 {
+/// Each control's width (with the gap before it); 0: not in this view (Catch and the
+/// horizontal zooms with the Live Loops grid in place of the tracks).
+fn track_slot_w(tracks_on: bool, c: TrackCtl) -> f32 {
+    if c == TrackCtl::Catch && !tracks_on {
+        return 0.0;
+    }
     GAP + match c {
-        TrackCtl::Automation | TrackCtl::Catch | TrackCtl::WaveZoom => ICON_W,
+        TrackCtl::Views => 62.0,
+        TrackCtl::AutoFlex | TrackCtl::AutoZoom => PAIR_W,
+        TrackCtl::Catch | TrackCtl::WaveZoom => ICON_W,
         TrackCtl::Tools => 2.0 * 48.0,
-        TrackCtl::Snap => ICON_W + 2.0 + text_w(ui, &snap_text(app)) + 32.0,
-        TrackCtl::Drag => text_w(ui, &drag_text(app)) + 32.0,
-        TrackCtl::AutoZoom => 2.0 * ICON_W,
-        TrackCtl::VZoom | TrackCtl::HZoom => SLIDER_W,
+        TrackCtl::Zoom => 2.0 * SLIDER_W + 1.0,
     }
 }
 
 /// The menus' capsule width (Edit / Functions / View) as Logic's, for tests.
 const MENUS_W: f32 = 225.0;
-const VIEW_W: f32 = GAP + 62.0;
-const FLEX_W: f32 = GAP + ICON_W;
 
-/// What shows in the room after the menus: the view buttons, Flex, then the right-hand
-/// controls. The right-hand ones leave first (from the right end), then Flex, then the view
-/// buttons (pure: for tests).
-pub fn tracks_layout(room: f32, right_w: &[f32]) -> (bool, bool, Vec<bool>) {
-    let mut slots = vec![Slot { w: VIEW_W, drop: 1 }, Slot { w: FLEX_W, drop: 1 }];
-    slots.extend(right_w.iter().map(|&w| Slot { w, drop: 2 }));
-    // (16 pt between the left and right groups)
-    let v = fit(&slots, room - 16.0, MORE_W + GAP);
-    let mut right = v[2..].to_vec();
-    // (Automation and Catch leave with the tool menus, as Logic's bar shows nothing but "…" at
-    // the right once the tools have gone: ui-tracks-with-pianoroll.png, a 630 pt Tracks area)
-    if !right[2] {
-        right[0] = false;
-        right[1] = false;
+/// Which controls show in the room after the menus, the "…" always there (pure: for tests).
+/// Automation | Flex leave with the tools, as Logic hides them together.
+pub fn tracks_layout(room: f32, w: &[f32]) -> Vec<bool> {
+    let slots: Vec<Slot> = TRACK_CTLS.iter().zip(w).map(|(&c, &w)| Slot { w, drop: if w == 0.0 { 0 } else { track_drop(c) } }).collect();
+    // (16 pt between the groups; the "…" is always shown, so its room is always kept)
+    let mut v = fit(&slots, room - 16.0 - MORE_W - GAP, 0.0);
+    if !v[TOOLS] {
+        v[1] = false;
     }
-    (v[0], v[1], right)
+    for (i, &x) in w.iter().enumerate() {
+        if x == 0.0 {
+            v[i] = false;
+        }
+    }
+    v
+}
+
+/// Where the tools go: centred on the bar when that leaves them clear of both ends, else just
+/// after the left group (pure: for tests).
+pub fn tools_x(bar_min: f32, bar_max: f32, left_end: f32, right_start: f32, w: f32) -> f32 {
+    let centred = (bar_min + bar_max) / 2.0 - w / 2.0;
+    if centred >= left_end + GAP && centred + w <= right_start - GAP {
+        centred
+    } else {
+        left_end + GAP
+    }
 }
 
 pub fn tracks_bar(app: &mut App, ui: &mut egui::Ui, local: Rect) {
@@ -303,7 +391,7 @@ pub fn tracks_bar(app: &mut App, ui: &mut egui::Ui, local: Rect) {
     let mut x = local.min.x + 9.0;
     // ↑: out of the packed folder (Logic's, dimmed at the top level)
     let inside = crate::trackarea::inside(app).is_some();
-    if icon_button(ui, cell(cy, x, ICON_W), id.with("up"), false, inside, "Go Out of Folder", ph::ARROW_UP).clicked() {
+    if icon_button(ui, cell(cy, x, ICON_W), id.with("up"), false, inside, "Go Out of Folder", ph::ARROW_BEND_LEFT_UP).clicked() {
         crate::trackarea::command(app, "Go Out of Folder or Region");
     }
     x += ICON_W + 7.0;
@@ -314,80 +402,108 @@ pub fn tracks_bar(app: &mut App, ui: &mut egui::Ui, local: Rect) {
         crate::menus::local_bar(app, ui, &[("Edit", "tracks-Edit"), ("Functions", "tracks-Functions"), ("View", "tracks-View")]);
         end = ui.min_rect().max.x - 12.0 + 4.0;
     });
-    let widths: Vec<f32> = TRACK_RIGHT.iter().map(|&c| track_slot_w(app, ui, c)).collect();
-    let (view_on, flex_on_bar, shown) = tracks_layout(local.max.x - 10.0 - end, &widths);
-    x = end + GAP;
-    // Live Loops grid | Tracks (one capsule), then Flex
-    if view_on {
-        let pair = cell(cy, x, 62.0);
-        ui.painter().rect_filled(pair, 6.0, look::group_bg());
-        let (grid_on, tracks_on) = crate::liveloops::shown(app);
-        for (i, (on, tip)) in [(grid_on, "Live Loops Grid (L)"), (tracks_on, "Tracks View")].into_iter().enumerate() {
-            let r = Rect::from_min_size(pos2(pair.min.x + i as f32 * 31.0, pair.min.y), vec2(31.0, BTN_H));
-            let resp = ui.interact(r, id.with(("view", i)), Sense::click()).on_hover_text(tip);
-            let p = ui.painter();
-            if on {
-                p.rect_filled(r, 6.0, look::accent());
-            } else if resp.hovered() {
-                p.rect_filled(r, 6.0, look::button_on());
-            }
-            let glyph = match (i, on) {
-                (0, true) => ph_fill::DOTS_NINE,
-                (0, false) => ph::DOTS_NINE,
-                (_, true) => ph_fill::ROWS,
-                _ => ph::ROWS,
-            };
-            glyphs::paint(p, r, glyph, 16.0, if on { Color32::WHITE } else { look::text() });
-            if resp.clicked() {
-                crate::liveloops::command(app, if i == 0 { "Show/Hide Live Loops Grid" } else { "Show/Hide Tracks area" });
-            }
+    let tracks_on = crate::liveloops::shown(app).1;
+    let widths: Vec<f32> = TRACK_CTLS.iter().map(|&c| track_slot_w(tracks_on, c)).collect();
+    let shown = tracks_layout(local.max.x - 10.0 - end, &widths);
+    // after the menus, left to right
+    let mut lx = end;
+    for i in 0..TRACK_LEFT {
+        if shown[i] {
+            let r = cell(cy, lx + GAP, widths[i] - GAP);
+            lx += widths[i];
+            track_control(app, ui, id, TRACK_CTLS[i], r);
         }
-        x = pair.max.x + GAP;
     }
-    if flex_on_bar {
-        // (Logic's Flex icon, drawn: cbicons.rs)
-        let fr = cell(cy, x, ICON_W);
-        let on = app.flex.show;
-        if icon_button(ui, fr, id.with("flex"), on, true, "Show/Hide Flex (⌘F)", "").clicked() {
-            crate::flex::command(app, ui.ctx(), "Show/Hide Flex Pitch/Time");
-        }
-        crate::cbicons::flex(ui.painter(), fr, if on { Color32::WHITE } else { look::text() });
-    }
-
-    // ---- the right-hand controls, as many as fit (placed from the right)
+    // the right end: "…" then the zooms, placed from the right
     let mut rx = local.max.x - 10.0;
-    if any_hidden(&shown) || !view_on || !flex_on_bar {
-        let mr = cell(cy, rx - MORE_W, MORE_W);
-        let resp = more_button(ui, mr, id.with("more"));
-        egui::Popup::menu(&resp).show(|ui| more_menu(app, ui, view_on, flex_on_bar, &shown));
-        rx = mr.min.x - GAP;
-    }
-    let mut place = vec![None; TRACK_RIGHT.len()];
-    for i in (0..TRACK_RIGHT.len()).rev() {
+    let mut placed = Vec::new();
+    for i in (TOOLS + 1..TRACK_CTLS.len()).rev() {
         if shown[i] {
             let w = widths[i] - GAP;
-            place[i] = Some(cell(cy, rx - w, w));
+            placed.push((i, cell(cy, rx - w, w)));
             rx -= widths[i];
         }
     }
-    for (i, c) in TRACK_RIGHT.iter().enumerate() {
-        let Some(r) = place[i] else { continue };
-        track_control(app, ui, id, *c, r);
+    let mr = cell(cy, rx - MORE_W, MORE_W);
+    rx = mr.min.x;
+    let resp = more_button(ui, mr, id.with("more"));
+    egui::Popup::menu(&resp).show(|ui| more_menu(app, ui, &shown, &widths));
+    for (i, r) in placed {
+        track_control(app, ui, id, TRACK_CTLS[i], r);
     }
+    if shown[TOOLS] {
+        let w = widths[TOOLS] - GAP;
+        let tx = tools_x(local.min.x, local.max.x, lx, rx, w);
+        track_control(app, ui, id, TrackCtl::Tools, cell(cy, tx, w));
+    }
+}
+
+fn view_buttons(app: &mut App, ui: &mut egui::Ui, id: egui::Id, pair: Rect) {
+    ui.painter().rect_filled(pair, 6.0, look::group_bg());
+    let (grid_on, tracks_on) = crate::liveloops::shown(app);
+    for (i, (on, tip)) in [(grid_on, "Live Loops Grid (L)"), (tracks_on, "Tracks View")].into_iter().enumerate() {
+        let r = Rect::from_min_size(pos2(pair.min.x + i as f32 * 31.0, pair.min.y), vec2(31.0, BTN_H));
+        let resp = ui.interact(r, id.with(("view", i)), Sense::click()).on_hover_text(tip);
+        let p = ui.painter();
+        if on {
+            p.rect_filled(r, 6.0, look::accent());
+        } else if resp.hovered() {
+            p.rect_filled(r, 6.0, look::button_on());
+        }
+        // (Logic's: outline glyphs, white on the lit one)
+        let glyph = if i == 0 { ph::DOTS_NINE } else { ph::LIST };
+        glyphs::paint(p, r, glyph, 16.0, if on { Color32::WHITE } else { look::text() });
+        if resp.clicked() {
+            crate::liveloops::command(app, if i == 0 { "Show/Hide Live Loops Grid" } else { "Show/Hide Tracks area" });
+        }
+    }
+}
+
+/// Two icon buttons in one capsule with a hairline between them (Logic's joined pairs).
+fn pair(ui: &mut egui::Ui, r: Rect, id: egui::Id, items: [(bool, &str, &str); 2]) -> [bool; 2] {
+    let p = ui.painter().clone();
+    p.rect_filled(r, 6.0, look::group_bg());
+    let mut out = [false; 2];
+    for (k, (on, tip, icon)) in items.into_iter().enumerate() {
+        let c = Rect::from_min_size(pos2(r.min.x + k as f32 * r.width() / 2.0, r.min.y), vec2(r.width() / 2.0, r.height()));
+        let resp = ui.interact(c, id.with(k), Sense::click()).on_hover_text(tip);
+        if on {
+            p.rect_filled(c, 6.0, look::accent());
+        } else if resp.hovered() {
+            p.rect_filled(c, 6.0, look::button_on());
+        }
+        glyphs::paint(&p, c, icon, 16.0, if on { Color32::WHITE } else { look::text() });
+        out[k] = resp.clicked();
+    }
+    if !items[0].0 && !items[1].0 {
+        p.vline(r.center().x, (r.center().y - 7.0)..=(r.center().y + 7.0), Stroke::new(1.0, look::text_dim().gamma_multiply(0.55)));
+    }
+    out
 }
 
 fn track_control(app: &mut App, ui: &mut egui::Ui, id: egui::Id, c: TrackCtl, r: Rect) {
     match c {
-        TrackCtl::Automation => {
-            if icon_button(ui, r, id.with("auto"), app.show_automation, true, "Show/Hide Automation (A)", br_automation()).clicked() {
+        TrackCtl::Views => view_buttons(app, ui, id, r),
+        TrackCtl::AutoFlex => {
+            let [a, f] = pair(ui, r, id.with("autoflex"), [(app.show_automation, "Show/Hide Automation (A)", ""), (app.flex.show, "Show/Hide Flex (⌘F)", glyphs::br::FLEX)]);
+            // (Logic's automation icon, drawn: a line through two nodes; cbicons.rs)
+            let half = Rect::from_min_size(r.min, vec2(r.width() / 2.0, r.height()));
+            crate::cbicons::automation(ui.painter(), half, if app.show_automation { Color32::WHITE } else { look::text() });
+            if a {
                 app.command(ui.ctx(), "Show/Hide Automation");
+            }
+            if f {
+                crate::flex::command(app, ui.ctx(), "Show/Hide Flex Pitch/Time");
             }
         }
         TrackCtl::Catch => {
-            if icon_button(ui, r, id.with("catch"), app.fit.catch, true, "Catch Playhead", ph::ARROW_LINE_RIGHT).clicked() {
+            // (Logic 13's Catch: the playhead pin with an arrow from each side, blue when on)
+            let on = app.fit.catch;
+            if icon_button(ui, r, id.with("catch"), on, true, "Catch Playhead", "").clicked() {
                 command(app, "Catch");
                 app.catch_off = false;
             }
+            crate::cbicons::catch(ui.painter(), r, if on { Color32::WHITE } else { look::text() });
         }
         TrackCtl::Tools => {
             let p = ui.painter().clone();
@@ -408,19 +524,6 @@ fn track_control(app: &mut App, ui: &mut egui::Ui, id: egui::Id, c: TrackCtl, r:
                 egui::Popup::menu(&resp).show(|ui| tool_items(app, ui, cmd));
             }
         }
-        TrackCtl::Snap => {
-            let on_r = Rect::from_min_size(r.min, vec2(ICON_W, BTN_H));
-            if icon_button(ui, on_r, id.with("snap-on"), app.snap_on, true, "Snap to Grid (⌘G)", ph::MAGNET).clicked() {
-                app.snap_on = !app.snap_on;
-            }
-            let pr = Rect::from_min_max(pos2(on_r.max.x + 2.0, r.min.y), r.max);
-            let resp = text_popup(ui, pr, id.with("snap"), &snap_text(app), "Snap");
-            egui::Popup::menu(&resp).show(|ui| crate::arranging::snap_items(app, ui, snap_rest()));
-        }
-        TrackCtl::Drag => {
-            let resp = text_popup(ui, r, id.with("drag"), &drag_text(app), "Drag");
-            egui::Popup::menu(&resp).show(|ui| crate::arranging::drag_items(app, ui));
-        }
         TrackCtl::WaveZoom => {
             let resp = icon_button(ui, r, id.with("wz"), app.keyx.wave_zoom > 1.0, true, "Waveform Zoom (drag up or down to zoom)", ph::WAVEFORM);
             if resp.dragged() {
@@ -433,36 +536,33 @@ fn track_control(app: &mut App, ui: &mut egui::Ui, id: egui::Id, c: TrackCtl, r:
             }
         }
         TrackCtl::AutoZoom => {
-            let a = Rect::from_min_size(r.min, vec2(ICON_W, BTN_H));
-            let b = Rect::from_min_size(pos2(r.min.x + ICON_W, r.min.y), vec2(ICON_W, BTN_H));
-            ui.painter().rect_filled(r, 6.0, look::group_bg());
-            if icon_button(ui, a, id.with("vauto"), app.fit.v_auto, true, "Vertical Auto Zoom", crate::glyphs::tb::ARROW_AUTOFIT_HEIGHT).clicked() {
+            let [v, h] = pair(ui, r, id.with("autozoom"), [(app.fit.v_auto, "Vertical Auto Zoom", crate::glyphs::tb::ARROW_AUTOFIT_HEIGHT), (app.fit.h_auto, "Horizontal Auto Zoom", crate::glyphs::tb::ARROW_AUTOFIT_WIDTH)]);
+            if v {
                 toggle_auto(app, true);
             }
-            if icon_button(ui, b, id.with("hauto"), app.fit.h_auto, true, "Horizontal Auto Zoom", crate::glyphs::tb::ARROW_AUTOFIT_WIDTH).clicked() {
+            if h {
                 toggle_auto(app, false);
             }
         }
-        TrackCtl::VZoom => {
-            let mut v = v_value(app);
-            if slider(ui, r, id.with("vz"), &mut v, ph::ARROWS_OUT_LINE_VERTICAL, "Vertical Zoom") {
-                set_v(app, v);
+        TrackCtl::Zoom => {
+            // (one dark capsule with both sliders and a hairline between, as Logic's)
+            let a = Rect::from_min_size(r.min, vec2(SLIDER_W, BTN_H));
+            let b = Rect::from_min_size(pos2(r.max.x - SLIDER_W, r.min.y), vec2(SLIDER_W, BTN_H));
+            ui.painter().rect_filled(r, 6.0, look::mix(look::header_bg(), Color32::BLACK, 0.2));
+            // (the thumbs follow the pointer at once; the zoom eases after them: ease_zoom)
+            let mut v = app.fit.v_goal.unwrap_or_else(|| v_value(app));
+            if slider(ui, a, id.with("vz"), &mut v, ph::ARROWS_VERTICAL, "Vertical Zoom") {
+                app.fit.v_goal = Some(v);
                 app.fit.v_auto = false;
             }
-        }
-        TrackCtl::HZoom => {
-            let mut v = h_value(app);
-            if slider(ui, r, id.with("hz"), &mut v, ph::ARROWS_OUT_LINE_HORIZONTAL, "Horizontal Zoom") {
-                set_h(app, v);
+            let mut h = app.fit.h_goal.unwrap_or_else(|| h_value(app));
+            if slider(ui, b, id.with("hz"), &mut h, ph::ARROWS_HORIZONTAL, "Horizontal Zoom") {
+                app.fit.h_goal = Some(h);
                 app.fit.h_auto = false;
             }
+            ui.painter().vline(a.max.x + 0.5, (r.center().y - 7.0)..=(r.center().y + 7.0), Stroke::new(1.0, look::line()));
         }
     }
-}
-
-/// Logic's automation icon (a curve through points).
-fn br_automation() -> &'static str {
-    ph::LINE_SEGMENTS
 }
 
 /// The Snap menu's items after the modes (from the research's "…" menu).
@@ -484,33 +584,73 @@ fn tool_items(app: &mut App, ui: &mut egui::Ui, cmd: bool) {
     }
 }
 
-/// The "…" menu: the controls that left the bar, in the bar's order, as menu items.
-fn more_menu(app: &mut App, ui: &mut egui::Ui, view_on: bool, flex_on: bool, shown: &[bool]) {
+/// The "…" menu as Logic's (menus/local/tracks-more.txt): Snap and Drag always, then the
+/// zooms that left the bar, then the other controls that left it.
+fn more_menu(app: &mut App, ui: &mut egui::Ui, shown: &[bool], widths: &[f32]) {
     ui.set_min_width(220.0);
-    if !view_on {
-        let (grid_on, tracks_on) = crate::liveloops::shown(app);
-        for (on, label, cmd) in [(grid_on, "Live Loops Grid", "Show/Hide Live Loops Grid"), (tracks_on, "Tracks", "Show/Hide Tracks area")] {
-            if ui.add(egui::Button::selectable(on, label)).clicked() {
-                crate::liveloops::command(app, cmd);
-                ui.close();
+    ui.menu_button("Snap", |ui| crate::arranging::snap_items(app, ui, snap_rest()));
+    ui.menu_button("Drag", |ui| crate::arranging::drag_items(app, ui));
+    let hidden = |c: TrackCtl| TRACK_CTLS.iter().position(|&x| x == c).is_some_and(|i| !shown[i] && widths[i] > 0.0);
+    if hidden(TrackCtl::WaveZoom) {
+        ui.menu_button("Waveform Zoom", |ui| {
+            if ui.add(egui::Button::selectable(app.keyx.wave_zoom > 1.0, "Waveform Zoom")).clicked() {
+                toggle_wave(app);
             }
+            ui.separator();
+            let mut z = app.keyx.wave_zoom;
+            if ui.add(egui::Slider::new(&mut z, 1.0..=16.0).logarithmic(true).show_value(false)).changed() {
+                app.keyx.wave_zoom = z;
+            }
+        });
+    }
+    if hidden(TrackCtl::AutoZoom) {
+        if ui.add(egui::Button::selectable(app.fit.h_auto, "Horizontal Auto Zoom")).clicked() {
+            toggle_auto(app, false);
+            ui.close();
+        }
+        if ui.add(egui::Button::selectable(app.fit.v_auto, "Vertical Auto Zoom")).clicked() {
+            toggle_auto(app, true);
+            ui.close();
         }
     }
-    if !flex_on && ui.add(egui::Button::selectable(app.flex.show, "Show Flex")).clicked() {
-        crate::flex::command(app, ui.ctx(), "Show/Hide Flex Pitch/Time");
-        ui.close();
+    if hidden(TrackCtl::Zoom) {
+        ui.menu_button("Vertical Zoom", |ui| {
+            let mut v = v_value(app);
+            if ui.add(egui::Slider::new(&mut v, 0.0..=1.0).show_value(false)).changed() {
+                set_v(app, v);
+                app.fit.v_auto = false;
+            }
+        });
+        ui.menu_button("Horizontal Zoom", |ui| {
+            let mut v = h_value(app);
+            if ui.add(egui::Slider::new(&mut v, 0.0..=1.0).show_value(false)).changed() {
+                set_h(app, v);
+                app.fit.h_auto = false;
+            }
+        });
     }
-    if !view_on || !flex_on {
+    let left: Vec<TrackCtl> = [TrackCtl::Views, TrackCtl::AutoFlex, TrackCtl::Catch, TrackCtl::Tools].into_iter().filter(|&c| hidden(c)).collect();
+    if !left.is_empty() {
         ui.separator();
     }
-    for (i, c) in TRACK_RIGHT.iter().enumerate() {
-        if shown[i] {
-            continue;
-        }
+    for c in left {
         match c {
-            TrackCtl::Automation => {
+            TrackCtl::Views => {
+                let (grid_on, tracks_on) = crate::liveloops::shown(app);
+                for (on, label, cmd) in [(grid_on, "Live Loops Grid", "Show/Hide Live Loops Grid"), (tracks_on, "Tracks", "Show/Hide Tracks area")] {
+                    if ui.add(egui::Button::selectable(on, label)).clicked() {
+                        crate::liveloops::command(app, cmd);
+                        ui.close();
+                    }
+                }
+            }
+            TrackCtl::AutoFlex => {
                 if ui.add(egui::Button::selectable(app.show_automation, "Show Automation").shortcut_text("A")).clicked() {
                     app.command(ui.ctx(), "Show/Hide Automation");
+                    ui.close();
+                }
+                if ui.add(egui::Button::selectable(app.flex.show, "Show Flex").shortcut_text("⌘F")).clicked() {
+                    crate::flex::command(app, ui.ctx(), "Show/Hide Flex Pitch/Time");
                     ui.close();
                 }
             }
@@ -520,55 +660,9 @@ fn more_menu(app: &mut App, ui: &mut egui::Ui, view_on: bool, flex_on: bool, sho
                     ui.close();
                 }
             }
-            TrackCtl::Tools => {
+            _ => {
                 ui.menu_button("Left-click Tool", |ui| tool_items(app, ui, false));
                 ui.menu_button("Command-click Tool", |ui| tool_items(app, ui, true));
-            }
-            TrackCtl::Snap => {
-                ui.menu_button("Snap", |ui| crate::arranging::snap_items(app, ui, snap_rest()));
-            }
-            TrackCtl::Drag => {
-                ui.menu_button("Drag", |ui| crate::arranging::drag_items(app, ui));
-            }
-            TrackCtl::WaveZoom => {
-                ui.menu_button("Waveform Zoom", |ui| {
-                    if ui.add(egui::Button::selectable(app.keyx.wave_zoom > 1.0, "Waveform Zoom")).clicked() {
-                        toggle_wave(app);
-                    }
-                    ui.separator();
-                    let mut z = app.keyx.wave_zoom;
-                    if ui.add(egui::Slider::new(&mut z, 1.0..=16.0).logarithmic(true).show_value(false)).changed() {
-                        app.keyx.wave_zoom = z;
-                    }
-                });
-            }
-            TrackCtl::AutoZoom => {
-                if ui.add(egui::Button::selectable(app.fit.h_auto, "Horizontal Auto Zoom")).clicked() {
-                    toggle_auto(app, false);
-                    ui.close();
-                }
-                if ui.add(egui::Button::selectable(app.fit.v_auto, "Vertical Auto Zoom")).clicked() {
-                    toggle_auto(app, true);
-                    ui.close();
-                }
-            }
-            TrackCtl::VZoom => {
-                ui.menu_button("Vertical Zoom", |ui| {
-                    let mut v = v_value(app);
-                    if ui.add(egui::Slider::new(&mut v, 0.0..=1.0).show_value(false)).changed() {
-                        set_v(app, v);
-                        app.fit.v_auto = false;
-                    }
-                });
-            }
-            TrackCtl::HZoom => {
-                ui.menu_button("Horizontal Zoom", |ui| {
-                    let mut v = h_value(app);
-                    if ui.add(egui::Slider::new(&mut v, 0.0..=1.0).show_value(false)).changed() {
-                        set_h(app, v);
-                        app.fit.h_auto = false;
-                    }
-                });
             }
         }
     }
@@ -790,30 +884,78 @@ mod tests {
         assert_eq!(v, vec![false, true, false]);
     }
 
+    // widths: views, automation | flex, catch, tools, wave zoom, auto zoom, zoom sliders
+    const W: [f32; 7] = [70.0, 80.0, 44.0, 104.0, 44.0, 80.0, 159.0];
+
     #[test]
-    fn tracks_bar_full_set_at_a_wide_window_and_leaves_in_order() {
-        let w = [44.0, 44.0, 104.0, 100.0, 120.0, 44.0, 80.0, 83.0, 83.0];
-        let full: f32 = w.iter().sum::<f32>() + VIEW_W + FLEX_W + 16.0;
-        let (v, f, r) = tracks_layout(full + 1.0, &w);
-        assert!(v && f && r.iter().all(|s| *s));
-        // a little narrower: the horizontal zoom slider leaves first, then the vertical one
-        let (v, f, r) = tracks_layout(full - 20.0, &w);
-        assert!(v && f);
-        assert_eq!(r, vec![true, true, true, true, true, true, true, false, false]);
-        // narrower still: Snap and Drag before the tools, the tools before Catch / Automation
-        let (_, _, r) = tracks_layout(VIEW_W + FLEX_W + 16.0 + 44.0 + 44.0 + 104.0 + MORE_W + GAP, &w);
-        assert_eq!(r, vec![true, true, true, false, false, false, false, false, false]);
-        // the tools gone: Automation and Catch go with them (Logic's 630 pt bar)
-        let (_, _, r) = tracks_layout(VIEW_W + FLEX_W + 16.0 + 44.0 + 44.0 + 50.0 + MORE_W + GAP, &w);
-        assert!(r.iter().all(|s| !*s));
-        // only the view buttons and Flex: everything on the right is in "…"
-        let (v, f, r) = tracks_layout(VIEW_W + FLEX_W + 16.0 + MORE_W + GAP, &w);
-        assert!(v && f && r.iter().all(|s| !*s));
-        // a Tracks area at Logic's minimum: Flex, then the view buttons leave too
-        let (v, f, _) = tracks_layout(VIEW_W + 16.0 + MORE_W + GAP, &w);
-        assert!(v && !f);
-        let (v, f, _) = tracks_layout(40.0, &w);
-        assert!(!v && !f);
+    fn tracks_bar_full_set_at_a_wide_window() {
+        let full: f32 = W.iter().sum::<f32>() + 16.0 + MORE_W + GAP;
+        assert!(tracks_layout(full + 1.0, &W).iter().all(|s| *s));
+    }
+
+    #[test]
+    fn tracks_bar_leaves_in_logics_order() {
+        let full: f32 = W.iter().sum::<f32>() + 16.0 + MORE_W + GAP;
+        // narrower: the zoom sliders leave first, then Auto Zoom, then Waveform Zoom
+        assert_eq!(tracks_layout(full - 20.0, &W), vec![true, true, true, true, true, true, false]);
+        assert_eq!(tracks_layout(full - 170.0, &W), vec![true, true, true, true, true, false, false]);
+        assert_eq!(tracks_layout(full - 250.0, &W), vec![true, true, true, true, false, false, false]);
+        // Logic's 630 pt bar: the view buttons and Catch, the rest in "…"
+        let room = 630.0 - 10.0 - 43.0 - 225.0 - 10.0;
+        assert_eq!(tracks_layout(room, &W), vec![true, false, true, false, false, false, false]);
+        // narrower: Catch, then the view buttons
+        assert_eq!(&tracks_layout(70.0 + 16.0 + MORE_W + GAP, &W)[..3], &[true, false, false]);
+        assert!(tracks_layout(40.0, &W).iter().all(|s| !*s));
+    }
+
+    #[test]
+    fn automation_flex_leave_with_the_tools() {
+        let v = tracks_layout(70.0 + 80.0 + 44.0 + 50.0 + 16.0 + MORE_W + GAP, &W);
+        assert_eq!(&v[..4], &[true, false, true, false]);
+    }
+
+    #[test]
+    fn catch_is_left_out_with_the_live_loops_grid() {
+        let mut w = W;
+        w[2] = 0.0;
+        let full: f32 = w.iter().sum::<f32>() + 16.0 + MORE_W + GAP;
+        let v = tracks_layout(full + 1.0, &w);
+        assert!(!v[2] && v[0] && v[1]);
+    }
+
+    #[test]
+    fn tools_centred_when_clear() {
+        assert_eq!(tools_x(0.0, 1000.0, 300.0, 800.0, 96.0), 452.0);
+        // too close to the left group: just after it
+        assert_eq!(tools_x(0.0, 1000.0, 450.0, 800.0, 96.0), 458.0);
+    }
+
+    #[test]
+    fn zoom_eases_smoothly_and_lands() {
+        // 60 fps: each frame a steady share of the rest, no jump, there within ~100 ms
+        let mut v = 0.2;
+        let mut steps = Vec::new();
+        for _ in 0..8 {
+            let n = ease_step(v, 0.8, 1.0 / 60.0, TAU);
+            steps.push(n - v);
+            v = n;
+        }
+        assert!(steps.windows(2).all(|w| w[1] < w[0]), "each step smaller than the last");
+        assert!(steps[0] < 0.6 * 0.5, "no snap on the first frame");
+        assert!((0.8 - v).abs() < 0.03, "about there after 130 ms: {v}");
+        // and it lands exactly instead of trailing forever
+        let mut v = 0.79999;
+        v = ease_step(v, 0.8, 1.0 / 60.0, TAU);
+        assert_eq!(v, 0.8);
+    }
+
+    #[test]
+    fn horizontal_zoom_keeps_its_anchor() {
+        // the playhead at bar 10, the view from bar 6 at 50 pt a bar: 200 pt in
+        let s = keep_anchor(6.0, 10.0, 50.0, 100.0);
+        assert!(((10.0 - s) * 100.0 - 200.0).abs() < 1e-3);
+        // the left edge as the anchor: the scroll doesn't move
+        assert!((keep_anchor(6.0, 6.0, 50.0, 80.0) - 6.0).abs() < 1e-5);
     }
 
     #[test]

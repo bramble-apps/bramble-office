@@ -36,7 +36,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     let Some((ti, ri)) = app.selected_region else {
-        p.text(area.center(), Align2::CENTER_CENTER, "Select a MIDI region to see its notes", look::regular(14.0), look::text_dim());
+        // (a track with no regions: Logic's empty Piano Roll; nothing selected at all: the hint)
+        if app.selected_track.is_some() {
+            crate::edpane::empty_roll(app, ui, area, LOCAL_H, KEYS_W, RULER_H, ROW);
+        } else {
+            p.text(area.center(), Align2::CENTER_CENTER, "Select a MIDI region to see its notes", look::regular(14.0), look::text_dim());
+        }
         return;
     };
     let Some((region, kind)) = app.project.as_ref().and_then(|pr| pr.tracks.get(ti)).and_then(|t| t.regions.get(ri).map(|r| (r.clone(), t.kind))) else { return };

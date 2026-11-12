@@ -15,6 +15,12 @@ const H: f32 = 24.0;
 pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     let p = ui.painter().clone();
     let y = bar.center().y;
+    // (laid out by the bar's width: the zoom slider leaves first, then the tool menus, then
+    // Link; barfit.rs)
+    let fits = crate::barfit::fit(&[crate::barfit::Slot { w: 34.0, drop: 1 }, crate::barfit::Slot { w: 8.5 + 84.0, drop: 2 }, crate::barfit::Slot { w: 9.0 + 75.0 + 9.0, drop: 3 }], bar.max.x - x, 0.0);
+    if !fits[0] {
+        return;
+    }
     // Link: purple Same Level, yellow Content (double-click), grey off
     let lr = Rect::from_min_size(pos2(x, y - H / 2.0), vec2(34.0, H));
     let resp = ui.interact(lr, ui.scope_id().with("sc-link"), Sense::click()).on_hover_text("Link: click for Same Level, double-click for Content");
@@ -30,6 +36,9 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     };
     p.rect_filled(lr, 6.0, fill);
     glyphs::paint(&p, lr, glyphs::ph::LINK, 16.0, ink);
+    if !fits[1] {
+        return;
+    }
     // the Tool menus: one pill, left-click tool | Command-click tool, each with its ⌄
     let tr = Rect::from_min_size(pos2(lr.max.x + 8.5, y - H / 2.0), vec2(84.0, H));
     p.rect_filled(tr, 6.0, look::group_bg());
@@ -53,6 +62,9 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
                 }
             }
         });
+    }
+    if !fits[2] {
+        return;
     }
     // the zoom slider (vertical-zoom icon, track, knob)
     // (Logic: a darker pill, 75 × 24 pt, 9 pt from the edge; a 48 pt track)

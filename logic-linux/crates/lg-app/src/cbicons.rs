@@ -30,9 +30,10 @@ pub fn browser(p: &egui::Painter, r: Rect, c: Color32, fill: Color32) {
     let back = Rect::from_min_size(r.center() - vec2(s / 2.0 + 2.5, s / 2.0 + 2.5), vec2(s, s));
     let front = back.translate(vec2(4.5, 4.5));
     p.rect_stroke(back, 3.0, Stroke::new(W, c), egui::StrokeKind::Middle);
-    p.rect_filled(front.expand(1.0), 3.5, fill);
-    p.rect_stroke(front, 3.0, Stroke::new(W, c), egui::StrokeKind::Middle);
-    glyphs::paint(p, front, ph::MUSIC_NOTE_SIMPLE, 9.5, c);
+    // (Logic's front square is solid, its note cut out in the button's colour)
+    p.rect_filled(front.expand(1.6), 3.8, fill);
+    p.rect_filled(front.expand(W / 2.0), 3.4, c);
+    glyphs::paint(p, front, ph::MUSIC_NOTE_SIMPLE, 9.5, fill);
 }
 
 /// The Inspector: two toggle switches, the top one an outline with its knob left, the bottom
@@ -82,9 +83,9 @@ pub fn capture(p: &egui::Painter, r: Rect, red: Color32) {
     p.circle_filled(ctr, 4.2, red);
 }
 
-/// Show/Hide Flex as Logic's: a flex marker (a line under a small pin head) with a chevron
-/// pointing at it from each side.
-pub fn flex(p: &egui::Painter, r: Rect, c: Color32) {
+/// Catch as Logic 13's (ui-tracks-with-pianoroll.png): the playhead (a line under a small pin
+/// head) with a chevron pointing at it from each side.
+pub fn catch(p: &egui::Painter, r: Rect, c: Color32) {
     let ctr = r.center();
     let top = ctr.y - 7.0;
     let bot = ctr.y + 7.0;
@@ -96,4 +97,28 @@ pub fn flex(p: &egui::Painter, r: Rect, c: Color32) {
         let back = ctr.x + s * 6.6;
         p.add(egui::Shape::line(vec![pos2(back, tip.y - 3.6), tip, pos2(back, tip.y + 3.6)], Stroke::new(W, c)));
     }
+}
+
+/// Show/Hide Automation as Logic's: a flat line into a node, a rise to a second node, a flat
+/// line out.
+pub fn automation(p: &egui::Painter, r: Rect, c: Color32) {
+    let ctr = r.center();
+    let a = pos2(ctr.x - 3.8, ctr.y + 3.0);
+    let b = pos2(ctr.x + 3.8, ctr.y - 3.0);
+    let st = Stroke::new(W, c);
+    p.line_segment([pos2(ctr.x - 9.0, a.y), pos2(a.x - 1.8, a.y)], st);
+    p.line_segment([a + vec2(1.4, -1.1), b + vec2(-1.4, 1.1)], st);
+    p.line_segment([pos2(b.x + 1.8, b.y), pos2(ctr.x + 9.0, b.y)], st);
+    p.circle_stroke(a, 1.8, st);
+    p.circle_stroke(b, 1.8, st);
+}
+
+/// Editors as Logic's: a thin pencil, a single stroke from lower left to upper right with a
+/// small point.
+pub fn pencil(p: &egui::Painter, r: Rect, c: Color32) {
+    let ctr = r.center();
+    let a = ctr + vec2(-4.6, 4.6);
+    let b = ctr + vec2(6.0, -6.0);
+    p.line_segment([a, b], Stroke::new(2.4, c));
+    p.add(egui::Shape::convex_polygon(vec![ctr + vec2(-7.2, 7.2), a + vec2(-1.3, -0.4), a + vec2(0.4, 1.3)], c, Stroke::NONE));
 }
