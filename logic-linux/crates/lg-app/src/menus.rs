@@ -263,7 +263,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
     }
 }
 
-fn checked(app: &App, label: &str) -> bool {
+pub(crate) fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::tm::checked(app, label).or_else(|| crate::autoext::checked(app, label)) {
         return c;
     }

@@ -11,6 +11,8 @@ pub struct Hub {
     pub sync: crate::syncmidi::State,
     pub movie: crate::movie::State,
     pub outs: crate::midiout::Outs,
+    pub mmc: crate::syncmmc::State,
+    pub link: crate::linksync::State,
 }
 
 /// A whole MIDI message from input `port`, before anything else sees it: control surfaces and
@@ -32,6 +34,8 @@ pub fn midi_raw(app: &mut App, ctx: &egui::Context, port: usize, bytes: &[u8]) -
 /// Each frame (before the windows): sync out, surface feedback, the movie.
 pub fn frame(app: &mut App, ctx: &egui::Context) {
     crate::syncmidi::frame(app, ctx);
+    crate::syncmmc::frame(app, ctx);
+    crate::linksync::frame(app, ctx);
     crate::surfaces::frame(app, ctx);
     crate::movie::frame(app, ctx);
     crate::viewprefs::frame(app);
@@ -47,7 +51,7 @@ pub fn windows(app: &mut App, ctx: &egui::Context) {
 
 /// Key commands and menu items of these areas.
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
-    crate::envwin::command(app, ctx, name) || crate::surfaces::command(app, ctx, name) || crate::syncmidi::command(app, ctx, name) || crate::movie::command(app, ctx, name)
+    crate::syncmmc::command(app, name) || crate::linksync::command(app, name) || crate::envwin::command(app, ctx, name) || crate::surfaces::command(app, ctx, name) || crate::syncmidi::command(app, ctx, name) || crate::movie::command(app, ctx, name)
 }
 
 /// Keys while the pointer is over one of these windows.
@@ -57,7 +61,7 @@ pub fn key_press(app: &mut App, ctx: &egui::Context, key: egui::Key, m: egui::Mo
 
 /// Menu ticks.
 pub fn checked(app: &App, label: &str) -> Option<bool> {
-    crate::surfaces::checked(app, label).or_else(|| crate::syncmidi::checked(app, label)).or_else(|| crate::movie::checked(app, label))
+    crate::linksync::checked(app, label).or_else(|| crate::surfaces::checked(app, label)).or_else(|| crate::syncmidi::checked(app, label)).or_else(|| crate::movie::checked(app, label))
 }
 
 pub fn after_open(app: &mut App) {

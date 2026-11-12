@@ -162,9 +162,169 @@ impl Class {
 }
 
 /// Global class parameters Studio carries out.
-pub const GLOBALS: [&str; 20] = ["Playhead", "Playhead (Beats)", "Playhead (Time Code)", "Playhead (Beats, Scrubbing)", "Move Locators", "Left Locator", "Right Locator", "Move Punch Locators", "Marker Position", "Nudge selected Regions/Events", "Any Solo", "Nudge Value", "Automation of all tracks", "Cycle", "Autopunch", "Go to Marker", "Group Clutch", "Shuttle Speed", "Horizontal Zoom", "Vertical Zoom"];
+pub const GLOBALS: [&str; 32] = [
+    "Playhead", "Playhead (Beats)", "Playhead (Time Code)", "Playhead (Beats, Scrubbing)", "Move Locators", "Left Locator", "Right Locator", "Move Punch Locators", "Left Punch Locator", "Right Punch Locator",
+    "Marker Position", "Marker Length", "Nudge selected Regions/Events", "Any Solo", "Nudge Value", "Scrub Status", "Automation of all tracks", "Cycle", "Autopunch", "Go to Marker", "Group Clutch", "Active Sense",
+    "Shuttle Speed", "Alert Text", "Alert Button", "Alert Icon", "Dummy", "Waveform Zoom", "Quantize Value", "Division", "Horizontal Zoom", "Vertical Zoom",
+];
+/// Global Nudge Value's options.
+pub const NUDGE_VALUES: [&str; 6] = ["Tick", "Division", "Beat", "Bar", "Frame", "1/2 Frame"];
+/// Global Scrub Status's options.
+pub const SCRUB_STATUS: [&str; 3] = ["Set Clock", "Audio Scrubbing", "Shuttle"];
+/// The Bank Type pop-up: as the group's Parameter Page Shift Mode says, by one, by a bank.
+pub const BANK_TYPES: [&str; 3] = ["CS Group Setting", "By One", "By Bank"];
 /// Control surface group parameters (Class Control Surface Group).
-pub const GROUP_PARAMS: [&str; 9] = ["Fader Bank for Current View", "Flip Mode", "Display Mode", "Clock Display", "Channel Strip View Mode", "Channel Strip Parameter", "Track Lock", "Plug-in Parameter Page", "Send Slot"];
+pub const GROUP_PARAMS: [&str; 40] = [
+    "Fader Bank for Current View", "Fader Bank for Tracks View", "Fader Bank for All View", "Fader Bank for MIDI", "Fader Bank for Input", "Fader Bank for Audio", "Fader Bank for Instrument", "Fader Bank for Aux", "Fader Bank for Bus", "Fader Bank for Output",
+    "Filter for All View", "Flip Mode", "Display Mode", "Clock Display", "Channel Strip View Mode", "Channel Strip Parameter", "Track Lock", "Channel Strip Track", "Open/Close Plug-in Window", "Follows Focused View",
+    "Live Loops Column Bank", "Surround Parameter", "EQ Band", "EQ Parameter", "All EQs Parameter Page", "Send Slot", "Send Parameter", "All Sends Parameter Page", "Split: no. of upper parameters", "Instrument Parameter Page",
+    "Inst Param Page (Split Lower)", "Insert Type", "Insert Slot", "Insert Type (Split Lower)", "Insert Slot (Split Lower)", "Plug-in Parameter Page", "Plug-in Param Page (Split Lower)", "Channel Strip Track (Split Lower)", "Automation Group", "Parameter Page Shift Mode",
+];
+/// Filter for All View: the strip types (bits).
+pub const STRIP_TYPES: [&str; 8] = ["MIDI", "Input", "Audio", "Instrument", "Aux", "Bus", "Output", "Master"];
+/// What the encoders control in the surround views.
+pub const SURROUND_PARAMS: [&str; 8] = ["Angle", "Diversity", "LFE", "Spread", "X", "Y", "Center", "Elevation"];
+/// What the encoders control in EQ Multi Channel view (Gain is the slope of the cut bands 1 and 8).
+pub const EQ_PARAMS: [&str; 4] = ["Frequency", "Gain", "Q", "Bypass"];
+/// What the encoders control in Send Multi Channel view.
+pub const SEND_PARAMS: [&str; 4] = ["Destination", "Level", "Position", "Mute"];
+pub const SEND_POSITIONS: [&str; 3] = ["Pre", "Post", "Post Pan"];
+
+/// The ticks Global Nudge Value's option moves by (`div`: the division in ticks, `fps`: the
+/// frame rate, `bpm`: the tempo).
+pub fn nudge_ticks(i: usize, ppq: f64, bar: f64, div: f64, fps: f64, bpm: f64) -> f64 {
+    let frame = bpm / 60.0 * ppq / fps.max(1.0);
+    match i {
+        0 => 1.0,
+        1 => div,
+        2 => ppq,
+        3 => bar,
+        4 => frame,
+        _ => frame / 2.0,
+    }
+}
+
+/// A bank change of `steps` as the Bank Type says: by one strip / parameter, or by the number
+/// shown (`shown`); CS Group Setting follows the group's Parameter Page Shift Mode (`by_one`).
+pub fn bank_step(bank_type: u8, by_one: bool, shown: i32, steps: i32) -> i32 {
+    let one = match bank_type {
+        1 => true,
+        2 => false,
+        _ => by_one,
+    };
+    steps * if one { 1 } else { shown.max(1) }
+}
+
+/// The surface strips' channels in a Channel Strip View Mode. `tracks`: each track's channel
+/// strip (an id shared by tracks on one channel) and type (index into STRIP_TYPES). Arrange
+/// follows the track order with a channel used by several tracks merged into one strip; Tracks
+/// shows every track; All shows the channel strips of the types `filter` (bits) lets through,
+/// independent of tracks (a channel once); Single shows the selected track's channel. The
+/// result: track indices from the fader bank on, `n` strips (None: empty strip).
+pub fn view_strips(view: u8, tracks: &[(u32, u8)], selected: Option<usize>, filter: u8, bank: i32, n: usize) -> Vec<Option<usize>> {
+    let mut seen = Vec::new();
+    let list: Vec<usize> = match view {
+        3 => selected.into_iter().filter(|t| *t < tracks.len()).collect(),
+        2 => (0..tracks.len()).collect(),
+        _ => (0..tracks.len()).filter(|&t| view != 1 || filter & (1 << tracks[t].1.min(7)) != 0).filter(|&t| {
+            let new = !seen.contains(&tracks[t].0);
+            seen.push(tracks[t].0);
+            new
+        }).collect(),
+    };
+    let from = if view == 3 { 0 } else { bank.max(0) as usize };
+    (0..n).map(|k| list.get(from + k).copied()).collect()
+}
+
+/// The Mackie V-Pot ring mode for a Feedback Format (index into FEEDBACK): 0 single dot,
+/// 1 bar from the centre, 2 bar from the left, 3 spread; None: no ring (None, Text Only).
+/// Automatic: a dot for pan, a bar for everything else.
+pub fn ring_mode(format: usize, pan: bool) -> Option<u8> {
+    match format {
+        0 | 9 => None,
+        2 => Some(0),
+        3 | 7 => Some(2),
+        4 => Some(1),
+        6 => Some(3),
+        // (right to left / descending: the bar from the left of the inverted value)
+        5 | 8 => Some(2),
+        _ => Some(if pan { 0 } else { 2 }),
+    }
+}
+
+/// The ring position (0–11) a format shows for a value 0–1 (Right to Left and Descending bars
+/// fill from the value to the maximum).
+pub fn ring_position(format: usize, v: f32) -> u8 {
+    let v = if matches!(format, 5 | 8) { 1.0 - v } else { v };
+    (v.clamp(0.0, 1.0) * 10.0).round() as u8 + 1
+}
+
+/// The feedback message for an assignment's current value (0–1): its Value Change message
+/// with the value scaled into Minimum…Maximum. None when the format sends none (None, Text
+/// Only), for buttons with nothing to show, or over IAC.
+pub fn feedback_msg(a: &Assignment, v: f32) -> Option<Vec<u8>> {
+    if a.feedback == 0 || a.feedback == 9 || a.port.contains("IAC") {
+        return None;
+    }
+    let raw = a.min as f32 + (a.max - a.min) as f32 * v.clamp(0.0, 1.0);
+    let raw = raw.round() as i32;
+    let mut out = Vec::new();
+    for t in &a.msg {
+        match t {
+            Tok::Byte(b) => out.push(*b),
+            Tok::Lo7 => out.push((raw & 127) as u8),
+            Tok::Hi7 => out.push(((raw >> 7) & 127) as u8),
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// What a label placeholder stands for (`@` + type + value): t track, r surround, s send slot,
+/// S number of sends, e EQ band, E number of EQs, p insert slot, i instrument slot; # number,
+/// n name, p addressed parameter's name, P first parameter's name, o / O parameter offset and
+/// maximum offset, b / B bank offset or size and total banks (all counted from 1).
+#[derive(Clone, Debug, Default)]
+pub struct LabelCtx {
+    pub track_no: i32,
+    pub track_name: String,
+    pub surround: String,
+    pub send_slot: i32,
+    pub sends: i32,
+    pub eq_band: i32,
+    pub eqs: i32,
+    pub insert_slot: i32,
+    pub insert_name: String,
+    pub inst_name: String,
+    pub param: String,
+    pub first_param: String,
+    pub offset: i32,
+    pub max_offset: i32,
+    pub bank: i32,
+    pub banks: i32,
+}
+
+pub fn label_value(c: &LabelCtx, kind: char, val: char) -> String {
+    match (kind, val) {
+        (_, 'p') => c.param.clone(),
+        (_, 'P') => c.first_param.clone(),
+        (_, 'o') => (c.offset + 1).to_string(),
+        (_, 'O') => (c.max_offset + 1).to_string(),
+        (_, 'b') => (c.bank + 1).to_string(),
+        (_, 'B') => c.banks.max(1).to_string(),
+        ('t', '#') => c.track_no.to_string(),
+        ('t', 'n') => c.track_name.clone(),
+        ('r', _) => c.surround.clone(),
+        ('s', '#') => c.send_slot.to_string(),
+        ('S', _) => c.sends.to_string(),
+        ('e', '#') => c.eq_band.to_string(),
+        ('E', _) => c.eqs.to_string(),
+        ('p', '#') => c.insert_slot.to_string(),
+        ('p', 'n') => c.insert_name.clone(),
+        ('i', '#') => "1".into(),
+        ('i', 'n') => c.inst_name.clone(),
+        (k, v) => format!("@{k}{v}"),
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Strip {
@@ -299,6 +459,8 @@ pub struct Assignment {
     pub local_feedback: bool,
     /// Modifier keys held with the control (bit 0 Shift, 1 Control, 2 Option, 3 Command).
     pub modifiers: u8,
+    /// The Bank Type pop-up (index into BANK_TYPES).
+    pub bank_type: u8,
 }
 
 impl Assignment {
@@ -332,6 +494,7 @@ impl Assignment {
             text_feedback: false,
             local_feedback: false,
             modifiers: 0,
+            bank_type: 0,
         }
     }
 
@@ -412,7 +575,7 @@ impl Assignment {
         [
             self.zone.clone(), self.mode.clone(), self.control_name.clone(), self.label.clone(), self.flip_group.to_string(), (self.exclusive as u8).to_string(), self.port.clone(), msg_text(&self.msg),
             self.min.to_string(), self.max.to_string(), (self.only as u8).to_string(), self.format.index().to_string(), msg_text(&self.touch), class, self.multiply.to_string(), self.value_mode.index().to_string(),
-            self.resolution.to_string(), (self.global_resolution as u8).to_string(), (self.key_repeat as u8).to_string(), self.feedback.to_string(), (self.text_feedback as u8).to_string(), (self.local_feedback as u8).to_string(), self.modifiers.to_string(),
+            self.resolution.to_string(), (self.global_resolution as u8).to_string(), (self.key_repeat as u8).to_string(), self.feedback.to_string(), (self.text_feedback as u8).to_string(), (self.local_feedback as u8).to_string(), self.modifiers.to_string(), self.bank_type.to_string(),
         ].join("\t")
     }
 
@@ -438,6 +601,7 @@ impl Assignment {
             zone: f[0].into(), mode: f[1].into(), control_name: f[2].into(), label: f[3].into(), flip_group: f[4].parse().unwrap_or(0), exclusive: f[5] == "1", port: f[6].into(), msg: parse_msg(f[7]),
             min: f[8].parse().unwrap_or(0), max: f[9].parse().unwrap_or(127), only: f[10] == "1", format: Format::from_index(f[11].parse().unwrap_or(0)), touch: parse_msg(f[12]), class, multiply: f[14].parse().unwrap_or(1.0),
             value_mode: ValueMode::from_index(f[15].parse().unwrap_or(2)), resolution: f[16].parse().unwrap_or(128), global_resolution: f[17] == "1", key_repeat: f[18] == "1", feedback: f[19].parse().unwrap_or(1), text_feedback: f[20] == "1", local_feedback: f[21] == "1", modifiers: f[22].parse().unwrap_or(0),
+            bank_type: f.get(23).and_then(|x| x.parse().ok()).unwrap_or(0),
         })
     }
 }
@@ -834,6 +998,36 @@ pub const HUI_PING: [u8; 3] = [0x90, 0x00, 0x00];
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn globals_banks_views_feedback_labels() {
+        assert!(GLOBALS.contains(&"Left Punch Locator") && GLOBALS.contains(&"Active Sense") && GLOBALS.len() == 32);
+        assert_eq!(nudge_ticks(3, 960.0, 3840.0, 240.0, 25.0, 120.0), 3840.0);
+        assert_eq!(nudge_ticks(4, 960.0, 3840.0, 240.0, 25.0, 120.0), 76.8);
+        assert_eq!(bank_step(1, false, 8, 2), 2);
+        assert_eq!(bank_step(2, true, 8, 2), 16);
+        assert_eq!(bank_step(0, true, 8, -1), -1);
+        // tracks 0 and 1 share channel 5: Arrange merges them, Tracks doesn't
+        let t = [(5, 2), (5, 2), (6, 3), (7, 0)];
+        assert_eq!(view_strips(0, &t, None, 0xff, 0, 3), vec![Some(0), Some(2), Some(3)]);
+        assert_eq!(view_strips(2, &t, None, 0xff, 1, 3), vec![Some(1), Some(2), Some(3)]);
+        assert_eq!(view_strips(1, &t, None, 1 << 3, 0, 2), vec![Some(2), None]);
+        assert_eq!(view_strips(3, &t, Some(3), 0xff, 4, 2), vec![Some(3), None]);
+        let mut a = Assignment::learned("Port", parse_msg("B0 07 Lo7"), Class::Global { param: "Cycle".into(), number: 0 });
+        assert_eq!(feedback_msg(&a, 1.0), Some(vec![0xB0, 0x07, 127]));
+        a.feedback = 9;
+        assert_eq!(feedback_msg(&a, 1.0), None);
+        assert_eq!(ring_mode(1, true), Some(0));
+        assert_eq!(ring_mode(1, false), Some(2));
+        assert_eq!(ring_mode(9, false), None);
+        assert_eq!(ring_position(5, 1.0), 1);
+        a.bank_type = 2;
+        assert_eq!(Assignment::from_line(&a.to_line()).unwrap().bank_type, 2);
+        let c = LabelCtx { track_no: 3, track_name: "Bass".into(), send_slot: 2, ..Default::default() };
+        assert_eq!(expand_label("Send@s#", |k, v| label_value(&c, k, v)), "Send2");
+        assert_eq!(expand_label("@tn", |k, v| label_value(&c, k, v)), "Bass");
+        assert_eq!(expand_label("@tb/@tB", |k, v| label_value(&c, k, v)), "1/1");
+    }
+
     use super::*;
 
     #[test]

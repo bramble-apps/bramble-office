@@ -1170,6 +1170,9 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, w: usize) {
             app.hub.env.sub = Some((Sub::Banks, id));
         }
     }
+    if o.kind == Kind::GmMixer {
+        gm_inspector(app, ui, &mut o);
+    }
     if o.kind == Kind::Alias {
         if let Some(r) = app.hub.env.env.obj(o.p("ref") as Id) {
             ui.label(format!("Reference: {}", r.name));
@@ -1194,6 +1197,56 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, w: usize) {
             }
         }
     }
+}
+
+/// The GM mixer's Reset button and, for GS and XG, the GS/XG Effect Controls (reverb and
+/// chorus programs and levels, the reverb time).
+fn gm_inspector(app: &mut App, ui: &mut egui::Ui, o: &mut Obj) {
+    let std = o.p("std");
+    let port = if o.port.is_empty() { "*".to_string() } else { o.port.clone() };
+    ui.add_space(4.0);
+    if ui.button("Reset").on_hover_text(format!("Sends {} and resets all controllers", ["GM On", "GS Reset", "XG System On"][std.clamp(0, 2) as usize])).clicked() {
+        for m in envm::gm_reset(std) {
+            app.hub.outs.send(&port, &m);
+        }
+    }
+    if std == 0 {
+        return;
+    }
+    egui::CollapsingHeader::new("GS/XG Effect Controls").id_salt(("gsxg", o.id)).default_open(o.on("fxshow")).show(ui, |ui| {
+        let (revs, chos) = if std == 1 { (envm::GS_REVERBS, envm::GS_CHORUSES) } else { (envm::XG_REVERBS, envm::XG_CHORUSES) };
+        let mut send: Option<(u8, u8)> = None;
+        egui::Grid::new(("gsxg-grid", o.id)).num_columns(2).show(ui, |ui| {
+            for (what, key, label, opts) in [(0u8, "fx_rev", "Reverb", revs), (1, "fx_cho", "Chorus", chos)] {
+                ui.label(label);
+                let mut v = o.p(key).clamp(0, opts.len() as i32 - 1);
+                egui::ComboBox::from_id_salt((key, o.id)).selected_text(opts[v as usize]).show_ui(ui, |ui| {
+                    for (k, n) in opts.iter().enumerate() {
+                        if ui.selectable_value(&mut v, k as i32, *n).clicked() {
+                            send = Some((what, k as u8));
+                        }
+                    }
+                });
+                o.params.insert(key.into(), v);
+                ui.end_row();
+            }
+            for (what, key, label, def) in [(2u8, "fx_revlvl", "Reverb Level", 64), (3, "fx_cholvl", "Chorus Level", 64), (4, "fx_time", "Time", 64)] {
+                ui.label(label);
+                let mut v = if o.params.contains_key(key) { o.p(key) } else { def };
+                // (double-click the Time field to type a value)
+                if ui.add(egui::DragValue::new(&mut v).range(0..=127)).changed() {
+                    send = Some((what, v as u8));
+                }
+                o.params.insert(key.into(), v);
+                ui.end_row();
+            }
+        });
+        if let Some((what, v)) = send {
+            if let Some(m) = envm::gsxg_effect(std, what, v) {
+                app.hub.outs.send(&port, &m);
+            }
+        }
+    });
 }
 
 fn top_bar(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize) {
@@ -1846,6 +1899,10 @@ fn draw_gm(p: &egui::Painter, o: &Obj, r: Rect, selected: bool) {
         let y = fr.max.y - fr.height() * v;
         p.rect_filled(Rect::from_center_size(pos2(fr.center().x, y), vec2(mw - 6.0, 5.0)), 1.0, Color32::from_gray(220));
         p.text(pos2(x + mw / 2.0, r.max.y - 8.0), Align2::CENTER_CENTER, format!("{}", ch + 1), look::regular(8.5), Color32::from_gray(200));
+        // the Bank field at the bottom (inspector: Bank)
+        if o.on("bankrow") {
+            p.text(pos2(x + mw / 2.0, r.max.y - 19.0), Align2::CENTER_CENTER, format!("B{}", c("bnk").unwrap_or(0)), look::regular(8.0), Color32::from_gray(170));
+        }
     }
 }
 
@@ -2462,7 +2519,7 @@ fn gm_at(o: &Obj, r: Rect, p: Pos2) -> Option<(i32, usize)> {
     }
     let ch = o.p("ch") - 1 + m;
     let y = p.y - r.min.y;
-    let row = if y < 15.0 { 0 } else if y < 29.0 { 2 } else if y < 43.0 { 3 } else if y < 57.0 { 4 } else if y < 84.0 { 5 } else { 1 };
+    let row = if o.on("bankrow") && p.y > r.max.y - 25.0 && p.y < r.max.y - 13.0 { 6 } else if y < 15.0 { 0 } else if y < 29.0 { 2 } else if y < 43.0 { 3 } else if y < 57.0 { 4 } else if y < 84.0 { 5 } else { 1 };
     (ch <= 15).then_some((ch, row))
 }
 
@@ -2482,6 +2539,12 @@ fn gm_press(app: &mut App, ctx: &egui::Context, o: &Obj, r: Rect, p: Pos2) {
             gm_send(app, ctx, o, Ev::new(0xC0, ch as u8, v as u8, 0));
             app.tell(format!("Channel {}: {}", ch + 1, envm::GM_PROGRAMS[v as usize]));
         }
+        // the Bank field: steps the bank (Bank Select MSB)
+        6 => {
+            let v = (o.params.get(&format!("bnk{ch}")).copied().unwrap_or(0) + 1) % 128;
+            app.hub.env.env.obj_mut(o.id).unwrap().params.insert(format!("bnk{ch}"), v);
+            gm_send(app, ctx, o, Ev::new(0xB0, ch as u8, 0, v as u8));
+        }
         // Mute: the channel volume to 0 and back to the fader's value
         5 => {
             let key = format!("mute{ch}");
@@ -2498,9 +2561,10 @@ fn gm_drag(app: &mut App, ctx: &egui::Context, o: &Obj, r: Rect, start: Pos2, p:
     let Some((ch, row)) = gm_at(o, r, start) else { return };
     let (key, cc, def) = match row {
         1 => ("vol", 7, 100),
-        2 => ("pan", 10, 64),
-        3 => ("rev", 91, 40),
-        4 => ("cho", 93, 0),
+        // (each knob's controller is chosen in the inspector: Pan, Reverb, Chorus by default)
+        2 => ("pan", o.p("k1").clamp(0, 127) as u8, 64),
+        3 => ("rev", o.p("k2").clamp(0, 127) as u8, 40),
+        4 => ("cho", o.p("k3").clamp(0, 127) as u8, 0),
         _ => return,
     };
     let k = format!("{key}{ch}");
@@ -3227,6 +3291,45 @@ fn touch_window(app: &mut App, ui: &mut egui::Ui, id: Id) {
     }
 }
 
+/// SysEx mapper mode: the message's length, checksum and fixed byte values in the operations'
+/// place (matching events: data byte 1 the position, data byte 2 the value; channel 1 sends
+/// the changed message, 2 doesn't send it, 3 sends it unchanged; 4–16 mean nothing).
+fn sysex_mapper_fields(ui: &mut egui::Ui, o: &mut Obj) {
+    let mut bytes = envm::sysex_map(o);
+    ui.label("SysEx Message");
+    ui.horizontal(|ui| {
+        ui.label("Length:");
+        let mut n = bytes.len() as i32;
+        if ui.add(egui::DragValue::new(&mut n).range(1..=64)).changed() {
+            bytes.resize(n as usize, 0);
+        }
+        ui.label("Checksum:");
+        let mut c = o.p("sx_sum").max(0) as usize;
+        egui::ComboBox::from_id_salt(("sxm-sum", o.id)).selected_text(lg_core::sysexfader::CHECKSUMS[c.min(5)]).show_ui(ui, |ui| {
+            for (k, n) in lg_core::sysexfader::CHECKSUMS.iter().enumerate() {
+                ui.selectable_value(&mut c, k, *n);
+            }
+        });
+        o.params.insert("sx_sum".into(), c as i32);
+        let mut f = o.on("sx_filter");
+        ui.checkbox(&mut f, "Filter non-matching");
+        o.params.insert("sx_filter".into(), f as i32);
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new("F0").monospace().color(look::text_dim()));
+        for (k, b) in bytes.iter_mut().enumerate() {
+            ui.add(egui::DragValue::new(b).range(0..=127).custom_formatter(|x, _| format!("{:02X}", x as u8))).on_hover_text(format!("Byte {k}"));
+        }
+        if o.p("sx_sum") > 0 {
+            ui.label(egui::RichText::new("SUM").monospace().color(look::text_dim()));
+        }
+        ui.label(egui::RichText::new("F7").monospace().color(look::text_dim()));
+    });
+    o.params.insert("sx_len".into(), bytes.len() as i32);
+    o.texts.insert("sxmap".into(), bytes.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" "));
+    ui.label(egui::RichText::new("Channel 1: send the changed message · 2: change only · 3: send unchanged").small().color(look::text_dim()));
+}
+
 /// The Transformer window: Mode, conditions and operations (the Object inspector's rows laid
 /// out as Logic's window), and the map.
 fn transformer_window(app: &mut App, ui: &mut egui::Ui, id: Id) {
@@ -3286,7 +3389,9 @@ fn transformer_window(app: &mut App, ui: &mut egui::Ui, id: Id) {
     };
     if mode != 6 {
         row(ui, &mut o, "Conditions", ["c_st", "c_ch", "c_d1", "c_d2"], true);
-        if mode != 2 {
+        if mode == 7 {
+            sysex_mapper_fields(ui, &mut o);
+        } else if mode != 2 {
             row(ui, &mut o, "Operations", ["o_st", "o_ch", "o_d1", "o_d2"], false);
         }
     }

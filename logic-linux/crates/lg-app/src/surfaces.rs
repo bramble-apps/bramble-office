@@ -156,6 +156,7 @@ pub struct State {
     loaded: bool,
     dirty_at: Option<Instant>,
     alert: Option<String>,
+    pub ext: crate::surfext::Ext,
 }
 
 #[derive(Clone, Debug)]
@@ -166,7 +167,7 @@ enum Pending {
 
 impl Default for State {
     fn default() -> State {
-        State { devices: Vec::new(), groups: vec![Group::default()], assign: Assignments::default(), live: Vec::new(), setup_open: false, install_open: false, install_sel: Vec::new(), assign_open: false, expert: false, learn: false, learn_class: Class::Strip { strip: Strip::Selected, param: StripParam::Volume }, ignore_notes: true, pinned_new: false, selected: None, sel_dev: None, sel_zone: None, bypass: false, link: false, last_msg: None, pending: None, mods: 0, loaded: false, dirty_at: None, alert: None }
+        State { devices: Vec::new(), groups: vec![Group::default()], assign: Assignments::default(), live: Vec::new(), setup_open: false, install_open: false, install_sel: Vec::new(), assign_open: false, expert: false, learn: false, learn_class: Class::Strip { strip: Strip::Selected, param: StripParam::Volume }, ignore_notes: true, pinned_new: false, selected: None, sel_dev: None, sel_zone: None, bypass: false, link: false, last_msg: None, pending: None, mods: 0, loaded: false, dirty_at: None, alert: None, ext: Default::default() }
     }
 }
 
@@ -194,6 +195,13 @@ fn load(s: &mut State) {
                 s.groups.push(Group { flip: n(1) as u8, show_value: f[2] == "1", smpte: f[3] == "1", view: n(4) as u8, fader_bank: n(5), strip_param: n(6) as u8, track_lock: f[7].parse().ok(), track_name_number: f[8] == "1", page_by_one: f[9] == "1", relative: n(10) as u8, send_slot: n(11).max(1) });
             }
             Some("bypass") => s.bypass = f.get(1) == Some(&"1"),
+            Some("gx") if f.len() >= 4 => {
+                let g: usize = f[1].parse().unwrap_or(0);
+                while s.ext.gx.len() <= g {
+                    s.ext.gx.push(Default::default());
+                }
+                s.ext.gx[g].insert(f[2].to_string(), f[3].parse().unwrap_or(0));
+            }
             Some("zone") | Some("a") => {
                 a_text += l;
                 a_text.push('\n');
@@ -220,6 +228,11 @@ fn save(s: &State) {
         t += &format!("group\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", g.flip, g.show_value as u8, g.smpte as u8, g.view, g.fader_bank, g.strip_param, g.track_lock.map_or(String::new(), |x| x.to_string()), g.track_name_number as u8, g.page_by_one as u8, g.relative, g.send_slot);
     }
     t += &format!("bypass\t{}\n", s.bypass as u8);
+    for (g, m) in s.ext.gx.iter().enumerate() {
+        for (k, v) in m {
+            t += &format!("gx\t{g}\t{k}\t{v}\n");
+        }
+    }
     t += &s.assign.to_text().lines().skip(1).map(|l| format!("{l}\n")).collect::<String>();
     if let Some(d) = f.parent() {
         let _ = std::fs::create_dir_all(d);
@@ -268,7 +281,9 @@ pub fn midi_in(app: &mut App, ctx: &egui::Context, port: usize, bytes: &[u8]) ->
         let note = matches!(bytes[0] & 0xF0, 0x80 | 0x90);
         if !(note && app.hub.surf.ignore_notes) {
             // (a note's release isn't a new control)
-            if !(note && (bytes[0] & 0xF0 == 0x80 || bytes.get(2) == Some(&0))) {
+            if crate::surfext::relearn(app, bytes) {
+                changed(app);
+            } else if !(note && (bytes[0] & 0xF0 == 0x80 || bytes.get(2) == Some(&0))) {
                 learn(app, ctx, &name, bytes);
             }
             return true;
@@ -276,6 +291,11 @@ pub fn midi_in(app: &mut App, ctx: &egui::Context, port: usize, bytes: &[u8]) ->
     }
     if app.hub.surf.bypass {
         return false;
+    }
+    // Active Sensing: taken by a Global Active Sense assignment
+    if bytes[0] == 0xFE && app.hub.surf.assign.list.iter().any(|a| matches!(&a.class, Class::Global { param, .. } if param == "Active Sense")) {
+        app.hub.surf.ext.sensed = Some(Instant::now());
+        return true;
     }
     // Mackie Control device query reply: the device is there (serial / version)
     if bytes.len() > 6 && bytes[..5] == [0xF0, 0x00, 0x00, 0x66, 0x14] && bytes[5] == 0x01 {
@@ -366,9 +386,34 @@ fn assignments_in(app: &mut App, ctx: &egui::Context, port: &str, bytes: &[u8]) 
     }
     for (i, v) in hits {
         let a = app.hub.surf.assign.list[i].clone();
+        crate::surfext::input(app, i, &a, v);
+        // (Key Repeat: the press runs now, the release only stops repeating)
+        if a.key_repeat && v != a.max {
+            continue;
+        }
         run_assignment(app, ctx, &a, v);
     }
     true
+}
+
+/// An assignment run with a value (Key Repeat).
+pub fn run(app: &mut App, ctx: &egui::Context, a: &Assignment, v: i32) {
+    run_assignment(app, ctx, a, v);
+}
+
+/// A channel strip parameter of a track set as an assignment says (automation groups).
+pub fn run_on_track(app: &mut App, t: usize, param: &StripParam, a: &Assignment, v: i32) {
+    let res = if a.global_resolution { 128.0 } else { a.resolution.max(1) as f32 };
+    let cur = param_value(app, t, param);
+    let steps = if param.is_switch() { 1.0 } else if *param == StripParam::Automation { 4.0 } else { res };
+    if let Some(nv) = a.apply(v, cur, steps) {
+        set_param(app, t, param, nv);
+    }
+}
+
+/// A strip assignment's current value 0–1 (feedback).
+pub fn strip_value(app: &App, strip: &Strip, param: &StripParam) -> Option<f32> {
+    strip_track(app, strip).map(|t| param_value(app, t, param))
 }
 
 /// The track a channel strip assignment addresses.
@@ -399,6 +444,7 @@ fn param_value(app: &App, t: usize, p: &StripParam) -> f32 {
         StripParam::RecordEnable => app.armed.contains(&t) as u8 as f32,
         StripParam::Select => (app.selected_track == Some(t)) as u8 as f32,
         StripParam::Automation => app.auto_mode.get(&t).map_or(1, |m| crate::automation::AutoMode::ALL.iter().position(|x| x == m).unwrap_or(1)) as f32 / 4.0,
+        StripParam::Send(k) => app.sends.get(&t).and_then(|v| v.get(*k as usize)).map_or(0.0, |s| crate::automation::db_to_logic(s.level_db) / 127.0),
         _ => 0.0,
     }
 }
@@ -432,6 +478,14 @@ fn set_param(app: &mut App, t: usize, p: &StripParam, v: f32) {
         StripParam::Automation => {
             let k = (v * 4.0).round() as usize;
             app.auto_mode.insert(t, crate::automation::AutoMode::ALL[k.min(4)]);
+        }
+        // a send's level (the send slot counted from the top)
+        StripParam::Send(k) => {
+            if let Some(s) = app.sends.get_mut(&t).and_then(|l| l.get_mut(*k as usize)) {
+                s.level_db = crate::automation::logic_to_db(v * 127.0).min(6.0);
+                app.dirty = true;
+                app.load_engine();
+            }
         }
         _ => {}
     }
@@ -468,25 +522,38 @@ fn run_assignment(app: &mut App, ctx: &egui::Context, a: &Assignment, v: i32) {
         }
         Class::Global { param, number } => global(app, ctx, param, *number, v, a),
         Class::Group { param } => {
-            let g = &mut app.hub.surf.groups[0];
             let d = (v as f32 * a.multiply).round() as i32;
+            const OWN: [&str; 7] = ["Flip Mode", "Display Mode", "Clock Display", "Channel Strip View Mode", "Channel Strip Parameter", "Track Lock", "Send Slot"];
+            if param == "Fader Bank for Current View" {
+                let nb = crate::surfext::current_bank(app, a, app.hub.surf.groups[0].fader_bank, d);
+                let view = app.hub.surf.groups[0].view as usize;
+                app.hub.surf.groups[0].fader_bank = nb;
+                crate::surfext::set_gx(app, 0, &format!("Fader Bank for {} View", VIEWS[view.min(3)]), nb);
+                return;
+            }
+            if !OWN.contains(&param.as_str()) {
+                let _ = crate::surfext::group(app, param, a, v);
+                return;
+            }
+            let g = &mut app.hub.surf.groups[0];
             match param.as_str() {
-                "Fader Bank for Current View" => g.fader_bank = if a.value_mode == ValueMode::Relative { (g.fader_bank + d * 8).max(0) } else { d.max(0) },
                 "Flip Mode" => g.flip = if g.flip == 0 { 2 } else { 0 },
                 "Display Mode" => g.show_value = !g.show_value,
                 "Clock Display" => g.smpte = !g.smpte,
                 "Channel Strip View Mode" => g.view = (g.view + 1) % 4,
                 "Channel Strip Parameter" => g.strip_param = (g.strip_param + 1) % 2,
                 "Track Lock" => g.track_lock = if g.track_lock.is_some() { None } else { app.selected_track },
-                "Send Slot" => g.send_slot = (g.send_slot + d).clamp(1, 8),
-                _ => {}
+                _ => g.send_slot = (g.send_slot + d).clamp(1, 8),
             }
         }
-        Class::AutomationGroup { .. } => {}
+        Class::AutomationGroup { param, group } => crate::surfext::automation_group(app, a, param, *group, v),
     }
 }
 
 fn global(app: &mut App, ctx: &egui::Context, param: &str, number: i32, v: i32, a: &Assignment) {
+    if crate::surfext::global(app, ctx, param, number, v, a) {
+        return;
+    }
     let d = (v as f32 * a.multiply) as i32;
     let bar = app.bar_ticks() as f64;
     match param {
@@ -540,10 +607,36 @@ fn group_of(app: &App, d: usize) -> Group {
     app.hub.surf.groups.get(row).cloned().unwrap_or_default()
 }
 
+/// The tracks the connected control surfaces reach now, with the device's colour (control
+/// surface bars in the Tracks area and Mixer).
+pub fn controlled_tracks(app: &App) -> BTreeMap<usize, u32> {
+    let mut m = BTreeMap::new();
+    if app.hub.surf.bypass {
+        return m;
+    }
+    for d in 0..app.hub.surf.devices.len() {
+        if app.hub.surf.devices[d].model == Model::Generic {
+            continue;
+        }
+        for k in 0..8u8 {
+            if let Some(t) = strip_of(app, d, k) {
+                m.entry(t).or_insert(app.hub.surf.devices[d].color);
+            }
+        }
+    }
+    m
+}
+
 fn strip_of(app: &App, d: usize, k: u8) -> Option<usize> {
     let g = group_of(app, d);
-    let t = (g.fader_bank + device_offset(&app.hub.surf, d) + k as i32) as usize;
-    (t < app.project.as_ref().map_or(0, |p| p.tracks.len())).then_some(t)
+    // the group's Channel Strip View Mode: Arrange merges tracks on one channel strip, Tracks
+    // shows each, All the strip types Filter for All View lets through, Single the selected one
+    let p = app.project.as_ref()?;
+    let tracks: Vec<(u32, u8)> = p.tracks.iter().map(|t| (t.extra.set.same_strip.unwrap_or(t.extra.id) as u32, if t.kind == lg_core::TrackKind::Audio { 2 } else { 3 })).collect();
+    let row = app.hub.surf.devices[d].row;
+    let filter = crate::surfext::gx(app, row, "Filter for All View") as u8;
+    let sel = g.track_lock.or(app.selected_track);
+    cs::view_strips(g.view, &tracks, sel, filter, g.fader_bank + device_offset(&app.hub.surf, d), k as usize + 1).get(k as usize).copied().flatten()
 }
 
 fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
@@ -571,6 +664,24 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 set_param(app, t, &q, v);
             }
             app.hub.surf.live[d].faders[k as usize] = Some((v * 16383.0) as u16);
+        }
+        Mcu::VPot(k, n) if g.strip_param == 2 && g.flip != 2 => {
+            let Some(t) = strip_of(app, d, k) else { return };
+            let slot = (g.send_slot.max(1) - 1) as u8;
+            match crate::surfext::gx(app, row, "Send Parameter") {
+                // Position: Pre / Post
+                2 => {
+                    if let Some(s) = app.sends.get_mut(&t).and_then(|l| l.get_mut(slot as usize)) {
+                        s.pre = n < 0;
+                        app.load_engine();
+                    }
+                }
+                _ => {
+                    let p = StripParam::Send(slot);
+                    let cur = param_value(app, t, &p);
+                    set_param(app, t, &p, cur + n as f32 / 64.0);
+                }
+            }
         }
         Mcu::VPot(k, n) => {
             let Some(t) = strip_of(app, d, k) else { return };
@@ -631,6 +742,8 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 mcu::NAME_VALUE => grp.show_value = !grp.show_value,
                 mcu::SMPTE_BEATS => grp.smpte = !grp.smpte,
                 mcu::ASSIGN_PAN => grp.strip_param = 1,
+                // Send: the V-Pots control the group's Send Slot (Send Parameter: Level, Position)
+                mcu::ASSIGN_SEND => grp.strip_param = 2,
                 mcu::ASSIGN_TRACK => grp.strip_param = 0,
                 _ => {}
             }
@@ -799,7 +912,11 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
         app.hub.surf.dirty_at = None;
         save(&app.hub.surf);
     }
-    if app.hub.surf.bypass || app.hub.surf.devices.is_empty() {
+    if app.hub.surf.bypass {
+        return;
+    }
+    crate::surfext::frame(app, ctx);
+    if app.hub.surf.devices.is_empty() {
         return;
     }
     let focused = ctx.input(|i| i.focused);
@@ -1715,6 +1832,23 @@ fn assignment_params(app: &mut App, ui: &mut egui::Ui) {
                     }
                 });
                 ui.end_row();
+                // (extra menus: Nudge Value's and Scrub Status's options)
+                let opts: &[&str] = match param.as_str() {
+                    "Nudge Value" => &cs::NUDGE_VALUES,
+                    "Scrub Status" => &cs::SCRUB_STATUS,
+                    _ => &[],
+                };
+                if !opts.is_empty() {
+                    ui.label("Value:");
+                    let mut k = (*number).clamp(0, opts.len() as i32 - 1) as usize;
+                    egui::ComboBox::from_id_salt("cs-glob-opt").selected_text(opts[k]).show_ui(ui, |ui| {
+                        for (j, n) in opts.iter().enumerate() {
+                            ui.selectable_value(&mut k, j, *n);
+                        }
+                    });
+                    *number = k as i32;
+                    ui.end_row();
+                }
                 if param == "Go to Marker" {
                     ui.label("Number:");
                     ui.add(egui::DragValue::new(number).range(1..=999));
@@ -1763,12 +1897,41 @@ fn assignment_params(app: &mut App, ui: &mut egui::Ui) {
             }
             Class::Group { param } => {
                 ui.label("Parameter:");
-                egui::ComboBox::from_id_salt("cs-gp").selected_text(param.clone()).show_ui(ui, |ui| {
+                let shown = param.split('|').next().unwrap_or("").to_string();
+                egui::ComboBox::from_id_salt("cs-gp").selected_text(shown.clone()).height(360.0).show_ui(ui, |ui| {
                     for g in cs::GROUP_PARAMS {
-                        ui.selectable_value(param, g.to_string(), g);
+                        if ui.selectable_label(shown == g, g).clicked() {
+                            *param = g.to_string();
+                        }
                     }
                 });
                 ui.end_row();
+                // Filter for All View: the eight strip types (Direct sets them, X-OR toggles)
+                if shown == "Filter for All View" {
+                    let mut mask = param.split('|').nth(1).and_then(|x| x.parse::<u8>().ok()).unwrap_or(0xff);
+                    ui.label("Types:");
+                    ui.horizontal_wrapped(|ui| {
+                        for (k, n) in cs::STRIP_TYPES.iter().enumerate() {
+                            let mut on = mask & (1 << k) != 0;
+                            if ui.checkbox(&mut on, *n).changed() {
+                                mask ^= 1 << k;
+                            }
+                        }
+                    });
+                    *param = format!("Filter for All View|{mask}");
+                    ui.end_row();
+                }
+                if shown.starts_with("Fader Bank") || shown.contains("Page") || shown == "Live Loops Column Bank" {
+                    ui.label("Bank Type:");
+                    let mut bt = a.bank_type as usize;
+                    egui::ComboBox::from_id_salt("cs-bt").selected_text(cs::BANK_TYPES[bt.min(2)]).show_ui(ui, |ui| {
+                        for (k, n) in cs::BANK_TYPES.iter().enumerate() {
+                            ui.selectable_value(&mut bt, k, *n);
+                        }
+                    });
+                    a.bank_type = bt as u8;
+                    ui.end_row();
+                }
             }
             Class::AutomationGroup { param, group } => {
                 ui.label("Parameter:");
@@ -1868,9 +2031,45 @@ fn assignment_params(app: &mut App, ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(format!("Incoming value: {v}")).small().color(look::text_dim()));
         }
     }
+    // the label as the surface shows it (placeholders expanded)
+    if a.label.contains('@') {
+        let lc = label_ctx(app);
+        let shown = cs::expand_label(&a.label, |k, v| cs::label_value(&lc, k, v));
+        ui.label(egui::RichText::new(format!("Label shows: {shown}")).small().color(look::text_dim()));
+    }
+    let relearn = a.key_repeat && !before.key_repeat;
     if a != before {
         app.hub.surf.assign.list[i] = a;
         changed(app);
+    }
+    if relearn {
+        crate::surfext::start_relearn(app, i);
+    }
+}
+
+/// What label placeholders stand for now (the selected track, the group's slots and pages).
+fn label_ctx(app: &App) -> cs::LabelCtx {
+    let g = app.hub.surf.groups.first().cloned().unwrap_or_default();
+    let t = g.track_lock.or(app.selected_track);
+    let tr = t.and_then(|t| app.project.as_ref().and_then(|p| p.tracks.get(t)));
+    let n = app.project.as_ref().map_or(0, |p| p.tracks.len()) as i32;
+    cs::LabelCtx {
+        track_no: t.map_or(0, |t| t as i32 + 1),
+        track_name: tr.map_or(String::new(), |x| x.name.clone()),
+        surround: cs::SURROUND_PARAMS[crate::surfext::gx(app, 0, "Surround Parameter").clamp(0, 7) as usize].into(),
+        send_slot: g.send_slot,
+        sends: t.and_then(|t| app.sends.get(&t)).map_or(0, |v| v.len() as i32),
+        eq_band: crate::surfext::gx(app, 0, "EQ Band"),
+        eqs: 8,
+        insert_slot: crate::surfext::gx(app, 0, "Insert Slot"),
+        insert_name: tr.and_then(|x| x.plugins.get(crate::surfext::gx(app, 0, "Insert Slot").max(1) as usize - 1)).map_or(String::new(), |p| p.name.clone()),
+        inst_name: tr.and_then(|x| x.plugins.first()).map_or(String::new(), |p| p.name.clone()),
+        param: String::new(),
+        first_param: String::new(),
+        offset: crate::surfext::gx(app, 0, "Plug-in Parameter Page"),
+        max_offset: 0,
+        bank: g.fader_bank / 8,
+        banks: (n + 7) / 8,
     }
 }
 

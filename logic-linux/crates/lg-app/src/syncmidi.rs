@@ -174,11 +174,11 @@ fn port_of(v: &str) -> String {
 }
 
 /// Where MMC goes: the rows with MMC ticked.
-fn mmc_ports(app: &App) -> Vec<String> {
+pub(crate) fn mmc_ports(app: &App) -> Vec<String> {
     dests(&app.proj).into_iter().filter(|d| d.mmc).map(|d| d.port).collect()
 }
 
-fn mmc_id(app: &App) -> u8 {
+pub(crate) fn mmc_id(app: &App) -> u8 {
     if app.logic_settings.get("MIDI / Sync / All") == "0" { app.logic_settings.get("MIDI / Sync / Output ID (Transport):").parse().unwrap_or(127) } else { 127 }
 }
 
@@ -592,14 +592,17 @@ pub fn sync_button(app: &mut App, ui: &mut egui::Ui, r: egui::Rect) {
     } else if resp.hovered() {
         p.rect_filled(cell, cell.height() / 2.0, crate::look::button_on().gamma_multiply(0.55));
     }
-    crate::glyphs::paint(p, r, crate::glyphs::ph::ARROWS_CLOCKWISE, 15.0, if on { egui::Color32::WHITE } else { crate::look::text() });
+    // (Ableton Link: the phase within the bar as a circle, the other participants in the middle)
+    if !crate::linksync::paint(app, p, r) {
+        crate::glyphs::paint(p, r, crate::glyphs::ph::ARROWS_CLOCKWISE, 15.0, if on { egui::Color32::WHITE } else { crate::look::text() });
+    }
     if resp.clicked() {
         let ctx = ui.ctx().clone();
         let _ = command(app, &ctx, "Toggle Sync intern/extern");
     }
     resp.context_menu(|ui| {
         let mode = app.proj.get("Synchronization / General / Sync Mode:");
-        for (m, label, ok) in [("Internal", "Internal Sync", true), ("Ableton Link", "Ableton Link", false), ("MTC", "SMPTE Sync (MTC)", true), ("Manual", "Manual Sync (Tempo Interpreter)", false)] {
+        for (m, label, ok) in [("Internal", "Internal Sync", true), ("Ableton Link", "Ableton Link", true), ("MTC", "SMPTE Sync (MTC)", true), ("Manual", "Manual Sync (Tempo Interpreter)", false)] {
             if ui.add_enabled(ok, egui::Button::new(if mode == m { format!("✓ {label}") } else { label.to_string() })).clicked() {
                 app.proj.0.insert("Synchronization / General / Sync Mode:".into(), m.into());
                 app.hub.sync.ext = m != "Internal";

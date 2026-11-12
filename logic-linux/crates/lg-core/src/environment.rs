@@ -395,7 +395,7 @@ pub fn specs(k: Kind) -> &'static [Spec] {
         ],
         Kind::MmcRecord => &[Spec("extra", "Extra", Widget::Check, 0), Spec("armed", "Armed (bit mask)", Widget::Num(0, 65535), 0)],
         Kind::Alias => &[Spec("ref", "Reference", Widget::Num(0, 100000), 0), Spec("ch", "Channel (0 All)", Widget::Num(0, 16), 0), Spec("sname", "Share Name", Widget::Check, 1), Spec("ssize", "Share Size", Widget::Check, 1), Spec("val", "Value", Widget::Num(0, 16383), 0)],
-        Kind::GmMixer => &[Spec("ch", "Channel", Widget::Num(1, 16), 1), Spec("legend", "Legend", Widget::Check, 1), Spec("bankrow", "Bank", Widget::Check, 0), Spec("std", "Standard", Widget::Popup(GM_STD), 0)],
+        Kind::GmMixer => &[Spec("ch", "Channel", Widget::Num(1, 16), 1), Spec("legend", "Legend", Widget::Check, 1), Spec("bankrow", "Bank", Widget::Check, 0), Spec("std", "Standard", Widget::Popup(GM_STD), 0), Spec("k1", "Knob 1 Controller", Widget::Num(0, 127), 10), Spec("k2", "Knob 2 Controller", Widget::Num(0, 127), 91), Spec("k3", "Knob 3 Controller", Widget::Num(0, 127), 93)],
         Kind::ChannelStrip => &[Spec("trk", "Track", Widget::Num(0, 999), 0), Spec("type", "Channel", Widget::Popup(STRIP_TYPES), 3), Spec("eqs", "Show EQs", Widget::Check, 1), Spec("ins", "Show Inserts", Widget::Check, 1), Spec("sends", "Show Sends", Widget::Check, 1), Spec("io", "Show I/O", Widget::Check, 1)],
         Kind::TouchTracks => &[],
         Kind::Macro => &[Spec("autofader", "Auto Fader", Widget::Check, 0), Spec("showall", "Show All", Widget::Check, 1), Spec("noreset", "No Reset", Widget::Check, 0), Spec("protected", "Protected", Widget::Check, 0)],
@@ -1820,8 +1820,43 @@ impl Env {
             // track automation splitter: matches to the top cable's object as automation
             (8, true) => self.emit_nth(id, 0, ev, clock, out, path),
             (8, false) => self.emit_nth(id, 1, ev, clock, out, path),
-            // SysEx mapper: Studio's Environment doesn't build SysEx; passes events on
-            (7, _) => self.emit_all(id, ev, clock, out, path),
+            // SysEx mapper: matching events set a byte of the SysEx message (data byte 1 the
+            // position, data byte 2 the value); channel 1 sends the changed message, 2 only
+            // changes it, 3 sends it unchanged
+            (7, true) => {
+                let mut bytes = sysex_map(o);
+                let unchanged = bytes.clone();
+                match e.ch {
+                    0 | 1 => {
+                        if let Some(b) = bytes.get_mut(e.d1 as usize) {
+                            *b = e.d2 & 127;
+                        }
+                        if let Some(x) = self.obj_mut(id) {
+                            x.texts.insert("sxmap".into(), bytes.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" "));
+                        }
+                    }
+                    _ => {}
+                }
+                let send = match e.ch {
+                    0 => Some(bytes),
+                    2 => Some(unchanged),
+                    _ => None,
+                };
+                if let Some(b) = send {
+                    let mut m = vec![0xF0];
+                    m.extend(&b);
+                    if let Some(c) = crate::sysexfader::checksum(o.p("sx_sum").max(0) as usize, &b) {
+                        m.push(c);
+                    }
+                    m.push(0xF7);
+                    for port in self.ports_downstream(id) {
+                        out.push(Out::Raw { port, bytes: m.clone() });
+                    }
+                }
+            }
+            // (Filter non-matching: events that don't control the message stop here)
+            (7, false) if o.on("sx_filter") => {}
+            (7, false) => self.emit_all(id, ev, clock, out, path),
             _ => {}
         }
     }
@@ -2317,6 +2352,62 @@ fn def_matches(t: i32, ch: i32, d1: i32, e: Ev) -> Option<i32> {
     }
 }
 
+/// The GM mixer's Reset: GM On, GS Reset or XG System On for its standard, then Reset All
+/// Controllers on each of its 16 channels.
+pub fn gm_reset(std: i32) -> Vec<Vec<u8>> {
+    let mut v = vec![match std {
+        1 => vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7],
+        2 => vec![0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7],
+        _ => vec![0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7],
+    }];
+    for ch in 0..16u8 {
+        v.push(vec![0xB0 | ch, 121, 0]);
+    }
+    v
+}
+
+/// The GS / XG effect controls: reverb and chorus program, level and (reverb) time.
+pub const GS_REVERBS: &[&str] = &["Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Panning Delay"];
+pub const GS_CHORUSES: &[&str] = &["Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "Feedback Chorus", "Flanger", "Short Delay", "Short Delay (FB)"];
+pub const XG_REVERBS: &[&str] = &["No Effect", "Hall 1", "Hall 2", "Room 1", "Room 2", "Room 3", "Stage 1", "Stage 2", "Plate", "White Room", "Tunnel", "Basement"];
+pub const XG_CHORUSES: &[&str] = &["No Effect", "Chorus 1", "Chorus 2", "Chorus 3", "Celeste 1", "Celeste 2", "Flanger 1", "Flanger 2"];
+/// (what: 0 reverb program, 1 chorus program, 2 reverb level, 3 chorus level, 4 reverb time)
+pub fn gsxg_effect(std: i32, what: u8, v: u8) -> Option<Vec<u8>> {
+    let v = v & 127;
+    match std {
+        1 => {
+            let addr = [0x30, 0x38, 0x33, 0x3A, 0x34][what.min(4) as usize];
+            let body = [0x40u8, 0x01, addr, v];
+            let sum = ((128 - body.iter().map(|b| *b as u32).sum::<u32>() % 128) % 128) as u8;
+            Some([&[0xF0, 0x41, 0x10, 0x42, 0x12][..], &body, &[sum, 0xF7]].concat())
+        }
+        2 => {
+            let (lo, data): (u8, Vec<u8>) = match what {
+                // XG effect types: MSB type, LSB 0 (Hall 1 = 01, Room 1 = 02 … as listed)
+                0 => (0x00, vec![xg_reverb(v), 0]),
+                1 => (0x20, vec![if v == 0 { 0 } else { 0x40 + (v - 1) / 2 }, (v.saturating_sub(1)) % 2]),
+                2 => (0x0C, vec![v]),
+                3 => (0x2C, vec![v]),
+                _ => (0x02, vec![v.min(69)]),
+            };
+            Some([&[0xF0, 0x43, 0x10, 0x4C, 0x02, 0x01, lo][..], &data, &[0xF7]].concat())
+        }
+        _ => None,
+    }
+}
+
+fn xg_reverb(k: u8) -> u8 {
+    [0x00, 0x01, 0x01, 0x02, 0x02, 0x02, 0x03, 0x03, 0x04, 0x10, 0x11, 0x13].get(k as usize).copied().unwrap_or(0)
+}
+
+/// A SysEx mapper transformer's message (without F0 / F7): its Length, the fixed byte values.
+pub fn sysex_map(o: &Obj) -> Vec<u8> {
+    let n = if o.params.contains_key("sx_len") { o.p("sx_len").clamp(1, 64) } else { 8 } as usize;
+    let mut v: Vec<u8> = o.texts.get("sxmap").map(|t| t.split_whitespace().filter_map(|x| x.parse::<u8>().ok()).map(|b| b & 127).collect()).unwrap_or_default();
+    v.resize(n, 0);
+    v
+}
+
 /// What a fader sends for a value: its Output definition (Note On sends on and off at once;
 /// 14 Bit sends pitch bend's two bytes or a controller's MSB and LSB, 32 above).
 pub fn fader_output(o: &Obj, v: i32, _remote: bool) -> Vec<Ev> {
@@ -2588,6 +2679,47 @@ mod tests {
         assert_eq!(e.members(m).len(), 2);
         assert!(e.crossing_cables(&e.members(m)).is_empty());
         assert!(e.cables.iter().any(|c| c.from == b && c.to == x));
+    }
+
+    #[test]
+    fn gm_mixer_reset_and_effects() {
+        let r = gm_reset(1);
+        assert_eq!(r[0], vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7]);
+        assert_eq!(r.len(), 17);
+        assert_eq!(r[16], vec![0xBF, 121, 0]);
+        // GS reverb macro Hall 1 (4): 40 01 30 04, checksum 0x0B
+        assert_eq!(gsxg_effect(1, 0, 4), Some(vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x01, 0x30, 0x04, 0x0B, 0xF7]));
+        assert_eq!(gsxg_effect(2, 2, 64), Some(vec![0xF0, 0x43, 0x10, 0x4C, 0x02, 0x01, 0x0C, 64, 0xF7]));
+        assert_eq!(gsxg_effect(0, 0, 1), None);
+        let o = Obj::new(1, Kind::GmMixer, 3, 0.0, 0.0);
+        assert_eq!((o.p("k1"), o.p("k2"), o.p("k3")), (10, 91, 93));
+    }
+
+    #[test]
+    fn sysex_mapper_transformer() {
+        let mut e = Env::new();
+        let t = e.add(Kind::Transformer, 3, 10.0, 10.0);
+        let ins = e.add(Kind::Instrument, 3, 100.0, 10.0);
+        e.obj_mut(ins).unwrap().port = "Synth".into();
+        e.connect_next(t, ins);
+        let o = e.obj_mut(t).unwrap();
+        o.set("mode", 7);
+        o.params.insert("sx_len".into(), 4);
+        o.texts.insert("sxmap".into(), "67 16 0 0".into());
+        // channel 1: byte 3 becomes 99 and is sent
+        let out = e.deliver(t, Ev::new(0xB0, 0, 3, 99), clk(0.0));
+        assert!(out.contains(&Out::Raw { port: "Synth".into(), bytes: vec![0xF0, 67, 16, 0, 99, 0xF7] }));
+        // channel 2: changed, not sent; channel 3: sent unchanged
+        assert!(e.deliver(t, Ev::new(0xB0, 1, 2, 5), clk(0.0)).iter().all(|x| !matches!(x, Out::Raw { .. })));
+        let out = e.deliver(t, Ev::new(0xB0, 2, 2, 77), clk(0.0));
+        assert!(out.contains(&Out::Raw { port: "Synth".into(), bytes: vec![0xF0, 67, 16, 5, 99, 0xF7] }));
+        // non-matching events pass unless filtered
+        e.obj_mut(t).unwrap().set("c_st", 1);
+        e.obj_mut(t).unwrap().set("c_stv", 3);
+        let seq_in = e.deliver(t, Ev::note(0, 60, 100), clk(0.0));
+        let _ = seq_in;
+        e.obj_mut(t).unwrap().params.insert("sx_filter".into(), 1);
+        assert!(e.deliver(t, Ev::note(0, 60, 100), clk(0.0)).is_empty());
     }
 
     #[test]

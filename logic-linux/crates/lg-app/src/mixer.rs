@@ -8,6 +8,9 @@
 //! buttons (Audio … MIDI, in All), Single | Tracks | All. Edits go on the Mixer Undo list;
 //! groups follow (mixstate).
 
+/// Low Latency Monitoring's orange text on bypassed slots.
+const LL_ORANGE: Color32 = Color32::from_rgb(0xf0, 0x9a, 0x2c);
+
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 use lg_core::TrackKind;
 
@@ -243,6 +246,13 @@ pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
             }
         }
         return;
+    }
+    // control surface bars: a bar in the surface's colour on the strips it controls
+    if crate::mixext::comp(app, "Control Surface Bars") {
+        if let Some(c) = crate::surfaces::controlled_tracks(app).get(&i) {
+            let c = Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, *c as u8);
+            ui.painter().rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0, r.max.y - 4.0), vec2(r.width() - 4.0, 3.0)), 1.0, c);
+        }
     }
     if let Some((v, pan, m, s)) = strip(app, ui, r, i, &t.name, Some(t.kind), (t.volume_db, t.pan, t.mute, t.solo), meter, sel) {
         let old = (t.volume_db, t.pan, t.mute, t.solo);
@@ -526,12 +536,14 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         for (k, u) in chain.iter().enumerate().take(max_slots) {
             let sr = slot_rect(y);
             app.mix.slot_rects.push((sr, i, k));
-            let fill = if u.bypass { Color32::from_gray(0x55) } else { Color32::from_rgb(0x1f, 0x5f, 0xc8) };
+            // (Low Latency Monitoring's bypass: grey with orange text; it shows once the engine runs)
+            let ll = !u.bypass && app.engine.lock().ok().is_some_and(|e| e.ext.ll_bypassed.get(i).and_then(|v| v.get(k).copied()).unwrap_or(false));
+            let fill = if u.bypass || ll { Color32::from_gray(0x55) } else { Color32::from_rgb(0x1f, 0x5f, 0xc8) };
             p.rect_filled(sr, 4.0, fill);
             // a side chain: a left-pointing arrow after the name (Logic's ◂), its source in the tip
             let side = app.side.by_slot.get(&(i, k)).copied();
             let shown_name = if side.is_some() { format!("{} ◂", u.name) } else { u.name.clone() };
-            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, &shown_name, look::regular(11.0), if u.bypass { look::text_dim() } else { Color32::WHITE });
+            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, &shown_name, look::regular(11.0), if ll { LL_ORANGE } else if u.bypass { look::text_dim() } else { Color32::WHITE });
             let hover = ui.rect_contains_pointer(sr);
             let bypass_r = Rect::from_min_size(sr.min, vec2(14.0, sr.height()));
             let arrow_r = Rect::from_min_max(pos2(sr.max.x - 14.0, sr.min.y), sr.max);
@@ -635,8 +647,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         for (k, snd) in list.iter().enumerate() {
             let sr = Rect::from_min_size(pos2(r.min.x + 8.0, y), vec2(r.width() - 34.0, 20.0));
             let on_faders = app.sends_on_faders == Some(snd.bus);
-            p.rect_filled(sr, 4.0, if on_faders { Color32::from_rgb(0x3c, 0x7c, 0xb0) } else { Color32::from_rgb(0x2a, 0x5a, 0x86) });
-            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, crate::mixext::send_label(app, snd.bus), look::regular(11.0), Color32::WHITE);
+            // (a send Low Latency Monitoring turns off: grey with orange text)
+            let ll = app.engine.lock().ok().is_some_and(|e| e.ext.low_latency && e.ext.tracks.get(i).is_some_and(|s| s.low_latency && !s.sends.get(k).copied().unwrap_or_default().low_latency_safe));
+            p.rect_filled(sr, 4.0, if ll { Color32::from_gray(0x55) } else if on_faders { Color32::from_rgb(0x3c, 0x7c, 0xb0) } else { Color32::from_rgb(0x2a, 0x5a, 0x86) });
+            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, crate::mixext::send_label(app, snd.bus), look::regular(11.0), if ll { LL_ORANGE } else { Color32::WHITE });
             let kc = pos2(r.max.x - 16.0, y + 10.0);
             let kr = ui.interact(Rect::from_center_size(kc, vec2(18.0, 18.0)), id.with(("send", k)), Sense::click_and_drag()).on_hover_text(format!("Send to Bus {}: {:.1} dB{}", snd.bus + 1, snd.level_db, if snd.pre { " (pre fader)" } else { "" }));
             p.circle_filled(kc, 8.0, Color32::from_gray(0x55));
