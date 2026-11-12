@@ -15,7 +15,7 @@ use crate::instwin;
 use crate::look;
 use crate::synthui::{self, rgb, Pane, Skin};
 
-const SKIN: Skin = Skin::new(0x34373c, 0x2a2d31, 0x7fb0e0);
+const SKIN: Skin = Skin::new(0x34373c, 0x2a2d31, 0x7fb0e0).silver();
 const ORANGE: Color32 = rgb(0xf0a030);
 const GREEN: Color32 = rgb(0x6fce7a);
 const BLUE: Color32 = rgb(0x5aa0e8);
@@ -290,7 +290,9 @@ fn objects(p: &mut Pane) {
         if vel_ok {
             hs(p, x0, 224.0, 114.0, s::obj(o, s::O_VEL), "VeloSens", false);
         } else {
-            cap(p, x0, 222.0, "VeloSens (not for this type)", false);
+            // (this object type has no velocity sensitivity: the slider shows dimmed)
+            cap(p, x0, 223.0, "VeloSens", false);
+            p.painter().rect_filled(p.rect(x0 + 4.0, 234.0, 106.0, 4.0), 2.0, Color32::from_gray(0x26));
         }
     }
 }
@@ -429,8 +431,9 @@ fn material_pad(p: &mut Pane, live: &Live) {
             let cell = Rect::from_min_size(pad.min + vec2(fx_ * pad.width() - 6.0, (1.0 - fy) * pad.height() - 6.0), vec2(12.0, 12.0));
             let d = ((fx_ - 0.5) * (fx_ - 0.5) + (fy - 0.5) * (fy - 0.5)).sqrt();
             if d < 0.5 {
-                let col = Color32::from_rgb((70.0 + 90.0 * fx_ * (1.0 - fy)) as u8, (80.0 + 70.0 * fy) as u8, (110.0 + 90.0 * (1.0 - fx_)) as u8);
-                pt.rect_filled(cell, 0.0, col.gamma_multiply(0.55));
+                // Logic's pad: dark slate, lighter towards the middle
+                let col = look::mix(rgb(0x3b4b5a), rgb(0x18222c), (d * 2.0).powf(1.4));
+                pt.rect_filled(cell, 0.0, col);
             }
         }
     }
@@ -438,7 +441,12 @@ fn material_pad(p: &mut Pane, live: &Live) {
     for (txt, fx_, fy) in [("Steel", 0.2, 0.2), ("Glass", 0.8, 0.2), ("Nylon", 0.2, 0.8), ("Wood", 0.8, 0.8)] {
         pt.text(pad.min + vec2(fx_ * pad.width(), (1.0 - fy) * pad.height()), Align2::CENTER_CENTER, txt, look::regular(10.0), Color32::from_gray(0xa8));
     }
-    pt.text(pad.min + vec2(-6.0, pad.height() * 0.5), Align2::RIGHT_CENTER, "", look::regular(9.0), p.skin.dim);
+    // the pad's name and its axes, as Logic labels them
+    pt.text(c, Align2::CENTER_CENTER, "MATERIAL", look::regular(17.0), Color32::from_white_alpha(70));
+    pt.text(pos2(c.x, pad.max.y - 8.0), Align2::CENTER_CENTER, "STIFFNESS", look::regular(8.5), Color32::from_gray(0x90));
+    let gal = pt.layout_no_wrap("INNER LOSS".into(), look::regular(8.5), Color32::from_gray(0x90));
+    let gw = gal.size();
+    pt.add(egui::epaint::TextShape::new(pos2(pad.min.x + 4.0, c.y + gw.x / 2.0), gal, Color32::from_gray(0x90)).with_angle(-std::f32::consts::FRAC_PI_2));
     let view = p.geti(s::KS_VIEW);
     let (st, il) = (p.get(s::STIFFNESS), p.get(s::INNER_LOSS));
     let at = |sx: f32, sy: f32| pos2(pad.min.x + sx.clamp(0.0, 1.0) * pad.width(), pad.max.y - sy.clamp(0.0, 1.0) * pad.height());
@@ -525,12 +533,12 @@ fn material_pad(p: &mut Pane, live: &Live) {
     p.painter().circle_stroke(ball, 7.0, Stroke::new(1.5, ORANGE));
     // Resolution above, Media Loss to the left, Tension Mod to the right
     let ring = |p: &mut Pane, r: Rect, id: u32, vertical: bool, col: Color32| slider(p, r, id, vertical, col);
-    cap(p, 396.0, 136.0, "Resolution", true);
+    p.text(448.0, 143.0, Align2::RIGHT_CENTER, "Resolution", 9.0, ORANGE);
     ring(p, p.rect(452.0, 138.0, 192.0, 12.0), s::RESOLUTION, false, ORANGE);
     ring(p, p.rect(398.0, 148.0, 12.0, 192.0), s::MEDIA_LOSS, true, ORANGE);
     ring(p, p.rect(662.0, 148.0, 12.0, 192.0), s::TENS_MOD, true, ORANGE);
-    p.text(404.0, 346.0, Align2::CENTER_CENTER, "Media", 9.0, ORANGE);
-    p.text(668.0, 346.0, Align2::CENTER_CENTER, "Tens D", 9.0, ORANGE);
+    p.text(412.0, 346.0, Align2::CENTER_CENTER, "Media Loss", 9.0, ORANGE);
+    p.text(662.0, 346.0, Align2::CENTER_CENTER, "Tension Mod", 9.0, ORANGE);
     if view == 1 {
         // low (green) and high (blue) key scaling of Resolution, Media Loss and Tension Mod
         ring(p, p.rect(452.0, 126.0, 96.0, 10.0), s::RES_KS_LO, false, GREEN);
@@ -543,7 +551,6 @@ fn material_pad(p: &mut Pane, live: &Live) {
         ring(p, p.rect(412.0, 148.0, 10.0, 192.0), s::ML_REL, true, BLUE);
     }
     p.seg(452.0, 348.0, 192.0, 16.0, s::KS_VIEW, &["Hide", "Keyscale", "Release"], false);
-    cap(p, 396.0, 356.0, "Material", false);
 }
 
 fn filter(p: &mut Pane) {
@@ -997,7 +1004,6 @@ fn morph_pad(p: &mut Pane, live: &Live) {
         p.put(s::MORPH_RNDSET, k as f32);
     }
     cap(p, 446.0, 676.0, s::MORPH_RND[cur.min(4)], false);
-    cap(p, 446.0, 692.0, "Morph points store the orange (morphable) values", false);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1040,8 +1046,6 @@ fn control_envelope(p: &mut Pane, i: usize, live: &Live) {
         if p.button(cr, "Compare", use_rec, ("cmp", i)) {
             p.put(s::env(i, s::E_USEREC), if use_rec { 0.0 } else { 1.0 });
         }
-    } else {
-        cap(p, 808.0, 528.0, "VariMod and Compare appear after a recording", false);
     }
     let azk = format!("autozoom{i}");
     let az: bool = mem_get(p, &azk, true);

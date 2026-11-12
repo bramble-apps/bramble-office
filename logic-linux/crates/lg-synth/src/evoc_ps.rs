@@ -676,6 +676,10 @@ impl Plugin for EvocPs {
             self.update();
         }
     }
+    /// Whole-number settings show without decimals (voices, bands, wave numbers).
+    fn value_text(&self, id: u32, v: f32) -> Option<String> {
+        [VOICES, BANDS, WAVE1, WAVE2].contains(&id).then(|| format!("{}", v.round()))
+    }
     fn reset(&mut self) {
         for v in &mut self.poly.voices {
             v.on = false;

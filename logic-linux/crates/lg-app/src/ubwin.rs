@@ -734,9 +734,10 @@ fn center_column(p: &mut Pane, v: usize) {
     flow_button(p, v, p.rect(672.0, 16.0, 46.0, 14.0), ub::RM_FLOW, "rmflow");
     mknob(p, v, 580.0, 30.0, 26.0, ub::RM_VOL, Some(ub::T_RM_VOL), "Level");
     // filter and distortion
-    p.group(544.0, 92.0, 180.0, 236.0, "FILTER");
+    // (the Filter button with its red light is the section's title, as in Logic)
+    p.group(544.0, 92.0, 180.0, 236.0, "");
     let fon = p.on(vid(v, ub::F_ON));
-    let fr = p.rect(590.0, 94.0, 40.0, 14.0);
+    let fr = p.rect(564.0, 95.0, 48.0, 14.0);
     if p.button(fr, "Filter", fon, ("fon", v)) {
         vput(p, v, ub::F_ON, if fon { 0.0 } else { 1.0 });
     }
@@ -860,8 +861,6 @@ fn output_column(p: &mut Pane, v: usize) {
     p.text(826.0, 324.0, Align2::LEFT_CENTER, "Group", 9.5, p.skin.dim);
     p.menu(866.0, 316.0, 62.0, 16.0, vid(v, ub::GROUP));
     vtoggle(p, v, 936.0, 292.0, 56.0, 16.0, ub::GATE, "Gate");
-    vtoggle(p, v, 936.0, 316.0, 56.0, 16.0, ub::SWING_EN, "Swing");
-    vtoggle(p, v, 936.0, 340.0, 56.0, 16.0, ub::ACC_EN, "Accent");
 }
 
 /// The modulation target display: every routing of the selected sound with its source and via
@@ -1045,9 +1044,9 @@ fn sequencer(p: &mut Pane, s: &Snap) {
     x += 28.0;
     p.text(x, top + 9.0, Align2::LEFT_CENTER, "Pattern", 10.0, p.skin.dim);
     x += 42.0;
-    p.menu(x, top, 46.0, 18.0, ub::G_PAT);
-    let presp = p.ui.interact(p.rect(x, top, 46.0, 18.0), egui::Id::unique(("ub-pat-ctx", p.t)), Sense::click());
-    presp.context_menu(|ui| {
+    let presp = p.menu_resp(x, top, 46.0, 18.0, ub::G_PAT);
+    // the shortcut menu needs its own popup id: the pop-up menu's id is the response's
+    egui::Popup::context_menu(&presp).id(egui::Id::unique(("ub-pat-ctx", p.t))).show(|ui| {
         for (n, a) in [("Copy", "copyp"), ("Paste", "pastep"), ("Clear", "clearp")] {
             if ui.button(n).clicked() {
                 acts.push(a.into());
@@ -1069,28 +1068,29 @@ fn sequencer(p: &mut Pane, s: &Snap) {
         vput(p, v, ub::ACC_EN, if acc_on { 0.0 } else { 1.0 });
     }
     p.text(x + 18.0, top + 9.0, Align2::LEFT_CENTER, "Accent", 10.0, p.skin.dim);
-    p.hfader(x + 56.0, top, 64.0, 18.0, ub::G_ACCENT);
-    x += 126.0;
+    p.hfader(x + 54.0, top, 50.0, 18.0, ub::G_ACCENT);
+    x += 108.0;
     vtoggle(p, v, x, top, 44.0, 18.0, ub::SWING_EN, "Swing");
-    p.hfader(x + 48.0, top, 70.0, 18.0, ub::G_SWING);
-    x += 124.0;
-    p.toggle(x, top, 82.0, 18.0, ub::G_PMODE, "Pattern Mode");
-    p.menu(x + 86.0, top, 96.0, 18.0, ub::G_PBMODE);
-    x += 190.0;
-    p.toggle(x, top, 76.0, 18.0, ub::G_MUTEMODE, "Voice Mute");
-    p.toggle(x + 80.0, top, 62.0, 18.0, ub::G_FULL, "Full View");
+    p.hfader(x + 46.0, top, 50.0, 18.0, ub::G_SWING);
+    x += 100.0;
+    p.toggle(x, top, 76.0, 18.0, ub::G_PMODE, "Pattern Mode");
+    p.menu(x + 80.0, top, 84.0, 18.0, ub::G_PBMODE);
+    x += 170.0;
+    p.toggle(x, top, 66.0, 18.0, ub::G_MUTEMODE, "Voice Mute");
+    p.toggle(x + 70.0, top, 58.0, 18.0, ub::G_FULL, "Full View");
+    // the pattern that Pattern Mode is playing, at the right of the second row
     if let Some(pp) = s.pm {
-        p.text(x + 150.0, top + 9.0, Align2::LEFT_CENTER, &format!("▶ {}", pp + 1), 10.5, YELLOW);
+        p.text(x + 4.0, top + 33.0, Align2::LEFT_CENTER, &format!("▶ Pattern {}", pp + 1), 10.5, YELLOW);
     }
     // the MIDI controllers: assignment menus (also under Extended Parameters) and Learn
     let ry = top + 24.0;
     p.text(16.0, ry + 9.0, Align2::LEFT_CENTER, "MIDI Ctrl", 10.0, p.skin.dim);
     for i in 0..4usize {
-        let cx = 70.0 + i as f32 * 128.0;
+        let cx = 70.0 + i as f32 * 150.0;
         p.text(cx, ry + 9.0, Align2::LEFT_CENTER, ["A", "B", "C", "D"][i], 10.0, GREEN);
-        p.menu(cx + 12.0, ry, 64.0, 18.0, ub::G_CTRL + i as u32);
+        p.menu(cx + 12.0, ry, 88.0, 18.0, ub::G_CTRL + i as u32);
         let learning = s.learning == Some(i);
-        if p.button(p.rect(cx + 80.0, ry, 38.0, 18.0), if learning { "…" } else { "Learn" }, learning, ("learn", i)) {
+        if p.button(p.rect(cx + 104.0, ry, 38.0, 18.0), if learning { "…" } else { "Learn" }, learning, ("learn", i)) {
             acts.push(if learning { "unlearn".into() } else { format!("learn:{i}") });
         }
     }

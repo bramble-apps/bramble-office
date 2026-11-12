@@ -19,7 +19,8 @@ use crate::instwin;
 use crate::look;
 use crate::synthui::{self, rgb, Pane, Skin};
 
-const SKIN: Skin = Skin::new(0x3a3d42, 0x2e3135, 0x7fb0e0);
+// Alchemy's look: a dark navy panel, light section titles, a cyan-blue accent
+const SKIN: Skin = Skin::new(0x161b22, 0x1f2630, 0x3fa6dc).texts(0xe4e8ee, 0x9aa4b2);
 const SRC_COL: [Color32; 4] = [rgb(0x4aa3f0), rgb(0x52c27a), rgb(0xf0a030), rgb(0xc070e0)];
 const ORANGE: Color32 = rgb(0xf08a30);
 const W: f32 = 900.0;
@@ -779,7 +780,6 @@ fn envelope_panel(p: &mut Pane, cur: usize) {
         p.text(x, y + 6.0, Align2::LEFT_CENTER, l, 10.5, p.skin.dim);
         p.field(x + 12.0, y, 52.0, 20.0, sa::sid(cur, base + k as u32), 0.01);
     }
-    p.label(236.0, 358.0, "drag a value up or down");
 }
 
 fn lfo_panel(p: &mut Pane) {
@@ -856,7 +856,7 @@ fn source_module(p: &mut Pane, sel: usize, cur: usize, play: usize, tempo: f32) 
     let sync_ok = tempo > 0.0;
     match play {
         0 => {
-            knob_t(p, 60.0, 424.0, 56.0, sa::sid(cur, o::SPEED), "Playback Speed");
+            knob_t(p, 60.0, 424.0, 56.0, sa::sid(cur, o::SPEED), "Speed");
             let on = p.on(sa::sid(cur, o::SPEED_SYNC));
             let r = p.rect(34.0, 502.0, 52.0, 18.0);
             if p.button(r, "Sync", on && sync_ok, "ssync") && sync_ok {
@@ -882,9 +882,10 @@ fn source_module(p: &mut Pane, sel: usize, cur: usize, play: usize, tempo: f32) 
         }
     }
     knob_t(p, 130.0, 424.0, 44.0, sa::sid(cur, o::PAN), "Pan");
-    knob_t(p, 194.0, 424.0, 44.0, sa::sid(cur, o::COARSE), "Tune Coarse");
-    knob_t(p, 254.0, 424.0, 44.0, sa::sid(cur, o::FINE), "Tune Fine");
-    p.label(190.0, 530.0, "Pressing a knob makes it the Mod Matrix target");
+    // Alchemy's tuning pair: Coarse and Fine with "Tune" between them
+    knob_t(p, 180.0, 424.0, 44.0, sa::sid(cur, o::COARSE), "Coarse");
+    knob_t(p, 262.0, 424.0, 44.0, sa::sid(cur, o::FINE), "Fine");
+    p.text(226.0, 476.0, Align2::CENTER_CENTER, "Tune", 11.0, p.skin.dim);
 }
 
 fn synthesis_module(p: &mut Pane, cur: usize, mode: usize, fx: usize) {
@@ -946,5 +947,4 @@ fn filter_module(p: &mut Pane, cur: usize) {
         knob_t(p, 690.0, 462.0, 52.0, a, la);
         knob_t(p, 810.0, 462.0, 52.0, b, lb);
     }
-    p.label(760.0, 540.0, if global { "One filter for every source" } else { "This source's filter" });
 }

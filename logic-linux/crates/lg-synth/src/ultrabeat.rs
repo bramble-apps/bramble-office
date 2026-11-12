@@ -1201,6 +1201,10 @@ impl Plugin for Ultrabeat {
         4.0
     }
     fn value_text(&self, id: u32, v: f32) -> Option<String> {
+        // a pattern's length is a whole number of steps
+        if (PAT_BASE..PAT_BASE + 2 * PATTERNS.len() as u32).contains(&id) && (id - PAT_BASE) % 2 == 0 {
+            return Some(format!("{}", v.round()));
+        }
         if !(VBASE..VBASE + 25 * VSTRIDE).contains(&id) {
             return None;
         }
