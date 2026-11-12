@@ -160,9 +160,11 @@ pub fn channel_mode_button(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, 
             ring(c + vec2(2.5, 0.0), true);
         }
         InputFormat::Surround => {
-            for k in 0..5 {
-                let a = std::f32::consts::TAU * k as f32 / 5.0 - std::f32::consts::FRAC_PI_2;
-                p.circle_stroke(c + vec2(a.cos(), a.sin()) * 5.0, 2.0, Stroke::new(1.0, col));
+            // a square with dots at the ear-level speakers (L C R above, Ls Rs below)
+            let sq = Rect::from_center_size(c, vec2(13.0, 13.0));
+            p.rect_stroke(sq, 1.5, Stroke::new(1.1, col), egui::StrokeKind::Inside);
+            for d in [vec2(-3.5, -3.5), vec2(0.0, -4.0), vec2(3.5, -3.5), vec2(-3.5, 3.5), vec2(3.5, 3.5)] {
+                p.circle_filled(c + d, 1.1, col);
             }
         }
     }
@@ -494,7 +496,9 @@ pub fn peak_display(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, r: Rect
 /// The level meter in segments: green, then yellow and amber towards 0 dB, red at the top;
 /// one column for mono, left or right strips, two for stereo.
 pub fn meter(app: &App, p: &egui::Painter, r: Rect, s: usize, level: f32) {
-    let cols = crate::tm::strip(app, s).format.meter_columns().min(2);
+    // (a surround strip: one column per channel of the project's surround format)
+    let f = crate::tm::strip(app, s).format;
+    let cols = if f == InputFormat::Surround { app.sur.format.n() } else { f.meter_columns().min(2) };
     let lv = level.clamp(0.0, 1.2).sqrt().min(1.0);
     let seg = 3.0;
     let n = (r.height() / seg).floor() as usize;

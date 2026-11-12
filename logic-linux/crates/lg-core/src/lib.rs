@@ -13,6 +13,8 @@ pub mod chunks;
 pub mod ctrlsurf;
 pub mod displaystate;
 pub mod environment;
+pub mod sysexfader;
+pub mod link;
 pub mod events;
 pub mod functions;
 pub mod liveloops;

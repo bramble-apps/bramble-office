@@ -302,6 +302,11 @@
  {
   "area": "Audio",
   "status": "Partial",
+  "feature": "MIDI studio (studio-envsur, 2026-11-12): Environment macros (New \u25b8 Macro around the selection, grey frame, Macro-In / Macro-Out or upper-left / lower-right, Auto Fader, Show All, No Reset, Protected, nested, moved / copied / deleted with members, double-click unpacks, cables to outside objects make it from a copy with a warning); SysEx faders (SysEx Fader Editor: eight event type buttons with Command-click, MIDI In capture, View \u25b8 SysEx in Hex Format, $hex typing, VAL / SUM, \u00b1 around EOX, Checksum Off / Roland / Yamaha / Regular / 2's / 1's, Value Position and the 15 Value formats; SysEx as Input for short messages); the transformer's SysEx mapper mode; GM mixer Bank row, knob controllers, Reset (GM / GS / XG on) and GS/XG effect controls in the inspector. Control surfaces: all of Logic's Global class parameters (punch locators, marker position / length, nudge and Nudge Value, Scrub Status, Shuttle Speed, Group Clutch, Active Sense, Alert, Dummy, Waveform Zoom, Quantize Value, Division), 40 control surface group parameters with Bank Type and Filter for All View, Channel Strip View Modes (Arrange merges shared strips, Tracks, All, Single) on Mackie strips, automation group assignments, feedback for learned assignments, Key Repeat with re-learn, label placeholders, Mackie Send assign mode, control surface bars in track headers and Mixer. MMC tape tracks (syncmmc.rs); Ableton Link (linksync.rs, lg_core::link: our own implementation of the open protocol). Mixer: Low Latency Monitoring's grey / orange slots and sends; the Surround Channel Mode symbol and meter columns. [ ] Link never tried against a real Link app, Mackie V-Pot plug-in / EQ / surround pages, MCU ring shapes from Feedback Format, modal dialogs on surface displays, Lua / MIDI Device Scripts auto-assignment, GM mixer controls on the object itself, macros not drawn with Logic's own macro graphics (no reference screenshot)"
+ },
+ {
+  "area": "Audio",
+  "status": "Partial",
   "feature": "Native SoundFont playback (Bramble extra); the Sampler conversion engine exists. [ ] SF3, the conversion wired to Add SoundFont"
  },
  {

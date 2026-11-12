@@ -119,10 +119,12 @@ pub enum Kind {
     Alias,
     GmMixer,
     ChannelStrip,
+    /// A macro: objects with their cabling packed into one (members carry param "mac").
+    Macro,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 21] = [Kind::PhysicalInput, Kind::SequencerInput, Kind::Keyboard, Kind::Monitor, Kind::Fader, Kind::Transformer, Kind::Arpeggiator, Kind::ChordMemorizer, Kind::DelayLine, Kind::VoiceLimiter, Kind::ChannelSplitter, Kind::Instrument, Kind::MultiInstrument, Kind::MappedInstrument, Kind::TouchTracks, Kind::Ornament, Kind::MidiClick, Kind::MmcRecord, Kind::Alias, Kind::GmMixer, Kind::ChannelStrip];
+    pub const ALL: [Kind; 22] = [Kind::PhysicalInput, Kind::SequencerInput, Kind::Keyboard, Kind::Monitor, Kind::Fader, Kind::Transformer, Kind::Arpeggiator, Kind::ChordMemorizer, Kind::DelayLine, Kind::VoiceLimiter, Kind::ChannelSplitter, Kind::Instrument, Kind::MultiInstrument, Kind::MappedInstrument, Kind::TouchTracks, Kind::Ornament, Kind::MidiClick, Kind::MmcRecord, Kind::Alias, Kind::GmMixer, Kind::ChannelStrip, Kind::Macro];
 
     /// The name Logic gives a new object of the kind.
     pub fn name(&self) -> &'static str {
@@ -148,6 +150,7 @@ impl Kind {
             Kind::Alias => "Alias",
             Kind::GmMixer => "GM Mixer",
             Kind::ChannelStrip => "Channel Strip",
+            Kind::Macro => "Macro",
         }
     }
 
@@ -174,6 +177,7 @@ impl Kind {
             Kind::Alias => "alias",
             Kind::GmMixer => "gm",
             Kind::ChannelStrip => "strip",
+            Kind::Macro => "macro",
         }
     }
 
@@ -194,13 +198,14 @@ impl Kind {
             Kind::MmcRecord => (160.0, 24.0),
             Kind::GmMixer => (360.0, 220.0),
             Kind::ChannelStrip => (60.0, 220.0),
+            Kind::Macro => (200.0, 140.0),
             _ => (40.0, 30.0),
         }
     }
 
     /// Instruments and the other objects that can be a track's destination (Assignable).
     pub fn assignable_default(&self) -> bool {
-        matches!(self, Kind::Instrument | Kind::MultiInstrument | Kind::MappedInstrument | Kind::TouchTracks | Kind::GmMixer | Kind::ChannelStrip | Kind::Alias)
+        matches!(self, Kind::Instrument | Kind::MultiInstrument | Kind::MappedInstrument | Kind::TouchTracks | Kind::GmMixer | Kind::ChannelStrip | Kind::Alias | Kind::Macro)
     }
 
     /// Objects that may have a direct physical MIDI output (Port).
@@ -390,9 +395,10 @@ pub fn specs(k: Kind) -> &'static [Spec] {
         ],
         Kind::MmcRecord => &[Spec("extra", "Extra", Widget::Check, 0), Spec("armed", "Armed (bit mask)", Widget::Num(0, 65535), 0)],
         Kind::Alias => &[Spec("ref", "Reference", Widget::Num(0, 100000), 0), Spec("ch", "Channel (0 All)", Widget::Num(0, 16), 0), Spec("sname", "Share Name", Widget::Check, 1), Spec("ssize", "Share Size", Widget::Check, 1), Spec("val", "Value", Widget::Num(0, 16383), 0)],
-        Kind::GmMixer => &[Spec("ch", "Channel", Widget::Num(1, 16), 1), Spec("legend", "Legend", Widget::Check, 1), Spec("bankrow", "Bank", Widget::Check, 0), Spec("std", "Standard", Widget::Popup(GM_STD), 0)],
+        Kind::GmMixer => &[Spec("ch", "Channel", Widget::Num(1, 16), 1), Spec("legend", "Legend", Widget::Check, 1), Spec("bankrow", "Bank", Widget::Check, 0), Spec("std", "Standard", Widget::Popup(GM_STD), 0), Spec("k1", "Knob 1 Controller", Widget::Num(0, 127), 10), Spec("k2", "Knob 2 Controller", Widget::Num(0, 127), 91), Spec("k3", "Knob 3 Controller", Widget::Num(0, 127), 93)],
         Kind::ChannelStrip => &[Spec("trk", "Track", Widget::Num(0, 999), 0), Spec("type", "Channel", Widget::Popup(STRIP_TYPES), 3), Spec("eqs", "Show EQs", Widget::Check, 1), Spec("ins", "Show Inserts", Widget::Check, 1), Spec("sends", "Show Sends", Widget::Check, 1), Spec("io", "Show I/O", Widget::Check, 1)],
         Kind::TouchTracks => &[],
+        Kind::Macro => &[Spec("autofader", "Auto Fader", Widget::Check, 0), Spec("showall", "Show All", Widget::Check, 1), Spec("noreset", "No Reset", Widget::Check, 0), Spec("protected", "Protected", Widget::Check, 0)],
         _ => &[],
     }
 }
@@ -609,6 +615,8 @@ pub enum Out {
     Touch { obj: Id, ev: Ev },
     /// An MMC record buttons object's tracks changed (bit mask).
     MmcArm { mask: u32 },
+    /// Raw bytes (a SysEx fader's System Exclusive messages) to a MIDI output port.
+    Raw { port: String, bytes: Vec<u8> },
 }
 
 /// The clock the Environment runs on.
@@ -730,6 +738,11 @@ impl Env {
 
     /// Deletes objects and every cable to or from them.
     pub fn delete(&mut self, ids: &[Id]) {
+        let mut all = ids.to_vec();
+        for &id in ids {
+            all.extend(self.all_members(id));
+        }
+        let ids = &all[..];
         self.objects.retain(|o| !ids.contains(&o.id));
         self.cables.retain(|c| !ids.contains(&c.from) && !ids.contains(&c.to));
         for id in ids {
@@ -809,6 +822,17 @@ impl Env {
     /// Copies objects (with the cables between them; a single object keeps its output cables),
     /// offset; returns the new ids.
     pub fn duplicate(&mut self, ids: &[Id], dx: f32, dy: f32, layer: Option<usize>) -> Vec<Id> {
+        // (a macro is copied with its members)
+        let mut all = ids.to_vec();
+        for &id in ids {
+            for m in self.all_members(id) {
+                if !all.contains(&m) {
+                    all.push(m);
+                }
+            }
+        }
+        let single = ids.len() == 1 && all.len() == 1;
+        let ids = &all[..];
         let mut map = BTreeMap::new();
         let mut out = Vec::new();
         for &id in ids {
@@ -834,8 +858,17 @@ impl Env {
         for c in old {
             match (map.get(&c.from), map.get(&c.to)) {
                 (Some(&f), Some(&t)) => self.cables.push(Cable { from: f, outlet: c.outlet, to: t }),
-                (Some(&f), None) if ids.len() == 1 => self.cables.push(Cable { from: f, outlet: c.outlet, to: c.to }),
+                (Some(&f), None) if single => self.cables.push(Cable { from: f, outlet: c.outlet, to: c.to }),
                 _ => {}
+            }
+        }
+        for &nid in &out {
+            let m = self.obj(nid).map_or(0, |o| o.p("mac")) as Id;
+            if m != 0 {
+                let nm = map.get(&m).copied().map_or(0, |x| x as i32);
+                if let Some(o) = self.obj_mut(nid) {
+                    if nm == 0 { o.params.remove("mac"); } else { o.params.insert("mac".into(), nm); }
+                }
             }
         }
         // (an alias copied with its original refers to the new original)
@@ -910,7 +943,9 @@ impl Env {
 
     /// Clears all live state (Reset messages, Stop).
     pub fn reset(&mut self) {
-        self.run.clear();
+        // (a macro with No Reset keeps its members' state)
+        let keep: Vec<Id> = self.objects.iter().filter(|o| o.kind == Kind::Macro && o.on("noreset")).flat_map(|o| self.all_members(o.id)).collect();
+        self.run.retain(|id, _| keep.contains(id));
         self.pending.clear();
     }
 
@@ -980,12 +1015,231 @@ impl Env {
         if o.p("style") == 5 && o.on("mute") {
             return Vec::new();
         }
+        if o.p("out_t") == 7 {
+            let mut out = Vec::new();
+            self.run_due(clock, &mut out);
+            self.sysex_out(&o, v, false, clock, &mut out, &[id]);
+            return out;
+        }
         let evs = fader_output(&o, v, false);
         let mut out = Vec::new();
         for ev in evs {
             out.extend(self.inject(id, ev, clock));
         }
         out
+    }
+
+    /// A SysEx fader's list sent for value `v`: channel and meta events along its cables, SysEx
+    /// strings to the MIDI ports its cables lead to.
+    fn sysex_out(&mut self, o: &Obj, v: i32, from_pi: bool, clock: Clock, out: &mut Vec<Out>, path: &[Id]) {
+        use crate::sysexfader::{list_from, render, Msg};
+        let list = list_from(o.texts.get("sysex"));
+        for m in render(&list, v, o.p("sx_fmt").max(0) as usize, o.p("sx_sum").max(0) as usize) {
+            match m {
+                Msg::Chan { st, ch, d1, d2 } => self.emit_all(o.id, Tagged { ev: Ev::new(st, ch, d1, d2), from_pi }, clock, out, path),
+                Msg::Meta { num, val } => self.emit_all(o.id, Tagged { ev: Ev::meta(num, val), from_pi }, clock, out, path),
+                Msg::Raw(bytes) => {
+                    for port in self.ports_downstream(o.id) {
+                        out.push(Out::Raw { port, bytes: bytes.clone() });
+                    }
+                }
+            }
+        }
+    }
+
+    /// The MIDI output ports an object's cables lead to (the first objects with a port).
+    pub fn ports_downstream(&self, id: Id) -> Vec<String> {
+        let mut seen = vec![id];
+        let mut todo: Vec<Id> = self.cables_from(id).iter().map(|c| c.to).collect();
+        let mut ports = Vec::new();
+        while let Some(t) = todo.pop() {
+            if seen.contains(&t) {
+                continue;
+            }
+            seen.push(t);
+            let Some(o) = self.obj(t) else { continue };
+            if o.kind.has_port() && !o.port.is_empty() {
+                if !ports.contains(&o.port) {
+                    ports.push(o.port.clone());
+                }
+                continue;
+            }
+            let next: Vec<Id> = if o.kind == Kind::Macro { self.macro_in(t).into_iter().collect() } else { self.cables_from(t).iter().map(|c| c.to).collect() };
+            todo.extend(next);
+            if let Some(m) = self.macro_of(t).filter(|m| self.macro_out(*m) == Some(t)) {
+                todo.extend(self.cables_from(m).iter().map(|c| c.to));
+            }
+        }
+        ports
+    }
+
+    /// A SysEx message from a MIDI input: faders whose Input is SysEx take its value (only very
+    /// short messages are recognised).
+    pub fn input_sysex(&mut self, bytes: &[u8], clock: Clock) -> Vec<Out> {
+        let mut out = Vec::new();
+        let hits: Vec<(Obj, i32)> = self.objects.iter().filter(|o| o.kind == Kind::Fader && o.p("in_t") == 7).filter_map(|o| crate::sysexfader::short_input(bytes, &crate::sysexfader::list_from(o.texts.get("sysex"))).map(|v| (o.clone(), v))).collect();
+        for (o, v) in hits {
+            if let Some(x) = self.obj_mut(o.id) {
+                x.params.insert("val".into(), v);
+            }
+            if o.p("out_t") == 7 {
+                self.sysex_out(&o, v, true, clock, &mut out, &[o.id]);
+            } else {
+                for ev in fader_output(&o, v, true) {
+                    self.emit_all(o.id, Tagged { ev, from_pi: true }, clock, &mut out, &[o.id]);
+                }
+            }
+        }
+        out
+    }
+
+    // ---- macros ----
+
+    /// The macro an object is packed in.
+    pub fn macro_of(&self, id: Id) -> Option<Id> {
+        self.obj(id).map(|o| o.p("mac") as Id).filter(|m| *m != 0 && self.obj(*m).is_some_and(|x| x.kind == Kind::Macro))
+    }
+    /// A macro's own members (not those of macros inside it).
+    pub fn members(&self, m: Id) -> Vec<Id> {
+        self.objects.iter().filter(|o| o.p("mac") as Id == m && m != 0).map(|o| o.id).collect()
+    }
+    /// Every object inside a macro, nested ones too.
+    pub fn all_members(&self, m: Id) -> Vec<Id> {
+        let mut v = Vec::new();
+        if self.obj(m).is_none_or(|o| o.kind != Kind::Macro) {
+            return v;
+        }
+        for c in self.members(m) {
+            v.push(c);
+            v.extend(self.all_members(c));
+        }
+        v
+    }
+    /// The macro's input: the member named Macro-In, else the upper-leftmost.
+    pub fn macro_in(&self, m: Id) -> Option<Id> {
+        let mem: Vec<&Obj> = self.members(m).iter().filter_map(|i| self.obj(*i)).collect();
+        mem.iter().find(|o| o.name == "Macro-In").or_else(|| mem.iter().min_by(|a, b| (a.x + a.y).partial_cmp(&(b.x + b.y)).unwrap_or(std::cmp::Ordering::Equal))).map(|o| o.id)
+    }
+    /// The macro's output: the member named Macro-Out, else the lower-rightmost.
+    pub fn macro_out(&self, m: Id) -> Option<Id> {
+        let mem: Vec<&Obj> = self.members(m).iter().filter_map(|i| self.obj(*i)).collect();
+        mem.iter().find(|o| o.name == "Macro-Out").or_else(|| mem.iter().max_by(|a, b| (a.x + a.w + a.y + a.h).partial_cmp(&(b.x + b.w + b.y + b.h)).unwrap_or(std::cmp::Ordering::Equal))).map(|o| o.id)
+    }
+    /// With the macro's Show All off only faders, monitors, ornaments and keyboards inside it show.
+    pub fn hidden_in_macro(&self, id: Id) -> bool {
+        let Some(o) = self.obj(id) else { return false };
+        let mut cur = self.macro_of(id);
+        while let Some(m) = cur {
+            if self.obj(m).is_some_and(|x| !x.on("showall")) && !matches!(o.kind, Kind::Fader | Kind::Monitor | Kind::Ornament | Kind::Keyboard) {
+                return true;
+            }
+            cur = self.macro_of(m);
+        }
+        false
+    }
+    /// Cables between the objects and others (a new macro deletes them).
+    pub fn crossing_cables(&self, ids: &[Id]) -> Vec<Cable> {
+        self.cables.iter().filter(|c| ids.contains(&c.from) != ids.contains(&c.to)).copied().collect()
+    }
+    /// New ▸ Macro: the selected objects (with the cables between them) packed into a macro
+    /// framed around them. Cables to objects left outside are deleted — then the macro is made
+    /// from a copy and the originals stay as they were (`true` in the result: warn). Too many
+    /// objects (over 200 with nested ones) fail.
+    pub fn make_macro(&mut self, ids: &[Id]) -> Result<(Id, bool), String> {
+        let top: Vec<Id> = ids.iter().copied().filter(|i| self.obj(*i).is_some_and(|o| !o.kind.unique()) && !ids.contains(&self.macro_of(*i).unwrap_or(0))).collect();
+        if top.is_empty() {
+            return Err("Select the objects to pack into a macro".into());
+        }
+        let count: usize = top.iter().map(|i| 1 + self.all_members(*i).len()).sum();
+        if count > 200 {
+            return Err(format!("A macro can hold about 200 objects ({count} selected)"));
+        }
+        let mut inner: Vec<Id> = top.clone();
+        for &i in &top {
+            inner.extend(self.all_members(i));
+        }
+        let crossing = !self.crossing_cables(&inner).is_empty();
+        let members = if crossing {
+            let new = self.duplicate(&top, 24.0, 24.0, None);
+            let cross = self.crossing_cables(&new.iter().flat_map(|i| std::iter::once(*i).chain(self.all_members(*i))).collect::<Vec<_>>());
+            self.cables.retain(|c| !cross.contains(c));
+            new.into_iter().filter(|i| self.macro_of(*i).is_none()).collect::<Vec<_>>()
+        } else {
+            top.clone()
+        };
+        let parent = self.macro_of(top[0]);
+        let objs: Vec<Obj> = members.iter().filter_map(|i| self.obj(*i).cloned()).collect();
+        let x0 = objs.iter().map(|o| o.x).fold(f32::MAX, f32::min) - 8.0;
+        let y0 = objs.iter().map(|o| o.y).fold(f32::MAX, f32::min) - 20.0;
+        let x1 = objs.iter().map(|o| o.x + o.w).fold(f32::MIN, f32::max) + 8.0;
+        let y1 = objs.iter().map(|o| o.y + o.h).fold(f32::MIN, f32::max) + 8.0;
+        let layer = objs[0].layer;
+        let m = self.add(Kind::Macro, layer, x0, y0);
+        let mo = self.obj_mut(m).unwrap();
+        mo.w = x1 - x0;
+        mo.h = y1 - y0;
+        mo.color = 0x9a9a9a;
+        if let Some(p) = parent {
+            mo.params.insert("mac".into(), p as i32);
+        }
+        for i in &members {
+            if let Some(o) = self.obj_mut(*i) {
+                o.params.insert("mac".into(), m as i32);
+            }
+        }
+        Ok((m, crossing))
+    }
+    /// Double-clicking a macro's empty area: unpacked into its objects and cables (cables to the
+    /// macro go to its input object, from it leave its output object). A protected macro stays.
+    pub fn unpack_macro(&mut self, m: Id) -> bool {
+        let Some(mo) = self.obj(m).cloned() else { return false };
+        if mo.kind != Kind::Macro || mo.on("protected") {
+            return false;
+        }
+        let (inp, outp) = (self.macro_in(m), self.macro_out(m));
+        for c in self.cables.iter_mut() {
+            if c.to == m {
+                if let Some(i) = inp {
+                    c.to = i;
+                }
+            }
+        }
+        let n = self.cables.iter().filter(|c| Some(c.from) == outp).map(|c| c.outlet + 1).max().unwrap_or(0);
+        let mut k = 0;
+        for c in self.cables.iter_mut() {
+            if c.from == m {
+                if let Some(o) = outp {
+                    c.from = o;
+                    c.outlet = n + k;
+                    k += 1;
+                }
+            }
+        }
+        let parent = mo.p("mac");
+        for i in self.members(m) {
+            if let Some(o) = self.obj_mut(i) {
+                if parent == 0 { o.params.remove("mac"); } else { o.params.insert("mac".into(), parent); }
+            }
+        }
+        self.cables.retain(|c| c.from != m && c.to != m);
+        self.objects.retain(|o| o.id != m);
+        true
+    }
+    /// Moves objects (macros take their members along).
+    pub fn move_with_members(&mut self, ids: &[Id], dx: f32, dy: f32, layer: Option<usize>) {
+        let mut all = ids.to_vec();
+        for &i in ids {
+            all.extend(self.all_members(i));
+        }
+        all.sort();
+        all.dedup();
+        for o in self.objects.iter_mut().filter(|o| all.contains(&o.id)) {
+            o.x += dx;
+            o.y += dy;
+            if let Some(l) = layer {
+                o.layer = l;
+            }
+        }
     }
 
     /// A vector fader's crosshair moved: vertical and horizontal values (0–127 range).
@@ -1133,8 +1387,34 @@ impl Env {
 
     fn emit_all(&mut self, from: Id, ev: Tagged, clock: Clock, out: &mut Vec<Out>, path: &[Id]) {
         let targets: Vec<Id> = self.cables_from(from).iter().map(|c| c.to).collect();
+        let uncabled = targets.is_empty();
         for t in targets {
             self.receive(t, ev, clock, out, path);
+        }
+        self.leave_macro(from, uncabled, ev, clock, out, path);
+    }
+
+    /// Events leaving a macro member: Auto Fader passes an uncabled fader's output to the next
+    /// fader (as if cabled in series); the macro's output object sends out of the macro.
+    fn leave_macro(&mut self, from: Id, uncabled: bool, ev: Tagged, clock: Clock, out: &mut Vec<Out>, path: &[Id]) {
+        let Some(m) = self.macro_of(from) else { return };
+        if path.len() > MAX_DEPTH {
+            return;
+        }
+        if uncabled && self.obj(m).is_some_and(|x| x.on("autofader")) && self.obj(from).is_some_and(|o| o.kind == Kind::Fader) {
+            let mut faders: Vec<&Obj> = self.members(m).iter().filter_map(|i| self.obj(*i)).filter(|o| o.kind == Kind::Fader).collect();
+            faders.sort_by(|a, b| (a.y + a.x).partial_cmp(&(b.y + b.x)).unwrap_or(std::cmp::Ordering::Equal));
+            if let Some(k) = faders.iter().position(|o| o.id == from) {
+                if let Some(next) = faders.get(k + 1).map(|o| o.id) {
+                    self.receive(next, ev, clock, out, path);
+                    return;
+                }
+            }
+        }
+        if self.macro_out(m) == Some(from) {
+            let mut p = path.to_vec();
+            p.push(m);
+            self.emit_all(m, ev, clock, out, &p);
         }
     }
 
@@ -1173,6 +1453,11 @@ impl Env {
                 self.emit_all(id, ev, clock, out, path);
             }
             Kind::Ornament | Kind::MmcRecord => {}
+            Kind::Macro => {
+                if let Some(i) = self.macro_in(id) {
+                    self.receive(i, ev, clock, out, path);
+                }
+            }
             Kind::ChannelSplitter => {
                 let outlet = ev.ev.ch as u16 + 1;
                 let cabled = self.cables.iter().any(|c| c.from == id && c.outlet == outlet);
@@ -1475,6 +1760,10 @@ impl Env {
                 }
                 let mut f = o.clone();
                 f.params.insert("val".into(), v);
+                if f.p("out_t") == 7 {
+                    self.sysex_out(&f, v, ev.from_pi, clock, out, path);
+                    return;
+                }
                 for x in fader_output(&f, v, true) {
                     self.emit_all(id, Tagged { ev: x, from_pi: ev.from_pi }, clock, out, path);
                     if x.st == META && matches!(x.d1, 49 | 50 | 51 | 52 | 100) {
@@ -1531,8 +1820,43 @@ impl Env {
             // track automation splitter: matches to the top cable's object as automation
             (8, true) => self.emit_nth(id, 0, ev, clock, out, path),
             (8, false) => self.emit_nth(id, 1, ev, clock, out, path),
-            // SysEx mapper: Studio's Environment doesn't build SysEx; passes events on
-            (7, _) => self.emit_all(id, ev, clock, out, path),
+            // SysEx mapper: matching events set a byte of the SysEx message (data byte 1 the
+            // position, data byte 2 the value); channel 1 sends the changed message, 2 only
+            // changes it, 3 sends it unchanged
+            (7, true) => {
+                let mut bytes = sysex_map(o);
+                let unchanged = bytes.clone();
+                match e.ch {
+                    0 | 1 => {
+                        if let Some(b) = bytes.get_mut(e.d1 as usize) {
+                            *b = e.d2 & 127;
+                        }
+                        if let Some(x) = self.obj_mut(id) {
+                            x.texts.insert("sxmap".into(), bytes.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" "));
+                        }
+                    }
+                    _ => {}
+                }
+                let send = match e.ch {
+                    0 => Some(bytes),
+                    2 => Some(unchanged),
+                    _ => None,
+                };
+                if let Some(b) = send {
+                    let mut m = vec![0xF0];
+                    m.extend(&b);
+                    if let Some(c) = crate::sysexfader::checksum(o.p("sx_sum").max(0) as usize, &b) {
+                        m.push(c);
+                    }
+                    m.push(0xF7);
+                    for port in self.ports_downstream(id) {
+                        out.push(Out::Raw { port, bytes: m.clone() });
+                    }
+                }
+            }
+            // (Filter non-matching: events that don't control the message stop here)
+            (7, false) if o.on("sx_filter") => {}
+            (7, false) => self.emit_all(id, ev, clock, out, path),
             _ => {}
         }
     }
@@ -2028,6 +2352,62 @@ fn def_matches(t: i32, ch: i32, d1: i32, e: Ev) -> Option<i32> {
     }
 }
 
+/// The GM mixer's Reset: GM On, GS Reset or XG System On for its standard, then Reset All
+/// Controllers on each of its 16 channels.
+pub fn gm_reset(std: i32) -> Vec<Vec<u8>> {
+    let mut v = vec![match std {
+        1 => vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7],
+        2 => vec![0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7],
+        _ => vec![0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7],
+    }];
+    for ch in 0..16u8 {
+        v.push(vec![0xB0 | ch, 121, 0]);
+    }
+    v
+}
+
+/// The GS / XG effect controls: reverb and chorus program, level and (reverb) time.
+pub const GS_REVERBS: &[&str] = &["Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Panning Delay"];
+pub const GS_CHORUSES: &[&str] = &["Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "Feedback Chorus", "Flanger", "Short Delay", "Short Delay (FB)"];
+pub const XG_REVERBS: &[&str] = &["No Effect", "Hall 1", "Hall 2", "Room 1", "Room 2", "Room 3", "Stage 1", "Stage 2", "Plate", "White Room", "Tunnel", "Basement"];
+pub const XG_CHORUSES: &[&str] = &["No Effect", "Chorus 1", "Chorus 2", "Chorus 3", "Celeste 1", "Celeste 2", "Flanger 1", "Flanger 2"];
+/// (what: 0 reverb program, 1 chorus program, 2 reverb level, 3 chorus level, 4 reverb time)
+pub fn gsxg_effect(std: i32, what: u8, v: u8) -> Option<Vec<u8>> {
+    let v = v & 127;
+    match std {
+        1 => {
+            let addr = [0x30, 0x38, 0x33, 0x3A, 0x34][what.min(4) as usize];
+            let body = [0x40u8, 0x01, addr, v];
+            let sum = ((128 - body.iter().map(|b| *b as u32).sum::<u32>() % 128) % 128) as u8;
+            Some([&[0xF0, 0x41, 0x10, 0x42, 0x12][..], &body, &[sum, 0xF7]].concat())
+        }
+        2 => {
+            let (lo, data): (u8, Vec<u8>) = match what {
+                // XG effect types: MSB type, LSB 0 (Hall 1 = 01, Room 1 = 02 … as listed)
+                0 => (0x00, vec![xg_reverb(v), 0]),
+                1 => (0x20, vec![if v == 0 { 0 } else { 0x40 + (v - 1) / 2 }, (v.saturating_sub(1)) % 2]),
+                2 => (0x0C, vec![v]),
+                3 => (0x2C, vec![v]),
+                _ => (0x02, vec![v.min(69)]),
+            };
+            Some([&[0xF0, 0x43, 0x10, 0x4C, 0x02, 0x01, lo][..], &data, &[0xF7]].concat())
+        }
+        _ => None,
+    }
+}
+
+fn xg_reverb(k: u8) -> u8 {
+    [0x00, 0x01, 0x01, 0x02, 0x02, 0x02, 0x03, 0x03, 0x04, 0x10, 0x11, 0x13].get(k as usize).copied().unwrap_or(0)
+}
+
+/// A SysEx mapper transformer's message (without F0 / F7): its Length, the fixed byte values.
+pub fn sysex_map(o: &Obj) -> Vec<u8> {
+    let n = if o.params.contains_key("sx_len") { o.p("sx_len").clamp(1, 64) } else { 8 } as usize;
+    let mut v: Vec<u8> = o.texts.get("sxmap").map(|t| t.split_whitespace().filter_map(|x| x.parse::<u8>().ok()).map(|b| b & 127).collect()).unwrap_or_default();
+    v.resize(n, 0);
+    v
+}
+
 /// What a fader sends for a value: its Output definition (Note On sends on and off at once;
 /// 14 Bit sends pitch bend's two bytes or a controller's MSB and LSB, 32 above).
 pub fn fader_output(o: &Obj, v: i32, _remote: bool) -> Vec<Ev> {
@@ -2243,6 +2623,132 @@ mod tests {
 
     fn seq(out: &[Out]) -> Vec<Ev> {
         out.iter().filter_map(|o| if let Out::Seq { ev, .. } = o { Some(*ev) } else { None }).collect()
+    }
+
+    #[test]
+    fn macros_pack_route_and_unpack() {
+        let mut e = Env::new();
+        let si = e.find(Kind::SequencerInput).unwrap();
+        let a = e.add(Kind::Transformer, 3, 10.0, 10.0);
+        let b = e.add(Kind::Monitor, 3, 100.0, 60.0);
+        e.connect_next(a, b);
+        // (no cables leave the selection: packed in place)
+        let (m, copied) = e.make_macro(&[a, b]).unwrap();
+        assert!(!copied);
+        assert_eq!(e.members(m), vec![a, b]);
+        assert_eq!(e.macro_in(m), Some(a));
+        assert_eq!(e.macro_out(m), Some(b));
+        assert!(e.obj(m).unwrap().assignable);
+        e.connect_next(m, si);
+        let out = e.deliver(m, Ev::note(0, 60, 100), clk(0.0));
+        assert_eq!(seq(&out), vec![Ev::note(0, 60, 100)]);
+        // Macro-In / Macro-Out names win; Show All off hides the transformer
+        e.obj_mut(b).unwrap().name = "Macro-In".into();
+        assert_eq!(e.macro_in(m), Some(b));
+        e.obj_mut(m).unwrap().set("showall", 0);
+        assert!(e.hidden_in_macro(a));
+        assert!(!e.hidden_in_macro(b));
+        // copies take members; nested macros; protected macros don't unpack
+        let n = e.objects.len();
+        let c = e.duplicate(&[m], 0.0, 300.0, None);
+        assert_eq!(e.objects.len(), n + 3);
+        assert_eq!(e.members(c[0]).len(), 2);
+        let (outer, _) = e.make_macro(&[m, c[0]]).unwrap_or((0, false));
+        assert!(outer != 0 && e.all_members(outer).len() == 6);
+        e.obj_mut(outer).unwrap().set("protected", 1);
+        assert!(!e.unpack_macro(outer));
+        e.obj_mut(outer).unwrap().set("protected", 0);
+        assert!(e.unpack_macro(outer));
+        assert!(e.unpack_macro(m));
+        assert!(e.macro_of(a).is_none());
+        // the cable from the macro now leaves its output object
+        assert!(e.cables.iter().any(|x| x.to == si && (x.from == a || x.from == b)));
+    }
+
+    #[test]
+    fn macro_from_cabled_selection_is_a_copy() {
+        let mut e = Env::new();
+        let a = e.add(Kind::Transformer, 3, 10.0, 10.0);
+        let b = e.add(Kind::Transformer, 3, 80.0, 10.0);
+        let x = e.add(Kind::Monitor, 3, 300.0, 10.0);
+        e.connect_next(a, b);
+        e.connect_next(b, x);
+        let (m, copied) = e.make_macro(&[a, b]).unwrap();
+        assert!(copied);
+        assert!(e.macro_of(a).is_none());
+        assert_eq!(e.members(m).len(), 2);
+        assert!(e.crossing_cables(&e.members(m)).is_empty());
+        assert!(e.cables.iter().any(|c| c.from == b && c.to == x));
+    }
+
+    #[test]
+    fn gm_mixer_reset_and_effects() {
+        let r = gm_reset(1);
+        assert_eq!(r[0], vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7]);
+        assert_eq!(r.len(), 17);
+        assert_eq!(r[16], vec![0xBF, 121, 0]);
+        // GS reverb macro Hall 1 (4): 40 01 30 04, checksum 0x0B
+        assert_eq!(gsxg_effect(1, 0, 4), Some(vec![0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x01, 0x30, 0x04, 0x0B, 0xF7]));
+        assert_eq!(gsxg_effect(2, 2, 64), Some(vec![0xF0, 0x43, 0x10, 0x4C, 0x02, 0x01, 0x0C, 64, 0xF7]));
+        assert_eq!(gsxg_effect(0, 0, 1), None);
+        let o = Obj::new(1, Kind::GmMixer, 3, 0.0, 0.0);
+        assert_eq!((o.p("k1"), o.p("k2"), o.p("k3")), (10, 91, 93));
+    }
+
+    #[test]
+    fn sysex_mapper_transformer() {
+        let mut e = Env::new();
+        let t = e.add(Kind::Transformer, 3, 10.0, 10.0);
+        let ins = e.add(Kind::Instrument, 3, 100.0, 10.0);
+        e.obj_mut(ins).unwrap().port = "Synth".into();
+        e.connect_next(t, ins);
+        let o = e.obj_mut(t).unwrap();
+        o.set("mode", 7);
+        o.params.insert("sx_len".into(), 4);
+        o.texts.insert("sxmap".into(), "67 16 0 0".into());
+        // channel 1: byte 3 becomes 99 and is sent
+        let out = e.deliver(t, Ev::new(0xB0, 0, 3, 99), clk(0.0));
+        assert!(out.contains(&Out::Raw { port: "Synth".into(), bytes: vec![0xF0, 67, 16, 0, 99, 0xF7] }));
+        // channel 2: changed, not sent; channel 3: sent unchanged
+        assert!(e.deliver(t, Ev::new(0xB0, 1, 2, 5), clk(0.0)).iter().all(|x| !matches!(x, Out::Raw { .. })));
+        let out = e.deliver(t, Ev::new(0xB0, 2, 2, 77), clk(0.0));
+        assert!(out.contains(&Out::Raw { port: "Synth".into(), bytes: vec![0xF0, 67, 16, 5, 99, 0xF7] }));
+        // non-matching events pass unless filtered
+        e.obj_mut(t).unwrap().set("c_st", 1);
+        e.obj_mut(t).unwrap().set("c_stv", 3);
+        let seq_in = e.deliver(t, Ev::note(0, 60, 100), clk(0.0));
+        let _ = seq_in;
+        e.obj_mut(t).unwrap().params.insert("sx_filter".into(), 1);
+        assert!(e.deliver(t, Ev::note(0, 60, 100), clk(0.0)).is_empty());
+    }
+
+    #[test]
+    fn auto_fader_and_sysex_fader() {
+        let mut e = Env::new();
+        let si = e.find(Kind::SequencerInput).unwrap();
+        let f1 = e.add(Kind::Fader, 3, 10.0, 10.0);
+        let f2 = e.add(Kind::Fader, 3, 50.0, 10.0);
+        e.obj_mut(f2).unwrap().set("out_d1", 10);
+        let (m, _) = e.make_macro(&[f1, f2]).unwrap();
+        e.obj_mut(m).unwrap().set("autofader", 1);
+        e.connect_next(m, si);
+        let out = e.move_fader(f1, 90, clk(0.0));
+        assert_eq!(e.obj(f2).unwrap().p("val"), 90);
+        assert!(seq(&out).contains(&Ev::new(0xB0, 0, 10, 90)));
+        // SysEx output: raw bytes to the port its cables lead to
+        let f = e.add(Kind::Fader, 3, 10.0, 200.0);
+        let ins = e.add(Kind::Instrument, 3, 100.0, 200.0);
+        e.obj_mut(ins).unwrap().port = "Synth".into();
+        e.connect_next(f, ins);
+        let o = e.obj_mut(f).unwrap();
+        o.set("out_t", 7);
+        o.params.insert("sx_sum".into(), 1);
+        o.texts.insert("sysex".into(), "s\t1\t65 16 66 18 64 0 VAL SUM".to_string());
+        let out = e.move_fader(f, 127, clk(0.0));
+        assert!(out.contains(&Out::Raw { port: "Synth".into(), bytes: vec![0xF0, 65, 16, 66, 18, 64, 0, 127, 0x41, 0xF7] }));
+        e.obj_mut(f).unwrap().set("in_t", 7);
+        e.input_sysex(&[0xF0, 65, 16, 66, 18, 64, 0, 0xF7], clk(0.0));
+        assert_eq!(e.obj(f).unwrap().p("val"), 127, "long messages aren't recognised as input");
     }
 
     #[test]

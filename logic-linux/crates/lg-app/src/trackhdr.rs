@@ -291,6 +291,12 @@ pub fn chosen_glyph(t: &lg_core::Track) -> Option<&'static str> {
 pub fn left_edge(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, row: Rect, i: usize) -> f32 {
     let Some(t) = app.project.as_ref().and_then(|p| p.tracks.get(i)).cloned() else { return 0.0 };
     let mut x = 0.0;
+    // control surface bars: the surface's colour along the left of the tracks it controls
+    if app.tm.hdr.surface_bars {
+        if let Some(c) = crate::surfaces::controlled_tracks(app).get(&i) {
+            hp.rect_filled(Rect::from_min_max(pos2(row.min.x, row.min.y + 1.0), pos2(row.min.x + 2.5, row.max.y - 1.0)), 0.0, Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, *c as u8));
+        }
+    }
     if app.tm.hdr.color_bars {
         let bar = Rect::from_min_max(pos2(row.min.x + 1.0, row.min.y + 1.0), pos2(row.min.x + 6.0, row.max.y - 1.0));
         hp.rect_filled(bar, 2.0, color_of(&t));
@@ -1363,6 +1369,10 @@ fn icon_palette(app: &mut App, ctx: &egui::Context) {
         }
         if ui.button("Default Icon").on_hover_text("The icon of the track's patch").clicked() {
             pick = Some(None);
+        }
+        // (Option: the MMC icon, under Other)
+        if let Some(n) = crate::syncmmc::icon_row(ui, tr.extra.set.icon.as_deref()) {
+            pick = Some(Some(n));
         }
         ui.separator();
         ui.horizontal(|ui| {
