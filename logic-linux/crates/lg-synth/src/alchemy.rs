@@ -118,6 +118,8 @@ enum Kind {
 #[derive(Clone, Copy, Debug, Default)]
 struct SourceCfg {
     kind: Kind,
+    /// How much of the source goes to main filter 2 rather than 1 (the F1/F2 knob).
+    route: f32,
     noise: bool,
     vol: f32,
     pan: f32,
@@ -147,6 +149,9 @@ pub(crate) struct AlchShared {
     f2_on: bool,
     f2_cut: f32,
     f2_res: f32,
+    f2_drive: f32,
+    /// Main filters in series (0) or parallel (1).
+    par: f32,
     env_amt: f32,
     amp_env: [f32; 4],
     filt_env: [f32; 4],
@@ -156,6 +161,13 @@ pub(crate) struct AlchShared {
     lfo1: f32,
     lfo2: f32,
     character: f32,
+    /// Master Vol (as a gain) and Pan, per voice (modulation targets).
+    vol: f32,
+    pan: f32,
+    /// The note counters the Note Property sources read (set before each note on).
+    note_index: u32,
+    arp_index: u32,
+    speed: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -213,6 +225,15 @@ pub(crate) struct AlchVoice {
     level: f32,
     sample: Option<Arc<(Vec<f32>, f32)>>,
     mix: [(f32, f32); CHUNK],
+    /// What the sources send to main filter 2 (their F1/F2 knob).
+    mix2: [(f32, f32); CHUNK],
+    /// The voice's modulators, its modulated settings (when a rack moves them) and levels
+    /// (sources A–D, main filters 1–2) for the envelope followers.
+    pub(crate) mv: crate::alchemy_mod::ModVoice,
+    legato: bool,
+    own: Option<AlchShared>,
+    ov: crate::alchemy_mod::Overlay,
+    lv: [f32; 6],
 }
 
 impl AlchVoice {
@@ -234,6 +255,12 @@ impl AlchVoice {
             level: 0.0,
             sample: None,
             mix: [(0.0, 0.0); CHUNK],
+            mix2: [(0.0, 0.0); CHUNK],
+            mv: Default::default(),
+            legato: false,
+            own: None,
+            ov: Default::default(),
+            lv: [0.0; 6],
         }
     }
 }
@@ -255,6 +282,16 @@ impl Voice<AlchShared> for AlchVoice {
         self.target = note as f32;
         if !(was && sh.glide > 0.0) {
             self.pitch = self.target;
+        }
+        self.legato = was && sh.glide > 0.0;
+        self.mv.fresh = true;
+        self.mv.note = note;
+        self.mv.vel = self.vel;
+        self.mv.index = sh.note_index;
+        self.mv.arp_index = sh.arp_index;
+        self.mv.speed = sh.speed;
+        if !self.legato {
+            self.mv.key = note as f32;
         }
         for (i, s) in self.src.iter_mut().enumerate() {
             for o in &mut s.osc {
@@ -296,6 +333,7 @@ impl Voice<AlchShared> for AlchVoice {
         }
     }
     fn release(&mut self, _sh: &AlchShared, _ctl: &Ctl) {
+        self.mv.release();
         self.amp.gate_off();
         self.fenv.gate_off();
     }
@@ -306,6 +344,14 @@ impl Voice<AlchShared> for AlchVoice {
         }
     }
     fn render(&mut self, l: &mut [f32], r: &mut [f32], sh: &AlchShared, ctl: &Ctl) {
+        let own;
+        let sh = match self.own {
+            Some(o) => {
+                own = o;
+                &own
+            }
+            None => sh,
+        };
         let rate = sh.rate;
         let b = banks();
         if sh.glide > 0.0 {
@@ -516,33 +562,63 @@ impl Voice<AlchShared> for AlchVoice {
                     br[i] = st.filt[1].run(br[i]);
                 }
             }
+            let mut pk = 0.0f32;
+            let (w1, w2) = (1.0 - c.route.clamp(0.0, 1.0), c.route.clamp(0.0, 1.0));
             for i in 0..n {
-                self_mix_add(&mut self.mix, i, bl[i], br[i]);
+                pk = pk.max(bl[i].abs()).max(br[i].abs());
+                if w1 > 0.0 {
+                    self_mix_add(&mut self.mix, i, bl[i] * w1, br[i] * w1);
+                }
+                if w2 > 0.0 {
+                    self_mix_add(&mut self.mix2, i, bl[i] * w2, br[i] * w2);
+                }
             }
+            self.lv[si] = pk;
         }
         let vel_g = 1.0 - sh.vel_sens + sh.vel_sens * self.vel * self.vel;
         let mut peak = 0.0f32;
+        let (mut f1p, mut f2p) = (0.0f32, 0.0f32);
+        let (pl, pr) = ((1.0 - sh.pan).clamp(0.0, 1.0).sqrt() * std::f32::consts::SQRT_2, (1.0 + sh.pan).clamp(0.0, 1.0).sqrt() * std::f32::consts::SQRT_2);
+        let (pl, pr) = (pl.min(1.0), pr.min(1.0));
         for i in 0..n {
             let (mut xl, mut xr) = self.mix[i];
+            let (bl2, br2) = self.mix2[i];
             self.mix[i] = (0.0, 0.0);
+            self.mix2[i] = (0.0, 0.0);
             xl = self.mf[0].run(xl);
             xr = self.mf[1].run(xr);
+            f1p = f1p.max(xl.abs());
             if sh.f2_on {
-                xl = self.f2[0].run(xl);
-                xr = self.f2[1].run(xr);
+                // series: filter 2 after filter 1 (plus what goes to 2 only); parallel: side by side
+                let (il, ir) = (bl2 + xl * (1.0 - sh.par), br2 + xr * (1.0 - sh.par));
+                let (il, ir) = if sh.f2_drive > 0.0 {
+                    let k = 1.0 + 4.0 * sh.f2_drive;
+                    (dsp::soft_clip(il * k) / k.sqrt(), dsp::soft_clip(ir * k) / k.sqrt())
+                } else {
+                    (il, ir)
+                };
+                let (yl, yr) = (self.f2[0].run(il), self.f2[1].run(ir));
+                f2p = f2p.max(yl.abs());
+                xl = yl + xl * sh.par;
+                xr = yr + xr * sh.par;
+            } else {
+                xl += bl2;
+                xr += br2;
             }
             self.fenv.next();
-            let mut g = self.amp.next() * vel_g * 0.65;
+            let mut g = self.amp.next() * vel_g * 0.65 * sh.vol;
             if self.killing {
                 g *= self.fade.next();
             }
-            let yl = xl * g;
-            let yr = xr * g;
+            let yl = xl * g * pl;
+            let yr = xr * g * pr;
             peak = peak.max(yl.abs());
             l[i] += yl;
             r[i] += yr;
         }
         self.level = peak;
+        self.lv[4] = f1p;
+        self.lv[5] = f2p;
         if self.amp.idle() || (self.killing && self.fade.gain <= 0.0) {
             self.on = false;
         }
@@ -560,6 +636,10 @@ fn self_mix_add(mix: &mut [(f32, f32); CHUNK], i: usize, a: f32, b: f32) {
     mix[i].0 += a;
     mix[i].1 += b;
 }
+
+/// Each source's F1/F2 knob (A–D), and the Name bar's Limiter.
+pub const ROUTE_F2: u32 = 14610;
+pub const LIMITER: u32 = 14614;
 
 /// Perform section values: 8 knobs, 4 XY axes, 4 envelope values.
 pub const PERFORM_IDS: [u32; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
@@ -587,6 +667,17 @@ pub struct Alchemy {
     base_tune: f32,
     /// The settings before the modulation rack and MSEG move them (each block starts from it).
     base_sh: AlchShared,
+    /// The modulation section (alchemy_mod): settings, instrument-wide state, what's in use.
+    pub mods: crate::alchemy_mod::ModCfg,
+    pub mg: crate::alchemy_mod::ModGlobal,
+    used: crate::alchemy_mod::Used,
+    /// Perform values now (after the Transform pad).
+    pf: [f32; 16],
+    /// An AHDSR (per voice) on Master Vol: it shapes the voices instead of the Perform envelope.
+    amp_from: Option<usize>,
+    bpm: f32,
+    side: f32,
+    limiter: bool,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -595,6 +686,11 @@ pub fn all_params() -> &'static [Param] {
     P.get_or_init(|| {
         let mut v = PARAMS.to_vec();
         v.extend(crate::alchemy_extra::params());
+        v.extend(crate::alchemy_mod::params());
+        for (k, n) in ["F1/F2 A", "F1/F2 B", "F1/F2 C", "F1/F2 D"].iter().enumerate() {
+            v.push(Param::new(ROUTE_F2 + k as u32, n, 0.0, 1.0, 0.0, Unit::Ratio));
+        }
+        v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
         v
     })
     .as_slice()
@@ -620,6 +716,8 @@ impl Alchemy {
                 f2_on: false,
                 f2_cut: 1.0,
                 f2_res: 0.0,
+                f2_drive: 0.0,
+                par: 0.0,
                 env_amt: 0.5,
                 amp_env: [0.005, 1.0, 0.7, 0.4],
                 filt_env: [0.005, 0.6, 0.3, 0.4],
@@ -629,6 +727,11 @@ impl Alchemy {
                 lfo1: 0.0,
                 lfo2: 0.0,
                 character: 0.0,
+                vol: 1.0,
+                pan: 0.0,
+                note_index: 0,
+                arp_index: 0,
+                speed: 0.0,
             };
         let mut a = Alchemy {
             params,
@@ -656,8 +759,19 @@ impl Alchemy {
             base_cut: 0.6,
             base_tune: 0.0,
             base_sh: sh0,
+            mods: Default::default(),
+            mg: Default::default(),
+            used: Default::default(),
+            pf: [0.0; 16],
+            amp_from: None,
+            bpm: 120.0,
+            side: 0.0,
+            limiter: true,
         };
         a.room.feedback = 0.82;
+        let params = &a.params;
+        a.mods.read_all(&|i| params.get(i));
+        a.used = crate::alchemy_mod::used(&a.mods);
         a.update();
         a
     }
@@ -675,8 +789,9 @@ impl Alchemy {
             let mut wsum = 0.0;
             let mut v = 0.0;
             for (i, s) in self.snapshots.iter().enumerate() {
-                let ang = i as f32 / n as f32 * std::f32::consts::TAU;
-                let (sx, sy) = (0.5 + 0.4 * ang.cos(), 0.5 + 0.4 * ang.sin());
+                // the Transform pad's 4 × 2 cells (snapshot 1 at the top left)
+                let _ = n;
+                let (sx, sy) = ((i % 4) as f32 * 0.25 + 0.125, 1.0 - ((i / 4) % 2) as f32 * 0.5 - 0.25);
                 let d2 = (x - sx).powi(2) + (y - sy).powi(2);
                 let w = 1.0 / (d2 + 1e-4);
                 wsum += w;
@@ -688,10 +803,36 @@ impl Alchemy {
         }
     }
 
-    fn update(&mut self) {
-        let pf: Vec<f32> = (0..16).map(|k| self.perform(k)).collect();
-        let d = |k: usize| pf[k] - self.defaults[k];
-        let p = |id: u32| self.params.get(id);
+    /// The voices' settings from parameter values `p` (the knobs, or the knobs as modulated).
+    fn build(p: &dyn Fn(u32) -> f32, pf: &[f32; 16], defaults: &[f32; 16], rate: f32, amp_from: Option<f32>) -> AlchShared {
+        let d = |k: usize| pf[k] - defaults[k];
+        let mut sh = AlchShared {
+            rate,
+            src: [SourceCfg::default(); 4],
+            m_cut: 0.0,
+            m_res: 0.0,
+            m_type: 0,
+            m_drive: 0.0,
+            f2_on: false,
+            f2_cut: 1.0,
+            f2_res: 0.0,
+            f2_drive: 0.0,
+            par: 0.0,
+            env_amt: 0.0,
+            amp_env: [0.0; 4],
+            filt_env: [0.0; 4],
+            vel_sens: 0.85,
+            glide: 0.0,
+            tune: 0.0,
+            lfo1: 0.0,
+            lfo2: 0.0,
+            character: 0.0,
+            vol: 1.0,
+            pan: 0.0,
+            note_index: 0,
+            arp_index: 0,
+            speed: 0.0,
+        };
         let envt = |x: f32, lo: f32, hi: f32| lo * (hi / lo).powf(x.clamp(0.0, 1.0));
         for s in 0..4 {
             let on = p(277 + s as u32) >= 0.5;
@@ -733,7 +874,7 @@ impl Alchemy {
             if shape > 3 {
                 shape = 3;
             }
-            self.sh.src[s] = SourceCfg {
+            sh.src[s] = SourceCfg {
                 kind,
                 noise: p(305 + s as u32) >= 0.5,
                 vol,
@@ -751,35 +892,59 @@ impl Alchemy {
                 res: p(55 + s as u32),
                 ftype: p(333 + s as u32).round() as u8,
                 keytrack: true,
+                route: p(ROUTE_F2 + s as u32),
             };
         }
-        self.sh.character = d(0);
-        self.sh.m_cut = (p(85) + d(1) * 0.5).clamp(0.0, 1.0);
-        self.sh.m_res = p(86);
-        self.sh.m_drive = (p(87) + pf[5] * 0.6).clamp(0.0, 1.0);
-        self.sh.m_type = if p(364) >= 0.5 {
+        sh.character = d(0);
+        sh.m_cut = (p(85) + d(1) * 0.5).clamp(0.0, 1.0);
+        sh.m_res = p(86);
+        sh.m_drive = (p(87) + pf[5] * 0.6).clamp(0.0, 1.0);
+        sh.m_type = if p(364) >= 0.5 {
             p(365).round() as u8
         } else {
             0
         };
-        self.sh.f2_on = p(367) >= 0.5;
-        self.sh.f2_cut = p(89);
-        self.sh.f2_res = p(90);
-        self.sh.env_amt = (pf[2] * 0.8).clamp(-1.0, 1.0);
-        self.sh.amp_env = [
+        sh.f2_on = p(367) >= 0.5;
+        sh.f2_cut = p(89);
+        sh.f2_res = p(90);
+        sh.f2_drive = p(91);
+        sh.par = p(93);
+        sh.env_amt = (pf[2] * 0.8).clamp(-1.0, 1.0);
+        sh.amp_env = [
             envt(pf[12], 0.001, 8.0),
             envt(pf[13], 0.02, 12.0),
             pf[14],
             envt(pf[15], 0.01, 10.0),
         ];
-        self.sh.filt_env = [
+        sh.filt_env = [
             p(129).max(0.001),
             p(133) * envt(pf[6], 0.1, 10.0),
             p(135),
             p(137).max(0.01),
         ];
-        self.sh.glide = p(98);
-        self.sh.tune = p(96) + p(97) / 100.0;
+        sh.glide = p(98);
+        sh.tune = p(96) + p(97) / 100.0;
+        sh.vol = p(94) / 0.8;
+        sh.pan = p(95);
+        if let Some(r) = amp_from {
+            sh.amp_env = [0.001, 0.001, 1.0, r.max(0.005)];
+        }
+        sh
+    }
+
+    fn update(&mut self) {
+        for k in 0..16 {
+            self.pf[k] = self.perform(k);
+        }
+        self.mg.perform = self.pf;
+        let params = &self.params;
+        let amp = self.amp_from.map(|i| self.mods.ahd[i].r);
+        let lfo = (self.sh.lfo1, self.sh.lfo2);
+        let ctr = (self.sh.note_index, self.sh.arp_index, self.sh.speed);
+        self.sh = Self::build(&|i| params.get(i), &self.pf, &self.defaults, self.rate, amp);
+        (self.sh.lfo1, self.sh.lfo2) = lfo;
+        (self.sh.note_index, self.sh.arp_index, self.sh.speed) = ctr;
+        let p = |id: u32| self.params.get(id);
         self.base_cut = self.sh.m_cut;
         self.base_tune = self.sh.tune;
         self.base_sh = self.sh;
@@ -789,6 +954,7 @@ impl Alchemy {
         self.ch.bend_up = p(391);
         self.ch.bend_down = p(396);
         self.ch.update_bend();
+        self.limiter = p(LIMITER) >= 0.5;
     }
 
     /// Reads Logic's plain-text Alchemy preset (the project's AuCU text or an .acp file): the
@@ -858,6 +1024,85 @@ impl Alchemy {
         self.update();
     }
 
+    /// The modulation section over one block: the instrument-wide modulators move the shared
+    /// settings, each voice's own modulators (and every route, through the voice) its own.
+    fn run_mods(&mut self, dt: f32) {
+        use crate::alchemy_mod as am;
+        let b = am::Block { dt, bpm: self.bpm, bend: self.ch.ctl.bend / self.ch.bend_up.max(self.ch.bend_down).max(1.0), wheel: self.ch.ctl.mod_wheel, aftertouch: self.ch.ctl.aftertouch, glide: self.sh.glide };
+        self.mg.voices = self.poly.voices.iter().filter(|v| v.on && !v.killing).count();
+        self.mg.max_voices = self.poly.max;
+        self.mg.step(&self.mods, &b, &self.used);
+        let params = &self.params;
+        let range = |id: u32| params.def(id).map(|p| (p.min, p.max)).unwrap_or((0.0, 1.0));
+        let amp = self.amp_from.map(|i| self.mods.ahd[i].r);
+        // instrument-wide
+        let mut ov = std::mem::take(&mut self.mg.ov);
+        let mut sm = self.mg.smooth;
+        am::build_overlay(&self.mods, None, &self.mg, &b, &mut sm, &mut ov, &range);
+        self.mg.smooth = sm;
+        if ov.n > 0 {
+            let keep = (self.sh.lfo1, self.sh.lfo2, self.sh.note_index, self.sh.arp_index, self.sh.speed);
+            self.sh = Self::build(&|id| ov.apply(id, params.get(id), range(id).0, range(id).1), &self.pf, &self.defaults, self.rate, amp);
+            (self.sh.lfo1, self.sh.lfo2, self.sh.note_index, self.sh.arp_index, self.sh.speed) = keep;
+        }
+        self.mg.ov = ov;
+        // per voice
+        let (mods, mg, used, pf, defaults, rate) = (&self.mods, &self.mg, &self.used, &self.pf, &self.defaults, self.rate);
+        let base = self.sh;
+        for v in self.poly.voices.iter_mut() {
+            if !v.on {
+                v.own = None;
+                continue;
+            }
+            if v.mv.fresh {
+                v.mv.init(mods, mg, v.legato);
+            }
+            if !used.any_voice {
+                v.own = None;
+                continue;
+            }
+            v.mv.step(mods, &b, used);
+            let mut sm = v.mv.smooth;
+            am::build_overlay(mods, Some(&v.mv), mg, &b, &mut sm, &mut v.ov, &range);
+            v.mv.smooth = sm;
+            if v.ov.n == 0 {
+                v.own = None;
+                continue;
+            }
+            let ov = &v.ov;
+            let mut o = Self::build(&|id| ov.apply(id, params.get(id), range(id).0, range(id).1), pf, defaults, rate, amp);
+            (o.lfo1, o.lfo2, o.note_index, o.arp_index, o.speed) = (base.lfo1, base.lfo2, base.note_index, base.arp_index, base.speed);
+            v.own = Some(o);
+        }
+    }
+
+    /// What's in use after the modulation settings changed.
+    fn mods_changed(&mut self) {
+        use crate::alchemy_mod as am;
+        self.used = am::used(&self.mods);
+        self.amp_from = self.mods.routes[..self.mods.nroutes].iter().find(|r| r.target == 94 && r.kind == am::K_AHD && self.mods.per_voice(r.kind, r.idx)).map(|r| r.idx.min(am::N - 1));
+    }
+
+    /// The parameter's range (for modulation amounts).
+    pub fn range(&self, id: u32) -> (f32, f32) {
+        self.params.def(id).map(|p| (p.min, p.max)).unwrap_or((0.0, 1.0))
+    }
+
+    /// Before a note starts: the counters the Note Property sources read.
+    fn count_note(&mut self) {
+        let g = &mut self.mg;
+        let gap = g.time - g.last_note_t;
+        g.last_note_t = g.time;
+        self.sh.note_index = g.note_count;
+        self.sh.arp_index = g.arp_count;
+        self.sh.speed = (gap / 2.0).clamp(0.0, 1.0);
+        g.note_count = g.note_count.wrapping_add(1);
+        g.arp_count = g.arp_count.wrapping_add(1);
+        if self.mg.held == 0 {
+            self.mg.first_note(&self.mods);
+        }
+    }
+
     /// The user's sample for the granular sources (mono, its root frequency in Hz).
     pub fn set_granular_sample(&mut self, data: Vec<f32>, rate: f32, root_hz: f32) {
         let ratio = self.rate / rate;
@@ -890,6 +1135,14 @@ impl Plugin for Alchemy {
             } else if PERFORM_IDS.contains(&id) {
                 self.transform = false;
             }
+            let params = &self.params;
+            if self.mods.read_changed(id, &|i| params.get(i)) {
+                self.mods_changed();
+                // the knobs that are both a modulator's and the voices' (LFO 1–2, AHDSR 1–2)
+                if !(100..=137).contains(&id) && !(crate::alchemy_mod::ROUTE..=crate::alchemy_mod::CTRL_CC + 4).contains(&id) && !(crate::alchemy_mod::AHD..crate::alchemy_mod::MSEG).contains(&id) {
+                    return;
+                }
+            }
             self.update();
         }
     }
@@ -918,16 +1171,26 @@ impl Instrument for Alchemy {
         if self.extra.held == 0 {
             self.extra.mseg_t = 0.0;
         }
-        self.extra.held += 1;
         if self.extra.arp_set.on {
+            if self.extra.held == 0 {
+                self.mg.arp_count = 0;
+            }
+            self.extra.held += 1;
             let s = self.extra.arp_set;
             self.extra.arp.note_on(&s, pitch, velocity);
             return;
         }
+        self.count_note();
+        self.extra.held += 1;
+        self.mg.held = self.extra.held;
         self.poly.note_on(pitch, velocity, &self.sh, &self.ch.ctl);
     }
     fn note_off(&mut self, pitch: u8) {
         self.extra.held = self.extra.held.saturating_sub(1);
+        if self.extra.held == 0 && self.mg.held > 0 {
+            self.mg.held = 0;
+            self.mg.all_released();
+        }
         if self.extra.arp_set.on {
             let s = self.extra.arp_set;
             self.extra.arp.note_off(&s, pitch);
@@ -937,6 +1200,19 @@ impl Instrument for Alchemy {
     }
     fn set_tempo(&mut self, bpm: f64) {
         self.extra.set_tempo(bpm);
+        self.bpm = bpm as f32;
+    }
+    fn set_transport(&mut self, t: lg_dsp::Transport) {
+        if t.playing {
+            self.mg.beats = t.beats;
+        }
+        self.bpm = t.bpm as f32;
+    }
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = left.iter().chain(right).fold(0.0f32, |a, &b| a.max(b.abs()));
+    }
+    fn pressure(&mut self, value: u8) {
+        self.ch.ctl.aftertouch = value as f32 / 127.0;
     }
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
         Some(self)
@@ -948,6 +1224,7 @@ impl Instrument for Alchemy {
         if cc == 123 || cc == 120 {
             return self.poly.all_notes_off(&self.sh, &self.ch.ctl);
         }
+        self.mg.cc[(cc as usize).min(127)] = value as f32 / 127.0;
         if let Some(d) = self.ch.cc(cc, value) {
             self.poly.sustain(d, &self.sh, &self.ch.ctl);
         }
@@ -960,7 +1237,7 @@ impl Instrument for Alchemy {
         let mut sl = [0.0f32; CHUNK];
         let mut sr = [0.0f32; CHUNK];
         let (gl, gr) = self.ch.out_gains();
-        let vol = self.p(94) / 0.8 * lg_dsp::db_to_gain(self.p(99));
+        let vol = lg_dsp::db_to_gain(self.p(99));
         let fx = self.perform(4);
         let (dl, dr) = (0.375 * self.rate, 0.25 * self.rate);
         let mut pos = 0;
@@ -981,18 +1258,31 @@ impl Instrument for Alchemy {
                 let k = self.extra.arp.advance(&s, beats, &mut ev);
                 for e in &ev[..k] {
                     match *e {
-                        crate::arp::ArpEvent::On(p, v) => self.poly.note_on(p, v, &self.sh, &self.ch.ctl),
+                        crate::arp::ArpEvent::On(p, v) => {
+                            if self.extra.arp.current_step() == 0 {
+                                self.mg.arp_count = 0;
+                            }
+                            let held = self.mg.held;
+                            self.count_note();
+                            self.mg.held = held.max(1);
+                            self.poly.note_on(p, v, &self.sh, &self.ch.ctl)
+                        }
                         crate::arp::ArpEvent::Off(p) => self.poly.note_off(p, &self.sh, &self.ch.ctl),
                     }
                 }
             }
             // the MSEG and the modulation rack move the settings from where the knobs put them
             let mseg = self.extra.mseg_level();
-            if self.extra.mseg_on || self.extra.nmods > 0 {
+            if self.extra.mseg_on || self.extra.nmods > 0 || self.used.any {
                 let (l1, l2) = (self.sh.lfo1, self.sh.lfo2);
+                let ctr = (self.sh.note_index, self.sh.arp_index, self.sh.speed);
                 self.sh = self.base_sh;
                 self.sh.lfo1 = l1;
                 self.sh.lfo2 = l2;
+                (self.sh.note_index, self.sh.arp_index, self.sh.speed) = ctr;
+            }
+            if self.used.any {
+                self.run_mods(dt);
             }
             if self.extra.mseg_on {
                 self.extra.mseg_t += dt;
@@ -1031,6 +1321,17 @@ impl Instrument for Alchemy {
             sr[..m].fill(0.0);
             self.poly
                 .render(&mut sl[..m], &mut sr[..m], &self.sh, &self.ch.ctl);
+            if self.used.envf != 0 {
+                let mut lv = [0.0f32; 6];
+                for v in self.poly.voices.iter().filter(|v| v.on) {
+                    for k in 0..6 {
+                        lv[k] += v.lv[k];
+                    }
+                }
+                self.mg.levels[..6].copy_from_slice(&lv);
+                self.mg.levels[6] = sl[..m].iter().chain(&sr[..m]).fold(0.0f32, |a, &b| a.max(b.abs()));
+                self.mg.levels[8] = self.side;
+            }
             if mvol != 1.0 {
                 for i in 0..m {
                     sl[i] *= mvol;
@@ -1048,6 +1349,15 @@ impl Instrument for Alchemy {
                     sr[i] += wr * fx * 0.5;
                 }
                 self.room.process(&mut sl[..m], &mut sr[..m], fx * 1.2);
+            }
+            if self.used.envf != 0 {
+                self.mg.levels[7] = sl[..m].iter().chain(&sr[..m]).fold(0.0f32, |a, &b| a.max(b.abs()));
+            }
+            if self.limiter {
+                for i in 0..m {
+                    sl[i] = dsp::soft_clip(sl[i] * vol) / vol.max(1e-6);
+                    sr[i] = dsp::soft_clip(sr[i] * vol) / vol.max(1e-6);
+                }
             }
             for i in 0..m {
                 left[pos + i] += sl[i] * gl * vol;
