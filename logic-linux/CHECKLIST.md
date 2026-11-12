@@ -147,8 +147,8 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 |---|---:|---:|---:|
 | Menu bar | 389 | 595 | 65% |
 | Local menus | 731 | 1191 | 61% |
-| Right-click menus | 1451 | 2575 | 56% |
-| Key commands | 1767 | 2207 | 80% |
+| Right-click menus | 1452 | 2575 | 56% |
+| Key commands | 1768 | 2207 | 80% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
 ## Menu bar: 389 of 595
@@ -2143,7 +2143,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1451 of 2575
+## Right-click menus: 1452 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4802,12 +4802,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tool-menu-T-key-piano-roll — 12/14</summary>
+<details><summary>tool-menu-T-key-piano-roll — 13/14</summary>
 
 - [x] Pointer Tool  `T`
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
-- [ ] Finger Tool  `F`
+- [x] Finger Tool  `F`
 - [x] Scissors Tool  `I`
 - [x] Join Tool  `J`
 - [x] Mute Tool  `M`
@@ -4966,7 +4966,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1767 of 2207
+## Key commands: 1768 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -7275,13 +7275,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Tool Menu — 18/29</summary>
+<details><summary>Tool Menu — 19/29</summary>
 
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
 - [x] Scissors Tool  `I`
 - [x] Join Tool  `J`
-- [ ] Finger Tool  `F`
+- [x] Finger Tool  `F`
 - [x] Text Tool  `⇧T`
 - [x] Zoom Tool  `Y`
 - [x] Solo Tool  `S`

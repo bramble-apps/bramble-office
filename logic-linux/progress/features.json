@@ -166,6 +166,21 @@
  },
  {
   "area": "Editing",
+  "status": "Partial",
+  "feature": "Key focus (focus.rs, tested; checked headless): the area clicked last (Tracks area, the editor, Mixer, Browser, Event List, Step Editor, windows, Smart Controls, Project Audio) gets Delete, Select All, Cut / Copy / Paste, the arrow keys and every key command, wherever the pointer is. Menus and popovers keep it; \u21e5 / \u21e7\u21e5 (Cycle Through Window Views) move it; Logic's 2 pt blue frame marks it. Delete in an editor removes its selected notes or steps, never the region (the reported \"deleting a note deletes the track\" bug: the pointer used to pick the area). \u2318C / \u2318X / \u2318V from the keyboard reach the commands (egui-winit sends them as clipboard events, which Studio used to ignore). Region Copy / Paste takes every selected region on every track, pasted at the playhead with their track offsets and spacing (regionclip.rs). \u2303 key bindings no longer fire on the bare key. [ ] \u2318V does nothing when the system clipboard is empty (egui-winit sends no event); the focus frame isn't checked in the light theme"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Piano Roll tools (rolltools.rs, pianoroll.rs, tested): notes land in the row clicked (the pitch under the pointer was one row too high: row_at had +1); the pointer takes the tool's shape over the grid with Logic's hotspot (Pencil / Eraser / Brush tip, Finger fingertip, centred tools; Marquee crosshair, Zoom magnifier); the Brush paints along the drag at the Time Quantize steps following the pointer's pitch (Shift: the pitch it started on), also starting on a note; Pencil Shift-drag paints, Control-Shift-click ignores Snap; Pointer drag on the background is a rubber band (Shift adds); the Eraser deletes what it's dragged over; Mute toggles (the clicked note's state for all selected), Solo plays the note, Zoom click / Option-click, Velocity Option-Shift sets all to one, the Finger tool (F) resizes from anywhere on a note; double-click makes the default note. [ ] Velocity Option (overwrite to max/min), Control fine moves, Automation tool in the Piano Roll"
+ },
+ {
+  "area": "Editing",
+  "status": "Partial",
+  "feature": "Region resize from both edges (regiontrim.rs, tested; checked headless on an imported WAV): the left edge trims the start of any region (audio keeps its timeline position through its file offset; not before the file's start), the right edge stops at the audio file's end; Option on either edge time-stretches (MIDI notes scale, audio through Flex); Drummer, Session Player and pattern regions remake their contents for the new span; one undo step each with Position / Length help tags. Tracks-area waveforms are drawn from the file at the region's offset and the timeline's scale (never squeezed). [ ] Option-drag left on audio isn't checked by ear; aliases follow their original's length (lg-core), not their own trims"
+ },
+ {
+  "area": "Editing",
   "status": "Done",
   "feature": "Region move, Option-copy, resize, delete, copy/paste, Repeat, split, join, nudge, slip, rotate, trims, crop, shuffle, pickup clock, multi-select, undo/redo"
  },
