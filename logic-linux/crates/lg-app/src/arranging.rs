@@ -487,7 +487,8 @@ pub fn tempo_lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x_of:
     let y_of = |bpm: f64| row.max.y - 6.0 - ((bpm - lo) / (hi - lo)).clamp(0.0, 1.0) as f32 * (row.height() - 12.0);
     let bpm_of = |y: f32| lo + ((row.max.y - 6.0 - y) / (row.height() - 12.0)).clamp(0.0, 1.0) as f64 * (hi - lo);
     let m = Map::of(&pr);
-    let green = Color32::from_rgb(0x4c, 0xd9, 0x64);
+    // Logic 13: the tempo the project follows is a blue line over a dark blue fill
+    let green = Color32::from_rgb(0x4a, 0x82, 0xd4);
     // the line, sampled so curves show
     let mut pts = Vec::new();
     let mut x = lane.min.x;
@@ -507,8 +508,12 @@ pub fn tempo_lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x_of:
     if let Some(l) = pts.last() {
         line.push(*l);
     }
-    lp.add(egui::Shape::line(line, Stroke::new(1.6, green)));
-    lp.text(pos2(lane.min.x + 6.0, row.min.y + 8.0), Align2::LEFT_CENTER, format!("{:.2}", app.tempo()), look::regular(10.5), look::text_dim());
+    for w in line.windows(2) {
+        if w[1].x > w[0].x {
+            lp.rect_filled(Rect::from_min_max(pos2(w[0].x, w[0].y.min(w[1].y)), pos2(w[1].x, row.max.y)), 0.0, Color32::from_rgb(0x1a, 0x2c, 0x48));
+        }
+    }
+    lp.add(egui::Shape::line(line, Stroke::new(1.2, green)));
     // points and curve points
     let mut hits: Vec<(Rect, usize, bool)> = Vec::new();
     for (k, &(t, b)) in m.points.iter().enumerate() {
@@ -516,10 +521,13 @@ pub fn tempo_lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x_of:
         let sel = app.arr.tempo_sel.contains(&t);
         if lane.expand(4.0).contains(c) {
             if sel {
-                lp.circle_filled(c, 4.0, green);
+                lp.circle_filled(c, 3.5, green);
             } else {
-                lp.circle_stroke(c, 3.5, Stroke::new(1.5, green));
+                lp.circle_stroke(c, 2.5, Stroke::new(1.2, green));
             }
+            // each point's tempo beside it (Logic: "120", "127")
+            let label = if (b - b.round()).abs() < 0.005 { format!("{b:.0}") } else { format!("{b:.2}") };
+            lp.text(c + vec2(5.0, 2.0), Align2::LEFT_TOP, label, look::regular(10.5), green);
         }
         hits.push((Rect::from_center_size(c, vec2(10.0, 10.0)), k, false));
         if let Some(&(t1, b1)) = m.points.get(k + 1) {
@@ -724,6 +732,10 @@ fn tempo_menu(app: &mut App, ui: &mut egui::Ui) {
         app.after_edit();
         ui.close();
     }
+    if ui.add_enabled(sel.len() >= 2, egui::Button::new("Set Time For Last Selected Tempo Event…")).clicked() {
+        crate::globalclip::command(app, "Tempo Track: Set Time For Last Selected Tempo");
+        ui.close();
+    }
     ui.separator();
     ui.menu_button("Snap", |ui| {
         for (n, v) in [("Off (Snap setting)", 0u32), ("Bar", app.bar_ticks()), ("Beat", 960), ("1/8", 480), ("1/16", 240)] {
@@ -809,6 +821,9 @@ pub fn signature_lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x
             continue;
         }
         let resp = ui.interact(r.intersect(lane), ui.scope_id().with(("sig", k)), Sense::click_and_drag());
+        if crate::globalclip::sig_item(app, ui, &resp, *bar, *key, &lp, r) {
+            continue;
+        }
         if resp.double_clicked() {
             let s = m.sig_of_bar(*bar);
             app.arr.sig = Some(SigDialog { bar: *bar, key: *key, num: s.0, den: s.1, grouping: String::new(), key_name: text.clone(), editing: Some(*bar) });

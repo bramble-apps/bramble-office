@@ -22,6 +22,8 @@ pub struct BeatMap {
     pub beat_unit: u8,
     /// Tempo: Variable (the beats as played) or Constant (evenly spaced).
     pub variable: bool,
+    /// Hints and locked ranges (hints.rs), kept with the map so undo covers them.
+    pub hints: crate::hints::Hints,
 }
 
 impl BeatMap {
@@ -39,7 +41,7 @@ impl BeatMap {
             beats.push(t);
             k += 1;
         }
-        BeatMap { beats, downbeat: back.max(0) as usize, beats_per_bar: beats_per_bar.max(1), beat_unit: 4, variable: false }
+        BeatMap { beats, downbeat: back.max(0) as usize, beats_per_bar: beats_per_bar.max(1), beat_unit: 4, variable: false, hints: Default::default() }
     }
 
     /// The average tempo (BPM).
@@ -350,7 +352,7 @@ pub fn analyze_rhythm(mono: &[f32], rate: u32, variable: bool) -> Option<BeatMap
         }
         beats.dedup_by(|a, b| (*a - *b).abs() < 0.03);
     }
-    let mut map = BeatMap { beats, downbeat: 0, beats_per_bar: 4, beat_unit: 4, variable };
+    let mut map = BeatMap { beats, downbeat: 0, beats_per_bar: 4, beat_unit: 4, variable, hints: Default::default() };
     if !variable {
         map.make_constant();
     }

@@ -22,6 +22,7 @@ pub mod fade;
 mod fft;
 pub mod file;
 pub mod flex;
+pub mod hints;
 pub mod flexpitch;
 pub mod ops;
 pub mod peaks;

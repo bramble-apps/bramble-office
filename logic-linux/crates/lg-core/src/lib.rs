@@ -3,6 +3,9 @@
 //! (project) and plug-in settings (plugin).
 
 pub mod arrange;
+pub mod arrmarks;
+pub mod tempoclip;
+pub mod tempointerp;
 pub mod automation;
 pub mod bandsave;
 pub mod chunks;
