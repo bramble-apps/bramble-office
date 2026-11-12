@@ -356,8 +356,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // Part Box:
     y = part_box(app, ui, area, y, &mut pb, &mut st);
+    let auto_on = crate::scoreattr::automation_shown(&ctx) && t.is_some();
     // the channel strips, when there's room
-    let strips = Rect::from_min_max(pos2(area.min.x, y + 6.0), pos2(area.max.x - 1.0, area.max.y - 4.0));
+    let strips = Rect::from_min_max(pos2(area.min.x, y + 6.0), pos2(area.max.x - 1.0, area.max.y - if auto_on { 40.0 } else { 4.0 }));
     if strips.height() > 260.0 {
         p.vline(strips.center().x, strips.y_range(), Stroke::new(1.0, look::line()));
         let w = strips.width() / 2.0;
@@ -367,6 +368,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             crate::mixer::output_strip(app, ui, Rect::from_min_size(strips.min + vec2(w + 4.0, 0.0), vec2(w - 8.0, strips.height())));
         });
+    }
+    // with automation shown: the Automation button, mode and parameter pop-ups at the bottom
+    if let (true, Some(t)) = (auto_on, t) {
+        let r = Rect::from_min_size(pos2(area.min.x + 10.0, area.max.y - 30.0), vec2(area.width() - 20.0, 22.0));
+        p.hline(area.x_range(), r.min.y - 6.0, Stroke::new(1.0, look::line()));
+        crate::automation::header(app, ui, r, t);
     }
     ctx.data_mut(|d| d.insert_temp(pb_id(), pb));
     score::with_state(&ctx, |s| {

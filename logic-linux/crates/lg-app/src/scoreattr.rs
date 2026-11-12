@@ -9,7 +9,7 @@ use crate::app::App;
 use crate::score;
 use lg_core::score::{NoteAttr, NOTE_HEADS};
 
-pub const COMMANDS: &[&str] = &["Set Resize Tool", "Resize Tool", "Align Object Positions Vertically", "Align Object Positions Horizontally", "Align Object Positions", "Show Margins", "Show Pages in Pairs", "Set Pointer Tool", "Set Pencil Tool", "Set Eraser Tool", "Set Text Tool", "Set Layout Tool", "Set Zoom Tool", "Set Voice Separation Tool", "Set Solo Tool"];
+pub const COMMANDS: &[&str] = &["Set Resize Tool", "Resize Tool", "Align Object Positions Vertically", "Align Object Positions Horizontally", "Align Object Positions", "Show Margins", "Show Pages in Pairs", "Set Pointer Tool", "Set Pencil Tool", "Set Eraser Tool", "Set Text Tool", "Set Layout Tool", "Set Zoom Tool", "Set Voice Separation Tool", "Set Solo Tool", "Show/Hide Automation"];
 
 /// The Resize tool's index in `score::TOOLS`.
 pub const RESIZE: usize = 9;
@@ -17,6 +17,14 @@ pub const RESIZE: usize = 9;
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     if !COMMANDS.contains(&name) {
         return false;
+    }
+    if name == "Show/Hide Automation" {
+        // (the Score's own automation lane while it has key focus)
+        if crate::focus::keymap_focus(app, ctx) != crate::keymap::Focus::Score {
+            return false;
+        }
+        toggle_automation(ctx);
+        return true;
     }
     if let Some(tool) = name.strip_prefix("Set ").and_then(|n| n.strip_suffix(" Tool")).filter(|n| *n != "Resize") {
         // the tools' key commands pick the Score's tool while it has key focus
@@ -428,6 +436,41 @@ pub fn scale_quantize(notes: &mut [lg_core::events::Note], sel: &[usize], scale:
         }
         n.pitch = if n.pitch > 0 && scale[((n.pitch - 1) % 12) as usize] { n.pitch - 1 } else { (n.pitch + 1).min(127) };
     }
+}
+
+// ---------------------------------------------------------------- automation in the Score
+
+fn auto_id() -> egui::Id {
+    egui::Id::new("lg-score-automation")
+}
+
+/// Whether the Score shows automation (A, the bar's Show/Hide Automation button).
+pub fn automation_shown(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(auto_id())).unwrap_or(false)
+}
+
+pub fn toggle_automation(ctx: &egui::Context) {
+    let on = automation_shown(ctx);
+    ctx.data_mut(|d| d.insert_temp(auto_id(), !on));
+}
+
+/// The Automation Lane height below the Score's staffs.
+pub const AUTO_H: f32 = 84.0;
+
+/// Draws the selected track's automation lane (track or region automation, as its Automation
+/// button says) at the bottom of the Score's area, edited as in the Tracks area.
+pub fn automation_lane(app: &mut App, ui: &mut egui::Ui, area: egui::Rect, t: usize, x_of: &dyn Fn(f32) -> f32, tick_of: &dyn Fn(f32) -> f32) {
+    let r = egui::Rect::from_min_max(egui::pos2(area.min.x, area.max.y - AUTO_H), area.max);
+    let p = ui.painter_at(r);
+    p.rect_filled(r, 0.0, crate::look::pane_bg());
+    p.hline(r.x_range(), r.min.y, egui::Stroke::new(1.0, crate::look::line()));
+    let name = crate::automation::key_name(app, t, crate::automation::shown(app, t));
+    p.text(r.min + egui::vec2(6.0, 4.0), egui::Align2::LEFT_TOP, name, crate::look::regular(10.5), crate::look::text_dim());
+    let lane = egui::Rect::from_min_max(r.min + egui::vec2(0.0, 6.0), r.max - egui::vec2(0.0, 4.0));
+    ui.scope_builder(egui::UiBuilder::new().id_salt("score-auto-lane").max_rect(lane), |ui| {
+        ui.set_clip_rect(lane);
+        crate::automation::lane(app, ui, lane, t, x_of, tick_of);
+    });
 }
 
 // ---------------------------------------------------------------- editing a text in place

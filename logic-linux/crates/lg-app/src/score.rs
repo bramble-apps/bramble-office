@@ -869,7 +869,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let head_w = if linear { HEAD_W + if names_on { 80.0 } else { 0.0 } } else { 0.0 };
     let ruler_h = if linear { RULER_H } else { 0.0 };
     let ruler = Rect::from_min_max(pos2(area.min.x + head_w, part.max.y), pos2(area.max.x, part.max.y + ruler_h));
-    let body = Rect::from_min_max(pos2(area.min.x, ruler.max.y), area.max);
+    // (the automation lane, when shown, takes the bottom of the area)
+    let auto_h = if crate::scoreattr::automation_shown(&ctx) && st.view == View::Linear && !st.printing { crate::scoreattr::AUTO_H } else { 0.0 };
+    let body = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, area.max.y - auto_h));
     let head = Rect::from_min_max(body.min, pos2(area.min.x + head_w, body.max.y));
     let music = Rect::from_min_max(pos2(head.max.x, body.min.y), body.max);
 
@@ -1763,6 +1765,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     if let Some(x) = guide_x {
         mp.vline(x, music.y_range(), Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 160)));
+    }
+    // A / Show/Hide Automation: the selected track's automation lane below the staffs (Linear view)
+    if crate::scoreattr::automation_shown(&ctx) && st.view == View::Linear && !st.printing {
+        if let (Some(line), Some(t)) = (lines.first().cloned(), app.selected_region.map(|x| x.0).or(tracks.first().copied())) {
+            let x_of = |tick: f32| line.x_of(tick, bar_t) + 0.8 * sp;
+            let tick_of = |x: f32| line.tick_of(x - 0.8 * sp, bar_t);
+            crate::scoreattr::automation_lane(app, ui, Rect::from_min_max(pos2(music.min.x, music.max.y), pos2(music.max.x, area.max.y)), t, &x_of, &tick_of);
+        }
     }
     // the Voice Separation tool: a line drawn between notes; those below it go to the next
     // lower voice (its MIDI channel)

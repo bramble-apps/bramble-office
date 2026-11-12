@@ -67,6 +67,17 @@ pub fn bar(ui: &mut egui::Ui, bar: Rect, x: f32, st: &mut State) {
     if !fits[2] {
         return;
     }
+    // Show/Hide Automation (A): the automation lane below the staffs, blue when shown
+    let ar = Rect::from_min_size(pos2(tr.max.x + 8.5, y - H / 2.0), vec2(30.0, H));
+    let on = crate::scoreattr::automation_shown(ui.ctx());
+    if ar.max.x < bar.max.x - 9.0 - 75.0 - 8.0 {
+        let resp = ui.interact(ar, ui.scope_id().with("sc-auto"), Sense::click()).on_hover_text("Show/Hide Automation");
+        p.rect_filled(ar, 6.0, if on { Color32::from_rgb(0x0a, 0x84, 0xff) } else { look::group_bg() });
+        glyphs::paint(&p, ar, glyphs::ph::LINE_SEGMENTS, 15.0, if on { Color32::WHITE } else { look::text() });
+        if resp.clicked() {
+            crate::scoreattr::toggle_automation(ui.ctx());
+        }
+    }
     // the zoom slider (vertical-zoom icon, track, knob)
     // (Logic: a darker pill, 75 × 24 pt, 9 pt from the edge; a 48 pt track)
     let zr = Rect::from_min_size(pos2(bar.max.x - 9.0 - 75.0, y - H / 2.0), vec2(75.0, H));
