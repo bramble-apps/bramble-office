@@ -400,6 +400,7 @@ pub fn extended(name: &str) -> &'static [&'static str] {
         "Channel EQ" | "Linear Phase EQ" => &["Analyzer Decay"],
         "GoldVerb" => &["Diffusion"],
         "PlatinumVerb" => &["ER Scale"],
+        "Match EQ" => &["Phase"],
         _ => &[],
     }
 }
