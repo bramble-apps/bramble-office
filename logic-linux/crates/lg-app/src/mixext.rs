@@ -475,6 +475,7 @@ fn held_peak(app: &App, s: usize) -> f32 {
 
 pub fn reset_peaks(app: &App) {
     app.engine.lock().unwrap_or_else(|e| e.into_inner()).ext.reset_peaks();
+    crate::meterball::reset_holds();
 }
 
 /// The peak level display: the highest level reached since the last reset; over 0 dB it lights
@@ -514,6 +515,15 @@ pub fn meter(app: &App, p: &egui::Painter, r: Rect, s: usize, level: f32) {
             let db = 40.0 * f.max(1e-3).log10();
             let col = if db > -1.0 { look::record_red() } else if db > -6.0 { Color32::from_rgb(0xf0, 0x9a, 0x2c) } else if db > -14.0 { Color32::from_rgb(0xe8, 0xd0, 0x3c) } else { Color32::from_rgb(0x4c, 0xd9, 0x64) };
             let yb = r.max.y - k as f32 * seg;
+            p.rect_filled(Rect::from_min_max(pos2(x0, yb - seg + 1.0), pos2(x0 + w, yb)), 0.0, col);
+        }
+        // the held peak: one segment at the highest level (Peak Hold Time)
+        let hv = crate::meterball::held(s).clamp(0.0, 1.2).sqrt().min(1.0);
+        let k = (hv * n as f32).floor() as usize;
+        if hv > lv + 0.5 / n as f32 && k > 0 {
+            let db = 40.0 * hv.max(1e-3).log10();
+            let col = if db > -1.0 { look::record_red() } else if db > -6.0 { Color32::from_rgb(0xf0, 0x9a, 0x2c) } else if db > -14.0 { Color32::from_rgb(0xe8, 0xd0, 0x3c) } else { Color32::from_rgb(0x4c, 0xd9, 0x64) };
+            let yb = r.max.y - (k - 1) as f32 * seg;
             p.rect_filled(Rect::from_min_max(pos2(x0, yb - seg + 1.0), pos2(x0 + w, yb)), 0.0, col);
         }
     }

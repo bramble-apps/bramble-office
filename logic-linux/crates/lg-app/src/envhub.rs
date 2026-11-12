@@ -37,6 +37,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
     crate::syncmmc::frame(app, ctx);
     crate::linksync::frame(app, ctx);
     crate::surfaces::frame(app, ctx);
+    crate::hotplug::frame(app, ctx);
     crate::movie::frame(app, ctx);
     crate::viewprefs::frame(app);
 }

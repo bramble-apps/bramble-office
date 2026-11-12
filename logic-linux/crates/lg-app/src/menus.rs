@@ -117,8 +117,20 @@ pub fn context_menu(app: &mut App, resp: &egui::Response, place: &str) {
     if items.is_empty() {
         return;
     }
+    // Settings ▸ Editing ▸ Right Mouse Button
+    let rmb = crate::rmb::mode(app, place);
+    if rmb == crate::rmb::Rmb::ToolMenu {
+        if resp.secondary_clicked() {
+            app.tool_menu_open = true;
+        }
+        return;
+    }
     resp.context_menu(|ui| {
         app.midi.menu_roll = place.starts_with("pianoroll");
+        if rmb == crate::rmb::Rmb::ToolAndShortcut {
+            crate::rmb::tools_section(app, ui, place.starts_with("pianoroll"));
+            ui.separator();
+        }
         show_items(app, ui, items);
         app.midi.menu_roll = false;
     });

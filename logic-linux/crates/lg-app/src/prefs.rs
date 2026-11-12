@@ -635,6 +635,7 @@ pub fn changed(app: &mut App, key: &str) {
         app.logic_settings.save();
     }
     sync_statics(&app.logic_settings);
+    crate::hotplug::device_changed(app, key);
     match key {
         ANIMATIONS => apply_animations(app),
         INPUT_DEVICE => {

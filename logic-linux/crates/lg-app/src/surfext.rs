@@ -334,7 +334,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
             continue;
         }
         let Some(v) = value01(app, &a) else { continue };
-        let Some(msg) = cs::feedback_msg(&a, v) else { continue };
+        let Some(msg) = crate::surfpref::feedback_bytes(&a, v) else { continue };
         let port = app.hub.surf.devices.iter().find(|d| d.in_port == a.port).map(|d| d.out_port.clone()).or_else(|| outs.iter().find(|o| **o == a.port).cloned());
         let Some(port) = port.filter(|p| !p.is_empty()) else { continue };
         if app.hub.surf.ext.sent.get(&i) != Some(&msg) {
