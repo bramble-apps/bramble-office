@@ -529,6 +529,35 @@ pub fn for_playback(app: &App, i: usize, notes: &mut Vec<(u32, u32, u8, u8)>) {
     notes.sort_by_key(|n| n.0);
 }
 
+/// MIDI input on the selected track: its set's switches change the live articulation; the
+/// switch's own message is taken (true), others play on.
+pub fn midi_in(app: &mut App, t: usize, status: u8, a: u8, b: u8) -> bool {
+    let Some(set) = app.artic.tracks.get(&t).cloned() else { return false };
+    if set.switches.is_empty() {
+        return false;
+    }
+    let ch = status & 0x0F;
+    let (kind, sel, val) = match status & 0xF0 {
+        0x90 if b > 0 => (Msg::NoteOn, a, b),
+        0x90 | 0x80 => (Msg::NoteOff, a, b),
+        0xA0 => (Msg::PolyAftertouch, a, b),
+        0xB0 => (Msg::Controller, a, b),
+        0xC0 => (Msg::Program, 0, a),
+        0xD0 => (Msg::Aftertouch, 0, a),
+        0xE0 => (Msg::PitchBend, 0, b),
+        _ => return false,
+    };
+    let global = app.artic.global();
+    let mut sw = app.artic.live.get(&t).cloned().unwrap_or_default();
+    let changed = sw.input(&set, global, kind, ch, sel, val);
+    app.artic.live.insert(t, sw);
+    // a keyswitch note (the octave offset applied) never sounds
+    let oct = if set.local { set.octave } else { global.2 };
+    let key = (a as i32 - oct as i32 * 12).clamp(0, 127) as u8;
+    let is_key = matches!(kind, Msg::NoteOn | Msg::NoteOff) && set.switches.iter().any(|w| w.kind == Msg::NoteOn && w.selector == key);
+    changed.is_some() && !matches!(kind, Msg::NoteOn | Msg::NoteOff) || is_key
+}
+
 // ---------------------------------------------------------------- UI
 
 /// The Track inspector's Articulation Set row (software instrument tracks); returns the next y.
