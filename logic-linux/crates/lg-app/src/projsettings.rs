@@ -675,7 +675,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
         }
         let note = match (pane.as_str(), sub.as_str()) {
             ("Synchronization", "General") => "Sync Mode MTC: with external sync on (Toggle Sync intern/extern) Studio follows incoming MIDI Time Code. Ableton Link and Manual (Tempo Interpreter) aren't available. The frame rate and bar 1's SMPTE time set MTC, MMC and the time display.",
-            ("Synchronization", _) => "Studio has no word clock: Core Audio's choice is kept with the project only.",
+            ("Synchronization", "Audio") => "Studio has no word clock: Core Audio's choice is kept with the project only.",
             ("Audio", "Channel Strips") => "Automatic management keeps one channel strip object per track on the Environment's Mixer layer (Window ▸ Open MIDI Environment).",
             ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning isn't built (plays equal tempered).",
             ("MIDI", "Clip Length") => "At a MIDI region's end, a reset for each ticked kind the region holds and played.",

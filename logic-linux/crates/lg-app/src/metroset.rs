@@ -100,14 +100,12 @@ pub fn pane(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(6.0);
     ui.label(egui::RichText::new("Source").strong());
     let audio = check(app, ui, "Audio Click (Klopfgeist)", "Audio Click (Klopfgeist)", true);
-    egui::Grid::new("metro-audio").num_columns(4).spacing([12.0, 3.0]).show(ui, |ui| {
-        ui.label("");
+    egui::Grid::new("metro-audio").num_columns(3).spacing([12.0, 3.0]).show(ui, |ui| {
         ui.label("");
         ui.label(egui::RichText::new("Note").small());
         ui.label(egui::RichText::new("Velocity").small());
         ui.end_row();
         for l in LEVELS {
-            ui.label("");
             check(app, ui, l, l, audio);
             num(&mut app.proj, ui, &format!("{l} Note"), 0.0, 127.0, audio, note_name);
             num(&mut app.proj, ui, &format!("{l} Velocity"), 1.0, 127.0, audio, plain);
@@ -126,15 +124,13 @@ pub fn pane(app: &mut App, ui: &mut egui::Ui) {
     });
     ui.add_space(6.0);
     let midi = check(app, ui, "MIDI Click", "MIDI Click", true);
-    egui::Grid::new("metro-midi").num_columns(5).spacing([12.0, 3.0]).show(ui, |ui| {
-        ui.label("");
+    egui::Grid::new("metro-midi").num_columns(4).spacing([12.0, 3.0]).show(ui, |ui| {
         ui.label("");
         for h in ["Channel", "Note", "Velocity"] {
             ui.label(egui::RichText::new(h).small());
         }
         ui.end_row();
         for l in LEVELS {
-            ui.label("");
             check(app, ui, &format!("MIDI {l}"), l, midi);
             num(&mut app.proj, ui, &format!("MIDI {l} Channel"), 1.0, 16.0, midi, plain);
             num(&mut app.proj, ui, &format!("MIDI {l} Note"), 0.0, 127.0, midi, note_name);
