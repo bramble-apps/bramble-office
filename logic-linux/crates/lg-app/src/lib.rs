@@ -91,6 +91,7 @@ pub mod regionparams;
 pub mod rollextras;
 mod snap;
 mod newtrack;
+mod ngview;
 mod pluginwin;
 pub mod plughead;
 mod eqview;

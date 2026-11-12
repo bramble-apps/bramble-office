@@ -506,9 +506,9 @@ pub fn pane(app: &mut App, ui: &mut egui::Ui) {
         ui.end_row();
         for n in 0..ROWS {
             let cur = row_get(&app.proj, n, "Destination");
-            egui::ComboBox::from_id_salt(("sync-dest", n)).selected_text(&cur).width(210.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(("sync-dest", n)).selected_text(crate::live::port_label(&cur)).width(210.0).show_ui(ui, |ui| {
                 for c in &choices {
-                    if ui.selectable_label(cur == *c, c).clicked() {
+                    if ui.selectable_label(cur == *c, crate::live::port_label(c)).clicked() {
                         set(&mut app.proj, row_key(n, "Destination"), c.clone());
                     }
                 }

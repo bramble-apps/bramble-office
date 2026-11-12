@@ -827,7 +827,8 @@ pub fn inspector_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, 
         let mut inputs: Vec<String> = vec!["Off".into(), "All".into(), "Musical Typing".into()];
         inputs.extend(app.live.input_names.iter().cloned());
         inputs.push("Virtual In".into());
-        let refs: Vec<&str> = inputs.iter().map(|s| s.as_str()).collect();
+        let shown: Vec<String> = inputs.iter().map(|s| crate::live::port_label(s)).collect();
+        let refs: Vec<&str> = shown.iter().map(|s| s.as_str()).collect();
         let cur = inputs.iter().position(|x| *x == set.midi.input).unwrap_or(1);
         if let Some(k) = choice(ui, &mut y, "midi-in", "MIDI Input", cur, &refs) {
             new.midi.input = inputs[k].clone();

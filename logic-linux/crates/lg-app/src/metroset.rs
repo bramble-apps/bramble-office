@@ -144,9 +144,9 @@ pub fn pane(app: &mut App, ui: &mut egui::Ui) {
         let mut ports = vec!["All".to_string()];
         ports.extend(app.hub.outs.ports());
         ui.add_enabled_ui(midi, |ui| {
-            egui::ComboBox::from_id_salt("metro-port").selected_text(&cur).width(240.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("metro-port").selected_text(crate::live::port_label(&cur)).width(240.0).show_ui(ui, |ui| {
                 for p in &ports {
-                    if ui.selectable_label(cur == *p, p).clicked() {
+                    if ui.selectable_label(cur == *p, crate::live::port_label(p)).clicked() {
                         set(&mut app.proj, &k("MIDI Port:"), p);
                     }
                 }

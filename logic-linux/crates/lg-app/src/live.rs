@@ -356,6 +356,29 @@ fn keys_frame(app: &mut App, ctx: &egui::Context, t: usize) -> Vec<egui::Key> {
     used
 }
 
+/// A MIDI port's name as Logic shows it: the device's port, without the ALSA client prefix
+/// ("Client:") or the "128:0" address ("Launchkey Mini:Launchkey Mini MIDI 1 20:0" →
+/// "Launchkey Mini MIDI 1"). Display only: settings and connections keep the full name.
+pub fn port_label(name: &str) -> String {
+    let mut n = name.trim();
+    // the address at the end: " 20:0"
+    if let Some((head, tail)) = n.rsplit_once(' ') {
+        if let Some((a, b)) = tail.split_once(':') {
+            if !a.is_empty() && !b.is_empty() && a.chars().all(|c| c.is_ascii_digit()) && b.chars().all(|c| c.is_ascii_digit()) {
+                n = head.trim_end();
+            }
+        }
+    }
+    // "Client:Port": the port's own name
+    if let Some((client, port)) = n.split_once(':') {
+        let port = port.trim();
+        if !port.is_empty() && !client.trim().is_empty() {
+            return port.to_string();
+        }
+    }
+    n.to_string()
+}
+
 /// A note's name as Logic writes it (middle C = C3).
 fn c_name(n: u8) -> String {
     format!("C{}", n as i32 / 12 - 2)
@@ -603,5 +626,14 @@ mod tests {
         assert_eq!(typing_label(48, 66), None);
         assert_eq!(c_name(60), "C3");
         assert_eq!(c_name(0), "C-2");
+    }
+
+    #[test]
+    fn port_names_lose_the_alsa_parts() {
+        assert_eq!(port_label("Launchkey Mini:Launchkey Mini MIDI 1 20:0"), "Launchkey Mini MIDI 1");
+        assert_eq!(port_label("Bramble Studio:Bramble Studio Virtual Out 128:0"), "Bramble Studio Virtual Out");
+        assert_eq!(port_label("USB Keystation 61"), "USB Keystation 61");
+        assert_eq!(port_label("Port 2 24:1"), "Port 2");
+        assert_eq!(port_label("IAC Driver Bus 1"), "IAC Driver Bus 1");
     }
 }

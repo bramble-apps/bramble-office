@@ -1028,46 +1028,10 @@ fn project_settings(app: &mut App, ctx: &egui::Context) {
     app.pf.settings = open.then_some(tab);
 }
 
-/// Project Settings ▸ General: the project, where it's saved, tempo, signature, key, and what
-/// the last Save couldn't write.
+/// Project Settings ▸ General: what the last Save couldn't write into the Logic file (Logic's
+/// pane has only its options; the project's name, tempo, signature and key are in the window
+/// title and the LCD, as in Logic).
 pub fn general_info(app: &mut App, ui: &mut egui::Ui) {
-    let Some(p) = app.project.clone() else { return };
-    egui::Grid::new("ps-general").num_columns(2).show(ui, |ui| {
-        ui.label("Project:");
-        ui.label(&p.name);
-        ui.end_row();
-        ui.label("Saved in:");
-        ui.label(match (&app.pf.band, package(app)) {
-            (Some(b), _) => b.display().to_string(),
-            (_, Some(pkg)) => pkg.display().to_string(),
-            _ => "not saved yet".into(),
-        });
-        ui.end_row();
-        if let Some(pkg) = package(app) {
-            ui.label("Alternatives:");
-            ui.label(package::list(&pkg).iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "));
-            ui.end_row();
-        }
-        ui.label("Tempo:");
-        let mut bpm = p.tempo;
-        if ui.add(egui::DragValue::new(&mut bpm).range(5.0..=990.0).speed(0.1).suffix(" BPM")).changed() {
-            app.checkpoint("Tempo");
-            if let Some(pr) = app.project.as_mut() {
-                pr.tempo = bpm;
-                if let Some(first) = pr.tempo_map.first_mut() {
-                    first.1 = bpm;
-                }
-            }
-            app.after_edit();
-        }
-        ui.end_row();
-        ui.label("Time signature:");
-        ui.label(format!("{}/{}", p.signature.0, p.signature.1));
-        ui.end_row();
-        ui.label("Key:");
-        ui.label(&p.key);
-        ui.end_row();
-    });
     if !app.pf.last_left_out.is_empty() {
         ui.add_space(6.0);
         ui.label(egui::RichText::new("Not in the Logic file after the last save:").color(crate::look::text_dim()));
@@ -1077,7 +1041,6 @@ pub fn general_info(app: &mut App, ui: &mut egui::Ui) {
             }
         });
     }
-    
 }
 
 #[cfg(test)]

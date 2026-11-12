@@ -129,6 +129,11 @@ impl NoiseGate {
 }
 
 impl lg_dsp::Effect for NoiseGate {
+    /// Whether the gate is open now (the window's Open / Close lights).
+    fn readouts(&self) -> Vec<(&'static str, f32)> {
+        vec![("Open", if self.open { 1.0 } else { 0.0 })]
+    }
+
     fn latency(&self) -> usize {
         self.latency_samples()
     }

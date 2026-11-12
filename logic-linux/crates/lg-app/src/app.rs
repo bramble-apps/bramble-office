@@ -1471,6 +1471,11 @@ impl App {
         if crate::stemsplit::command(self, name) || crate::regionparams::command(self, ctx, name) {
             return true;
         }
+        // (the Live Loops view commands from the menus and key commands; the grid's own buttons
+        // and keys already reach liveloops.rs)
+        if matches!(name, "Show/Hide Live Loops Grid" | "Switch between Live Loops Grid and Tracks View" | "Show Both, Live Loops Grid and Tracks View" | "Show Live Loops Grid only" | "Show Tracks View only" | "Toggle Grid Horizontal Zoom" | "Stop All Cells") && crate::liveloops::command(self, name) {
+            return true;
+        }
         let bar = self.bar_ticks() as f64;
         let n_tracks = self.project.as_ref().map_or(0, |p| p.tracks.len());
         match name {
