@@ -892,12 +892,23 @@ impl Sampler {
         self.has_release_zones = zones.iter().any(|z| z.trigger == Trigger::Release);
         self.sh.zones = zones;
     }
+    /// Adds a zone while voices play on (Quick Sampler's Flex makes one per key as notes
+    /// come); returns its index.
+    pub fn add_zone(&mut self, zone: Zone) -> usize {
+        self.has_release_zones |= zone.trigger == Trigger::Release;
+        self.sh.zones.push(zone);
+        self.sh.zones.len() - 1
+    }
     /// The group rules zones refer to by `layer`.
     pub fn set_groups(&mut self, groups: Vec<GroupRule>) {
         self.sh.groups = groups;
     }
     pub fn zones(&self) -> &[Zone] {
         &self.sh.zones
+    }
+    /// Where the sounding voices are: (zone index, frame), the newest last.
+    pub fn play_positions(&self) -> Vec<(usize, f64)> {
+        self.poly.voices.iter().filter(|v| v.on).map(|v| (v.zone, v.pos)).collect()
     }
     /// Voices sounding now (the Synth Details' Used Voices).
     pub fn used_voices(&self) -> usize {
@@ -1266,6 +1277,9 @@ impl Instrument for Sampler {
     }
     fn set_tempo(&mut self, bpm: f64) {
         self.sh.syn.bpm = bpm as f32;
+    }
+    fn pressure(&mut self, value: u8) {
+        self.ch.ctl.aftertouch = value as f32 / 127.0;
     }
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
         Some(self)

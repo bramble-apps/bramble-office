@@ -78,6 +78,8 @@ mod instwin;
 mod samplerwin;
 mod dmdwin;
 mod quickwin;
+mod drumsynthwin;
+mod legacywin;
 mod dkdwin;
 mod alchemyrack;
 mod alchemywin;
