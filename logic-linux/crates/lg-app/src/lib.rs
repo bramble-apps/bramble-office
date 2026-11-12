@@ -19,6 +19,7 @@ pub mod demo;
 mod dialogs;
 pub mod envhub;
 pub mod envwin;
+pub mod envsysex;
 pub mod metroset;
 pub mod midiout;
 pub mod movie;

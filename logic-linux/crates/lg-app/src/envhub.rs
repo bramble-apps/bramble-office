@@ -23,6 +23,9 @@ pub fn midi_raw(app: &mut App, ctx: &egui::Context, port: usize, bytes: &[u8]) -
     if crate::syncmidi::midi_in(app, ctx, port, bytes) {
         return true;
     }
+    if crate::envsysex::midi_in(app, ctx, bytes) {
+        return true;
+    }
     crate::surfaces::midi_in(app, ctx, port, bytes)
 }
 

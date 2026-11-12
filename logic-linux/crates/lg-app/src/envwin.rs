@@ -80,6 +80,7 @@ pub enum Sub {
     Transformer,
     TextFader,
     Banks,
+    SysEx,
 }
 
 /// Confirmations shown over the Environment.
@@ -144,7 +145,7 @@ impl Default for State {
 
 const GRID: f32 = 8.0;
 
-fn clock(app: &App) -> Clock {
+pub(crate) fn clock(app: &App) -> Clock {
     Clock { ms: app.hub.env.t0.elapsed().as_secs_f64() * 1000.0, bpm: app.tempo(), playing: app.playing(), song: app.position() }
 }
 
@@ -226,7 +227,7 @@ pub fn sync_strips(app: &mut App) {
     }
 }
 
-fn checkpoint(app: &mut App) {
+pub(crate) fn checkpoint(app: &mut App) {
     let s = &mut app.hub.env;
     s.undo.push(s.env.clone());
     if s.undo.len() > 100 {
@@ -306,6 +307,7 @@ pub fn dispatch(app: &mut App, ctx: &egui::Context, outs: Vec<Out>) {
             },
             Out::Touch { obj, ev } => touch(app, obj, ev),
             Out::MmcArm { mask } => crate::syncmidi::send_arm(app, mask as u64),
+            Out::Raw { port, bytes } => app.hub.outs.send(&port, &bytes),
         }
     }
 }
@@ -1173,6 +1175,9 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, w: usize) {
             ui.label(format!("Reference: {}", r.name));
         }
     }
+    if o.kind == Kind::Fader && ((o.p("out_t") == 7 && before.p("out_t") != 7) || (o.p("in_t") == 7 && before.p("in_t") != 7)) {
+        app.hub.env.sub = Some((Sub::SysEx, id));
+    }
     if o != before {
         checkpoint(app);
         if let Some(x) = app.hub.env.env.obj_mut(id) {
@@ -1216,7 +1221,7 @@ fn top_bar(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize) {
         });
         ui.separator();
         for k in ["Keyboard", "Monitor", "Macro", "Arpeggiator", "Transformer", "Delay Line", "Voice Limiter", "Channel Splitter", "Chord Memorizer", "Alias", "Ornament", "GM Mixer", "MMC Record Buttons"] {
-            if ui.add_enabled(k != "Macro", egui::Button::new(k)).clicked() {
+            if ui.add_enabled(k != "Macro" || !app.hub.env.wins[w].sel.is_empty(), egui::Button::new(k)).clicked() {
                 fired = Some(k.into());
             }
         }
@@ -1360,10 +1365,31 @@ fn top_bar(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize) {
                 }
                 None => app.tell("Select an object first: New ▸ Alias makes an alias of it"),
             }
+        } else if f == "Macro" {
+            new_macro(app, w);
         } else if f == "Channel Strip" {
             add_object(app, w, Kind::ChannelStrip, None);
         } else if let Some(k) = new_kind(&f) {
             add_object(app, w, k, None);
+        }
+    }
+}
+
+/// New ▸ Macro: the selected objects packed into a macro (cables to objects outside are
+/// deleted, so the macro is then made from a copy and Logic's warning is shown).
+fn new_macro(app: &mut App, w: usize) {
+    let sel = app.hub.env.wins[w].sel.clone();
+    checkpoint(app);
+    match app.hub.env.env.make_macro(&sel) {
+        Ok((m, copied)) => {
+            app.hub.env.wins[w].sel = vec![m];
+            if copied {
+                app.tell("Cables to objects outside the macro were deleted: the macro was made from a copy, the original objects are unchanged");
+            }
+        }
+        Err(e) => {
+            app.hub.env.undo.pop();
+            app.tell(e);
         }
     }
 }
@@ -1490,7 +1516,10 @@ fn canvas_ui(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize, ca
     let layer = app.hub.env.wins[w].layer;
     let ports: Vec<String> = app.live.input_names.clone();
     let ids = app.hub.env.env.on_layer(layer);
-    let objs: Vec<Obj> = ids.iter().filter_map(|i| app.hub.env.env.obj(*i).cloned()).collect();
+    let mut objs: Vec<Obj> = ids.iter().filter(|i| !app.hub.env.env.hidden_in_macro(**i)).filter_map(|i| app.hub.env.env.obj(*i).cloned()).collect();
+    // macros behind their members (outer macros first)
+    let depth = |id: Id| std::iter::successors(app.hub.env.env.macro_of(id), |m| app.hub.env.env.macro_of(*m)).count();
+    objs.sort_by_key(|o| if o.kind == Kind::Macro { depth(o.id) as i32 - 100 } else { 0 });
     let rects: BTreeMap<Id, Rect> = objs.iter().map(|o| (o.id, obj_rect(o, canvas, scroll))).collect();
     // ornaments first (behind)
     for o in objs.iter().filter(|o| o.kind == Kind::Ornament) {
@@ -1596,6 +1625,11 @@ fn draw_object(app: &App, p: &egui::Painter, o: &Obj, r: Rect, selected: bool, h
     let edge = Stroke::new(1.0, if selected { look::accent() } else { Color32::from_gray(200) });
     let dim = Color32::from_gray(200);
     match o.kind {
+        Kind::Macro => {
+            // a frame with a grey background around its objects
+            p.rect_filled(r, 3.0, Color32::from_gray(72));
+            p.rect_stroke(r, 3.0, edge, egui::StrokeKind::Inside);
+        }
         Kind::PhysicalInput => {
             p.rect_stroke(r, 0.0, edge, egui::StrokeKind::Inside);
             p.text(pos2(r.max.x - 6.0, r.min.y + 8.0), Align2::RIGHT_CENTER, "Sum", look::regular(10.5), dim);
@@ -1886,9 +1920,20 @@ fn interact(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize, can
                 Kind::MultiInstrument => Some(Sub::Multi),
                 Kind::TouchTracks => Some(Sub::Touch),
                 Kind::Transformer => Some(Sub::Transformer),
+                Kind::Fader if o.p("out_t") == 7 || o.p("in_t") == 7 => Some(Sub::SysEx),
                 Kind::Fader if o.p("style") == 10 || o.p("as") == 7 => Some(Sub::TextFader),
                 _ => None,
             };
+            // a macro's empty area: unpacked into its objects and cables
+            if o.kind == Kind::Macro && !protect {
+                checkpoint(app);
+                if app.hub.env.env.unpack_macro(id) {
+                    app.hub.env.wins[w].sel.clear();
+                } else {
+                    app.hub.env.undo.pop();
+                    app.tell("This macro is protected: turn off Protected in its inspector to unpack it");
+                }
+            }
             if let Some(s) = sub {
                 app.hub.env.sub = Some((s, id));
             }
@@ -1926,7 +1971,15 @@ fn interact(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, w: usize, can
                 if !sel.contains(&id) {
                     *sel = vec![id];
                 }
-                let ids = sel.clone();
+                let mut ids = sel.clone();
+                // (macros move with their members)
+                for i in sel.clone() {
+                    for m in app.hub.env.env.all_members(i) {
+                        if !ids.contains(&m) {
+                            ids.push(m);
+                        }
+                    }
+                }
                 let orig: Vec<(Id, f32, f32)> = ids.iter().filter_map(|i| app.hub.env.env.obj(*i).map(|o| (o.id, o.x, o.y))).collect();
                 checkpoint(app);
                 app.hub.env.wins[w].drag = Drag::Move { start, orig, copy: m.alt };
@@ -2692,6 +2745,7 @@ fn sub_windows(app: &mut App, ctx: &egui::Context) {
         Sub::Transformer => format!("Transformer: {}", o.name),
         Sub::TextFader => format!("Text Fader: {}", o.name),
         Sub::Banks => format!("Custom Bank Messages: {}", o.name),
+        Sub::SysEx => format!("SysEx Fader: {}", o.name),
     };
     egui::Window::new(title).id(egui::Id::unique(("env-sub", id))).open(&mut open).resizable(true).default_size(vec2(560.0, 380.0)).show(ctx, |ui| match kind {
         Sub::Chord => chord_window(app, ui, id),
@@ -2701,6 +2755,7 @@ fn sub_windows(app: &mut App, ctx: &egui::Context) {
         Sub::Transformer => transformer_window(app, ui, id),
         Sub::TextFader => text_fader_window(app, ui, ctx, id),
         Sub::Banks => banks_window(app, ui, id),
+        Sub::SysEx => crate::envsysex::window(app, ui, id),
     });
     if !open {
         app.hub.env.sub = None;
