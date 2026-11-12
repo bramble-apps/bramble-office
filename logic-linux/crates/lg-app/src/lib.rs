@@ -131,6 +131,7 @@ mod demix;
 mod regsolo;
 mod stretch;
 mod flexedit;
+mod varispeed;
 pub mod settings;
 pub mod share;
 pub mod smarttempo;

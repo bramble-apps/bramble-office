@@ -268,6 +268,7 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 ui.label("Modes and Functions:");
                 ui.checkbox(&mut app.hub.sync.show_button, "Sync");
+                crate::varispeed::customize(ui);
             });
             ui.add_space(8.0);
             ui.horizontal(|ui| {

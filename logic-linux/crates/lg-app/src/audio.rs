@@ -205,6 +205,9 @@ pub struct Engine {
     pub tempo: f64,
     /// Tempo changes (ticks, BPM); empty: `tempo` throughout.
     pub tempo_map: Vec<(u32, f64)>,
+    /// Varispeed: the whole project faster or slower (1.0: off), audio pitched with it like
+    /// tape (varispeed.rs).
+    pub varispeed: f64,
     pub tracks: Vec<PlayTrack>,
     pub cycle: Option<(u32, u32)>,
     pub cycle_on: bool,
@@ -305,7 +308,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), varispeed: 1.0, tracks: Vec::new(), cycle: None, cycle_on: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -624,7 +627,8 @@ impl Engine {
             self.meters = vec![0.0; self.tracks.len()];
         }
         let bpm = if self.timeline.points.is_empty() { self.tempo_map.iter().rev().find(|t| t.0 as f64 <= self.pos).map_or(self.tempo, |t| t.1) } else { self.timeline.bpm_at(self.pos) };
-        let tps = bpm / 60.0 * PPQ as f64 / RATE as f64;
+        let vs = if self.varispeed > 0.0 { self.varispeed } else { 1.0 };
+        let tps = bpm / 60.0 * PPQ as f64 / RATE as f64 * vs;
         // the Arpeggiators' steps for keys held live
         if !self.arp.tracks.is_empty() {
             let song = self.playing.then(|| (self.pos, self.pos + tps * frames as f64, PPQ));
@@ -842,12 +846,15 @@ impl Engine {
                             if tick < 0.0 {
                                 continue;
                             }
-                            let frame = (tick / tps) as usize;
-                            if 2 * frame + 1 >= samples.len() {
+                            // (Varispeed: read faster or slower, the pitch with it)
+                            let fpos = tick / (tps / vs);
+                            let frame = fpos as usize;
+                            if 2 * frame + 3 >= samples.len() {
                                 break;
                             }
-                            l[k] += samples[2 * frame];
-                            r[k] += samples[2 * frame + 1];
+                            let f = (fpos - frame as f64) as f32;
+                            l[k] += samples[2 * frame] * (1.0 - f) + samples[2 * frame + 2] * f;
+                            r[k] += samples[2 * frame + 1] * (1.0 - f) + samples[2 * frame + 3] * f;
                             any = true;
                         }
                     }
