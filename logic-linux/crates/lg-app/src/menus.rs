@@ -204,6 +204,9 @@ pub fn enabled(app: &App, label: &str) -> bool {
     if !IMPLEMENTED.contains(&label) && !handled(label) && !crate::audioedit::COMMANDS.contains(&label) && !crate::recording::COMMANDS.contains(&label) && !crate::takes::COMMANDS.contains(&label) {
         return false;
     }
+    if let Some(e) = crate::share::enabled(app, label) {
+        return e;
+    }
     if let Some(e) = crate::arranging::enabled(app, label) {
         return e;
     }

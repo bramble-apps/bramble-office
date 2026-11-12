@@ -453,5 +453,10 @@
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
   "status": "Partial",
   "feature": "Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Partial",
+  "feature": "Bounce and share (share.rs, 2026-11-12, tested): Logic's Bounce window for stereo projects \u2014 Destination list (PCM, MP3, M4A: AAC; the clicked row shows its options), PCM AIFF / WAVE / CAF, 8\u201332-bit float, 11.025\u2013192 kHz (anti-aliased), Interleaved / Split (Bounce Extensions), Dithering (None, POWr #1\u2013#3, UV22HR: Studio's own algorithms in their spirit, not Apple's), MP3 (mono / stereo bit rates, VBR, Quality, best encoding, 10 Hz filter, Joint / Normal stereo, ID3 tags with the ID3 Settings window and default values), M4A (AAC bit rate / VBR, Apple Lossless), Start / End from cycle, selection or project, Mode Automatic / Offline / Realtime (paced, not monitored), Bounce 2nd Cycle Pass, Include Audio Tail, Include Tempo Information (acid chunk: project tempo only), Normalize, Add to Project, Add to Music Library (~/Music/Bramble Studio), remembered folder; MP3 / M4A through ffmpeg. Share \u25b8 Song to Music (tags, artist/album folders, .m3u playlist), Song to Voice Memos (a folder), Mail (song, or the project zipped; xdg-email). Export \u25b8 Selection as MIDI File; Import \u25b8 Audio File / MIDI File / Other; audio and MIDI files dropped from the file manager import at the playhead. Surround projects keep surround_ui's Bounce window. [ ] Burn CD/DVD, AirDrop, GarageBand for iOS / iPad, AAF, Final Cut Pro XML, MusicXML import, Export Selection as Audio File, My Info tags, mono outputs; Bnc bounces the one output (Studio has no other outputs)"
  }
 ]

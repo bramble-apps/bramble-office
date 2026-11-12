@@ -1573,7 +1573,7 @@ fn bar_text(t: u32) -> String {
 
 /// The offline engine: everything the live one plays (tracks, auxes, routing, the masters and
 /// surround), from bar `from`.
-fn offline(app: &App) -> Option<crate::audio::Engine> {
+pub fn offline(app: &App) -> Option<crate::audio::Engine> {
     let (tracks, auxes, out, byp, mi, mb, comp, pa, tl, tempo, map, master, sf) = {
         let e = app.engine.lock().ok()?;
         (e.tracks.clone(), e.auxes.clone(), e.track_out.clone(), e.track_bypass.clone(), e.master_inserts.clone(), e.master_bypass.clone(), e.compensate, e.param_auto.clone(), e.timeline.clone(), e.tempo, e.tempo_map.clone(), e.master, e.soundfont.clone())

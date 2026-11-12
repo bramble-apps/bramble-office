@@ -1032,9 +1032,9 @@ impl App {
 
     /// Bounce: the song (the cycle area when cycling), or one track, to a WAV file.
     pub fn bounce(&mut self, only: Option<usize>) {
-        // (a surround or Spatial Audio project: the Bounce window with Surround Bounce)
-        if only.is_none() && crate::surround::active(self) {
-            crate::surround_ui::open_bounce(self);
+        // (the Bounce window; a surround or Spatial Audio project's has Surround Bounce)
+        if only.is_none() {
+            crate::share::command(self, "Project or Section…");
             return;
         }
         let Some(p) = &self.project else { return };
@@ -1367,6 +1367,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::share::command(self, name) {
+            return true;
+        }
         if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
@@ -1894,6 +1897,7 @@ impl App {
         crate::browser::frame(self, &ctx);
         crate::projfile::windows(self, &ctx);
         crate::surround_ui::windows(self, &ctx);
+        crate::share::windows(self, &ctx);
         if let Some(t) = self.eq_window {
             let name = self.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
             let mut open = true;
@@ -1939,6 +1943,7 @@ impl eframe::App for App {
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if let Some(p) = dropped.first()
             && !crate::instwin::takes_drop(self, &ctx, &dropped)
+            && !crate::share::takes_drop(self, &dropped)
         {
             self.open_path(p);
         }

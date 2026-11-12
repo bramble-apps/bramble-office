@@ -46,13 +46,20 @@ unsafe impl Send for Module {}
 unsafe impl Sync for Module {}
 
 fn module(path: &Path) -> Result<&'static Module, String> {
-    static M: OnceLock<Mutex<HashMap<PathBuf, &'static Module>>> = OnceLock::new();
+    // (each file once, as it was when loaded: a changed file is loaded again, see load_path)
+    static M: OnceLock<Mutex<HashMap<PathBuf, (Option<crate::Stamp>, &'static Module)>>> = OnceLock::new();
     let mut map = M.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(m) = map.get(path) {
-        return Ok(m);
+    let now = crate::stamp(path);
+    if let Some((s, m)) = map.get(path) {
+        if *s == now {
+            return Ok(m);
+        }
     }
+    let from = crate::load_path(path, map.contains_key(path))?;
     unsafe {
-        let lib = libloading::Library::new(path).map_err(|e| e.to_string())?;
+        let lib = libloading::Library::new(&from);
+        crate::loaded_from(path, &from);
+        let lib = lib.map_err(|e| e.to_string())?;
         let entry: *const clap_plugin_entry = *lib.get::<*const clap_plugin_entry>(b"clap_entry\0").map_err(|_| "not a CLAP plug-in (no clap_entry)".to_string())?;
         if entry.is_null() || (*entry).clap_version.major < 1 {
             return Err("unsupported CLAP version".into());
@@ -68,7 +75,7 @@ fn module(path: &Path) -> Result<&'static Module, String> {
             return Err("no plug-in factory".into());
         }
         let m: &'static Module = Box::leak(Box::new(Module { _lib: lib, factory }));
-        map.insert(path.to_path_buf(), m);
+        map.insert(path.to_path_buf(), (now, m));
         Ok(m)
     }
 }

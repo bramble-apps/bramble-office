@@ -781,7 +781,12 @@ mod tests {
         let d = exe.parent()?.parent()?.join("lg-app-hosting");
         let _ = std::fs::create_dir_all(&d);
         let p = d.join("Test.clap");
-        std::fs::copy(&so, &p).ok()?;
+        // (replaced as installers do, beside then renamed: copied over in place, the library an
+        // earlier test in this process loaded would be rewritten under its feet and crash the
+        // process at exit; lg-host loads the changed file again)
+        let tmp = d.join("Test.clap.part");
+        std::fs::copy(&so, &tmp).ok()?;
+        std::fs::rename(&tmp, &p).ok()?;
         lg_host::set_catalog(lg_host::clap::describe(&p).ok()?);
         Some(())
     }

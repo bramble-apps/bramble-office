@@ -121,6 +121,7 @@ mod stepinput;
 mod stepedit;
 mod eventedit;
 pub mod settings;
+pub mod share;
 pub mod smarttempo;
 pub mod takes;
 pub mod smartcontrols;
