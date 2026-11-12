@@ -163,6 +163,12 @@ pub fn render(e: &mut crate::audio::Engine, span: Option<(f64, f64)>, tps_block:
 
 /// Region events as the engine plays them: song tick, message (looped regions repeat them).
 pub fn region_controls(tr: &lg_core::Track, song_end: u32) -> Vec<(u32, Msg)> {
+    region_controls_with(tr, song_end, [false; 6])
+}
+
+/// `region_controls` with Project Settings ▸ MIDI ▸ Clip Length: at each region's end, the
+/// ticked resets for the kinds the region holds (aftertouch, pitch bend, CC 1, 2, 4, 11).
+pub fn region_controls_with(tr: &lg_core::Track, song_end: u32, clip: [bool; 6]) -> Vec<(u32, Msg)> {
     let mut out = Vec::new();
     for r in tr.regions.iter().filter(|r| !r.muted && r.audio.is_none()) {
         let mut until = if r.props.looped { tr.regions.iter().map(|o| o.start).filter(|&s| s >= r.start + r.length).min().unwrap_or(song_end) } else { r.start + r.length };
@@ -195,6 +201,23 @@ pub fn region_controls(tr: &lg_core::Track, song_end: u32) -> Vec<(u32, Msg)> {
                 break;
             }
         }
+        // (Clip Length: a kind the region holds is reset where it ends)
+        let has = |f: &dyn Fn(&lg_core::events::Control) -> bool| r.ext.events.iter().any(|c| c.pos < r.length && f(c));
+        let ch = r.ext.events.first().map_or(0, |c| c.channel);
+        let end = until.min(song_end).max(r.start);
+        let resets: [(bool, Msg); 6] = [
+            (has(&|c| c.kind & 0xF0 == 0xD0), Msg::Pressure { ch, val: 0 }),
+            (has(&|c| c.kind & 0xF0 == 0xE0), Msg::Bend { ch, val: 0 }),
+            (has(&|c| c.kind & 0xF0 == 0xB0 && c.number == 1), Msg::Cc { ch, num: 1, val: 0 }),
+            (has(&|c| c.kind & 0xF0 == 0xB0 && c.number == 2), Msg::Cc { ch, num: 2, val: 0 }),
+            (has(&|c| c.kind & 0xF0 == 0xB0 && c.number == 4), Msg::Cc { ch, num: 4, val: 0 }),
+            (has(&|c| c.kind & 0xF0 == 0xB0 && c.number == 11), Msg::Cc { ch, num: 11, val: 127 }),
+        ];
+        for (k, (present, m)) in resets.into_iter().enumerate() {
+            if clip[k] && present {
+                out.push((end, m));
+            }
+        }
     }
     out.sort_by_key(|x| x.0);
     out
@@ -204,7 +227,8 @@ pub fn region_controls(tr: &lg_core::Track, song_end: u32) -> Vec<(u32, Msg)> {
 pub fn to_engine(app: &App, e: &mut crate::audio::Engine) {
     let Some(p) = &app.project else { return };
     let song_end = p.tracks.iter().flat_map(|t| t.regions.iter().map(|r| r.start + r.length)).max().unwrap_or(0).max(64 * app.bar_ticks());
-    e.fx.controls = p.tracks.iter().map(|t| region_controls(t, song_end)).collect();
+    let clip = crate::projsettings::clip_length(&app.proj);
+    e.fx.controls = p.tracks.iter().map(|t| region_controls_with(t, song_end, clip)).collect();
     let n = p.tracks.len();
     let mut offs = Vec::new();
     for (i, t) in p.tracks.iter().enumerate() {
@@ -837,6 +861,19 @@ fn chord_editor(app: &mut App, ui: &mut egui::Ui, t: usize, v: &mut Vec<f32>, st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clip_length_resets_at_region_end() {
+        let mut t = lg_core::Track::new("K", lg_core::TrackKind::Instrument);
+        let mut r = lg_core::Region { name: "r".into(), start: 0, length: 3840, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
+        r.ext.events.push(lg_core::events::Control { kind: 0xB0, channel: 0, pos: 10, number: 1, value: 90 });
+        t.regions.push(r);
+        let c = region_controls_with(&t, 100_000, [true; 6]);
+        assert_eq!(c.last(), Some(&(3840, Msg::Cc { ch: 0, num: 1, val: 0 })));
+        // only kinds the region holds; none when unticked
+        assert_eq!(c.len(), 2);
+        assert_eq!(region_controls_with(&t, 100_000, [false; 6]).len(), 1);
+    }
 
     #[test]
     fn region_controls_follow_region_and_loop() {

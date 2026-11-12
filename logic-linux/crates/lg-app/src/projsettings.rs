@@ -145,8 +145,12 @@ const ROWS: &[Row] = &[
     Row("MIDI", "Chase", "Chase on cycle jump", Kind::Check, "0"),
     Row("MIDI", "Chase", "Notes (on cycle jump)", Kind::Check, "1"),
     Row("MIDI", "Chase", "Send full MIDI reset before chasing", Kind::Check, "0"),
-    Row("MIDI", "Clip Length", "Control 1 (Modulation) to zero", Kind::Check, "1"),
+    Row("MIDI", "Clip Length", "Aftertouch to zero", Kind::Check, "1"),
     Row("MIDI", "Clip Length", "Pitch Bend to center position", Kind::Check, "1"),
+    Row("MIDI", "Clip Length", "Control 1 (Modulation) to zero", Kind::Check, "1"),
+    Row("MIDI", "Clip Length", "Control 2 (Breath Control) to zero", Kind::Check, "0"),
+    Row("MIDI", "Clip Length", "Control 4 (Foot Control) to zero", Kind::Check, "0"),
+    Row("MIDI", "Clip Length", "Control 11 (Expression) to max", Kind::Check, "0"),
     Row("Score", "Global", "Top Margin:", Kind::Num(0.0, 10.0, "cm"), "1.75"),
     Row("Score", "Global", "Bottom Margin:", Kind::Num(0.0, 10.0, "cm"), "1.75"),
     Row("Score", "Global", "Left Margin:", Kind::Num(0.0, 10.0, "cm"), "1.58"),
@@ -325,6 +329,11 @@ pub fn cc_moves_strip(v: &Values) -> bool {
     v.on("MIDI / General / Control change message 7/10 sets Volume fader/Pan knob")
 }
 
+/// MIDI ▸ Clip Length: aftertouch, pitch bend, CC 1, 2, 4 and 11 reset at a region's end.
+pub fn clip_length(v: &Values) -> [bool; 6] {
+    ["Aftertouch to zero", "Pitch Bend to center position", "Control 1 (Modulation) to zero", "Control 2 (Breath Control) to zero", "Control 4 (Foot Control) to zero", "Control 11 (Expression) to max"].map(|l| v.on(&format!("MIDI / Clip Length / {l}")))
+}
+
 /// Smart Tempo ▸ Keep Project Tempo: loops and imports don't change the tempo.
 pub fn keep_tempo(v: &Values) -> bool {
     v.get("Smart Tempo /  / Project Tempo Mode:") == "Keep Project Tempo"
@@ -333,6 +342,27 @@ pub fn keep_tempo(v: &Values) -> bool {
 /// Recording ▸ Automatically erase duplicates.
 pub fn erase_duplicates(v: &Values) -> bool {
     v.on("Recording / MIDI / Automatically erase duplicates")
+}
+
+/// Automatically erase duplicates: notes of one pitch and channel starting within 100 ticks of a
+/// later one in the list (the newer take) are dropped, the newer kept (unquantized playing
+/// counts as the same position within 100 ticks, as Logic).
+pub fn erase_near_duplicates(notes: &mut Vec<lg_core::events::Note>) {
+    let mut keep = vec![true; notes.len()];
+    for i in 0..notes.len() {
+        for j in i + 1..notes.len() {
+            let (a, b) = (&notes[i], &notes[j]);
+            if keep[j] && a.pitch == b.pitch && a.channel == b.channel && a.pos.abs_diff(b.pos) <= 100 {
+                keep[i] = false;
+                break;
+            }
+        }
+    }
+    let mut k = 0;
+    notes.retain(|_| {
+        k += 1;
+        keep[k - 1]
+    });
 }
 
 /// Recording ▸ Audio Recording Path: a folder of its own (None: the project's).
@@ -541,14 +571,18 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
                     crate::score::with_state(ctx, |s| s.settings = Some(0));
                 }
             }
-            "Movie" => {
-                ui.label(egui::RichText::new("Studio has no movie track: Movie project settings have nothing to set.").color(crate::look::text_dim()));
-            }
+            "Movie" => movie_pane(app, ui),
             "Audio" if sub == "General" => {
                 if let Some(p) = &app.project {
                     ui.label(format!("Sample Rate: {:.1} kHz (the project's; Studio plays at {} kHz)", p.sample_rate as f64 / 1000.0, crate::audio::RATE / 1000));
                 }
                 crate::surround_ui::project_settings(app, ui);
+            }
+            "Recording" if sub == "General" => {
+                if ui.button("Recording Settings…").clicked() {
+                    open_logic_settings(app, "Recording", "");
+                }
+                ui.add_space(4.0);
             }
             "Recording" if sub == "Audio Recording Path" => {
                 let cur = app.proj.get("Recording / Audio Recording Path / Folder:");
@@ -644,7 +678,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
             ("Synchronization", _) => "Studio has no word clock: Core Audio's choice is kept with the project only.",
             ("Audio", "Channel Strips") => "Automatic management keeps one channel strip object per track on the Environment's Mixer layer (Window ▸ Open MIDI Environment).",
             ("Tuning", _) => "Applies to every software instrument that tunes by MIDI note. Hermode Tuning isn't built (plays equal tempered).",
-            ("MIDI", "Clip Length") => "Kept with the project; Studio's instruments don't reset these yet.",
+            ("MIDI", "Clip Length") => "At a MIDI region's end, a reset for each ticked kind the region holds and played.",
             ("Audio", "General") => "Pan Law: the level of a centred mono signal (Compensated: centre unchanged, hard pans raised instead).",
             _ => "",
         };
@@ -658,6 +692,57 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
         app.dirty = true;
     }
     import_sheet(app, ctx);
+}
+
+/// Opens Logic Settings at a tab (and sub-tab).
+fn open_logic_settings(app: &mut App, tab: &str, sub: &str) {
+    app.settings_tab = tab.into();
+    app.settings_sub = sub.into();
+    app.show_settings = true;
+}
+
+/// SMPTE text of seconds at a frame rate ("01:00:00:00"; a semicolon before the frames marks a
+/// drop-frame rate).
+pub fn smpte_text(secs: f64, fps: f64, drop: bool) -> String {
+    let fr = fps.round().max(1.0);
+    let total = (secs.max(0.0) * fr + 1e-6).floor() as i64;
+    let f = total % fr as i64;
+    let s = total / fr as i64;
+    format!("{:02}:{:02}:{:02}{}{:02}", s / 3600, s / 60 % 60, s % 60, if drop { ';' } else { ':' }, f)
+}
+
+fn parse_smpte(t: &str, fps: f64) -> Option<f64> {
+    let f: Vec<f64> = t.split([':', ';', '.']).map(|x| x.trim().parse().ok()).collect::<Option<Vec<f64>>>()?;
+    (f.len() >= 3).then(|| f[0] * 3600.0 + f[1] * 60.0 + f[2] + f.get(3).copied().unwrap_or(0.0) / fps.round().max(1.0))
+}
+
+/// Project Settings ▸ Movie: the Movie Position (where the movie starts, SMPTE) and the Movie
+/// Settings button.
+fn movie_pane(app: &mut App, ui: &mut egui::Ui) {
+    let (bar1, fps, drop) = smpte(&app.proj);
+    if app.hub.movie.path.is_none() {
+        ui.label(egui::RichText::new("No movie in the project (File ▸ Movie ▸ Open Movie…).").color(crate::look::text_dim()));
+    } else {
+        ui.horizontal(|ui| {
+            ui.label("Movie Position:");
+            let id = ui.scope_id().with("movie-pos");
+            let cur = smpte_text(app.hub.movie.start.unwrap_or(bar1), fps, drop);
+            let mut t = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| cur.clone());
+            let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(110.0));
+            if r.lost_focus() {
+                if let Some(v) = parse_smpte(&t, fps) {
+                    app.hub.movie.start = Some(v);
+                    app.dirty = true;
+                }
+                ui.data_mut(|d| d.remove::<String>(id));
+            } else if r.has_focus() {
+                ui.data_mut(|d| d.insert_temp(id, t));
+            }
+        });
+    }
+    if ui.button("Movie Settings…").clicked() {
+        open_logic_settings(app, "Movie", "");
+    }
 }
 
 fn import_sheet(app: &mut App, ctx: &egui::Context) {
@@ -754,5 +839,12 @@ mod tests {
         assert_eq!(w.get("Synchronization / General / Frame Rate:"), "25");
         assert_eq!(parse_count_in("2 Bars"), Some(crate::recording::CountIn::Bars(2)));
         assert_eq!(parse_count_in("3/4"), Some(crate::recording::CountIn::Beats(3)));
+        assert_eq!(smpte_text(3600.0 + 2.5, 25.0, false), "01:00:02:12");
+        assert_eq!(smpte_text(61.0, 29.97, true), "00:01:01;00");
+        assert!((parse_smpte("01:00:02:12", 25.0).unwrap_or(0.0) - 3602.48).abs() < 1e-9);
+        let n = |pos, pitch| lg_core::events::Note { channel: 0, pitch, velocity: 90, pos, len: 100, muted: false };
+        let mut notes = vec![n(0, 60), n(960, 62), n(40, 60), n(1200, 62)];
+        erase_near_duplicates(&mut notes);
+        assert_eq!(notes.iter().map(|x| x.pos).collect::<Vec<_>>(), vec![960, 40, 1200]);
     }
 }
