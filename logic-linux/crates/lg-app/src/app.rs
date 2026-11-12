@@ -1456,11 +1456,7 @@ impl App {
         }
         // the MIDI editors besides the Piano Roll: Score, Step Sequencer, Step Input, Step and
         // Event Editors
-<<<<<<< HEAD
-        if crate::scorecmd::command(self, ctx, name) || crate::scorepdf::command(self, ctx, name) || crate::scoreattr::command(self, ctx, name) || crate::scorestyle::command(self, ctx, name) || crate::scoregrid::command(self, ctx, name) || crate::scoreinsp::command(self, ctx, name) || crate::scorexml::command(self, name) || crate::stepseq::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
-=======
-        if crate::scorecmd::command(self, ctx, name) || crate::scorepdf::command(self, ctx, name) || crate::scorestyle::command(self, ctx, name) || crate::scoregrid::command(self, ctx, name) || crate::scoreinsp::command(self, ctx, name) || crate::scorexml::command(self, name) || crate::stepseq::command(self, ctx, name) || crate::noterepeat::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
->>>>>>> studio-seqloops
+        if crate::scorecmd::command(self, ctx, name) || crate::scorepdf::command(self, ctx, name) || crate::scoreattr::command(self, ctx, name) || crate::scorestyle::command(self, ctx, name) || crate::scoregrid::command(self, ctx, name) || crate::scoreinsp::command(self, ctx, name) || crate::scorexml::command(self, name) || crate::stepseq::command(self, ctx, name) || crate::noterepeat::command(self, ctx, name) || crate::stepinput::command(self, ctx, name) || crate::stepedit::command(self, ctx, name) || crate::eventedit::command(self, ctx, name) {
             return true;
         }
         if crate::surround_ui::command(self, ctx, name) {
