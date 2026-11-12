@@ -1,6 +1,6 @@
 //! Control bar icons drawn to match Logic 13's where the icon font has nothing close
-//! (win-tracks-1-instrument-track.png at 2x): Smart Controls (a knob with a pointer under five
-//! short rays), the Browser (two stacked rounded squares, a music note on the front one), the
+//! (win-tracks-1-instrument-track.png at 2x): Smart Controls (a knob with an upright pointer in seven
+//! scale dots), the Browser (two stacked rounded squares, a music note on the front one), the
 //! Inspector (two toggle switches), Low Latency (a shield with an ×), the Browsers pane (pages
 //! with a music note). Outline icons in 1.6 pt strokes, about 19 pt, as Logic's.
 
@@ -10,17 +10,20 @@ use crate::glyphs::{self, ph};
 
 const W: f32 = 1.6;
 
-/// Smart Controls: a ring (the knob) with its pointer up and to the left, and five rays over it.
+/// Smart Controls, as Logic 13's: a ring (the knob) with its pointer straight up, and seven
+/// dots round it (left, upper left, top, upper right, right, lower left, lower right) like a
+/// knob's scale. Ring and pointer in the bar's 1.6 pt stroke, as Studio's other icons.
 pub fn smart_controls(p: &egui::Painter, r: Rect, c: Color32) {
-    let ctr = r.center() + vec2(0.0, 2.0);
-    let rad = 5.2;
-    p.circle_stroke(ctr, rad, Stroke::new(W, c));
-    let a = (-105.0f32).to_radians();
-    p.line_segment([ctr, ctr + vec2(a.cos(), a.sin()) * (rad - 1.2)], Stroke::new(W, c));
-    // the rays: left, upper left, up, upper right, right
-    for deg in [-180.0f32, -135.0, -90.0, -45.0, 0.0] {
-        let d = vec2(deg.to_radians().cos(), deg.to_radians().sin());
-        p.line_segment([ctr + d * (rad + 2.6), ctr + d * (rad + 4.4)], Stroke::new(W, c));
+    // (measured on Logic's at 2x: ring 4.7 pt, dots 8.6 pt out; the stroke a touch lighter than
+    // the bar's 1.6 pt so the knob doesn't look heavier than its neighbours)
+    let ctr = r.center() + vec2(0.0, 1.0);
+    let (rad, w) = (4.7, 1.4);
+    p.circle_stroke(ctr, rad, Stroke::new(w, c));
+    p.line_segment([ctr, ctr - vec2(0.0, rad)], Stroke::new(w * 0.85, c));
+    for deg in [-90.0f32, -45.0, 0.0, 45.0, 90.0, 135.0, -135.0] {
+        // (0 = up, clockwise)
+        let a = deg.to_radians();
+        p.circle_filled(ctr + vec2(a.sin(), -a.cos()) * 8.6, 0.75, c);
     }
 }
 
