@@ -81,7 +81,7 @@ pub fn row_h(app: &App, t: usize) -> f32 {
     if app.ta.zoom_focused && app.selected_track == Some(t) {
         h = h.max(crate::tracks::ROW_H * 2.5);
     }
-    h.clamp(44.0, 420.0)
+    h.clamp(44.0, 420.0) + crate::autoext::sub_h(app, t)
 }
 
 /// The rows the Tracks area shows, top to bottom.
@@ -166,6 +166,7 @@ pub fn sync(app: &mut App) {
     remap_map(&mut app.eqs, &map);
     remap_map(&mut app.plugin_compare, &map);
     remap_map(&mut app.ta.shown_plugin, &map);
+    crate::autoext::remap(app, &map);
     remap_pair(&mut app.players, &map);
     remap_pair(&mut app.drum_params, &map);
     remap_pair(&mut app.audio_edit.regions, &map);

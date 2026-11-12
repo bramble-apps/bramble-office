@@ -258,7 +258,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     for (vis, row_info) in rows.iter().enumerate() {
         let i = row_info.t;
         let t = &proj.tracks[i];
-        let rh = row_info.h;
+        // (the automation subtracks below the track's own row: autoext.rs)
+        let sub = crate::autoext::sub_h(app, i);
+        let rh = row_info.h - sub;
         let y = headers.min.y + row_info.y - app.scroll_y;
         if y + rh < headers.min.y || y > headers.max.y {
             continue;
@@ -429,6 +431,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let ar = Rect::from_min_size(pos2(bx + 98.0, by), vec2((row.max.x - bx - 138.0).max(90.0), 17.0));
             hp.rect_filled(ar.expand(2.0), 0.0, if selected { look::track_selected() } else { look::track_header_bg() });
             crate::automation::header(app, ui, ar, i);
+            crate::autoext::header_extras(app, ui, row, i);
         } else if app.flex.show {
             // Show Flex Pitch/Time: the flex button and mode pop-up there
             let ar = Rect::from_min_size(pos2(bx + 98.0, by), vec2((row.max.x - bx - 138.0).max(90.0), 17.0));
@@ -509,12 +512,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             if resp.drag_stopped() {
                 // the Drag mode (No Overlap, X-Fade, Shuffle…) on the track it ended on
-                if let Some(Drag::Region { track, region, .. }) = app.drag {
+                if let Some(Drag::Region { track, region, start, .. }) = app.drag {
                     let under = resp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()).and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
                     let (t2, r2) = match under.filter(|&to| to != track).and_then(|to| crate::arranging::move_to_track(app, track, region, to).map(|k| (to, k))) {
                         Some(x) => x,
                         None => (track, region),
                     };
+                    crate::autoext::region_moved(app, track, start, t2, r2);
                     crate::arranging::after_move(app, t2, r2);
                 }
                 app.drag = None;
@@ -576,6 +580,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let xo = move |tick: f32| x_of(tick, scroll);
             let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
             crate::automation::lane(app, ui, lane.intersect(lanes), i, &xo, &to);
+        }
+        if sub > 0.0 {
+            let xo = move |tick: f32| x_of(tick, scroll);
+            let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
+            crate::autoext::subtracks(app, ui, (row.min.x, row.max.x), lanes, y + rh, i, &xo, &to);
         }
     }
     // the empty header area under the tracks (double-click: a track like the selected one)

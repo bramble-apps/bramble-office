@@ -244,7 +244,7 @@ pub fn sequencer_in(app: &mut App, ctx: &egui::Context, status: u8, a: u8, b: u8
             0x80 => note(app, a, 0),
             0xB0 => {
                 // (a controller learned or assigned to a Smart Control moves it)
-                if a != 64 && crate::smartcontrols::midi_cc(app, a, b) {
+                if a != 64 && (crate::autoext::midi_cc(app, a, b) || crate::smartcontrols::midi_cc(app, a, b)) {
                     return;
                 }
                 if a == 64 {

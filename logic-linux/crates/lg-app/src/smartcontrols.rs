@@ -22,6 +22,7 @@ use crate::widgets;
 pub const COMMANDS: &[&str] = &[
     "Toggle Track Master View", "Cycle Through Routing Destination Views", "Cycle Through Subviews", "Add Mapping", "Learn Parameter Mapping", "Learn External Assignment",
     "Show Smart Controls", "Open Smart Controls", "Open Smart Controls…", "Toggle Channel Strip Arpeggiator",
+    "Map all Controls", "Map all Unmapped Controls", "Copy Mapping", "Paste Mapping", "Copy All Mappings", "Paste Mappings", "Delete Mapping", "Automatic Smart Controls",
 ];
 
 /// What a screen control moves.
@@ -45,19 +46,21 @@ pub struct Mapping {
     /// The range used, as shares of the parameter's range (lo > hi: inverted).
     pub lo: f32,
     pub hi: f32,
+    /// The parameter mapping graph (Scaling): the control's value through it first.
+    pub graph: crate::scgraph::Graph,
 }
 
 impl Mapping {
     pub fn new(target: Target) -> Mapping {
-        Mapping { target, lo: 0.0, hi: 1.0 }
+        Mapping { target, lo: 0.0, hi: 1.0, graph: Default::default() }
     }
     /// The parameter's share for the control at `v` (0..1).
     pub fn param_share(&self, v: f32) -> f32 {
-        self.lo + (self.hi - self.lo) * v.clamp(0.0, 1.0)
+        self.lo + (self.hi - self.lo) * self.graph.apply(v.clamp(0.0, 1.0))
     }
     /// The control's value (0..1) for the parameter's share.
     pub fn control_value(&self, share: f32) -> f32 {
-        if (self.hi - self.lo).abs() < 1e-6 { 0.0 } else { ((share - self.lo) / (self.hi - self.lo)).clamp(0.0, 1.0) }
+        if (self.hi - self.lo).abs() < 1e-6 { 0.0 } else { self.graph.inverse(((share - self.lo) / (self.hi - self.lo)).clamp(0.0, 1.0)) }
     }
 }
 
@@ -140,6 +143,12 @@ pub struct State {
     drag_step: bool,
     /// The pane's rect (its key commands under the pointer).
     pub rect: Option<Rect>,
+    /// The parameter mapping graph window (scgraph.rs).
+    pub graph: crate::scgraph::State,
+    /// Copy Mapping / Copy All Mappings.
+    pub map_clip: Option<Vec<Mapping>>,
+    /// A screen control's shortcut menu (Control-click): the view, the control, where.
+    ctx_menu: Option<(View, usize, egui::Pos2)>,
 }
 
 /// The view the pane shows for the selected track.
@@ -429,6 +438,7 @@ pub fn move_control(app: &mut App, v: View, ci: usize, value: f32) {
         }
         set_target(app, v, m.target, x);
     }
+    crate::autoext::screen_control_moved(app, v, ci, value);
 }
 
 fn snapshot(s: &Screen, all: &[(Target, String, ParamInfo)]) -> Vec<(Target, f32)> {
@@ -532,6 +542,59 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 app.tell("Move a control on your MIDI controller to assign it");
             }
         }
+        "Map all Controls" | "Map all Unmapped Controls" | "Automatic Smart Controls" => {
+            let Some(v) = view(app) else { return true };
+            let mut s = screen(app, v);
+            if name == "Automatic Smart Controls" {
+                s.layout = layout_for(app, v);
+            }
+            let fresh = default_controls(app, v, s.layout);
+            if name == "Automatic Smart Controls" {
+                s.controls = fresh;
+            } else {
+                for (c, f) in s.controls.iter_mut().zip(fresh) {
+                    if name == "Map all Controls" || c.maps.is_empty() {
+                        c.maps = f.maps;
+                        if c.label.is_empty() || name == "Map all Controls" {
+                            c.label = f.label;
+                        }
+                    }
+                }
+            }
+            app.sc.screens.insert(v, s);
+            app.dirty = true;
+        }
+        "Copy Mapping" | "Copy All Mappings" | "Paste Mapping" | "Paste Mappings" | "Delete Mapping" => {
+            let Some(v) = view(app) else { return true };
+            let mut s = screen(app, v);
+            let sel = app.sc.selected;
+            let Some(c) = s.controls.get_mut(sel) else { return true };
+            match name {
+                "Copy Mapping" => app.sc.map_clip = c.maps.first().map(|m| vec![*m]),
+                "Copy All Mappings" => app.sc.map_clip = Some(c.maps.clone()),
+                "Paste Mapping" => {
+                    if let Some(m) = app.sc.map_clip.as_ref().and_then(|x| x.first()).copied() {
+                        if c.maps.is_empty() {
+                            c.maps.push(m);
+                        } else {
+                            c.maps[0] = m;
+                        }
+                    }
+                }
+                "Paste Mappings" => {
+                    if let Some(ms) = app.sc.map_clip.clone() {
+                        c.maps = ms;
+                    }
+                }
+                _ => {
+                    if !c.maps.is_empty() {
+                        c.maps.remove(0);
+                    }
+                }
+            }
+            app.sc.screens.insert(v, s);
+            app.dirty = true;
+        }
         "Toggle Channel Strip Arpeggiator" => {
             let Some(t) = app.selected_track else { return true };
             let a = app.sc.arps.entry(t).or_default();
@@ -579,7 +642,11 @@ pub fn update(app: &mut App) {
 /// A MIDI controller moved: assigned during Learn External Assignment; afterwards it drives
 /// the screen controls it's assigned to (and isn't passed on to the instrument). True when used.
 pub fn midi_cc(app: &mut App, cc: u8, value: u8) -> bool {
-    if let Some((v, ci)) = app.sc.learn_cc.take() {
+    if let Some((v, _)) = app.sc.learn_cc {
+        // (learning goes on: select another control and move another hardware control to
+        // assign that too; Learn again ends it)
+        let ci = app.sc.selected;
+        app.sc.learn_cc = Some((v, ci));
         screen(app, v);
         if let Some(s) = app.sc.screens.get_mut(&v) {
             for c in s.controls.iter_mut() {
@@ -694,7 +761,39 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if header_button(ui, b(x + 52.0, 56.0), "master", "Master", app.sc.master, "Show the Smart Controls for the master effects").clicked() && !app.sc.master {
         command(app, "Toggle Track Master View");
     }
-    x += 120.0;
+    // the Master Effects pop-up: Master and the auxes the track sends to
+    let dests = destinations(app);
+    if dests.len() > 1 || app.sc.master {
+        let dr = Rect::from_min_size(pos2(x + 110.0, head.center().y - 11.0), vec2(16.0, 22.0));
+        let dresp = ui.interact(dr, ui.scope_id().with("sc-dest"), Sense::click()).on_hover_text("Master Effects: the master or an aux the track sends to");
+        crate::glyphs::paint(&p, dr, crate::glyphs::ph::CARET_DOWN, 11.0, look::text());
+        egui::Popup::menu(&dresp).show(|ui| {
+            if ui.add(egui::Button::selectable(app.sc.master, "Master")).clicked() {
+                app.sc.master = true;
+                app.sc.dest = None;
+                ui.close();
+            }
+            for d in dests.iter().flatten() {
+                let n = app.auxes.get(*d).map(|a| a.name.clone()).unwrap_or_default();
+                if ui.add(egui::Button::selectable(!app.sc.master && app.sc.dest == Some(*d), n)).clicked() {
+                    app.sc.master = false;
+                    app.sc.dest = Some(*d);
+                    app.sc.selected = 0;
+                    ui.close();
+                }
+            }
+        });
+    }
+    x += 130.0;
+    // audio tracks: the Tuner button
+    if let View::Track(t) = v {
+        if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Audio) {
+            if header_button(ui, b(x, 50.0), "tuner", "Tuner", app.show_tuner, "Open the Tuner").clicked() {
+                app.show_tuner = !app.show_tuner;
+            }
+            x += 58.0;
+        }
+    }
     let title = match v {
         View::Track(t) => {
             let name = app.project.as_ref().map(|p| p.tracks[t].name.clone()).unwrap_or_default();
@@ -797,6 +896,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     app.sc.selected = *ci;
                     app.sc.inspector = true;
                 }
+            }
+        }
+    }
+    // Control-click (right-click) a screen control: its shortcut menu
+    if let Some(pp) = ui.input(|i| i.pointer.secondary_clicked().then(|| i.pointer.interact_pos()).flatten()) {
+        for (n, (ci, _)) in knobs.iter().enumerate() {
+            let r = Rect::from_min_size(kn.min + vec2((n % per_row) as f32 * kw, (n / per_row) as f32 * kh), vec2(kw, kh)).shrink(6.0);
+            if r.contains(pp) {
+                app.sc.ctx_menu = Some((v, *ci, pp));
+            }
+        }
+        for (n, (ci, _)) in buttons.iter().enumerate() {
+            let r = Rect::from_min_size(pos2(inner.max.x - btn_w + 10.0, inner.min.y + n as f32 * 30.0), vec2(btn_w - 10.0, 24.0));
+            if r.contains(pp) {
+                app.sc.ctx_menu = Some((v, *ci, pp));
             }
         }
     }
@@ -925,10 +1039,18 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
     let learning = app.sc.learn.as_ref().is_some_and(|l| l.0 == v && l.1 == sel);
     let learning_cc = app.sc.learn_cc.is_some_and(|l| l.0 == v && l.1 == sel);
     let all = parameters(app, v);
+    let mut run_open: Option<Vec<Target>> = None;
     egui::ScrollArea::vertical().id_salt("sc-insp").auto_shrink([false, false]).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.label("Layout");
             egui::ComboBox::from_id_salt("sc-layout").selected_text(LAYOUTS[s.layout.min(LAYOUTS.len() - 1)].0).show_ui(ui, |ui| {
+                // (Logic chooses the layout for the patch and maps every control)
+                if ui.button("Automatic Smart Controls").clicked() {
+                    s.layout = layout_for(app, v);
+                    s.controls = default_controls(app, v, s.layout);
+                    s.subview = 0;
+                }
+                ui.separator();
                 for (k, l) in LAYOUTS.iter().enumerate() {
                     if ui.add(egui::Button::selectable(s.layout == k, l.0)).clicked() && s.layout != k {
                         s.layout = k;
@@ -945,36 +1067,103 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
         ui.add_space(4.0);
         ui.label(egui::RichText::new("Parameter Mapping").strong());
         let mut remove = None;
+        let mut swap: Option<(usize, usize)> = None;
+        let n_maps = c.maps.len();
+        let mut open_plugin: Option<Target> = None;
+        let mut open_graph: Option<usize> = None;
+        let mut clip_op: Option<(&str, usize)> = None;
+        if c.maps.is_empty() {
+            // the Name field: Unmapped (a click chooses the parameter)
+            ui.menu_button("Unmapped", |ui| {
+                let mut t = Target::Volume;
+                if param_menu(ui, &all, &mut t) {
+                    c.maps.push(Mapping::new(t));
+                    if c.label.is_empty() {
+                        c.label = all.iter().find(|x| x.0 == t).map(|x| x.2.name.clone()).unwrap_or_default();
+                    }
+                }
+                ui.separator();
+                mapping_menu_items(ui, &mut clip_op, 0, false);
+            });
+        }
         for (k, m) in c.maps.iter_mut().enumerate() {
             let path = all.iter().find(|x| x.0 == m.target).map(|x| x.1.clone()).unwrap_or_else(|| "Unmapped".into());
             ui.push_id(("map", k), |ui| {
-                ui.menu_button(crate::tracks::ellipsize(&path, 34), |ui| {
-                    param_menu(ui, &all, &mut m.target);
-                });
                 ui.horizontal(|ui| {
-                    let mut lo = m.lo * 100.0;
-                    let mut hi = m.hi * 100.0;
-                    ui.label("Range");
-                    if ui.add(egui::DragValue::new(&mut lo).range(0.0..=100.0).suffix("%")).changed() {
-                        m.lo = lo / 100.0;
+                    // the three-dot handle: drag up or down to reorder (the top one shows the
+                    // control's values)
+                    if n_maps > 1 {
+                        let h = ui.add(egui::Label::new("⋮").sense(Sense::drag())).on_hover_text("Drag to reorder the mappings");
+                        if h.dragged() {
+                            let dy = h.total_drag_delta().map_or(0.0, |d| d.y);
+                            if dy < -40.0 && k > 0 {
+                                swap = Some((k, k - 1));
+                            } else if dy > 40.0 && k + 1 < n_maps {
+                                swap = Some((k, k + 1));
+                            }
+                        }
                     }
-                    if ui.add(egui::DragValue::new(&mut hi).range(0.0..=100.0).suffix("%")).changed() {
-                        m.hi = hi / 100.0;
-                    }
-                    if ui.small_button("⇅").on_hover_text("Invert the range").clicked() {
-                        std::mem::swap(&mut m.lo, &mut m.hi);
-                    }
-                    if ui.small_button("✕").on_hover_text("Delete Mapping").clicked() {
-                        remove = Some(k);
+                    ui.menu_button(crate::tracks::ellipsize(&path, 30), |ui| {
+                        param_menu(ui, &all, &mut m.target);
+                        ui.separator();
+                        mapping_menu_items(ui, &mut clip_op, k, true);
+                    });
+                    if matches!(m.target, Target::Instrument(_) | Target::Effect(..)) && ui.small_button("🔌").on_hover_text("Open the plug-in window").clicked() {
+                        open_plugin = Some(m.target);
                     }
                 });
+                let mut lo = m.lo.min(m.hi) * 100.0;
+                let mut hi = m.lo.max(m.hi) * 100.0;
+                let mut inv = m.lo > m.hi;
+                let r1 = ui.add(egui::Slider::new(&mut hi, 0.0..=100.0).suffix("%").text("Range Max"));
+                let r2 = ui.add(egui::Slider::new(&mut lo, 0.0..=100.0).suffix("%").text("Range Min"));
+                let r3 = ui.checkbox(&mut inv, "Invert Range");
+                if r1.changed() || r2.changed() || r3.changed() {
+                    let (a, b) = (lo.min(hi) / 100.0, lo.max(hi) / 100.0);
+                    (m.lo, m.hi) = if inv { (b, a) } else { (a, b) };
+                }
+                ui.horizontal(|ui| {
+                    ui.label(if m.graph.is_linear() { "Scaling: Linear" } else { "Scaling: Curve" });
+                    if ui.small_button("Open").on_hover_text("The parameter mapping graph").clicked() {
+                        open_graph = Some(k);
+                    }
+                });
+                ui.add_space(4.0);
             });
         }
-        if let Some(k) = remove {
-            c.maps.remove(k);
+        if let Some((a, b)) = swap {
+            c.maps.swap(a, b);
         }
-        if c.maps.is_empty() {
-            ui.label(egui::RichText::new("Unmapped").color(look::text_dim()));
+        if let Some(t) = open_plugin {
+            run_open = Some(vec![t]);
+        }
+        if let Some(k) = open_graph {
+            app.sc.graph.open = Some((v, sel, k));
+        }
+        if let Some((op, k)) = clip_op {
+            match op {
+                "Copy Mapping" => app.sc.map_clip = c.maps.get(k).map(|m| vec![*m]),
+                "Copy All Mappings" => app.sc.map_clip = Some(c.maps.clone()),
+                "Paste Mapping" => {
+                    if let Some(m) = app.sc.map_clip.as_ref().and_then(|v| v.first()).copied() {
+                        if k < c.maps.len() {
+                            c.maps[k] = m;
+                        } else {
+                            c.maps.push(m);
+                        }
+                    }
+                }
+                "Paste Mappings" => {
+                    if let Some(ms) = app.sc.map_clip.clone() {
+                        c.maps = ms;
+                    }
+                }
+                "Delete Mapping" => remove = Some(k),
+                other => run = Some(if other == "Map all Controls" { "Map all Controls" } else { "Map all Unmapped Controls" }),
+            }
+        }
+        if let Some(k) = remove.filter(|k| *k < c.maps.len()) {
+            c.maps.remove(k);
         }
         ui.horizontal(|ui| {
             ui.menu_button("Add Mapping", |ui| {
@@ -995,7 +1184,7 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
         ui.separator();
         ui.label(egui::RichText::new("External Assignment").strong());
         ui.horizontal(|ui| {
-            ui.label(match c.cc { Some(n) => format!("Controller {n}"), None => "No Assignment".into() });
+            ui.label(match c.cc { Some(n) => format!("Controller {n}"), None => "Unassigned".into() });
             if ui.add(egui::Button::selectable(learning_cc, "Learn")).on_hover_text("Learn External Assignment: then move a control on your MIDI controller").clicked() {
                 run = Some("Learn External Assignment");
             }
@@ -1011,6 +1200,61 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
     if let Some(cmd) = run {
         app.sc.selected = sel;
         command(app, cmd);
+    }
+    if let Some(ts) = run_open {
+        open_plugin_windows(app, v, &ts);
+    }
+}
+
+/// The mapping pop-up's commands (Add Mapping is its own menu).
+fn mapping_menu_items<'a>(ui: &mut egui::Ui, op: &mut Option<(&'a str, usize)>, k: usize, mapped: bool) {
+    for (name, needs) in [("Copy Mapping", true), ("Paste Mapping", false), ("Copy All Mappings", true), ("Paste Mappings", false), ("Delete Mapping", true), ("Map all Controls", false), ("Map all Unmapped Controls", false)] {
+        let name: &'a str = name;
+        if ui.add_enabled(mapped || !needs, egui::Button::new(name)).clicked() {
+            *op = Some((name, k));
+            ui.close();
+        }
+    }
+}
+
+/// Open Plug-in Window for a screen control: every plug-in its mappings reach (the instrument,
+/// the Audio FX).
+pub fn open_plugin_windows(app: &mut App, v: View, targets: &[Target]) {
+    let mut any = false;
+    for t in targets {
+        match (*t, v) {
+            (Target::Instrument(_), View::Track(tr)) => {
+                app.plugin_window = Some(tr);
+                any = true;
+            }
+            (Target::Effect(k, _), _) => {
+                app.mix.fx_window = Some((v.strip(), k));
+                any = true;
+            }
+            _ => {}
+        }
+    }
+    if !any {
+        app.tell("This screen control moves no plug-in parameter");
+    }
+}
+
+/// A screen control's shortcut menu (Control-click): Open Plug-in Window.
+fn control_menu(app: &mut App, ctx: &egui::Context) {
+    let Some((v, ci, pos)) = app.sc.ctx_menu else { return };
+    let targets: Vec<Target> = app.sc.screens.get(&v).and_then(|s| s.controls.get(ci)).map_or(Vec::new(), |c| c.maps.iter().map(|m| m.target).filter(|t| matches!(t, Target::Instrument(_) | Target::Effect(..))).collect());
+    let mut close = false;
+    let resp = egui::Area::new(egui::Id::unique("sc-ctl-menu")).fixed_pos(pos).order(egui::Order::Foreground).show(ctx, |ui| {
+        egui::Frame::menu(ui.style()).show(ui, |ui| {
+            ui.set_min_width(180.0);
+            if ui.add_enabled(!targets.is_empty(), egui::Button::new("Open Plug-in Window")).clicked() {
+                open_plugin_windows(app, v, &targets);
+                close = true;
+            }
+        });
+    });
+    if close || (ctx.input(|i| i.pointer.any_pressed()) && !resp.response.contains_pointer()) {
+        app.sc.ctx_menu = None;
     }
 }
 
@@ -1042,6 +1286,8 @@ fn param_menu(ui: &mut egui::Ui, all: &[(Target, String, ParamInfo)], target: &m
 
 /// Window ▸ Open Smart Controls.
 pub fn window(app: &mut App, ctx: &egui::Context) {
+    crate::scgraph::window(app, ctx);
+    control_menu(app, ctx);
     if !app.sc.window {
         return;
     }
@@ -1084,12 +1330,12 @@ mod tests {
 
     #[test]
     fn mapping_ranges() {
-        let m = Mapping { target: Target::Volume, lo: 0.25, hi: 0.75 };
+        let m = Mapping { lo: 0.25, hi: 0.75, ..Mapping::new(Target::Volume) };
         assert_eq!(m.param_share(0.0), 0.25);
         assert_eq!(m.param_share(1.0), 0.75);
         assert!((m.control_value(0.5) - 0.5).abs() < 1e-6);
         // inverted
-        let m = Mapping { target: Target::Volume, lo: 1.0, hi: 0.0 };
+        let m = Mapping { lo: 1.0, hi: 0.0, ..Mapping::new(Target::Volume) };
         assert_eq!(m.param_share(0.0), 1.0);
         assert!((m.control_value(0.25) - 0.75).abs() < 1e-6);
     }

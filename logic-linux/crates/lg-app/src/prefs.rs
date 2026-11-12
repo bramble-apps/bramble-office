@@ -527,6 +527,7 @@ pub fn button(app: &mut App, key: &str) -> bool {
             app.tell(format!("MIDI drivers reset: {} input{}", app.live.input_names.len(), if app.live.input_names.len() == 1 { "" } else { "s" }));
         }
         "Audio / Devices / Apply" => open_output(app),
+        k if crate::autoext::button(app, k) => {}
         k if k.ends_with("Controller Assignments…") || k.ends_with("/ Setup…") => {
             let ctx = app.ctx.clone();
             app.key_command(&ctx, if k.ends_with("Setup…") { "Control Surfaces Setup…" } else { "Open Controller Assignments" });
