@@ -1907,6 +1907,36 @@ mod tests {
     }
 
     #[test]
+    fn side_chain_effects_listen_to_the_side_chain() {
+        // Ringshifter's Side Chain Ring Mod: input × side chain
+        let mut r = crate::more_fx::by_name("Ringshifter", 48000.0).unwrap();
+        r.set(1000, 3.0);
+        r.set(1017, 100.0);
+        assert!(r.has_side_chain());
+        let x = vec![0.5f32; 64];
+        let key: Vec<f32> = (0..64).map(|i| (i as f32 * 0.3).sin()).collect();
+        let (mut l, mut rr) = (x.clone(), x.clone());
+        r.side_chain(&key, &key);
+        r.process(&mut l, &mut rr);
+        assert!(l.iter().zip(&key).all(|(o, k)| (o - 0.5 * k).abs() < 1e-5));
+        // Match EQ's Reference Learn takes the side chain
+        let mut m = crate::match_eq::MatchEq::new(48000.0);
+        m.set(crate::match_eq::REFERENCE_LEARN, 1.0);
+        let quiet = vec![0.0f32; 4096];
+        let loud = sine(4096, 1000.0, 0.5);
+        for _ in 0..3 {
+            let (mut l, mut r) = (quiet.clone(), quiet.clone());
+            m.side_chain(&loud, &loud);
+            m.process(&mut l, &mut r);
+        }
+        let k1000 = (0..crate::match_eq::BANDS).max_by(|a, b| m.get(crate::match_eq::REFERENCE + *a as u32).total_cmp(&m.get(crate::match_eq::REFERENCE + *b as u32))).unwrap();
+        assert!(m.get(crate::match_eq::REFERENCE + k1000 as u32) > -60.0, "reference learned from the side chain");
+        for n in ["Compressor", "Noise Gate", "AutoFilter", "Phat FX", "EVOC 20 TrackOscillator", "Ducker"] {
+            assert!(crate::by_logic_name(n, 48000.0).unwrap().has_side_chain(), "{n}");
+        }
+    }
+
+    #[test]
     fn grooveshifter_moves_even_divisions() {
         let mut g = Grooveshifter::new(48000.0);
         g.set(3, 75.0);

@@ -1191,11 +1191,13 @@ pub struct Ringshifter {
     hc: [Biquad; 2],
     fb: [f32; 2],
     bpm: f64,
+    /// The side chain's block (Side Chain Ring Mod).
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl Ringshifter {
     pub fn new(rate: f32) -> Ringshifter {
-        let mut r = Ringshifter { p: Values::new(&RS_P), rate, hil: [Hilbert::default(); 2], osc: Phase::default(), lfo: Phase::default(), env: Follower::new(rate, 10.0, 200.0), line: [Delay::new((2.1 * rate) as usize), Delay::new((2.1 * rate) as usize)], lc: [Biquad::default(); 2], hc: [Biquad::default(); 2], fb: [0.0; 2], bpm: 120.0 };
+        let mut r = Ringshifter { p: Values::new(&RS_P), rate, hil: [Hilbert::default(); 2], osc: Phase::default(), lfo: Phase::default(), env: Follower::new(rate, 10.0, 200.0), line: [Delay::new((2.1 * rate) as usize), Delay::new((2.1 * rate) as usize)], lc: [Biquad::default(); 2], hc: [Biquad::default(); 2], fb: [0.0; 2], bpm: 120.0, side: None };
         r.update();
         r
     }
@@ -1218,7 +1220,14 @@ impl Ringshifter {
 }
 
 impl Effect for Ringshifter {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let mode = self.p.idx(B);
         let f0 = self.p.get(B + 1);
         let exp = self.p.idx(B + 2) == 1;
@@ -1256,6 +1265,9 @@ impl Effect for Ringshifter {
                         // up for the left, down for the right in Dual mode
                         if mode == 1 && s == 1 { a * c - b * s_ } else { a * c + b * s_ }
                     }
+                    // Side Chain Ring Mod: the input times the side chain audio (the sine
+                    // oscillator is off; no side chain = silence, as an unconnected input)
+                    3 => inp * side.as_ref().map(|(a, b)| if s == 0 { a.get(i) } else { b.get(i) }.copied().unwrap_or(0.0)).unwrap_or(0.0),
                     _ => inp * c,
                 };
                 if dlevel > 0.0 {

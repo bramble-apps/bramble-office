@@ -528,7 +528,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             app.mix.slot_rects.push((sr, i, k));
             let fill = if u.bypass { Color32::from_gray(0x55) } else { Color32::from_rgb(0x1f, 0x5f, 0xc8) };
             p.rect_filled(sr, 4.0, fill);
-            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, &u.name, look::regular(11.0), if u.bypass { look::text_dim() } else { Color32::WHITE });
+            // a side chain: a left-pointing arrow after the name (Logic's ◂), its source in the tip
+            let side = app.side.by_slot.get(&(i, k)).copied();
+            let shown_name = if side.is_some() { format!("{} ◂", u.name) } else { u.name.clone() };
+            p.with_clip_rect(sr.shrink(2.0)).text(sr.center(), Align2::CENTER_CENTER, &shown_name, look::regular(11.0), if u.bypass { look::text_dim() } else { Color32::WHITE });
             let hover = ui.rect_contains_pointer(sr);
             let bypass_r = Rect::from_min_size(sr.min, vec2(14.0, sr.height()));
             let arrow_r = Rect::from_min_max(pos2(sr.max.x - 14.0, sr.min.y), sr.max);
@@ -552,7 +555,10 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
             if ui.interact(bypass_r, id.with(("bypass", k)), Sense::click()).on_hover_text("Bypass").clicked() {
                 toggle_bypass(app);
             }
-            let body = ui.interact(body_r, id.with(("fxslot", k)), Sense::click_and_drag()).on_hover_text(crate::hosting::slot_tip(app, i, k, &u.name));
+            let body = ui.interact(body_r, id.with(("fxslot", k)), Sense::click_and_drag()).on_hover_text(match side {
+                Some(c) => format!("{}\nSide Chain: {}", crate::hosting::slot_tip(app, i, k, &u.name), crate::sidechain::label_of(app, c)),
+                None => crate::hosting::slot_tip(app, i, k, &u.name),
+            });
             if body.clicked() {
                 if ui.input(|i| i.modifiers.command) {
                     // Command-click: the plug-in goes
@@ -580,7 +586,17 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 mixstate::checkpoint(app, if choice.is_some() { "Insert Plug-in" } else { "Remove Plug-in" });
                 let inserted = choice.is_some();
                 mixstate::edit_inserts(app, i, |v| match choice {
-                    Some(n) => v[k] = mixstate::new_plugin(&n),
+                    Some(n) => {
+                        // Channel EQ and Linear Phase EQ share their parameters: swapping one
+                        // for the other keeps the setting
+                        let eqs = ["Channel EQ", "Linear Phase EQ"];
+                        let keep = (eqs.contains(&v[k].name.as_str()) && eqs.contains(&n.as_str())).then(|| (v[k].params.clone(), v[k].preset.clone()));
+                        v[k] = mixstate::new_plugin(&n);
+                        if let Some((params, preset)) = keep {
+                            v[k].params = params;
+                            v[k].preset = preset;
+                        }
+                    }
                     None => {
                         v.remove(k);
                     }

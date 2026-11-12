@@ -254,6 +254,8 @@ pub struct TrackOscillator {
     lfo: Phase,
     hold: (f32, f32),
     voiced: f32,
+    /// The side chain's block (Analysis In / Synthesis In: SideChain).
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl TrackOscillator {
@@ -281,6 +283,7 @@ impl TrackOscillator {
             lfo: Phase::default(),
             hold: (0.0, 0.0),
             voiced: 1.0,
+            side: None,
         };
         t.update();
         t
@@ -331,7 +334,18 @@ impl TrackOscillator {
 }
 
 impl Effect for TrackOscillator {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
+        // Analysis In / Synthesis In: SideChain uses the side chain (with none chosen, the
+        // track, as Logic does)
+        let ana_side = self.p.idx(B + 4) == 1 && side.is_some();
+        let syn_side = self.p.idx(B + 8) == 1 && side.is_some();
         let osc = self.p.idx(B + 8) == 2;
         let freeze = self.p.on(B + 2);
         let uv_mode = self.p.idx(B + 6);
@@ -348,7 +362,9 @@ impl Effect for TrackOscillator {
         let lfo_pitch = self.p.get(B + 26);
         let lfo_shift = self.p.get(B + 25);
         for i in 0..left.len().min(right.len()) {
-            let x = 0.5 * (left[i] + right[i]);
+            let track = 0.5 * (left[i] + right[i]);
+            let sc = side.as_ref().map(|(a, b)| 0.5 * (a.get(i).copied().unwrap_or(0.0) + b.get(i).copied().unwrap_or(0.0))).unwrap_or(0.0);
+            let x = if ana_side { sc } else { track };
             // pitch tracking
             self.buf[self.at] = x;
             self.at = (self.at + 1) % self.buf.len();
@@ -383,7 +399,7 @@ impl Effect for TrackOscillator {
                 1 => self.noise.next() * 0.2 + oscv * 0.5,
                 _ => hi,
             } * uv_level * (1.0 - self.voiced);
-            let carrier = if osc { oscv } else { x };
+            let carrier = if osc { oscv } else if syn_side { sc } else { track };
             let mut out = [0f32; 2];
             for k in 0..self.nb {
                 let a = self.ana[k][0].run(x);

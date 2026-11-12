@@ -105,6 +105,8 @@ fn svf_g(rate: f32, f: f32) -> f32 {
 }
 
 pub struct PhatFx {
+    /// The side chain's block: the envelope follower tracks it when one is chosen.
+    side: Option<(Vec<f32>, Vec<f32>)>,
     p: Values,
     rate: f32,
     bpm: f64,
@@ -130,6 +132,7 @@ pub struct PhatFx {
 impl PhatFx {
     pub fn new(rate: f32) -> PhatFx {
         let mut f = PhatFx {
+            side: None,
             p: Values::new(&ALL),
             rate,
             bpm: 120.0,
@@ -237,7 +240,14 @@ fn dist(kind: usize, x: f32, d: f32, hold: &mut f32, n: f32) -> f32 {
 }
 
 impl lg_dsp::Effect for PhatFx {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let rate = self.rate;
         let v = |id: u32| self.p.get(id);
         let (bp_on, dist_on, filt_on, mod_on, bass_on, comp_on) = (self.p.on(1), self.p.on(13), self.p.on(26), self.p.on(37), self.p.on(46), self.p.on(55));
@@ -264,7 +274,11 @@ impl lg_dsp::Effect for PhatFx {
                 }
             }
             if env_on {
-                let e = self.env.run(left[i].abs().max(right[i].abs()));
+                let x = match &side {
+                    Some((a, b)) => a.get(i).copied().unwrap_or(0.0).abs().max(b.get(i).copied().unwrap_or(0.0).abs()),
+                    None => left[i].abs().max(right[i].abs()),
+                };
+                let e = self.env.run(x);
                 m[env_t.min(6)] += (e * 3.0).min(1.0) * 0.5;
             }
             self.hold_n += 1.0;

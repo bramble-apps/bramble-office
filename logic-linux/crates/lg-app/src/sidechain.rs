@@ -37,6 +37,11 @@ fn label(app: &App, c: Option<Choice>) -> String {
     }
 }
 
+/// A choice's name (a track, Bus N, Input 1-2).
+pub fn label_of(app: &App, c: Choice) -> String {
+    label(app, Some(c))
+}
+
 /// The current choice for track `t`.
 pub fn choice(app: &App, t: usize) -> Option<Choice> {
     let id = crate::instwin::track_id(app, t)?;

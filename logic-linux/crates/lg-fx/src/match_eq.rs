@@ -84,11 +84,13 @@ pub struct MatchEq {
     bq: [[Biquad; BANDS]; 2],
     conv: [Convolver; 2],
     curve: Vec<f32>,
+    /// The side chain's block: Reference Learn learns it when one is chosen.
+    side: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl MatchEq {
     pub fn new(rate: f32) -> MatchEq {
-        let mut m = MatchEq { p: Values::new(P.as_slice()), rate, ring: Ring::new(4096), acc: [vec![0.0; BANDS], vec![0.0; BANDS]], frames: [0; 2], since: 0, bq: [[Biquad::default(); BANDS]; 2], conv: [Convolver::new(FIR), Convolver::new(FIR)], curve: vec![0.0; BANDS] };
+        let mut m = MatchEq { p: Values::new(P.as_slice()), rate, ring: Ring::new(4096), acc: [vec![0.0; BANDS], vec![0.0; BANDS]], frames: [0; 2], since: 0, bq: [[Biquad::default(); BANDS]; 2], conv: [Convolver::new(FIR), Convolver::new(FIR)], curve: vec![0.0; BANDS], side: None };
         m.update();
         m
     }
@@ -211,13 +213,24 @@ impl MatchEq {
 }
 
 impl Effect for MatchEq {
+    fn side_chain(&mut self, left: &[f32], right: &[f32]) {
+        self.side = Some((left.to_vec(), right.to_vec()));
+    }
+    fn has_side_chain(&self) -> bool {
+        true
+    }
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let side = self.side.take();
         let learning = [self.p.on(CURRENT_LEARN), self.p.on(REFERENCE_LEARN)];
         let linear = self.p.idx(PHASE) == 0;
         let on = self.p.on(MATCH);
         for i in 0..left.len().min(right.len()) {
             if learning[0] || learning[1] {
-                let m = self.pick(left[i], right[i]);
+                // Reference Learn listens to the side chain when there is one
+                let m = match &side {
+                    Some((a, b)) if learning[1] => self.pick(a.get(i).copied().unwrap_or(0.0), b.get(i).copied().unwrap_or(0.0)),
+                    _ => self.pick(left[i], right[i]),
+                };
                 self.ring.push(m, m);
                 self.since += 1;
                 if self.since >= 2048 {
