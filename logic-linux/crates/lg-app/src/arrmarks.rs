@@ -188,7 +188,8 @@ pub fn lane(app: &mut App, ui: &mut egui::Ui, head: Rect, row: Rect, lane: Rect,
         let fill = if selected { Color32::from_gray(0x5a) } else { Color32::from_gray(0x36) };
         lp.rect_filled(r, 0.0, fill);
         lp.vline(r.min.x, r.y_range(), Stroke::new(1.0, Color32::from_gray(0x1e)));
-        let font = look::regular(12.0);
+        // Logic 13: ≈11 pt, light grey, centred
+        let font = look::regular(11.0);
         let tw = ui.fonts_mut(|f| f.layout_no_wrap(name.clone(), font.clone(), Color32::WHITE).size().x);
         let name_r = Rect::from_center_size(r.center(), vec2(tw + 8.0, r.height())).intersect(r);
         lp.with_clip_rect(r).text(r.center(), Align2::CENTER_CENTER, name, font, if selected { Color32::WHITE } else { Color32::from_gray(0xdc) });

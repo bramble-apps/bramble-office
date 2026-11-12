@@ -90,6 +90,10 @@ pub fn command(app: &mut App, name: &str) -> bool {
     if !app.audio_edit.st.maps.contains_key(&f) {
         return false;
     }
+    // D or T in Beat Marker mode: Hint mode, and the tap adds a hint
+    if matches!(name, "Tap Tempo - Smart Tempo Editor" | "Tap Tempo (Downbeat)") && !hint_mode(app) {
+        app.audio_edit.st.region_scope = true;
+    }
     match name {
         "Tap Tempo - Smart Tempo Editor" | "Tap Tempo (Downbeat)" if hint_mode(app) => {
             let down = name.contains("Downbeat");

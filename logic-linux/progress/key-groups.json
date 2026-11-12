@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 544,
+  "done": 545,
   "total": 679,
-  "percent": 80.1
+  "percent": 80.3
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -43,9 +43,9 @@
  },
  {
   "group": "Views Showing Time Ruler",
-  "done": 47,
+  "done": 48,
   "total": 80,
-  "percent": 58.8
+  "percent": 60.0
  },
  {
   "group": "Views Showing Automation",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 145,
+  "done": 146,
   "total": 249,
-  "percent": 58.2
+  "percent": 58.6
  },
  {
   "group": "Live Loops Grid",
