@@ -29,6 +29,7 @@ pub mod legacy;
 pub mod ensemble;
 pub mod ep;
 pub mod es2;
+pub mod es2_tutorials;
 pub mod evoc_ps;
 pub mod mellotron;
 pub mod organ;

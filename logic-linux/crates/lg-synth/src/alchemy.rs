@@ -17,7 +17,20 @@ pub const VA_SHAPES: &[&str] = &["Sine", "Square", "Saw", "Triangle"];
 /// Source and main filter types (alchemy_filter).
 pub const SRC_FILTERS: &[&str] = crate::alchemy_filter::FILTER_TYPES;
 pub const MASTER_FILTERS: &[&str] = crate::alchemy_filter::FILTER_TYPES;
-pub const PLAY_MODES: &[&str] = &["Poly", "Mono", "Legato"];
+/// The master voice section's Trigger Mode (Logic's PlayMode, id 371).
+pub const PLAY_MODES: &[&str] = &["Always", "Retrigger", "Legato"];
+/// Master voice section: VOICE + (0 Voice Priority, 1 Glide Rate/Time, 2 Wide Unison).
+pub const VOICE: u32 = 14960;
+/// The VA element's noise oscillator per source: NOISE + s (type), + 4 + s (Vol),
+/// + 8 + s (Low Cut), + 12 + s (High Cut).
+pub const NOISE: u32 = 14964;
+pub const PRIORITIES: &[&str] = &["Newest", "Oldest", "Lowest", "Highest"];
+pub const GLIDE_MODES: &[&str] = &["Rate", "Time"];
+pub const NOISE_TYPES: &[&str] = &["White", "Pink", "Brown"];
+/// Noise Low Cut / High Cut knob (0–1) → Hz (20 Hz – 20 kHz).
+pub fn noise_cut_hz(x: f32) -> f32 {
+    20.0 * 1000f32.powf(x.clamp(0.0, 1.0))
+}
 
 include!("alchemy_params.rs");
 
@@ -126,6 +139,13 @@ struct SourceCfg {
     va_detune: f32,
     va_num: usize,
     va_sync: f32,
+    /// VA Phase: a fixed start point (0–99.9 %), or random on each trigger (100 %).
+    va_phase: f32,
+    /// The noise oscillator: type (White, Pink, Brown), level and its band (Hz).
+    noise_type: u8,
+    noise_vol: f32,
+    noise_lo: f32,
+    noise_hi: f32,
     keytrack: bool,
     /// The three source filters: (type, cutoff knob, res knob, drive knob, on); parallel or not.
     sf: [(u8, f32, f32, f32, bool); 3],
@@ -166,6 +186,14 @@ pub(crate) struct AlchShared {
     filt_env: [f32; 4],
     vel_sens: f32,
     glide: f32,
+    /// Glide Time (a fixed time whatever the interval) rather than Rate (a fixed speed).
+    glide_time: bool,
+    /// Wide unison mode (VA unison oscillators hard panned, detune up to ±2 semitones).
+    wide: bool,
+    /// Set per note by the instrument: restart the envelopes / sources (else play legato), and
+    /// the pitch to glide from (NaN: no glide).
+    retrig: bool,
+    from: f32,
     tune: f32,
     lfo1: f32,
     lfo2: f32,
@@ -194,7 +222,7 @@ struct Grain {
 
 #[derive(Clone)]
 struct SrcState {
-    osc: [Osc; 4],
+    osc: [Osc; 8],
     sync: Osc,
     ph: [f32; NP],
     jit: [f32; NP],
@@ -204,12 +232,17 @@ struct SrcState {
     sf: [[crate::alchemy_filter::AFilt; 2]; 3],
     nf: Svf,
     ps: crate::alchemy_partials::PartState,
+    /// The noise oscillator: pink (Kellet) / brown filter state, its Low Cut and High Cut.
+    pink: [f32; 3],
+    brown: f32,
+    nlo: [dsp::OnePole; 2],
+    nhi: [dsp::OnePole; 2],
 }
 
 impl Default for SrcState {
     fn default() -> Self {
         SrcState {
-            osc: [Osc::default(); 4],
+            osc: [Osc::default(); 8],
             sync: Osc::default(),
             ph: [0.0; NP],
             jit: [1.0; NP],
@@ -219,6 +252,10 @@ impl Default for SrcState {
             sf: Default::default(),
             nf: Svf::default(),
             ps: Default::default(),
+            pink: [0.0; 3],
+            brown: 0.0,
+            nlo: Default::default(),
+            nhi: Default::default(),
         }
     }
 }
@@ -253,6 +290,8 @@ pub(crate) struct AlchVoice {
     /// (sources A–D, main filters 1–2) for the envelope followers.
     pub(crate) mv: crate::alchemy_mod::ModVoice,
     legato: bool,
+    /// Glide speed in semitones per second (infinite: no glide).
+    gspeed: f32,
     /// Seconds since the note started.
     age: f32,
     /// The arpeggiator step's pan for this note.
@@ -289,6 +328,7 @@ impl AlchVoice {
             mix2: [(0.0, 0.0); CHUNK],
             mv: Default::default(),
             legato: false,
+            gspeed: f32::INFINITY,
             age: 0.0,
             npan: 0.0,
             own: None,
@@ -313,10 +353,21 @@ impl Voice<AlchShared> for AlchVoice {
         self.note = note;
         self.vel = velocity.max(1) as f32 / 127.0;
         self.target = note as f32;
-        if !(was && sh.glide > 0.0) {
+        // a voice moved to a new note without a trigger plays on (legato): its envelopes,
+        // sources and modulators carry on
+        self.legato = was && !sh.retrig;
+        if sh.from.is_finite() && sh.glide > 0.0 {
+            if !self.legato {
+                self.pitch = sh.from;
+            }
+            // Rate: a fixed speed (an octave per Glide time), so wider intervals take longer;
+            // Time: the same time whatever the interval
+            let dist = (self.target - self.pitch).abs();
+            self.gspeed = if sh.glide_time { dist.max(1e-3) / sh.glide } else { 12.0 / sh.glide };
+        } else {
             self.pitch = self.target;
+            self.gspeed = f32::INFINITY;
         }
-        self.legato = was && sh.glide > 0.0;
         if !self.legato {
             self.age = 0.0;
         }
@@ -332,32 +383,36 @@ impl Voice<AlchShared> for AlchVoice {
         if !self.legato {
             self.mv.key = note as f32;
         }
-        for (i, s) in self.src.iter_mut().enumerate() {
-            for o in &mut s.osc {
-                o.phase = self.rng.unit();
-            }
-            for k in 0..NP {
-                s.ph[k] = self.rng.unit();
-                s.jit[k] = 1.0;
-            }
-            s.grains = [Grain::default(); 12];
-            if !was {
-                s.ps.start(self.rng.next_u32());
-            }
-            s.gpos = sh.src[i].position;
-            s.gnext = 0.0;
-            if !was {
-                for f in s.sf.iter_mut().flatten() {
-                    f.reset();
+        if !self.legato {
+            for (i, s) in self.src.iter_mut().enumerate() {
+                // VA Phase: 0–99.9 % a fixed start point, 100 % random on each trigger
+                let ph = sh.src[i].va_phase;
+                for o in &mut s.osc {
+                    o.phase = if ph >= 0.999 { self.rng.unit() } else { ph };
                 }
+                for k in 0..NP {
+                    s.ph[k] = self.rng.unit();
+                    s.jit[k] = 1.0;
+                }
+                s.grains = [Grain::default(); 12];
+                if !was {
+                    s.ps.start(self.rng.next_u32());
+                }
+                s.gpos = sh.src[i].position;
+                s.gnext = 0.0;
+                if !was {
+                    for f in s.sf.iter_mut().flatten() {
+                        f.reset();
+                    }
+                }
+                s.nf = Svf::new(SvfMode::Band, 1200.0, 0.8, rate);
             }
-            s.nf = Svf::new(SvfMode::Band, 1200.0, 0.8, rate);
         }
         let [a, d, su, r] = sh.amp_env;
         self.amp.set(a, d, su, r, rate);
         let [a, d, su, r] = sh.filt_env;
         self.fenv.set(a, d, su, r, rate);
-        if was {
+        if self.legato {
             self.amp.gate_on();
             self.fenv.gate_on();
         } else {
@@ -390,11 +445,12 @@ impl Voice<AlchShared> for AlchVoice {
         };
         let rate = sh.rate;
         let b = banks();
-        if sh.glide > 0.0 {
-            self.pitch = self.target
-                + (self.pitch - self.target) * dsp::tau_coef(sh.glide * 0.3, rate / CHUNK as f32);
-        } else {
+        // glide: linear in semitones, at the speed the note started with
+        let step = self.gspeed * l.len() as f32 / rate;
+        if (self.target - self.pitch).abs() <= step || !step.is_finite() {
             self.pitch = self.target;
+        } else {
+            self.pitch += step.copysign(self.target - self.pitch);
         }
         let vib = sh.lfo1 * ctl.mod_wheel * 0.4;
         let base = self.pitch + sh.tune + ctl.bend + vib;
@@ -443,7 +499,7 @@ impl Voice<AlchShared> for AlchVoice {
             let vol = c.vol;
             match c.kind {
                 Kind::Va => {
-                    let nos = c.va_num.clamp(1, 4);
+                    let nos = c.va_num.clamp(1, 8);
                     let wave = match c.va_shape {
                         0 => Wave::Sine,
                         1 => Wave::Pulse,
@@ -451,15 +507,17 @@ impl Voice<AlchShared> for AlchVoice {
                         _ => Wave::Saw,
                     };
                     let g = vol / (nos as f32).sqrt();
+                    // the source Pan: a pan for one oscillator, a balance for a unison stack
+                    let (bl_g, br_g) = if nos == 1 {
+                        (pl, pr)
+                    } else {
+                        ((1.0 - c.pan).min(1.0), (1.0 + c.pan).min(1.0))
+                    };
                     for i in 0..n {
                         let mut sl = 0.0;
                         let mut sr = 0.0;
                         for u in 0..nos {
-                            let d = if nos > 1 {
-                                (u as f32 / (nos - 1) as f32 - 0.5) * c.va_detune * 0.6
-                            } else {
-                                0.0
-                            };
+                            let (d, p) = unison_spread(sh.wide, u, nos, c.va_detune);
                             let inc = hz * dsp::semis(d) / rate;
                             let x = if c.va_sync > 0.0 {
                                 let wrapped = st.sync.advance(inc);
@@ -470,16 +528,11 @@ impl Voice<AlchShared> for AlchVoice {
                             } else {
                                 st.osc[u].next(wave, inc, c.va_sym)
                             };
-                            let p = if nos > 1 {
-                                u as f32 / (nos - 1) as f32 * 2.0 - 1.0
-                            } else {
-                                0.0
-                            } * 0.95;
                             sl += x * (1.0 - p).sqrt();
                             sr += x * (1.0 + p).sqrt();
                         }
-                        bl[i] = sl * g;
-                        br[i] = sr * g;
+                        bl[i] = sl * g * bl_g;
+                        br[i] = sr * g * br_g;
                     }
                 }
                 Kind::Additive | Kind::Spectral => {
@@ -600,11 +653,47 @@ impl Voice<AlchShared> for AlchVoice {
                 }
                 Kind::Off => {}
             }
-            if c.noise {
+            if c.noise && c.noise_vol > 0.0 {
+                // the noise oscillator: white, pink or brown, through its Low Cut and High Cut
+                // (together a band-pass)
+                let (lo, hi) = (c.noise_lo > 20.5, c.noise_hi < 19_900.0);
+                if lo {
+                    for f in &mut st.nlo {
+                        f.lowpass_hz(c.noise_lo, rate);
+                    }
+                }
+                if hi {
+                    for f in &mut st.nhi {
+                        f.lowpass_hz(c.noise_hi, rate);
+                    }
+                }
+                let g = 0.1 * vol * c.noise_vol;
                 for i in 0..n {
-                    let x = self.rng.bipolar() * 0.1 * vol;
-                    bl[i] += x;
-                    br[i] += x;
+                    let w = self.rng.bipolar();
+                    let mut x = match c.noise_type {
+                        1 => {
+                            let b = &mut st.pink;
+                            b[0] = 0.99765 * b[0] + w * 0.099_046;
+                            b[1] = 0.963 * b[1] + w * 0.296_516_4;
+                            b[2] = 0.57 * b[2] + w * 1.052_691_3;
+                            (b[0] + b[1] + b[2] + w * 0.1848) * 0.25
+                        }
+                        2 => {
+                            st.brown = (st.brown + 0.02 * w) / 1.02;
+                            st.brown * 3.5
+                        }
+                        _ => w,
+                    };
+                    if lo {
+                        x = st.nlo[0].hp(x);
+                        x = st.nlo[1].hp(x);
+                    }
+                    if hi {
+                        x = st.nhi[0].lp(x);
+                        x = st.nhi[1].lp(x);
+                    }
+                    bl[i] += x * g * pl;
+                    br[i] += x * g * pr;
                 }
             }
             // the source filters: 1 → 2 → 3 in series, or side by side
@@ -732,6 +821,28 @@ impl Voice<AlchShared> for AlchVoice {
     fn level(&self) -> f32 {
         self.level
     }
+}
+
+/// A VA unison oscillator's detune (semitones) and pan (-1 … 1), oscillator `u` of `n`.
+/// Wide unison: 1 centred, 2 hard left / right, 3 centre + hard left / right, 4 or more
+/// alternately hard left and right (an odd one centred), detune spread linearly up to ±2
+/// semitones at 100 % (±1 at 50 %). The older mode: ±0.3 semitones, spread across the field.
+pub fn unison_spread(wide: bool, u: usize, n: usize, detune: f32) -> (f32, f32) {
+    if n <= 1 {
+        return (0.0, 0.0);
+    }
+    let lin = u as f32 / (n - 1) as f32 * 2.0 - 1.0;
+    if !wide {
+        return (lin * 0.5 * detune * 0.6, lin * 0.95);
+    }
+    let pan = if n % 2 == 1 {
+        if u == 0 { 0.0 } else if u % 2 == 1 { -1.0 } else { 1.0 }
+    } else if u % 2 == 0 {
+        -1.0
+    } else {
+        1.0
+    };
+    (lin * 2.0 * detune, pan)
 }
 
 #[inline]
@@ -897,6 +1008,12 @@ pub struct Alchemy {
     playing: bool,
     /// The effects racks (alchemy_fx).
     pub racks: crate::alchemy_fx::Racks,
+    /// The keys down (pitch, velocity; oldest first), the note last played (glides start
+    /// there) and, with Num 1, the note sounding.
+    keys: [(u8, u8); 32],
+    nkeys: usize,
+    last: f32,
+    sounding: Option<u8>,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -918,6 +1035,17 @@ pub fn all_params() -> &'static [Param] {
             let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
             v.push(Param::menu(KEYSCALE + s as u32, leak(format!("Keyscale {l}")), KEYSCALES, 0.0));
             v.push(Param::new(WAIT + s as u32, leak(format!("Wait {l}")), 0.0, 2.0, 0.0, Unit::Seconds));
+        }
+        v.push(Param::menu(VOICE, "Voice Priority", PRIORITIES, 0.0));
+        v.push(Param::menu(VOICE + 1, "Glide Mode", GLIDE_MODES, 0.0));
+        v.push(Param::new(VOICE + 2, "Wide Unison", 0.0, 1.0, 0.0, Unit::OnOff));
+        for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
+            let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
+            let s = s as u32;
+            v.push(Param::menu(NOISE + s, leak(format!("Noise Type {l}")), NOISE_TYPES, 0.0));
+            v.push(Param::new(NOISE + 4 + s, leak(format!("Noise Vol {l}")), 0.0, 1.0, 1.0, Unit::Ratio));
+            v.push(Param::new(NOISE + 8 + s, leak(format!("Noise Low Cut {l}")), 0.0, 1.0, 0.0, Unit::Ratio));
+            v.push(Param::new(NOISE + 12 + s, leak(format!("Noise High Cut {l}")), 0.0, 1.0, 1.0, Unit::Ratio));
         }
         v.push(Param::new(MORPH + 1, "Morph Elements", 0.0, 1.0, 0.0, Unit::OnOff));
         v.push(Param::menu(MORPH + 2, "Morph Group", MORPH_GROUPS, 2.0));
@@ -976,6 +1104,10 @@ impl Alchemy {
                 filt_env: [0.005, 0.6, 0.3, 0.4],
                 vel_sens: 0.85,
                 glide: 0.0,
+                glide_time: false,
+                wide: false,
+                retrig: true,
+                from: f32::NAN,
                 tune: 0.0,
                 lfo1: 0.0,
                 lfo2: 0.0,
@@ -1027,6 +1159,10 @@ impl Alchemy {
             arp: Default::default(),
             playing: false,
             racks: crate::alchemy_fx::Racks::new(rate),
+            keys: [(0, 0); 32],
+            nkeys: 0,
+            last: f32::NAN,
+            sounding: None,
         };
         a.room.feedback = 0.82;
         let params = &a.params;
@@ -1093,6 +1229,10 @@ impl Alchemy {
             filt_env: [0.0; 4],
             vel_sens: 0.85,
             glide: 0.0,
+            glide_time: false,
+            wide: false,
+            retrig: true,
+            from: f32::NAN,
             tune: 0.0,
             lfo1: 0.0,
             lfo2: 0.0,
@@ -1161,6 +1301,11 @@ impl Alchemy {
                 va_detune: det,
                 va_num: num.clamp(1, 4),
                 va_sync: sync,
+                va_phase: p(212 + s as u32),
+                noise_type: p(NOISE + s as u32).round().clamp(0.0, 2.0) as u8,
+                noise_vol: p(NOISE + 4 + s as u32),
+                noise_lo: noise_cut_hz(p(NOISE + 8 + s as u32)),
+                noise_hi: noise_cut_hz(p(NOISE + 12 + s as u32)),
                 keytrack: true,
                 sf: [0usize, 1, 2].map(|k| {
                     let b = SRC_FILT + s as u32 * 16;
@@ -1207,6 +1352,8 @@ impl Alchemy {
             p(137).max(0.01),
         ];
         sh.glide = p(98);
+        sh.glide_time = p(VOICE + 1) >= 0.5;
+        sh.wide = p(VOICE + 2) >= 0.5;
         sh.tune = p(96) + p(97) / 100.0;
         sh.vol = p(94) / 0.8;
         sh.pan = p(95);
@@ -1235,10 +1382,100 @@ impl Alchemy {
         let params = &self.params;
         self.extra.read(&|i| params.get(i));
         self.poly.set_max(p(376).round() as usize);
+        self.poly.priority = p(VOICE).round().clamp(0.0, 3.0) as u8;
         self.ch.bend_up = p(391);
         self.ch.bend_down = p(396);
         self.ch.update_bend();
         self.limiter = p(LIMITER) >= 0.5;
+    }
+
+    /// The voices sounding (not fading out): note, pitch now (semitones) and seconds since
+    /// their last trigger.
+    pub fn voice_states(&self) -> Vec<(u8, f32, f32)> {
+        self.poly.voices.iter().filter(|v| v.on && !v.killing).map(|v| (v.note, v.pitch, v.age)).collect()
+    }
+
+    /// The held key Num 1 plays, by Voice Priority (Newest, Oldest, Lowest, Highest).
+    fn choose(&self) -> Option<(u8, u8)> {
+        let k = &self.keys[..self.nkeys];
+        match self.poly.priority {
+            1 => k.first().copied(),
+            2 => k.iter().min_by_key(|e| e.0).copied(),
+            3 => k.iter().max_by_key(|e| e.0).copied(),
+            _ => k.last().copied(),
+        }
+    }
+
+    /// A note starts, by the Trigger Mode (Always, Retrigger, Legato) and Num: with Num 1,
+    /// Always triggers once per legato group but glides on every note, Retrigger triggers and
+    /// glides on every note, Legato triggers and glides once per legato group; with more voices
+    /// every note triggers, Legato gliding only for notes played while others are held.
+    fn play_on(&mut self, pitch: u8, vel: u8) {
+        let trig = self.p(371).round() as u8;
+        let held_before = self.nkeys > 0;
+        if let Some(i) = self.keys[..self.nkeys].iter().position(|e| e.0 == pitch) {
+            self.keys.copy_within(i + 1..self.nkeys, i);
+            self.nkeys -= 1;
+        }
+        if self.nkeys < self.keys.len() {
+            self.keys[self.nkeys] = (pitch, vel);
+            self.nkeys += 1;
+        }
+        if self.poly.max == 1 {
+            let (want, wv) = self.choose().unwrap_or((pitch, vel));
+            match self.sounding.filter(|_| held_before) {
+                Some(cur) => {
+                    if want != cur {
+                        self.move_mono(cur, want, wv, trig == 1);
+                    }
+                }
+                None => {
+                    self.sh.from = if trig != 2 { self.last } else { f32::NAN };
+                    self.poly.note_on(want, wv, &self.sh, &self.ch.ctl);
+                    self.sounding = Some(want);
+                    self.last = want as f32;
+                }
+            }
+        } else {
+            self.sh.from = if trig != 2 || held_before { self.last } else { f32::NAN };
+            self.poly.note_on(pitch, vel, &self.sh, &self.ch.ctl);
+            self.last = pitch as f32;
+        }
+        self.sh.from = f32::NAN;
+        self.sh.retrig = true;
+    }
+
+    /// Num 1: the sounding voice moves from `cur` to `want`, gliding (legato, or retriggered).
+    fn move_mono(&mut self, cur: u8, want: u8, vel: u8, retrig: bool) {
+        self.sh.retrig = retrig;
+        self.sh.from = self.last;
+        if !self.poly.legato(cur, want, vel, &self.sh, &self.ch.ctl) {
+            self.sh.retrig = true;
+            self.poly.note_on(want, vel, &self.sh, &self.ch.ctl);
+        }
+        self.sounding = Some(want);
+        self.last = want as f32;
+        self.sh.from = f32::NAN;
+        self.sh.retrig = true;
+    }
+
+    fn play_off(&mut self, pitch: u8) {
+        if let Some(i) = self.keys[..self.nkeys].iter().position(|e| e.0 == pitch) {
+            self.keys.copy_within(i + 1..self.nkeys, i);
+            self.nkeys -= 1;
+        }
+        if self.poly.max == 1 && self.sounding.is_some() {
+            if self.sounding != Some(pitch) {
+                return;
+            }
+            if let Some((want, wv)) = self.choose() {
+                // back to a key still held
+                let trig = self.p(371).round() as u8;
+                return self.move_mono(pitch, want, wv, trig == 1);
+            }
+            self.sounding = None;
+        }
+        self.poly.note_off(pitch, &self.sh, &self.ch.ctl);
     }
 
     /// Reads Logic's plain-text Alchemy preset (the project's AuCU text or an .acp file): the
@@ -1454,6 +1691,9 @@ impl Plugin for Alchemy {
         self.ch.reset();
         self.extra.reset();
         self.racks.reset();
+        self.nkeys = 0;
+        self.sounding = None;
+        self.last = f32::NAN;
         let mut ev = [crate::alchemy_arp::ArpEv::Off(0); 32];
         self.arp.clear(&mut ev);
         self.update();
@@ -1485,7 +1725,7 @@ impl Instrument for Alchemy {
         self.count_note();
         self.extra.held += 1;
         self.mg.held = self.extra.held;
-        self.poly.note_on(pitch, velocity, &self.sh, &self.ch.ctl);
+        self.play_on(pitch, velocity);
     }
     fn note_off(&mut self, pitch: u8) {
         self.extra.held = self.extra.held.saturating_sub(1);
@@ -1496,7 +1736,7 @@ impl Instrument for Alchemy {
         if self.arp_cfg.mode != 0 && self.arp.note_off(&self.arp_cfg, pitch) {
             return;
         }
-        self.poly.note_off(pitch, &self.sh, &self.ch.ctl);
+        self.play_off(pitch);
     }
     fn set_tempo(&mut self, bpm: f64) {
         self.extra.set_tempo(bpm);
@@ -1511,7 +1751,7 @@ impl Instrument for Alchemy {
             let k = self.arp.clear(&mut ev);
             for e in &ev[..k] {
                 if let crate::alchemy_arp::ArpEv::Off(p) = *e {
-                    self.poly.note_off(p, &self.sh, &self.ch.ctl);
+                    self.play_off(p);
                 }
             }
             self.extra.held = 0;
@@ -1533,6 +1773,8 @@ impl Instrument for Alchemy {
     }
     fn controller(&mut self, cc: u8, value: u8) {
         if cc == 123 || cc == 120 {
+            self.nkeys = 0;
+            self.sounding = None;
             return self.poly.all_notes_off(&self.sh, &self.ch.ctl);
         }
         self.mg.cc[(cc as usize).min(127)] = value as f32 / 127.0;
@@ -1596,9 +1838,9 @@ impl Instrument for Alchemy {
                             self.sh.note_pan = nt.pan;
                             self.sh.arp_mod = [nt.m1, nt.m2];
                             self.sh.playhead = nt.step as f32 / nt.steps.max(1) as f32;
-                            self.poly.note_on(nt.pitch, nt.vel, &self.sh, &self.ch.ctl)
+                            self.play_on(nt.pitch, nt.vel)
                         }
-                        aa::ArpEv::Off(p) => self.poly.note_off(p, &self.sh, &self.ch.ctl),
+                        aa::ArpEv::Off(p) => self.play_off(p),
                     }
                 }
             }

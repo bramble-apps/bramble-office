@@ -92,7 +92,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     }
 }
 
-/// Initialize Preset: a basic sawtooth (source A, wide unison off), AHDSR 1 and Velocity on
+/// Initialize Preset: a basic sawtooth (source A, wide unison on), AHDSR 1 and Velocity on
 /// Master Vol, Ctrl C (CC 74 Brightness) on Filter 1 Cutoff; everything else at its default.
 pub fn init_pairs(list: &[lg_dsp::Param]) -> Vec<(u32, f32)> {
     use am::*;
@@ -105,6 +105,8 @@ pub fn init_pairs(list: &[lg_dsp::Param]) -> Vec<(u32, f32)> {
     // source A: one saw; B off; the Perform knobs neutral
     put(278, 0.0);
     put(301, 2.0);
+    // Initialize Preset turns wide unison mode on (loaded presets keep the older mode)
+    put(lg_synth::alchemy::VOICE + 2, 1.0);
     put(8, 1.0);
     put(9, 0.0);
     put(10, 0.0);
@@ -375,8 +377,10 @@ fn nav(p: &mut Pane, st: &mut St) {
             // blue: the source is on; green: it's being morphed; none: off
             let on = p.get(277 + k as u32 - 1) >= 0.5;
             let morphing = p.get(lg_synth::alchemy::MORPH) >= 2.5;
+            // yellow: soloed
+            let solo_on = soloed(p) == Some(k) && on;
             if on {
-                p.ui.painter().rect_filled(Rect::from_min_size(r.min + vec2(0.0, 8.0), vec2(2.0, 21.0)), 0.0, if morphing { rgb(0x5ac46a) } else { BLUE });
+                p.ui.painter().rect_filled(Rect::from_min_size(r.min + vec2(0.0, 8.0), vec2(2.0, 21.0)), 0.0, if solo_on { rgb(0xe8c547) } else if morphing { rgb(0x5ac46a) } else { BLUE });
             }
         }
         p.ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, *n, look::regular(11.5), if lit { BLUE } else if resp.hovered() { Color32::WHITE } else { p.skin.text });
@@ -384,24 +388,34 @@ fn nav(p: &mut Pane, st: &mut St) {
             st.page = k as u8;
             // Option-click: view and solo the source (again: the other sources back as they were)
             if (1..=4).contains(&k) && p.ui.input(|i| i.modifiers.alt) {
-                let sid = egui::Id::unique(("alch-solo", p.t));
-                let saved: Option<(usize, [f32; 4])> = p.ui.data(|d| d.get_temp(sid));
-                match saved {
-                    Some((who, prev)) if who == k => {
-                        for j in 0..4u32 {
-                            p.put(277 + j, prev[j as usize]);
-                        }
-                        p.ui.data_mut(|d| d.remove::<(usize, [f32; 4])>(sid));
-                    }
-                    _ => {
-                        let prev = saved.map(|x| x.1).unwrap_or([0, 1, 2, 3].map(|j| p.get(277 + j)));
-                        for j in 0..4u32 {
-                            p.put(277 + j, if j as usize == k - 1 { 1.0 } else { 0.0 });
-                        }
-                        p.ui.data_mut(|d| d.insert_temp(sid, (k, prev)));
-                    }
-                }
+                solo(p, k);
             }
+        }
+    }
+}
+
+/// The source soloed (1–4) by an Option-click, if any.
+fn soloed(p: &Pane) -> Option<usize> {
+    p.ui.data(|d| d.get_temp::<(usize, [f32; 4])>(egui::Id::unique(("alch-solo", p.t)))).map(|x| x.0)
+}
+
+/// Solos source `k` (1–4) — only it on — or, when it's soloed, puts the sources back.
+fn solo(p: &mut Pane, k: usize) {
+    let sid = egui::Id::unique(("alch-solo", p.t));
+    let saved: Option<(usize, [f32; 4])> = p.ui.data(|d| d.get_temp(sid));
+    match saved {
+        Some((who, prev)) if who == k => {
+            for j in 0..4u32 {
+                p.put(277 + j, prev[j as usize]);
+            }
+            p.ui.data_mut(|d| d.remove::<(usize, [f32; 4])>(sid));
+        }
+        _ => {
+            let prev = saved.map(|x| x.1).unwrap_or([0, 1, 2, 3].map(|j| p.get(277 + j)));
+            for j in 0..4u32 {
+                p.put(277 + j, if j as usize == k - 1 { 1.0 } else { 0.0 });
+            }
+            p.ui.data_mut(|d| d.insert_temp(sid, (k, prev)));
         }
     }
 }
@@ -430,7 +444,12 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
         let by = 82.0 + (s / 2) as f32 * 102.0;
         let on = g(p, ix, 277 + s) >= 0.5;
         if rack::flat(p, p.rect(bx + 8.0, by, 20.0, 20.0), ["A", "B", "C", "D"][s as usize], on, true, ("src-on", s)) {
-            p.put(277 + s, if on { 0.0 } else { 1.0 });
+            // Option-click solos the source
+            if p.ui.input(|i| i.modifiers.alt) {
+                solo(p, s as usize + 1);
+            } else {
+                p.put(277 + s, if on { 0.0 } else { 1.0 });
+            }
         }
         let el = element(p, ix, s);
         let name = if !on { "Off".to_string() } else if el == 0 { lg_synth::alchemy::VA_SHAPES[(g(p, ix, 301 + s).round().max(0.0) as usize).min(3)].to_string() } else { ELEMENTS[el].to_string() };
@@ -502,6 +521,42 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
     p.field(988.0, 248.0, 38.0, 20.0, 396, 1.0);
     p.text(946.0, 276.0, Align2::LEFT_CENTER, "Up-Bend-Down", 10.0, p.skin.dim);
     rack::knob(p, ix, st, 1100.0, 196.0, 34.0, 98, "Glide");
+    // Voice Priority, and Glide Rate | Time (a joined pill)
+    p.menu(852.0, 248.0, 86.0, 20.0, lg_synth::alchemy::VOICE);
+    p.text(852.0, 276.0, Align2::LEFT_CENTER, "Priority", 10.0, p.skin.dim);
+    let gm = g(p, ix, lg_synth::alchemy::VOICE + 1).round() as usize;
+    for (k, l) in ["Rate", "Time"].iter().enumerate() {
+        if rack::flat(p, p.rect(1066.0 + k as f32 * 35.0, 254.0, 34.0, 20.0), l, gm == k, true, ("glide-mode", k)) {
+            p.put(lg_synth::alchemy::VOICE + 1, k as f32);
+        }
+    }
+}
+
+/// The VA Wave pop-up (its last entry turns wide unison mode on) and its ‹ › arrows.
+fn va_wave(p: &mut Pane, ix: &Ix, s: u32) {
+    use lg_synth::alchemy::{VA_SHAPES, VOICE};
+    let cur = g(p, ix, 301 + s).round().clamp(0.0, (VA_SHAPES.len() - 1) as f32) as usize;
+    let wide = g(p, ix, VOICE + 2) >= 0.5;
+    let resp = rack::field_btn(p, p.rect(124.0, 88.0, 100.0, 20.0), VA_SHAPES[cur], ("va-wave", s), true);
+    let mut pick = None;
+    egui::Popup::menu(&resp).show(|ui| {
+        for (k, n) in VA_SHAPES.iter().enumerate() {
+            if ui.add(egui::Button::selectable(k == cur, *n)).clicked() {
+                pick = Some((301 + s, k as f32));
+            }
+        }
+        ui.separator();
+        if ui.add(egui::Button::selectable(wide, "Wide Unison")).clicked() {
+            pick = Some((VOICE + 2, if wide { 0.0 } else { 1.0 }));
+        }
+    });
+    if let Some((id, v)) = pick {
+        p.put(id, v);
+    }
+    let d = rack::arrows(p, p.rect(226.0, 88.0, 30.0, 20.0), ("va-wave-ar", s));
+    if d != 0 {
+        p.put(301 + s, (cur as i32 + d).clamp(0, VA_SHAPES.len() as i32 - 1) as f32);
+    }
 }
 
 // ---------------------------------------------------------------- Perform / Arp / Effects
@@ -647,7 +702,7 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
     let k = |p: &mut Pane, st: &mut St, x: f32, y: f32, d: f32, pid: u32, l: &str| rack::knob(p, ix, st, x, y, d, pid, l);
     match view {
         0 => {
-            rack::menu_arrows(p, ix, 124.0, 88.0, 100.0, 301 + s);
+            va_wave(p, ix, s);
             for (j, (pid, l)) in [(204 + s, "Volume"), (208 + s, "Symmetry"), (212 + s, "Phase"), (216 + s, "Detune"), (250 + s, "Sync")].iter().enumerate() {
                 k(p, st, 120.0 + j as f32 * 60.0, 124.0, 38.0, *pid, l);
             }
@@ -655,6 +710,15 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
             let nz = g(p, ix, 305 + s) >= 0.5;
             if rack::flat(p, p.rect(500.0, 132.0, 50.0, 20.0), "Noise", nz, true, ("va-noise", s)) {
                 p.put(305 + s, if nz { 0.0 } else { 1.0 });
+            }
+            // the noise oscillator: its waveform (‹ ›), Vol, Low Cut and High Cut
+            let n0 = lg_synth::alchemy::NOISE + s;
+            rack::menu_arrows(p, ix, 556.0, 132.0, 70.0, n0);
+            for (j, (pid, l)) in [(n0 + 4, "Vol"), (n0 + 8, "Low Cut"), (n0 + 12, "High Cut")].iter().enumerate() {
+                k(p, st, 700.0 + j as f32 * 56.0, 124.0, 34.0, *pid, l);
+            }
+            if !nz {
+                p.ui.painter().rect_filled(p.rect(556.0, 120.0, 300.0, 70.0), 0.0, rgb(0x1c2027).gamma_multiply(0.55));
             }
         }
         1 => {
