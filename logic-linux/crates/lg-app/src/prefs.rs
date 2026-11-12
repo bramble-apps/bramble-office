@@ -535,6 +535,8 @@ pub fn send_reset(app: &mut App) {
                 e.live_message(t, 0xD0, 0, 0);
             }
         }
+        // (Stop clicked again while stopped: stuck notes off, as Logic's double-click on Stop)
+        e.all_off();
     }
     // External MIDI: the checked messages on all 16 channels of every MIDI output
     let bytes = external_reset(v);

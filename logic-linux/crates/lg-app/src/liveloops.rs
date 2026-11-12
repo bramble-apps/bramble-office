@@ -149,6 +149,8 @@ pub struct State {
     /// Queued with ⌥↩ / ⌥-click, waiting for a trigger (↩).
     pub pending: BTreeSet<(usize, usize)>,
     pub focused_scene: Option<usize>,
+    /// The scenes selected (by clicking under their triggers); the focused one is in it.
+    pub scene_sel: BTreeSet<usize>,
     pub focused: bool,
     pub rec: Option<Rec>,
     pub performance: bool,
@@ -1117,6 +1119,80 @@ fn insert_scene(s: &mut State, at: usize) {
     s.scenes = s.scenes.max(s.used_scenes()) + 1;
 }
 
+/// A scene dragged from `from` to `to`: its cells and settings move, the scenes between shift.
+pub fn move_scene(s: &mut State, from: usize, to: usize) {
+    if from == to {
+        return;
+    }
+    let map = |sc: usize| -> usize {
+        if sc == from {
+            to
+        } else if from < to && sc > from && sc <= to {
+            sc - 1
+        } else if to < from && sc >= to && sc < from {
+            sc + 1
+        } else {
+            sc
+        }
+    };
+    s.cells = std::mem::take(&mut s.cells).into_iter().map(|((t, sc), c)| ((t, map(sc)), c)).collect();
+    s.scene_opts = std::mem::take(&mut s.scene_opts).into_iter().map(|(sc, o)| (map(sc), o)).collect();
+    s.selected = std::mem::take(&mut s.selected).into_iter().map(|(t, sc)| (t, map(sc))).collect();
+    s.scene_sel = std::mem::take(&mut s.scene_sel).into_iter().map(map).collect();
+    s.focused_scene = s.focused_scene.map(map);
+    for p in s.plays.values_mut() {
+        if let Some(c) = p.current.as_mut() {
+            c.0 = map(c.0);
+        }
+        if let Some(n) = p.next.as_mut() {
+            n.0 = map(n.0);
+        }
+    }
+}
+
+/// The Mute tool on a cell: muted ↔ unmuted.
+pub fn toggle_mute(s: &mut State, key: (usize, usize)) {
+    if let Some(c) = s.cells.get_mut(&key) {
+        c.muted = !c.muted;
+    }
+}
+
+/// A click under a Scene trigger: selects the scene (Shift adds it; a click on one of several
+/// selected scenes only moves the focus to it).
+pub fn click_scene(s: &mut State, sc: usize, shift: bool) {
+    if shift {
+        if s.scene_sel.is_empty() {
+            s.scene_sel.extend(s.focused_scene);
+        }
+        s.scene_sel.insert(sc);
+    } else if !(s.scene_sel.len() > 1 && s.scene_sel.contains(&sc)) {
+        s.scene_sel = [sc].into();
+    }
+    s.focused_scene = Some(sc);
+    s.selected.clear();
+}
+
+/// ← / → with scenes selected: the previous or next scene. Shift extends the selection; with
+/// several selected, the focus moves between them and the selection stays.
+pub fn arrow_scene(s: &mut State, d: i32, shift: bool) {
+    let Some(cur) = s.focused_scene else { return };
+    let last = s.scenes.max(1) - 1;
+    if !shift && s.scene_sel.len() > 1 {
+        let v: Vec<usize> = s.scene_sel.iter().copied().collect();
+        let i = v.iter().position(|&x| x == cur).unwrap_or(0) as i32;
+        s.focused_scene = Some(v[(i + d).clamp(0, v.len() as i32 - 1) as usize]);
+        return;
+    }
+    let next = (cur as i32 + d).clamp(0, last as i32) as usize;
+    if shift {
+        s.scene_sel.insert(cur);
+        s.scene_sel.insert(next);
+    } else {
+        s.scene_sel = [next].into();
+    }
+    s.focused_scene = Some(next);
+}
+
 fn delete_scene(s: &mut State, at: usize) {
     s.cells.retain(|k, _| k.1 != at);
     let moved: Vec<((usize, usize), Cell)> = s.cells.iter().filter(|(k, _)| k.1 > at).map(|(k, c)| (*k, c.clone())).collect();
@@ -1662,6 +1738,26 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
     if focused && matches!(key, egui::Key::Backspace | egui::Key::Delete) && m.is_none() && !app.live_loops.selected.is_empty() {
         return command(app, "Delete");
     }
+    // scenes selected (no cells): ← / → move, ⇧ extends, ⌫ deletes them
+    if focused && app.live_loops.selected.is_empty() && !app.live_loops.scene_sel.is_empty() {
+        if matches!(key, egui::Key::ArrowLeft | egui::Key::ArrowRight) && !m.command && !m.alt {
+            arrow_scene(&mut app.live_loops, if key == egui::Key::ArrowLeft { -1 } else { 1 }, m.shift);
+            return true;
+        }
+        if matches!(key, egui::Key::Backspace | egui::Key::Delete) && m.is_none() {
+            let scenes: Vec<usize> = app.live_loops.scene_sel.iter().rev().copied().collect();
+            crate::cellinsp::undoable(app, "Delete Scenes", |app| {
+                for sc in scenes {
+                    delete_scene(&mut app.live_loops, sc);
+                }
+                app.live_loops.scene_sel.clear();
+                app.live_loops.focused_scene = None;
+                app.dirty = true;
+                true
+            });
+            return true;
+        }
+    }
     false
 }
 
@@ -1981,9 +2077,14 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                         let st = if playing && rec.is_some_and(|r| pos >= r.start as f64) { RingState::Recording } else { RingState::RecQueued };
                         let frac = rec.map_or(0.0, |r| ((pos - r.start as f64).max(0.0) / bar(app) as f64).fract() as f32);
                         draw_ring(&cp, r.center(), st, frac, false, now);
-                    } else if selected && armed {
+                    } else if (selected || hovered) && armed {
+                        // the Cell Record button (shown on the selected or hovered empty cell)
                         cp.circle_filled(r.center(), RING_R + 2.0, Color32::from_gray(30));
                         cp.circle_filled(r.center(), 4.5, look::record_red());
+                    } else if hovered && app.live_loops.active(t) {
+                        // an empty cell's Stop button: stops the track's playing cell
+                        cp.circle_filled(r.center(), RING_R + 2.0, Color32::from_gray(30));
+                        cp.rect_filled(Rect::from_center_size(r.center(), vec2(8.0, 8.0)), 1.0, Color32::from_gray(210));
                     }
                 }
                 Some(c) => {
@@ -2060,11 +2161,18 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             }
             // clicks
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
-            if resp.clicked() {
+            // the Mute tool mutes (or unmutes) the clicked cell
+            if resp.clicked() && cell.is_some() && app.tool == crate::edit::Tool::Mute {
+                crate::cellinsp::undoable(app, "Mute Cell", |app| {
+                    toggle_mute(&mut app.live_loops, key);
+                    true
+                });
+            } else if resp.clicked() {
                 app.selected_track = Some(t);
                 app.selected_region = None;
                 app.live_loops.cell_sel = true;
                 app.live_loops.focused_scene = Some(sc);
+                app.live_loops.scene_sel.clear();
                 let s = &mut app.live_loops;
                 if shift || cmd {
                     if !s.selected.remove(&key) {
@@ -2079,6 +2187,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                         trigger(app, t, sc, false);
                     } else if cell.is_none() && centre && app.armed.contains(&t) {
                         record_into_cell(app, t, sc);
+                    } else if cell.is_none() && centre && app.live_loops.active(t) {
+                        stop_track(app, t);
                     }
                 }
             }
@@ -2200,11 +2310,30 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         }
         let r = Rect::from_min_size(pos2(x, trig.min.y), vec2(pitch, TRIGGER_H));
         let up = Rect::from_min_size(r.min, vec2(pitch, 25.0));
-        let resp = ui.interact(r.intersect(trig), ui.scope_id().with(("ll-scene", sc)), Sense::click());
+        let resp = ui.interact(r.intersect(trig), ui.scope_id().with(("ll-scene", sc)), Sense::click_and_drag());
+        // dragging the area under the trigger left or right moves the scene
+        if resp.drag_stopped() {
+            let from_x = ui.input(|i| i.pointer.press_origin()).map_or(0.0, |p| p.x);
+            let to_x = resp.interact_pointer_pos().map_or(from_x, |p| p.x);
+            let to = (sc as i32 + ((to_x - from_x) / pitch).round() as i32).clamp(0, app.live_loops.scenes.max(1) as i32 - 1) as usize;
+            if to != sc {
+                crate::cellinsp::undoable(app, "Move Scene", |app| {
+                    move_scene(&mut app.live_loops, sc, to);
+                    app.dirty = true;
+                    true
+                });
+            }
+        }
         let focused = app.live_loops.focused_scene == Some(sc);
         let playing_scene = (0..n_tracks).any(|t| app.live_loops.cells.contains_key(&(t, sc))) && (0..n_tracks).filter(|t| app.live_loops.cells.contains_key(&(*t, sc))).all(|t| app.live_loops.plays.get(&t).is_some_and(|p| p.current.is_some_and(|c| c.0 == sc)));
         if focused || resp.hovered() {
             tp.rect_filled(up, 0.0, if resp.hovered() { Color32::from_gray(52) } else { Color32::from_gray(44) });
+        }
+        // a multiple scene selection: the selected names lit, the focused one also has the gray
+        // area round its trigger
+        if app.live_loops.scene_sel.contains(&sc) {
+            let name_r = Rect::from_min_max(pos2(r.min.x + 3.0, up.max.y), pos2(r.max.x - 3.0, r.max.y - 2.0));
+            tp.rect_filled(name_r, 4.0, look::accent().gamma_multiply(if focused { 0.55 } else { 0.3 }));
         }
         tp.vline(r.max.x, trig.y_range(), Stroke::new(1.0, look::line().gamma_multiply(0.7)));
         let c = up.center();
@@ -2225,8 +2354,15 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                 tp.with_clip_rect(r).text(pos2(c.x, up.max.y + 9.0), Align2::CENTER_CENTER, label, look::regular(12.0), look::text());
             }
         }
-        if resp.clicked() {
+        // the arrow triggers the scene; the area under it (the name) selects it
+        let on_arrow = resp.interact_pointer_pos().is_some_and(|pp| up.contains(pp));
+        if resp.clicked() && on_arrow {
             trigger_scene(app, sc);
+        } else if resp.double_clicked() {
+            app.live_loops.renaming = Some((None, sc, app.live_loops.scene_opts.get(&sc).map(|s| s.name.clone()).unwrap_or_default()));
+        } else if resp.clicked() {
+            let shift = ui.input(|i| i.modifiers.shift);
+            click_scene(&mut app.live_loops, sc, shift);
         }
         if resp.secondary_clicked() {
             app.live_loops.focused_scene = Some(sc);
@@ -2326,6 +2462,58 @@ fn put_back(app: &mut App, track: usize, region: usize, start: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scene_selection() {
+        let mut s = State { scenes: 6, ..Default::default() };
+        click_scene(&mut s, 2, false);
+        assert_eq!((s.focused_scene, s.scene_sel.iter().copied().collect::<Vec<_>>()), (Some(2), vec![2]));
+        arrow_scene(&mut s, 1, false);
+        assert_eq!((s.focused_scene, s.scene_sel.len()), (Some(3), 1));
+        arrow_scene(&mut s, -1, true);
+        assert_eq!(s.scene_sel.iter().copied().collect::<Vec<_>>(), [2, 3]);
+        click_scene(&mut s, 5, true);
+        assert_eq!(s.scene_sel.iter().copied().collect::<Vec<_>>(), [2, 3, 5]);
+        // in a multiple selection a click or an arrow only moves the focus
+        click_scene(&mut s, 3, false);
+        assert_eq!((s.focused_scene, s.scene_sel.len()), (Some(3), 3));
+        arrow_scene(&mut s, 1, false);
+        assert_eq!((s.focused_scene, s.scene_sel.len()), (Some(5), 3));
+        arrow_scene(&mut s, -1, false);
+        arrow_scene(&mut s, -1, false);
+        assert_eq!(s.focused_scene, Some(2));
+        // a plain click elsewhere selects just that scene
+        click_scene(&mut s, 0, false);
+        assert_eq!(s.scene_sel.iter().copied().collect::<Vec<_>>(), [0]);
+        arrow_scene(&mut s, -1, false);
+        assert_eq!(s.focused_scene, Some(0));
+    }
+
+    #[test]
+    fn scenes_move() {
+        let mut s = State { scenes: 4, ..Default::default() };
+        for sc in 0..4 {
+            s.cells.insert((0, sc), Cell { name: format!("c{sc}"), ..Default::default() });
+        }
+        move_scene(&mut s, 0, 2);
+        let names: Vec<String> = (0..4).map(|sc| s.cells[&(0, sc)].name.clone()).collect();
+        assert_eq!(names, ["c1", "c2", "c0", "c3"]);
+        move_scene(&mut s, 3, 0);
+        let names: Vec<String> = (0..4).map(|sc| s.cells[&(0, sc)].name.clone()).collect();
+        assert_eq!(names, ["c3", "c1", "c2", "c0"]);
+    }
+
+    #[test]
+    fn mute_tool_toggles_a_cell() {
+        let mut s = State::default();
+        s.cells.insert((0, 1), Cell::default());
+        toggle_mute(&mut s, (0, 1));
+        assert!(s.cells[&(0, 1)].muted);
+        toggle_mute(&mut s, (0, 1));
+        assert!(!s.cells[&(0, 1)].muted);
+        toggle_mute(&mut s, (3, 3));
+        assert!(s.cells.get(&(3, 3)).is_none());
+    }
 
     fn note(pos: u32, pitch: u8) -> Note {
         Note { channel: 0, pitch, velocity: 100, pos, len: 240, muted: false }

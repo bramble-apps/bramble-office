@@ -32,6 +32,7 @@ pub const BUTTONS: &[(&str, &str, bool)] = &[
     ("Back", "Navigation: Back", false),
     ("Tap Tempo", "Tap Tempo", false),
     ("Note Pad", "Show/Hide Note Pad", false),
+    ("Note Repeat", "Note Repeat", false),
 ];
 
 /// Which control-bar parts can be ticked in the sheet (beside controlbar::Shown's).
