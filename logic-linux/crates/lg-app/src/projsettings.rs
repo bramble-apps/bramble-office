@@ -618,7 +618,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
                 }
             }
         }
-        ui.add_space(4.0);
+        ui.add_space(if boxed { 19.0 } else { 8.0 });
         let whole = Rect::from_min_max(top, pos2(top.x + PS_W, ui.cursor().min.y));
         p.set(bg, egui::Shape::rect_filled(whole, 12.0, gray(0x262524)));
         p.rect_stroke(whole, 12.0, Stroke::new(0.5, Color32::BLACK), egui::StrokeKind::Outside);
@@ -655,7 +655,7 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
     }
     let p = ui.painter().clone();
     let f = look::regular(13.0);
-    let label_w = list.iter().filter(|r| !matches!(r.3, Kind::Check | Kind::Heading)).map(|r| p.layout_no_wrap(r.2.to_string(), f.clone(), Color32::WHITE).size().x).fold(60.0f32, f32::max);
+    let label_w = list.iter().filter(|r| !matches!(r.3, Kind::Check | Kind::Heading)).map(|r| p.layout_no_wrap(r.2.to_string(), f.clone(), Color32::WHITE).size().x).fold(75.0f32, f32::max);
     let left = ui.max_rect().min.x;
     let label_right = left + label_w + 10.0;
     let ctrl_x = label_right + 9.5;
@@ -665,7 +665,9 @@ fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
         let key = key(r);
         let cur = app.proj.get(&key);
         let id = ui.scope_id().with(("ps-row", k));
-        let (row, _) = ui.allocate_exact_size(vec2(ui.max_rect().width(), 24.0), Sense::hover());
+        // (Logic's pitch: checkboxes 23 pt apart, pop-ups and fields 31 pt)
+        let h = if matches!(r.3, Kind::Check) { 16.0 } else { 24.0 };
+        let (row, _) = ui.allocate_exact_size(vec2(ui.max_rect().width(), h), Sense::hover());
         let cy = row.center().y;
         match r.3 {
             Kind::Heading => {
