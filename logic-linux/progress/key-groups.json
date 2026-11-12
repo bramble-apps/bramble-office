@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 545,
+  "done": 549,
   "total": 679,
-  "percent": 80.3
+  "percent": 80.9
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -19,9 +19,9 @@
  },
  {
   "group": "Various Windows",
-  "done": 67,
+  "done": 68,
   "total": 110,
-  "percent": 60.9
+  "percent": 61.8
  },
  {
   "group": "Windows Showing Audio Files",
@@ -157,9 +157,9 @@
  },
  {
   "group": "Tool Menu",
-  "done": 17,
+  "done": 18,
   "total": 29,
-  "percent": 58.6
+  "percent": 62.1
  },
  {
   "group": "Control Surface Install Window",

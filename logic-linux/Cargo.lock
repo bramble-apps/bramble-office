@@ -1798,6 +1798,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 name = "lg-app"
 version = "0.4.2"
 dependencies = [
+ "ab_glyph",
  "eframe",
  "egui",
  "image",

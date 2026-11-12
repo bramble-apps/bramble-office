@@ -32,6 +32,8 @@ lg-synth = { path = "../lg-synth" }
 lg-sounds = { path = "../lg-sounds" }
 lg-fx = { path = "../lg-fx" }
 lg-notation = { path = "../lg-notation" }
+# glyph outlines for the Score's printed PDF (already built by the suite's kn-ui)
+ab_glyph = "0.2"
 # hosting third-party CLAP, VST3 and LV2 plug-ins
 lg-host = { path = "../lg-host" }
 # MIDI keyboards and controllers (ALSA / CoreMIDI / WinMM)

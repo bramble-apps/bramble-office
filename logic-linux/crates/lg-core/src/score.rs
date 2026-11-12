@@ -77,6 +77,46 @@ pub enum SymbolKind {
     Ornament,
     /// Automatic text: `text` is REGION, INSTR, SONG or DATE.
     AutoText,
+    /// A user N-tuplet (Tuplet window): `text` is "n of base flags" (`TupletText`).
+    Tuplet,
+    /// A chord grid: `text` is the grid (chordgrid::Grid::encode); `style` its scale
+    /// ("reduced", "", "enlarged"), `align` 1 hides the chord name, dx / dy its offset.
+    ChordGrid,
+}
+
+/// A tuplet symbol's settings, kept in its text: `n` notes of 1/`base` in the time of `of`;
+/// flags: 1 hide bracket, 2 hide number, 4 show note value, 8 up, 16 down, 32 allow double
+/// values, 64 allow half values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TupletText {
+    pub n: u8,
+    pub of: u8,
+    pub base: u8,
+    pub flags: u8,
+}
+
+impl Default for TupletText {
+    fn default() -> TupletText {
+        TupletText { n: 5, of: 4, base: 16, flags: 0 }
+    }
+}
+
+impl TupletText {
+    pub fn parse(s: &str) -> TupletText {
+        let v: Vec<u8> = s.split(' ').map(|x| x.parse().unwrap_or(0)).collect();
+        let d = TupletText::default();
+        TupletText { n: v.first().copied().filter(|&x| x > 0).unwrap_or(d.n), of: v.get(1).copied().filter(|&x| x > 0).unwrap_or(d.of), base: v.get(2).copied().filter(|&x| x > 0).unwrap_or(d.base), flags: v.get(3).copied().unwrap_or(0) }
+    }
+    pub fn text(&self) -> String {
+        format!("{} {} {} {}", self.n, self.of, self.base, self.flags)
+    }
+    /// Its length in ticks (`ppq` per quarter).
+    pub fn len(&self, ppq: u32) -> u32 {
+        self.of as u32 * ppq * 4 / self.base.max(1) as u32
+    }
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
 }
 
 /// The Part box's Trills group (free symbols, not attached to notes, visual only).
@@ -241,6 +281,8 @@ pub struct TrackScore {
     pub syncopation: bool,
     /// Max. Dots: 0 = the default (1), otherwise the number of dots + 1.
     pub max_dots: u8,
+    /// No Overlap turned off (Logic's default is on: a note ends where the next starts).
+    pub overlap: bool,
     pub notes: BTreeMap<(u32, u8), NoteAttr>,
     pub symbols: Vec<Symbol>,
 }
@@ -259,6 +301,42 @@ pub struct Score {
     pub text_styles: Vec<TextStyle>,
     /// Score sets (besides All Instruments, which isn't stored).
     pub sets: Vec<ScoreSet>,
+    /// Global text (Page view): on the pages themselves, in every score set.
+    pub globals: Vec<GlobalText>,
+    /// Staff styles: edited copies of Logic's predefined ones (same name) and the project's own.
+    pub staff_styles: Vec<crate::staffstyle::StaffStyleDef>,
+}
+
+/// Global text's Pages pop-up: which pages show it.
+pub const GLOBAL_PAGES: [&str; 5] = ["1", "2", "Odd", "Even", "All"];
+/// Global text's Zone pop-up: the margin area it belongs to.
+pub const GLOBAL_ZONES: [&str; 5] = ["Top", "Header", "Side", "Footer", "Bottom"];
+
+/// A global text object: a graphic position on the page (fractions of its width and height),
+/// not a bar position; which pages show it, its zone, text style and alignment.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct GlobalText {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    /// Index into `GLOBAL_PAGES` ("1" first page only, "2" every page but the first).
+    pub pages: u8,
+    pub zone: u8,
+    pub style: String,
+    pub align: u8,
+}
+
+impl GlobalText {
+    /// Whether page `k` (from 0) shows it.
+    pub fn on_page(&self, k: usize) -> bool {
+        match self.pages {
+            0 => k == 0,
+            1 => k > 0,
+            2 => k % 2 == 0,
+            3 => k % 2 == 1,
+            _ => true,
+        }
+    }
 }
 
 /// An instrument of a score set: its track, names, and whether a bracket and the bar lines join
@@ -404,7 +482,9 @@ fn unesc(s: &str) -> String {
     out
 }
 
-const KINDS: [(SymbolKind, &str); 12] = [
+const KINDS: [(SymbolKind, &str); 14] = [
+    (SymbolKind::Tuplet, "tuplet"),
+    (SymbolKind::ChordGrid, "grid"),
     (SymbolKind::Dynamic, "dyn"), (SymbolKind::Text, "text"), (SymbolKind::Lyric, "lyric"), (SymbolKind::Chord, "chord"), (SymbolKind::Crescendo, "cresc"), (SymbolKind::Decrescendo, "decresc"), (SymbolKind::SlurUp, "slurup"), (SymbolKind::SlurDown, "slurdown"), (SymbolKind::Clef, "clef"), (SymbolKind::Ornament, "orn"), (SymbolKind::AutoText, "auto"), (SymbolKind::Text, "text"),
 ];
 
@@ -414,7 +494,7 @@ impl Score {
         let mut out = String::new();
         for (id, t) in &self.tracks {
             let Some(i) = index_of(*id) else { continue };
-            out += &format!("strack\t{i}\t{}\t{}\t{}\t{}\t{}\n", esc(&t.style), esc(&t.quantize), t.no_interpretation as u8, t.syncopation as u8, t.max_dots);
+            out += &format!("strack\t{i}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&t.style), esc(&t.quantize), t.no_interpretation as u8, t.syncopation as u8, t.max_dots, t.overlap as u8);
             for (&(pos, pitch), a) in &t.notes {
                 out += &format!(
                     "sattr\t{i}\t{pos}\t{pitch}\t{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n",
@@ -445,6 +525,12 @@ impl Score {
         for t in &self.text_styles {
             out += &format!("sstyle\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&t.name), esc(&t.family), t.size, t.bold as u8, t.italic as u8, t.underline as u8);
         }
+        for d in &self.staff_styles {
+            out += &d.to_lines(&esc);
+        }
+        for g in &self.globals {
+            out += &format!("sglobal\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&g.text), g.x, g.y, g.pages, g.zone, esc(&g.style), g.align);
+        }
         out
     }
 
@@ -464,6 +550,7 @@ impl Score {
                         t.no_interpretation = w[4] == "1";
                         t.syncopation = w[5] == "1";
                         t.max_dots = num(6) as u8;
+                        t.overlap = num(7) == 1;
                         any = true;
                     }
                 }
@@ -517,7 +604,13 @@ impl Score {
                     self.text_styles.push(TextStyle { name: unesc(w[1]), family: unesc(w[2]), size: w[3].parse().unwrap_or(12.0), bold: w[4] == "1", italic: w[5] == "1", underline: w[6] == "1" });
                     any = true;
                 }
-                _ => {}
+                Some("sglobal") if w.len() >= 8 => {
+                    self.globals.push(GlobalText { text: unesc(w[1]), x: w[2].parse().unwrap_or(0.5), y: w[3].parse().unwrap_or(0.1), pages: num(4) as u8, zone: num(5) as u8, style: unesc(w[6]), align: num(7) as u8 });
+                    any = true;
+                }
+                _ => {
+                    any |= crate::staffstyle::StaffStyleDef::read_line(&mut self.staff_styles, &w, &unesc);
+                }
             }
         }
         any
@@ -552,6 +645,7 @@ mod tests {
         });
         s.track_mut(5).style = "Piano".into();
         s.track_mut(5).max_dots = 3;
+        s.track_mut(5).overlap = true;
         s.track_mut(5).symbols.push(Symbol { tick: 10, kind: SymbolKind::AutoText, text: "SONG\ttab".into(), style: "Title".into(), dx: -4, dy: 7, align: 1, ..Default::default() });
         s.add_bar(BarSym { tick: 3840, kind: BarKind::RepeatEnd, ..Default::default() });
         s.add_bar(BarSym { tick: 3840, kind: BarKind::Final, ..Default::default() });
@@ -564,6 +658,9 @@ mod tests {
         set.entries[0].bracket = true;
         set.scale = 80;
         s.sets.push(set);
+        s.staff_styles.push(crate::staffstyle::StaffStyleDef::dual("Mine\tPiano"));
+        s.globals.push(GlobalText { text: "© 2026".into(), x: 0.5, y: 0.95, pages: 4, zone: 3, style: "Plain Text".into(), align: 1 });
+        assert!(s.globals[0].on_page(3) && !GlobalText { pages: 1, ..Default::default() }.on_page(0));
         let text = s.to_text(|id| (id == 5).then_some(2));
         let mut back = Score::default();
         assert!(back.apply_text(&text, |i| (i == 2).then_some(5)));

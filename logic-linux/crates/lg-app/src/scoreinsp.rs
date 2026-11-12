@@ -362,12 +362,15 @@ fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usiz
     // Style
     let style = score::style_of(app, t);
     let own = app.project.as_ref().and_then(|p| p.score.track(tid)).is_some_and(|x| !x.style.is_empty());
+    // (every staff style: Logic's and the project's own, mapped ones with a #)
+    let all = crate::scorestyle::all(app);
     let mut names: Vec<String> = vec![format!("Auto ({})", style.name)];
-    names.extend(nt::StaffStyle::ALL.iter().map(|s| s.name.to_string()));
-    let cur = if own { nt::StaffStyle::ALL.iter().position(|s| s.name == style.name).map_or(0, |k| k + 1) } else { 0 };
+    names.extend(all.iter().map(|s| s.shown_name()));
+    let cur = if own { all.iter().position(|s| s.name == style.name).map_or(0, |k| k + 1) } else { 0 };
     label(&p, area, y, "Style");
     if let Some(k) = popup(ui, slot(area, y), id.with("style"), cur, &names) {
-        score::set_style(app, t, if k == 0 { "" } else { nt::StaffStyle::ALL[k - 1].name });
+        let name = if k == 0 { String::new() } else { all[k - 1].name.clone() };
+        score::set_style(app, t, &name);
     }
     y += ROW;
     // Quantize
@@ -388,6 +391,12 @@ fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usiz
     let mut s = synco;
     if check(ui, slot(area, y), id.with("synco"), &mut s) {
         score::region_param(app, t, "Syncopation", |ts| ts.syncopation = s);
+    }
+    y += ROW;
+    label(&p, area, y, "No Overlap");
+    let mut no = app.project.as_ref().and_then(|p| p.score.track(tid)).is_none_or(|x| !x.overlap);
+    if check(ui, slot(area, y), id.with("overlap"), &mut no) {
+        score::region_param(app, t, "No Overlap", |ts| ts.overlap = !no);
     }
     y += ROW;
     label(&p, area, y, "Max. Dots");
@@ -605,6 +614,11 @@ fn symbol_icon(p: &egui::Painter, r: Rect, part: Part, dotted: bool, triplet: bo
             let ch = [score::GCLEF, score::FCLEF, score::CCLEF, score::CCLEF, score::PERC_CLEF][i];
             score::smufl(p, ch, c + vec2(0.0, [5.0, -2.0, 1.0, -2.0, 1.0][i]), 2.6, col, true);
         }
+        Part::Text(7) => {
+            // a small chord grid
+            let g = lg_core::chordgrid::Grid::shape(0, 0, "x32010");
+            crate::scoregrid::draw_grid(p, Rect::from_center_size(c + vec2(0.0, 3.0), vec2(12.0, 12.0)), &g, 4, false, false, col, look::pane_bg(), (None, None));
+        }
         Part::Text(i) => {
             let s = ["A", "Lyr", "C7", "REG", "INS", "SNG", "DAT"][i];
             p.text(c, Align2::CENTER_CENTER, s, look::regular(if i == 0 { 15.0 } else { 9.5 }), col);
@@ -676,6 +690,20 @@ fn symbol_icon(p: &egui::Painter, r: Rect, part: Part, dotted: bool, triplet: bo
             if i >= 2 {
                 p.line_segment([r.left_bottom() + vec2(5.0, -5.0), r.right_top() + vec2(-5.0, 5.0)], Stroke::new(1.2, col));
             }
+        }
+        Part::NTuplet => {
+            // Logic's N-tuplet: a bracket with "n" over two beamed notes
+            let y = r.min.y + 4.0;
+            p.line_segment([pos2(r.min.x + 4.0, y + 3.0), pos2(r.min.x + 4.0, y)], Stroke::new(1.0, col));
+            p.line_segment([pos2(r.min.x + 4.0, y), pos2(r.max.x - 4.0, y)], Stroke::new(1.0, col));
+            p.line_segment([pos2(r.max.x - 4.0, y), pos2(r.max.x - 4.0, y + 3.0)], Stroke::new(1.0, col));
+            p.rect_filled(Rect::from_center_size(pos2(c.x, y), vec2(8.0, 9.0)), 0.0, look::pane_bg());
+            p.text(pos2(c.x, y), Align2::CENTER_CENTER, "n", look::regular(10.0), col);
+            for dx in [-4.0, 4.0] {
+                score::notehead(p, pos2(c.x + dx, r.max.y - 5.0), 3.6, 8, col, Color32::TRANSPARENT);
+                p.vline(c.x + dx + 2.6, r.max.y - 15.0..=r.max.y - 5.0, Stroke::new(1.0, col));
+            }
+            p.line_segment([pos2(c.x - 1.4, r.max.y - 15.0), pos2(c.x + 6.6, r.max.y - 15.0)], Stroke::new(2.0, col));
         }
     }
 }
@@ -764,8 +792,8 @@ fn group_rows(g: usize) -> Vec<Vec<(Part, bool, bool)>> {
     let one = |n: usize, f: &dyn Fn(usize) -> Part| -> Vec<Vec<(Part, bool, bool)>> { vec![(0..n).map(|i| (f(i), false, false)).collect()] };
     match g {
         0 => vec![
-            (0..7).map(|i| (Part::Note(i), false, false)).collect(),
-            (1..7).map(|i| (Part::Note(i), false, true)).collect(),
+            (0..score::VALUES.len()).map(|i| (Part::Note(i), false, false)).collect(),
+            (1..7).map(|i| (Part::Note(i), false, true)).chain(std::iter::once((Part::NTuplet, false, false))).collect(),
             (0..7).map(|i| (Part::Note(i), true, false)).collect(),
         ],
         _ => one(Part::GROUPS[g], &|i| Part::from_index(g, i)),
@@ -908,7 +936,7 @@ fn part_box(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, pb: &mut P
             for (k, (part, dotted, triplet)) in row.into_iter().enumerate() {
                 let r = Rect::from_min_size(pos2(x0 + (k % per_row) as f32 * sw, y + (k / per_row) as f32 * cell_h), vec2(sw - 1.0, cell_h - 2.0));
                 let on = st.part == part && (g != 0 || (st.dotted == dotted && st.triplet == triplet));
-                let resp = ui.interact(r, id.with(("s", g, k, dotted, triplet)), Sense::click_and_drag()).on_hover_text(part.name());
+                let resp = ui.interact(r, id.with(("s", g, part.index(), dotted, triplet)), Sense::click_and_drag()).on_hover_text(part.name());
                 if on {
                     p.rect_filled(r, 3.0, look::accent());
                 } else if resp.hovered() {
