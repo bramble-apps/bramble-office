@@ -1831,7 +1831,7 @@ impl App {
             let drummer = self.selected_region.filter(|(t, _)| self.project.as_ref().and_then(|p| p.tracks.get(*t)).is_some_and(|tr| tr.kind == TrackKind::Drummer));
             match self.bottom {
                 Bottom::PianoRoll if self.selected_region.is_some_and(|(t, r)| crate::stepseq::is_pattern(ui.ctx(), t, r)) => crate::stepseq::show(self, ui, ed),
-                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) && self.drum_tab != 2 => {
+                Bottom::PianoRoll if self.selected_region.is_some_and(|x| self.players.contains_key(&x)) => {
                     let (t, r) = self.selected_region.unwrap();
                     crate::players::show(self, ui, ed, t, r);
                 }

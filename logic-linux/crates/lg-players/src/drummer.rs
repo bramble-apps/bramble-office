@@ -37,12 +37,46 @@ pub enum SnareMode {
     Rimshot,
 }
 
-/// The Tempo control (Details): Standard, Half or Double time.
+/// The Tempo control (Details): Standard, Half or Double time, or Automatic (half or double
+/// time when the project's tempo is far from the style's own).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TempoFeel {
     Standard,
     Half,
     Double,
+    Automatic,
+}
+
+impl TempoFeel {
+    pub const ALL: [TempoFeel; 4] = [TempoFeel::Automatic, TempoFeel::Standard, TempoFeel::Half, TempoFeel::Double];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TempoFeel::Standard => "Standard",
+            TempoFeel::Half => "Half Time",
+            TempoFeel::Double => "Double Time",
+            TempoFeel::Automatic => "Automatic",
+        }
+    }
+
+    /// What the player plays at a project tempo: Automatic plays half time when the project is
+    /// much faster than the style's default tempo (over 1.45 times), double time when much
+    /// slower; the others as they are.
+    pub fn resolve(self, bpm: f32, style_bpm: f32) -> TempoFeel {
+        match self {
+            TempoFeel::Automatic if bpm > 0.0 && style_bpm > 0.0 => {
+                if bpm > style_bpm * 1.45 {
+                    TempoFeel::Half
+                } else if bpm * 1.45 < style_bpm {
+                    TempoFeel::Double
+                } else {
+                    TempoFeel::Standard
+                }
+            }
+            TempoFeel::Automatic => TempoFeel::Standard,
+            t => t,
+        }
+    }
 }
 
 /// One of the kit sections on the Main tab (Percussion, Hi-Hat / Cymbal, Kick & Snare): on or
@@ -194,6 +228,13 @@ struct GrooveBars {
 /// The drummer's performance for a region. `follow`: the onsets (song ticks) of a track to
 /// follow (Logic's Follow), used when `params.follow` is above 0.
 pub fn generate(params: &DrummerParams, region: &RegionSpec, follow: Option<&[u32]>) -> Vec<Note> {
+    let resolved;
+    let params = if params.tempo == TempoFeel::Automatic {
+        resolved = DrummerParams { tempo: params.tempo.resolve(region.bpm, params.character().default_tempo as f32), ..params.clone() };
+        &resolved
+    } else {
+        params
+    };
     let ch = params.character();
     let style = ch.style;
     let kit = ch.kit_map();

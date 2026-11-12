@@ -23,10 +23,23 @@ pub enum BassStyle {
     IndieDisco,
     Slap,
     RootsSongwriter,
+    Synth808,
+    SynthPump,
+    SynthSequenced,
+}
+
+/// A Details control only some styles have.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extra {
+    DoubleStops,
+    BuzzTrills,
+    LaidBack,
+    BlueNotes,
+    Slaps,
 }
 
 impl BassStyle {
-    pub const ALL: [BassStyle; 8] = [
+    pub const ALL: [BassStyle; 11] = [
         BassStyle::PopSongwriter,
         BassStyle::PopRock,
         BassStyle::ClassicRock,
@@ -35,6 +48,9 @@ impl BassStyle {
         BassStyle::IndieDisco,
         BassStyle::Slap,
         BassStyle::RootsSongwriter,
+        BassStyle::Synth808,
+        BassStyle::SynthPump,
+        BassStyle::SynthSequenced,
     ];
 
     pub fn id(self) -> &'static str {
@@ -47,9 +63,69 @@ impl BassStyle {
             BassStyle::IndieDisco => "Electric Bass - Indie Disco",
             BassStyle::Slap => "Electric Bass - Slap",
             BassStyle::RootsSongwriter => "Upright Bass - Roots Songwriter",
+            BassStyle::Synth808 => "Synth Bass - 808 Bass",
+            BassStyle::SynthPump => "Synth Bass - Pump Bass",
+            BassStyle::SynthSequenced => "Synth Bass - Sequenced Bass",
         }
     }
 
+    /// A Synth Bass Player style (played by [`crate::synth::bass`]).
+    pub fn synth(self) -> Option<crate::synth::SynthBassStyle> {
+        use crate::synth::SynthBassStyle as S;
+        match self {
+            BassStyle::Synth808 => Some(S::Bass808),
+            BassStyle::SynthPump => Some(S::Pump),
+            BassStyle::SynthSequenced => Some(S::Sequenced),
+            _ => None,
+        }
+    }
+
+    /// The instrument group the style is listed under (Electric, Upright, Synth).
+    pub fn group(self) -> &'static str {
+        self.id().split(" - ").next().unwrap_or("")
+    }
+
+    /// The style's own tempo (Tempo ▸ Automatic plays half or double time far from it).
+    pub fn default_bpm(self) -> f32 {
+        match self {
+            BassStyle::RootsSongwriter => 90.0,
+            BassStyle::ModernRnB => 85.0,
+            BassStyle::Slap | BassStyle::IndieDisco => 118.0,
+            BassStyle::ClassicRock | BassStyle::PopRock => 125.0,
+            BassStyle::Synth808 => 140.0,
+            BassStyle::SynthPump => 124.0,
+            BassStyle::SynthSequenced => 120.0,
+            _ => 100.0,
+        }
+    }
+
+    /// The Details controls only this style has (Studio's styles stand in for Logic's: Slap
+    /// for Disco Slap, Classic Rock for Retro Rock, Roots Songwriter for Roots Upright).
+    pub fn extras(self) -> &'static [Extra] {
+        match self {
+            BassStyle::PopSongwriter => &[Extra::DoubleStops],
+            BassStyle::ModernRnB => &[Extra::DoubleStops, Extra::LaidBack],
+            BassStyle::ClassicRock => &[Extra::DoubleStops, Extra::BlueNotes],
+            BassStyle::Slap => &[Extra::BuzzTrills],
+            BassStyle::RootsSongwriter => &[Extra::BlueNotes, Extra::Slaps],
+            _ => &[],
+        }
+    }
+
+    /// The Melody pop-up's choices for the style (index = [`BassParams::melody`]).
+    pub fn melody_options(self) -> &'static [&'static str] {
+        match self {
+            BassStyle::RootsSongwriter => &["Root Notes", "Roots & Fifths", "Walking", "Chord Tones", "Passages"],
+            BassStyle::Slap | BassStyle::IndieDisco => &["Root Notes", "Roots & Octaves", "Roots, Fifths & Octaves", "Chord Tones", "Passages"],
+            _ => &["Root Notes", "Roots & Fifths", "Roots, Fifths & Octaves", "Chord Tones", "Passages"],
+        }
+    }
+}
+
+pub const OCTAVE_OPTIONS: [&str; 4] = ["Off", "Rarely", "Sometimes", "Often"];
+pub const PHRASING_OPTIONS: [&str; 5] = ["Staccato", "Short", "Medium", "Long", "Full Length"];
+
+impl BassStyle {
     pub fn name(self) -> &'static str {
         self.id().split(" - ").nth(1).unwrap_or("")
     }
@@ -93,6 +169,25 @@ pub struct BassParams {
     /// The lowest note the bass plays (40 = E1, a four-string's open E)
     pub lowest_note: u8,
     pub tempo: TempoFeel,
+    /// Melody pop-up: 0 root notes .. 4 passages with other chord tones (names per style)
+    pub melody: u8,
+    /// Octaves pop-up: how often octave jumps come (0 off .. 3 often)
+    pub octaves: u8,
+    /// Phrasing pop-up: the longest note (0 staccato, 1 an eighth, 2 a beat, 3 two beats, 4 full)
+    pub phrasing: u8,
+    /// More ▸ Slide Mode (Studio Bass for electric and upright, Pitch Bend for synth basses)
+    pub slide_mode: crate::synth::SlideMode,
+    /// Buzz Trills, Laid Back, Blue Notes (0..1), Slaps: the style's own controls
+    pub buzz_trills: f32,
+    pub laid_back: f32,
+    pub blue_notes: f32,
+    pub slaps: bool,
+    /// Follow Rhythm Of ▸ Chords: a note on every chord change
+    pub follow_chords: bool,
+    /// The chosen rhythmic pattern (Patterns dialog; None: the style's own)
+    pub pattern: Option<usize>,
+    /// The Synth Bass Player's settings (Synth styles)
+    pub synth: crate::synth::SynthBass,
     pub seed: u64,
     pub channel: u8,
 }
@@ -118,6 +213,17 @@ impl Default for BassParams {
             humanize: 0.25,
             lowest_note: 40,
             tempo: TempoFeel::Standard,
+            melody: 2,
+            octaves: 2,
+            phrasing: 4,
+            slide_mode: crate::synth::SlideMode::StudioBass,
+            buzz_trills: 0.0,
+            laid_back: 0.0,
+            blue_notes: 0.0,
+            slaps: false,
+            follow_chords: true,
+            pattern: None,
+            synth: crate::synth::SynthBass::default(),
             seed: 1,
             channel: 0,
         }
@@ -258,6 +364,8 @@ fn figure(style: BassStyle, c: f32, i: f32, beats: u32, beat_t: u32, r: &mut Rng
                 }
             }
         }
+        // (the Synth Bass styles are played by synth.rs)
+        _ => {}
     }
     v.sort_by_key(|s| s.at);
     v
@@ -270,12 +378,22 @@ fn place(pc: u8, lowest: u8) -> u8 {
 
 /// The bass performance for a region over `chords` (song ticks; one chord per bar or more).
 pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) -> Vec<Note> {
+    generate_perf(params, region, chords).notes
+}
+
+/// The performance with its pitch-bend and controller events (slides, the Synth Bass LFO and
+/// ducking).
+pub fn generate_perf(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) -> crate::synth::Perf {
+    if let Some(ss) = params.style.synth() {
+        return crate::synth::bass(ss, &params.synth, params.complexity, params.intensity, region, chords, params.seed, params.channel);
+    }
+    let mut controls: Vec<crate::synth::Control> = Vec::new();
     let bar_t = region.bar_ticks();
     let (_, beat_t) = beats_of(region.signature);
-    let beat_t = match params.tempo {
+    let beat_t = match params.tempo.resolve(region.bpm, params.style.default_bpm()) {
         TempoFeel::Half => beat_t * 2,
         TempoFeel::Double => beat_t / 2,
-        TempoFeel::Standard => beat_t,
+        _ => beat_t,
     };
     let beats = (bar_t / beat_t).max(1);
     let c = params.complexity.clamp(0.0, 1.0);
@@ -286,8 +404,23 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
     let mut notes: Vec<Note> = Vec::new();
     // the figure belongs to the style and complexity; Regenerate re-rolls the details
     let mut groove_r = Rng::derive(params.style as u64 * 7919 + (c * 10.0).round() as u64, 12);
-    let base_figure = figure(params.style, c, params.intensity, beats, beat_t, &mut groove_r);
-    let alt_figure = figure(params.style, c, params.intensity, beats, beat_t, &mut groove_r);
+    let (base_figure, alt_figure) = match params.pattern.and_then(|i| crate::synth::patterns(crate::synth::PatternKind::Bass).get(i)) {
+        // a pattern from the Patterns dialog: its main accents, the probable ones when complex
+        Some((_, dots)) => {
+            let mk = |r: &mut Rng| crate::synth::onsets(dots, c, bar_t, r).into_iter().map(|(at, main)| Step { at, tone: Tone::Root, accent: if main { 0.0 } else { -6.0 } }).collect::<Vec<Step>>();
+            (mk(&mut groove_r), mk(&mut groove_r))
+        }
+        None => (figure(params.style, c, params.intensity, beats, beat_t, &mut groove_r), figure(params.style, c, params.intensity, beats, beat_t, &mut groove_r)),
+    };
+    let melody = params.melody.min(4);
+    let oct_p = [0.0, 0.08, 0.2, 0.4][params.octaves.min(3) as usize];
+    let max_len = match params.phrasing.min(4) {
+        0 => beat_t / 4,
+        1 => beat_t / 2,
+        2 => beat_t,
+        3 => beat_t * 2,
+        _ => u32::MAX,
+    };
     let mut prev_pitch: Option<u8> = None;
     let ch = params.channel;
     for b in 0..region.bars() {
@@ -297,7 +430,14 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
         let fig = if b % 2 == 1 && c > 0.4 { &alt_figure } else { &base_figure };
         // onsets: the figure, plus a downbeat at every chord change inside the bar
         let mut steps: Vec<Step> = fig.clone();
-        for chg in chords.iter().filter(|x| x.pos > t0 && x.pos < t0 + bar_t) {
+        // Follow Rhythm Of ▸ Track: a note with the other track's (sixteenth-quantized) onsets
+        for &f in region.follow.iter().filter(|f| **f >= t0 && **f < t0 + bar_t) {
+            let at = ((f - t0) + beat_t / 8) / (beat_t / 4) * (beat_t / 4);
+            if at < bar_t && !steps.iter().any(|s| s.at == at) {
+                steps.push(Step { at, tone: Tone::Root, accent: 3.0 });
+            }
+        }
+        for chg in chords.iter().filter(|x| params.follow_chords && x.pos > t0 && x.pos < t0 + bar_t) {
             let at = chg.pos - t0;
             steps.retain(|s| s.at.abs_diff(at) >= beat_t / 4 || s.at == at);
             if !steps.iter().any(|s| s.at == at) {
@@ -334,9 +474,24 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 tone = if r.chance(0.5) { Tone::Fifth } else { Tone::Octave };
             }
             if let Some(chg) = change {
-                if chg.pos == next_on && s.at != 0 && tone != Tone::Dead && r.chance(c * 0.4) {
+                if chg.pos == next_on && s.at != 0 && tone != Tone::Dead && melody >= 2 && r.chance(c * if melody == 4 { 0.8 } else { 0.4 }) {
                     tone = Tone::Approach;
                 }
+            }
+            // the Melody pop-up: which notes may be played
+            tone = match (melody, tone) {
+                (_, Tone::Dead) => Tone::Dead,
+                (0, _) => Tone::Root,
+                (1, Tone::Octave | Tone::Third | Tone::Approach) => Tone::Fifth,
+                (2, Tone::Third) => Tone::Fifth,
+                (3 | 4, Tone::Root) if s.at != 0 && r.chance(0.3 + 0.3 * c) => *r.pick(&[Tone::Third, Tone::Fifth, Tone::Third]),
+                (_, t) => t,
+            };
+            // the Octaves pop-up: octave jumps on weak steps (Off: none)
+            if params.octaves == 0 && tone == Tone::Octave {
+                tone = Tone::Root;
+            } else if tone == Tone::Root && s.at != 0 && r.chance(oct_p) {
+                tone = Tone::Octave;
             }
             let pitch = match tone {
                 Tone::Root | Tone::Dead => root,
@@ -364,6 +519,7 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
                 len = (len as f32 * (0.55 + 0.45 * (i / 100.0))) as u32;
             }
             len = (len as f32 * (1.0 - params.mute_offset.clamp(-1.0, 1.0) * 0.35)).max(30.0) as u32;
+            len = len.min(max_len.saturating_sub(max_len / 10).max(30));
             let mut v = base_vel + s.accent;
             if s.at == 0 && kind == SectionKind::Chorus {
                 v += 4.0;
@@ -373,10 +529,44 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
             if let (true, Some(pp)) = (on_change, prev_pitch) {
                 if pp != pitch && tick >= region.start + 70 && r.chance(params.slides.clamp(0.0, 1.0) * 0.2) {
                     let from = if pp < pitch { pitch - 2 } else { pitch + 2 };
-                    notes.push(Note { channel: ch, pitch: from, velocity: vel(v - 12.0), pos: tick - 60, len: 60, muted: false });
+                    match params.slide_mode {
+                        // a grace note a tone away (Studio Bass plays it as a slide articulation)
+                        crate::synth::SlideMode::StudioBass => notes.push(Note { channel: ch, pitch: from, velocity: vel(v - 12.0), pos: tick - 60, len: 60, muted: false }),
+                        // the note starts bent a tone away and bends home (range 2 semitones)
+                        crate::synth::SlideMode::PitchBend => {
+                            let sign = if pp < pitch { -1.0 } else { 1.0 };
+                            for k in 0..=4u32 {
+                                let v = sign * (1.0 - k as f32 / 4.0) * 8191.0;
+                                controls.push(lg_core::regions::bend_event(tick + k * 15, ch, v as i16));
+                            }
+                        }
+                        // the previous note held into this one (mono legato synths glide)
+                        crate::synth::SlideMode::Overlap => {
+                            if let Some(prev) = notes.iter_mut().rev().find(|n| n.pitch == pp) {
+                                prev.len = (tick + 40).saturating_sub(prev.pos);
+                            }
+                        }
+                    }
                 }
             }
+            // Blue Notes: a minor third bent up to a major one, or a quarter-tone slide in
+            if params.blue_notes > 0.0 && tone == Tone::Third && !chord.is_minor() && r.chance(params.blue_notes.clamp(0.0, 1.0) * 0.7) {
+                notes.push(Note { channel: ch, pitch: pitch - 1, velocity: vel(v - 8.0), pos: tick.saturating_sub(50).max(region.start), len: 50, muted: false });
+            } else if params.blue_notes > 0.0 && span >= beat_t && r.chance(params.blue_notes.clamp(0.0, 1.0) * 0.25) {
+                controls.push(lg_core::regions::bend_event(tick, ch, -2048));
+                controls.push(lg_core::regions::bend_event(tick + 80, ch, 0));
+            }
             notes.push(Note { channel: ch, pitch, velocity: vel(v), pos: tick, len, muted: false });
+            // Buzz Trills: a fast trill with the note a tone above at the end of a long note
+            if params.buzz_trills > 0.0 && span >= beat_t && r.chance(params.buzz_trills.clamp(0.0, 1.0) * 0.5) {
+                let t32 = beat_t / 8;
+                let from = tick + span / 2;
+                let last = notes.len() - 1;
+                notes[last].len = (from - tick).max(30);
+                for k in 0..4u32 {
+                    notes.push(Note { channel: ch, pitch: if k % 2 == 0 { pitch + 2 } else { pitch }, velocity: vel(v - 10.0), pos: from + k * t32, len: t32 - 10, muted: false });
+                }
+            }
             // double stops: a tenth (or fifth) above long notes
             if params.double_stops > 0.0 && span >= beat_t && r.chance(params.double_stops.clamp(0.0, 1.0) * 0.5) {
                 let up = if r.chance(0.6) { 12 + chord.third() } else { chord.fifth() };
@@ -389,12 +579,22 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
             if chord_at(chords, chg.pos - 1) == Some(chg.chord) {
                 continue;
             }
-            let p = if params.pickup_hits { 1.0 } else { 0.25 + 0.3 * c };
+            let p = 0.25 + 0.3 * c;
             if chg.pos >= region.start + beat_t / 4 && r.chance(p) {
                 let at = chg.pos - beat_t * 3 / 20;
                 let pitch = place(chg.chord.root, lowest);
                 notes.retain(|n| !(n.pos >= at && n.pos < chg.pos));
                 notes.push(Note { channel: ch, pitch, velocity: vel(base_vel + 34.0), pos: at, len: beat_t * 3 / 20, muted: false });
+            }
+        }
+        // Pickup Hits: open-palm string hits on beats 2 and 4; Slaps: percussive slaps there
+        if params.pickup_hits || params.slaps {
+            for k in (1..beats).step_by(2) {
+                let at = t0 + k * beat_t;
+                if at < region.end() {
+                    let p = place(chord_at(chords, at).map_or(0, |x| x.root), lowest);
+                    notes.push(Note { channel: ch, pitch: if params.slaps { p + 12 } else { p }, velocity: vel(if params.slaps { 70.0 + 0.3 * i } else { 30.0 + 0.2 * i }), pos: at, len: 40, muted: false });
+                }
             }
         }
         // dead notes between the notes
@@ -418,7 +618,18 @@ pub fn generate(params: &BassParams, region: &RegionSpec, chords: &[ChordAt]) ->
             }
         }
     }
-    humanize(notes, region, params.humanize, params.feel, params.swing, params.swing_type, params.dynamics, params.seed, beat_t)
+    // Laid Back: the last eighth of each beat played late
+    if params.laid_back > 0.0 {
+        for n in notes.iter_mut() {
+            if (n.pos.saturating_sub(region.start)) % beat_t == beat_t / 2 {
+                n.pos += (params.laid_back.clamp(0.0, 1.0) * beat_t as f32 / 8.0) as u32;
+            }
+        }
+    }
+    let notes = humanize(notes, region, params.humanize, params.feel, params.swing, params.swing_type, params.dynamics, params.seed, beat_t);
+    controls.retain(|c| c.pos >= region.start && c.pos < region.end());
+    controls.sort_by_key(|c| c.pos);
+    crate::synth::Perf { notes, controls }
 }
 
 /// Swing, feel, timing and velocity looseness, dynamics range; then made safe.
@@ -463,5 +674,39 @@ mod tests {
             assert_eq!(first.pitch % 12, chords[b as usize].chord.root, "bar {b}");
             assert!((40..52).contains(&first.pitch));
         }
+    }
+
+    #[test]
+    fn details_pop_ups() {
+        let region = RegionSpec::new(0, 3840 * 8, (4, 4));
+        let chords = parse_bars("C Am F G", 0, 3840);
+        let base = BassParams { complexity: 0.9, slides: 0.0, ..Default::default() };
+        // Melody: Root Notes plays only the chords' roots
+        let roots = generate(&BassParams { melody: 0, octaves: 0, ..base.clone() }, &region, &chords);
+        for n in &roots {
+            let c = crate::chords::chord_at(&chords, n.pos + 40).unwrap();
+            let c2 = crate::chords::chord_at(&chords, n.pos + 200).unwrap();
+            assert!(n.pitch % 12 == c.root || n.pitch % 12 == c2.root, "root only at {}", n.pos);
+        }
+        // Octaves Off: nothing above the octave of the lowest note's range
+        assert!(roots.iter().all(|n| n.pitch < 40 + 12));
+        // Phrasing Staccato: no note longer than a sixteenth
+        let st = generate(&BassParams { phrasing: 0, ..base.clone() }, &region, &chords);
+        assert!(st.iter().all(|n| n.len <= 240), "staccato");
+        // Slide Mode Pitch Bend: bends instead of grace notes
+        let pb = generate_perf(&BassParams { slides: 1.0, slide_mode: crate::synth::SlideMode::PitchBend, ..base.clone() }, &region, &chords);
+        assert!(pb.controls.iter().any(|c| c.kind == 0xE0));
+        // Pickup Hits: hits on beats 2 and 4
+        let ph = generate(&BassParams { pickup_hits: true, humanize: 0.0, feel: 0.0, ..base.clone() }, &region, &chords);
+        assert!(ph.iter().any(|n| n.pos == 960 && n.len <= 60) && ph.iter().any(|n| n.pos == 2880 && n.len <= 60));
+        // Tempo Automatic: half time far above the style's tempo
+        let mut fast = region.clone();
+        fast.bpm = 200.0;
+        let auto = generate(&BassParams { tempo: TempoFeel::Automatic, ..base.clone() }, &fast, &chords);
+        let half = generate(&BassParams { tempo: TempoFeel::Half, ..base.clone() }, &fast, &chords);
+        assert_eq!(auto, half);
+        // the Synth styles play through synth.rs
+        let syn = generate_perf(&BassParams { style: BassStyle::SynthPump, ..base.clone() }, &region, &chords);
+        assert!(syn.controls.iter().any(|c| c.number == 11));
     }
 }

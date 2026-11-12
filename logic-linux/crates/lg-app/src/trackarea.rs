@@ -169,6 +169,9 @@ pub fn sync(app: &mut App) {
     crate::autoext::remap(app, &map);
     remap_pair(&mut app.players, &map);
     remap_pair(&mut app.drum_params, &map);
+    remap_pair(&mut app.spx.region_chords, &map);
+    remap_pair(&mut app.spx.patterns, &map);
+    remap_pair(&mut app.spx.hands, &map);
     remap_pair(&mut app.audio_edit.regions, &map);
     remap_map(&mut app.flex.tracks, &map);
     remap_set(&mut app.armed, &map);

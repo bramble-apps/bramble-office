@@ -104,6 +104,7 @@ mod es2win;
 mod fxviews;
 mod stemsplit;
 mod players;
+mod spedit;
 mod rightpane;
 mod screensets;
 mod score;

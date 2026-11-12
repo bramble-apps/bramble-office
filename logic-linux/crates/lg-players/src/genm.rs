@@ -130,6 +130,8 @@ fn tempo_of(j: &Json) -> TempoFeel {
     match num(j, "HalfTimeDoubleTime").unwrap_or(0.0) as i32 {
         1 => TempoFeel::Half,
         2 => TempoFeel::Double,
+        // presumed: 3 automatic (presets use it; unverified)
+        3 => TempoFeel::Automatic,
         _ => TempoFeel::Standard,
     }
 }
@@ -139,6 +141,7 @@ fn tempo_value(t: TempoFeel) -> f64 {
         TempoFeel::Standard => 0.0,
         TempoFeel::Half => 1.0,
         TempoFeel::Double => 2.0,
+        TempoFeel::Automatic => 3.0,
     }
 }
 
@@ -229,6 +232,7 @@ impl PlayerSettings {
                 tempo: tempo_of(j),
                 seed,
                 channel: d.channel,
+                ..d.clone()
             }));
         }
         if ty.contains("Piano") || ty.contains("Pad") || ty.contains("Keyboard") {
@@ -245,6 +249,8 @@ impl PlayerSettings {
                     4 => LeftHand::RootFifth,
                     5 => LeftHand::Chord,
                     6 => LeftHand::Moving,
+                    7 => LeftHand::RootFifthOctave,
+                    8 => LeftHand::Broken,
                     _ => LeftHand::Root,
                 }
             };
@@ -267,6 +273,7 @@ impl PlayerSettings {
                 tempo: tempo_of(j),
                 seed,
                 channel: d.channel,
+                ..d.clone()
             }));
         }
         None
@@ -350,6 +357,9 @@ impl PlayerSettings {
                     LeftHand::RootFifth => 4.0,
                     LeftHand::Chord => 5.0,
                     LeftHand::Moving => 6.0,
+                    // (Studio's own values; Logic's numbers for these are not known)
+                    LeftHand::RootFifthOctave => 7.0,
+                    LeftHand::Broken => 8.0,
                 }));
                 j.set("arpDirection", Json::Num(p.arp_direction as f64));
                 j.set("HalfTimeDoubleTime", Json::Num(tempo_value(p.tempo)));
