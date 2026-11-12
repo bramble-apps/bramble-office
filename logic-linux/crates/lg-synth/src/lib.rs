@@ -55,6 +55,7 @@ pub mod synthkit;
 pub mod ultrabeat;
 pub mod ultrabeat_dsp;
 pub mod ultrabeat_seq;
+pub mod utility;
 pub mod es1;
 pub mod es_emp;
 pub mod efm1;
@@ -301,6 +302,9 @@ pub fn synthesized_by_logic_name(plugin_name: &str, rate: f32) -> Option<Box<dyn
         "Drum Machine Designer" | NAME_DMD => Box::new(dmd::DrumMachineDesigner::new(rate)),
         "Ultrabeat" | NAME_ULTRABEAT => Box::new(ultrabeat::Ultrabeat::new(rate)),
         "Drum Synth" => Box::new(drum_synth::DrumSynth::new(rate)),
+        utility::KLOPFGEIST => Box::new(utility::Klopfgeist::new(rate)),
+        utility::TEST_OSCILLATOR => Box::new(utility::TestOscInstrument::new(rate)),
+        utility::EXTERNAL_INSTRUMENT => Box::new(utility::ExternalInstrument::new(rate)),
         n if legacy::variant_of(n).is_some() => Box::new(legacy::Legacy::new(legacy::variant_of(n).unwrap_or(legacy::Variant::AnalogBasic), rate)),
         "Bass" => Box::new(bass::StudioBass::new(rate)),
         "Strings" | NAME_ENSEMBLE => Box::new(ensemble::StudioEnsemble::new(rate)),

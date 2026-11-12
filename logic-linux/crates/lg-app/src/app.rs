@@ -1431,7 +1431,7 @@ impl App {
         if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) || crate::sbp::command(self, name) {
             return true;
         }
-        if crate::envhub::command(self, ctx, name) {
+        if crate::envhub::command(self, ctx, name) || crate::convsampler::command(self, ctx, name) {
             return true;
         }
         if crate::tm::command(self, ctx, name) {

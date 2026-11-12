@@ -243,7 +243,7 @@ pub fn kind_of(app: &App, s: usize) -> Kind {
         return Kind::Aux;
     }
     // (an External MIDI track's strip is a MIDI channel strip)
-    if app.project.as_ref().and_then(|p| p.tracks.get(s)).is_some_and(|t| t.extra.set.external.is_some()) {
+    if app.project.as_ref().and_then(|p| p.tracks.get(s)).is_some_and(|t| t.extra.set.external.is_some()) && !crate::utilwin::ext_instrument(app, s) {
         return Kind::Midi;
     }
     match app.project.as_ref().and_then(|p| p.tracks.get(s)).map(|t| t.kind) {

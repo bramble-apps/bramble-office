@@ -288,6 +288,13 @@ fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
                 clip.pattern = c.2;
             }
         }
+        "copyover" => {
+            let (from, to) = (n(1), n(2));
+            let mut pairs = Vec::new();
+            instwin::with_inst::<Ultrabeat, _>(app, t, |u| pairs = copy_pattern_pairs(u, from, to));
+            instwin::checkpoint(app, t, "Copy Pattern");
+            instwin::set_params(app, t, &pairs);
+        }
         "pastep" | "clearp" => {
             let paste = parts[0] == "pastep";
             if !paste || !clip.pattern.is_empty() {
@@ -310,6 +317,19 @@ fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
         _ => {}
     }
     ctx.data_mut(|d| d.insert_temp(clip_id(t), clip));
+}
+
+/// The parameter changes that copy pattern `from` (its steps for all 25 sounds, its length and
+/// resolution) over pattern `to` (Option-choosing a pattern in the Pattern menu).
+pub fn copy_pattern_pairs(u: &Ultrabeat, from: usize, to: usize) -> Vec<(u32, f32)> {
+    let mut pairs = Vec::new();
+    for v in 0..25 {
+        let c = u.cell(from, v).clone();
+        pairs.extend(u.cell_pairs(to, v, &c));
+    }
+    pairs.push((ub::pat_len_id(to), u.pattern_len(from) as f32));
+    pairs.push((ub::pat_res_id(to), u.pattern_res(from) as f32));
+    pairs
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1044,7 +1064,17 @@ fn sequencer(p: &mut Pane, s: &Snap) {
     x += 28.0;
     p.text(x, top + 9.0, Align2::LEFT_CENTER, "Pattern", 10.0, p.skin.dim);
     x += 42.0;
+    let before = p.set.len();
     let presp = p.menu_resp(x, top, 46.0, 18.0, ub::G_PAT);
+    // Option-choosing another pattern copies the current one over it (and goes there)
+    if p.ui.input(|i| i.modifiers.alt) {
+        if let Some(&(_, to)) = p.set[before..].iter().rev().find(|x| x.0 == ub::G_PAT) {
+            let to = to.round() as usize;
+            if to != s.pat {
+                acts.push(format!("copyover:{}:{}", s.pat, to));
+            }
+        }
+    }
     // the shortcut menu needs its own popup id: the pop-up menu's id is the response's
     egui::Popup::context_menu(&presp).id(egui::Id::unique(("ub-pat-ctx", p.t))).show(|ui| {
         for (n, a) in [("Copy", "copyp"), ("Paste", "pastep"), ("Clear", "clearp")] {
@@ -1410,5 +1440,28 @@ fn full_view(p: &mut Pane, s: &Snap) {
         if all[vo] != s.cells[vo] {
             put_cell(p, s.pat, vo, &s.cells[vo], &all[vo]);
         }
+    }
+}
+
+#[cfg(test)]
+mod copy_pattern_tests {
+    use super::*;
+
+    #[test]
+    fn option_choosing_a_pattern_copies_the_current_one_over_it() {
+        let mut u = Ultrabeat::new(48_000.0);
+        let mut c = u.cell(0, 3).clone();
+        c.steps[0] |= 1;
+        c.steps[5] |= 1;
+        for (id, v) in u.cell_pairs(0, 3, &c) {
+            u.set(id, v);
+        }
+        u.set(ub::pat_len_id(0), 12.0);
+        for (id, v) in copy_pattern_pairs(&u, 0, 4) {
+            u.set(id, v);
+        }
+        assert_eq!(u.cell(4, 3).steps[5] & 1, 1);
+        assert_eq!(u.cell(4, 3).steps[1] & 1, u.cell(0, 3).steps[1] & 1);
+        assert_eq!(u.pattern_len(4), 12);
     }
 }

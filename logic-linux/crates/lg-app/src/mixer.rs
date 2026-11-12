@@ -315,7 +315,7 @@ pub fn vca_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, v: usize) {
 pub fn track_strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize) {
     let Some(t) = app.project.as_ref().and_then(|p| p.tracks.get(i)).cloned() else { return };
     // (an External MIDI track: a MIDI channel strip)
-    if t.extra.set.external.is_some() {
+    if t.extra.set.external.is_some() && !crate::utilwin::ext_instrument(app, i) {
         crate::mixwin::midi_strip(app, ui, r, i);
         return;
     }

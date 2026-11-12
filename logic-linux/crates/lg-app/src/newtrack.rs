@@ -541,7 +541,12 @@ pub fn create_tracks(app: &mut App, ctx: &egui::Context, d: &Details, n: usize) 
                     let ch = if d.midi_ascending { (d.midi_channel as usize - 1 + k) % 16 + 1 } else { d.midi_channel as usize } as u8;
                     nt.name = format!("MIDI {ch}");
                     nt.extra.set.external = Some(External { port: d.midi_port.clone(), channel: ch, use_plugin: pattern || d.external_plugin, ..Default::default() });
-                    made.push(push_track(app, nt, 0));
+                    let t = push_track(app, nt, 0);
+                    // (External Instrument loaded: the module's audio comes back on the strip)
+                    if d.external_plugin && !pattern {
+                        crate::utilwin::picked(app, t, Some("External Instrument"));
+                    }
+                    made.push(t);
                     continue;
                 }
                 let t = push_track(app, nt, 0);

@@ -126,6 +126,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                     let _ = std::process::Command::new("xdg-open").arg(dir).stdin(std::process::Stdio::null()).spawn();
                 }
             }
+            "create-alchemy" => {
+                if let Some(path) = info.path.clone() {
+                    create_alchemy_track(app, t, std::path::Path::new(&path));
+                }
+            }
             "derive" => {
                 if let Some(bpm) = instwin::with_inst(app, t, |s: &mut SampleAlchemy| s.derive_tempo()) {
                     instwin::checkpoint(app, t, "Derive Tempo");
@@ -140,6 +145,36 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
             _ => {}
         }
     }
+}
+
+/// More ▸ Create Alchemy track: a new track whose Alchemy plays the current sample (source A's
+/// Granular element), undoable.
+fn create_alchemy_track(app: &mut App, t: usize, path: &std::path::Path) {
+    let audio = match lg_synth::wav::read_audio(path) {
+        Ok(a) => Arc::new(a),
+        Err(e) => {
+            app.tell(format!("Couldn't read {}: {e}", path.display()));
+            return;
+        }
+    };
+    let name = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_else(|| "Alchemy".into());
+    app.checkpoint("Create Alchemy Track");
+    let Some(p) = app.project.as_mut() else { return };
+    let mut tr = lg_core::Track::new(&name, lg_core::TrackKind::Instrument);
+    tr.row = p.tracks.len() as u32 + 1;
+    p.tracks.push(tr);
+    let nt = p.tracks.len() - 1;
+    app.programs.push(crate::app::program_for(&name, lg_core::TrackKind::Instrument));
+    crate::trackarea::sync(app);
+    let Some(nid) = instwin::track_id(app, nt) else { return };
+    app.instrument_choice.insert(nt, "Alchemy".into());
+    app.inst.alch_audio.insert(nid, (path.to_path_buf(), audio));
+    app.load_engine();
+    // source A plays it (its Granular element on), as an import in Alchemy does
+    instwin::set_params(app, nt, &[(277, 1.0), (313, 1.0)]);
+    instwin::bump(app, nt);
+    app.selected_track = Some(nt);
+    app.after_edit();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -575,6 +610,7 @@ fn more_menu(p: &mut Pane, info: &Info, r: Rect) {
     let get: Vec<(u32, f32)> = (0..64).map(|i| (i, p.get(i))).collect();
     let g = |id: u32| get.iter().find(|x| x.0 == id).map(|x| x.1).unwrap_or(0.0);
     let params: Vec<lg_dsp::Param> = (0..64).map(|i| p.prm(i)).collect();
+    let has_sample = info.path.is_some();
     egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
         ui.set_min_width(250.0);
         let num = |ui: &mut egui::Ui, set: &mut Vec<(u32, f32)>, label: &str, id: u32, speed: f64| {
@@ -637,7 +673,10 @@ fn more_menu(p: &mut Pane, info: &Info, r: Rect) {
             }
         });
         ui.separator();
-        ui.add_enabled(false, egui::Button::new("Create Alchemy track"));
+        if ui.add_enabled(has_sample, egui::Button::new("Create Alchemy track")).clicked() {
+            act.push("create-alchemy".into());
+            ui.close();
+        }
     });
     for (id, v) in set {
         p.put(id, if matches!(id, sa::POLY | sa::PLAY_MODE | sa::MIDI_MONO | sa::PREVIEW_KEY | sa::ROOT_KEY) || (sa::CTRL_A..sa::CTRL_A + 4).contains(&id) { v.round() } else { v });
