@@ -34,4 +34,5 @@ pub mod trackmix;
 pub mod transform;
 pub mod writeback;
 
+pub mod groove;
 pub use project::{open, Project, Region, Track, TrackKind};

@@ -664,7 +664,8 @@ impl App {
                 let mut offset = 0u32;
                 // (muted notes and notes past the region's end don't play; regparams: the
                 // region parameters as played)
-                let played = lg_core::regparams::play_notes(&r.props, &r.notes, r.start, r.start + r.length, &|tk| lg_core::regparams::key_shift(p, tk));
+                let groove = lg_core::groove::groove_index(r.props.quantize).and_then(|k| lg_core::groove::resolve(p, k));
+                let played = lg_core::regparams::play_notes_groove(&r.props, &r.notes, r.start, r.start + r.length, &|tk| lg_core::regparams::key_shift(p, tk), groove.as_ref());
                 loop {
                     for n in &played {
                         let mut n = *n;
@@ -1402,6 +1403,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
+            return true;
+        }
         if crate::share::command(self, name) {
             return true;
         }
@@ -1913,6 +1917,10 @@ impl App {
         crate::dialogs::show(self, &ctx);
         crate::midiwin::windows(self, &ctx);
         crate::stepinput::window(self, &ctx);
+        crate::evlist::float_window(self, &ctx);
+        crate::joinaudio::window(self, &ctx);
+        crate::regsolo::frame(self, &ctx);
+        crate::varispeed::frame(self, &ctx);
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);

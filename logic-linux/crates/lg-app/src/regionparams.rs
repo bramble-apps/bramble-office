@@ -123,6 +123,8 @@ enum P {
     QStrength,
     QRange,
     QFlam,
+    QVelocity,
+    QLength,
     FadeIn,
     InCurve,
     FadeOut,
@@ -142,6 +144,7 @@ fn range(p: P) -> (f32, f32, f32) {
         P::QSwing | P::QStrength => (0.0, 100.0, 1.0),
         P::QRange => (-960.0, 960.0, 1.0),
         P::QFlam => (-480.0, 480.0, 1.0),
+        P::QVelocity | P::QLength => (-100.0, 100.0, 1.0),
         P::FadeIn | P::FadeOut => (0.0, 60000.0, 1.0),
         P::InCurve | P::OutCurve => (-99.0, 99.0, 1.0),
     }
@@ -203,6 +206,8 @@ fn get(app: &App, tg: Tg, p: P) -> f32 {
         P::QStrength => pr.q_strength as f32,
         P::QRange => pr.q_range as f32,
         P::QFlam => pr.q_flam as f32,
+        P::QVelocity => pr.q_velocity as f32,
+        P::QLength => pr.q_length as f32,
         P::FadeIn => fades.in_ms as f32,
         P::InCurve => fades.in_curve as f32,
         P::FadeOut => fades.out_ms as f32,
@@ -239,6 +244,8 @@ fn put(app: &mut App, tg: Tg, p: P, v: f32) {
             P::QSwing => pr.swing = v as u8,
             P::QStrength => pr.q_strength = v as u8,
             P::QRange => pr.q_range = v as i16,
+            P::QVelocity => pr.q_velocity = v as i16,
+            P::QLength => pr.q_length = v as i16,
             _ => pr.q_flam = v as i16,
         }),
     }
@@ -771,10 +778,25 @@ fn body(app: &mut App, ui: &mut egui::Ui, area: Rect, y0: f32, tg: Tg, id: egui:
     y += ROW;
     if !app.rp.closed[1] {
         row_line(&p, x, y);
-        let cur = crate::inspector::QUANTIZE.iter().position(|q| Some(q.1) == props(app, tg).map(|p| p.quantize)).unwrap_or(0);
-        let names: Vec<&str> = crate::inspector::QUANTIZE.iter().map(|q| q.0).collect();
-        if let Some(i) = choice_row(app, ui, inner, y, id.with("q"), tg, false, "Quantize", cur, &names) {
-            set_choice(app, tg, |a, x| with_props(a, x, |p| p.quantize = crate::inspector::QUANTIZE[i].1));
+        // Logic's values, the swing and tuplet values, the groove templates, then the template
+        // commands (groovecmd.rs)
+        let values = crate::groovecmd::quantize_values(app);
+        let cur = values.iter().position(|q| Some(q.1) == props(app, tg).map(|p| p.quantize)).unwrap_or(0);
+        let mut names: Vec<String> = values.iter().map(|q| q.0.clone()).collect();
+        let n_values = names.len();
+        names.push("Make Groove Template".into());
+        names.push("Remove Groove Template from List".into());
+        let names_ref: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        if let Some(i) = choice_row(app, ui, inner, y, id.with("q"), tg, false, "Quantize", cur, &names_ref) {
+            if i == n_values {
+                crate::groovecmd::command(app, "Make Groove Template");
+            } else if i == n_values + 1 {
+                crate::groovecmd::remove(app, props(app, tg).map_or(0, |p| p.quantize));
+            } else {
+                let v = values[i].1;
+                set_choice(app, tg, |a, x| with_props(a, x, |p| p.quantize = v));
+                crate::groovecmd::after_quantize_choice(app, v);
+            }
         }
         y += ROW;
         row_line(&p, x, y);
@@ -796,6 +818,13 @@ fn body(app: &mut App, ui: &mut egui::Ui, area: Rect, y0: f32, tg: Tg, id: egui:
             if !audio {
                 row_line(&p, x, y);
                 num_row(app, ui, inner, y, id.with("qf"), tg, true, "Q-Flam", P::QFlam, "", &signed, &[], 1.0);
+                y += ROW;
+                // groove templates' velocities and lengths
+                row_line(&p, x, y);
+                num_row(app, ui, inner, y, id.with("qv"), tg, true, "Q-Velocity", P::QVelocity, "%", &signed, &[], 1.0);
+                y += ROW;
+                row_line(&p, x, y);
+                num_row(app, ui, inner, y, id.with("ql"), tg, true, "Q-Length", P::QLength, "%", &signed, &[], 1.0);
                 y += ROW;
             }
         }
@@ -1384,6 +1413,8 @@ pub fn command(app: &mut App, _ctx: &egui::Context, name: &str) -> bool {
         "Toggle Region Solo" => {
             // on: the selected regions solo (only they play); off: everything plays again
             app.rp.region_solo = !app.rp.region_solo;
+            // the control bar's Solo button shows it (regsolo.rs)
+            app.solo_mode = app.rp.region_solo;
             app.rp.soloed = if app.rp.region_solo { app.region_selection() } else { Vec::new() };
             app.load_engine();
         }
@@ -1574,16 +1605,17 @@ pub fn extras_text(p: &lg_core::Project) -> String {
         for (r, x) in tr.regions.iter().enumerate() {
             let q = &x.props;
             if (q.q_strength, q.q_range, q.q_flam, q.clip_length, q.pitch_source, q.locked, q.color) == (d.q_strength, d.q_range, d.q_flam, d.clip_length, d.pitch_source, d.locked, d.color)
-                && (q.delay_ms, q.dynamics, q.gate_time, q.delay, q.quantize, q.swing) == (d.delay_ms, d.dynamics, d.gate_time, d.delay, d.quantize, d.swing)
+                && (q.delay_ms, q.dynamics, q.gate_time, q.delay, q.quantize, q.swing, q.q_velocity, q.q_length) == (d.delay_ms, d.dynamics, d.gate_time, d.delay, d.quantize, d.swing, d.q_velocity, d.q_length)
             {
                 continue;
             }
             out += &format!(
-                "rp\t{t}\t{r}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-                x.start, q.q_strength, q.q_range, q.q_flam, q.clip_length as u8, q.pitch_source, q.locked as u8, q.color.map_or(-1, |c| c as i32), q.delay_ms as u8, q.dynamics, q.gate_time, q.delay, q.quantize, q.swing
+                "rp\t{t}\t{r}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                x.start, q.q_strength, q.q_range, q.q_flam, q.clip_length as u8, q.pitch_source, q.locked as u8, q.color.map_or(-1, |c| c as i32), q.delay_ms as u8, q.dynamics, q.gate_time, q.delay, q.quantize, q.swing, q.q_velocity, q.q_length
             );
         }
     }
+    out += &crate::groovecmd::extras_text(p);
     out
 }
 
@@ -1609,8 +1641,13 @@ pub fn apply_extras(p: &mut lg_core::Project, text: &str) -> bool {
         q.delay = w[13] as i32;
         q.quantize = w[14] as u32;
         q.swing = w[15] as u8;
+        if w.len() >= 18 {
+            q.q_velocity = w[16] as i16;
+            q.q_length = w[17] as i16;
+        }
         any = true;
     }
+    any |= crate::groovecmd::apply_extras(p, text);
     any
 }
 

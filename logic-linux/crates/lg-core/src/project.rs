@@ -58,6 +58,8 @@ pub struct Project {
     pub arrangement: Vec<(u32, u32, String)>,
     /// Tempo curves and sets, signature and key changes, beat mappings (timeline.rs).
     pub global: crate::timeline::Global,
+    /// Groove templates (Make Groove Template; groove.rs).
+    pub grooves: Vec<crate::groove::Groove>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,6 +180,10 @@ pub struct RegionProps {
     pub delay_ms: bool,
     /// A caller's mark, carried through edits and copies (not a Logic parameter).
     pub tag: u32,
+    /// Q-Velocity / Q-Length: percent of a groove template's velocities / lengths taken in
+    /// (negative: the difference exaggerated).
+    pub q_velocity: i16,
+    pub q_length: i16,
 }
 
 /// Gate Time "Legato": every note lasts to the next one.
@@ -185,7 +191,7 @@ pub const GATE_LEGATO: u16 = u16::MAX;
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, q_strength: 100, q_range: 0, q_flam: 0, clip_length: false, pitch_source: 0, locked: false, color: None, delay_ms: false, tag: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, q_strength: 100, q_range: 0, q_flam: 0, clip_length: false, pitch_source: 0, locked: false, color: None, delay_ms: false, tag: 0, q_velocity: 0, q_length: 0 }
     }
 }
 
@@ -193,13 +199,13 @@ impl RegionProps {
     /// A note as the region plays it.
     pub fn apply(&self, n: &crate::events::Note, region_start: u32) -> crate::events::Note {
         let mut out = *n;
-        if self.quantize > 0 {
-            let q = self.quantize as i64;
+        if let Some((q, swing)) = crate::groove::grid(self.quantize, self.swing) {
             let rel = n.pos as i64 - region_start as i64;
-            let mut grid = ((rel as f64 / q as f64).round() as i64) * q;
+            let k = (rel as f64 / q).round() as i64;
+            let mut grid = (k as f64 * q).round() as i64;
             // Q-Swing: every other grid point later (or earlier) by up to half a step
-            if (grid / q) % 2 == 1 {
-                grid += (q as f64 * (self.swing as f64 - 50.0) / 100.0) as i64;
+            if k % 2 == 1 {
+                grid += (q * (swing as f64 - 50.0) / 100.0) as i64;
             }
             // Q-Range: 0 every note; positive only notes farther off than it; negative only
             // notes within it. Q-Strength: how far toward the grid.

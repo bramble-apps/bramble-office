@@ -501,6 +501,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let resp = ui.interact(rr.intersect(lanes), ui.scope_id().with(("region", i, ri)), Sense::click_and_drag());
             // the Gain tool: the region's gain shown on hover, dragged up or down
             crate::regionparams::gain_hover(app, ui, rr, i, ri, resp.hovered());
+            // the Solo tool: plays while held (regsolo.rs)
+            if app.tool == Tool::Solo && resp.is_pointer_button_down_on() && !crate::regsolo::holding(app) {
+                let tick = resp.interact_pointer_pos().map(|pp| ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32);
+                let alt = ui.input(|i| i.modifiers.alt);
+                crate::regsolo::hold_start(app, i, ri, tick, alt);
+            }
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
             }
@@ -589,7 +595,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             if eresp.drag_stopped() {
                 if let Some(Drag::RegionEnd { track, region, length }) = app.drag {
-                    crate::arranging::after_resize(app, track, region, length);
+                    // Option: time stretch (stretch.rs)
+                    if ui.input(|i| i.modifiers.alt) {
+                        crate::stretch::option_resize(app, track, region, length);
+                    } else {
+                        crate::arranging::after_resize(app, track, region, length);
+                    }
                 }
                 app.drag = None;
                 app.load_engine();
@@ -972,20 +983,7 @@ fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tic
             app.after_edit();
         }
         Tool::Solo => {
-            // the region's track alone, from the click (Logic plays while held; here a toggle)
-            let solo = app.project.as_ref().is_some_and(|p| p.tracks[t].solo);
-            if let Some(p) = app.project.as_mut() {
-                p.tracks[t].solo = !solo;
-            }
-            app.sync_mix();
-            if !solo {
-                if let Some(tick) = tick {
-                    app.locate(tick as f64);
-                }
-                if !app.playing() {
-                    app.play_stop();
-                }
-            }
+            // played while held (regsolo.rs, on the press)
         }
         Tool::Zoom => {
             if let Some(pp) = pp {

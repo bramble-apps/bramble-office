@@ -12,7 +12,6 @@ use egui::{pos2, vec2, Align2, Rect, Sense, Stroke};
 
 use crate::app::{App, RightPane};
 use crate::look;
-use crate::widgets;
 
 const ROW: f32 = 22.0;
 
@@ -103,102 +102,7 @@ pub fn bbdt(app: &App, t: u32) -> String {
 }
 
 fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
-    let p = ui.painter().clone();
-    let Some((t, r)) = app.selected_region else {
-        p.text(body.center(), Align2::CENTER_CENTER, "Select a MIDI region to list its events", look::regular(12.0), look::text_dim());
-        return;
-    };
-    let Some(region) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return };
-    // controllers, pitch bend, pressure, program changes below the notes (arranging.rs)
-    let body = crate::arranging::event_list_extras(app, ui, body, t, r);
-    let w = body.width() - 16.0;
-    // the Event Editor's view options (eventedit.rs): Relative Position, Length as Absolute Position
-    let ev = crate::eventedit::state(ui.ctx());
-    crate::eventedit::with(ui.ctx(), |s| s.rect = Some(body));
-    let cols = [(if ev.relative { "Rel. Position" } else { "Position" }, w * 0.34), ("Status", w * 0.17), ("Ch", w * 0.09), ("Num", w * 0.14), ("Val", w * 0.11), (if ev.abs_length { "End" } else { "Length" }, w * 0.15)];
-    let hr = Rect::from_min_size(body.min, vec2(body.width(), ROW));
-    header_row(&p, hr, &cols);
-    let list = Rect::from_min_max(pos2(body.min.x, hr.max.y + 1.0), body.max);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
-    let mut edit: Option<(usize, lg_core::events::Note)> = None;
-    let selected = app.selected_notes.clone();
-    egui::ScrollArea::vertical().id_salt("events").auto_shrink([false, false]).show_rows(&mut child, ROW, region.notes.len(), |ui, range| {
-        for i in range {
-            let n = region.notes[i];
-            let (row, resp) = ui.allocate_exact_size(vec2(list.width(), ROW), Sense::click());
-            let p = ui.painter();
-            if selected.contains(&i) {
-                p.rect_filled(row, 0.0, look::accent().gamma_multiply(0.45));
-            } else if i % 2 == 1 {
-                p.rect_filled(row, 0.0, look::lane_alt());
-            }
-            if resp.clicked() {
-                if ui.input(|x| x.modifiers.shift || x.modifiers.command) {
-                    if !app.selected_notes.contains(&i) {
-                        app.selected_notes.push(i);
-                    }
-                } else {
-                    app.selected_notes = vec![i];
-                    app.preview_note(t, n.pitch, n.velocity);
-                }
-            }
-            let mut x = row.min.x + 8.0;
-            let cell = |x: f32, w: f32| Rect::from_min_size(pos2(x - 4.0, row.min.y + 1.0), vec2(w - 2.0, ROW - 2.0));
-            let shown = if ev.relative { n.pos.saturating_sub(region.start) } else { n.pos };
-            p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, bbdt(app, shown), look::regular(12.0), look::text());
-            x += cols[0].1;
-            p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, "Note", look::regular(12.0), look::text());
-            x += cols[1].1;
-            p.text(pos2(x, row.center().y), Align2::LEFT_CENTER, format!("{}", n.channel + 1), look::regular(12.0), look::text());
-            x += cols[2].1;
-            let mut pitch = n.pitch as f32;
-            if widgets::value_slot(ui, cell(x, cols[3].1), ui.scope_id().with(("ev-pitch", i)), &mut pitch, 0.0, 127.0, n.pitch as f32, 1.0, &|v| crate::app::note_name(v as u8)) {
-                edit = Some((i, lg_core::events::Note { pitch: pitch as u8, ..n }));
-            }
-            x += cols[3].1;
-            let mut vel = n.velocity as f32;
-            if widgets::value_slot(ui, cell(x, cols[4].1), ui.scope_id().with(("ev-vel", i)), &mut vel, 1.0, 127.0, n.velocity as f32, 1.0, &|v| format!("{v:.0}")) {
-                edit = Some((i, lg_core::events::Note { velocity: vel as u8, ..n }));
-            }
-            x += cols[4].1;
-            let mut len = n.len as f32;
-            let beat = 960.0;
-            if ev.abs_length {
-                // Length as Absolute Position: the note's end
-                ui.painter().text(pos2(x, row.center().y), Align2::LEFT_CENTER, bbdt(app, n.pos + n.len), look::regular(12.0), look::text());
-            } else if widgets::value_slot(ui, cell(x, cols[5].1), ui.scope_id().with(("ev-len", i)), &mut len, 1.0, 3840.0 * 64.0, n.len as f32, 10.0, &move |v| format!("{} {}", (v / beat).floor() as u32, (v % beat) as u32)) {
-                edit = Some((i, lg_core::events::Note { len: len as u32, ..n }));
-            }
-        }
-    });
-    // Numerical Edit of Event Position: the position typed
-    if let Some((i, mut text)) = ev.typing.clone() {
-        let mut done = None;
-        egui::Area::new(egui::Id::unique("lg-ev-typing")).fixed_pos(body.min + vec2(10.0, 30.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.label("Position (bar beat division tick):");
-                ui.add(egui::TextEdit::singleline(&mut text).desired_width(140.0)).request_focus();
-                if ui.input(|x| x.key_pressed(egui::Key::Enter)) {
-                    done = Some(true);
-                } else if ui.input(|x| x.key_pressed(egui::Key::Escape)) {
-                    done = Some(false);
-                }
-            });
-        });
-        crate::eventedit::with(ui.ctx(), |s| s.typing = if done.is_some() { None } else { Some((i, text.clone())) });
-        if done == Some(true) {
-            crate::eventedit::set_position(app, i, &text);
-        }
-    }
-    if let Some((i, n)) = edit {
-        app.checkpoint("Change Event");
-        if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
-            if let Some(slot) = rg.notes.get_mut(i) {
-                *slot = n;
-            }
-        }
-        app.after_edit();
-    }
+    crate::evlist::show(app, ui, body);
 }
 
 fn markers(app: &mut App, ui: &mut egui::Ui, body: Rect) {

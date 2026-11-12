@@ -266,6 +266,10 @@ impl App {
 
     /// Join: the selected regions on each track become one (Logic's Join Regions).
     fn join(&mut self) {
+        // audio regions (a mixdown) and MIDI regions across tracks: joinaudio.rs
+        if crate::joinaudio::join(self) {
+            return;
+        }
         let sel = self.region_selection();
         if sel.len() == 1 && self.project.as_ref().is_some_and(|p| p.tracks[sel[0].0].regions[sel[0].1].props.looped) {
             // a looped region joins with its loops

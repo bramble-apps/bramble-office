@@ -59,17 +59,61 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
                     }
                 }
             });
+            // Presets ▸ Create New Transform Set / Create Initialized User Set
+            ui.menu_button("Presets ⌄", |ui| {
+                if ui.button("Create New Transform Set").clicked() {
+                    let mut t = w.t.clone();
+                    t.name = format!("New Parameter Set {}", w.slot);
+                    w.t = t;
+                    ui.close();
+                }
+                if ui.button("Create Initialized User Set").clicked() {
+                    w.t = transform::Transform::new(&format!("New Parameter Set {}", w.slot));
+                    ui.close();
+                }
+            });
             ui.label(if w.roll { "on the Piano Roll's notes" } else { "on the selected regions" });
         });
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            ui.add(egui::TextEdit::singleline(&mut w.t.name).desired_width(200.0)).on_hover_text("A new name saves as a new set (the original stays)");
+            ui.label("Mode:");
+            let mut mode = w.t.mode as usize;
+            egui::ComboBox::from_id_salt("tf-mode").selected_text(transform::MODES[mode]).width(260.0).show_ui(ui, |ui| {
+                for (k, m) in transform::MODES.iter().enumerate() {
+                    ui.selectable_value(&mut mode, k, *m);
+                }
+            });
+            w.t.mode = mode as u8;
+            ui.menu_button("Options ⌄", |ui| {
+                ui.checkbox(&mut w.t.hide_unused, "Hide Unused Parameters");
+                ui.separator();
+                if ui.radio(!w.t.absolute, "Relative Position").clicked() {
+                    w.t.absolute = false;
+                }
+                if ui.radio(w.t.absolute, "Absolute Position").clicked() {
+                    w.t.absolute = true;
+                }
+            });
+        });
+        // how many regions and events the conditions find
+        let (regions, events) = crate::midifunc::transform_count(app, &w.t);
+        ui.label(egui::RichText::new(format!("{regions} region{} selected · {events} event{} match", if regions == 1 { "" } else { "s" }, if events == 1 { "" } else { "es" })).small().weak());
         ui.add_space(6.0);
         egui::Grid::new("tf-grid").num_columns(6).spacing([10.0, 6.0]).show(ui, |ui| {
             ui.label("");
-            for p in transform::PARAMS {
-                ui.label(egui::RichText::new(p).strong());
+            let used = |t: &transform::Transform, p: usize| !t.hide_unused || t.conds[p] != Cond::All || t.ops[p] != Op::Thru;
+            for (p, name) in transform::PARAMS.iter().enumerate() {
+                ui.label(egui::RichText::new(if used(&w.t, p) { *name } else { "" }).strong());
             }
+            ui.label(egui::RichText::new("Subposition").strong());
             ui.end_row();
             ui.label("Select Conditions:");
             for p in 0..5 {
+                if !used(&w.t, p) {
+                    ui.label("");
+                    continue;
+                }
                 ui.vertical(|ui| {
                     let cur = w.t.conds[p].index();
                     egui::ComboBox::from_id_salt(("tf-cond", p)).selected_text(Cond::NAMES[cur]).width(70.0).show_ui(ui, |ui| {
@@ -90,9 +134,33 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
                     w.t.conds[p].set_values(a, b);
                 });
             }
+            // Subposition: ticks within the bar
+            ui.vertical(|ui| {
+                let cur = w.t.sub.index().min(6);
+                egui::ComboBox::from_id_salt("tf-sub").selected_text(Cond::NAMES[cur]).width(70.0).show_ui(ui, |ui| {
+                    for (k, n) in Cond::NAMES.iter().enumerate().take(7) {
+                        if ui.selectable_label(k == cur, *n).clicked() {
+                            w.t.sub = w.t.sub.with_index(k);
+                        }
+                    }
+                });
+                let (mut a, mut b) = w.t.sub.values();
+                let n = w.t.sub.arity();
+                if n >= 1 {
+                    value_drag(ui, &mut a, 0);
+                }
+                if n >= 2 {
+                    value_drag(ui, &mut b, 0);
+                }
+                w.t.sub.set_values(a, b);
+            });
             ui.end_row();
             ui.label("Operations:");
             for p in 0..5 {
+                if !used(&w.t, p) {
+                    ui.label("");
+                    continue;
+                }
                 ui.vertical(|ui| {
                     let cur = w.t.ops[p].index();
                     egui::ComboBox::from_id_salt(("tf-op", p)).selected_text(Op::NAMES[cur]).width(70.0).show_ui(ui, |ui| {
@@ -119,7 +187,11 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
             }
             ui.end_row();
         });
-        ui.label(egui::RichText::new("Position counts ticks from the region's start (960 a quarter note); Length in ticks.").small().weak());
+        ui.label(egui::RichText::new(if w.t.absolute { "Position counts ticks from the project's start (960 a quarter note); Length in ticks." } else { "Position counts ticks from the region's start (960 a quarter note); Length in ticks." }).small().weak());
+        // the map (Use Map / Map): 128 bars, dragged; the fields show the original and mapped value
+        if w.t.ops.iter().any(|o| *o == Op::UseMap) || w.t.conds.iter().any(|c| matches!(c, Cond::Map(..))) {
+            map_editor(ui, &mut w.t.map);
+        }
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             if ui.button("Select Only").clicked() {
@@ -160,6 +232,45 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
     if open {
         app.midi.transform = Some(w);
     }
+}
+
+/// The MIDI Transform map: 128 vertical bars (value 0-127 → mapped value), dragged; two fields
+/// show and set the original and mapped value.
+fn map_editor(ui: &mut egui::Ui, map: &mut Vec<u8>) {
+    if map.len() != 128 {
+        *map = transform::identity_map();
+    }
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(128.0 * 4.0, 128.0), egui::Sense::click_and_drag());
+    let p = ui.painter();
+    p.rect_filled(rect, 4.0, crate::look::lcd_bg());
+    for (i, m) in map.iter().enumerate() {
+        let x = rect.min.x + i as f32 * 4.0;
+        let h = (*m as f32 + 1.0) / 128.0 * rect.height();
+        p.rect_filled(egui::Rect::from_min_max(egui::pos2(x + 0.5, rect.max.y - h), egui::pos2(x + 3.5, rect.max.y)), 0.0, crate::look::accent());
+    }
+    let sel_id = ui.make_persistent_id("tf-map-sel");
+    let mut sel: usize = ui.data(|d| d.get_temp(sel_id)).unwrap_or(60);
+    if let Some(pp) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
+        let i = (((pp.x - rect.min.x) / 4.0) as usize).min(127);
+        let v = ((rect.max.y - pp.y) / rect.height() * 128.0).clamp(0.0, 127.0) as u8;
+        map[i] = v;
+        sel = i;
+    }
+    ui.horizontal(|ui| {
+        let mut a = sel as i64;
+        ui.label("Value:");
+        ui.add(egui::DragValue::new(&mut a).range(0..=127));
+        sel = a as usize;
+        let mut b = map[sel] as i64;
+        ui.label("→");
+        if ui.add(egui::DragValue::new(&mut b).range(0..=127)).changed() {
+            map[sel] = b as u8;
+        }
+        if ui.button("1:1").on_hover_text("Each value maps to itself").clicked() {
+            *map = transform::identity_map();
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(sel_id, sel));
 }
 
 fn sheet(app: &mut App, ctx: &egui::Context) {

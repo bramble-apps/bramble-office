@@ -43,7 +43,21 @@ pub fn key_shift(p: &Project, tick: u32) -> i16 {
 /// that start together spread up or down by the flam), Pitch Source (`shift` at each note),
 /// Gate Time Legato (every note to the next start) and Clip Length (no note past the end).
 pub fn play_notes(props: &RegionProps, notes: &[Note], start: u32, end: u32, shift: &dyn Fn(u32) -> i16) -> Vec<Note> {
-    let mut out: Vec<Note> = notes.iter().filter(|n| !n.muted && n.pos < end).map(|n| props.apply(n, start)).collect();
+    play_notes_groove(props, notes, start, end, shift, None)
+}
+
+/// `play_notes` with the region's groove template (when its Quantize is one).
+pub fn play_notes_groove(props: &RegionProps, notes: &[Note], start: u32, end: u32, shift: &dyn Fn(u32) -> i16, groove: Option<&crate::groove::Points>) -> Vec<Note> {
+    let mut out: Vec<Note> = notes.iter().filter(|n| !n.muted && n.pos < end).map(|n| {
+        let x = props.apply(n, start);
+        match groove {
+            Some(g) => {
+                let q = crate::groove::apply(n, g, props.q_strength, props.q_velocity, props.q_length);
+                Note { pos: (q.pos as i64 + props.delay as i64).max(0) as u32, velocity: (x.velocity as i16 + q.velocity as i16 - n.velocity as i16).clamp(1, 127) as u8, len: if props.gate_time == 100 { q.len } else { x.len }, ..x }
+            }
+            None => x,
+        }
+    }).collect();
     if props.q_flam != 0 {
         out.sort_by_key(|n| (n.pos, n.pitch));
         let mut i = 0;

@@ -182,6 +182,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         crate::syncmidi::sync_button(app, ui, b[0]);
         x = c.max.x + 8.0;
     }
+    // Varispeed (Customize Control Bar ▸ Modes and Functions; varispeed.rs)
+    if crate::varispeed::shown(ui.ctx()) {
+        let c = crate::varispeed::control_bar(app, ui, x, cy, H);
+        caps.push(c);
+        x = c.max.x + 8.0;
+    }
     let room = bar.max.x - 10.0 - right_w - x;
     if room > 3.0 * BTN + 2.0 * BTN + 30.0 {
         let (b, c) = run(x, cy, &[BTN; 3]);
@@ -197,7 +203,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
         })
         .clicked()
         {
-            app.solo_mode = !app.solo_mode;
+            // Option-click: Set Solo Lock Mode (regsolo.rs)
+            let alt = ui.input(|i| i.modifiers.alt);
+            crate::regsolo::button(app, alt);
         }
         x = c.max.x + 8.0;
         let (b, c) = run(x, cy, &[BTN; 2]);
