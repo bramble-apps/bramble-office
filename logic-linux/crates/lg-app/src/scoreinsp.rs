@@ -19,7 +19,7 @@ use crate::app::App;
 use crate::look;
 use crate::score::{self, Part, GROUP_NAMES, TIMES};
 
-pub const COMMANDS: &[&str] = &["Text Styles…", "Reset Line Layout", "Show Local Inspector", "Hide Local Inspector", "Show/Hide Local Inspector"];
+pub const COMMANDS: &[&str] = &["Text Styles…", "Reset Line Layout", "Show Score Sets", "Show/Hide Score Sets Window", "Show Local Inspector", "Hide Local Inspector", "Show/Hide Local Inspector"];
 
 const ROW: f32 = 25.0;
 
@@ -274,6 +274,25 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.rect_filled(area, 0.0, look::pane_bg());
     p.vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));
     let mut y = area.min.y;
+    // Filter: the score set shown (All Instruments, the project's sets)
+    {
+        let r = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), HEAD));
+        p.text(pos2(r.min.x + 12.0, r.center().y), Align2::LEFT_CENTER, "Filter:", look::regular(13.0), look::text());
+        let mut names = vec!["All Instruments".to_string()];
+        names.extend(app.project.as_ref().map(|p| p.score.sets.iter().map(|s| s.name.clone()).collect::<Vec<_>>()).unwrap_or_default());
+        let cur = st.set.map_or(0, |k| k + 1).min(names.len() - 1);
+        let pr = Rect::from_min_max(pos2(r.min.x + 62.0, r.center().y - 11.0), pos2(r.max.x - 14.0, r.center().y + 11.0));
+        if let Some(k) = popup(ui, pr, ui.scope_id().with("si-filter"), cur, &names) {
+            st.set = (k > 0).then(|| k - 1);
+            st.score_set = None;
+            score::with_state(&ctx, |s| {
+                s.set = st.set;
+                s.score_set = None;
+            });
+        }
+        p.hline(r.x_range(), r.max.y, Stroke::new(1.0, look::line()));
+        y += HEAD + 1.0;
+    }
     let sel = app.selected_region.filter(|&(t, r)| app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).is_some_and(|r| r.audio.is_none()));
     let t = sel.map(|x| x.0).or(app.selected_track);
     // Region:
@@ -1077,6 +1096,15 @@ pub fn delete_selected(app: &mut App) -> bool {
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     match name {
         "Text Styles…" => open_dialog(ctx, Dialog::Styles { sel: 0, renaming: None }),
+        "Show Score Sets" | "Show/Hide Score Sets Window" => {
+            let open = ctx.data(|m| m.get_temp::<Option<Dialog>>(dlg_id())).flatten().is_some_and(|d| matches!(d, Dialog::Sets { .. }));
+            if open && name.starts_with("Show/Hide") {
+                ctx.data_mut(|m| m.insert_temp::<Option<Dialog>>(dlg_id(), None));
+            } else {
+                let sel = score::state(ctx).set;
+                open_dialog(ctx, Dialog::Sets { sel, renaming: None });
+            }
+        }
         "Reset Line Layout" => {
             app.checkpoint("Reset Line Layout");
             if let Some(p) = app.project.as_mut() {
@@ -1123,6 +1151,8 @@ pub enum Dialog {
     /// The time signature at a bar: beats typed, note value (index into VALUES).
     Time { bar: u32, beats: String, value: usize },
     Styles { sel: usize, renaming: Option<String> },
+    /// The Score Sets window: the set selected (None: All Instruments), a name being typed.
+    Sets { sel: Option<usize>, renaming: Option<String> },
 }
 
 fn dlg_id() -> egui::Id {
@@ -1196,6 +1226,11 @@ pub fn windows(app: &mut App, ctx: &egui::Context, _st: &mut score::State) {
                         close = true;
                     }
                 });
+            });
+        }
+        Dialog::Sets { sel, renaming } => {
+            egui::Window::new("Score Sets").collapsible(false).resizable(true).default_size(vec2(560.0, 320.0)).open(&mut open).show(ctx, |ui| {
+                sets_window(app, ui, sel, renaming);
             });
         }
         Dialog::Styles { sel, renaming } => {
@@ -1321,6 +1356,178 @@ fn styles_window(app: &mut App, ui: &mut egui::Ui, sel: &mut usize, renaming: &m
         app.after_edit();
         *sel = 0;
     }
+}
+
+/// A new score set of the project (one undo step); its index.
+pub fn new_set(app: &mut App, name: &str, tracks: &[u64]) -> usize {
+    app.checkpoint("New Score Set");
+    let mut k = 0;
+    if let Some(p) = app.project.as_mut() {
+        p.score.sets.push(lg_core::score::ScoreSet::new(name, tracks));
+        k = p.score.sets.len() - 1;
+    }
+    app.after_edit();
+    k
+}
+
+/// The Score Sets window: New ▸ New Empty Set / New Complete Set / Duplicate Set / Delete Set,
+/// the sets at the left (double-click renames), the selected set's instruments in score order
+/// with Full Name, Short Name, Bracket and Bar Line (joined to the next), moved up and down or
+/// removed, an instrument added; Scale (25–250 %) and Score / Part layout. All Instruments can't
+/// be edited.
+fn sets_window(app: &mut App, ui: &mut egui::Ui, sel: &mut Option<usize>, renaming: &mut Option<String>) {
+    let Some(p) = app.project.as_ref() else { return };
+    let sets = p.score.sets.clone();
+    let tracks: Vec<(u64, String)> = p.tracks.iter().filter(|t| t.kind != lg_core::TrackKind::Audio).map(|t| (t.extra.id, t.name.clone())).collect();
+    let edit = |app: &mut App, what: &str, f: &mut dyn FnMut(&mut Vec<lg_core::score::ScoreSet>)| {
+        app.checkpoint(what);
+        if let Some(p) = app.project.as_mut() {
+            f(&mut p.score.sets);
+        }
+        app.after_edit();
+    };
+    ui.horizontal(|ui| {
+        ui.menu_button("New", |ui| {
+            if ui.button("New Empty Set").clicked() {
+                *sel = Some(new_set(app, &format!("Score Set {}", sets.len() + 1), &[]));
+                ui.close();
+            }
+            if ui.button("New Complete Set").clicked() {
+                let all: Vec<u64> = tracks.iter().map(|t| t.0).collect();
+                *sel = Some(new_set(app, "Complete Set", &all));
+                ui.close();
+            }
+            if ui.add_enabled(sel.is_some(), egui::Button::new("Duplicate Set")).clicked() {
+                if let Some(s) = sel.and_then(|k| sets.get(k)) {
+                    let mut d = s.clone();
+                    d.name = format!("{} copy", s.name);
+                    edit(app, "Duplicate Set", &mut |v| v.push(d.clone()));
+                    *sel = Some(sets.len());
+                }
+                ui.close();
+            }
+            if ui.add_enabled(sel.is_some(), egui::Button::new("Delete Set")).clicked() {
+                if let Some(k) = *sel {
+                    edit(app, "Delete Set", &mut |v| {
+                        if k < v.len() {
+                            v.remove(k);
+                        }
+                    });
+                    *sel = None;
+                    score::with_state(&ui.ctx().clone(), |s| s.set = None);
+                }
+                ui.close();
+            }
+        });
+    });
+    ui.separator();
+    ui.horizontal_top(|ui| {
+        // the sets
+        ui.vertical(|ui| {
+            ui.set_width(150.0);
+            if ui.add(egui::Button::selectable(sel.is_none(), "All Instruments")).clicked() {
+                *sel = None;
+            }
+            for (k, s) in sets.iter().enumerate() {
+                if renaming.is_some() && *sel == Some(k) {
+                    let mut t = renaming.clone().unwrap_or_default();
+                    let te = ui.text_edit_singleline(&mut t);
+                    crate::widgets::focus_once(ui, &te);
+                    *renaming = Some(t.clone());
+                    if te.lost_focus() {
+                        if !t.trim().is_empty() {
+                            let name = t.trim().to_string();
+                            edit(app, "Rename Set", &mut |v| v[k].name = name.clone());
+                        }
+                        *renaming = None;
+                    }
+                    continue;
+                }
+                let r = ui.add(egui::Button::selectable(*sel == Some(k), s.name.as_str()));
+                if r.clicked() {
+                    *sel = Some(k);
+                }
+                if r.double_clicked() {
+                    *renaming = Some(s.name.clone());
+                }
+            }
+        });
+        ui.separator();
+        ui.vertical(|ui| {
+            let Some(k) = *sel else {
+                ui.label(egui::RichText::new("All Instruments shows every instrument and can't be edited. Choose New ▸ New Complete Set to make one you can edit.").color(look::text_dim()));
+                return;
+            };
+            let Some(set) = sets.get(k).cloned() else { return };
+            egui::Grid::new("sets-grid").num_columns(6).spacing(vec2(10.0, 4.0)).striped(true).show(ui, |ui| {
+                for h in ["Instrument", "Full Name", "Short Name", "Bracket", "Bar Line", ""] {
+                    ui.label(egui::RichText::new(h).strong());
+                }
+                ui.end_row();
+                for (i, e) in set.entries.iter().enumerate() {
+                    let tname = tracks.iter().find(|t| t.0 == e.track).map_or("(deleted)".to_string(), |t| t.1.clone());
+                    ui.label(&tname);
+                    let mut full = e.full.clone();
+                    if ui.add(egui::TextEdit::singleline(&mut full).hint_text(&tname).desired_width(110.0)).lost_focus() && full != e.full {
+                        edit(app, "Full Name", &mut |v| v[k].entries[i].full = full.clone());
+                    }
+                    let mut short = e.short.clone();
+                    if ui.add(egui::TextEdit::singleline(&mut short).hint_text(crate::scoreset::short_name(&tname)).desired_width(70.0)).lost_focus() && short != e.short {
+                        edit(app, "Short Name", &mut |v| v[k].entries[i].short = short.clone());
+                    }
+                    let mut b = e.bracket;
+                    if ui.checkbox(&mut b, "").changed() {
+                        edit(app, "Bracket", &mut |v| v[k].entries[i].bracket = b);
+                    }
+                    let mut l = e.barline;
+                    if ui.checkbox(&mut l, "").changed() {
+                        edit(app, "Bar Line", &mut |v| v[k].entries[i].barline = l);
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(i > 0, egui::Button::new("▲").small()).clicked() {
+                            edit(app, "Move Instrument", &mut |v| v[k].entries.swap(i, i - 1));
+                        }
+                        if ui.add_enabled(i + 1 < set.entries.len(), egui::Button::new("▼").small()).clicked() {
+                            edit(app, "Move Instrument", &mut |v| v[k].entries.swap(i, i + 1));
+                        }
+                        if ui.small_button("✕").on_hover_text("Leave out of the set").clicked() {
+                            edit(app, "Remove Instrument", &mut |v| {
+                                v[k].entries.remove(i);
+                            });
+                        }
+                    });
+                    ui.end_row();
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.menu_button("Add Instrument", |ui| {
+                    for (id, n) in tracks.iter().filter(|t| set.entry(t.0).is_none()) {
+                        if ui.button(n).clicked() {
+                            let id = *id;
+                            edit(app, "Add Instrument", &mut |v| v[k].entries.push(lg_core::score::SetEntry { track: id, ..Default::default() }));
+                            ui.close();
+                        }
+                    }
+                });
+                ui.label("Scale:");
+                let mut sc = set.scale as f32;
+                if ui.add(egui::DragValue::new(&mut sc).range(25.0..=250.0).suffix(" %")).changed() {
+                    edit(app, "Scale", &mut |v| v[k].scale = sc as u16);
+                }
+                ui.label("Layout:");
+                let mut part = set.part_layout;
+                if ui.selectable_value(&mut part, false, "Score").changed() || ui.selectable_value(&mut part, true, "Part").changed() {
+                    edit(app, "Layout", &mut |v| v[k].part_layout = part);
+                }
+            });
+            if ui.button("Show This Set").clicked() {
+                score::with_state(&ui.ctx().clone(), |s| {
+                    s.set = Some(k);
+                    s.score_set = None;
+                });
+            }
+        });
+    });
 }
 
 /// The note heads by name (for the Functions ▸ Note Attributes menu).

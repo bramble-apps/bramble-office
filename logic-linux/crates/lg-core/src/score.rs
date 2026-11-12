@@ -257,6 +257,38 @@ pub struct Score {
     pub breaks: BTreeMap<u32, Break>,
     /// Text styles: the defaults' edits (same name) and the user's own, in order.
     pub text_styles: Vec<TextStyle>,
+    /// Score sets (besides All Instruments, which isn't stored).
+    pub sets: Vec<ScoreSet>,
+}
+
+/// An instrument of a score set: its track, names, and whether a bracket and the bar lines join
+/// it with the next instrument.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SetEntry {
+    pub track: u64,
+    /// Full and short names ("" = the track's name, its short form).
+    pub full: String,
+    pub short: String,
+    pub bracket: bool,
+    pub barline: bool,
+}
+
+/// A score set: instruments in score order, the Scale (25–250 %), and Part layout (else Score).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScoreSet {
+    pub name: String,
+    pub entries: Vec<SetEntry>,
+    pub scale: u16,
+    pub part_layout: bool,
+}
+
+impl ScoreSet {
+    pub fn new(name: &str, tracks: &[u64]) -> ScoreSet {
+        ScoreSet { name: name.to_string(), entries: tracks.iter().map(|&t| SetEntry { track: t, ..Default::default() }).collect(), scale: 100, part_layout: false }
+    }
+    pub fn entry(&self, track: u64) -> Option<&SetEntry> {
+        self.entries.iter().find(|e| e.track == track)
+    }
 }
 
 impl Score {
@@ -402,6 +434,13 @@ impl Score {
         for (bar, k) in &self.breaks {
             out += &format!("sbreak\t{bar}\t{}\n", k.name());
         }
+        for (k, set) in self.sets.iter().enumerate() {
+            out += &format!("sset\t{k}\t{}\t{}\t{}\n", esc(&set.name), set.scale, set.part_layout as u8);
+            for e in &set.entries {
+                let Some(i) = index_of(e.track) else { continue };
+                out += &format!("sentry\t{k}\t{i}\t{}\t{}\t{}\t{}\n", esc(&e.full), esc(&e.short), e.bracket as u8, e.barline as u8);
+            }
+        }
         for t in &self.text_styles {
             out += &format!("sstyle\t{}\t{}\t{}\t{}\t{}\t{}\n", esc(&t.name), esc(&t.family), t.size, t.bold as u8, t.italic as u8, t.underline as u8);
         }
@@ -463,6 +502,16 @@ impl Score {
                         any = true;
                     }
                 }
+                Some("sset") if w.len() >= 5 => {
+                    self.sets.push(ScoreSet { name: unesc(w[2]), entries: Vec::new(), scale: w[3].parse().unwrap_or(100), part_layout: w[4] == "1" });
+                    any = true;
+                }
+                Some("sentry") if w.len() >= 7 => {
+                    let k = num(1) as usize;
+                    if let (Some(id), Some(set)) = (track(2), self.sets.get_mut(k)) {
+                        set.entries.push(SetEntry { track: id, full: unesc(w[3]), short: unesc(w[4]), bracket: w[5] == "1", barline: w[6] == "1" });
+                    }
+                }
                 Some("sstyle") if w.len() >= 7 => {
                     self.text_styles.push(TextStyle { name: unesc(w[1]), family: unesc(w[2]), size: w[3].parse().unwrap_or(12.0), bold: w[4] == "1", italic: w[5] == "1", underline: w[6] == "1" });
                     any = true;
@@ -509,6 +558,11 @@ mod tests {
         s.breaks.insert(4, Break::Page);
         s.set_style(TextStyle { name: "Mine".into(), family: "Serif".into(), size: 17.5, bold: true, italic: false, underline: true });
         s.keys = vec![(1920, -3)];
+        let mut set = ScoreSet::new("Strings", &[5]);
+        set.entries[0].full = "Violin".into();
+        set.entries[0].bracket = true;
+        set.scale = 80;
+        s.sets.push(set);
         let text = s.to_text(|id| (id == 5).then_some(2));
         let mut back = Score::default();
         assert!(back.apply_text(&text, |i| (i == 2).then_some(5)));

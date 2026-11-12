@@ -133,7 +133,19 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             if ids.is_empty() {
                 return false;
             }
-            view(ctx, &|s| s.score_set = Some(ids.clone()));
+            // a score set of the project, named after its instruments (one undo step)
+            let mut uniq: Vec<u64> = Vec::new();
+            for id in ids {
+                if !uniq.contains(&id) {
+                    uniq.push(id);
+                }
+            }
+            let name = uniq.iter().filter_map(|id| p.tracks.iter().find(|t| t.extra.id == *id)).map(|t| t.name.clone()).collect::<Vec<_>>().join(", ");
+            let k = crate::scoreinsp::new_set(app, &name, &uniq);
+            view(ctx, &|s| {
+                s.set = Some(k);
+                s.score_set = None;
+            });
         }
         // ---- Part box
         _ if name.starts_with("Part Box: ") => {

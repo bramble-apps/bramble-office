@@ -248,6 +248,9 @@ pub struct State {
     pub diatonic: bool,
     /// Tracks shown by a score set (track ids); None: the selected track.
     pub score_set: Option<Vec<u64>>,
+    /// The project's score set shown (index into Score::sets; None: All Instruments / the
+    /// display level).
+    pub set: Option<usize>,
     /// Text being typed for a symbol: (track, tick, kind, staff, text, where).
     pub typing: Option<(usize, u32, SymbolKind, u8, String, Pos2)>,
     /// Go to Page… being typed.
@@ -295,6 +298,7 @@ impl Default for State {
             snap: true,
             diatonic: false,
             score_set: None,
+            set: None,
             typing: None,
             goto: None,
             settings: None,
@@ -361,6 +365,11 @@ struct Row {
     voice: Option<u8>,
     style: nt::StaffStyle,
     name: String,
+    /// The score set's short name ("" = made from the name), bracket and bar line joins to the
+    /// next instrument.
+    short: String,
+    bracket: bool,
+    barline: bool,
     /// The first row of a two-staff (grand staff) track.
     brace: bool,
     /// Offset of the staff's bottom line from the line's top.
@@ -454,6 +463,10 @@ fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
     let Some(p) = app.project.as_ref() else { return Vec::new() };
     let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_tracks;
     let midi = |t: &lg_core::Track| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none()) && !(hide_muted && t.mute);
+    // (a project score set: its instruments in its own order)
+    if let Some(set) = st.set.and_then(|k| p.score.sets.get(k)) {
+        return set.entries.iter().filter_map(|e| p.tracks.iter().position(|t| t.extra.id == e.track)).filter(|&i| midi(&p.tracks[i])).collect();
+    }
     if let Some(set) = &st.score_set {
         let v: Vec<usize> = p.tracks.iter().enumerate().filter(|(_, t)| set.contains(&t.extra.id) && midi(t)).map(|(i, _)| i).collect();
         if !v.is_empty() {
@@ -483,7 +496,9 @@ fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
                 if s > 0 || vk > 0 {
                     off += 10.0 * sp;
                 }
-                rows.push(Row { t, id: tr.extra.id, staff: s, voice: v, style, name: tr.name.clone(), brace: n > 1 && s == 0 && vk == 0, off });
+                let entry = st.set.and_then(|k| app.project.as_ref()?.score.sets.get(k)?.entry(tr.extra.id).cloned()).unwrap_or_default();
+                let name = if entry.full.is_empty() { tr.name.clone() } else { entry.full.clone() };
+                rows.push(Row { t, id: tr.extra.id, staff: s, voice: v, style, name, short: entry.short.clone(), bracket: entry.bracket, barline: entry.barline, brace: n > 1 && s == 0 && vk == 0, off });
             }
         }
     }
@@ -729,7 +744,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     // the Page view shows a whole page's width (zoom in from there)
-    let sp = if st.view == View::Page { st.space.min((music.width() - 24.0) / 120.0).max(3.0) } else { st.space };
+    let set_scale = st.set.and_then(|k| app.project.as_ref()?.score.sets.get(k)).map_or(1.0, |s| s.scale.clamp(25, 250) as f32 / 100.0);
+    let sp = if st.view == View::Page { st.space.min((music.width() - 24.0) / 120.0).max(3.0) } else { st.space } * set_scale;
     let rows = rows_for(app, &st, &tracks, sp);
     let block_h = rows.last().map_or(4.0 * sp, |r| r.off) + 4.0 * sp;
     let segs = engrave_rows(app, &rows);
@@ -846,7 +862,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             mp.text(pos2(pr.center().x, pr.min.y + 8.0 * sp), Align2::CENTER_CENTER, &project_name, look::semibold(3.0 * sp), INK);
         }
         // (Numbers & Names: the page number's side, top or bottom, distances, prefix)
-        let set_name = if st.score_set.is_some() { "Score Set" } else { "All Instruments" };
+        let set_name = st.set.and_then(|k| app.project.as_ref()?.score.sets.get(k)).map_or(if st.score_set.is_some() { "Score Set" } else { "All Instruments" }.to_string(), |s| s.name.clone());
+        let set_name = set_name.as_str();
         if let Some(text) = fmt.page_text(k, &project_name, set_name, "Region") {
             let cm = crate::scoreset::SP_PER_CM * sp;
             let (hd, vd) = (fmt.page_hdist * cm, fmt.page_vdist * cm);
@@ -977,7 +994,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false));
             }
             if !linear && (rk == 0 || rows[rk - 1].t != row.t) {
-                let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first) };
+                let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first).map(|n| if !row.short.is_empty() && n != row.name { row.short.clone() } else { n }) };
                 if let Some(name) = name {
                     if names_beside {
                         mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, name, look::regular(1.5 * sp), INK);
@@ -1051,6 +1068,39 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     let (y, al) = if fmt.bar_v >= 0.0 { (bottom - 4.0 * sp - fmt.bar_v * sp, if fmt.bar_center { Align2::CENTER_BOTTOM } else { Align2::LEFT_BOTTOM }) } else { (bottom - fmt.bar_v * sp, if fmt.bar_center { Align2::CENTER_TOP } else { Align2::LEFT_TOP }) };
                     mp.text(pos2(x, y), al, n.to_string(), look::regular(size), INK);
                 }
+            }
+            // (score set: a bracket over instruments joined to the next; bar lines through)
+            let last_of_track = rows.get(rk + 1).is_none_or(|r| r.t != row.t);
+            if last_of_track && row.barline {
+                if let Some(next) = rows.get(rk + 1) {
+                    for b in line.b0..=line.b1 {
+                        let x = x_of(b as f32 * bar_t);
+                        if !linear && x >= music.min.x && x <= music.max.x {
+                            mp.vline(x, bottom..=line.top + next.off - 4.0 * sp, Stroke::new(1.0, INK));
+                        }
+                    }
+                }
+            }
+            let starts_bracket = row.bracket && (rk == 0 || !rows[..rk].iter().rev().find(|r| r.t != row.t).is_some_and(|r| r.bracket));
+            if starts_bracket && rows.iter().position(|r| r.t == row.t) == Some(rk) {
+                // down to the last staff of the last instrument in the run
+                let mut end = rk;
+                let mut k = rk;
+                while k < rows.len() {
+                    let t = rows[k].t;
+                    let last = rows.iter().rposition(|r| r.t == t).unwrap_or(k);
+                    end = last;
+                    if !rows[k].bracket {
+                        break;
+                    }
+                    k = last + 1;
+                }
+                let x = if linear { head.min.x + 4.0 + if names_on { 80.0 } else { 0.0 } } else { line.x_start - 1.2 * sp };
+                let pp = if linear { &headp } else { &mp };
+                let (y0, y1) = (bottom - 4.0 * sp, line.top + rows[end].off);
+                pp.line_segment([pos2(x, y0 - 0.5 * sp), pos2(x, y1 + 0.5 * sp)], Stroke::new(0.5 * sp, INK));
+                smufl(pp, '\u{E003}', pos2(x - 0.25 * sp, y0 - 0.5 * sp), sp, INK, false);
+                smufl(pp, '\u{E004}', pos2(x - 0.25 * sp, y1 + 0.5 * sp), sp, INK, false);
             }
             if row.brace {
                 let lower = line.top + rows.get(rk + 1).map_or(row.off, |r| r.off);
@@ -1234,7 +1284,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let auto = |k: &str| -> String {
                     match k {
                         "REGION" => track_of(row.t).and_then(|tr| tr.regions.iter().find(|r| r.audio.is_none() && s.tick >= r.start && s.tick < r.start + r.length)).map_or_else(|| project_name.clone(), |r| r.name.clone()),
-                        "INSTR" => if st.score_set.is_some() { "Score Set".into() } else { row.name.clone() },
+                        "INSTR" => st.set.and_then(|k| app.project.as_ref()?.score.sets.get(k)).map_or_else(|| row.name.clone(), |s| s.name.clone()),
                         "SONG" => project_name.clone(),
                         _ => crate::scoreset::today(),
                     }
@@ -2003,10 +2053,11 @@ fn styled_text(p: &egui::Painter, s: &Symbol, at: Pos2, text: &str, t: &SymText,
         _ => Align2::LEFT_CENTER,
     };
     let at = at + vec2(s.dx as f32 * sp / 10.0, -(s.dy as f32) * sp / 10.0);
-    let r = p.text(at, al, text, style_font(&t.style, sp), col);
-    if t.style.underline {
-        p.hline(r.x_range(), r.max.y - 0.1 * sp, Stroke::new(1.0, col));
-    }
+    // (italic and underline as the style says)
+    let fmt = egui::TextFormat { font_id: style_font(&t.style, sp), color: col, italics: t.style.italic, underline: if t.style.underline { Stroke::new(1.0, col) } else { Stroke::NONE }, ..Default::default() };
+    let g = p.layout_job(egui::text::LayoutJob::single_section(text.to_string(), fmt));
+    let r = al.anchor_size(at, g.size());
+    p.galley(r.min, g, col);
     r
 }
 
