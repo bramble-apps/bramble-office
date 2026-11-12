@@ -156,11 +156,15 @@ pub struct State {
     pub column_path: Vec<String>,
     locations_open: bool,
     smart_open: bool,
+    /// Previews by dragging across icons / Option-hovering them (brpreview.rs): the sound last
+    /// reached, and whether a drag started on an icon.
+    pub swept: Option<String>,
+    pub sweeping: bool,
 }
 
 impl Default for State {
     fn default() -> State {
-        State { saved: sl::Saved::default(), search: Search::default(), typed: String::new(), view: Cat::Instruments, selected: Vec::new(), items: Vec::new(), loaded: false, all_filters: false, expanded: HashSet::new(), show_more: HashSet::new(), info: None, renaming: None, deleting: None, smart_name: None, smart_rename: None, location_rename: None, patch_name: None, add_to_browser: None, volume: 0.8, drag: None, multi_drop: None, lanes: Rect::NOTHING, rect: Rect::NOTHING, search_rect: Rect::NOTHING, linked: None, preset_slot: None, preset_path: Vec::new(), column_path: Vec::new(), locations_open: true, smart_open: true }
+        State { saved: sl::Saved::default(), search: Search::default(), typed: String::new(), view: Cat::Instruments, selected: Vec::new(), items: Vec::new(), loaded: false, all_filters: false, expanded: HashSet::new(), show_more: HashSet::new(), info: None, renaming: None, deleting: None, smart_name: None, smart_rename: None, location_rename: None, patch_name: None, add_to_browser: None, volume: 0.8, drag: None, multi_drop: None, lanes: Rect::NOTHING, rect: Rect::NOTHING, search_rect: Rect::NOTHING, linked: None, preset_slot: None, preset_path: Vec::new(), column_path: Vec::new(), locations_open: true, smart_open: true, swept: None, sweeping: false }
     }
 }
 
@@ -366,7 +370,7 @@ fn pack_names(app: &App) -> Vec<String> {
 
 // ---- actions
 
-fn save_state(app: &App) {
+pub(crate) fn save_state(app: &App) {
     app.br.saved.save();
 }
 
@@ -401,7 +405,7 @@ pub fn load_patch(app: &mut App, t: usize, it: &Item) {
         load_user_patch(app, t, &p);
         return;
     }
-    let cat = patches().iter().find(|p| p.2 == it.name).map(|p| p.0.clone()).unwrap_or_default();
+    let cat = patch_category(&it.name);
     app.choose_patch(t, &cat, &it.name);
 }
 
@@ -825,8 +829,14 @@ fn find_similar(app: &mut App, id: &str, name: &str) {
     app.br.all_filters = false;
 }
 
-/// Preview: a loop or one-shot plays at the preview volume (Auto Leveling on: levelled).
-fn preview_item(app: &mut App, it: &Item) {
+/// A patch's category (Bass, Strings…), for its preview's sound.
+pub(crate) fn patch_category(name: &str) -> String {
+    patches().iter().find(|p| p.2 == name).map(|p| p.0.clone()).unwrap_or_default()
+}
+
+/// Preview: a loop (looped) or one-shot plays at the preview volume (Auto Leveling on:
+/// levelled).
+pub(crate) fn preview_item(app: &mut App, it: &Item, looped: bool) {
     let Some(p) = it.path.clone() else { return };
     let mut g = app.br.volume;
     if app.br.saved.flag("auto_level", true) && sl::is_audio(&p) {
@@ -834,7 +844,7 @@ fn preview_item(app: &mut App, it: &Item) {
             g *= 10f32.powf(db / 20.0);
         }
     }
-    crate::preview::toggle(app, &it.id, &p, g, None, false);
+    crate::preview::toggle(app, &it.id, &p, g, None, looped);
 }
 
 /// Runs a Browser command (key commands, menus). `focused`: the Browser has the keys (Rename
@@ -866,7 +876,7 @@ pub fn run(app: &mut App, name: &str, focused: bool) -> bool {
         }
         "Play/Stop Preview" => {
             if let Some(it) = sel.first() {
-                preview_item(app, it);
+                crate::brpreview::click(app, it, crate::brpreview::Click::Icon { option: false });
             }
         }
         "Clear Applied Tags" => {
@@ -964,9 +974,20 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
             (Some(i), false) => i.saturating_sub(1),
         };
         let it = r[i].clone();
+        let was = app.br.selected.first() == Some(&it.id);
         app.br.selected = vec![it.id.clone()];
-        click_item(app, &it);
+        if !was {
+            click_item(app, &it, false);
+        }
         return true;
+    }
+    // Right Arrow (list layout): starts or retriggers the selected sound's preview
+    if key == egui::Key::ArrowRight && !m.command && !m.alt && !app.br.saved.flag("columns", false) {
+        let r = results(app);
+        if let Some(it) = app.br.selected.first().and_then(|s| r.iter().find(|i| &i.id == s)).cloned() {
+            crate::brpreview::click(app, &it, crate::brpreview::Click::RightArrow);
+            return true;
+        }
     }
     for b in crate::keymap::bindings().iter().filter(|b| b.area == "Browser") {
         if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
@@ -977,19 +998,16 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
     false
 }
 
-/// A click on a result: patches load (Replace Mode), loops and one-shots preview.
-fn click_item(app: &mut App, it: &Item) {
-    match it.kind {
-        Kind::Patch => {
-            if app.browser_replace {
-                match app.selected_track {
-                    Some(t) => load_patch(app, t, it),
-                    None => app.tell("Select a track first"),
-                }
-            }
+/// A click on a result: patches load (Replace Mode); the preview as Logic's rules say
+/// (brpreview.rs: the selected sound toggles, Play Preview on Selection on the first click).
+fn click_item(app: &mut App, it: &Item, was_selected: bool) {
+    if it.kind == Kind::Patch && app.browser_replace && !was_selected {
+        match app.selected_track {
+            Some(t) => load_patch(app, t, it),
+            None => app.tell("Select a track first"),
         }
-        Kind::Loop | Kind::OneShot => preview_item(app, it),
     }
+    crate::brpreview::click(app, it, crate::brpreview::Click::Row { was_selected });
 }
 
 fn add_location_dialog(app: &mut App) {
@@ -1674,7 +1692,13 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     let now = app.ctx.input(|i| i.time);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
     child.spacing_mut().item_spacing.y = 0.0;
-    let mut clicked: Option<(Item, egui::Modifiers)> = None;
+    let mut clicked: Option<(Item, egui::Modifiers, bool)> = None;
+    let mut icon_click: Option<(Item, bool)> = None;
+    let mut swept: Option<Item> = None;
+    let (pointer, alt_held, down) = ui.input(|i| (i.pointer.hover_pos(), i.modifiers.alt, i.pointer.primary_down()));
+    if !down {
+        app.br.sweeping = false;
+    }
     let mut dbl: Option<Item> = None;
     let mut fav: Option<String> = None;
     let mut drag: Option<Item> = None;
@@ -1704,10 +1728,24 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
                 Kind::Loop => ph::REPEAT,
                 Kind::OneShot => ph::WAVEFORM,
             };
-            crate::glyphs::paint(&p, m, glyph, 10.0, Color32::from_black_alpha(170));
             let playing = app.preview.is_playing(&it.id, now);
+            // (previewing: a small speaker in place of the type glyph)
+            crate::glyphs::paint(&p, m, if playing { ph_fill::SPEAKER_HIGH } else { glyph }, 10.0, Color32::from_black_alpha(170));
+            // the icon: a click previews (Option: from the start); a drag from it, or Option
+            // held, previews each icon reached
+            let iresp = ui.interact(m.expand(2.0), ui.scope_id().with(("bicon", k)), Sense::click_and_drag());
+            if iresp.clicked() {
+                icon_click = Some((it.clone(), ui.input(|i| i.modifiers.alt)));
+            }
+            if iresp.drag_started() {
+                app.br.sweeping = true;
+                app.br.swept = None;
+            }
+            if pointer.is_some_and(|pp| pp.y >= r.min.y && pp.y < r.max.y && (pp.x - m.center().x).abs() <= m.width() / 2.0 + 2.0) && ((app.br.sweeping && down) || alt_held) {
+                swept = Some(it.clone());
+            }
             let name_r = Rect::from_min_max(pos2(r.min.x + 40.0, r.min.y), pos2(r.max.x - if wide { 150.0 } else { 28.0 }, r.max.y));
-            p.with_clip_rect(name_r).text(pos2(name_r.min.x, r.center().y), Align2::LEFT_CENTER, &it.name, look::regular(13.0), if playing { look::accent() } else { look::text() });
+            p.with_clip_rect(name_r).text(pos2(name_r.min.x, r.center().y), Align2::LEFT_CENTER, &it.name, look::regular(13.0), look::text());
             if wide && it.kind != Kind::Patch {
                 let bars = it.bars.map(|b| b.to_string()).unwrap_or_else(|| it.seconds.map(|s| format!("{s:.1}s")).unwrap_or_default());
                 let cols = [it.bpm.map(|b| format!("{b:.0}")).unwrap_or_default(), it.key_text(), bars];
@@ -1725,7 +1763,7 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             if sresp.clicked() {
                 fav = Some(it.id.clone());
             } else if resp.clicked() {
-                clicked = Some((it.clone(), ui.input(|i| i.modifiers)));
+                clicked = Some((it.clone(), ui.input(|i| i.modifiers), sel));
             }
             if resp.double_clicked() {
                 dbl = Some(it.clone());
@@ -1746,7 +1784,21 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     if let Some(id) = fav {
         toggle_favorite(app, &id);
     }
-    if let Some((it, m)) = clicked {
+    if let Some((it, option)) = icon_click {
+        app.br.selected = vec![it.id.clone()];
+        crate::brpreview::click(app, &it, crate::brpreview::Click::Icon { option });
+    }
+    match swept {
+        Some(it) => {
+            if app.br.swept.as_deref() != Some(it.id.as_str()) {
+                app.br.selected = vec![it.id.clone()];
+            }
+            crate::brpreview::sweep(app, &it);
+        }
+        None if !app.br.sweeping => app.br.swept = None,
+        None => {}
+    }
+    if let Some((it, m, was_selected)) = clicked {
         if m.command || m.shift {
             if let Some(i) = app.br.selected.iter().position(|x| *x == it.id) {
                 app.br.selected.remove(i);
@@ -1755,7 +1807,7 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             }
         } else {
             app.br.selected = vec![it.id.clone()];
-            click_item(app, &it);
+            click_item(app, &it, was_selected && !m.alt);
         }
     }
     if let Some(it) = dbl {
@@ -1895,8 +1947,9 @@ fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             app.br.column_path.truncate(ci);
             app.br.column_path.push(name);
         } else if let Some(it) = items.iter().find(|i| i.name == name).cloned() {
+            let was = app.br.selected.first() == Some(&it.id);
             app.br.selected = vec![it.id.clone()];
-            click_item(app, &it);
+            click_item(app, &it, was);
         }
     }
     items.len()
@@ -2433,6 +2486,7 @@ fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
                 }
             });
         }
+        crate::brpreview::menu_item(app, ui);
         flag_item(ui, app, "compact", "Use Compact Navigation", false);
         if matches!(app.br.view, Cat::All | Cat::Instruments | Cat::Effects | Cat::YourPatches) {
             ui.separator();

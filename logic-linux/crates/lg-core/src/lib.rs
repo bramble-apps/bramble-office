@@ -24,6 +24,7 @@ pub mod package;
 pub mod mixer;
 pub mod plugin;
 pub mod project;
+pub mod projend;
 pub mod regions;
 pub mod regparams;
 pub mod save;

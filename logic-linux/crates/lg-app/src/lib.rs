@@ -170,6 +170,8 @@ pub mod smartcontrols;
 mod scgraph;
 pub mod soundlib;
 mod stopbutton;
+mod projend;
+mod brpreview;
 mod trackarea;
 mod toolbar;
 mod tracks;

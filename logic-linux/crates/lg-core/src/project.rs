@@ -60,6 +60,8 @@ pub struct Project {
     pub global: crate::timeline::Global,
     /// Groove templates (Make Groove Template; groove.rs).
     pub grooves: Vec<crate::groove::Groove>,
+    /// The Project End marker, ticks from bar 1 (None: Logic's default, bar 129; projend.rs).
+    pub end: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -473,6 +475,7 @@ pub fn read_project_data(data: &[u8]) -> Result<Project, Error> {
             p.tempo = t as f64 / 10000.0;
         }
     }
+    p.end = crate::projend::read(data);
     // the global events: signatures, key
     if let Some(global) = live.iter().find(|c| c.is("EvSq") && c.id == 0) {
         // (the song's own: the first of each; later ones are changes mid-song)

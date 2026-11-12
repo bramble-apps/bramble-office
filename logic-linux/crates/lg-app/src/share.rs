@@ -467,6 +467,8 @@ pub fn render(mut e: crate::audio::Engine, from: u32, to: u32, second_pass: bool
         }
         true
     };
+    // (a bounce runs to `to`, past the Project End marker when asked)
+    e.end = None;
     e.pos = from as f64;
     e.playing = true;
     for pass in 0..passes {
@@ -1065,8 +1067,9 @@ fn run_share(app: &mut App, d: ShareDlg) {
     start_job(app, p, then);
 }
 
+/// The Project End marker (Logic's Bounce with nothing selected runs to it; projend.rs).
 fn project_end(app: &App) -> u32 {
-    app.project.as_ref().map_or(3840, |p| p.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.start + r.length).max().unwrap_or(3840))
+    crate::projend::end(app)
 }
 
 /// Opens the mail program with the files attached (xdg-email).

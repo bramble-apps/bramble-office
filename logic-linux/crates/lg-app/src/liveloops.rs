@@ -423,6 +423,11 @@ impl State {
     pub fn active(&self, t: usize) -> bool {
         self.plays.get(&t).is_some_and(|p| p.current.is_some())
     }
+
+    /// Whether any cell is playing (the song then runs on past the Project End, projend.rs).
+    pub fn any_active(&self) -> bool {
+        self.plays.values().any(|p| p.current.is_some())
+    }
 }
 
 /// Reads the grid when the project changes (from its ProjectData), and picks the view Logic

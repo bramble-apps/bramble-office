@@ -167,15 +167,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // (the project start: a small grey triangle before bar 1)
     let x0 = x_of(0.0, scroll);
     if x0 >= ruler.min.x - 1.0 {
-        let cy = upper_r.center().y;
-        rp.add(egui::Shape::convex_polygon(vec![pos2(x0 - 8.5, cy - 4.25), pos2(x0 - 4.0, cy), pos2(x0 - 8.5, cy + 4.25)], Color32::from_gray(0x54), Stroke::NONE));
+        // (Logic at 2x: 7 × 11 pt, flat side 8 pt before bar 1, tip 1 pt before, centred 7.5 pt
+        // down the upper strip)
+        let cy = upper_r.min.y + 7.5;
+        rp.add(egui::Shape::convex_polygon(vec![pos2(x0 - 8.0, cy - 5.5), pos2(x0 - 1.0, cy), pos2(x0 - 8.0, cy + 5.5)], Color32::from_gray(0x54), Stroke::NONE));
     }
     let beats = app.project.as_ref().map_or(4, |p| p.signature.0.max(1)) as f32;
     let num_col = |x: f32| if cycle_on && x > crect.min.x && x < crect.max.x { Color32::from_gray(0x20) } else { Color32::from_gray(0xf7) };
+    // (the Project End marker sits right of its bar line: that bar's number moves past it)
+    let end_x = x_of(crate::projend::end(app) as f32, scroll);
     let bar_mark = |rp: &egui::Painter, x: f32, n: i32, numbered: bool| {
         if numbered {
             rp.vline(x, upper_r.min.y + 2.0..=upper_r.max.y, Stroke::new(1.0, look::ta_ruler_bar()));
-            rp.text(pos2(x + 4.0, upper_r.min.y - 0.5), Align2::LEFT_TOP, format!("{n}"), look::regular(13.0), num_col(x + 4.0));
+            let nx = if (x - end_x).abs() < 0.5 { x + 11.0 } else { x + 4.0 };
+            rp.text(pos2(nx, upper_r.min.y - 0.5), Align2::LEFT_TOP, format!("{n}"), look::regular(13.0), num_col(x + 4.0));
         }
         rp.vline(x, lower_r.min.y..=lower_r.max.y, Stroke::new(1.0, look::ta_ruler_tick()));
     };
@@ -274,6 +279,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let to = |x: f32| ((x - lanes.min.x) / bw + scroll) * bar_t;
         let shown = !(app.global_tracks && crate::globals::rows(app).iter().any(|r| r.0 == crate::globals::MARKER));
         crate::markers::ruler(app, ui, ruler, &xo, &to, shown);
+        // the Project End marker (projend.rs)
+        crate::projend::ruler(app, ui, upper_r, &xo, &to);
     }
     // Autopunch's punch locators (the red strip)
     crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
