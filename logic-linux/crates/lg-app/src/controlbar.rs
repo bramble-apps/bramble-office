@@ -25,8 +25,15 @@ pub enum LcdMode {
     BeatsProject,
     /// Hours:minutes:seconds and bar.beat.division.tick.
     BeatsTime,
+    /// The musical position alone (lcdcustom.rs).
+    Beats,
     Time,
+    /// Columns ticked in Customize Control Bar and Display (lcdcustom.rs).
+    Custom,
 }
+
+/// The ⌄ menu's modes, in Logic's order.
+pub const LCD_MODES: [(LcdMode, &str); 5] = [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Beats, "Beats"), (LcdMode::Time, "Time"), (LcdMode::Custom, "Custom")];
 
 /// A button in a capsule: hover and lit cells as the suite's grouped buttons.
 fn button(ui: &mut egui::Ui, r: Rect, id: &str, on: bool, enabled: bool, tip: &str, draw: impl FnOnce(&egui::Painter, Rect, Color32)) -> egui::Response {
@@ -98,7 +105,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     let left_end = c.max.x;
 
     // ---- the LCD, centred; the transport before it
-    let lcd_w = 310.0;
+    let lcd_w = crate::lcdcustom::width(app);
     // (Logic's default transport: Go to Beginning / Stop, Play, Record, Cycle; Capture as
     // Recording, Replace and Autopunch only once ticked in Customize Control Bar)
     let extras = [app.cb_show.capture, app.cb_show.replace, app.cb_show.autopunch];
@@ -291,7 +298,7 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
     let bar_t = app.bar_ticks() as f64;
     let beat_t = lg_core::events::PPQ as f64 * 4.0 / app.project.as_ref().map_or(4.0, |pr| pr.signature.1 as f64);
     let bar_n = (pos / bar_t).floor() as i64 + 1;
-    let beat_n = ((pos % bar_t) / beat_t).floor() as i64 + 1;
+    let beat_n = (pos.rem_euclid(bar_t) / beat_t).floor() as i64 + 1;
     let big = look::regular(30.0);
     match app.lcd_mode {
         LcdMode::BeatsProject => {
@@ -315,6 +322,8 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
             tempo_cell(app, ui, p, cell(2.0));
             sig_key_cell(app, ui, p, cell(3.0));
         }
+        LcdMode::Beats => crate::lcdcustom::beats(app, p, lcd),
+        LcdMode::Custom => crate::lcdcustom::custom(app, ui, p, lcd),
         LcdMode::BeatsTime | LcdMode::Time => {
             let secs = app.seconds_at(pos);
             let h = (secs / 3600.0).floor();
@@ -324,8 +333,8 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
             // (Settings ▸ View ▸ Display Time As, the project's frame rate and SMPTE start)
             let time = crate::prefs::time_text(&app.logic_settings, &app.proj, secs);
             let div_t = beat_t / 4.0;
-            let div = ((pos % beat_t) / div_t).floor() as i64 + 1;
-            let tick = (pos % div_t).floor() as i64 + 1;
+            let div = (pos.rem_euclid(beat_t) / div_t).floor() as i64 + 1;
+            let tick = pos.rem_euclid(div_t).floor() as i64 + 1;
             let half = Rect::from_min_size(lcd.min, vec2(lcd.width() * 0.62, lcd.height()));
             let beats = crate::prefs::beats_text(&app.logic_settings, bar_n as i64, beat_n as i64, div, tick);
             let (top, bottom) = if app.lcd_mode == LcdMode::Time { (time, beats) } else { (beats, time) };
@@ -344,7 +353,7 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
     crate::glyphs::paint(p, Rect::from_center_size(m, vec2(14.0, 14.0)), ph::CARET_DOWN, 13.0, col);
     egui::Popup::menu(&resp).show(|ui| {
         ui.set_min_width(220.0);
-        for (mode, label) in [(LcdMode::BeatsProject, "Beats & Project"), (LcdMode::BeatsTime, "Beats & Time"), (LcdMode::Time, "Time")] {
+        for (mode, label) in LCD_MODES {
             if ui.add(egui::Button::selectable(app.lcd_mode == mode, label)).clicked() {
                 app.lcd_mode = mode;
                 ui.close();
@@ -471,7 +480,7 @@ fn master_volume(app: &mut App, ui: &mut egui::Ui, r: Rect) {
     }
 }
 
-fn short_key(k: &str) -> String {
+pub(crate) fn short_key(k: &str) -> String {
     // "C major" -> "Cmaj", "G minor" -> "Gmin"
     let mut it = k.split_whitespace();
     let root = it.next().unwrap_or("C");

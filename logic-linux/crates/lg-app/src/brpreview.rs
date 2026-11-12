@@ -128,23 +128,52 @@ fn start(app: &mut App, it: &Item) {
 fn chord(app: &mut App, it: &Item) {
     let cat = crate::browser::patch_category(&it.name);
     let program = crate::app::patch_program(&cat, &it.name);
+    let drums = is_kit(&cat, &it.category) || kit_named(&it.name);
     let sf = app.engine.lock().unwrap_or_else(|e| e.into_inner()).soundfont.clone();
     let name = it.name.clone();
-    let render = move || render_chord(sf.as_deref(), &name, program);
+    // (LG_PREVIEW_WAV=<dir>, for checks without a sound device: each chord also goes to a WAV)
+    let dump = std::env::var_os("LG_PREVIEW_WAV").map(std::path::PathBuf::from);
+    let render = move || {
+        let s = render_preview(sf.as_deref(), &name, program, drums);
+        if let Some(d) = dump {
+            let (l, r): (Vec<f32>, Vec<f32>) = s.chunks(2).map(|f| (f[0], f.get(1).copied().unwrap_or(0.0))).unzip();
+            let rate = crate::audio::RATE;
+            let _ = crate::projaudio::write_wav(&d.join(format!("{name}.wav")), &[l, r], rate, rate, 16);
+            eprintln!("LG_PREVIEW_WAV {name} program {program}");
+        }
+        s
+    };
     let gain = app.br.volume;
     crate::preview::play_rendered(app, &it.id, gain, CHORD_SECONDS + 0.5, render);
 }
 
+/// A drum kit patch (its preview plays the kit, not a chord).
+pub fn is_kit(category: &str, item_category: &str) -> bool {
+    [category, item_category].iter().any(|c| c.starts_with("Drum"))
+}
+
+/// A drum kit by its name: a Drummer / Drum Kit Designer kit, or a patch voiced on a kit.
+pub fn kit_named(name: &str) -> bool {
+    lg_sounds::for_kit(name).is_some() || lg_synth::patch(name).is_some_and(|s| s.engine == lg_synth::Engine::DrumKit)
+}
+
 /// The chord as stereo samples (with a short release tail).
 pub fn render_chord(soundfont: Option<&std::path::Path>, instrument: &str, program: u8) -> Vec<f32> {
+    render_preview(soundfont, instrument, program, false)
+}
+
+/// A patch's preview through the engine, apart from the song: the chord (all three notes even
+/// on a patch set to mono, as a preview of its sound), or for a drum kit a bar of the kit
+/// (kick, snare, hi-hat) on the drum channel.
+pub fn render_preview(soundfont: Option<&std::path::Path>, instrument: &str, program: u8, drums: bool) -> Vec<f32> {
     let mut e = crate::audio::Engine::new();
     e.tempo = 120.0;
     e.load_soundfont(soundfont);
     let ppq = lg_core::events::PPQ as f64;
     let len = (CHORD_SECONDS * 2.0 * ppq) as u32; // 120 BPM: two beats a second
-    let notes = chord_notes(len);
+    let notes = if drums { kit_notes(len) } else { chord_notes(len) };
     e.tracks = vec![crate::audio::PlayTrack {
-        channel: 0,
+        channel: if drums { 9 } else { 0 },
         program,
         notes,
         audio: Vec::new(),
@@ -161,7 +190,61 @@ pub fn render_chord(soundfont: Option<&std::path::Path>, instrument: &str, progr
         auto_pan: Vec::new(),
     }];
     e.program_changes();
+    if let Some(ins) = e.units.get_mut(0).and_then(|u| u.instrument.as_mut()) {
+        poly(ins.as_mut());
+    }
     crate::audio::render_offline(e, 0, len, 0.5, true)
+}
+
+/// A mono-set instrument made polyphonic (three voices at least) for the chord: Polyphony /
+/// Voices raised, Keyboard / Voice / MIDI Mono Mode set to Poly.
+pub fn poly(ins: &mut dyn lg_dsp::Instrument) {
+    let ps: Vec<(u32, &'static str, f32, &'static [&'static str])> = ins.params().iter().map(|p| (p.id, p.name, p.max, p.choices)).collect();
+    for (id, name, max, choices) in ps {
+        let v = ins.get(id);
+        match name {
+            "Polyphony" | "Voices" if choices.is_empty() => {
+                if v < 3.0 {
+                    ins.set(id, 3f32.min(max));
+                }
+            }
+            "Voices" => {
+                // (a menu: Mono, Legato, 2, 3 …)
+                if let Some(k) = choices.iter().position(|c| *c == "3") {
+                    if (v as usize) < k {
+                        ins.set(id, k as f32);
+                    }
+                }
+            }
+            n if (n.contains("Mono Mode") || n == "Keyboard Mode" || n == "Voice Mode") && !n.contains("Bend") => {
+                if let Some(k) = choices.iter().position(|c| *c == "Poly") {
+                    ins.set(id, k as f32);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A bar of the kit for its preview: kick on 1 and 3, snare on 2 (and 4 when it fits), closed
+/// hi-hat on the eighths, ending at `len`.
+pub fn kit_notes(len: u32) -> Vec<(u32, u32, u8, u8)> {
+    let ppq = lg_core::events::PPQ;
+    let eighth = ppq / 2;
+    let mut v = Vec::new();
+    let mut t = 0;
+    let mut k = 0;
+    while t < len {
+        v.push((t, t + eighth / 2, 42, 80));
+        match k % 4 {
+            0 => v.push((t, t + eighth, 36, 110)),
+            2 => v.push((t, t + eighth, 38, 105)),
+            _ => {}
+        }
+        t += eighth;
+        k += 1;
+    }
+    v
 }
 
 /// The chord's notes (start, end, pitch, velocity), all `len` ticks long.
@@ -225,5 +308,92 @@ mod tests {
         let secs = s.len() as f64 / 2.0 / crate::audio::RATE as f64;
         assert!((1.5..=2.1).contains(&secs), "{secs}");
         assert!(s.iter().any(|x| x.abs() > 1e-3), "the chord is audible");
+    }
+
+    /// Energy of `hz` in mono `x` (Goertzel).
+    fn tone(x: &[f32], hz: f32) -> f32 {
+        let w = 2.0 * std::f32::consts::PI * hz / crate::audio::RATE as f32;
+        let c = 2.0 * w.cos();
+        let (mut s1, mut s2) = (0f32, 0f32);
+        for &v in x {
+            let s0 = v + c * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        (s1 * s1 + s2 * s2 - c * s1 * s2).max(0.0).sqrt() / x.len().max(1) as f32
+    }
+
+    fn mono(s: &[f32]) -> Vec<f32> {
+        // (0.1 s to 0.9 s: the held chord)
+        let r = crate::audio::RATE as usize;
+        s.chunks(2).skip(r / 10).take(r * 8 / 10).map(|f| (f[0] + f.get(1).copied().unwrap_or(0.0)) / 2.0).collect()
+    }
+
+    fn hz(midi: u8) -> f32 {
+        440.0 * 2f32.powf((midi as f32 - 69.0) / 12.0)
+    }
+
+    #[test]
+    fn chord_has_its_three_pitches() {
+        for patch in ["Steinway Grand Piano", "Deluxe Classic"] {
+            let cat = crate::browser::patch_category(patch);
+            let s = render_chord(None, patch, crate::app::patch_program(&cat, patch));
+            let m = mono(&s);
+            let on: Vec<f32> = CHORD.iter().map(|&p| tone(&m, hz(p))).collect();
+            // (between the chord's notes: D and F, not played)
+            let off = tone(&m, hz(62)).max(tone(&m, hz(65)));
+            eprintln!("{patch}: chord {on:?} off {off}");
+            for (k, e) in on.iter().enumerate() {
+                assert!(*e > 2.0 * off, "{patch}: pitch {} missing ({on:?} vs {off})", CHORD[k]);
+            }
+        }
+    }
+
+    #[test]
+    fn two_patches_sound_different() {
+        let a = render_chord(None, "Steinway Grand Piano", crate::app::patch_program(&crate::browser::patch_category("Steinway Grand Piano"), "Steinway Grand Piano"));
+        let b = render_chord(None, "Classic Electric Piano", crate::app::patch_program(&crate::browser::patch_category("Classic Electric Piano"), "Classic Electric Piano"));
+        // harmonic profiles (C3's first eight partials), normalised
+        let prof = |s: &[f32]| {
+            let m = mono(s);
+            let v: Vec<f32> = (1..=8).map(|k| tone(&m, hz(60) * k as f32)).collect();
+            let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+            v.into_iter().map(|x| x / n).collect::<Vec<f32>>()
+        };
+        let (pa, pb) = (prof(&a), prof(&b));
+        let d: f32 = pa.iter().zip(&pb).map(|(x, y)| (x - y).abs()).sum();
+        eprintln!("profiles {pa:?} {pb:?} diff {d}");
+        assert!(d > 0.2, "the two patches sound alike: {d}");
+    }
+
+    fn patch(name: &str) -> Vec<f32> {
+        let cat = crate::browser::patch_category(name);
+        render_preview(None, name, crate::app::patch_program(&cat, name), is_kit(&cat, "") || kit_named(name))
+    }
+
+    #[test]
+    fn a_mono_bass_patch_still_previews_the_whole_chord() {
+        let m = mono(&patch("Big Stadium Bass"));
+        let on: Vec<f32> = CHORD.iter().map(|&p| tone(&m, hz(p))).collect();
+        let off = tone(&m, hz(62)).max(tone(&m, hz(65)));
+        eprintln!("Big Stadium Bass: {on:?} off {off}");
+        assert!(on.iter().all(|e| *e > 2.0 * off), "{on:?} vs {off}");
+    }
+
+    #[test]
+    fn kits_preview_a_bar_of_drums_with_their_own_kit() {
+        assert!(kit_named("SoCal") && kit_named("Bluebird") && !kit_named("Deluxe Classic"));
+        let a = patch("SoCal");
+        let b = patch("Bluebird");
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
+        assert!(rms(&a) > 1e-3 && rms(&b) > 1e-3);
+        // (the kick on beat 1 and the snare on beat 2: loud at both)
+        let r = crate::audio::RATE as usize;
+        let at = |x: &[f32], sec: f32| rms(&x[(sec * r as f32) as usize * 2..((sec + 0.1) * r as f32) as usize * 2]);
+        assert!(at(&a, 0.0) > 1e-3 && at(&a, 0.5) > 1e-3);
+        let n = a.len().min(b.len());
+        let d: f32 = a[..n].iter().zip(&b[..n]).map(|(x, y)| (x - y).abs()).sum::<f32>() / n as f32;
+        assert!(d > 1e-4, "two kits of different character sound the same");
+        assert_eq!(kit_notes(2880).iter().filter(|n| n.2 == 36).count(), 2);
     }
 }

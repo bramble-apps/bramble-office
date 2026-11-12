@@ -215,6 +215,12 @@ pub struct Engine {
     /// (projend.rs); `ended` tells the app it did.
     pub end: Option<u32>,
     pub ended: bool,
+    /// Live Loops cells are playing: at the end the playhead stops (`past_end`, the app shows
+    /// it at the end) while the song runs on under the cells.
+    pub cells_run: bool,
+    pub past_end: bool,
+    /// The Project Start (ticks, 0 or before bar 1): the playhead goes no earlier.
+    pub start: f64,
     /// The metronome click (K): on every beat, higher on the bar's first (Logic's Klopfgeist).
     pub metronome: bool,
     /// Project Settings ▸ Metronome: what clicks and how it sounds.
@@ -312,7 +318,7 @@ struct Voice {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), varispeed: 1.0, tracks: Vec::new(), cycle: None, cycle_on: false, end: None, ended: false, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
+        Engine { playing: false, pos: 0.0, tempo: 120.0, tempo_map: Vec::new(), varispeed: 1.0, tracks: Vec::new(), cycle: None, cycle_on: false, end: None, ended: false, cells_run: false, past_end: false, start: 0.0, metronome: false, click_cfg: ClickCfg::default(), beats_per_bar: 4, click: None, clicks: Vec::new(), master: 1.0, meters: Vec::new(), master_meter: 0.0, sf: None, synths: Vec::new(), eqs: Vec::new(), voices: Vec::new(), units: Vec::new(), auxes: Vec::new(), aux_units: Vec::new(), aux_meters: Vec::new(), buses: Vec::new(), side_src: Vec::new(), fx_side: Default::default(), side_out: Vec::new(), bus_prev: Vec::new(), track_out: Vec::new(), track_bypass: Vec::new(), master_inserts: Vec::new(), master_bypass: Vec::new(), master_units: Units::default(), gr: Vec::new(), aux_gr: Vec::new(), master_gr: 0.0, compensate: true, pre_fader_meters: false, plan_for: Vec::new(), plan: Default::default(), edge_delays: Vec::new(), sounding: Vec::new(), soundfont: None, error: None, rec: Default::default(), param_auto: Vec::new(), arp: Default::default(), fx: Default::default(), timeline: Default::default(), chase_notes: true, chase_due: false, chase: Default::default(), live_channel: 0, was_playing: false, surround: None, ext: Default::default()  }
     }
 
     /// Loads a SoundFont for the instruments (None: the system's General MIDI one, if any).
@@ -616,7 +622,8 @@ impl Engine {
 
     pub fn locate(&mut self, ticks: f64) {
         self.all_off();
-        self.pos = ticks.max(0.0);
+        self.pos = ticks.max(self.start.min(0.0));
+        self.past_end = false;
         self.chase_due = true;
     }
 
@@ -756,11 +763,12 @@ impl Engine {
                 let div = PPQ as f64 / 4.0;
                 let next = (from / div).ceil() * div;
                 if next < to {
-                    let n = (next / div).round() as u32;
+                    // (before bar 1, from a Project Start moved earlier: counted back from bar 1)
+                    let n = (next / div).round() as i64;
                     // (signature changes: beats and bars from the signature map)
-                    let (on_beat, bar, group) = if self.timeline.points.is_empty() {
-                        let on_beat = n % 4 == 0;
-                        (on_beat, on_beat && (n / 4) % self.beats_per_bar.max(1) == 0, false)
+                    let (on_beat, bar, group) = if self.timeline.points.is_empty() || next < 0.0 {
+                        let on_beat = n.rem_euclid(4) == 0;
+                        (on_beat, on_beat && n.div_euclid(4).rem_euclid(self.beats_per_bar.max(1) as i64) == 0, false)
                     } else {
                         let (_, start, sig) = self.timeline.bar_of(next as u32);
                         let beat = lg_core::timeline::Map::beat_len(sig);
@@ -793,7 +801,9 @@ impl Engine {
             // runs on and moves the end, projend.rs)
             let cycling = self.cycle_on && self.cycle.is_some_and(|(a, b)| b > a);
             if let Some(end) = self.end.filter(|_| !cycling && !self.rec.capturing && self.playing) {
-                if self.pos >= end as f64 {
+                if self.pos >= end as f64 && self.cells_run {
+                    self.past_end = true;
+                } else if self.pos >= end as f64 {
                     self.pos = end as f64;
                     self.playing = false;
                     self.all_off();

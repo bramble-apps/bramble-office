@@ -80,6 +80,8 @@ pub fn press(app: &mut App) {
     let cycle = if app.cycle_on() { Some(app.cycle.0) } else { None };
     let region = app.selected_region.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r).map(|g| g.start));
     let to = stopped_target(&o, app.position(), marquee, cycle, region);
+    // (the project start: 1 1 1 1, or earlier when moved)
+    let to = if to == 0.0 { crate::projend::start(app) as f64 } else { to };
     app.locate(to);
 }
 

@@ -16,12 +16,22 @@ pub fn end(app: &App) -> u32 {
 /// Options: Stop and Go to Left Locator / Last Locate Position); recording moves the end on.
 pub fn frame(app: &mut App) {
     let end = end(app);
-    // (Live Loops: playing cells go on at the end, so the song does too)
-    let want = (!app.live_loops.any_active()).then_some(end);
+    // (Live Loops: at the end the playhead stops while playing cells go on; once they've all
+    // stopped, the song stops there too)
+    let cells = app.live_loops.any_active();
     let (ended, pos) = {
         let mut e = app.engine.lock().unwrap_or_else(|e| e.into_inner());
-        if e.end != want {
-            e.end = want;
+        e.end = Some(end);
+        e.start = start(app) as f64;
+        e.cells_run = cells;
+        if e.past_end && (!cells || !e.playing) {
+            e.past_end = false;
+            e.pos = end as f64;
+            if e.playing {
+                e.playing = false;
+                e.all_off();
+                e.ended = true;
+            }
         }
         (std::mem::take(&mut e.ended), e.pos)
     };
@@ -58,30 +68,88 @@ pub fn marker(x: f32, cy: f32) -> [egui::Pos2; 3] {
     [pos2(x + 8.0, cy - 5.5), pos2(x + 1.0, cy), pos2(x + 8.0, cy + 5.5)]
 }
 
-/// The ruler's end marker; dragging it (Trim pointer) moves the end by bars, one undo step.
+/// Where the Project Start is kept with the project's settings (its .logicx place isn't known
+/// yet; the end is in the file).
+const START_KEY: &str = "State / Project / Start";
+
+/// A project opened: its Project Start.
+pub fn after_open(app: &mut App) {
+    let s = app.proj.0.get(START_KEY).and_then(|v| v.parse::<i32>().ok()).unwrap_or(0).min(0);
+    if let Some(p) = app.project.as_mut() {
+        p.start = s;
+    }
+}
+
+/// The project saved: its Project Start beside it.
+pub fn store(app: &mut App) {
+    match start(app) {
+        0 => {
+            app.proj.0.remove(START_KEY);
+        }
+        s => {
+            app.proj.0.insert(START_KEY.into(), s.to_string());
+        }
+    }
+}
+
+/// The Project Start (ticks from bar 1; 0 or earlier).
+pub fn start(app: &App) -> i32 {
+    app.project.as_ref().map_or(0, |p| p.start)
+}
+
+/// How far left the Tracks area scrolls (bars): to the Project Start.
+pub fn min_scroll(app: &App) -> f32 {
+    start(app) as f32 / app.bar_ticks().max(1) as f32
+}
+
+/// The Project Start's triangle: Logic's at 2x, 7 × 11 pt, flat side 8 pt before the start,
+/// tip 1 pt before.
+pub fn start_marker(x: f32, cy: f32) -> [egui::Pos2; 3] {
+    [pos2(x - 8.0, cy - 5.5), pos2(x - 1.0, cy), pos2(x - 8.0, cy + 5.5)]
+}
+
+/// The ruler's Project Start and End markers; dragging one (Trim pointer) moves it by bars, one
+/// undo step, a help tag giving both. The start moves right only back to bar 1.
 pub fn ruler(app: &mut App, ui: &mut egui::Ui, upper: Rect, x_of: &dyn Fn(f32) -> f32, tick_of: &dyn Fn(f32) -> f32) {
     let Some(sig) = app.project.as_ref().map(|p| p.signature) else { return };
-    let x = x_of(end(app) as f32);
-    if x < upper.min.x - 10.0 || x > upper.max.x + 10.0 {
-        return;
-    }
     let cy = upper.min.y + 7.5;
     let p = ui.painter_at(upper);
-    p.add(egui::Shape::convex_polygon(marker(x, cy).to_vec(), egui::Color32::from_gray(0x54), Stroke::NONE));
-    let hit = Rect::from_min_max(pos2(x - 2.0, upper.min.y), pos2(x + 10.0, upper.max.y));
-    let resp = ui.interact(hit, ui.scope_id().with("project-end"), Sense::drag()).on_hover_text("Project End");
-    if resp.hovered() || resp.dragged() {
-        ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
-    }
-    if resp.drag_started() {
-        app.checkpoint("Project End");
-    }
-    if let (true, Some(pp)) = (resp.dragged(), resp.interact_pointer_pos()) {
-        let t = tick_of(pp.x);
-        if let Some(pr) = app.project.as_mut() {
-            let e = lg_core::projend::snap_end(pr, t);
-            pr.end = Some(e);
-            app.help_tag = Some(vec![("Project".into(), String::new()), ("Start:".into(), crate::app::bbdt(0, sig)), ("End:".into(), crate::app::bbdt(e, sig))]);
+    let grey = egui::Color32::from_gray(0x54);
+    let xs = x_of(start(app) as f32);
+    let xe = x_of(end(app) as f32);
+    p.add(egui::Shape::convex_polygon(start_marker(xs, cy).to_vec(), grey, Stroke::NONE));
+    p.add(egui::Shape::convex_polygon(marker(xe, cy).to_vec(), grey, Stroke::NONE));
+    let div = app.nav.division;
+    let tag = |pr: &lg_core::Project| -> Vec<(String, String)> {
+        vec![
+            ("Project".into(), String::new()),
+            ("Start:".into(), crate::lcdcustom::bars_text(pr.start as f64, sig, div)),
+            ("End:".into(), crate::lcdcustom::bars_text(lg_core::projend::end(pr) as f64, sig, div)),
+        ]
+    };
+    for (is_start, x) in [(true, xs), (false, xe)] {
+        if x < upper.min.x - 10.0 || x > upper.max.x + 10.0 {
+            continue;
+        }
+        let hit = if is_start { Rect::from_min_max(pos2(x - 10.0, upper.min.y), pos2(x + 1.0, upper.max.y)) } else { Rect::from_min_max(pos2(x - 1.0, upper.min.y), pos2(x + 10.0, upper.max.y)) };
+        let name = if is_start { "Project Start" } else { "Project End" };
+        let resp = ui.interact(hit, ui.scope_id().with(name), Sense::drag()).on_hover_text(name);
+        if resp.hovered() || resp.dragged() {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+        }
+        if resp.drag_started() {
+            app.checkpoint(name);
+        }
+        if let (true, Some(pp)) = (resp.dragged(), resp.interact_pointer_pos()) {
+            let t = tick_of(pp.x);
+            if let Some(pr) = app.project.as_mut() {
+                if is_start {
+                    pr.start = lg_core::projend::snap_start(pr, t);
+                } else {
+                    pr.end = Some(lg_core::projend::snap_end(pr, t));
+                }
+                app.help_tag = Some(tag(pr));
+            }
         }
     }
 }
@@ -112,6 +180,23 @@ mod tests {
         assert!(!e.playing);
         assert!(e.ended);
         assert_eq!(e.pos, 3840.0);
+    }
+
+    #[test]
+    fn cells_run_on_past_the_end_with_the_playhead_held() {
+        let mut e = crate::audio::Engine::new();
+        e.end = Some(3840);
+        e.cells_run = true;
+        e.pos = 3800.0;
+        e.playing = true;
+        let mut buf = vec![0f32; 2 * 512];
+        for _ in 0..200 {
+            e.render(&mut buf);
+        }
+        assert!(e.playing && e.past_end && !e.ended);
+        assert!(e.pos > 3840.0);
+        e.locate(0.0);
+        assert!(!e.past_end);
     }
 
     #[test]

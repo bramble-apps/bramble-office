@@ -119,6 +119,8 @@ pub struct App {
     pub solo_mode: bool,
     pub count_in: bool,
     pub lcd_mode: crate::controlbar::LcdMode,
+    /// The LCD's Custom columns and its Division / Project End fields (lcdcustom.rs).
+    pub lcdc: crate::lcdcustom::State,
     pub right_pane: Option<RightPane>,
     /// Recording (MIDI from the inputs and Musical Typing): where it began.
     pub record_from: Option<f64>,
@@ -412,6 +414,7 @@ impl App {
             solo_mode: false,
             count_in: true,
             lcd_mode: crate::controlbar::LcdMode::BeatsProject,
+            lcdc: Default::default(),
             right_pane: None,
             record_from: None,
             selected_regions: Vec::new(),
@@ -909,7 +912,12 @@ impl App {
     }
 
     pub fn position(&self) -> f64 {
-        self.engine().pos
+        let e = self.engine();
+        // (Live Loops cells running on past the Project End: the playhead stays there)
+        match e.end {
+            Some(end) if e.past_end => e.pos.min(end as f64),
+            _ => e.pos,
+        }
     }
 
     pub fn cycle_on(&self) -> bool {
