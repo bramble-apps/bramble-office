@@ -1105,7 +1105,7 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
 /// one to move it), Tempo (the tempo as a line; drag up or down), Signature (time and key).
 fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
     let p = ui.painter_at(area);
-    p.rect_filled(area, 0.0, look::header_bg());
+    p.rect_filled(area, 0.0, look::ta_header());
     // the headers' right-click menu: which global tracks show (Studio adds Transposition)
     let heads = Rect::from_min_max(area.min, pos2(lanes_x, area.max.y));
     let hresp = ui.interact(heads, ui.scope_id().with("global-heads"), Sense::click());
@@ -1130,11 +1130,30 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         .collect();
     for &(kind, row) in &placed {
         let n = crate::globals::KINDS[kind];
+        // (Logic: grey lanes for Arrangement, Marker and Signature, near-black for Tempo and
+        // Chord; the headers' grey; names in white 13.5 pt, 20 pt in)
+        let split = lanes_x - LANE_INSET;
+        let lane_fill = match kind {
+            crate::globals::TEMPO | crate::globals::CHORD => Color32::from_gray(0x0d),
+            crate::globals::ARRANGEMENT | crate::globals::MARKER | crate::globals::SIGNATURE => Color32::from_gray(0x30),
+            _ => look::ta_lane(),
+        };
+        if !kn_ui::theme::is_light() {
+            p.rect_filled(Rect::from_min_max(pos2(split, row.min.y), row.max), 0.0, lane_fill);
+        }
+        if matches!(kind, crate::globals::TEMPO | crate::globals::CHORD) {
+            let lp = ui.painter_at(Rect::from_min_max(pos2(lanes_x, row.min.y), row.max));
+            let b0 = scroll.floor() as i32;
+            for b in b0..b0 + ((row.max.x - lanes_x) / bw).ceil() as i32 + 1 {
+                lp.vline(x_of(b as f32 * bar_t), row.min.y..=row.max.y - 1.0, Stroke::new(1.0, look::ta_bar_line()));
+            }
+        }
         crate::globals::header(app, ui, kind, row, lanes_x);
-        p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
+        p.hline(row.min.x..=split, row.max.y - 0.5, Stroke::new(1.0, look::ta_header_sep()));
+        p.hline(split..=row.max.x, row.max.y - 0.5, Stroke::new(1.0, look::ta_lane_line()));
         if kind != crate::globals::MOVIE {
             let n = if kind == crate::globals::ARRANGEMENT { crate::arrmarks::header_name(app) } else { n };
-            p.text(pos2(row.min.x + 14.0, row.min.y + GLOBAL_ROW / 2.0), Align2::LEFT_CENTER, n, look::semibold(12.0), look::text_dim());
+            p.text(pos2(row.min.x + 20.0, row.min.y + 10.5), Align2::LEFT_CENTER, n, look::regular(13.5), look::text());
         }
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
         let lp = ui.painter_at(lane);
@@ -1158,7 +1177,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         let plus = Rect::from_center_size(pos2(lanes_x - LANE_INSET - 18.0, row.min.y + GLOBAL_ROW / 2.0), vec2(18.0, 18.0));
         let presp = ui.interact(plus, ui.scope_id().with(("gplus", i)), Sense::click()).on_hover_text(format!("Add to the {n} track"));
         if i != 2 {
-            crate::glyphs::paint(&p, plus, crate::glyphs::ph::PLUS_CIRCLE, 17.0, if presp.hovered() { look::text() } else { look::text_dim() });
+            crate::glyphs::paint(&p, plus, crate::glyphs::ph_fill::PLUS_CIRCLE, 19.0, if presp.hovered() { Color32::WHITE } else { look::text() });
         }
         let i = match i {
             0 => {
