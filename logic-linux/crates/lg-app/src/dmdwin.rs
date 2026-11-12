@@ -41,11 +41,36 @@ pub struct Ui {
     pub page: usize,
     pub clip: Option<(PadDoc, Vec<(u32, f32)>)>,
     pub rename: Option<(u8, String)>,
+    /// Kit Action: Select Pad by Key, Show GM Drum Names, Hide Kit Piece Icons.
+    pub select_by_key: bool,
+    pub gm_names: bool,
+    pub hide_icons: bool,
+    /// A pad being dragged onto another (they swap), and the pad held down by its speaker.
+    pub drag_from: Option<u8>,
+    pub held: Option<u8>,
+    pub kit_rename: Option<String>,
 }
 
 impl Default for Ui {
     fn default() -> Self {
-        Ui { selected: FIRST_PAD, page: 0, clip: None, rename: None }
+        Ui { selected: FIRST_PAD, page: 0, clip: None, rename: None, select_by_key: false, gm_names: false, hide_icons: false, drag_from: None, held: None, kit_rename: None }
+    }
+}
+
+#[allow(dead_code)]
+pub const COMMANDS: &[&str] = &["Select Pad by Key", "Show GM Drum Names", "Hide Kit Piece Icons", "Clear All Pads", "Update All Kit Names", "Cut Pad"];
+
+/// General MIDI percussion names (the GM standard's list), for Show GM Drum Names.
+pub fn gm_name(n: u8) -> &'static str {
+    const N: [&str; 47] = ["Acoustic Bass Drum", "Bass Drum 1", "Side Stick", "Acoustic Snare", "Hand Clap", "Electric Snare", "Low Floor Tom", "Closed Hi-Hat", "High Floor Tom", "Pedal Hi-Hat", "Low Tom", "Open Hi-Hat", "Low-Mid Tom", "Hi-Mid Tom", "Crash Cymbal 1", "High Tom", "Ride Cymbal 1", "Chinese Cymbal", "Ride Bell", "Tambourine", "Splash Cymbal", "Cowbell", "Crash Cymbal 2", "Vibraslap", "Ride Cymbal 2", "Hi Bongo", "Low Bongo", "Mute Hi Conga", "Open Hi Conga", "Low Conga", "High Timbale", "Low Timbale", "High Agogo", "Low Agogo", "Cabasa", "Maracas", "Short Whistle", "Long Whistle", "Short Guiro", "Long Guiro", "Claves", "Hi Wood Block", "Low Wood Block", "Mute Cuica", "Open Cuica", "Mute Triangle", "Open Triangle"];
+    if (35..82).contains(&n) { N[(n - 35) as usize] } else { "" }
+}
+
+/// Select Pad by Key: a played note selects its pad (Logic: live keys only, not regions).
+pub fn note_played(app: &mut App, pitch: u8) {
+    if app.inst.dmd.select_by_key && (FIRST_PAD..FIRST_PAD + PADS as u8).contains(&pitch) {
+        app.inst.dmd.selected = pitch;
+        app.inst.dmd.page = ((pitch - FIRST_PAD) / 16) as usize;
     }
 }
 
@@ -128,6 +153,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let Some((params, vals)) = instwin::values(app, t) else { return };
     let get = |pid: u32| params.iter().position(|x| x.id == pid).map(|i| vals[i]).unwrap_or(0.0);
     let track = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
+    let (track_mute, track_solo) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| (tr.mute, tr.solo)).unwrap_or_default();
     let names: Vec<String> = (FIRST_PAD..FIRST_PAD + PADS as u8).map(|n| pad_name(app, t, &pads, n)).collect();
     let dropped = std::mem::take(&mut app.inst.dropped);
     let drop_pos = app.inst.drop_pos;
@@ -142,15 +168,71 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         Paste(u8),
         Rename(u8, String),
         QuickSet(u8, u32, f32),
+        Swap(u8, u8),
+        Stop(u8),
+        StopAll,
+        TrackMute,
+        TrackSolo,
+        RenameKit(String),
     }
     let mut acts: Vec<A> = Vec::new();
     let qvals: Option<(Vec<lg_dsp::Param>, Vec<f32>)> = instwin::with_inst(app, t, |d: &mut DrumMachineDesigner| d.pad_quick(st.selected).map(|q| {
-        let p = lg_dsp::Plugin::params(q).to_vec();
+        use lg_synth::quick as qk;
+        let shown = [qk::MODE, qk::ROOT, qk::START, qk::END, qk::LOOP_MODE, qk::TUNE, qk::REVERSE, qk::FADE_IN, qk::FADE_OUT, qk::VOLUME, qk::FILTER_ON, qk::CUTOFF, qk::RESO, lg_synth::sampler_synth::ENV1 + 2, lg_synth::sampler_synth::ENV1 + 5, lg_synth::sampler_synth::ENV1 + 6, lg_synth::sampler_synth::ENV1 + 7];
+        let p: Vec<lg_dsp::Param> = lg_dsp::Plugin::params(q).iter().filter(|x| shown.contains(&x.id)).cloned().collect();
         let v = p.iter().map(|x| lg_dsp::Plugin::get(q, x.id)).collect();
         (p, v)
     })).flatten();
     let resp = egui::Window::new(format!("{track} — Drum Machine Designer")).id(egui::Id::unique(("dmd-window", t))).open(&mut open).collapsible(false).resizable(true).default_size(vec2(760.0, 720.0)).show(ctx, |ui| {
+        // the kit controls bar: the kit icon (a click stops every sound), the kit's name
+        // (double-click renames the kit and its track), Mute, Solo and the Action pop-up
         ui.horizontal(|ui| {
+            if ui.add(egui::Button::new(crate::glyphs::ph::SPEAKER_SIMPLE_X).frame(false)).on_hover_text("Stop all kit pieces").clicked() {
+                acts.push(A::StopAll);
+            }
+            match st.kit_rename.as_mut() {
+                Some(n) => {
+                    let te = ui.add(egui::TextEdit::singleline(n).desired_width(160.0));
+                    crate::widgets::focus_once(ui, &te);
+                    if te.lost_focus() {
+                        acts.push(A::RenameKit(n.clone()));
+                    }
+                }
+                None => {
+                    if ui.add(egui::Label::new(egui::RichText::new(&track).strong()).sense(Sense::click())).on_hover_text("Double-click to rename the kit and its track").double_clicked() {
+                        st.kit_rename = Some(track.clone());
+                    }
+                }
+            }
+            if ui.add(egui::Button::selectable(track_mute, "M")).on_hover_text("Mute the kit (main track)").clicked() {
+                acts.push(A::TrackMute);
+            }
+            if ui.add(egui::Button::selectable(track_solo, "S")).on_hover_text("Solo the kit").clicked() {
+                acts.push(A::TrackSolo);
+            }
+            ui.menu_button("…", |ui| {
+                ui.set_min_width(240.0);
+                if ui.add(egui::Button::selectable(st.select_by_key, "Select Pad by Key")).clicked() {
+                    st.select_by_key = !st.select_by_key;
+                    ui.close();
+                }
+                if ui.button(if st.gm_names { "Hide GM Drum Names" } else { "Show GM Drum Names" }).clicked() {
+                    st.gm_names = !st.gm_names;
+                    ui.close();
+                }
+                if ui.button(if st.hide_icons { "Show Kit Piece Icons" } else { "Hide Kit Piece Icons" }).clicked() {
+                    st.hide_icons = !st.hide_icons;
+                    ui.close();
+                }
+                ui.separator();
+                for c in ["Update All Kit Names", "Clear All Pads"] {
+                    if ui.button(c).clicked() {
+                        acts.push(A::Cmd(c));
+                        ui.close();
+                    }
+                }
+            });
+            ui.separator();
             ui.label(egui::RichText::new("Kit").color(look::text_dim()));
             let cur = get(2).round() as usize;
             ui.menu_button(format!("{} ⌄", dmd::STYLES.get(cur).copied().unwrap_or("")), |ui| {
@@ -168,13 +250,6 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                     set.push((pid, v));
                 }
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                for pg in (0..3).rev() {
-                    if ui.add(egui::Button::selectable(st.page == pg, format!("{}", pg + 1))).on_hover_text("Pad page").clicked() {
-                        st.page = pg;
-                    }
-                }
-            });
         });
         // the grid: 4 × 4, bottom left the page's first pad
         let (grid, _) = ui.allocate_exact_size(vec2(ui.available_width(), 330.0), Sense::hover());
@@ -189,18 +264,73 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 let k = row * 4 + col;
                 let note = first + k as u8;
                 let r = Rect::from_min_size(pos2(grid.min.x + gap + col as f32 * (pw + gap), grid.max.y - gap - (row as f32 + 1.0) * (ph + gap) + gap), vec2(pw, ph));
-                let resp = ui.interact(r, ui.scope_id().with(("pad", note)), Sense::click());
+                let resp = ui.interact(r, ui.scope_id().with(("pad", note)), Sense::click_and_drag());
                 let sel = st.selected == note;
                 let has_sample = pads.pads.get(&note).is_some_and(|x| x.audio.is_some());
                 let muted = pads.muted.contains(&note);
                 let solo = pads.soloed.contains(&note);
                 let base = if has_sample { Color32::from_rgb(0x3d, 0x7f, 0xb8) } else { Color32::from_rgb(0x5a, 0x4a, 0x8a) };
-                p.rect_filled(r, 8.0, if resp.hovered() { look::mix(base, Color32::WHITE, 0.15) } else { base }.gamma_multiply(if muted { 0.35 } else { 1.0 }));
+                let any_solo = !pads.soloed.is_empty();
+                let dim = muted || (any_solo && !solo);
+                let target = st.drag_from.is_some_and(|f| f != note) && resp.contains_pointer();
+                p.rect_filled(r, 8.0, if resp.hovered() || target { look::mix(base, Color32::WHITE, 0.15) } else { base }.gamma_multiply(if dim { 0.35 } else { 1.0 }));
+                if target {
+                    p.rect_stroke(r, 8.0, Stroke::new(2.0, Color32::from_rgb(0x3c, 0x9c, 0xf0)), egui::StrokeKind::Inside);
+                }
                 if sel {
                     p.rect_stroke(r, 8.0, Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Inside);
                 }
                 let name = names.get((note - FIRST_PAD) as usize).cloned().unwrap_or_default();
                 p.with_clip_rect(r.shrink(4.0)).text(r.center(), Align2::CENTER_CENTER, name, look::semibold(12.0), Color32::WHITE);
+                if st.gm_names {
+                    p.with_clip_rect(r.shrink(4.0)).text(r.center() + vec2(0.0, 16.0), Align2::CENTER_CENTER, gm_name(note), look::regular(10.0), Color32::from_white_alpha(170));
+                }
+                // hover: Mute, Solo, the speaker (plays while held) and the Action pop-up
+                if resp.hovered() || muted || solo {
+                    let b = |i: usize| Rect::from_min_size(pos2(r.max.x - 22.0 * (i as f32 + 1.0) - 4.0, r.max.y - 24.0), vec2(20.0, 18.0));
+                    for (i, (label, on, cmd)) in [("S", solo, "Solo Pad"), ("M", muted, "Mute Pad")].iter().enumerate() {
+                        let br = b(i);
+                        let bresp = ui.interact(br, ui.scope_id().with(("padbtn", note, i)), Sense::click());
+                        p.rect_filled(br, 4.0, if *on { if i == 0 { Color32::from_rgb(0xe8, 0xc0, 0x3c) } else { Color32::from_rgb(0x3c, 0x9c, 0xf0) } } else { Color32::from_black_alpha(90) });
+                        p.text(br.center(), Align2::CENTER_CENTER, *label, look::semibold(10.5), Color32::WHITE);
+                        if bresp.clicked() {
+                            st.selected = note;
+                            acts.push(A::Cmd(cmd));
+                        }
+                    }
+                }
+                if resp.hovered() {
+                    let sr = Rect::from_min_size(r.left_top() + vec2(6.0, 18.0), vec2(18.0, 18.0));
+                    let sresp = ui.interact(sr, ui.scope_id().with(("padspk", note)), Sense::click_and_drag()).on_hover_text("Play (hold)");
+                    crate::glyphs::paint(&p, sr, if has_sample || !st.hide_icons { crate::glyphs::ph::SPEAKER_HIGH } else { crate::glyphs::ph::PLUS }, 14.0, Color32::WHITE);
+                    if sresp.is_pointer_button_down_on() && st.held.is_none() {
+                        st.held = Some(note);
+                        acts.push(A::Play(note));
+                    }
+                }
+                if st.held == Some(note) && !ui.input(|i| i.pointer.any_down()) {
+                    st.held = None;
+                    acts.push(A::Stop(note));
+                }
+                if resp.double_clicked() {
+                    st.rename = Some((note, pads.pads.get(&note).map(|x| x.name.clone()).unwrap_or_default()));
+                }
+                if resp.drag_started() {
+                    st.drag_from = Some(note);
+                }
+                if resp.drag_stopped() {
+                    let to = ui.ctx().pointer_interact_pos().and_then(|pp| (0..16).map(|kk| first + kk as u8).find(|&nn| {
+                        let kk = (nn - first) as usize;
+                        let (rw, cl) = (kk / 4, kk % 4);
+                        Rect::from_min_size(pos2(grid.min.x + gap + cl as f32 * (pw + gap), grid.max.y - gap - (rw as f32 + 1.0) * (ph + gap) + gap), vec2(pw, ph)).contains(pp)
+                    }));
+                    if let (Some(f), Some(tn)) = (st.drag_from, to)
+                        && f != tn
+                    {
+                        acts.push(A::Swap(f, tn));
+                    }
+                    st.drag_from = None;
+                }
                 p.text(r.left_top() + vec2(6.0, 4.0), Align2::LEFT_TOP, lg_synth::sampler_doc::note_name(note), look::regular(10.0), Color32::from_white_alpha(180));
                 if has_sample {
                     crate::glyphs::paint(&p, Rect::from_min_size(r.right_top() + vec2(-20.0, 4.0), vec2(16.0, 16.0)), crate::glyphs::ph::WAVEFORM, 13.0, Color32::from_white_alpha(200));
@@ -240,6 +370,12 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                         st.clip = Some((pads.pads.get(&note).cloned().unwrap_or_default(), pp));
                         ui.close();
                     }
+                    if ui.button("Cut Pad").clicked() {
+                        let pp: Vec<(u32, f32)> = (0..7).map(|f| (f as u32, get(dmd::pad_param((note - FIRST_PAD) as usize, f)))).collect();
+                        st.clip = Some((pads.pads.get(&note).cloned().unwrap_or_default(), pp));
+                        acts.push(A::Cmd("Clear Pad"));
+                        ui.close();
+                    }
                     if ui.add_enabled(st.clip.is_some(), egui::Button::new("Paste Pad")).clicked() {
                         acts.push(A::Paste(note));
                         ui.close();
@@ -262,6 +398,22 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
             }
         }
         let _ = drop_i;
+        ui.horizontal(|ui| {
+            ui.add_space(ui.available_width() / 2.0 - 44.0);
+            if ui.add_enabled(st.page > 0, egui::Button::new(crate::glyphs::ph::CARET_LEFT).frame(false)).on_hover_text("Previous pad page").clicked() {
+                st.page -= 1;
+            }
+            for pg in 0..3 {
+                let (r, resp) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::click());
+                ui.painter().circle(r.center(), 4.0, if st.page == pg { Color32::WHITE } else { Color32::TRANSPARENT }, Stroke::new(1.0, Color32::from_gray(0xb0)));
+                if resp.on_hover_text(format!("Pad page {}", pg + 1)).clicked() {
+                    st.page = pg;
+                }
+            }
+            if ui.add_enabled(st.page < 2, egui::Button::new(crate::glyphs::ph::CARET_RIGHT).frame(false)).on_hover_text("Next pad page").clicked() {
+                st.page += 1;
+            }
+        });
         ui.separator();
         // the selected pad's sound
         let note = st.selected;
@@ -400,6 +552,37 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 }
             }
             A::Rename(n, name) => edit(app, t, "Rename Pad", |p| p.pads.entry(n).or_default().name = name.clone()),
+            A::Swap(a, b) => swap(app, t, a, b),
+            A::Stop(n) => {
+                if let Ok(mut e) = app.engine.lock() {
+                    e.live(t, n, 0);
+                }
+            }
+            A::StopAll => {
+                instwin::with_inst(app, t, |d: &mut DrumMachineDesigner| lg_dsp::Plugin::reset(d));
+            }
+            A::TrackMute | A::TrackSolo => {
+                app.checkpoint(if matches!(a, A::TrackMute) { "Mute Track" } else { "Solo Track" });
+                if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                    if matches!(a, A::TrackMute) {
+                        tr.mute = !tr.mute;
+                    } else {
+                        tr.solo = !tr.solo;
+                    }
+                }
+                app.dirty = true;
+                app.sync_mix();
+            }
+            A::RenameKit(n) => {
+                app.inst.dmd.kit_rename = None;
+                if !n.trim().is_empty() {
+                    app.checkpoint("Rename Track");
+                    if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                        tr.name = n.trim().to_string();
+                    }
+                    app.dirty = true;
+                }
+            }
             A::QuickSet(n, pid, v) => {
                 // straight into the running pad (no rebuild while dragging), and kept
                 instwin::checkpoint_once(app, ctx, t, "Pad Setting");
@@ -424,6 +607,41 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         app.plugin_window = None;
         app.inst.rect = None;
     }
+}
+
+/// Two pads trade their sounds (sample, settings, drum parameters, mute / solo); the pads keep
+/// their notes (Logic's Reorder Pads ▸ Change Sounds).
+fn swap(app: &mut App, t: usize, a: u8, b: u8) {
+    let Some((params, vals)) = instwin::values(app, t) else { return };
+    let get = |pid: u32| params.iter().position(|x| x.id == pid).map(|i| vals[i]).unwrap_or(0.0);
+    let (ka, kb) = ((a - FIRST_PAD) as usize, (b - FIRST_PAD) as usize);
+    let mut set = Vec::new();
+    for f in 0..7 {
+        let (va, vb) = (get(dmd::pad_param(ka, f)), get(dmd::pad_param(kb, f)));
+        // a drum's source note stays the drum's (it moves with the sound)
+        set.push((dmd::pad_param(ka, f), vb));
+        set.push((dmd::pad_param(kb, f), va));
+    }
+    edit(app, t, "Move Pad", |p| {
+        let (pa, pb) = (p.pads.remove(&a), p.pads.remove(&b));
+        if let Some(x) = pa {
+            p.pads.insert(b, x);
+        }
+        if let Some(x) = pb {
+            p.pads.insert(a, x);
+        }
+        for set in [&mut p.muted, &mut p.soloed] {
+            let (ia, ib) = (set.remove(&a), set.remove(&b));
+            if ia {
+                set.insert(b);
+            }
+            if ib {
+                set.insert(a);
+            }
+        }
+    });
+    instwin::set_params(app, t, &set);
+    app.inst.dmd.selected = b;
 }
 
 /// The Drum Machine Designer's key commands.
@@ -471,6 +689,30 @@ pub fn command(app: &mut App, t: usize, name: &str) -> bool {
                 });
             }
         }
+        "Clear All Pads" => {
+            edit(app, t, "Clear All Pads", |p| {
+                p.pads.clear();
+                p.muted.clear();
+                p.soloed.clear();
+            });
+        }
+        "Update All Kit Names" => {
+            let kit = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
+            let names: Vec<(u8, String)> = (FIRST_PAD..FIRST_PAD + PADS as u8).map(|n| {
+                let pads = instwin::track_id(app, t).and_then(|id| app.inst.pads.get(&id).cloned()).unwrap_or_default();
+                let cur = pad_name(app, t, &pads, n);
+                let piece = cur.split(" (").next().unwrap_or(&cur).to_string();
+                (n, format!("{piece} ({kit})"))
+            }).collect();
+            edit(app, t, "Update All Kit Names", |p| {
+                for (n, name) in names {
+                    p.pads.entry(n).or_default().name = name;
+                }
+            });
+        }
+        "Select Pad by Key" => app.inst.dmd.select_by_key = !app.inst.dmd.select_by_key,
+        "Show GM Drum Names" => app.inst.dmd.gm_names = !app.inst.dmd.gm_names,
+        "Hide Kit Piece Icons" => app.inst.dmd.hide_icons = !app.inst.dmd.hide_icons,
         n if n.starts_with("Assign To Exclusive Group: ") => {
             let g = n.trim_start_matches("Assign To Exclusive Group: ").parse::<f32>().unwrap_or(0.0);
             instwin::checkpoint(app, t, "Exclusive Group");

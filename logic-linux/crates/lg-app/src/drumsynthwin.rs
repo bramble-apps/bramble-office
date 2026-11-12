@@ -10,6 +10,7 @@ use crate::app::App;
 use crate::look;
 use crate::synthui::{Pane, Skin};
 
+#[allow(dead_code)]
 pub const COMMANDS: &[&str] = &["Back to Default"];
 
 const SKIN: Skin = Skin::new(0x1d1f22, 0x2a2d31, 0xe0a63a).texts(0xe6e6e8, 0x9c9ca2);

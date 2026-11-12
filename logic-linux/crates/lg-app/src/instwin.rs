@@ -586,4 +586,5 @@ pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
 pub fn note_played(app: &mut App, pitch: u8) {
     app.inst.last_played = Some(pitch);
     crate::samplerwin::note_played(app, pitch);
+    crate::dmdwin::note_played(app, pitch);
 }
