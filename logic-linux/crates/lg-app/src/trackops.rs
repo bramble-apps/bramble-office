@@ -869,6 +869,21 @@ pub fn inspector_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, 
                 new.midi.hermode = k as u8;
             }
         }
+        // External MIDI tracks: the MIDI output port (Virtual Out first) and channel
+        if let Some(e) = new.external.as_mut() {
+            let mut ports: Vec<String> = vec![crate::midiout::VIRTUAL.to_string()];
+            ports.extend(app.hub.outs.ports().into_iter().filter(|x| x != crate::midiout::VIRTUAL));
+            let refs: Vec<&str> = ports.iter().map(|s| s.as_str()).collect();
+            let cur = if e.port.is_empty() { 0 } else { ports.iter().position(|x| *x == e.port).unwrap_or(0) };
+            if let Some(k) = choice(ui, &mut y, "midiout", "MIDI Out", cur, &refs) {
+                e.port = if k == 0 { String::new() } else { ports[k].clone() };
+            }
+            let chans: Vec<String> = (1..=16).map(|c| c.to_string()).collect();
+            let crefs: Vec<&str> = chans.iter().map(|s| s.as_str()).collect();
+            if let Some(k) = choice(ui, &mut y, "midich", "MIDI Channel", e.channel.clamp(1, 16) as usize - 1, &crefs) {
+                e.channel = k as u8 + 1;
+            }
+        }
     }
     if new != set {
         app.checkpoint("Track Parameter");

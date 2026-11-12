@@ -534,11 +534,8 @@ fn audio_targets(app: &App) -> Vec<usize> {
     let Some(p) = &app.project else { return Vec::new() };
     let mut v: Vec<usize> = app.armed.iter().copied().filter(|&t| p.tracks.get(t).is_some_and(|tr| tr.kind == TrackKind::Audio)).collect();
     v.sort();
-    if app.armed.is_empty() {
-        if let Some(t) = app.selected_track.filter(|&t| p.tracks.get(t).is_some_and(|tr| tr.kind == TrackKind::Audio)) {
-            v.push(t);
-        }
-    }
+    // (Auto Record Enable: the focused track, or all selected tracks)
+    v.extend(crate::autoarm::implied(app).into_iter().filter(|&t| p.tracks.get(t).is_some_and(|tr| tr.kind == TrackKind::Audio)));
     v
 }
 
@@ -546,7 +543,7 @@ fn midi_target(app: &App) -> Option<usize> {
     let p = app.project.as_ref()?;
     let ok = |t: usize| p.tracks.get(t).is_some_and(|tr| tr.kind != TrackKind::Audio);
     let armed: Vec<usize> = { let mut a: Vec<usize> = app.armed.iter().copied().filter(|&t| ok(t)).collect(); a.sort(); a };
-    armed.first().copied().or_else(|| app.armed.is_empty().then_some(app.selected_track).flatten().filter(|&t| ok(t)))
+    armed.first().copied().or_else(|| crate::autoarm::implied(app).into_iter().find(|&t| ok(t)))
 }
 
 /// The input feed set up for the engine: the test file, else the sound card (never headless).

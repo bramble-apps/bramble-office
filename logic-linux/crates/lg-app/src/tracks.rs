@@ -122,6 +122,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             let total = crate::trackarea::total_h(&crate::trackarea::rows(app));
             app.scroll_y = (app.scroll_y - dy).clamp(0.0, (total - lanes.height() + 40.0).max(0.0));
+            crate::scrollnum::scrolled(app, lanes, dx, dy);
         }
     }
     let scroll = app.scroll_x;
@@ -843,6 +844,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         full.add(head);
         full.vline(ph, top..=top + 17.5, Stroke::new(crate::prefs::playhead_width(), if kn_ui::theme::is_light() { look::playhead() } else { Color32::WHITE }));
     }
+    crate::scrollnum::draw(ui, lanes);
     // follow the playhead while playing (Logic's Catch; Scroll in Play: nav.rs)
     app.nav.lanes_h = lanes.height();
     crate::windows::area(app, ruler, "ruler");

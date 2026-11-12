@@ -699,7 +699,7 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         // off: grey; record-ready: blinking red; recording: solid red; the focused track when
         // none is armed: grey with a red R (it records)
         let recording = app.recording() && armed;
-        let implied = !armed && app.armed.is_empty() && app.selected_track == Some(i);
+        let implied = !armed && crate::autoarm::implied(app).contains(&i);
         paint(ui, r, if recording || (armed && blink) { red } else if armed { red.gamma_multiply(0.55) } else { look::header_pill() }, cr(&corners));
         ui.painter().text(r.center(), Align2::CENTER_CENTER, "R", look::semibold(12.0), if armed { Color32::WHITE } else if implied { Color32::from_rgb(0xfe, 0x6e, 0x6e) } else { look::text() });
         if ui.interact(r, ui.scope_id().with(("rec", i)), Sense::click()).clicked() {

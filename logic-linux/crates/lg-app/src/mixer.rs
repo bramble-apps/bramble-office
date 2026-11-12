@@ -1020,7 +1020,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     p.rect_filled(track, 3.0, look::lcd_bg());
     let meter_r = Rect::from_min_size(pos2(r.center().x + 8.0, y), vec2(8.0, fh));
     p.rect_filled(meter_r, 2.0, look::lcd_bg());
-    let lv = meter.clamp(0.0, 1.0).sqrt();
+    // (Peak Hold Time and Return Time)
+    let meter = crate::meterball::shown(&app.logic_settings, i, meter);
+    let lv = meter.clamp(0.0, 1.0).sqrt().max(crate::meterball::held(i).clamp(0.0, 1.0).sqrt());
     let surround_master = is_master && crate::surround::active(app);
     if surround_master {
         crate::surround_ui::master_meters(app, ui, &p, Rect::from_min_max(pos2(meter_r.min.x, y), pos2(r.max.x - 6.0, y + fh)));

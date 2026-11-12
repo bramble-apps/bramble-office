@@ -499,7 +499,12 @@ fn run_assignment(app: &mut App, ctx: &egui::Context, a: &Assignment, v: i32) {
             let cur = param_value(app, t, param);
             let steps = if param.is_switch() { 1.0 } else if *param == StripParam::Automation { 4.0 } else { res };
             if let Some(nv) = a.apply(v, cur, steps) {
-                set_param(app, t, param, nv);
+                // Pickup mode: an absolute control moves the parameter once it reaches its value
+                let absolute = matches!(a.value_mode, ValueMode::Direct | ValueMode::Scaled) && !param.is_switch() && *param != StripParam::Automation;
+                let nv = if absolute { crate::surfpref::pickup(&format!("{}|{}|{t}", a.port, cs::msg_text(&a.msg)), app.logic_settings.on(crate::surfpref::PICKUP), nv, cur) } else { Some(nv) };
+                if let Some(nv) = nv {
+                    set_param(app, t, param, nv);
+                }
             }
         }
         Class::KeyCommand(c) => {
@@ -627,6 +632,36 @@ pub fn controlled_tracks(app: &App) -> BTreeMap<usize, u32> {
     m
 }
 
+/// Device `d`'s first encoder in its group, and the group's encoder count (plug-in modes).
+pub(crate) fn encoders(app: &App, d: usize) -> (usize, usize) {
+    let s = &app.hub.surf;
+    let row = s.devices[d].row;
+    (device_offset(s, d) as usize, s.devices.iter().filter(|o| o.row == row).map(|o| o.model.faders()).sum::<i32>().max(8) as usize)
+}
+
+/// Control surface follows track selection: each group's fader bank moves (the least) so a
+/// surface of it shows track `sel` (not in Single view or with Track Lock on).
+pub(crate) fn bank_to_show(app: &mut App, sel: usize) {
+    let Some(p) = app.project.as_ref() else { return };
+    let tracks: Vec<(u32, u8)> = p.tracks.iter().map(|t| (t.extra.set.same_strip.unwrap_or(t.extra.id) as u32, if t.kind == lg_core::TrackKind::Audio { 2 } else { 3 })).collect();
+    let max = tracks.len() as i32 - 1;
+    for row in 0..app.hub.surf.groups.len() {
+        let g = app.hub.surf.groups[row].clone();
+        let offs: Vec<i32> = (0..app.hub.surf.devices.len()).filter(|&d| app.hub.surf.devices[d].row == row && app.hub.surf.devices[d].model != Model::Generic).map(|d| device_offset(&app.hub.surf, d)).collect();
+        if offs.is_empty() || g.view == 3 || g.track_lock.is_some() {
+            continue;
+        }
+        let filter = crate::surfext::gx(app, row, "Filter for All View") as u8;
+        let shows = |b: i32| offs.iter().any(|o| cs::view_strips(g.view, &tracks, Some(sel), filter, b + o, 8).contains(&Some(sel)));
+        if let Some(b) = crate::surfpref::bank_showing(g.fader_bank, max, shows) {
+            if b != g.fader_bank {
+                app.hub.surf.groups[row].fader_bank = b;
+                crate::surfext::set_gx(app, row, &format!("Fader Bank for {} View", VIEWS[(g.view as usize).min(3)]), b);
+            }
+        }
+    }
+}
+
 fn strip_of(app: &App, d: usize, k: u8) -> Option<usize> {
     let g = group_of(app, d);
     // the group's Channel Strip View Mode: Arrange merges tracks on one channel strip, Tracks
@@ -659,12 +694,17 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
             let Some(t) = strip_of(app, d, k) else { return };
             let p = if g.flip == 2 { StripParam::Pan } else { StripParam::Volume };
             set_param(app, t, &p, v);
+            if p == StripParam::Volume {
+                crate::surfpref::tag_volume(&app.logic_settings, crate::automation::logic_to_db(v * 127.0), Instant::now());
+            }
             if g.flip == 1 {
                 let q = if g.strip_param == 0 { StripParam::Volume } else { StripParam::Pan };
                 set_param(app, t, &q, v);
             }
             app.hub.surf.live[d].faders[k as usize] = Some((v * 16383.0) as u16);
         }
+        // Plug-in / Instrument: the V-Pots edit the selected track's plug-in parameters
+        Mcu::VPot(k, n) if g.strip_param >= crate::surfpref::MODE_PLUGIN && g.flip != 2 => crate::surfpref::plugin_vpot(app, d, k, n as i32),
         Mcu::VPot(k, n) if g.strip_param == 2 && g.flip != 2 => {
             let Some(t) = strip_of(app, d, k) else { return };
             let slot = (g.send_slot.max(1) - 1) as u8;
@@ -703,7 +743,8 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
             set_param(app, t, &p, nv);
         }
         Mcu::Jog(n) => {
-            let step = lg_core::events::PPQ as f64 / 4.0;
+            let ppq = lg_core::events::PPQ as f64;
+            let step = crate::surfpref::jog_ticks(app.logic_settings.on(crate::surfpref::JOG_ZOOM), app.bar_w, ppq * 4.0, ppq);
             let p = app.position();
             app.locate((p + n as f64 * step).max(0.0));
         }
@@ -732,6 +773,11 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 return;
             }
             let strip = |base: u8| (n >= base && n < base + 8).then(|| n - base);
+            let mode_was = app.hub.surf.groups[row].strip_param;
+            if mode_was >= crate::surfpref::MODE_PLUGIN && (n == mcu::BANK_LEFT || n == mcu::BANK_RIGHT) {
+                crate::surfpref::plugin_bank(app, d, if n == mcu::BANK_LEFT { -1 } else { 1 });
+                return;
+            }
             let grp = &mut app.hub.surf.groups[row];
             match n {
                 mcu::BANK_LEFT => grp.fader_bank = (grp.fader_bank - 8).max(0),
@@ -745,8 +791,12 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 // Send: the V-Pots control the group's Send Slot (Send Parameter: Level, Position)
                 mcu::ASSIGN_SEND => grp.strip_param = 2,
                 mcu::ASSIGN_TRACK => grp.strip_param = 0,
+                mcu::ASSIGN_PLUGIN => grp.strip_param = crate::surfpref::MODE_PLUGIN,
+                mcu::ASSIGN_INSTRUMENT => grp.strip_param = crate::surfpref::MODE_INSTRUMENT,
                 _ => {}
             }
+            let mode_now = app.hub.surf.groups[row].strip_param;
+            crate::surfpref::mode_changed(app, row, mode_was, mode_now);
             let n_tracks = app.project.as_ref().map_or(0, |p| p.tracks.len()) as i32;
             let grp = &mut app.hub.surf.groups[row];
             grp.fader_bank = grp.fader_bank.min((n_tracks - 1).max(0));
@@ -768,6 +818,13 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
             } else if let Some(k) = strip(mcu::SELECT) {
                 if let Some(t) = strip_of(app, d, k) {
                     app.selected_track = Some(t);
+                    let name = app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(String::new(), |x| x.name.clone());
+                    crate::surfpref::tag_selected(&app.logic_settings, &name, Instant::now());
+                }
+            } else if let Some(k) = strip(mcu::VPOT_PUSH).filter(|_| app.hub.surf.groups[row].strip_param >= crate::surfpref::MODE_PLUGIN) {
+                // a plug-in parameter back to its default
+                if let Some((t, tg, info)) = crate::surfpref::plugin_slot(app, d, k) {
+                    crate::smartcontrols::set_target(app, crate::smartcontrols::View::Track(t), tg, info.default);
                 }
             } else if let Some(k) = strip(mcu::VPOT_PUSH) {
                 // a V-Pot pushed: back to the parameter's default
@@ -919,6 +976,7 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
     if app.hub.surf.devices.is_empty() {
         return;
     }
+    crate::surfpref::follow(app);
     let focused = ctx.input(|i| i.focused);
     if !focused && app.logic_settings.on("Control Surfaces / General / Bypass all while in background") {
         return;
@@ -984,9 +1042,20 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
             }
             let name = tr.as_ref().map_or(String::new(), |(t, x)| if g.track_name_number { format!("{}{}", t + 1, x.name) } else { x.name.clone() });
             names += &cs::lcd_cell(&name);
-            let val = tr.as_ref().map_or(String::new(), |(_, x)| if g.strip_param == 1 { format!("{:+.0}", x.pan * 64.0) } else { format!("{:.1}", x.volume_db) });
+            let units = app.logic_settings.on(crate::surfpref::UNITS_STRIP);
+            let val = tr.as_ref().map_or(String::new(), |(_, x)| if g.strip_param == 1 { format!("{:+.0}", x.pan * 64.0) } else { crate::surfpref::value_text(x.volume_db, lg_dsp::Unit::Db, units) });
             values += &cs::lcd_cell(&val);
         }
+        if g.strip_param >= crate::surfpref::MODE_PLUGIN {
+            (names, values) = crate::surfpref::plugin_lcd(app, d);
+        }
+        // Help Tags: long names and values across the display while editing
+        let (top, bottom) = crate::surfpref::help_rows(&app.logic_settings, Instant::now());
+        if top.is_some() || bottom.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(250));
+        }
+        let names = top.unwrap_or(names);
+        let values = bottom.unwrap_or(values);
         // the LCD: names above; values below (Display Mode Value: both rows show values)
         if dev.model != Model::Hui {
             let lcd = if g.show_value { format!("{values}{values}") } else { format!("{names}{values}") };
@@ -1018,8 +1087,10 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
                 out.push(cs::HUI_PING.to_vec());
             }
         }
-        for m in out {
-            app.hub.outs.send(&dev.out_port, &m);
+        // (paced to Maximum MIDI Bandwidth)
+        let pct = app.logic_settings.get(crate::surfpref::BANDWIDTH).parse::<f32>().unwrap_or(50.0);
+        if crate::surfpref::send_paced(&app.hub.outs, &dev.out_port, pct, out) {
+            ctx.request_repaint_after(Duration::from_millis(20));
         }
     }
     if app.playing() {
