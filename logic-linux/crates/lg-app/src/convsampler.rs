@@ -233,7 +233,7 @@ fn convert_dmd(app: &mut App, d: &Dlg, list: &[Piece], keys: &[u8]) {
 
 fn note_menu(ui: &mut egui::Ui, id: &str, v: &mut u8) {
     let shown = |n: u8| format!("{}  ({n})", crate::app::note_name(n));
-    egui::ComboBox::from_id_salt(id).selected_text(shown(*v)).width(128.0).height(300.0).show_ui(ui, |ui| {
+    egui::ComboBox::from_id_salt(id).selected_text(shown(*v)).width(124.0).height(300.0).show_ui(ui, |ui| {
         for n in 0..=127u8 {
             ui.selectable_value(v, n, shown(n));
         }
@@ -250,7 +250,7 @@ fn row(ui: &mut egui::Ui, label: &str, body: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
-const LABEL_W: f32 = 168.0;
+const LABEL_W: f32 = 236.0;
 
 /// The sheet (drawn every frame while open).
 pub fn dialog(app: &mut App, ctx: &egui::Context) {
@@ -273,18 +273,20 @@ pub fn dialog(app: &mut App, ctx: &egui::Context) {
     let before = (d.transients, d.lo, d.hi, d.even);
     let frame = egui::Frame::new().fill(crate::look::window_bg()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x50))).corner_radius(10.0).inner_margin(egui::Margin::symmetric(16, 14));
     egui::Window::new("Convert Regions to New Sampler Track").title_bar(false).frame(frame).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
-        ui.set_width(520.0);
+        ui.set_width(510.0);
         ui.spacing_mut().item_spacing.y = 6.0;
-        ui.vertical_centered(|ui| ui.label(egui::RichText::new("Convert Regions to New Sampler Track").size(13.0).strong()));
+        ui.vertical_centered(|ui| ui.label(egui::RichText::new("Convert Regions to New Sampler Track").font(crate::look::bold(13.0))));
         ui.add_space(4.0);
         row(ui, "Create Zones From:", |ui| {
             ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
                 ui.radio_value(&mut d.transients, false, "Regions");
                 ui.add_enabled_ui(single, |ui| ui.radio_value(&mut d.transients, true, "Transient Markers"));
             });
         });
         row(ui, "Instrument:", |ui| {
             ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
                 ui.radio_value(&mut d.instrument, 0, "Drum Machine Designer");
                 ui.add_enabled_ui(false, |ui| ui.radio_value(&mut d.instrument, 1, "Alchemy"));
                 ui.radio_value(&mut d.instrument, 2, "Sampler");
@@ -294,7 +296,7 @@ pub fn dialog(app: &mut App, ctx: &egui::Context) {
             ui.checkbox(&mut d.one_shot, "");
         });
         row(ui, "Instrument Name:", |ui| {
-            ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(320.0));
+            ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(ui.available_width()));
         });
         row(ui, "Trigger Note Range:", |ui| {
             note_menu(ui, "conv-lo", &mut d.lo);

@@ -99,6 +99,10 @@ fn number_menu(ui: &mut egui::Ui, id: (&str, usize), label: &str, v: u8, names: 
 
 fn external(app: &mut App, ctx: &egui::Context, t: usize) {
     let Some((params, vals)) = instwin::values(app, t) else { return };
+    // (loaded some other way than the slot menu: set the track up as External Instrument does)
+    if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.extra.set.external.is_none()) {
+        picked(app, t, Some(ut::EXTERNAL_INSTRUMENT));
+    }
     let Some(e) = app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.extra.set.external.clone()) else { return };
     let ports = {
         let mut v = vec![(String::new(), crate::midiout::VIRTUAL.to_string())];
@@ -290,6 +294,11 @@ fn klopfgeist(app: &mut App, ctx: &egui::Context, t: usize) {
     keyswin::finish(app, ctx, t, resp.map(|r| r.response.rect), set, "Klopfgeist Setting", open);
 }
 
+/// An untitled group (Test Oscillator's two halves: their mode labels are the titles).
+fn panel<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new().fill(look::group_bg()).corner_radius(6.0).inner_margin(8.0).show(ui, |ui| ui.vertical(body).inner).inner
+}
+
 /// A clickable mode label (lit when chosen); true when clicked.
 fn mode_label(ui: &mut egui::Ui, on: bool, name: &str) -> bool {
     let col = if on { look::accent() } else { look::text_dim() };
@@ -317,7 +326,7 @@ fn test_osc(app: &mut App, ctx: &egui::Context, t: usize) {
         keyswin::header(app, ui, &mut pane, "Test Oscillator");
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            group(ui, "", |ui| {
+            panel(ui, |ui| {
                 ui.set_min_width(200.0);
                 if mode_label(ui, !sweep, "Test Tone") && sweep {
                     let last: usize = ui.data(|d| d.get_temp(last_id)).unwrap_or(0);
@@ -344,7 +353,7 @@ fn test_osc(app: &mut App, ctx: &egui::Context, t: usize) {
                     freq_field(ui, &mut pane, 1003);
                 });
             });
-            group(ui, "", |ui| {
+            panel(ui, |ui| {
                 ui.set_min_width(200.0);
                 if mode_label(ui, sweep, "Sine Sweep") && !sweep {
                     pane.put(ut::TO_GENERATOR, 5.0);
