@@ -341,6 +341,7 @@ pub struct App {
     pub spdrum: crate::spdrum::State,
     pub artic: crate::artic::State,
     pub sbp: crate::sbp::State,
+    pub keyx: crate::keyextra::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -545,6 +546,7 @@ impl App {
             spdrum: Default::default(),
             artic: Default::default(),
             sbp: Default::default(),
+            keyx: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -915,9 +917,14 @@ impl App {
                     e.locate(a as f64);
                 }
             }
-            e.playing = true;
             // (Logic's last locate position: where playback started)
             let at = e.pos;
+            // Settings ▸ Audio ▸ General ▸ Playback pre-roll: start early by the compensation
+            let early = crate::prefs::playback_preroll(&self.logic_settings, e.latency(), self.project.as_ref().map_or(120.0, |p| p.tempo_at(at as u32)));
+            if early > 0.0 {
+                e.locate(at - early);
+            }
+            e.playing = true;
             drop(e);
             self.stopbtn.last_pos = at;
         }
@@ -1297,7 +1304,7 @@ impl App {
             "New Software Instrument Track" | "New Audio Track" => {
                 let _ = self.key_command(ctx, cmd);
             }
-            c if c.starts_with("Undo ") => self.undo(),
+            c if c.starts_with("Undo ") && c != "Undo History…" => self.undo(),
             c if c.starts_with("Can’t Redo") || c.starts_with("Redo") => self.redo(),
             "1 Track as Audio File…" => crate::freeze::open_export_selected(self),
             "All MIDI Tracks as MIDI File…" => self.export_midi(),
@@ -1406,7 +1413,7 @@ impl App {
         if crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
             return true;
         }
-        if crate::share::command(self, name) {
+        if crate::share::command(self, name) || crate::keyextra::command(self, ctx, name) {
             return true;
         }
         if crate::arrmarks::command(self, name) || crate::globalclip::command(self, name) || crate::beatmapping::command(self, name) || crate::stmulti::command(self, name) || crate::tempointerp::command(self, name) || crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
@@ -1927,6 +1934,7 @@ impl App {
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);
         crate::sbp::window(self, &ctx);
+        crate::keyextra::history_window(self, &ctx);
         crate::arranging::windows(self, &ctx);
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);

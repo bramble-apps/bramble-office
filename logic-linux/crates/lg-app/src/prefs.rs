@@ -92,6 +92,10 @@ fn sync_statics(v: &Values) {
     if let Ok(mut s) = INPUTS_OFF.write() {
         *s = Some(off);
     }
+    // Audio ▸ Sampler: where a dropped sample's root key comes from
+    let src = ["File/Analysis", "Filename/Analysis", "Filename Only", "File Only", "Analysis Only"].iter().position(|x| *x == v.get("Audio / Sampler / Read Root Key From:")).unwrap_or(0);
+    lg_synth::sampler_doc::ROOT_SOURCE.store(src as u8, Ordering::Relaxed);
+    lg_synth::sampler_doc::ROOT_NAME_POS.store(v.get("Audio / Sampler / Root Key at File Name Position:").parse::<u8>().unwrap_or(0), Ordering::Relaxed);
 }
 
 // ---- Project Handling ---------------------------------------------------------------------------
@@ -520,14 +524,58 @@ pub fn send_reset(app: &mut App) {
             msgs.push((cc, val));
         }
     }
+    let after = v.on(&format!("{base}Aftertouch to zero"));
     let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
     if let Ok(mut e) = app.engine.lock() {
         for t in 0..n {
             for &(cc, val) in &msgs {
                 e.live_control(t, cc, val);
             }
+            if after {
+                e.live_message(t, 0xD0, 0, 0);
+            }
         }
     }
+    // External MIDI: the checked messages on all 16 channels of every MIDI output
+    let bytes = external_reset(v);
+    if !bytes.is_empty() {
+        let outs = app.hub.outs.clone();
+        for port in outs.ports() {
+            outs.send(&port, &bytes);
+        }
+    }
+}
+
+/// Audio ▸ General ▸ Playback pre-roll: how many ticks before the play position playback starts
+/// (the plug-in latency compensation's delay, `samples`, at `bpm`), so compensated tracks' first
+/// transients are heard; 0 when the setting is off or nothing is delayed.
+pub fn playback_preroll(v: &Values, samples: usize, bpm: f64) -> f64 {
+    if samples == 0 || !v.on("Audio / General / Playback pre-roll") || v.get("Audio / General / Compensation:") == "Off" {
+        return 0.0;
+    }
+    samples as f64 / crate::audio::RATE as f64 * bpm / 60.0 * lg_core::events::PPQ as f64
+}
+
+/// Settings ▸ MIDI ▸ Reset Messages' External MIDI rows as MIDI bytes, for channels 1-16.
+pub fn external_reset(v: &Values) -> Vec<u8> {
+    let base = "MIDI / Reset Messages / ";
+    // (the External MIDI rows repeat Software Instruments' names: their keys end in " #2")
+    let on = |row: &str, dup: bool| v.on(&format!("{base}{row}{}", if dup { " #2" } else { "" }));
+    let mut out = Vec::new();
+    for ch in 0..16u8 {
+        for (row, dup, cc) in [("Control 123 (All Notes Off)", false, 123u8), ("Control 121 (Reset Controls)", false, 121), ("Control 64 (Sustain) off", true, 64), ("Control 4 (Foot Control) to zero", true, 4), ("Control 2 (Breath Control) to zero", false, 2), ("Control 1 (Modulation) to zero", true, 1)] {
+            if on(row, dup) {
+                out.extend([0xB0 | ch, cc, 0]);
+            }
+        }
+        if on("Aftertouch to zero", true) {
+            out.extend([0xD0 | ch, 0]);
+        }
+        if on("Pitch Bend to center position", true) {
+            out.extend([0xE0 | ch, 0x00, 0x40]);
+        }
+    }
+    out
 }
 
 pub fn command(app: &mut App, name: &str) -> bool {
@@ -634,6 +682,25 @@ mod tests {
 
     fn vals(kv: &[(&str, &str)]) -> Values {
         Values(kv.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect())
+    }
+
+    #[test]
+    fn playback_preroll_ticks() {
+        // 4800 samples = 0.1 s = 0.2 beats at 120 bpm
+        assert!((playback_preroll(&vals(&[]), 4800, 120.0) - 192.0).abs() < 1e-6);
+        assert_eq!(playback_preroll(&vals(&[("Audio / General / Playback pre-roll", "0")]), 4800, 120.0), 0.0);
+        assert_eq!(playback_preroll(&vals(&[]), 0, 120.0), 0.0);
+    }
+
+    #[test]
+    fn external_reset_messages() {
+        // defaults: sustain, foot, breath, modulation, aftertouch, bend on 16 channels
+        let b = external_reset(&vals(&[]));
+        assert_eq!(b.len(), 16 * (4 * 3 + 2 + 3));
+        assert_eq!(&b[..3], &[0xB0, 64, 0]);
+        let b = external_reset(&vals(&[("MIDI / Reset Messages / Control 123 (All Notes Off)", "1"), ("MIDI / Reset Messages / Control 64 (Sustain) off #2", "0")]));
+        assert_eq!(&b[..3], &[0xB0, 123, 0]);
+        assert!(!b.windows(2).any(|w| w == [0xB0, 64]));
     }
 
     #[test]

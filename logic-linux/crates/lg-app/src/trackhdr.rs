@@ -436,6 +436,16 @@ pub fn icon(app: &mut App, ui: &mut egui::Ui, hp: &egui::Painter, r: Rect, i: us
     if resp.secondary_clicked() {
         app.tm.ui.icons = Some(i);
     }
+    if resp.double_clicked() {
+        // a track with a patch: Smart Controls; without one: the Library (Browser)
+        let ctx = ui.ctx().clone();
+        app.selected_track = Some(i);
+        if app.instrument_choice.contains_key(&i) {
+            app.key_command(&ctx, "Show/Hide Smart Controls");
+        } else {
+            app.show_browser = !app.show_browser;
+        }
+    }
     let c = color_of(&t);
     if let Some(name) = t.extra.set.icon.as_deref().and_then(|n| n.strip_prefix("custom:")) {
         let ctx = ui.ctx().clone();
@@ -556,6 +566,16 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
         paint(ui, r, look::header_pill(), cr(&corners));
         glyphs::paint(ui.painter(), r, ph::POWER, 12.0, if on { Color32::from_rgb(0x52, 0xc0, 0x3c) } else { look::text_dim().gamma_multiply(0.6) });
         if let Some(state) = press(app, ui, r, Btn::OnOff, on, "onoff") {
+            if cmd {
+                // Command-click: every track on or off (Option-Command: plug-ins kept loaded)
+                let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
+                for k in 0..n {
+                    if let Some(s) = crate::tm::set_mut(app, k) {
+                        s.off = !state;
+                        s.offline = !state && alt;
+                    }
+                }
+            }
             if let Some(s) = crate::tm::set_mut(app, i) {
                 s.off = !state;
                 // (Option-click: offline, its plug-ins kept loaded)
@@ -579,6 +599,15 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
                         o.mute = state;
                     }
                 }
+            } else if alt {
+                // Option-click: this track's mute, every other track's mute off
+                if let Some(p) = app.project.as_mut() {
+                    for (k, o) in p.tracks.iter_mut().enumerate() {
+                        if k != i {
+                            o.mute = false;
+                        }
+                    }
+                }
             }
             out.mute = state;
             out.changed = true;
@@ -599,7 +628,15 @@ pub fn buttons(app: &mut App, ui: &mut egui::Ui, row: Rect, i: usize, bx: f32, b
             let was = set.strip.solo_safe;
             crate::tm::edit_strip(app, i, |s| s.solo_safe = !was);
         } else if let Some(state) = press(app, ui, r, Btn::Solo, t.solo, "solo") {
-            if alt {
+            if cmd {
+                // Command-click: every track's solo on or off
+                if let Some(p) = app.project.as_mut() {
+                    for o in p.tracks.iter_mut() {
+                        o.solo = state;
+                    }
+                }
+                out.solo = state;
+            } else if alt {
                 // Option-click: this track alone; on a soloed one: every solo off
                 let clear = t.solo;
                 if let Some(p) = app.project.as_mut() {
@@ -777,6 +814,9 @@ pub fn add_clicked(app: &mut App, ui: &egui::Ui) {
         crate::newtrack::command(app, &ctx, "New Empty Track of Focused Type");
     } else if m.shift && m.command {
         crate::newtrack::command(app, &ctx, "New Empty Track of Opposite Type");
+    } else if m.alt || m.command {
+        // Option-click: the focused type with the default patch; Command-click: the other type
+        crate::newtrack::with_default_patch(app, &ctx, m.command);
     } else {
         app.new_track_open = true;
     }

@@ -52,37 +52,142 @@ pub fn parse_note(s: &str) -> Option<u8> {
 }
 
 /// The root key a file name gives ("Piano_C3_f.wav", "Horn A#2", "bass-45.aif"), Logic octaves.
+/// Settings ▸ Audio ▸ Sampler ▸ Read Root Key From (0 File/Analysis, 1 Filename/Analysis,
+/// 2 Filename Only, 3 File Only, 4 Analysis Only) and Root Key at File Name Position (0 Auto, else
+/// the character position, from 1, where the key starts in the file name).
+pub static ROOT_SOURCE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub static ROOT_NAME_POS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// A zone's root key as Logic's Sampler reads it: from the file's header (`header`), its name or
+/// an analysis of the sample (the longest / loudest note), in the Settings' order; C3 (60) when
+/// none gives one.
+pub fn root_key(name: &str, header: Option<u8>, data: &SampleData) -> u8 {
+    root_key_found(name, header, data).unwrap_or(60)
+}
+
+/// [`root_key`] without the C3 fallback.
+pub fn root_key_found(name: &str, header: Option<u8>, data: &SampleData) -> Option<u8> {
+    use std::sync::atomic::Ordering::Relaxed;
+    let by_name = || match ROOT_NAME_POS.load(Relaxed) {
+        0 => root_from_name(name),
+        n => root_at(name, n as usize),
+    };
+    let analysis = || detect_pitch(data).map(|p| p.0);
+    match ROOT_SOURCE.load(Relaxed) {
+        1 => by_name().or_else(analysis),
+        2 => by_name(),
+        3 => header,
+        4 => analysis(),
+        _ => header.or_else(analysis),
+    }
+}
+
+/// The root key at character `pos` (from 1) of the file name: a note name or a number.
+pub fn root_at(name: &str, pos: usize) -> Option<u8> {
+    let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| name.to_string());
+    let tail: String = stem.chars().skip(pos.saturating_sub(1)).collect();
+    note_at_start(&tail).map(|x| x.0).or_else(|| {
+        let d: String = tail.chars().take_while(|c| c.is_ascii_digit()).take(3).collect();
+        d.parse::<u8>().ok().filter(|n| (21..=127).contains(n))
+    })
+}
+
+/// A note name at the start of `s` (Logic's forms: C3, C 3, C_3, C#3, #C3, Db3, A-1; C-2 to
+/// G8, C3 = 60): the note and how many bytes it took.
+fn note_at_start(s: &str) -> Option<(u8, usize)> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    let mut acc = 0i32;
+    if b.first() == Some(&b'#') {
+        acc = 1;
+        i = 1;
+    }
+    let base = match b.get(i)?.to_ascii_uppercase() {
+        b'C' => 0,
+        b'D' => 2,
+        b'E' => 4,
+        b'F' => 5,
+        b'G' => 7,
+        b'A' => 9,
+        b'B' => 11,
+        _ => return None,
+    };
+    i += 1;
+    if acc == 0 {
+        match b.get(i) {
+            Some(b'#') => {
+                acc = 1;
+                i += 1;
+            }
+            Some(b'b') if b.get(i + 1).is_some_and(|c| c.is_ascii_digit() || *c == b'-') => {
+                acc = -1;
+                i += 1;
+            }
+            _ => {}
+        }
+    }
+    if matches!(b.get(i), Some(b' ') | Some(b'_')) {
+        i += 1;
+    }
+    let neg = b.get(i) == Some(&b'-');
+    if neg {
+        i += 1;
+    }
+    let d = *b.get(i)?;
+    if !d.is_ascii_digit() || b.get(i + 1).is_some_and(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let oct = (d - b'0') as i32 * if neg { -1 } else { 1 };
+    let n = (oct + 2) * 12 + base + acc;
+    (-2..=8).contains(&oct).then_some(())?;
+    (0..=127).contains(&n).then_some((n as u8, i + 1))
+}
+
+/// Root Key at File Name Position "Auto": the last note name in the name (C3, C 3, C_3, #C3,
+/// C#3, A-1 …), else the last number 21 to 127 (60 or 060).
 pub fn root_from_name(name: &str) -> Option<u8> {
     let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| name.to_string());
-    let tokens: Vec<&str> = stem.split(|c: char| c == '_' || c == ' ' || c == '-' && false || c == '.' || c == '(' || c == ')' || c == ',').filter(|t| !t.is_empty()).collect();
-    // a note name first (its own token, or at a token's end: "PianoC3"), then a bare number
-    for t in tokens.iter().rev() {
-        for start in 0..t.len() {
-            if !t.is_char_boundary(start) {
-                continue;
-            }
-            let tail = &t[start..];
-            if tail.len() <= 4
-                && tail.as_bytes()[0].is_ascii_alphabetic()
-                && (start == 0 || !t.as_bytes()[start - 1].is_ascii_uppercase() || true)
-                && let Some(n) = parse_note(tail)
-                && tail.chars().any(|c| c.is_ascii_digit())
-            {
-                return Some(n);
-            }
+    let b = stem.as_bytes();
+    let mut found = None;
+    let mut i = 0;
+    while i < b.len() {
+        let start = i;
+        i += 1;
+        if !stem.is_char_boundary(start) {
+            continue;
+        }
+        // (a lower-case letter only at a word's start: "Grand_3" is no D)
+        let c = b[start];
+        let prev_letter = start > 0 && b[start - 1].is_ascii_alphabetic();
+        if (c.is_ascii_lowercase() || c == b'#') && prev_letter {
+            continue;
+        }
+        if let Some((n, used)) = note_at_start(&stem[start..]) {
+            found = Some(n);
+            i = start + used;
         }
     }
-    for t in tokens.iter().rev() {
-        let digits: String = t.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<Vec<_>>().into_iter().rev().collect();
-        if !digits.is_empty() && digits.len() <= 3
-            && let Ok(n) = digits.parse::<u8>()
-            && n <= 127
-            && n >= 12
-        {
-            return Some(n);
+    if found.is_some() {
+        return found;
+    }
+    let mut last = None;
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_digit() {
+            let j = (i..b.len()).find(|&k| !b[k].is_ascii_digit()).unwrap_or(b.len());
+            if j - i <= 3 && !(i > 0 && b[i - 1] == b'-' && i > 1 && b[i - 2].is_ascii_alphabetic()) {
+                if let Ok(n) = stem[i..j].parse::<u8>() {
+                    if (21..=127).contains(&n) {
+                        last = Some(n);
+                    }
+                }
+            }
+            i = j;
+        } else {
+            i += 1;
         }
     }
-    None
+    last
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -457,7 +562,8 @@ impl SamplerDoc {
                     z.key_hi = key;
                     if how == Drop::Chromatic {
                         // Read Root Key from: the file name, else the key it lands on
-                        z.root = root_from_name(&f.0.to_string_lossy()).or(f.3).unwrap_or(key);
+                        // (Settings ▸ Audio ▸ Sampler: Read Root Key From; C3 when nothing gives one)
+                        z.root = root_key_found(&f.0.to_string_lossy(), f.3, &f.1).unwrap_or(key);
                     } else {
                         z.root = key;
                     }
@@ -554,7 +660,7 @@ impl SamplerDoc {
                 for f in &loaded {
                     let zi = mk(self, g, f);
                     let z = &mut self.zones[zi];
-                    let r = root_from_name(&f.0.to_string_lossy()).or(f.3).unwrap_or(60);
+                    let r = root_key(&f.0.to_string_lossy(), f.3, &f.1);
                     z.root = r;
                     z.key_lo = r;
                     z.key_hi = r;
@@ -2027,6 +2133,13 @@ mod tests {
         assert_eq!(root_from_name("Horn A#2.aif"), Some(58));
         assert_eq!(root_from_name("bass 45.wav"), Some(45));
         assert_eq!(root_from_name("kick.wav"), None);
+        // Logic's forms: C3, C 3, C_3, A-1, #C3, C#3; numbers 21-127 with or without zeros
+        for (n, k) in [("Pad C 3.wav", 60), ("Pad_C_3.wav", 60), ("Bell A-1.wav", 21), ("Str #C3.wav", 61), ("Str C#3.wav", 61), ("Flute G8.wav", 127), ("Low C-2.wav", 0), ("Vox 060.wav", 60), ("Vox 60.wav", 60)] {
+            assert_eq!(root_from_name(n), Some(k), "{n}");
+        }
+        assert_eq!(root_from_name("Take 7.wav"), None);
+        assert_eq!(root_at("xxC3yy.wav", 3), Some(60));
+        assert_eq!(root_at("ab072.wav", 3), Some(72));
     }
 
     #[test]
@@ -2037,6 +2150,20 @@ mod tests {
         let (r, c) = detect_pitch(&tone(lg_dsp::midi_hz(52.3), 0.5, 0.5)).unwrap();
         assert_eq!(r, 52);
         assert!((c - 30.0).abs() < 6.0, "{c}");
+    }
+
+    #[test]
+    fn root_key_sources() {
+        use std::sync::atomic::Ordering::Relaxed;
+        let a = tone(220.0, 0.5, 0.5);
+        ROOT_SOURCE.store(1, Relaxed);
+        assert_eq!(root_key("Pad C3.wav", Some(50), &a), 60, "Filename/Analysis: the name first");
+        assert_eq!(root_key("Pad.wav", Some(50), &a), 57, "then the analysis (A2)");
+        ROOT_SOURCE.store(3, Relaxed);
+        assert_eq!(root_key("Pad C3.wav", None, &a), 60, "File Only, no header: C3");
+        ROOT_SOURCE.store(0, Relaxed);
+        assert_eq!(root_key("Pad C3.wav", Some(50), &a), 50, "File/Analysis: the header first");
+        assert_eq!(root_key("Pad C3.wav", None, &a), 57, "then the analysis");
     }
 
     #[test]

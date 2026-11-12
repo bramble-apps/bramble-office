@@ -878,7 +878,10 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
         match samples {
             Some(s) if !s.is_empty() => {
                 // (Bramble's smoother waveforms: multi-resolution overviews, wavecache.rs)
-                crate::wavecache::draw(p, inner, p.clip_rect(), &s, ink);
+                // (Waveform Vertical Zoom: taller than the region, cut at its edges)
+                let clip = p.clip_rect().intersect(inner);
+                let zr = Rect::from_center_size(inner.center(), vec2(inner.width(), inner.height() * app.keyx.wave_zoom));
+                crate::wavecache::draw(&p.with_clip_rect(clip), zr, clip, &s, ink);
             }
             _ => {
                 p.hline(inner.x_range(), mid, Stroke::new(1.0, ink));
