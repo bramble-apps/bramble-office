@@ -230,7 +230,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
     if !it.children.is_empty() && crate::movie::menu_ui(app, ui, &it.label) {
         return;
     }
-    if crate::tm::menu_ui(app, ui, it) || crate::mixext::menu_ui(app, ui, it) || crate::arranging::menu_ui(app, ui, it) || crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) {
+    if crate::tm::menu_ui(app, ui, it) || crate::mixext::menu_ui(app, ui, it) || crate::arranging::menu_ui(app, ui, it) || crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) || crate::autoext::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -261,7 +261,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 }
 
 fn checked(app: &App, label: &str) -> bool {
-    if let Some(c) = crate::tm::checked(app, label) {
+    if let Some(c) = crate::tm::checked(app, label).or_else(|| crate::autoext::checked(app, label)) {
         return c;
     }
     if let Some(c) = crate::envhub::checked(app, label) {

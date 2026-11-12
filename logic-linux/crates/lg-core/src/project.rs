@@ -101,6 +101,15 @@ pub struct AutoLane {
     /// A plug-in parameter's lane (the channel strip's slot, the parameter's id) in place of
     /// Logic's channel parameter `param`.
     pub plugin: Option<(u32, u32)>,
+    /// The parameter's automation switched off (the On/Off button on the parameter pop-up):
+    /// kept, drawn gray, not played.
+    pub muted: bool,
+    /// A Relative curve (Trim / Relative modes): offsets the absolute lane of the same
+    /// parameter by its value minus 64.
+    pub relative: bool,
+    /// Stepped segments: the first point's tick of each segment that holds its value up to
+    /// the next point (the Automation Curve tool's Option-click).
+    pub steps: Vec<u32>,
 }
 
 #[derive(Clone, Debug)]

@@ -18,6 +18,9 @@ pub struct RegionExt {
     pub alias_of: u64,
     /// The original's name as last seen (an alias shows it under its own).
     pub parent_name: String,
+    /// Region automation of channel and plug-in parameters (ticks from the region's start):
+    /// it moves and copies with the region and plays over the track's own automation.
+    pub automation: Vec<crate::project::AutoLane>,
 }
 
 /// One MIDI FX slot of a channel strip.
@@ -137,6 +140,7 @@ pub fn split_events(a: &mut RegionExt, b: &mut RegionExt, at: u32) {
     let all = std::mem::take(&mut a.events);
     a.events = all.iter().copied().filter(|e| e.pos < at).collect();
     b.events = all.iter().filter(|e| e.pos >= at).map(|e| Control { pos: e.pos - at, ..*e }).collect();
+    b.automation = a.automation.iter_mut().map(|l| crate::automation::split_lane(l, at)).filter(|l| !l.points.is_empty()).collect();
     b.id = 0;
     for x in [a, b] {
         x.alias_of = 0;

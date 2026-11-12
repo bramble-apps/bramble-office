@@ -312,6 +312,11 @@ pub struct App {
     /// Project Files pane's tab (0 Project, 1 All Files), the browsers' preview.
     pub br: crate::browser::State,
     pub sc: crate::smartcontrols::State,
+    /// Automation beyond one lane: Trim / Relative, region automation, subtracks, snap, Quick
+    /// Access, the Event List (autoext.rs).
+    pub ax: crate::autoext::State,
+    /// Session Player presets, custom patterns, hands (spx.rs).
+    pub spx: crate::spx::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
     pub pa: crate::projaudio::State,
@@ -498,6 +503,8 @@ impl App {
             ta: Default::default(),
             br: Default::default(),
             sc: Default::default(),
+            ax: Default::default(),
+            spx: Default::default(),
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
@@ -564,6 +571,7 @@ impl App {
         self.eqs = p.tracks.iter().enumerate().filter_map(|(i, t)| t.plugins.iter().find(|u| u.name == "Channel EQ").and_then(|u| crate::eq::Params::from_logic(&u.params)).map(|e| (i, e))).collect();
         self.drum_params.clear();
         crate::trackarea::reset(self);
+        crate::autoext::reset(self);
         self.undo.clear();
         self.redo.clear();
         self.selected_track = (!p.tracks.is_empty()).then_some(0);
@@ -1315,6 +1323,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
+            return true;
+        }
         if crate::envhub::command(self, ctx, name) {
             return true;
         }
@@ -1827,6 +1838,7 @@ impl App {
         crate::tm::windows(self, &ctx);
         crate::projaudio::window(self, &ctx);
         crate::smartcontrols::window(self, &ctx);
+        crate::autoext::frame(self, &ctx);
         crate::browser::frame(self, &ctx);
         crate::projfile::windows(self, &ctx);
         crate::surround_ui::windows(self, &ctx);

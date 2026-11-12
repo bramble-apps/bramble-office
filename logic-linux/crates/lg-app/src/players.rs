@@ -71,6 +71,7 @@ pub fn regenerate(app: &mut App, t: usize, r: usize) {
             n.channel = 0;
         }
     }
+    crate::spx::after_generate(app, t, r);
     app.load_engine();
 }
 
@@ -156,6 +157,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
             app.drum_tab = i;
         }
     }
+    // the type and Preset pop-ups, the locks (spx.rs); a new style loads its defaults
+    if player.style_name() != before.style_name() && std::mem::discriminant(&player) == std::mem::discriminant(&before) {
+        player = crate::spx::style_changed(app, &before, &player);
+    }
+    crate::spx::header(app, ui, head, t, &mut player);
+    let mut pattern_changed = false;
     let body = Rect::from_min_max(pos2(area.min.x + 12.0, head.max.y + 10.0), area.max - vec2(12.0, 8.0));
     if app.drum_tab == 0 {
         // the XY pad and Regenerate
@@ -197,6 +204,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
                 widgets::knob(ui, kr(0.0), id("fills"), &mut k.fills, 0.0, 1.0, 0.3, "Fills", &pct);
                 widgets::knob(ui, kr(1.0), id("swing"), &mut k.swing, 0.0, 1.0, 0.0, "Swing", &pct);
                 widgets::knob(ui, kr(2.0), id("grace"), &mut k.grace_notes, 0.0, 1.0, 0.2, "Grace Notes", &pct);
+                pattern_changed |= crate::spx::hand_buttons(app, ui, pos2(kx, pad.max.y + 6.0), t, r);
                 let mut voicing = k.upper_voicing as f32;
                 if widgets::knob(ui, kr(3.0), id("voicing"), &mut voicing, 1.0, 8.0, 5.0, "Voicing", &|v| ["Triad", "Triad + top", "Sevenths", "Suspended", "Add 9", "Open", "Four + 9", "Shells"].get((v.round() as usize).saturating_sub(1)).copied().unwrap_or("").to_string()) {
                     k.upper_voicing = voicing.round() as u8;
@@ -217,7 +225,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
                 widgets::knob(ui, kr(3.0), id("double"), &mut b.double_stops, 0.0, 1.0, 0.0, "Double Stops", &pct);
                 widgets::knob(ui, kr(4.0), id("mute-off"), &mut b.mute_offset, -1.0, 1.0, 0.0, "Mute Offset", &|v| format!("{:+.0}", v * 100.0));
                 let mut low = b.lowest_note as f32;
-                if widgets::knob(ui, kr(5.0), id("lowest"), &mut low, 28.0, 52.0, 40.0, "Lowest Note", &|v| crate::app::note_name(v.round() as u8)) {
+                // (down to B0: a five-string bass)
+                if widgets::knob(ui, kr(5.0), id("lowest"), &mut low, 23.0, 52.0, 40.0, "Lowest Note", &|v| crate::app::note_name(v.round() as u8)) {
                     b.lowest_note = low.round() as u8;
                 }
             }
@@ -236,7 +245,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
             }
         }
     } else {
-        p.text(body.center(), Align2::CENTER_CENTER, "Manual: the region's notes are in the Piano Roll (double-click the region)", look::regular(12.0), look::text_dim());
+        pattern_changed |= crate::spx::manual(app, ui, body, t, r);
+    }
+    if pattern_changed && player == before {
+        app.checkpoint("Session Player Pattern");
+        regenerate(app, t, r);
+        app.dirty = true;
     }
     if player != before {
         app.checkpoint("Change Session Player");
