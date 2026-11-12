@@ -142,9 +142,14 @@ pub(crate) struct Shared {
     /// The assigned controllers' values (FM, vibrato).
     cfm: f32,
     cvib: f32,
+    /// The MIDI channel of the note being started (MIDI Mono Mode).
+    chan: u8,
 }
 
 pub(crate) struct V {
+    /// MIDI Mono Mode: the voice's channel and its own pitch bend (semitones).
+    chan: u8,
+    mpe_bend: f32,
     on: bool,
     note: u8,
     vel: f32,
@@ -166,7 +171,7 @@ pub(crate) struct V {
 
 impl V {
     fn new() -> V {
-        V { on: false, note: 60, vel: 1.0, pitch: 60.0, target: 60.0, mp: [0.0; 2], cp: [0.0; 2], sp: 0.0, menv: Adsr::default(), venv: Adsr::default(), fade: Fade::default(), killing: false, level: 0.0, uni: 0.0, glide: true }
+        V { chan: 0, mpe_bend: 0.0, on: false, note: 60, vel: 1.0, pitch: 60.0, target: 60.0, mp: [0.0; 2], cp: [0.0; 2], sp: 0.0, menv: Adsr::default(), venv: Adsr::default(), fade: Fade::default(), killing: false, level: 0.0, uni: 0.0, glide: true }
     }
     fn set_envs(&mut self, sh: &Shared) {
         let p = &sh.p;
@@ -182,6 +187,8 @@ impl V {
 impl Voice<Shared> for V {
     fn start(&mut self, note: u8, velocity: u8, sh: &Shared, _ctl: &Ctl) {
         let was = self.on && !self.killing;
+        self.chan = sh.chan;
+        self.mpe_bend = 0.0;
         self.on = true;
         self.killing = false;
         self.note = note;
@@ -241,7 +248,7 @@ impl Voice<Shared> for V {
         let lfo_knob = p[LFO as usize];
         let vib = (if lfo_knob < 0.0 { lfo_knob * lfo_knob } else { 0.0 } + sh.cvib * p[CTRL_VIB_AMT as usize]) * sh.lfo * 1.5;
         let fm_lfo = if lfo_knob > 0.0 { lfo_knob * sh.lfo * 0.5 } else { 0.0 };
-        let key = self.pitch + transpose + p[TUNE as usize] / 100.0 + ctl.bend + vib + self.uni;
+        let key = self.pitch + transpose + p[TUNE as usize] / 100.0 + ctl.bend + self.mpe_bend + vib + self.uni;
         let base = lg_dsp::midi_hz(key);
         let car_ratio = p[CAR_HARMONIC as usize].round() + p[CAR_FINE as usize];
         let mod_ratio = p[MOD_HARMONIC as usize].round() + p[MOD_FINE as usize];
@@ -329,7 +336,7 @@ impl Efm1 {
             params: Params::new(PARAMS),
             poly: Poly::new(16, V::new),
             ch: Channel::new(rate),
-            sh: Shared { rate, p: [0.0; N], lfo: 0.0, last_pitch: 0.0, cfm: 0.0, cvib: 0.0 },
+            sh: Shared { rate, p: [0.0; N], lfo: 0.0, last_pitch: 0.0, cfm: 0.0, cvib: 0.0, chan: 0 },
             rate,
             lfo: Lfo::default(),
             rng: Rng::new(21),
@@ -358,6 +365,24 @@ impl Efm1 {
     }
     fn unison(&self) -> bool {
         self.sh.p[UNISON as usize] >= 0.5
+    }
+    /// One note's pitch bend in MIDI Mono Mode: a member channel bends its own voices by Mono
+    /// Mode Bend Range; the base channel (or Mono Mode off) is the normal pitch wheel.
+    pub fn pitch_bend_ch(&mut self, channel: u8, value: i16) {
+        let base = match self.sh.p[MONO_MODE as usize].round() as i32 {
+            1 => Some(0),
+            2 => Some(15),
+            _ => None,
+        };
+        match base {
+            Some(b) if b != channel => {
+                let st = value as f32 / 8192.0 * self.sh.p[MONO_BEND as usize];
+                for v in self.poly.voices.iter_mut().filter(|v| v.on && v.chan == channel) {
+                    v.mpe_bend = st;
+                }
+            }
+            _ => self.pitch_bend(value),
+        }
     }
     fn mono(&self) -> bool {
         self.sh.p[VOICES_P as usize].round() as i32 <= 1
@@ -486,6 +511,11 @@ impl Instrument for Efm1 {
             self.poly.sustain(d, &self.sh, &self.ch.ctl);
         }
         self.update();
+    }
+    fn note_on_ch(&mut self, channel: u8, pitch: u8, velocity: u8) {
+        self.sh.chan = channel;
+        self.note_on(pitch, velocity);
+        self.sh.chan = 0;
     }
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);

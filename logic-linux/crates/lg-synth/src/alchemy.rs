@@ -34,6 +34,8 @@ pub const SNAP_UPDATE: u32 = 31140;
 pub const SNAP_OCTAVE: u32 = 31141;
 pub const SNAP_RATE: u32 = 31142;
 pub const SNAP_WHEEL: u32 = 31143;
+/// Lock Control per Perform control (16): the Transform pad leaves it alone.
+pub const SNAP_LOCK: u32 = 31150;
 pub const SNAP_OCTAVES: &[&str] = &["Off", "C-2", "C-1", "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"];
 /// ModWheel pop-up: None, the 16 Perform controls, the same inverted.
 pub fn wheel_targets() -> &'static [&'static str] {
@@ -77,6 +79,10 @@ pub fn transform_weights(x: f32, y: f32) -> [f32; 8] {
     w
 }
 pub const GLIDE_MODES: &[&str] = &["Rate", "Time"];
+/// Extended parameters: MIDI Mono Mode (MPE: a voice per channel) and its Bend Range.
+pub const MONO_MODE: u32 = 14990;
+pub const MONO_BEND: u32 = 14991;
+pub const MONO_MODES: &[&str] = &["Off", "On (with common base channel 1)", "On (with common base channel 16)"];
 pub const NOISE_TYPES: &[&str] = &["White", "Pink", "Brown"];
 /// Noise Low Cut / High Cut knob (0–1) → Hz (20 Hz – 20 kHz).
 pub fn noise_cut_hz(x: f32) -> f32 {
@@ -245,6 +251,8 @@ pub(crate) struct AlchShared {
     /// the pitch to glide from (NaN: no glide).
     retrig: bool,
     from: f32,
+    /// The MIDI channel of the note being started (MIDI Mono Mode).
+    chan: u8,
     tune: f32,
     lfo1: f32,
     lfo2: f32,
@@ -343,6 +351,9 @@ pub(crate) struct AlchVoice {
     legato: bool,
     /// Glide speed in semitones per second (infinite: no glide).
     gspeed: f32,
+    /// MIDI Mono Mode: the voice's channel and its own pitch bend (semitones).
+    chan: u8,
+    mpe_bend: f32,
     /// Seconds since the note started.
     age: f32,
     /// The arpeggiator step's pan for this note.
@@ -380,6 +391,8 @@ impl AlchVoice {
             mv: Default::default(),
             legato: false,
             gspeed: f32::INFINITY,
+            chan: 0,
+            mpe_bend: 0.0,
             age: 0.0,
             npan: 0.0,
             own: None,
@@ -407,6 +420,10 @@ impl Voice<AlchShared> for AlchVoice {
         // a voice moved to a new note without a trigger plays on (legato): its envelopes,
         // sources and modulators carry on
         self.legato = was && !sh.retrig;
+        self.chan = sh.chan;
+        if !self.legato {
+            self.mpe_bend = 0.0;
+        }
         if sh.from.is_finite() && sh.glide > 0.0 {
             if !self.legato {
                 self.pitch = sh.from;
@@ -504,7 +521,7 @@ impl Voice<AlchShared> for AlchVoice {
             self.pitch += step.copysign(self.target - self.pitch);
         }
         let vib = sh.lfo1 * ctl.mod_wheel * 0.4;
-        let base = self.pitch + sh.tune + ctl.bend + vib;
+        let base = self.pitch + sh.tune + ctl.bend + self.mpe_bend + vib;
         let n = l.len();
         // master filter
         let fe = self.fenv.level;
@@ -1098,9 +1115,15 @@ pub fn all_params() -> &'static [Param] {
             v.push(Param::new(SNAPVOL + k as u32, leak(format!("Snap Vol {}", k + 1)), -24.0, 12.0, 0.0, Unit::Db).hide());
         }
         v.push(Param::new(SNAP_UPDATE, "Snapshot Update", 0.0, 1.0, 1.0, Unit::OnOff));
+        for (i, q) in PARAMS.iter().filter(|q| (1..=16).contains(&q.id)).enumerate() {
+            let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
+            v.push(Param::new(SNAP_LOCK + i as u32, leak(format!("Lock {}", q.name)), 0.0, 1.0, 0.0, Unit::OnOff).hide());
+        }
         v.push(Param::menu(SNAP_OCTAVE, "Transform Octave", SNAP_OCTAVES, 0.0));
         v.push(Param::new(SNAP_RATE, "Transform Rate", 0.0, 5.0, 0.0, Unit::Seconds));
         v.push(Param::menu(SNAP_WHEEL, "ModWheel", wheel_targets(), 0.0));
+        v.push(Param::menu(MONO_MODE, "MIDI Mono Mode", MONO_MODES, 0.0));
+        v.push(Param::new(MONO_BEND, "Mono Mode Bend Range", 0.0, 96.0, 48.0, Unit::Semitones));
         v.push(Param::menu(VOICE, "Voice Priority", PRIORITIES, 0.0));
         v.push(Param::menu(VOICE + 1, "Glide Mode", GLIDE_MODES, 0.0));
         v.push(Param::new(VOICE + 2, "Wide Unison", 0.0, 1.0, 0.0, Unit::OnOff));
@@ -1173,6 +1196,7 @@ impl Alchemy {
                 wide: false,
                 retrig: true,
                 from: f32::NAN,
+                chan: 0,
                 tune: 0.0,
                 lfo1: 0.0,
                 lfo2: 0.0,
@@ -1248,7 +1272,7 @@ impl Alchemy {
 
     /// Perform value k (0..16) after the Transform pad.
     fn perform(&self, k: usize) -> f32 {
-        if self.transform {
+        if self.transform && self.p(SNAP_LOCK + k as u32) < 0.5 {
             let w = transform_weights(self.p(17), self.p(18));
             (0..8).map(|i| w[i] * self.p(snapv(i, k))).sum()
         } else {
@@ -1292,6 +1316,7 @@ impl Alchemy {
             wide: false,
             retrig: true,
             from: f32::NAN,
+            chan: 0,
             tune: 0.0,
             lfo1: 0.0,
             lfo2: 0.0,
@@ -1452,6 +1477,25 @@ impl Alchemy {
     /// their last trigger.
     pub fn voice_states(&self) -> Vec<(u8, f32, f32)> {
         self.poly.voices.iter().filter(|v| v.on && !v.killing).map(|v| (v.note, v.pitch, v.age)).collect()
+    }
+
+    /// One note's pitch bend in MIDI Mono Mode: a member channel bends its own voices by Mono
+    /// Mode Bend Range; the base channel (or Mono Mode off) is the normal pitch wheel.
+    pub fn pitch_bend_ch(&mut self, channel: u8, value: i16) {
+        let base = match self.p(MONO_MODE).round() as i32 {
+            1 => Some(0),
+            2 => Some(15),
+            _ => None,
+        };
+        match base {
+            Some(b) if b != channel => {
+                let st = value as f32 / 8192.0 * self.p(MONO_BEND);
+                for v in self.poly.voices.iter_mut().filter(|v| v.on && v.chan == channel) {
+                    v.mpe_bend = st;
+                }
+            }
+            _ => self.pitch_bend(value),
+        }
     }
 
     /// The held key Num 1 plays, by Voice Priority (Newest, Oldest, Lowest, Highest).
@@ -1887,6 +1931,11 @@ impl Instrument for Alchemy {
         if let Some(d) = self.ch.cc(cc, value) {
             self.poly.sustain(d, &self.sh, &self.ch.ctl);
         }
+    }
+    fn note_on_ch(&mut self, channel: u8, pitch: u8, velocity: u8) {
+        self.sh.chan = channel;
+        self.note_on(pitch, velocity);
+        self.sh.chan = 0;
     }
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);

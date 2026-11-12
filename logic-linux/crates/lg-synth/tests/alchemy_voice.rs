@@ -276,6 +276,10 @@ mod transform {
         a.set(17, 0.25);
         let mid = a.mg.perform[0];
         assert!(mid > 0.3 && mid < 0.9, "between snapshots 1 and 2: {mid}");
+        // Lock Control: the pad leaves the control at its knob value
+        a.set(SNAP_LOCK, 1.0);
+        a.set(17, x);
+        assert!((a.mg.perform[0] - a.get(1)).abs() < 1e-6);
     }
 
     #[test]

@@ -247,6 +247,8 @@ pub(crate) struct Sh {
     bpm: f32,
     last_pitch: f32,
     mono_unison: bool,
+    /// The MIDI channel of the note being started (MIDI Mono Mode).
+    chan: u8,
     /// The pitch bend wheel, −1…1 (a source even with a bend range of 0).
     bender: f32,
 }
@@ -475,6 +477,9 @@ impl VecEnv {
 }
 
 pub(crate) struct Es2Voice {
+    /// MIDI Mono Mode: the voice's channel and its own pitch bend (semitones).
+    chan: u8,
+    mpe_bend: f32,
     on: bool,
     held: bool,
     note: u8,
@@ -511,6 +516,8 @@ pub(crate) struct Es2Voice {
 impl Es2Voice {
     fn new(seed: u32) -> Es2Voice {
         Es2Voice {
+            chan: 0,
+            mpe_bend: 0.0,
             on: false,
             held: false,
             note: 60,
@@ -554,6 +561,8 @@ impl Es2Voice {
 impl Voice<Sh> for Es2Voice {
     fn start(&mut self, note: u8, velocity: u8, sh: &Sh, _ctl: &Ctl) {
         let was = self.on && !self.killing;
+        self.chan = sh.chan;
+        self.mpe_bend = 0.0;
         self.on = true;
         self.held = true;
         self.killing = false;
@@ -746,7 +755,7 @@ impl Voice<Sh> for Es2Voice {
         } else {
             self.pitch = self.target;
         }
-        let base = self.pitch + sh.g(2) / 100.0 + ctl.bend + self.analog + pitch_cents(m[1]) / 100.0;
+        let base = self.pitch + sh.g(2) / 100.0 + ctl.bend + self.mpe_bend + self.analog + pitch_cents(m[1]) / 100.0;
         // Constant Beat Detuning: the detune in cents shrinks up the keyboard so the beats
         // keep their speed (reference: C3, MIDI note 60)
         let cbd = sh.g(10).round() * 0.25;
@@ -1035,7 +1044,7 @@ impl Es2 {
                 Es2Voice::new(seed)
             }),
             ch: Channel::new(rate),
-            sh: Sh { rate, p: [0.0; NP], lfo2: 0.0, env1: 0.0, side: 0.0, ctrl: [0.0; 6], bpm: 120.0, last_pitch: 0.0, mono_unison: false, bender: 0.0 },
+            sh: Sh { rate, p: [0.0; NP], lfo2: 0.0, env1: 0.0, side: 0.0, ctrl: [0.0; 6], bpm: 120.0, last_pitch: 0.0, mono_unison: false, chan: 0, bender: 0.0 },
             rate,
             lfo2: Lfo::default(),
             rng: Rng::new(5),
@@ -1099,6 +1108,24 @@ impl Es2 {
         }
         self.poly.stacking = false;
         self.sh.last_pitch = pitch as f32;
+    }
+    /// One note's pitch bend in MIDI Mono Mode: a member channel bends its own voices by Mono
+    /// Mode Bend Range; the base channel (or Mono Mode off) is the normal pitch wheel.
+    pub fn pitch_bend_ch(&mut self, channel: u8, value: i16) {
+        let base = match self.sh.g(184).round() as i32 {
+            1 => Some(0),
+            2 => Some(15),
+            _ => None,
+        };
+        match base {
+            Some(b) if b != channel => {
+                let st = value as f32 / 8192.0 * self.sh.g(185);
+                for v in self.poly.voices.iter_mut().filter(|v| v.on && v.chan == channel) {
+                    v.mpe_bend = st;
+                }
+            }
+            _ => self.pitch_bend(value),
+        }
     }
     /// Where the Vector Envelope has the pointers of the voice started last (mix x, mix y, pad
     /// x, pad y), for the window and for checks; None when no voice sounds.
@@ -1263,6 +1290,11 @@ impl Instrument for Es2 {
         if let Some(d) = self.ch.cc(cc, value) {
             self.poly.sustain(d, &self.sh, &self.ch.ctl);
         }
+    }
+    fn note_on_ch(&mut self, channel: u8, pitch: u8, velocity: u8) {
+        self.sh.chan = channel;
+        self.note_on(pitch, velocity);
+        self.sh.chan = 0;
     }
     fn pitch_bend(&mut self, value: i16) {
         self.ch.set_bend(value);

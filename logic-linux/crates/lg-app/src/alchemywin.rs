@@ -42,7 +42,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
         _ => vec2(W, 738.0),
     };
     let mut ext: Vec<u32> = (0..5).map(|k| am::CTRL_CC + k).collect();
-    ext.push(lg_synth::alchemy_arp::OVERLAP_LEGACY);
+    ext.extend([lg_synth::alchemy::MONO_MODE, lg_synth::alchemy::MONO_BEND, lg_synth::alchemy_arp::OVERLAP_LEGACY]);
     let actions = synthui::window(app, ctx, t, "Alchemy", size, SKIN, &ext, |p| body(p, &mut st, &live, &fx_params, audio_name.as_deref(), &presets, &cur));
     ctx.data_mut(|d| d.insert_temp(st_id, st));
     let mut file = dropped.first().cloned();
@@ -660,6 +660,7 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         if crate::widgets::knob(p.ui, kr, egui::Id::unique(("alch-perf", p.t, k)), &mut v, 0.0, 1.0, p.prm(k + 1).default, "", &|v| format!("{:.0} %", v * 100.0)) {
             p.put(k + 1, v);
         }
+        perform_menu(p, ix, st, kr, &[k as usize]);
         p.text(x, y + 48.0, Align2::CENTER_CENTER, name, 10.0, dark_text);
     }
     // the XY pads
@@ -668,7 +669,8 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         let xn = p.prm(*ix_).name;
         let yn = p.prm(*iy).name;
         p.text(x, y0 + 12.0, Align2::LEFT_CENTER, &format!("X{}: {xn}", k + 1), 10.5, dark_text);
-        p.xy(x, y0 + 22.0, 110.0, 110.0, *ix_, *iy);
+        let pr = p.xy(x, y0 + 22.0, 110.0, 110.0, *ix_, *iy);
+        perform_menu(p, ix, st, pr, &[*ix_ as usize - 1, *iy as usize - 1]);
         p.text(x + 55.0, y0 + 144.0, Align2::CENTER_CENTER, &format!("Y{}: {yn}", k + 1), 10.5, dark_text);
     }
     // the envelope knobs
@@ -680,6 +682,7 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
         if crate::widgets::knob(p.ui, kr, egui::Id::unique(("alch-penv", p.t, k)), &mut v, 0.0, 1.0, p.prm(*id).default, "", &|v| format!("{:.0} %", v * 100.0)) {
             p.put(*id, v);
         }
+        perform_menu(p, ix, st, kr, &[*id as usize - 1]);
         label(p, x, y + 48.0, n);
     }
     let _ = ORANGE;
@@ -687,6 +690,41 @@ fn perform(p: &mut Pane, ix: &Ix, st: &mut St, fx: &[Option<(Vec<lg_dsp::Param>,
 
 
 
+
+/// Control-click on a Perform knob, envelope knob or XY pad (its two axes): Copy Setting to all
+/// Snapshots and Lock Control, per control.
+fn perform_menu(p: &mut Pane, ix: &Ix, st: &St, r: Rect, ks: &[usize]) {
+    use lg_synth::alchemy::{snapv, SNAP_LOCK};
+    let resp = p.ui.interact(r, egui::Id::unique(("alch-perf-menu", p.t, ks[0])), Sense::click());
+    let axis = |i: usize| if ks.len() > 1 { [" X", " Y"][i] } else { "" };
+    let locks: Vec<bool> = ks.iter().map(|&k| g(p, ix, SNAP_LOCK + k as u32) >= 0.5).collect();
+    let mut act: Option<(usize, bool)> = None;
+    resp.context_menu(|ui| {
+        for (i, _) in ks.iter().enumerate() {
+            if ui.button(format!("Copy{} Setting to all Snapshots", axis(i))).clicked() {
+                act = Some((i, false));
+                ui.close();
+            }
+        }
+        ui.separator();
+        for (i, _) in ks.iter().enumerate() {
+            if ui.add(egui::Button::selectable(locks[i], format!("Lock Control{}", axis(i)))).clicked() {
+                act = Some((i, true));
+                ui.close();
+            }
+        }
+    });
+    match act {
+        Some((i, false)) => {
+            let k = ks[i];
+            for n in 0..8 {
+                p.put(snapv(n, k), st.perform[k]);
+            }
+        }
+        Some((i, true)) => p.put(SNAP_LOCK + ks[i] as u32, if locks[i] { 0.0 } else { 1.0 }),
+        None => {}
+    }
+}
 
 /// The Transform pad's snapshot commands.
 #[derive(Clone, Copy)]

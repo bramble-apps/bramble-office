@@ -82,6 +82,9 @@ pub static PARAMS: &[Param] = &[
     Param::new(55, "Damper Control", 0.0, 122.0, 0.0, Unit::None),
     Param::new(56, "Wah Control", 0.0, 122.0, 1.0, Unit::None),
     Param::new(57, "Wah Pedal Position", 0.0, 1.0, 0.0, Unit::Ratio),
+    // extended parameters (the disclosure arrow at the lower left)
+    Param::menu(MONO_MODE, "MIDI Mono Mode", MONO_MODES, 0.0),
+    Param::new(MONO_BEND, "Mono Mode Bend Range", 0.0, 96.0, 48.0, Unit::Semitones),
 ];
 
 /// What makes a model: its strings and how they are excited.
@@ -151,7 +154,14 @@ pub fn velocity_curve(curve: usize, v: f32) -> f32 {
     }
 }
 
+/// Extended parameters: MIDI Mono Mode (MPE: a voice per channel) and its Bend Range.
+pub const MONO_MODE: u32 = 58;
+pub const MONO_BEND: u32 = 59;
+pub const MONO_MODES: &[&str] = &["Off", "On (with common base channel 1)", "On (with common base channel 16)"];
+
 pub(crate) struct ClavShared {
+    /// The MIDI channel of the note being started (MIDI Mono Mode).
+    chan: u8,
     rate: f32,
     model: Model,
     wiring: u8,
@@ -181,6 +191,9 @@ pub(crate) struct ClavShared {
 }
 
 pub(crate) struct ClavVoice {
+    /// MIDI Mono Mode: the voice's channel and its own pitch bend (semitones).
+    chan: u8,
+    mpe_bend: f32,
     s: WaveString,
     on: bool,
     released: bool,
@@ -204,6 +217,8 @@ pub(crate) struct ClavVoice {
 impl ClavVoice {
     fn new(rate: f32, seed: u32) -> ClavVoice {
         ClavVoice {
+            chan: 0,
+            mpe_bend: 0.0,
             s: WaveString::new(8.0, rate),
             on: false,
             released: false,
@@ -247,6 +262,8 @@ impl Voice<ClavShared> for ClavVoice {
         let vv = 1.0 - sh.vel_sens + sh.vel_sens * v;
         self.note = note;
         self.vel = v;
+        self.chan = sh.chan;
+        self.mpe_bend = 0.0;
         self.hz = Self::pitch(note as f32, note, sh);
         let key = (note as f32 - 60.0) / 12.0;
         // worn or uneven instruments: each key a little different
@@ -300,7 +317,7 @@ impl Voice<ClavShared> for ClavVoice {
         let m = &sh.model;
         let t = self.age as f32 / sh.rate;
         self.age = self.age.saturating_add(n);
-        let mut hz = self.hz * ctl.bend_ratio * dsp::semis(sh.pressure * 2.0 * ctl.aftertouch);
+        let mut hz = self.hz * ctl.bend_ratio * dsp::semis(sh.pressure * 2.0 * ctl.aftertouch + self.mpe_bend);
         // the string is stretched by the strike: a moment sharp; let go, it sags
         hz *= 1.0 + sh.tension * 0.012 * self.vel * (-t / 0.05).exp();
         if self.released {
@@ -458,6 +475,7 @@ impl VintageClav {
                 stretch: 0.0,
                 warmth: 0.0,
                 pressure: 0.0,
+                chan: 0,
             },
             tone: [[Svf::default(); 4]; 2],
             body: [Biquad::default(); 2],
@@ -569,6 +587,30 @@ impl VintageClav {
     }
 }
 
+impl VintageClav {
+    /// The base channel (0-based) in MIDI Mono Mode, None when it's off.
+    fn base_channel(&self) -> Option<u8> {
+        match self.p(MONO_MODE).round() as i32 {
+            1 => Some(0),
+            2 => Some(15),
+            _ => None,
+        }
+    }
+    /// One note's pitch bend on a MIDI Mono Mode member channel (by Mono Mode Bend Range); the
+    /// base channel (or Mono Mode off) bends every voice by the Pitch Wheel range.
+    pub fn pitch_bend_ch(&mut self, channel: u8, value: i16) {
+        match self.base_channel() {
+            Some(b) if b != channel => {
+                let st = value as f32 / 8192.0 * self.p(MONO_BEND);
+                for v in self.poly.voices.iter_mut().filter(|v| v.on && v.chan == channel) {
+                    v.mpe_bend = st;
+                }
+            }
+            _ => self.pitch_bend(value),
+        }
+    }
+}
+
 impl Plugin for VintageClav {
     fn params(&self) -> &[Param] {
         PARAMS
@@ -654,6 +696,11 @@ impl Instrument for VintageClav {
             self.struck = Some(pitch);
         }
         self.poly.note_on(pitch, velocity, &self.sh, &self.ch.ctl);
+    }
+    fn note_on_ch(&mut self, channel: u8, pitch: u8, velocity: u8) {
+        self.sh.chan = channel;
+        self.note_on(pitch, velocity);
+        self.sh.chan = 0;
     }
     fn note_off(&mut self, pitch: u8) {
         if self.p(53).round() as i32 == 2 {

@@ -225,6 +225,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let tempo = app.engine.lock().map(|e| e.tempo as f32).unwrap_or(120.0);
     let tab_id = egui::Id::unique(("clav-tab", t));
     let mut tab: usize = ctx.data(|d| d.get_temp(tab_id)).unwrap_or(0);
+    let ext_id = egui::Id::unique(("clav-ext", t));
+    let mut ext_open: bool = ctx.data(|d| d.get_temp(ext_id)).unwrap_or(false);
     let mut open = true;
     let resp = egui::Window::new("Vintage Clav").id(egui::Id::unique(("clav-window", t))).open(&mut open).collapsible(false).resizable(true).default_size(vec2(640.0, 430.0)).show(ctx, |ui| {
         keyswin::header(app, ui, &mut pane, "Vintage Clav");
@@ -282,7 +284,14 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 }
             });
         });
+        // the footer: the extended parameters behind the disclosure arrow at the lower left
+        crate::plughead::footer(ui, "Vintage Clav", Some(&mut ext_open));
+        if ext_open {
+            pane.menu(ui, clav::MONO_MODE, "MIDI Mono Mode");
+            pane.knob(ui, clav::MONO_BEND, "Mono Mode Bend Range");
+        }
     });
+    ctx.data_mut(|d| d.insert_temp(ext_id, ext_open));
     ctx.data_mut(|d| d.insert_temp(tab_id, tab));
     let set = std::mem::take(&mut pane.set);
     keyswin::finish(app, ctx, t, resp.map(|r| r.response.rect), set, "Vintage Clav Setting", open);
