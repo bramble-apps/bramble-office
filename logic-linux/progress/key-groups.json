@@ -7,9 +7,9 @@
  },
  {
   "group": "Global Commands",
-  "done": 530,
+  "done": 536,
   "total": 679,
-  "percent": 78.1
+  "percent": 78.9
  },
  {
   "group": "Global Control Surfaces Commands",
@@ -31,9 +31,9 @@
  },
  {
   "group": "Main Window Tracks and Various Editors",
-  "done": 177,
+  "done": 180,
   "total": 290,
-  "percent": 61.0
+  "percent": 62.1
  },
  {
   "group": "Various Editors",
@@ -43,9 +43,9 @@
  },
  {
   "group": "Views Showing Time Ruler",
-  "done": 33,
+  "done": 47,
   "total": 80,
-  "percent": 41.2
+  "percent": 58.8
  },
  {
   "group": "Views Showing Automation",
@@ -55,9 +55,9 @@
  },
  {
   "group": "Main Window Tracks",
-  "done": 128,
+  "done": 130,
   "total": 249,
-  "percent": 51.4
+  "percent": 52.2
  },
  {
   "group": "Live Loops Grid",

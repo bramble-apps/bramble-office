@@ -18,7 +18,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
+
 use crate::app::App;
+use crate::look;
 
 pub const COMMANDS: &[&str] = &["Import Project Settings…", "Import Settings from Project…"];
 
@@ -528,35 +531,217 @@ fn subs(pane: &str) -> Vec<&'static str> {
     v
 }
 
-/// The window (projfile.rs calls this with the pane shown).
+/// The window (projfile.rs calls this with the pane shown), drawn as Logic's settings windows
+/// (settings.rs): the title band with the panes as icon tabs, the sub-panes as a segmented
+/// control on the group box's top border, labels right-aligned before their controls.
 pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut bool) {
     read_back(app);
     let before = app.proj.clone();
-    egui::Window::new("Project Settings").id(egui::Id::unique("project-settings")).open(open).collapsible(false).resizable(false).default_width(620.0).show(ctx, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for t in PANES {
-                if ui.add(egui::Button::selectable(pane == t, t)).clicked() {
-                    *pane = t.to_string();
-                    app.ps_ui.sub.clear();
-                }
+    let screen = ctx.content_rect();
+    egui::Window::new("Project Settings").id(egui::Id::unique("project-settings")).title_bar(false).resizable(false).collapsible(false).frame(egui::Frame::NONE).default_pos(pos2(screen.center().x - PS_W / 2.0, screen.min.y + 70.0)).show(ctx, |ui| {
+        ui.set_width(PS_W);
+        let p = ui.painter().clone();
+        let bg = p.add(egui::Shape::Noop);
+        let top = ui.cursor().min;
+        // the title band: the close light, the title, the panes
+        let (band, _) = ui.allocate_exact_size(vec2(PS_W, PS_BAND), Sense::hover());
+        p.rect_filled(band, egui::CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 }, gray(0x2e2d2c));
+        p.hline(band.x_range(), band.max.y, Stroke::new(0.5, gray(0x353433)));
+        p.text(pos2(band.center().x, band.min.y + 15.5), Align2::CENTER_CENTER, "Project Settings", look::bold(13.0), gray(0xaaa9a8));
+        let close = Rect::from_center_size(band.min + vec2(16.0, 16.0), vec2(14.0, 14.0));
+        p.circle_filled(close.center(), 7.0, gray(0xe1675b));
+        for k in 1..3 {
+            p.circle_filled(close.center() + vec2(20.0 * k as f32, 0.0), 7.0, gray(0x525150));
+        }
+        if ui.interact(close, ui.scope_id().with("ps-close"), Sense::click()).clicked() {
+            *open = false;
+        }
+        let widths: Vec<f32> = PANES.iter().map(|t| p.layout_no_wrap(t.to_string(), look::regular(11.0), Color32::WHITE).size().x + 14.0).map(|w| w.max(48.0)).collect();
+        let gap = 4.0;
+        let total = widths.iter().sum::<f32>() + gap * (PANES.len() - 1) as f32;
+        let mut x = band.center().x - total / 2.0;
+        for (i, t) in PANES.iter().enumerate() {
+            let tr = Rect::from_min_size(pos2(x, band.min.y + 32.0), vec2(widths[i], 48.0));
+            x += tr.width() + gap;
+            let sel = pane == t;
+            if sel {
+                p.rect_filled(tr, 7.5, gray(0x4b4a49));
+                p.rect_stroke(tr, 7.5, Stroke::new(0.5, gray(0x100f0f)), egui::StrokeKind::Outside);
+                p.hline(tr.min.x + 7.0..=tr.max.x - 7.0, tr.min.y + 0.5, Stroke::new(0.5, gray(0x7b7977)));
             }
-        });
-        ui.separator();
+            let icon = PANE_ICONS[i];
+            crate::glyphs::paint(&p, Rect::from_center_size(pos2(tr.center().x, band.min.y + 48.0), vec2(26.0, 26.0)), icon, 24.0, if sel { gray(0x3478f6) } else { gray(0xa1a1a0) });
+            p.text(pos2(tr.center().x, band.min.y + 68.0), Align2::CENTER_CENTER, *t, look::regular(11.0), if sel { gray(0x3d85f7) } else { gray(0x979696) });
+            if ui.interact(tr, ui.scope_id().with(("ps-tab", i)), Sense::click()).clicked() {
+                *pane = t.to_string();
+                app.ps_ui.sub.clear();
+            }
+        }
         let ss = subs(pane);
-        if ss.len() > 1 {
-            if !ss.contains(&app.ps_ui.sub.as_str()) {
-                app.ps_ui.sub = ss[0].to_string();
-            }
-            ui.horizontal(|ui| {
-                for s in &ss {
-                    if ui.add(egui::Button::selectable(app.ps_ui.sub == *s, *s)).clicked() {
-                        app.ps_ui.sub = s.to_string();
-                    }
-                }
-            });
-            ui.add_space(4.0);
+        if ss.len() > 1 && !ss.contains(&app.ps_ui.sub.as_str()) {
+            app.ps_ui.sub = ss[0].to_string();
         }
         let sub = if ss.len() > 1 { app.ps_ui.sub.clone() } else { ss.first().map(|s| s.to_string()).unwrap_or_default() };
+        // the group box (drawn behind its contents once their height is known)
+        let boxed = ss.len() > 1;
+        ui.add_space(if boxed { 30.0 } else { 20.0 });
+        let box_top = ui.cursor().min.y;
+        let box_bg = p.add(egui::Shape::Noop);
+        ui.add_space(if boxed { 24.0 } else { 0.0 });
+        let inner = Rect::from_min_max(pos2(top.x + 20.0 + 23.0, ui.cursor().min.y), pos2(top.x + PS_W - 20.0 - 23.0, ui.cursor().min.y + 2000.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+        child.style_mut().spacing.item_spacing.y = 7.0;
+        body(app, ctx, &mut child, pane, &sub);
+        let used = child.min_rect();
+        ui.allocate_rect(Rect::from_min_max(pos2(top.x, inner.min.y), pos2(top.x + PS_W, used.max.y.max(inner.min.y) + 18.0)), Sense::hover());
+        let bottom = ui.cursor().min.y;
+        if boxed {
+            let bx = Rect::from_min_max(pos2(top.x + 20.0, box_top), pos2(top.x + PS_W - 20.0, bottom - 2.0));
+            p.set(box_bg, egui::Shape::rect_filled(bx, 4.0, gray(0x2d2c2b)));
+            p.rect_stroke(bx, 4.0, Stroke::new(1.0, gray(0x464545)), egui::StrokeKind::Inside);
+            // the segmented control on its top border
+            let f = look::regular(13.0);
+            let segw: Vec<f32> = ss.iter().map(|s| p.layout_no_wrap(s.to_string(), f.clone(), Color32::WHITE).size().x + 30.0).collect();
+            let seg = Rect::from_center_size(pos2(bx.center().x, bx.min.y), vec2(segw.iter().sum::<f32>() + 4.0, 24.0));
+            p.rect_filled(seg, 5.0, gray(0x363534));
+            let mut sx = seg.min.x + 2.0;
+            for (k, sname) in ss.iter().enumerate() {
+                let sr = Rect::from_min_size(pos2(sx, seg.min.y + 2.0), vec2(segw[k], 20.0));
+                sx += segw[k];
+                if *sname == sub {
+                    p.rect_filled(sr, 4.0, gray(0x545251));
+                    p.rect_stroke(sr, 4.0, Stroke::new(0.5, gray(0x7c7978)), egui::StrokeKind::Inside);
+                }
+                p.text(sr.center(), Align2::CENTER_CENTER, *sname, f.clone(), gray(0xe0e0e0));
+                if ui.interact(sr, ui.scope_id().with(("ps-sub", k)), Sense::click()).clicked() {
+                    app.ps_ui.sub = sname.to_string();
+                }
+            }
+        }
+        ui.add_space(if boxed { 19.0 } else { 8.0 });
+        let whole = Rect::from_min_max(top, pos2(top.x + PS_W, ui.cursor().min.y));
+        p.set(bg, egui::Shape::rect_filled(whole, 12.0, gray(0x262524)));
+        p.rect_stroke(whole, 12.0, Stroke::new(0.5, Color32::BLACK), egui::StrokeKind::Outside);
+    });
+    if app.proj != before {
+        apply(app);
+        app.dirty = true;
+    }
+    import_sheet(app, ctx);
+}
+
+const PS_W: f32 = 860.0;
+const PS_BAND: f32 = 88.0;
+const PANE_ICONS: [&str; 11] = [
+    crate::glyphs::ph::GEAR_SIX,
+    crate::glyphs::ph::ARROWS_CLOCKWISE,
+    crate::glyphs::ph::METRONOME,
+    crate::glyphs::ph::RECORD,
+    crate::glyphs::br::TUNING_FORK,
+    crate::glyphs::ph::WAVEFORM,
+    crate::glyphs::br::MIDI,
+    crate::glyphs::ph::MUSIC_NOTES,
+    crate::glyphs::ph::FILM_STRIP,
+    crate::glyphs::ph::GAUGE,
+    crate::glyphs::ph::FOLDER_SIMPLE,
+];
+
+/// The pane's rows as Logic's: labels right-aligned at one column, checkboxes, pop-ups,
+/// values and text fields after it (settings.rs's look).
+fn rows(app: &mut App, ui: &mut egui::Ui, pane: &str, sub: &str) {
+    let list: Vec<&Row> = ROWS.iter().filter(|r| r.0 == pane && r.1 == sub && !custom(r.0, r.1)).filter(|r| !(matches!(r.3, Kind::Text) && key(r).ends_with("Folder:"))).collect();
+    if list.is_empty() {
+        return;
+    }
+    let p = ui.painter().clone();
+    let f = look::regular(13.0);
+    let label_w = list.iter().filter(|r| !matches!(r.3, Kind::Check | Kind::Heading)).map(|r| p.layout_no_wrap(r.2.to_string(), f.clone(), Color32::WHITE).size().x).fold(75.0f32, f32::max);
+    let left = ui.max_rect().min.x;
+    let label_right = left + label_w + 10.0;
+    let ctrl_x = label_right + 9.5;
+    let fill = gray(0x3d3c3b);
+    let text = gray(0xdfdfdf);
+    for (k, r) in list.into_iter().enumerate() {
+        let key = key(r);
+        let cur = app.proj.get(&key);
+        let id = ui.scope_id().with(("ps-row", k));
+        // (Logic's pitch: checkboxes 23 pt apart, pop-ups and fields 31 pt)
+        let h = if matches!(r.3, Kind::Check) { 16.0 } else { 24.0 };
+        let (row, _) = ui.allocate_exact_size(vec2(ui.max_rect().width(), h), Sense::hover());
+        let cy = row.center().y;
+        match r.3 {
+            Kind::Heading => {
+                p.text(pos2(left, cy), Align2::LEFT_CENTER, r.2, look::bold(13.0), text);
+            }
+            Kind::Check => {
+                let b = Rect::from_min_size(pos2(ctrl_x, cy - 8.0), vec2(16.0, 16.0));
+                let on = cur == "1";
+                p.rect_filled(b, 3.5, if on { gray(0x397bf7) } else { gray(0x424140) });
+                if on {
+                    p.line_segment([b.center() + vec2(-4.0, 0.0), b.center() + vec2(-1.2, 3.2)], Stroke::new(2.0, Color32::WHITE));
+                    p.line_segment([b.center() + vec2(-1.2, 3.2), b.center() + vec2(4.5, -3.8)], Stroke::new(2.0, Color32::WHITE));
+                }
+                let g = p.layout_no_wrap(r.2.to_string(), f.clone(), text);
+                let hit = Rect::from_min_size(b.min, vec2(22.5 + g.size().x, 16.0));
+                p.galley(pos2(ctrl_x + 22.5, cy - g.size().y / 2.0), g, text);
+                if ui.interact(hit, id, Sense::click()).clicked() {
+                    set(&mut app.proj, &key, if on { "0" } else { "1" });
+                }
+            }
+            Kind::Popup(ch) => {
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
+                let w = ch.iter().map(|c| p.layout_no_wrap(c.to_string(), f.clone(), Color32::WHITE).size().x).fold(0.0f32, f32::max) + 44.0;
+                let pr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(w.clamp(120.0, 420.0), 24.0));
+                let resp = ui.interact(pr, id, Sense::click());
+                p.rect_filled(pr, 5.0, if resp.hovered() { look::mix(fill, Color32::WHITE, 0.06) } else { fill });
+                p.with_clip_rect(pr.shrink2(vec2(10.0, 0.0))).text(pos2(pr.min.x + 12.0, cy), Align2::LEFT_CENTER, &cur, f.clone(), text);
+                let m = pos2(pr.max.x - 14.0, cy);
+                for sg in [-1.0f32, 1.0] {
+                    p.line_segment([m + vec2(-3.5, sg * 1.5), m + vec2(0.0, sg * 5.0)], Stroke::new(1.3, gray(0xe1e1e1)));
+                    p.line_segment([m + vec2(0.0, sg * 5.0), m + vec2(3.5, sg * 1.5)], Stroke::new(1.3, gray(0xe1e1e1)));
+                }
+                egui::Popup::menu(&resp).show(|ui| {
+                    ui.set_min_width(pr.width());
+                    for c in ch {
+                        if ui.add(egui::Button::selectable(cur == *c, *c)).clicked() {
+                            set(&mut app.proj, &key, c);
+                            ui.close();
+                        }
+                    }
+                });
+            }
+            Kind::Num(lo, hi, unit) => {
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
+                let mut x: f32 = cur.parse().unwrap_or(0.0);
+                let fr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(110.0, 24.0));
+                p.rect_filled(fr, 5.0, fill);
+                let resp = ui.put(fr.shrink2(vec2(8.0, 2.0)), egui::DragValue::new(&mut x).range(lo..=hi).speed((hi - lo) / 400.0).fixed_decimals(1).suffix(format!(" {unit}")));
+                if resp.changed() {
+                    set(&mut app.proj, &key, &format!("{x:.1}"));
+                }
+            }
+            Kind::Text => {
+                p.text(pos2(label_right, cy), Align2::RIGHT_CENTER, r.2, f.clone(), text);
+                let fr = Rect::from_min_size(pos2(ctrl_x, row.min.y), vec2(220.0, 24.0));
+                p.rect_filled(fr, 5.0, fill);
+                let mut t = cur.clone();
+                if ui.put(fr.shrink2(vec2(8.0, 3.0)), egui::TextEdit::singleline(&mut t).frame(egui::Frame::NONE).font(f.clone())).changed() {
+                    set(&mut app.proj, &key, &t);
+                }
+            }
+        }
+    }
+}
+
+fn gray(hex: u32) -> Color32 {
+    Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
+/// A pane's contents: its own code's controls, then its rows (labels right-aligned).
+fn body(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui, pane: &str, sub: &str) {
+    let pane = pane.to_string();
+    let pane = &pane;
+    let sub = sub.to_string();
         match pane.as_str() {
             "General" => crate::projfile::general_info(app, ui),
             "MIDI" if sub == "Chase" => crate::chase::pane(ui, &mut app.proj),
@@ -600,54 +785,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
             }
             _ => {}
         }
-        egui::Grid::new(("ps-rows", pane.clone(), sub.clone())).num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            for r in ROWS.iter().filter(|r| r.0 == pane && r.1 == sub && !custom(r.0, r.1)) {
-                let k = key(r);
-                if matches!(r.3, Kind::Text) && k.ends_with("Folder:") {
-                    continue;
-                }
-                let cur = app.proj.get(&k);
-                match r.3 {
-                    Kind::Heading => {
-                        ui.label(egui::RichText::new(r.2).strong());
-                        ui.end_row();
-                        continue;
-                    }
-                    Kind::Check => {
-                        ui.label("");
-                        let mut on = cur == "1";
-                        if ui.checkbox(&mut on, r.2).changed() {
-                            set(&mut app.proj, &k, if on { "1" } else { "0" });
-                        }
-                    }
-                    Kind::Popup(ch) => {
-                        ui.label(r.2);
-                        egui::ComboBox::from_id_salt(&k).selected_text(&cur).width(260.0).show_ui(ui, |ui| {
-                            for c in ch {
-                                if ui.selectable_label(cur == *c, *c).clicked() {
-                                    set(&mut app.proj, &k, c);
-                                }
-                            }
-                        });
-                    }
-                    Kind::Num(lo, hi, unit) => {
-                        ui.label(r.2);
-                        let mut x: f32 = cur.parse().unwrap_or(0.0);
-                        if ui.add(egui::Slider::new(&mut x, lo..=hi).suffix(format!(" {unit}"))).changed() {
-                            set(&mut app.proj, &k, &format!("{x:.1}"));
-                        }
-                    }
-                    Kind::Text => {
-                        ui.label(r.2);
-                        let mut t = cur.clone();
-                        if ui.text_edit_singleline(&mut t).changed() {
-                            set(&mut app.proj, &k, &t);
-                        }
-                    }
-                }
-                ui.end_row();
-            }
-        });
+        rows(app, ui, pane, &sub);
         // Tuning ▸ User: the twelve semitones from the root (the root itself fixed)
         if pane == "Tuning" && app.proj.get("Tuning /  / Software Instrument Tuning Table") == "User" {
             ui.horizontal_wrapped(|ui| {
@@ -686,12 +824,6 @@ pub fn window(app: &mut App, ctx: &egui::Context, pane: &mut String, open: &mut 
             ui.add_space(6.0);
             ui.label(egui::RichText::new(note).small().color(crate::look::text_dim()));
         }
-    });
-    if app.proj != before {
-        apply(app);
-        app.dirty = true;
-    }
-    import_sheet(app, ctx);
 }
 
 /// Opens Logic Settings at a tab (and sub-tab).

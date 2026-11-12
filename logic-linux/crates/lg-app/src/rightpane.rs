@@ -202,29 +202,7 @@ fn event_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {
 }
 
 fn markers(app: &mut App, ui: &mut egui::Ui, body: Rect) {
-    let p = ui.painter().clone();
-    let w = body.width() - 16.0;
-    let cols = [("Position", w * 0.4), ("Marker Name", w * 0.6)];
-    let hr = Rect::from_min_size(body.min, vec2(body.width(), ROW));
-    header_row(&p, hr, &cols);
-    let mut y = hr.max.y + 1.0;
-    let markers = app.markers.clone();
-    for (i, (pos, name)) in markers.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(body.min.x, y), vec2(body.width(), ROW));
-        if i % 2 == 1 {
-            p.rect_filled(row, 0.0, look::lane_alt());
-        }
-        p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, bbdt(app, *pos), look::regular(12.0), look::text());
-        p.text(pos2(row.min.x + 8.0 + cols[0].1, row.center().y), Align2::LEFT_CENTER, name, look::regular(12.0), look::text());
-        if ui.interact(row, ui.scope_id().with(("marker", i)), Sense::click()).double_clicked() {
-            app.locate(*pos as f64);
-        }
-        y += ROW;
-    }
-    let add = Rect::from_min_size(pos2(body.min.x + 10.0, y + 8.0), vec2(120.0, 24.0));
-    if ui.put(add, egui::Button::new("Create Marker")).clicked() {
-        app.key_command(ui.ctx(), "Create Marker");
-    }
+    crate::markers::list(app, ui, body);
 }
 
 fn tempo_list(app: &mut App, ui: &mut egui::Ui, body: Rect) {

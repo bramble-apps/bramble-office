@@ -1283,7 +1283,9 @@ pub fn signature_list(app: &mut App, ui: &mut egui::Ui) {
         if ui.button("Add Key Signature").clicked() {
             command(app, "Create Key Signature Change");
         }
+        crate::globals::sig_set_popup(app, ui);
     });
+    let Some(p) = app.project.clone() else { return };
     let mut rows: Vec<(u32, String, bool)> = vec![(0, format!("Time Signature {}/{}", p.signature.0, p.signature.1), false), (0, format!("Key Signature {}", p.key), true)];
     rows.extend(p.global.signatures.iter().map(|s| (s.0, format!("Time Signature {}/{}", s.1, s.2), false)));
     rows.extend(p.global.keys.iter().map(|k| (k.0, format!("Key Signature {}", k.1), true)));
@@ -1458,6 +1460,8 @@ fn extras_text(p: &lg_core::Project) -> String {
     if !p.global.tempo_sets.is_empty() {
         out += &format!("tcur\t{}\n", p.global.tempo_set);
     }
+    out += &crate::markers::extras_text(p);
+    out += &crate::globals::extras_text(p);
     out
 }
 
@@ -1501,7 +1505,7 @@ fn apply_extras(p: &mut lg_core::Project, text: &str) -> bool {
                 any = true;
             }
             ["tcur", k] => p.global.tempo_set = k.parse().unwrap_or(0),
-            _ => {}
+            _ => any |= crate::markers::apply_extras(p, l) || crate::globals::apply_extras(p, l),
         }
     }
     any
@@ -1527,6 +1531,7 @@ pub fn after_open(app: &mut App) {
     let Ok(text) = std::fs::read_to_string(path) else { return };
     let applied = app.project.as_mut().is_some_and(|p| apply_extras(p, &text));
     if applied {
+        app.markers = app.project.as_ref().map(|p| p.markers.clone()).unwrap_or_default();
         app.load_engine();
         app.dirty = false;
     }

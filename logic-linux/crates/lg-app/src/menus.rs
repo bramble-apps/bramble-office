@@ -264,6 +264,9 @@ fn checked(app: &App, label: &str) -> bool {
     if let Some(c) = crate::tm::checked(app, label).or_else(|| crate::autoext::checked(app, label)) {
         return c;
     }
+    if let Some(c) = crate::globals::checked(app, label) {
+        return c;
+    }
     if let Some(c) = crate::envhub::checked(app, label) {
         return c;
     }
