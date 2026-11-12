@@ -60,6 +60,9 @@ struct Slot {
     age: u64,
 }
 
+/// Poly::priority: none chosen (the instrument's own stealing).
+pub const NO_PRIORITY: u8 = 255;
+
 /// A fixed pool of voices (allocated once). `max` voices may sound; the pool holds extra slots
 /// so a stolen voice can fade out while its replacement starts.
 pub struct Poly<V> {
@@ -71,6 +74,10 @@ pub struct Poly<V> {
     pub retrigger_kills: bool,
     /// The next note-ons add voices to the key (layers, unison) instead of replacing it.
     pub stacking: bool,
+    /// Which notes to keep when the polyphony is exceeded: 0 Newest (steal the oldest),
+    /// 1 Oldest (drop the new note), 2 Lowest, 3 Highest; NO_PRIORITY (the default) steals the
+    /// quietest of the oldest.
+    pub priority: u8,
 }
 
 impl<V> Poly<V> {
@@ -83,6 +90,7 @@ impl<V> Poly<V> {
             counter: 0,
             retrigger_kills: true,
             stacking: false,
+            priority: NO_PRIORITY,
         }
     }
 
@@ -117,7 +125,23 @@ impl<V> Poly<V> {
         let live = (0..self.voices.len())
             .filter(|&i| self.voices[i].active() && !self.slots[i].killed)
             .count();
-        if live >= self.max {
+        if live >= self.max && self.priority != NO_PRIORITY && !(0..self.voices.len()).any(|i| self.voices[i].active() && !self.slots[i].killed && self.slots[i].released) {
+            // all voices held: keep the oldest / lowest / highest notes
+            let held = (0..self.voices.len()).filter(|&i| self.voices[i].active() && !self.slots[i].killed);
+            let victim = match self.priority {
+                0 => held.min_by_key(|&i| self.slots[i].age),
+                2 => held.max_by_key(|&i| self.slots[i].note).filter(|&i| self.slots[i].note > note),
+                3 => held.min_by_key(|&i| self.slots[i].note).filter(|&i| self.slots[i].note < note),
+                _ => None,
+            };
+            match victim {
+                Some(i) => {
+                    self.voices[i].kill(ctl.rate);
+                    self.slots[i].killed = true;
+                }
+                None => return,
+            }
+        } else if live >= self.max {
             let mut best: Option<usize> = None;
             let mut best_score = f32::MAX;
             for i in 0..self.voices.len() {
@@ -168,6 +192,23 @@ impl<V> Poly<V> {
             killed: false,
             age: self.counter,
         };
+    }
+
+    /// Mono / legato: moves the sounding voice of `from` to `note` without a new voice (the
+    /// voice decides from `shared` whether to retrigger). False when nothing is sounding.
+    pub fn legato<S>(&mut self, from: u8, note: u8, vel: u8, shared: &S, ctl: &Ctl) -> bool
+    where
+        V: Voice<S>,
+    {
+        let Some(i) = (0..self.voices.len()).find(|&i| self.voices[i].active() && !self.slots[i].killed && !self.slots[i].released && self.slots[i].note == from) else {
+            return false;
+        };
+        self.counter += 1;
+        self.voices[i].start(note, vel, shared, ctl);
+        self.slots[i].note = note;
+        self.slots[i].held = true;
+        self.slots[i].sustained = false;
+        true
     }
 
     pub fn note_off<S>(&mut self, note: u8, shared: &S, ctl: &Ctl)

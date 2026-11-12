@@ -496,6 +496,23 @@ pub fn shown_of(params: &[Param], vals: &[f32], texts: &[Option<String>], id: u3
     crate::pluginwin::fmt(p, v)
 }
 
+/// A plug-in's Tutorial Settings (the folder in its Settings pop-up).
+pub fn tutorial_names(plugin: &str) -> &'static [&'static str] {
+    match plugin {
+        "ES2" => lg_synth::es2_tutorials::NAMES,
+        "Sculpture" => lg_synth::sculpture_tutorials::NAMES,
+        _ => &[],
+    }
+}
+
+pub fn tutorial_setting(plugin: &str, name: &str) -> Option<Vec<(u32, f32)>> {
+    match plugin {
+        "ES2" => lg_synth::es2_tutorials::setting(name),
+        "Sculpture" => lg_synth::sculpture_tutorials::setting(name),
+        _ => None,
+    }
+}
+
 /// The settings file's current name by track (shown in the header).
 pub(crate) fn setting_name(app: &App, t: usize) -> String {
     instwin::track_id(app, t).and_then(|id| app.inst.synth_setting.get(&id).cloned()).unwrap_or_else(|| "Factory Default".to_string())
@@ -618,6 +635,19 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
                 head = Some((6, String::new()));
                 ui.close();
             }
+            // the plug-in's Tutorial Settings folder (ES2, Sculpture)
+            let tutorials = tutorial_names(plugin);
+            if !tutorials.is_empty() {
+                ui.separator();
+                ui.menu_button("Tutorial Settings", |ui| {
+                    for n in tutorials {
+                        if ui.add(egui::Button::selectable(*n == cur_setting, *n)).clicked() {
+                            head = Some((11, n.to_string()));
+                            ui.close();
+                        }
+                    }
+                });
+            }
             if !saved.is_empty() {
                 ui.separator();
             }
@@ -716,6 +746,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize, plugin: &str, size: 
         }
         Some((9, _)) => {
             instwin::undo(app);
+        }
+        Some((11, name)) => {
+            if let Some(pairs) = tutorial_setting(plugin, &name) {
+                apply_setting(app, t, &name, &pairs);
+            }
         }
         Some((10, _)) => {
             instwin::redo(app);

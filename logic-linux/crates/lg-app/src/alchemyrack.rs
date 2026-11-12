@@ -23,6 +23,11 @@ pub const BTN: Color32 = rgb(0x3a3e46);
 /// The window's own state (by track).
 #[derive(Clone, Default)]
 pub struct St {
+    /// The Perform values as heard this frame, and the Transform pad's copied snapshot.
+    pub perform: [f32; 16],
+    pub snap_clip: Option<[f32; 17]>,
+    /// The running instrument's levels this frame (sources A–D, main filters 1–2, …).
+    pub levels: [f32; 9],
     /// 0 Advanced, 1 Simple, 2 Browse.
     pub view: u8,
     /// 0 Global, 1–4 sources A–D, 5 Morph.
@@ -53,6 +58,8 @@ pub struct St {
 #[derive(Clone, Copy, Default)]
 pub struct Live {
     pub levels: [f32; 9],
+    /// The Perform values as heard (after the Transform pad).
+    pub perform: [f32; 16],
     pub envf: [f32; 16],
     pub time: f64,
 }
@@ -449,6 +456,19 @@ pub fn arrows(p: &mut Pane, r: Rect, salt: impl std::hash::Hash + Copy + std::fm
         }
     }
     out
+}
+
+/// A source level meter over a source select field: a fill by level (−60 … 0 dB), red above
+/// 0 dB.
+pub fn level_fill(p: &Pane, r: Rect, level: f32) {
+    if level <= 1e-4 {
+        return;
+    }
+    let db = 20.0 * level.log10();
+    let frac = ((db + 60.0) / 60.0).clamp(0.0, 1.0);
+    let col = if level > 1.0 { rgb(0xd8423a) } else { rgb(0x3d8fc4) };
+    let m = Rect::from_min_size(r.min, vec2(r.width() * frac, r.height()));
+    p.ui.painter().rect_filled(m, 3.0, col.gamma_multiply(0.35));
 }
 
 /// A parameter pop-up with ‹ › arrows after it.

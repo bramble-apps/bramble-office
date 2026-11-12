@@ -189,3 +189,18 @@ fn import_midi_sets_pitch_velocity_swing() {
     assert!(v.contains(&(usize::MAX, 0, 3.0)));
     assert!(v.contains(&(S_TUNE, 2, 7.0)) && v.contains(&(S_VEL, 1, 0.0)));
 }
+
+#[test]
+fn overlapping_repeats_and_legacy_mode() {
+    // a key played again while still held joins the arpeggio again …
+    let c = cfg(1);
+    assert_eq!(pitches(&play(&c, &[60, 64, 60], 0.95)), [60, 60, 64, 60]);
+    // … unless Arp Overlap Legacy Mode leaves it out
+    let mut c = cfg(1);
+    c.overlap_legacy = true;
+    assert_eq!(pitches(&play(&c, &[60, 64, 60], 0.95)), [60, 64, 60, 64]);
+    // the extended parameter sets it
+    let mut a = Alchemy::new(48000.0);
+    a.set(OVERLAP_LEGACY, 1.0);
+    assert!(a.arp_cfg.overlap_legacy);
+}

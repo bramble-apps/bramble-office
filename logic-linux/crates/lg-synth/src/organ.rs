@@ -319,6 +319,8 @@ pub struct TonewheelB3 {
     keys: [[u8; 128]; 3],
     placed: [Option<(u8, u8)>; 128],
     sustained: [bool; 128],
+    /// The Clear preset key (C) held: preset keys then retrigger the held notes (a gate).
+    clear_down: bool,
     down: [usize; 3],
     perc_env: f32,
     perc_coef: f32,
@@ -407,6 +409,7 @@ impl TonewheelB3 {
             keys: [[0; 128]; 3],
             placed: [None; 128],
             sustained: [false; 128],
+            clear_down: false,
             down: [0; 3],
             perc_env: 0.0,
             perc_coef: 0.0,
@@ -1147,6 +1150,9 @@ impl Instrument for TonewheelB3 {
     }
     fn note_off(&mut self, pitch: u8) {
         let pitch = pitch.min(127);
+        if pitch == 24 && self.on(72) {
+            self.clear_down = false;
+        }
         let pedal_sustains = !matches!(self.p(27).round() as i32, 6 | 7);
         if self.ch.ctl.sustain && pedal_sustains {
             if self.placed[pitch as usize].is_some() {
@@ -1169,6 +1175,17 @@ impl Instrument for TonewheelB3 {
             let before = self.p(70 + manual as u32).round() as usize;
             self.press_preset(manual, (pitch - 24) as usize, before);
             self.update();
+            if pitch == 24 {
+                self.clear_down = true;
+            } else if self.clear_down {
+                // holding Clear: the held chord is struck again with the new registration
+                for k in 0..128 {
+                    if let Some((m, n)) = self.placed[k] {
+                        self.key_up(m as usize, n);
+                        self.key_down(m as usize, n, velocity);
+                    }
+                }
+            }
             return;
         }
         self.sustained[pitch as usize] = false;
@@ -1886,5 +1903,26 @@ mod tests {
         let (l, r) = play(&mut o, 1.0);
         assert!(rms(&r) > rms(&l) * 1.2);
         assert!(outs[4].0 > outs[4].1);
+    }
+
+    #[test]
+    fn clear_key_gate_retriggers_held_chords() {
+        let mut o = organ();
+        o.note_on(60, 100);
+        o.note_on(64, 100);
+        o.click = 0.0;
+        // without Clear held a preset key only changes the registration
+        o.note_on(24 + 3, 100);
+        assert_eq!(o.click, 0.0);
+        // holding Clear, each preset key strikes the held chord again
+        o.note_on(24, 100);
+        o.note_on(24 + 5, 100);
+        assert!(o.click > 0.0, "the chord retriggered (key clicks)");
+        assert_eq!(o.down[0], 2, "still two keys down");
+        assert_eq!(o.preset_key(0), 5);
+        o.note_off(24);
+        o.click = 0.0;
+        o.note_on(24 + 7, 100);
+        assert_eq!(o.click, 0.0, "Clear released: no gate");
     }
 }
