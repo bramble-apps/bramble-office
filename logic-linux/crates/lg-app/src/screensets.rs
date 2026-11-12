@@ -4,7 +4,7 @@
 //! Window menu), Next / Previous. The project's own screensets come from its DisplayState.plist
 //! (lg_core::displaystate): their numbers, names, locks and panes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::app::{App, Bottom, RightPane};
 
@@ -147,10 +147,24 @@ pub fn frame(app: &mut App) {
     if app.screens.loaded_for.as_ref() == Some(&file) {
         return;
     }
+    let first = app.screens.loaded_for.is_none();
     app.screens.loaded_for = Some(file.clone());
     app.screens.sets.clear();
     app.screens.tens = None;
     let now = layout(app);
+    // Studio's own memory of the layout wins over the file's (it's newer); with no project
+    // file, only at startup (the last layout)
+    if (!app.automated || std::env::var_os("LG_LAYOUT").is_some()) && (file.is_some() || first) {
+        if let Some((sets, cur)) = store_path(file.as_deref()).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| parse_store(&t, now)) {
+            app.screens.sets = sets;
+            app.screens.current = cur;
+            app.screens.saved = app.screens.sets.clone();
+            if let Some(l) = app.screens.sets.iter().find(|s| s.slot == cur).map(|s| s.layout) {
+                apply(app, l);
+            }
+            return;
+        }
+    }
     let Some(ds) = file.as_deref().and_then(lg_core::displaystate::read) else {
         ensure(app);
         return;
@@ -396,9 +410,154 @@ pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> boo
     true
 }
 
+// ---- the layout remembered (Logic keeps it in the project's DisplayState) --------------------
+
+/// A new project's layout, as Logic's: the Tracks area with the Browser and the inspector,
+/// no editor or right pane open.
+pub fn new_layout(l: Layout) -> Layout {
+    Layout { browser: true, inspector: true, bottom: Bottom::None, right_pane: None, scroll_x: 0.0, scroll_y: 0.0, ..l }
+}
+
+/// A new, empty project: Logic's starting layout, one screenset.
+pub fn new_project(app: &mut App) {
+    let l = new_layout(layout(app));
+    apply(app, l);
+    app.screens.sets = vec![Set { slot: 1, name: String::new(), locked: false, layout: l }];
+    app.screens.current = 1;
+    app.screens.saved = app.screens.sets.clone();
+    app.screens.loaded_for = Some(app.file.as_ref().map(|f| f.0.clone()));
+}
+
+/// Where a project's layout is kept (no file: the last layout, for the next start).
+fn store_path(file: Option<&Path>) -> Option<PathBuf> {
+    match file {
+        Some(f) => {
+            let side = crate::hosting::sidecar_path(f)?;
+            Some(side.parent()?.parent()?.join("layouts").join(side.file_name()?))
+        }
+        None => {
+            let base = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+            Some(base.join("bramble-studio").join("layouts").join("last.txt"))
+        }
+    }
+}
+
+fn bottom_n(b: Bottom) -> u8 {
+    match b {
+        Bottom::None => 0,
+        Bottom::PianoRoll => 1,
+        Bottom::Mixer => 2,
+        Bottom::SmartControls => 3,
+    }
+}
+
+fn pane_n(p: Option<RightPane>) -> i8 {
+    match p {
+        None => -1,
+        Some(RightPane::Lists) => 0,
+        Some(RightPane::Notes) => 1,
+        Some(RightPane::Loops) => 2,
+        Some(RightPane::Files) => 3,
+    }
+}
+
+pub fn store_text(sets: &[Set], current: u32) -> String {
+    let mut t = format!("# Bramble Studio: window layout (screensets)\ncurrent\t{current}\n");
+    for s in sets {
+        let l = &s.layout;
+        let b = |v: bool| if v { 1 } else { 0 };
+        t += &format!(
+            "set\t{}\t{}\t{}\t{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n",
+            s.slot, b(s.locked), s.name.replace(['\t', '\n'], " "),
+            b(l.browser), b(l.inspector), b(l.control_bar), b(l.toolbar), bottom_n(l.bottom), pane_n(l.right_pane), l.list_tab,
+            l.browser_w, l.header_w, l.editor_h, l.mixer_h, l.bar_w, l.scroll_x, l.scroll_y, l.v_zoom, b(l.global_tracks), b(l.automation)
+        );
+    }
+    t
+}
+
+/// The remembered screensets (`base` fills nothing missing: every field is written).
+pub fn parse_store(t: &str, base: Layout) -> Option<(Vec<Set>, u32)> {
+    let mut sets = Vec::new();
+    let mut current = 0;
+    for line in t.lines().filter(|l| !l.starts_with('#')) {
+        let w: Vec<&str> = line.split('\t').collect();
+        match w.as_slice() {
+            ["current", n] => current = n.parse().ok()?,
+            ["set", slot, locked, name, f] => {
+                let f: Vec<f32> = f.split(' ').filter_map(|x| x.parse().ok()).collect();
+                if f.len() != 17 {
+                    continue;
+                }
+                let on = |i: usize| f[i] != 0.0;
+                let layout = Layout {
+                    browser: on(0),
+                    inspector: on(1),
+                    control_bar: on(2),
+                    toolbar: on(3),
+                    bottom: [Bottom::None, Bottom::PianoRoll, Bottom::Mixer, Bottom::SmartControls].get(f[4] as usize).copied().unwrap_or(base.bottom),
+                    right_pane: [RightPane::Lists, RightPane::Notes, RightPane::Loops, RightPane::Files].get(f[5] as i32 as usize).copied().filter(|_| f[5] >= 0.0),
+                    list_tab: f[6] as usize,
+                    browser_w: f[7],
+                    header_w: f[8],
+                    editor_h: f[9],
+                    mixer_h: f[10],
+                    bar_w: f[11],
+                    scroll_x: f[12],
+                    scroll_y: f[13],
+                    v_zoom: f[14],
+                    global_tracks: on(15),
+                    automation: on(16),
+                };
+                sets.push(Set { slot: slot.parse().ok()?, name: name.to_string(), locked: *locked == "1", layout });
+            }
+            _ => {}
+        }
+    }
+    if sets.is_empty() {
+        return None;
+    }
+    if !sets.iter().any(|s| s.slot == current) {
+        current = sets[0].slot;
+    }
+    Some((sets, current))
+}
+
+/// Keeps the layout (at Save, and at quit): the current screenset takes what's shown unless
+/// it's locked.
+pub fn remember(app: &mut App) {
+    if app.automated {
+        return;
+    }
+    ensure(app);
+    let now = layout(app);
+    let cur = app.screens.current;
+    if let Some(c) = app.screens.sets.iter_mut().find(|s| s.slot == cur) {
+        if !c.locked {
+            c.layout = now;
+        }
+    }
+    let Some(path) = store_path(app.file.as_ref().map(|f| f.0.as_path())) else { return };
+    if let Some(d) = path.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let _ = std::fs::write(path, store_text(&app.screens.sets, cur));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remembered_layout_round_trips() {
+        let l = Layout { browser: false, inspector: true, control_bar: true, toolbar: false, bottom: Bottom::Mixer, right_pane: Some(RightPane::Notes), list_tab: 2, browser_w: 300.5, header_w: 220.0, editor_h: 310.0, mixer_h: 400.0, bar_w: 64.0, scroll_x: 12.5, scroll_y: 40.0, v_zoom: 1.5, global_tracks: true, automation: false };
+        let sets = vec![Set { slot: 1, name: "Mix".into(), locked: false, layout: l }, Set { slot: 3, name: "Edit".into(), locked: true, layout: new_layout(l) }];
+        let (back, cur) = parse_store(&store_text(&sets, 3), l).unwrap();
+        assert_eq!(back, sets);
+        assert_eq!(cur, 3);
+        assert_eq!(back[1].layout.bottom, Bottom::None);
+        assert_eq!(back[1].layout.right_pane, None);
+    }
 
     fn l(x: f32) -> Layout {
         Layout { browser: true, inspector: true, control_bar: true, toolbar: false, bottom: Bottom::None, right_pane: None, list_tab: 0, browser_w: 300.0, header_w: 265.0, editor_h: 300.0, mixer_h: 420.0, bar_w: 70.0, scroll_x: x, scroll_y: 0.0, v_zoom: 1.0, global_tracks: false, automation: false }

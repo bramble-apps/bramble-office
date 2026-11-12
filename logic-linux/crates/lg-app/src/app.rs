@@ -1880,6 +1880,11 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// Quitting: the window layout is kept for the next start (Logic keeps it in the project).
+    fn on_exit(&mut self) {
+        crate::screensets::remember(self);
+    }
+
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         [0.0; 4]
     }

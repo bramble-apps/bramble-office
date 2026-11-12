@@ -942,6 +942,7 @@ impl App {
             "New Empty Project" | "New from Template…" => {
                 self.stop();
                 self.set_project(crate::demo::empty(), true);
+                crate::screensets::new_project(self);
             }
             "Open…" => self.open_dialog(),
             "Close Project" => {

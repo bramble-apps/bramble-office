@@ -250,6 +250,7 @@ pub fn save(app: &mut App) {
     if app.pf.copy_assets && app.pf.band.is_none() {
         consolidate(app, true);
     }
+    crate::screensets::remember(app);
     let mut left = give_to_project(app);
     if let Some(pkg) = app.pf.band.clone() {
         let p = app.project.clone().unwrap_or_default();
@@ -443,6 +444,7 @@ pub fn new_project(app: &mut App, cmd: &str) {
         app.set_project(crate::demo::empty(), true);
         app.file = None;
         app.pf.band = None;
+        crate::screensets::new_project(app);
     } else {
         app.pf.chooser = true;
     }
