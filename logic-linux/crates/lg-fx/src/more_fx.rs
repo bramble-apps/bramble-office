@@ -610,8 +610,9 @@ static SG_P: [Param; 11] = [
     Param::new(B + 1, "Speed", 0.1, 20.0, 2.0, Unit::Hz),
     Param::new(B + 2, "CF Modulation", 0.0, 100.0, 0.0, Unit::Percent),
     Param::new(B + 3, "BW Modulation", 0.0, 100.0, 0.0, Unit::Percent),
-    Param::new(B + 4, "Center Frequency", 50.0, 15000.0, 1500.0, Unit::Hz),
-    Param::new(B + 5, "Bandwidth", 0.1, 5.0, 2.0, Unit::Octaves),
+    Param::new(B + 4, "Center Frequency", 20.0, 20000.0, 1500.0, Unit::Hz),
+    // in hertz, as Logic's: the band runs from Center − Bandwidth/2 to Center + Bandwidth/2
+    Param::new(B + 5, "Bandwidth", 1.0, 20000.0, 2250.0, Unit::Hz),
     Param::new(B + 6, "Low Level", 0.0, 100.0, 100.0, Unit::Percent),
     Param::new(B + 7, "Super Energy", 0.0, 100.0, 100.0, Unit::Percent),
     Param::new(B + 8, "Sub Energy", 0.0, 100.0, 0.0, Unit::Percent),
@@ -627,22 +628,30 @@ pub struct SpectralGate {
     env: Follower,
     ph: Phase,
     k: u32,
+    band: (f32, f32),
 }
 
 impl SpectralGate {
     pub fn new(rate: f32) -> SpectralGate {
-        let mut g = SpectralGate { p: Values::new(&SG_P), rate, lo: [Crossover::default(); 2], hi: [Crossover::default(); 2], env: Follower::new(rate, 2.0, 60.0), ph: Phase::default(), k: 0 };
+        let mut g = SpectralGate { p: Values::new(&SG_P), rate, lo: [Crossover::default(); 2], hi: [Crossover::default(); 2], env: Follower::new(rate, 2.0, 60.0), ph: Phase::default(), k: 0, band: (0.0, 0.0) };
         g.place(0.0);
         g
     }
     fn place(&mut self, m: f32) {
         let cf = self.p.get(B + 4) * 2f32.powf(m * 2.0 * self.p.get(B + 2) / 100.0);
         let bw = self.p.get(B + 5) * (1.0 + m * self.p.get(B + 3) / 100.0).max(0.1);
-        let (a, b) = (cf * 2f32.powf(-bw / 2.0), cf * 2f32.powf(bw / 2.0));
+        // (clipped at 20 Hz at the bottom, the band keeps its width upwards)
+        let a = (cf - bw / 2.0).max(20.0);
+        let b = (a + bw).max(a * 1.01);
         for s in 0..2 {
             self.lo[s].set(self.rate, a.max(20.0));
             self.hi[s].set(self.rate, b.min(self.rate * 0.45));
         }
+        self.band = (a.max(20.0), b.min(self.rate * 0.45));
+    }
+    /// The band's edges (Hz) as last placed.
+    pub fn band(&self) -> (f32, f32) {
+        self.band
     }
     fn update(&mut self) {
         self.place(0.0);
@@ -1610,6 +1619,20 @@ mod tests {
     }
 
     #[test]
+    fn spectral_gate_full_range() {
+        let g = SpectralGate::new(48000.0);
+        let cf = g.params().iter().find(|p| p.name == "Center Frequency").unwrap().clone();
+        let bw = g.params().iter().find(|p| p.name == "Bandwidth").unwrap().clone();
+        assert_eq!((cf.min, bw.max), (20.0, 20000.0));
+        // Center at minimum, Bandwidth at maximum: the band covers everything
+        let mut g = SpectralGate::new(48000.0);
+        g.set(cf.id, 20.0);
+        g.set(bw.id, 20000.0);
+        let (lo, hi) = g.band();
+        assert!(lo <= 20.0 && hi >= 20000.0, "{lo} {hi}");
+    }
+
+    #[test]
     fn rotor_motor_910_instant_acceleration_and_single_cabinet() {
         let spin = |set: &[(u32, f32)]| {
             let mut r = RotorCabinet::new(48000.0);
@@ -1623,9 +1646,9 @@ mod tests {
             (r.rotor.horn_hz, r.rotor.drum_hz)
         };
         // 910 at slow: drum stopped, horn turning; fast: both run
-        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 0.0)]);
+        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 0.0), (B + 3, 0.0)]);
         assert!(h > 0.5 && d.abs() < 1e-3, "{h} {d}");
-        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 2.0)]);
+        let (h, d) = spin(&[(B + 2, 3.0), (B + 1, 2.0), (B + 3, 0.0)]);
         assert!(h > 5.0 && d > 5.0);
         // single cabinet: Motor Control (Inv) has no effect
         assert_eq!(spin(&[(B, 3.0), (B + 2, 1.0), (B + 1, 2.0)]), spin(&[(B, 3.0), (B + 2, 0.0), (B + 1, 2.0)]));

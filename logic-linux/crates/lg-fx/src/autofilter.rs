@@ -8,7 +8,7 @@
 //! stored negative, like Tremolo) and the envelope (threshold-gated follower with attack,
 //! decay and sustain) move it in octaves; Spread offsets left and right.
 //!
-//! Logic's sections and switches (our own ids 40 up): Filter / Envelope / Distortion / LFO
+//! Logic's sections and switches (our own ids 1000 up): Filter / Envelope / Distortion / LFO
 //! on-off switches; State Variable HP / BP / LP / PK modes beside the 4-pole low-pass slopes
 //! (choosing a slope turns State Variable off, like clicking a 4-Pole button); envelope
 //! Retrigger, Dynamic and Release; LFO Sync (re-expresses the rate as a note value), Retrigger,
@@ -43,24 +43,24 @@ static PARAMS: [Param; 34] = [
     Param::new(26, "LFO Sync Phase", 0.0, 360.0, 180.0, Unit::None),
     Param::new(27, "Stereo Phase", -180.0, 180.0, 0.0, Unit::None),
     Param::new(30, "Spread", 0.0, 1.0, 0.01, Unit::None),
-    Param::new(40, "Filter On", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::menu(41, "State Variable", SV, 0.0),
-    Param::new(42, "Envelope On", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::new(43, "Env Retrigger", 0.0, 1.0, 0.0, Unit::OnOff),
-    Param::new(44, "Dynamic", 0.0, 100.0, 0.0, Unit::Percent),
-    Param::new(45, "Release", 0.0, 10000.0, 200.0, Unit::Ms),
-    Param::new(46, "LFO On", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::new(47, "LFO Sync", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::new(48, "LFO Retrigger", 0.0, 1.0, 0.0, Unit::OnOff),
-    Param::menu(49, "LFO Waveform", WAVES, 2.0),
-    Param::new(50, "Pulse Width", 5.0, 95.0, 50.0, Unit::Percent),
-    Param::new(51, "Distortion On", 0.0, 1.0, 1.0, Unit::OnOff),
-    Param::menu(52, "Pre Mode", DIST, 0.0),
-    Param::menu(53, "Post Mode", DIST, 0.0),
-    Param::new(54, "Dry Signal", 0.0, 100.0, 0.0, Unit::Percent),
-    Param::new(55, "Main Out", -30.0, 12.0, 0.0, Unit::Db),
-    Param::new(56, "Fatness Comp", 0.0, 1.0, 0.0, Unit::None).hide(),
-    Param::new(57, "LFO Hz Memory", 0.01, 100.0, 1.0, Unit::None).hide(),
+    Param::new(1000, "Filter On", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::menu(1001, "State Variable", SV, 0.0),
+    Param::new(1002, "Envelope On", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(1003, "Env Retrigger", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1004, "Dynamic", 0.0, 100.0, 0.0, Unit::Percent),
+    Param::new(1005, "Release", 0.0, 10000.0, 200.0, Unit::Ms),
+    Param::new(1006, "LFO On", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(1007, "LFO Sync", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::new(1008, "LFO Retrigger", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::menu(1009, "LFO Waveform", WAVES, 2.0),
+    Param::new(1010, "Pulse Width", 5.0, 95.0, 50.0, Unit::Percent),
+    Param::new(1011, "Distortion On", 0.0, 1.0, 1.0, Unit::OnOff),
+    Param::menu(1012, "Pre Mode", DIST, 0.0),
+    Param::menu(1013, "Post Mode", DIST, 0.0),
+    Param::new(1014, "Dry Signal", 0.0, 100.0, 0.0, Unit::Percent),
+    Param::new(1015, "Main Out", -30.0, 12.0, 0.0, Unit::Db),
+    Param::new(1016, "Fatness Comp", 0.0, 1.0, 0.0, Unit::None).hide(),
+    Param::new(1017, "LFO Hz Memory", 0.0, 100.0, 0.0, Unit::None).hide(),
 ];
 
 /// One distortion stage of the given mode (0 Classic, 1 Tube, 2 Scream) at drive 0-1.
@@ -116,13 +116,13 @@ impl AutoFilter {
 
     fn lfo_hz(&self) -> f32 {
         let r = self.p.get(25);
-        if r < 0.0 || (self.p.on(47) && r < 0.5) { beats_hz(sync_index_beats(r), self.bpm) } else { r.max(0.01) }
+        if r < 0.0 || (self.p.on(1007) && r < 0.5) { beats_hz(sync_index_beats(r), self.bpm) } else { r.max(0.01) }
     }
 
     fn update(&mut self) {
         self.att = coef(self.rate, self.p.get(17).max(0.1));
         self.dec = coef(self.rate, self.p.get(19).max(0.1));
-        self.rel = coef(self.rate, self.p.get(45).max(0.1));
+        self.rel = coef(self.rate, self.p.get(1005).max(0.1));
     }
 
     fn clear(&mut self) {
@@ -141,10 +141,10 @@ impl AutoFilter {
     /// The LFO's value (-1..1) at a phase, for the chosen waveform.
     fn wave(&mut self, ph: f32) -> f32 {
         let ph = ph - ph.floor();
-        match self.p.idx(49) {
+        match self.p.idx(1009) {
             0 => 1.0 - 2.0 * ph,
             1 => 2.0 * ph - 1.0,
-            3 => if ph < self.p.get(50) / 100.0 { 1.0 } else { -1.0 },
+            3 => if ph < self.p.get(1010) / 100.0 { 1.0 } else { -1.0 },
             4 => {
                 if ph < self.last_ph {
                     self.held = self.noise.next();
@@ -161,10 +161,10 @@ impl AutoFilter {
     pub fn edit(&mut self, id: u32, value: f32) {
         match id {
             5 => {
-                self.p.set(41, 0.0);
+                self.p.set(1001, 0.0);
             }
-            47 => {
-                let was = self.p.on(47) || self.p.get(25) < 0.0;
+            1007 => {
+                let was = self.p.on(1007) || self.p.get(25) < 0.0;
                 let hz = self.lfo_hz();
                 if value > 0.5 && !was {
                     // nearest note value to the free rate
@@ -174,10 +174,10 @@ impl AutoFilter {
                         let db_ = (sync_index_beats(-(*b as f32)) / beats).ln().abs();
                         da.total_cmp(&db_)
                     });
-                    self.p.set(57, hz);
+                    self.p.set(1017, hz);
                     self.p.set(25, -(best.unwrap_or(11) as f32));
                 } else if value < 0.5 && was {
-                    let back = if self.p.get(57) > 0.01 { self.p.get(57) } else { hz };
+                    let back = if self.p.get(1017) > 0.01 { self.p.get(1017) } else { hz };
                     self.p.set(25, back.clamp(0.01, 100.0));
                 }
             }
@@ -202,18 +202,19 @@ impl lg_dsp::Effect for AutoFilter {
         let rate = self.rate;
         let base_oct = (p.get(2) / 100.0) * 1000f32.log2(); // octaves above 20 Hz
         let res = p.get(3) / 100.0;
-        let k = res * 4.2;
-        let filt_on = p.on(40);
-        let svm = p.idx(41);
-        let env_on = p.on(42);
-        let env_retrig = p.on(43);
-        let dynamic = p.get(44) / 100.0;
-        let lfo_on = p.on(46);
-        let lfo_retrig = p.on(48);
-        let dist_on = p.on(51);
-        let (pre_m, post_m) = (p.idx(52), p.idx(53));
-        let dry = p.get(54) / 100.0;
-        let out = db(p.get(55));
+        // (4.6: the ladder breaks into self-oscillation from about 93 % Resonance)
+        let k = res * 4.6;
+        let filt_on = p.on(1000);
+        let svm = p.idx(1001);
+        let env_on = p.on(1002);
+        let env_retrig = p.on(1003);
+        let dynamic = p.get(1004) / 100.0;
+        let lfo_on = p.on(1006);
+        let lfo_retrig = p.on(1008);
+        let dist_on = p.on(1011);
+        let (pre_m, post_m) = (p.idx(1012), p.idx(1013));
+        let dry = p.get(1014) / 100.0;
+        let out = db(p.get(1015));
         let thr_db = p.get(15);
         let fat = p.get(4) / 100.0;
         let poles = p.idx(5).min(3) + 1;
@@ -302,9 +303,10 @@ impl lg_dsp::Effect for AutoFilter {
                     }
                 } else {
                     let st = &mut self.pole[s];
-                    // resonance feedback; Fatness feeds the input back in step with it, so at
+                    // resonance feedback from the fourth pole whatever the slope (the slope only
+                    // picks the output tap); Fatness feeds the input back in step with it, so at
                     // full Fatness resonance no longer thins the band below the cutoff
-                    let u = (v - k * (st[poles - 1] - fat * v)).tanh();
+                    let u = (v - k * (st[3] - fat * v)).tanh();
                     st[0] = flush(st[0] + g * (u - st[0]));
                     for j in 1..4 {
                         st[j] = flush(st[j] + g * (st[j - 1] - st[j]));
@@ -401,46 +403,46 @@ mod tests {
     fn state_variable_modes() {
         // cutoff 50 % = about 630 Hz
         let c = [(2, 50.0), (3, 0.0)];
-        let hp = [c[0], c[1], (41, 1.0)];
+        let hp = [c[0], c[1], (1001, 1.0)];
         assert!(gain(&hp, 100.0) < 0.1 && gain(&hp, 5000.0) > 0.8);
-        let lp = [c[0], c[1], (41, 3.0)];
+        let lp = [c[0], c[1], (1001, 3.0)];
         assert!(gain(&lp, 100.0) > 0.8 && gain(&lp, 5000.0) < 0.1);
         // band-pass centred on the cutoff
-        let bp = [c[0], c[1], (41, 2.0)];
+        let bp = [c[0], c[1], (1001, 2.0)];
         let fc = 20.0 * 2f32.powf(0.5 * 1000f32.log2());
         assert!(gain(&bp, fc) > 0.9, "{}", gain(&bp, fc));
         assert!(gain(&bp, fc / 8.0) < 0.3 && gain(&bp, fc * 8.0) < 0.3);
         // peak: a boost at the cutoff, flat away from it
-        let pk = [c[0], (3, 50.0), (41, 4.0)];
+        let pk = [c[0], (3, 50.0), (1001, 4.0)];
         assert!(gain(&pk, fc) > 1.5 && (gain(&pk, 40.0) - 1.0).abs() < 0.2);
     }
 
     #[test]
     fn four_pole_button_overrides_state_variable() {
         let mut a = AutoFilter::new(R);
-        a.set(41, 1.0);
-        assert_eq!(a.get(41), 1.0);
+        a.set(1001, 1.0);
+        assert_eq!(a.get(1001), 1.0);
         a.set(5, 1.0);
-        assert_eq!(a.get(41), 0.0);
+        assert_eq!(a.get(1001), 0.0);
         assert_eq!(a.get(5), 1.0);
     }
 
     #[test]
     fn section_switches() {
         // filter off: everything passes
-        assert!(gain(&[(2, 30.0), (40, 0.0)], 5000.0) > 0.95);
+        assert!(gain(&[(2, 30.0), (1000, 0.0)], 5000.0) > 0.95);
         // distortion switch off silences the drive
         let x = sine(220.0, 0.3, 24000);
-        let on = run(&[(2, 100.0), (0, 100.0), (40, 0.0)], &x);
-        let off = run(&[(2, 100.0), (0, 100.0), (40, 0.0), (51, 0.0)], &x);
+        let on = run(&[(2, 100.0), (0, 100.0), (1000, 0.0)], &x);
+        let off = run(&[(2, 100.0), (0, 100.0), (1000, 0.0), (1011, 0.0)], &x);
         assert!(off.iter().zip(&x).all(|(a, b)| (a - b).abs() < 1e-6));
         assert!(on.iter().zip(&x).any(|(a, b)| (a - b).abs() > 0.05));
         // Classic, Tube and Scream sound different
-        let m: Vec<Vec<f32>> = (0..3).map(|k| run(&[(40, 0.0), (0, 60.0), (52, k as f32)], &x)).collect();
+        let m: Vec<Vec<f32>> = (0..3).map(|k| run(&[(1000, 0.0), (0, 60.0), (1012, k as f32)], &x)).collect();
         assert!(rms(&m[0].iter().zip(&m[1]).map(|(a, b)| a - b).collect::<Vec<_>>()) > 0.005);
         assert!(rms(&m[0].iter().zip(&m[2]).map(|(a, b)| a - b).collect::<Vec<_>>()) > 0.005);
         // LFO off: a big LFO amount no longer moves the cutoff
-        let still = run(&[(2, 40.0), (12, 100.0), (46, 0.0)], &sine(1000.0, 0.1, 24000));
+        let still = run(&[(2, 40.0), (12, 100.0), (1006, 0.0)], &sine(1000.0, 0.1, 24000));
         let moving = run(&[(2, 40.0), (12, 100.0)], &sine(1000.0, 0.1, 24000));
         let var = |y: &[f32]| {
             let r: Vec<f32> = y[4800..].chunks(960).map(rms).collect();
@@ -452,9 +454,9 @@ mod tests {
     #[test]
     fn dry_signal_and_main_out() {
         // filter shut (cutoff 0): only the dry signal comes through
-        let g = gain(&[(2, 0.0), (54, 50.0)], 5000.0);
+        let g = gain(&[(2, 0.0), (1014, 50.0)], 5000.0);
         assert!((g - 0.5).abs() < 0.05, "{g}");
-        let g = gain(&[(40, 0.0), (55, -6.0)], 1000.0);
+        let g = gain(&[(1000, 0.0), (1015, -6.0)], 1000.0);
         assert!((g - 0.501).abs() < 0.02, "{g}");
     }
 
@@ -495,25 +497,26 @@ mod tests {
         let mut x = sine(200.0, 0.5, 9600);
         x.extend(vec![0.0; 24000]);
         // Release: slower release keeps the envelope up longer
-        let fast = env_trace(&[(16, 50.0), (45, 20.0), (17, 1.0)], &x);
-        let slow = env_trace(&[(16, 50.0), (45, 2000.0), (17, 1.0)], &x);
-        assert!(fast[200 + 50] < 0.01 && slow[200 + 50] > 0.3, "{} {}", fast[250], slow[250]);
+        let fast = env_trace(&[(16, 50.0), (1005, 20.0), (17, 1.0)], &x);
+        let slow = env_trace(&[(16, 50.0), (1005, 2000.0), (17, 1.0)], &x);
+        // (the detector holds the peak about 50 ms before the level counts as gone)
+        assert!(fast[200 + 150] < 0.01 && slow[200 + 150] > 0.3, "{} {}", fast[350], slow[350]);
         // Dynamic: a quiet input reaches a lower peak
         let quiet = sine(200.0, 0.05, 9600);
-        let full = env_trace(&[(16, 50.0), (44, 100.0), (17, 1.0), (18, 100.0)], &quiet);
-        let flat = env_trace(&[(16, 50.0), (44, 0.0), (17, 1.0), (18, 100.0)], &quiet);
+        let full = env_trace(&[(15, -40.0), (16, 50.0), (1004, 100.0), (17, 1.0), (18, 100.0)], &quiet);
+        let flat = env_trace(&[(15, -40.0), (16, 50.0), (1004, 0.0), (17, 1.0), (18, 100.0)], &quiet);
         assert!(full[150] < 0.7 * flat[150], "{} {}", full[150], flat[150]);
         // Retrigger: a second burst while the envelope still releases restarts it only when on
         let mut two = sine(200.0, 0.5, 4800);
         two.extend(vec![0.0; 4800]);
         two.extend(sine(200.0, 0.5, 4800));
-        let on = env_trace(&[(16, 50.0), (45, 3000.0), (17, 1.0), (18, 0.0), (19, 50.0), (43, 1.0)], &two);
-        let off = env_trace(&[(16, 50.0), (45, 3000.0), (17, 1.0), (18, 0.0), (19, 50.0), (43, 0.0)], &two);
-        assert!(on[205] > 0.9 && off[205] < 0.5, "{} {}", on[205], off[205]);
+        let on = env_trace(&[(16, 50.0), (1005, 3000.0), (17, 1.0), (18, 50.0), (19, 20.0), (1003, 1.0)], &two);
+        let off = env_trace(&[(16, 50.0), (1005, 3000.0), (17, 1.0), (18, 50.0), (19, 20.0), (1003, 0.0)], &two);
+        assert!(on[205] > 0.9 && off[205] < 0.55, "{} {}", on[205], off[205]);
         // Envelope switch off: no push at all
         let mut a = AutoFilter::new(R);
         a.set(16, 100.0);
-        a.set(42, 0.0);
+        a.set(1002, 0.0);
         let mut y = sine(1000.0, 0.5, 24000);
         let mut b = y.clone();
         a.set(12, 0.0);
@@ -528,21 +531,21 @@ mod tests {
     fn lfo_waveforms_sync_and_retrigger() {
         let mut a = AutoFilter::new(R);
         let mut at = |w: f32, ph: f32| {
-            a.p.set(49, w);
+            a.p.set(1009, w);
             a.wave(ph)
         };
         assert!((at(0.0, 0.1) - 0.8).abs() < 1e-5); // saw down
         assert!((at(1.0, 0.1) + 0.8).abs() < 1e-5); // saw up
         assert!((at(2.0, 0.25) - 1.0).abs() < 1e-5); // triangle peak
         // pulse width moves the edge
-        a.p.set(49, 3.0);
-        a.p.set(50, 25.0);
+        a.p.set(1009, 3.0);
+        a.p.set(1010, 25.0);
         assert_eq!(a.wave(0.2), 1.0);
         assert_eq!(a.wave(0.3), -1.0);
-        a.p.set(50, 75.0);
+        a.p.set(1010, 75.0);
         assert_eq!(a.wave(0.7), 1.0);
         // random: held values, new one each cycle
-        a.p.set(49, 4.0);
+        a.p.set(1009, 4.0);
         let v1 = a.wave(0.1);
         assert_eq!(a.wave(0.5), v1);
         let v2 = a.wave(0.05);
@@ -551,17 +554,17 @@ mod tests {
         let mut a = AutoFilter::new(R);
         a.set_tempo(120.0);
         assert!(a.get(25) < 0.0);
-        a.set(47, 0.0);
+        a.set(1007, 0.0);
         assert!(a.get(25) > 0.0);
         let hz = a.lfo_hz();
         assert!((hz - 4.0).abs() < 0.01, "{hz}"); // 1/8 at 120 bpm
         a.set(25, 2.0);
-        a.set(47, 1.0);
+        a.set(1007, 1.0);
         assert!(a.get(25) < 0.0 && (a.lfo_hz() - 2.0).abs() < 0.01, "{}", a.lfo_hz());
         assert!((sync_index_beats(-26.0) - 16.0).abs() < 1e-6 && (sync_index_beats(-12.0) - 2.0 / 3.0).abs() < 1e-6);
         // LFO Retrigger: a trigger resets the LFO phase
         let mut a = AutoFilter::new(R);
-        a.set(48, 1.0);
+        a.set(1008, 1.0);
         a.set(16, 10.0);
         let mut z = vec![0.0; 4000];
         let mut zz = z.clone();

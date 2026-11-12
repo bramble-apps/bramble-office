@@ -248,10 +248,10 @@ impl lg_dsp::Effect for Limiter {
             let (l, r) = (left[i] * self.gain, right[i] * self.gain);
             let pk = if true_peak { self.tp.peak(0, l).max(self.tp.peak(1, r)) } else { l.abs().max(r.abs()) };
             let want = if soft {
-                // a 6 dB soft knee centred on the ceiling (infinite ratio above it)
+                // a 12 dB wide soft knee centred on the ceiling (infinite ratio above it)
                 const W: f32 = 6.0;
                 let x = lg_dsp::gain_to_db(pk.max(1e-9) / self.ceiling);
-                let gr = if x <= -W / 2.0 { 0.0 } else if x < W / 2.0 { -(x + W / 2.0).powi(2) / (2.0 * W) } else { -x };
+                let gr = if x <= -W { 0.0 } else if x < W { -(x + W).powi(2) / (4.0 * W) } else { -x };
                 db(gr)
             } else if pk > self.ceiling {
                 self.ceiling / pk

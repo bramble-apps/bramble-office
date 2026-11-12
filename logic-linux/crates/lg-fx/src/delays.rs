@@ -16,13 +16,13 @@
 //! Echo: a simple synced echo — Time (a note menu), Repeat (feedback), Color (tilts the repeats
 //! dark or bright), Dry and Wet.
 
-use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Smooth, Values, db, flush, note_div_beats, plugin_impl, sine01, sync_index_beats};
+use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Smooth, Values, db, flush, note_div_beats, plugin_impl_edit, sine01, sync_index_beats};
 use lg_dsp::{Param, Unit};
 
 const MAX_DELAY_S: f32 = 10.0;
 const INPUTS: &[&str] = &["Off", "Left", "Right", "Left + Right", "Left - Right"];
 
-static STEREO_PARAMS: [Param; 25] = [
+static STEREO_PARAMS: [Param; 29] = [
     Param::new(0, "Left Mix", 0.0, 100.0, 30.0, Unit::Percent),
     Param::new(1, "Right Mix", 0.0, 100.0, 30.0, Unit::Percent),
     Param::new(2, "Left Delay Time", 0.0, 10000.0, 500.0, Unit::Ms),
@@ -48,6 +48,11 @@ static STEREO_PARAMS: [Param; 25] = [
     Param::new(25, "Right Low Cut", 20.0, 20000.0, 20.0, Unit::Hz),
     Param::new(26, "Stereo Link", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(21, "(reserved)", 0.0, 1.0, 0.0, Unit::None),
+    // (our own ids) the :2 and x2 buttons beside each Delay Time: halve / double it (momentary)
+    Param::new(1000, "Left :2", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1001, "Left x2", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1002, "Right :2", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1003, "Right x2", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 pub struct StereoDelay {
@@ -156,11 +161,57 @@ impl lg_dsp::Effect for StereoDelay {
     }
 }
 
-plugin_impl!(StereoDelay);
+/// Left / right parameter pairs that Stereo Link moves together.
+const LINKED: [(u32, u32); 10] = [(0, 1), (2, 3), (4, 5), (6, 7), (11, 13), (12, 14), (17, 18), (19, 20), (22, 24), (23, 25)];
+
+/// A delay time halved (k = 0.5) or doubled: a note value (stored as a whole-note divisor)
+/// or milliseconds.
+fn scale_time(p: &mut Values, synced: bool, note: u32, ms: u32, k: f32) {
+    if synced {
+        p.set(note, p.get(note) / k);
+    } else {
+        p.set(ms, p.get(ms) * k);
+    }
+}
+
+impl StereoDelay {
+    /// A user edit: :2 / x2 halve or double a side's delay; with Stereo Link on, a change to
+    /// one side moves the other by the same amount, keeping their relative values.
+    pub fn edit(&mut self, id: u32, value: f32) {
+        let link = self.p.on(26);
+        if (1000..=1003).contains(&id) {
+            if value > 0.5 {
+                let k = if id % 2 == 0 { 0.5 } else { 2.0 };
+                let sync = self.p.on(10);
+                let right = id >= 1002;
+                if !right || link {
+                    scale_time(&mut self.p, sync, 11, 2, k);
+                }
+                if right || link {
+                    scale_time(&mut self.p, sync, 13, 3, k);
+                }
+                self.update();
+            }
+            return;
+        }
+        if link {
+            if let Some(&(a, b)) = LINKED.iter().find(|(a, b)| *a == id || *b == id) {
+                let other = if id == a { b } else { a };
+                let delta = value - self.p.get(id);
+                self.p.set(other, self.p.get(other) + delta);
+            }
+        }
+        if self.p.set(id, value) {
+            self.update();
+        }
+    }
+}
+
+plugin_impl_edit!(StereoDelay);
 
 // ---------------------------------------------------------------------------------------------
 
-static TAPE_PARAMS: [Param; 18] = [
+static TAPE_PARAMS: [Param; 20] = [
     Param::new(3, "Feedback", 0.0, 100.0, 61.0, Unit::Percent),
     Param::new(4, "High Cut", 200.0, 20000.0, 1500.0, Unit::Hz),
     Param::new(5, "Low Cut", 20.0, 5000.0, 520.0, Unit::Hz),
@@ -179,6 +230,9 @@ static TAPE_PARAMS: [Param; 18] = [
     Param::new(22, "Delay Time", 1.0, 5000.0, 666.62, Unit::Ms),
     Param::new(23, "Stereo Spread", 0.0, 100.0, 0.0, Unit::Percent),
     Param::menu(24, "Tape Head Mode", &["Clean", "Diffuse"], 0.0),
+    // (our own ids) the :2 and x2 buttons: halve / double Delay Time (momentary)
+    Param::new(1000, ":2", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1001, "x2", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 const DIFFUSE_MS: [f32; 3] = [7.3, 11.9, 17.1];
@@ -329,19 +383,38 @@ impl lg_dsp::Effect for TapeDelay {
     }
 }
 
-plugin_impl!(TapeDelay);
+impl TapeDelay {
+    pub fn edit(&mut self, id: u32, value: f32) {
+        if id == 1000 || id == 1001 {
+            if value > 0.5 {
+                let sync = self.p.on(6);
+                scale_time(&mut self.p, sync, 7, 22, if id == 1000 { 0.5 } else { 2.0 });
+                self.update();
+            }
+            return;
+        }
+        if self.p.set(id, value) {
+            self.update();
+        }
+    }
+}
+
+plugin_impl_edit!(TapeDelay);
 
 // ---------------------------------------------------------------------------------------------
 
 /// Echo's Time menu (index 7 = 1/8, as Logic stores its default).
 const ECHO_TIMES: &[&str] = &["1/64.", "1/32", "1/16t", "1/32.", "1/16", "1/8t", "1/16.", "1/8", "1/4t", "1/8.", "1/4", "1/2t", "1/4.", "1/2", "1/1t", "1/2.", "1/1", "2/1t", "1/1.", "2/1", "4/1t", "2/1.", "4/1"];
 
-static ECHO_PARAMS: [Param; 5] = [
+static ECHO_PARAMS: [Param; 7] = [
     Param::menu(16, "Time", ECHO_TIMES, 7.0),
     Param::new(17, "Repeat", 0.0, 100.0, 64.0, Unit::Percent),
     Param::new(18, "Color", 0.0, 100.0, 37.0, Unit::Percent),
     Param::new(19, "Dry", 0.0, 100.0, 96.0, Unit::Percent),
     Param::new(20, "Wet", 0.0, 100.0, 20.0, Unit::Percent),
+    // (our own ids) :2 / x2: half or double the note value (momentary)
+    Param::new(1000, ":2", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1001, "x2", 0.0, 1.0, 0.0, Unit::OnOff),
 ];
 
 pub struct Echo {
@@ -421,11 +494,70 @@ impl lg_dsp::Effect for Echo {
     }
 }
 
-plugin_impl!(Echo);
+impl Echo {
+    pub fn edit(&mut self, id: u32, value: f32) {
+        if id == 1000 || id == 1001 {
+            if value > 0.5 {
+                // the menu runs straight / triplet / dotted, so three steps = a factor of two
+                let i = self.p.get(16) + if id == 1000 { -3.0 } else { 3.0 };
+                if (0.0..=(ECHO_TIMES.len() - 1) as f32).contains(&i) {
+                    self.p.set(16, i);
+                    self.update();
+                }
+            }
+            return;
+        }
+        if self.p.set(id, value) {
+            self.update();
+        }
+    }
+}
+
+plugin_impl_edit!(Echo);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn half_double_buttons_and_stereo_link() {
+        use lg_dsp::Plugin;
+        let mut d = StereoDelay::new(48000.0);
+        lg_dsp::Effect::set_tempo(&mut d, 120.0);
+        let l0 = d.delay_samples(0);
+        let r0 = d.delay_samples(1);
+        d.set(1000, 1.0);
+        assert!((d.delay_samples(0) - l0 * 0.5).abs() < 1.0);
+        assert!((d.delay_samples(1) - r0).abs() < 1e-3);
+        d.set(1003, 1.0);
+        assert!((d.delay_samples(1) - r0 * 2.0).abs() < 1.0);
+        // free times too
+        d.set(10, 0.0);
+        d.set(2, 400.0);
+        d.set(1001, 1.0);
+        assert_eq!(d.get(2), 800.0);
+        // Stereo Link: both sides move by the same amount
+        d.set(26, 1.0);
+        let (f4, f5) = (d.get(4), d.get(5));
+        d.set(4, f4 - 10.0);
+        assert_eq!((d.get(4), d.get(5)), (f4 - 10.0, f5 - 10.0));
+        d.set(1000, 1.0);
+        assert_eq!(d.get(2), 400.0);
+        // Tape Delay and Echo
+        let mut t = TapeDelay::new(48000.0);
+        let n = t.get(7);
+        t.set(1000, 1.0);
+        assert_eq!(t.get(7), n * 2.0);
+        t.set(1001, 1.0);
+        assert_eq!(t.get(7), n);
+        let mut e = Echo::new(48000.0);
+        assert_eq!(ECHO_TIMES[e.get(16) as usize], "1/8");
+        e.set(1000, 1.0);
+        assert_eq!(ECHO_TIMES[e.get(16) as usize], "1/16");
+        e.set(1001, 1.0);
+        e.set(1001, 1.0);
+        assert_eq!(ECHO_TIMES[e.get(16) as usize], "1/4");
+    }
     use lg_dsp::{Effect, Plugin};
 
     fn first_echo(fx: &mut dyn Effect, n: usize) -> usize {

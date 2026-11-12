@@ -343,6 +343,7 @@ mod tests {
     fn console_band_buttons_and_output_models() {
         let mut c = ConsoleEq::new(48000.0);
         c.set(13, 3.0); // Output Model Off
+        c.set(7, 0.0); // High Pass off
         c.set(3, 12.0);
         c.set(1, 12.0);
         c.set(0, 12.0);

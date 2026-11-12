@@ -24,12 +24,12 @@
 //! unrelated line ratios for an odd, metallic space). Levels were matched to Logic's renders of
 //! factory settings (white-noise wet energy and decay time; see tests/reference.rs).
 //!
-//! Not modelled: tempo sync of predelay and decay (the ms / s values are used as they are).
+//! Predelay Sync and DecayTime Sync snap those times to the nearest note value at the tempo.
 
 use crate::util::{Biquad, Coefs, Delay, Drift, OnePole, Phase, Values, db, flush, plugin_impl, sine01, tri};
 use lg_dsp::{Param, Unit};
 
-pub const ROOMS: &[&str] = &["Room", "Chamber", "Concert Hall", "Theatre", "Synth Hall", "Dark Room", "Dense Room", "Smooth Space", "Vocal Hall", "Reflective Hall", "Strange Room", "Airy", "Bloomy"];
+pub const ROOMS: &[&str] = &["Room", "Chamber", "Concert Hall", "Theatre", "Synth Hall", "Dark Room", "Dense Room", "Smooth Space", "Vocal Hall", "Reflective Hall", "Strange Room", "Airy", "Bloomy", "Digital"];
 const ORDERS: &[&str] = &["", "6 dB/Oct", "12 dB/Oct"];
 
 const DRY: u32 = 0;
@@ -75,7 +75,7 @@ static PARAMS: [Param; 57] = [
     Param::menu(QUALITY, "Quality", &["Low", "High", "Ultra"], 1.0),
     Param::new(MOD_DEPTH, "Modulation Depth", 0.0, 100.0, 25.0, Unit::Percent),
     Param::new(MOD_SPEED, "Modulation Speed", 0.01, 10.0, 0.5, Unit::Hz),
-    Param::menu(MOD_SOURCE, "Modulation Source", &["Sine", "Triangle", "Random"], 2.0),
+    Param::menu(MOD_SOURCE, "Modulation Source", &["Sine", "Triangle", "Random", "Noise"], 2.0),
     Param::new(MOD_SMOOTH, "Modulation Smoothing", 0.0, 100.0, 12.0, Unit::Percent),
     Param::new(DAMP, "Damping Low Shelf Freq", 20.0, 20000.0, 210.0, Unit::Hz),
     Param::new(DAMP + 1, "Damping Low Shelf Ratio", 0.1, 4.0, 1.0, Unit::Ratio),
@@ -115,6 +115,13 @@ static PARAMS: [Param; 57] = [
     Param::menu(EQ + 22, "High Cut Order", ORDERS, 2.0),
 ];
 
+/// A time snapped to the nearest synced note value (1/64 to four bars, straight, triplet and
+/// dotted) at a tempo.
+fn sync_secs(secs: f32, bpm: f64) -> f32 {
+    let beat = 60.0 / bpm as f32;
+    (2..=26).map(|k| crate::util::sync_index_beats(-(k as f32)) * beat).min_by(|a, b| (a / secs.max(1e-4)).ln().abs().total_cmp(&(b / secs.max(1e-4)).ln().abs())).unwrap_or(secs)
+}
+
 /// One room type's character.
 #[derive(Clone, Copy)]
 struct RoomKind {
@@ -137,22 +144,26 @@ struct RoomKind {
     odd: bool,
     /// level trim (dB)
     trim: f32,
+    /// extra chorus-like line modulation (1 = none beyond Modulation Depth)
+    chorus: f32,
 }
 
-const KINDS: [RoomKind; 13] = [
-    RoomKind { long_ms: 62.0, spread: 0.32, er_ms: 32.0, er_level: 0.9, er_taps: 12, diffuse: 1.0, hf: 1.0, tilt: 0.0, bloom: 0.0, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 78.0, spread: 0.35, er_ms: 45.0, er_level: 0.8, er_taps: 12, diffuse: 1.1, hf: 0.9, tilt: 0.0, bloom: 0.05, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 140.0, spread: 0.30, er_ms: 85.0, er_level: 0.6, er_taps: 10, diffuse: 1.0, hf: 0.85, tilt: -0.5, bloom: 0.12, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 115.0, spread: 0.33, er_ms: 70.0, er_level: 0.75, er_taps: 12, diffuse: 0.9, hf: 0.95, tilt: 0.0, bloom: 0.08, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 150.0, spread: 0.28, er_ms: 60.0, er_level: 0.45, er_taps: 8, diffuse: 1.2, hf: 1.15, tilt: 0.5, bloom: 0.15, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 60.0, spread: 0.33, er_ms: 30.0, er_level: 0.8, er_taps: 12, diffuse: 1.0, hf: 0.45, tilt: -3.0, bloom: 0.0, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 52.0, spread: 0.45, er_ms: 22.0, er_level: 0.95, er_taps: 12, diffuse: 1.3, hf: 0.9, tilt: 0.0, bloom: 0.0, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 165.0, spread: 0.25, er_ms: 50.0, er_level: 0.3, er_taps: 6, diffuse: 1.3, hf: 1.0, tilt: 0.0, bloom: 0.3, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 120.0, spread: 0.3, er_ms: 55.0, er_level: 0.55, er_taps: 9, diffuse: 1.15, hf: 0.8, tilt: -1.0, bloom: 0.1, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 135.0, spread: 0.3, er_ms: 90.0, er_level: 1.0, er_taps: 12, diffuse: 0.75, hf: 1.25, tilt: 1.0, bloom: 0.0, odd: false, trim: 0.0 },
-    RoomKind { long_ms: 90.0, spread: 0.5, er_ms: 40.0, er_level: 0.85, er_taps: 12, diffuse: 0.6, hf: 1.1, tilt: 0.0, bloom: 0.0, odd: true, trim: 0.0 },
-    RoomKind { long_ms: 145.0, spread: 0.3, er_ms: 60.0, er_level: 0.5, er_taps: 8, diffuse: 1.2, hf: 1.2, tilt: 2.0, bloom: 0.08, odd: false, trim: -2.5 },
-    RoomKind { long_ms: 155.0, spread: 0.27, er_ms: 45.0, er_level: 0.25, er_taps: 6, diffuse: 1.35, hf: 1.0, tilt: 0.0, bloom: 0.45, odd: false, trim: 0.0 },
+const KINDS: [RoomKind; 14] = [
+    RoomKind { long_ms: 62.0, spread: 0.32, er_ms: 32.0, er_level: 0.9, er_taps: 12, diffuse: 1.0, hf: 1.0, tilt: 0.0, bloom: 0.0, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 78.0, spread: 0.35, er_ms: 45.0, er_level: 0.8, er_taps: 12, diffuse: 1.1, hf: 0.9, tilt: 0.0, bloom: 0.05, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 140.0, spread: 0.30, er_ms: 85.0, er_level: 0.6, er_taps: 10, diffuse: 1.0, hf: 0.85, tilt: -0.5, bloom: 0.12, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 115.0, spread: 0.33, er_ms: 70.0, er_level: 0.75, er_taps: 12, diffuse: 0.9, hf: 0.95, tilt: 0.0, bloom: 0.08, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 150.0, spread: 0.28, er_ms: 60.0, er_level: 0.45, er_taps: 8, diffuse: 1.2, hf: 1.15, tilt: 0.5, bloom: 0.15, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 60.0, spread: 0.33, er_ms: 30.0, er_level: 0.8, er_taps: 12, diffuse: 1.0, hf: 0.45, tilt: -3.0, bloom: 0.0, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 52.0, spread: 0.45, er_ms: 22.0, er_level: 0.95, er_taps: 12, diffuse: 1.3, hf: 0.9, tilt: 0.0, bloom: 0.0, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 165.0, spread: 0.25, er_ms: 50.0, er_level: 0.3, er_taps: 6, diffuse: 1.3, hf: 1.0, tilt: 0.0, bloom: 0.3, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 120.0, spread: 0.3, er_ms: 55.0, er_level: 0.55, er_taps: 9, diffuse: 1.15, hf: 0.8, tilt: -1.0, bloom: 0.1, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 135.0, spread: 0.3, er_ms: 90.0, er_level: 1.0, er_taps: 12, diffuse: 0.75, hf: 1.25, tilt: 1.0, bloom: 0.0, odd: false, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 90.0, spread: 0.5, er_ms: 40.0, er_level: 0.85, er_taps: 12, diffuse: 0.6, hf: 1.1, tilt: 0.0, bloom: 0.0, odd: true, trim: 0.0, chorus: 1.0 },
+    RoomKind { long_ms: 145.0, spread: 0.3, er_ms: 60.0, er_level: 0.5, er_taps: 8, diffuse: 1.2, hf: 1.2, tilt: 2.0, bloom: 0.08, odd: false, trim: -2.5, chorus: 1.0 },
+    RoomKind { long_ms: 155.0, spread: 0.27, er_ms: 45.0, er_level: 0.25, er_taps: 6, diffuse: 1.35, hf: 1.0, tilt: 0.0, bloom: 0.45, odd: false, trim: 0.0, chorus: 1.0 },
+    // Digital: a medium room, slower onset than Room, bright, chorus-like decay, dense tail
+    RoomKind { long_ms: 85.0, spread: 0.34, er_ms: 38.0, er_level: 0.7, er_taps: 10, diffuse: 1.35, hf: 1.3, tilt: 1.5, bloom: 0.15, odd: false, trim: 0.0, chorus: 3.0 },
 ];
 
 /// Early-reflection pattern: (time as a share of the span, gain, pan -1..1).
@@ -231,6 +242,8 @@ pub struct ChromaVerb {
     filt: [LineFilter; N],
     mod_ph: [Phase; N],
     mod_rnd: [Drift; N],
+    mod_noise: crate::util::Noise,
+    bpm: f64,
     mod_amt: f32,
     mod_smooth: OnePole,
     smooth_mod: [f32; N],
@@ -274,6 +287,8 @@ impl ChromaVerb {
             filt: [LineFilter::default(); N],
             mod_ph: std::array::from_fn(|i| Phase { p: i as f32 / N as f32 }),
             mod_rnd: std::array::from_fn(|i| Drift::new(0x9E37_79B9u32.wrapping_mul(i as u32 + 1))),
+            mod_noise: crate::util::Noise(0x1234_5677),
+            bpm: 120.0,
             mod_amt: 0.0,
             mod_smooth: OnePole::new(rate, 20.0),
             smooth_mod: [0.0; N],
@@ -302,10 +317,11 @@ impl ChromaVerb {
         let size = p.get(SIZE) / 100.0;
         // Size 0..100 % scales the space 1/2.2x..2.2x (50 % = the room's own size)
         let scale = MAX_SIZE_SCALE.powf(2.0 * size.clamp(0.0, 1.0) - 1.0);
-        let decay = p.get(DECAY).max(0.1);
+        let decay = if p.on(6) { sync_secs(p.get(DECAY).max(0.1), self.bpm) } else { p.get(DECAY).max(0.1) };
         self.freeze = p.on(FREEZE);
         // predelay
-        self.pre_len = (p.get(PREDELAY) * 0.001 * rate).max(1.0);
+        let pre_ms = if p.on(4) { sync_secs(p.get(PREDELAY) * 0.001, self.bpm) * 1000.0 } else { p.get(PREDELAY) };
+        self.pre_len = (pre_ms * 0.001 * rate).max(1.0);
         // attack swell: taps spread over the attack time with a rising ramp
         let att = (p.get(ATTACK) / 100.0 + k.bloom).clamp(0.0, 1.0);
         let att_ms = att * att * MAX_ATTACK_MS.min(decay * 400.0);
@@ -404,7 +420,7 @@ impl ChromaVerb {
         self.inject = (1.0 - gmean2).max(0.0005).sqrt() * 0.9;
         // modulation
         let depth = p.get(MOD_DEPTH) / 100.0;
-        self.mod_amt = depth * depth * 0.0012 * rate * scale.sqrt().max(0.5);
+        self.mod_amt = (depth * depth * k.chorus + 0.02 * (k.chorus - 1.0)) * 0.0012 * rate * scale.sqrt().max(0.5);
         let sm = p.get(MOD_SMOOTH) / 100.0;
         self.mod_smooth.set(rate, 200.0 * (1.0 - sm) + 2.0);
         // Early/Late and Distance
@@ -499,6 +515,15 @@ impl ChromaVerb {
 }
 
 impl lg_dsp::Effect for ChromaVerb {
+    fn set_tempo(&mut self, bpm: f64) {
+        if bpm > 0.0 && (bpm - self.bpm).abs() > 1e-6 {
+            self.bpm = bpm;
+            if self.p.on(4) || self.p.on(6) {
+                self.update();
+            }
+        }
+    }
+
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
         let lines = self.lines;
@@ -548,7 +573,9 @@ impl lg_dsp::Effect for ChromaVerb {
                 let m = match src {
                     0 => sine01(self.mod_ph[j].step(rate, speed * (1.0 + 0.07 * j as f32))),
                     1 => tri(self.mod_ph[j].step(rate, speed * (1.0 + 0.07 * j as f32))),
-                    _ => self.mod_rnd[j].next(rate, speed * (1.0 + 0.11 * j as f32)),
+                    2 => self.mod_rnd[j].next(rate, speed * (1.0 + 0.11 * j as f32)),
+                    // Noise: a new random value every sample (Smoothing filters it)
+                    _ => self.mod_noise.next(),
                 };
                 self.smooth_mod[j] = flush(self.smooth_mod[j] + self.mod_smooth.a * (m - self.smooth_mod[j]));
                 let len = self.len[j] + self.mod_amt * (1.0 + self.smooth_mod[j]);
@@ -621,6 +648,35 @@ plugin_impl!(ChromaVerb);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn digital_room_noise_source_and_sync() {
+        assert_eq!(ROOMS.len(), 14);
+        assert_eq!(ROOMS[13], "Digital");
+        let mut v = ChromaVerb::new(48000.0);
+        v.set(ROOM, 0.0);
+        let room_mod = v.mod_amt;
+        v.set(ROOM, 13.0);
+        assert!(v.mod_amt > room_mod, "chorus-like");
+        assert!(KINDS[13].bloom > KINDS[0].bloom && KINDS[13].hf > KINDS[0].hf);
+        // Noise source runs and stays finite
+        v.set(MOD_SOURCE, 3.0);
+        let (mut l, mut r) = (vec![0.0f32; 9600], vec![0.0f32; 9600]);
+        l[0] = 1.0;
+        r[0] = 1.0;
+        lg_dsp::Effect::process(&mut v, &mut l, &mut r);
+        assert!(l.iter().all(|x| x.is_finite()) && l[4800..].iter().any(|x| x.abs() > 1e-6));
+        // Predelay Sync: 130 ms at 120 bpm snaps to 125 ms (a 1/16 note)
+        let mut v = ChromaVerb::new(48000.0);
+        lg_dsp::Effect::set_tempo(&mut v, 120.0);
+        v.set(PREDELAY, 130.0);
+        let free = v.pre_len;
+        v.set(4, 1.0);
+        assert!((free - 0.13 * 48000.0).abs() < 1.0);
+        assert!((v.pre_len - 0.125 * 48000.0).abs() < 1.0, "{}", v.pre_len);
+        // Decay Sync: 1.9 s snaps to 2 s (a whole note) at 120 bpm
+        assert!((sync_secs(1.9, 120.0) - 2.0).abs() < 1e-4);
+    }
     use lg_dsp::{Effect, Plugin};
 
     fn impulse_energy_decay(v: &mut ChromaVerb, secs: f32) -> (f32, f32) {

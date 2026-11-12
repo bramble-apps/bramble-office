@@ -25,12 +25,12 @@ pub const AMPS: &[&str] = &[
     "British Amp", "Tweed Amp", "Black Panel Amp", "Silver Panel Amp", "Brown Panel Amp", "Blues Blaster Amp", "Vintage British Amp", "Modern British Amp", "Brown Amp", "British Blues Amp", "Modern American Amp", "Studio Amp",
     "Boutique British Amp", "Sunshine Amp", "Stadium Amp", "Boutique Retro Amp", "High Octane Amp", "Turbo Amp", "Pawnshop Amp", "Clean Preamp",
 ];
-pub const EQ_MODELS: &[&str] = &["British Bright", "US Classic", "Boutique", "Custom EQ Model"];
+pub const EQ_MODELS: &[&str] = &["British Bright", "US Classic", "Boutique", "Custom EQ Model", "Vintage", "Modern"];
 pub const SPEAKERS: &[&str] = &[
     "British 1x12", "British 2x12", "Tweed 1x12", "Tweed 4x10", "Tweed 1x10", "Black Panel 4x10", "Silver Panel 2x12", "Black Panel 1x10", "Brown Panel 1x12", "Brown Panel 1x15", "Vintage British 4x12", "Modern British 4x12", "Brown 4x12",
     "British Blues 2x12", "Modern American 4x12", "Studio 1x12", "Boutique British 2x12", "Sunshine 4x12", "Sunshine 1x12", "Stadium 4x12", "Stadium 2x12", "Boutique Retro 2x12", "High Octane 4x12", "Turbo 4x12", "Pawnshop 1x8", "DI Box",
 ];
-pub const MICS: &[&str] = &["Ribbon 121", "Condenser 414", "Dynamic 57", "Dynamic 609"];
+pub const MICS: &[&str] = &["Ribbon 121", "Condenser 414", "Dynamic 57", "Dynamic 609", "Condenser 87", "Dynamic 20", "Dynamic 421"];
 const REVERBS: &[&str] = &["Vintage Spring", "Simple Spring", "Mellow Spring", "Bright Spring", "Dark Spring", "Resonant Spring", "Boutique Spring", "Sweet Reverb", "Rich Reverb", "Warm Reverb"];
 
 /// A head's voicing.
@@ -168,8 +168,16 @@ impl AmpCore {
         let (mid_f, mid_base, bass_f, treb_f) = match stack {
             0 => (500.0, -6.0, 120.0, 2500.0),
             1 => (700.0, -1.5, 150.0, 2800.0),
+            // Vintage (Tweed / old British stack): hardly any insertion loss, so it drives
+            // the power stage harder (loud, quick to distort), softer highs than British Bright
+            3 => (650.0, 0.0, 130.0, 2200.0),
+            // Modern: a deep mid scoop for rock and metal
+            4 => (650.0, -9.0, 90.0, 4000.0),
             _ => (800.0, -3.0, 110.0, 3200.0),
         };
+        if stack == 3 {
+            self.pre_gain *= db(4.0);
+        }
         let stack_c = [
             Coefs::low_shelf(r, bass_f, 0.7, b * 10.0),
             Coefs::peak(r, mid_f, 0.8, mid_base * (1.0 - (mids / 10.0)) + m * 6.0),
@@ -192,10 +200,23 @@ impl AmpCore {
             0 => (1200.0, 1.5, 7000.0),
             1 => (6000.0, 2.0, 16000.0),
             2 => (4500.0, 4.0, 11000.0),
+            // Condenser 87: smooth, extended top
+            4 => (5000.0, 1.5, 18000.0),
+            // Dynamic 20: flat, broadcast-style, rolled-off top
+            5 => (2000.0, 1.0, 9000.0),
+            // Dynamic 421: forward upper mids
+            6 => (3500.0, 3.5, 13000.0),
             _ => (2500.0, 3.0, 12000.0),
         };
+        // X: from the cone centre (on-axis) towards the rim: brighter and thinner; Z: closer
+        // to the speaker = more bass (proximity)
         let off = mic_x.clamp(0.0, 1.0);
-        let mic_c = [Coefs::peak(r, pk, 1.0, pk_db * (1.0 - off * 0.5)), Coefs::lowpass(r, (top * (1.0 - 0.55 * off)).min(r * 0.45), 0.707), Coefs::low_shelf(r, 200.0, 0.7, 3.0 * (1.0 - mic_z.clamp(0.0, 1.0)) - 1.5)];
+        let mic_c = [
+            // the presence peak moves up and grows towards the rim
+            Coefs::peak(r, (pk + (4000.0 - pk) * off).min(r * 0.4), 1.0, pk_db + 5.0 * off),
+            Coefs::lowpass(r, (top * (1.0 + 0.3 * off)).min(r * 0.45), 0.707),
+            Coefs::low_shelf(r, 200.0, 0.7, 3.0 * (1.0 - mic_z.clamp(0.0, 1.0)) - 1.5 - 3.0 * off),
+        ];
         for s in 0..2 {
             for i in 0..4 {
                 self.stack[s][i].c = stack_c[i];
@@ -394,6 +415,8 @@ impl AmpDesigner {
             0 => 1,
             1 => 0,
             2 => 2,
+            4 => 3,
+            5 => 4,
             _ => voice.stack,
         };
         let cab = cab_for(SPEAKERS[p.idx(20).min(SPEAKERS.len() - 1)]);
@@ -506,6 +529,9 @@ static BASS_PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|
         // (our own ids) the amp's Channel switch (I active 0 dB, II passive -15 dB) and Bright
         Param::menu(1007, "Channel", &["I", "II"], 0.0),
         Param::new(1008, "Bright", 0.0, 1.0, 0.0, Unit::OnOff),
+        // (our own ids) the mic's position: centre to rim, and distance (0 = closest)
+        Param::new(1009, "Mic Position X", 0.0, 1.0, 0.0, Unit::None),
+        Param::new(1010, "Mic Position Z", 0.0, 1.0, 0.3, Unit::None),
     ]);
     v
 });
@@ -579,12 +605,9 @@ impl BassAmp {
         } else {
             Cab { res: 75.0, res_q: 1.4, top: 4500.0, colour: 1500.0, colour_db: 1.5 }
         };
-        let mic = match p.idx(48) {
-            0 => 1,
-            1 => 0,
-            _ => 3,
-        };
-        self.core.set(voice, p.get(10), p.get(12), p.get(14), p.get(16), 5.0, p.get(20), voice.stack, cab, mic, 0.2, 0.3, 30.0);
+        // Condenser 87, Dynamic 20, Dynamic 421 (the core's mic models 4-6)
+        let mic = 4 + p.idx(48).min(2);
+        self.core.set(voice, p.get(10), p.get(12), p.get(14), p.get(16), 5.0, p.get(20), voice.stack, cab, mic, p.get(1009), p.get(1010), 30.0);
         for s in 0..2 {
             for i in 0..7 {
                 self.eq[s][i].c = if !p.on(3) {
@@ -780,6 +803,59 @@ mod fx_sync_tests {
         let d = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(p, q)| (p - q).abs()).fold(0.0, f32::max);
         assert!(d(&run(0.0, 0.0), &run(0.0, 1.0)) < 1e-4);
         assert!(d(&run(1.0, 0.0), &run(1.0, 1.0)) > 0.01);
+    }
+
+    #[test]
+    fn mics_and_mic_position() {
+        assert_eq!(MICS.len(), 7);
+        for m in ["Condenser 87", "Condenser 414", "Dynamic 20", "Dynamic 57", "Dynamic 421", "Dynamic 609", "Ribbon 121"] {
+            assert!(MICS.contains(&m));
+        }
+        let tone = |f: f32| -> Vec<f32> { (0..24000).map(|i| 0.02 * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect() };
+        let lvl = |set: &[(u32, f32)], f: f32| {
+            let mut a = AmpDesigner::new(48000.0);
+            a.set(30, 0.0);
+            a.set(1, 1.0);
+            for &(id, v) in set {
+                a.set(id, v);
+            }
+            let (mut l, mut r) = (tone(f), tone(f));
+            a.process(&mut l, &mut r);
+            (l[12000..].iter().map(|v| v * v).sum::<f32>() / 12000.0).sqrt()
+        };
+        // towards the rim: brighter and thinner
+        assert!(lvl(&[(22, 1.0)], 4000.0) > lvl(&[(22, 0.0)], 4000.0) * 1.2);
+        assert!(lvl(&[(22, 1.0)], 100.0) < lvl(&[(22, 0.0)], 100.0));
+        // closer: more bass
+        assert!(lvl(&[(23, 0.0)], 100.0) > lvl(&[(23, 1.0)], 100.0) * 1.2);
+        // the new mics differ from each other
+        let a = lvl(&[(21, 4.0)], 5000.0);
+        let b = lvl(&[(21, 5.0)], 5000.0);
+        assert!((a / b - 1.0).abs() > 0.1);
+        // Bass Amp Designer: the mic sliders work there too
+        let mut ba = BassAmp::new(48000.0);
+        ba.set(1009, 1.0);
+        assert_eq!(ba.get(1009), 1.0);
+    }
+
+    #[test]
+    fn amp_vintage_and_modern_eq_types() {
+        assert!(EQ_MODELS.contains(&"Vintage") && EQ_MODELS.contains(&"Modern"));
+        let level = |model: f32, f: f32| {
+            let mut a = AmpDesigner::new(48000.0);
+            a.set(19, model);
+            a.set(30, 0.0);
+            a.set(1, 2.0);
+            let x: Vec<f32> = (0..24000).map(|i| 0.05 * (crate::util::TAU * f * i as f32 / 48000.0).sin()).collect();
+            let (mut l, mut r) = (x.clone(), x);
+            a.process(&mut l, &mut r);
+            (l[12000..].iter().map(|v| v * v).sum::<f32>() / 12000.0).sqrt()
+        };
+        // Modern scoops the mids against the lows; Vintage is louder than British Bright
+        let modern = level(5.0, 650.0) / level(5.0, 150.0);
+        let british = level(0.0, 650.0) / level(0.0, 150.0);
+        assert!(modern < british * 0.8, "{modern} {british}");
+        assert!(level(4.0, 650.0) > level(0.0, 650.0) * 1.1);
     }
 
     #[test]

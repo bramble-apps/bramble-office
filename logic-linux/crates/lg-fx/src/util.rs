@@ -117,6 +117,39 @@ macro_rules! plugin_impl {
 }
 pub(crate) use plugin_impl;
 
+/// Like `plugin_impl!`, but user edits go through the type's own `edit(id, value)` (for
+/// Logic's linked buttons: momentary :2 / x2, Stereo Link …); loading floats stays direct.
+macro_rules! plugin_impl_edit {
+    ($t:ty) => {
+        impl lg_dsp::Plugin for $t {
+            fn params(&self) -> &[lg_dsp::Param] {
+                self.p.defs
+            }
+            fn get(&self, id: u32) -> f32 {
+                self.p.get(id)
+            }
+            fn set(&mut self, id: u32, value: f32) {
+                self.edit(id, value);
+            }
+            fn reset(&mut self) {
+                self.clear();
+            }
+            fn tail(&self) -> f32 {
+                self.tail_secs()
+            }
+            fn load_floats(&mut self, floats: &[f32]) {
+                for d in self.p.defs {
+                    if let Some(v) = floats.get(d.id as usize) {
+                        self.p.set(d.id, *v);
+                    }
+                }
+                self.update();
+            }
+        }
+    };
+}
+pub(crate) use plugin_impl_edit;
+
 /// One-pole smoothing towards a target (for gains and times that must not click).
 #[derive(Clone, Copy, Debug)]
 pub struct Smooth {
