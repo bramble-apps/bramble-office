@@ -26,6 +26,48 @@ pub mod scan;
 pub mod state;
 pub mod vst3;
 
+/// A plug-in library file as it was when loaded (size, modification time, inode).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Stamp {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    ino: u64,
+}
+
+pub(crate) fn stamp(path: &std::path::Path) -> Option<Stamp> {
+    let m = std::fs::metadata(path).ok()?;
+    #[cfg(unix)]
+    let ino = std::os::unix::fs::MetadataExt::ino(&m);
+    #[cfg(not(unix))]
+    let ino = 0;
+    Some(Stamp { len: m.len(), modified: m.modified().ok(), ino })
+}
+
+/// Where to load a plug-in library from. The file itself the first time; once it has changed
+/// since it was loaded (a plug-in updated while Studio runs), a private copy: rewritten in
+/// place, the loaded library's pages now read the new bytes (its relocated data is lost: it
+/// lists nothing and crashes), and loading the same file again would only hand back that stale
+/// library. The copy can be removed as soon as it's loaded (the mapping keeps it).
+pub(crate) fn load_path(path: &std::path::Path, changed: bool) -> Result<PathBuf, String> {
+    if !changed {
+        return Ok(path.to_path_buf());
+    }
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!("bramble-studio-plugins-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let copy = dir.join(format!("{n}-{}", path.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()));
+    std::fs::copy(path, &copy).map_err(|e| e.to_string())?;
+    Ok(copy)
+}
+
+/// After loading from a private copy: the copy's file is no longer needed.
+pub(crate) fn loaded_from(original: &std::path::Path, used: &std::path::Path) {
+    if used != original {
+        let _ = std::fs::remove_file(used);
+    }
+}
+
 /// The plug-in formats Studio hosts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Format {

@@ -66,14 +66,22 @@ unsafe impl Send for Module {}
 unsafe impl Sync for Module {}
 
 fn module(path: &Path) -> Result<&'static Module, String> {
-    static M: OnceLock<Mutex<HashMap<PathBuf, &'static Module>>> = OnceLock::new();
+    // (each bundle once, as its library was when loaded: a changed one is loaded again, see
+    // load_path)
+    static M: OnceLock<Mutex<HashMap<PathBuf, (Option<crate::Stamp>, &'static Module)>>> = OnceLock::new();
     let mut map = M.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(m) = map.get(path) {
-        return Ok(m);
-    }
     let so = library_of(path).ok_or("no Linux library in the bundle")?;
+    let now = crate::stamp(&so);
+    if let Some((s, m)) = map.get(path) {
+        if *s == now {
+            return Ok(m);
+        }
+    }
+    let from = crate::load_path(&so, map.contains_key(path))?;
     unsafe {
-        let unix = libloading::os::unix::Library::open(Some(&so), libc::RTLD_NOW | libc::RTLD_LOCAL).map_err(|e| e.to_string())?;
+        let unix = libloading::os::unix::Library::open(Some(&from), libc::RTLD_NOW | libc::RTLD_LOCAL);
+        crate::loaded_from(&so, &from);
+        let unix = unix.map_err(|e| e.to_string())?;
         let handle = unix.into_raw();
         let lib: libloading::Library = libloading::os::unix::Library::from_raw(handle).into();
         if let Ok(entry) = lib.get::<unsafe extern "system" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
@@ -84,7 +92,7 @@ fn module(path: &Path) -> Result<&'static Module, String> {
         let get = lib.get::<unsafe extern "system" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0").map_err(|_| "not a VST3 plug-in (no GetPluginFactory)".to_string())?;
         let factory = ComPtr::from_raw(get()).ok_or("no plug-in factory")?;
         let m: &'static Module = Box::leak(Box::new(Module { _lib: lib, factory }));
-        map.insert(path.to_path_buf(), m);
+        map.insert(path.to_path_buf(), (now, m));
         Ok(m)
     }
 }

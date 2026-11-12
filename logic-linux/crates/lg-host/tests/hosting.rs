@@ -373,3 +373,34 @@ fn lv2_x11_ui_embeds() {
     assert_eq!(p.get(4), -12.0);
     p.close_editor();
 }
+
+/// A plug-in file rewritten in place while it's loaded (updated while Studio runs): the scan and
+/// Studio get the new version (loaded from a private copy), not the stale library, whose pages
+/// now read the new file. Run in a child process: the stale library left mapped can crash it
+/// when it exits.
+#[test]
+fn a_plugin_rewritten_in_place_loads_again() {
+    if std::env::var_os("LG_HOST_REWRITE_CHILD").is_some() {
+        let d = scratch("rewrite");
+        let path = clap_bundle(&d, "Test.clap");
+        let list = lg_host::clap::describe(&path).unwrap();
+        lg_host::set_catalog(list.clone());
+        drop(lg_host::open(&list[0], 48000.0).unwrap());
+        // rewritten in place (cp truncates and writes the same file)
+        std::fs::write(&path, std::fs::read(lib("test_clap")).unwrap()).unwrap();
+        let again = lg_host::clap::describe(&path).unwrap();
+        assert_eq!(again.len(), 2, "both plug-ins listed again");
+        lg_host::set_catalog(again);
+        let mut fx = lg_host::open_by_name("Test Gain (CLAP)", 48000.0).expect("loads again");
+        let (l, _) = impulse_through(&mut fx, 256);
+        assert!(l.iter().any(|x| x.abs() > 0.5), "and processes");
+        // the private copy isn't left behind
+        let tmp = std::env::temp_dir().join(format!("bramble-studio-plugins-{}", std::process::id()));
+        assert_eq!(std::fs::read_dir(&tmp).map(|d| d.count()).unwrap_or(0), 0);
+        println!("REWRITE-OK");
+        return;
+    }
+    let out = std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact", "a_plugin_rewritten_in_place_loads_again", "--nocapture", "--test-threads=1"]).env("LG_HOST_REWRITE_CHILD", "1").output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+    assert!(text.contains("REWRITE-OK"), "{text}");
+}
