@@ -37,11 +37,19 @@ pub struct Live {
     _virtual: Option<midir::MidiInputConnection<()>>,
     rx: Option<mpsc::Receiver<RawMsg>>,
     sustain: bool,
+    /// The window's left button: the onscreen piano instead of the computer keys.
+    pub keyboard_mode: bool,
+    /// The onscreen piano's lowest C, and the note the mouse holds there.
+    pub piano_c: u8,
+    mouse_note: Option<u8>,
+    /// What Musical Typing last sent: pitch bend (−8192…8191) and the mod key (0 = off … 5 = max).
+    pub bend: i16,
+    pub modulation: u8,
 }
 
 impl Live {
     pub fn new() -> Live {
-        Live { typing_open: false, octave_c: 60, velocity: 100, held: HashMap::new(), keys_down: HashMap::new(), _inputs: Vec::new(), input_names: Vec::new(), all_ports: Vec::new(), #[cfg(unix)] _virtual: None, rx: None, sustain: false }
+        Live { typing_open: false, octave_c: 60, velocity: 100, held: HashMap::new(), keys_down: HashMap::new(), _inputs: Vec::new(), input_names: Vec::new(), all_ports: Vec::new(), #[cfg(unix)] _virtual: None, rx: None, sustain: false, keyboard_mode: false, piano_c: 36, mouse_note: None, bend: 0, modulation: 0 }
     }
 
     /// Opens every MIDI input (call once; again to pick up keyboards plugged in later).
@@ -300,6 +308,14 @@ fn keys_frame(app: &mut App, ctx: &egui::Context, t: usize) -> Vec<egui::Key> {
             continue;
         }
         if !pressed || repeat {
+            if matches!(key, egui::Key::Num1 | egui::Key::Num2) && !pressed {
+                // (the bend springs back when the key is let go, as a wheel does)
+                app.live.bend = 0;
+                if let Ok(mut e) = app.engine.lock() {
+                    e.live_control(t, 128, 8192);
+                }
+                used.push(key);
+            }
             if matches!(key, egui::Key::Tab) && !pressed {
                 app.live.sustain = false;
                 if let Ok(mut e) = app.engine.lock() {
@@ -321,12 +337,14 @@ fn keys_frame(app: &mut App, ctx: &egui::Context, t: usize) -> Vec<egui::Key> {
                 }
             }
             egui::Key::Num1 | egui::Key::Num2 => {
+                app.live.bend = if key == egui::Key::Num1 { -8192 } else { 8191 };
                 if let Ok(mut e) = app.engine.lock() {
                     e.live_control(t, 128, if key == egui::Key::Num1 { 0 } else { 16383 });
                 }
             }
             egui::Key::Num3 | egui::Key::Num4 | egui::Key::Num5 | egui::Key::Num6 | egui::Key::Num7 | egui::Key::Num8 => {
                 let k = [egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6, egui::Key::Num7, egui::Key::Num8].iter().position(|x| *x == key).unwrap_or(0);
+                app.live.modulation = k as u8;
                 if let Ok(mut e) = app.engine.lock() {
                     e.live_control(t, 1, (k as u16 * 127) / 5);
                 }
@@ -338,42 +356,252 @@ fn keys_frame(app: &mut App, ctx: &egui::Context, t: usize) -> Vec<egui::Key> {
     used
 }
 
-/// The Musical Typing window: the keyboard with each key's letter, the octave and velocity.
+/// A note's name as Logic writes it (middle C = C3).
+fn c_name(n: u8) -> String {
+    format!("C{}", n as i32 / 12 - 2)
+}
+
+const IS_BLACK: [bool; 12] = [false, true, false, true, false, false, true, false, true, false, true, false];
+
+/// The Musical Typing window, as Logic's: the two buttons (onscreen keyboard | Musical Typing)
+/// and the keyboard overview with the range played, then either the computer keys (Pitch Bend
+/// and Modulation keys, sustain, the notes, Octave and Velocity) or an onscreen piano.
 pub fn window(app: &mut App, ctx: &egui::Context) {
     if !app.live.typing_open {
         return;
     }
     let mut open = true;
-    egui::Window::new("Musical Typing").open(&mut open).collapsible(false).resizable(false).default_width(560.0).show(ctx, |ui| {
-        let (r, _) = ui.allocate_exact_size(vec2(540.0, 150.0), Sense::hover());
-        let p = ui.painter();
-        p.rect_filled(r, 8.0, look::lcd_bg());
-        let keys = Rect::from_min_max(r.min + vec2(14.0, 40.0), r.max - vec2(14.0, 12.0));
-        let whites = [0u8, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17];
-        let ww = keys.width() / whites.len() as f32;
-        let down: Vec<u8> = app.live.held.keys().copied().collect();
-        let label_of = |off: u8| TYPING.iter().find(|(_, o)| *o == off).map(|(k, _)| match k { egui::Key::Semicolon => ";".to_string(), egui::Key::Quote => "'".to_string(), k => k.name().to_string() }).unwrap_or_default();
-        for (i, off) in whites.iter().enumerate() {
-            let kr = Rect::from_min_size(pos2(keys.min.x + i as f32 * ww, keys.min.y), vec2(ww - 2.0, keys.height()));
-            let lit = down.contains(&(app.live.octave_c + off));
-            p.rect_filled(kr, 4.0, if lit { look::accent() } else { Color32::from_gray(0xee) });
-            p.text(pos2(kr.center().x, kr.max.y - 12.0), Align2::CENTER_CENTER, label_of(*off), look::semibold(12.0), Color32::from_gray(0x40));
+    egui::Window::new("Musical Typing").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        let (r, _) = ui.allocate_exact_size(vec2(690.0, 262.0), Sense::hover());
+        let x0 = r.min.x - 8.0;
+        let at = |x: f32, y: f32| pos2(x0 + x, r.min.y + y);
+        let p = ui.painter().clone();
+        toolbar(app, ui, &p, r, &at);
+        // (the toolbar's bottom line runs to the window's edges)
+        p.hline((r.min.x - 8.0)..=(r.max.x + 8.0), r.min.y + 29.5, Stroke::new(1.0, Color32::from_black_alpha(160)));
+        if app.live.keyboard_mode {
+            piano(app, ui, &p, Rect::from_min_max(at(14.0, 44.0), at(692.0, 254.0)));
+        } else {
+            typing_keys(app, &p, &at);
         }
-        for off in [1u8, 3, 6, 8, 10, 13, 15] {
-            let before = whites.iter().position(|w| *w == off - 1).unwrap_or(0) as f32;
-            let kr = Rect::from_min_size(pos2(keys.min.x + (before + 1.0) * ww - ww * 0.3, keys.min.y), vec2(ww * 0.6, keys.height() * 0.6));
-            let lit = down.contains(&(app.live.octave_c + off));
-            p.rect_filled(kr, 3.0, if lit { look::accent() } else { Color32::from_gray(0x22) });
-            p.text(pos2(kr.center().x, kr.max.y - 10.0), Align2::CENTER_CENTER, label_of(off), look::semibold(11.0), Color32::from_gray(0xd0));
-        }
-        let oct = app.live.octave_c as i32 / 12 - 2;
-        p.text(r.min + vec2(14.0, 18.0), Align2::LEFT_CENTER, format!("Octave: C{oct}   (Z ◀  X ▶)"), look::regular(12.0), look::lcd_text());
-        p.text(pos2(r.max.x - 14.0, r.min.y + 18.0), Align2::RIGHT_CENTER, format!("Velocity: {}   (C ◀  V ▶)", app.live.velocity), look::regular(12.0), look::lcd_text());
-        p.rect_stroke(r, 8.0, Stroke::new(1.0, look::line()), egui::StrokeKind::Inside);
-        let inputs = if app.live.input_names.is_empty() { "No MIDI keyboard found".to_string() } else { format!("MIDI in: {}", app.live.input_names.join(", ")) };
-        ui.label(egui::RichText::new(inputs).color(look::text_dim()).font(look::regular(11.0)));
     });
     if !open {
         app.live.typing_open = false;
+        if let Some(n) = app.live.mouse_note.take() {
+            note(app, n, 0);
+        }
+    }
+}
+
+/// The two mode buttons (a joined pill) and the overview of all 128 notes with the range shown.
+fn toolbar(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, r: Rect, at: &dyn Fn(f32, f32) -> egui::Pos2) {
+    // the pill: piano (onscreen keyboard) | computer keys (Musical Typing)
+    let pill = Rect::from_min_max(at(14.0, 0.0), at(78.0, 21.0));
+    p.rect_filled(pill, 5.0, Color32::from_gray(0x3a));
+    for (i, (icon, kb)) in [(crate::glyphs::ph::PIANO_KEYS, true), (crate::glyphs::ph::KEYBOARD, false)].into_iter().enumerate() {
+        let b = Rect::from_min_size(pill.min + vec2(1.0 + i as f32 * 31.0, 1.0), vec2(31.0, 19.0));
+        let on = app.live.keyboard_mode == kb;
+        if on {
+            p.rect_filled(b, 4.0, look::accent());
+        }
+        crate::glyphs::paint(p, b, icon, 16.0, if on { Color32::WHITE } else { Color32::from_gray(0xd8) });
+        let resp = ui.interact(b, ui.scope_id().with(("mt-mode", i)), Sense::click()).on_hover_text(if kb { "Keyboard" } else { "Musical Typing" });
+        if resp.clicked() {
+            app.live.keyboard_mode = kb;
+        }
+    }
+    // the overview: the range played is the blue box; click to move it, the arrows move it an octave
+    let strip = Rect::from_min_max(at(239.0, 0.0), at(466.0, 21.0));
+    p.rect_filled(strip, 5.0, Color32::from_gray(0x2c));
+    let keys = strip.shrink2(vec2(4.0, 3.0));
+    let whites: Vec<u8> = (0..128u8).filter(|n| !IS_BLACK[*n as usize % 12]).collect();
+    let ww = keys.width() / whites.len() as f32;
+    let x_of = |n: u8| keys.min.x + (0..n).filter(|m| !IS_BLACK[*m as usize % 12]).count() as f32 * ww;
+    let (lo, hi) = if app.live.keyboard_mode { (app.live.piano_c, (app.live.piano_c as u16 + 36).min(127) as u8) } else { (app.live.octave_c, (app.live.octave_c as u16 + 17).min(127) as u8) };
+    let range = Rect::from_min_max(pos2(x_of(lo) - 1.0, strip.min.y), pos2(x_of(hi) + ww + 1.0, strip.max.y));
+    p.rect_filled(range, 0.0, Color32::from_rgb(0x2f, 0x7c, 0xe8));
+    for (i, n) in whites.iter().enumerate() {
+        let inside = *n >= lo && *n <= hi;
+        let kr = Rect::from_min_size(pos2(keys.min.x + i as f32 * ww, keys.min.y), vec2((ww - 0.6).max(0.5), keys.height()));
+        p.rect_filled(kr, 0.0, if inside { Color32::from_rgb(0xd6, 0xe6, 0xfc) } else { Color32::from_gray(0xe8) });
+    }
+    for n in (0..128u8).filter(|n| IS_BLACK[*n as usize % 12]) {
+        let kr = Rect::from_min_size(pos2(x_of(n) - ww * 0.3, keys.min.y), vec2(ww * 0.6, keys.height() * 0.6));
+        p.rect_filled(kr, 0.0, Color32::from_gray(0x18));
+    }
+    let resp = ui.interact(strip, ui.scope_id().with("mt-overview"), Sense::click_and_drag());
+    if let Some(pt) = resp.interact_pointer_pos().filter(|_| resp.clicked() || resp.dragged()) {
+        let w = (((pt.x - keys.min.x) / ww).floor().max(0.0) as usize).min(whites.len() - 1);
+        let span = if app.live.keyboard_mode { 36 } else { 17 };
+        // (the range is centred on the click, starting on a C)
+        let c = ((whites[w] as i32 - span / 2 + 6) / 12 * 12).clamp(0, 120) as u8;
+        set_range(app, c);
+    }
+    for (dx, icon, d) in [(228.0, crate::glyphs::ph::CARET_LEFT, -12i32), (477.0, crate::glyphs::ph::CARET_RIGHT, 12)] {
+        let b = Rect::from_center_size(at(dx, 10.5), vec2(14.0, 21.0));
+        let resp = ui.interact(b, ui.scope_id().with(("mt-shift", d)), Sense::click());
+        crate::glyphs::paint(p, b, icon, 13.0, if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xa0) });
+        if resp.clicked() {
+            let cur = if app.live.keyboard_mode { app.live.piano_c } else { app.live.octave_c } as i32;
+            set_range(app, (cur + d).clamp(0, 120) as u8);
+        }
+    }
+    let _ = r;
+}
+
+/// The computer key that plays `n` (Musical Typing's letters on the onscreen piano, as Logic shows them).
+fn typing_label(octave_c: u8, n: u8) -> Option<&'static str> {
+    let off = n.checked_sub(octave_c)?;
+    const L: [&str; 18] = ["A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L", "P", ";", "'"];
+    L.get(off as usize).copied()
+}
+
+fn set_range(app: &mut App, c: u8) {
+    if app.live.keyboard_mode {
+        app.live.piano_c = c.min(84);
+    } else {
+        app.live.octave_c = c.min(120);
+    }
+}
+
+/// One key cap: rounded, its key bottom-left and what it does top-right.
+fn cap(p: &egui::Painter, kr: Rect, fill: Color32, key: &str, hint: &str, key_col: Color32, hint_col: Color32) {
+    p.rect_filled(kr, 5.0, fill);
+    p.text(pos2(kr.min.x + 9.0, kr.max.y - 12.0), Align2::LEFT_CENTER, key, look::regular(13.0), key_col);
+    if !hint.is_empty() {
+        p.text(pos2(kr.max.x - 9.0, kr.min.y + 12.0), Align2::RIGHT_CENTER, hint, look::regular(12.0), hint_col);
+    }
+}
+
+/// Musical Typing's keys, laid out as Logic draws them (points from the window's left edge).
+fn typing_keys(app: &mut App, p: &egui::Painter, at: &dyn Fn(f32, f32) -> egui::Pos2) {
+    let label = Color32::from_gray(0x9a);
+    let value = Color32::from_gray(0xf0);
+    let lit = |c: Color32| look::mix(c, Color32::WHITE, 0.35);
+    let dark = Color32::from_gray(0x14);
+    // Pitch Bend 1 2 · Modulation 3–8
+    p.text(at(33.0, 53.0), Align2::LEFT_CENTER, "Pitch Bend:", look::regular(12.0), label);
+    p.text(at(112.5, 53.0), Align2::CENTER_CENTER, app.live.bend.to_string(), look::semibold(12.0), value);
+    let blue = Color32::from_rgb(0x2e, 0x6c, 0xb5);
+    let purple = Color32::from_rgb(0x8b, 0x39, 0xb8);
+    let purple_off = Color32::from_rgb(0x6b, 0x2c, 0x94);
+    for i in 0..8usize {
+        let kr = Rect::from_min_size(at(124.0 + i as f32 * 48.0, 40.5), vec2(46.0, 50.0));
+        let (fill, hint) = match i {
+            0 => (blue, "-"),
+            1 => (blue, "+"),
+            2 => (purple_off, "off"),
+            7 => (purple, "max"),
+            _ => (purple, ""),
+        };
+        let on = match i {
+            0 => app.live.bend < 0,
+            1 => app.live.bend > 0,
+            _ => app.live.modulation as usize == i - 2 && i > 2,
+        };
+        let (kc, hc) = if i == 2 { (Color32::WHITE, Color32::WHITE) } else { (dark, if i == 1 { Color32::WHITE } else { dark }) };
+        cap(p, kr, if on { lit(fill) } else { fill }, &(i + 1).to_string(), hint, kc, hc);
+    }
+    p.text(at(514.0, 53.0), Align2::LEFT_CENTER, "Modulation", look::regular(12.0), label);
+    // sustain (Tab)
+    let green = Color32::from_rgb(0x3a, 0x8a, 0x3d);
+    cap(p, Rect::from_min_max(at(75.0, 95.0), at(151.0, 141.5)), if app.live.sustain { lit(green) } else { green }, "tab", "sustain", Color32::from_rgb(0x1c, 0x4e, 0x1e), dark);
+    // the notes: A S D F G H J K L ; ' and W E · T Y U · O P
+    let down: Vec<u8> = app.live.held.keys().copied().collect();
+    let accent = Color32::from_rgb(0x2f, 0x7c, 0xe8);
+    let whites = [(0u8, "A"), (2, "S"), (4, "D"), (5, "F"), (7, "G"), (9, "H"), (11, "J"), (12, "K"), (14, "L"), (16, ";"), (17, "'")];
+    for (i, (off, k)) in whites.iter().enumerate() {
+        let kr = Rect::from_min_size(at(167.0 + i as f32 * 47.0, 95.0), vec2(45.0, 95.5));
+        let on = down.contains(&(app.live.octave_c.saturating_add(*off)));
+        cap(p, kr, if on { accent } else { Color32::WHITE }, k, "", if on { Color32::WHITE } else { Color32::BLACK }, dark);
+    }
+    for (before, off, k) in [(0.0, 1u8, "W"), (1.0, 3, "E"), (3.0, 6, "T"), (4.0, 8, "Y"), (5.0, 10, "U"), (7.0, 13, "O"), (8.0, 15, "P")] {
+        let kr = Rect::from_min_size(at(167.0 + (before + 0.70) * 47.0, 95.0), vec2(45.0, 50.0));
+        let on = down.contains(&(app.live.octave_c.saturating_add(off)));
+        // (a thin gap of the window's colour around each black key, as the white keys show it)
+        p.rect_filled(kr.expand(1.0), 6.0, look::window_bg());
+        cap(p, kr, if on { accent } else { Color32::BLACK }, k, "", Color32::WHITE, dark);
+    }
+    // Octave Z X · Velocity C V
+    p.text(at(156.0, 205.0), Align2::RIGHT_CENTER, "Octave:", look::regular(12.0), label);
+    p.text(at(166.5, 205.0), Align2::LEFT_CENTER, c_name(app.live.octave_c), look::semibold(12.0), value);
+    let gold = Color32::from_rgb(0xc2, 0x95, 0x30);
+    let orange = Color32::from_rgb(0xc3, 0x67, 0x2b);
+    for (i, (k, hint, fill)) in [("Z", "-", gold), ("X", "+", gold), ("C", "-", orange), ("V", "+", orange)].into_iter().enumerate() {
+        let kr = Rect::from_min_size(at(189.0 + i as f32 * 47.0, 195.0), vec2(45.0, 46.5));
+        cap(p, kr, fill, k, hint, dark, if i % 2 == 0 { dark } else { Color32::WHITE });
+    }
+    p.text(at(453.0, 205.0), Align2::RIGHT_CENTER, "Velocity:", look::regular(12.0), label);
+    p.text(at(465.0, 205.0), Align2::LEFT_CENTER, app.live.velocity.to_string(), look::semibold(12.0), value);
+}
+
+/// The onscreen piano: three octaves from `piano_c`; a click plays (lower on a key = louder),
+/// the computer keys' notes light up too.
+fn piano(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, area: Rect) {
+    let lo = app.live.piano_c;
+    let notes: Vec<u8> = (lo..=(lo as u16 + 36).min(127) as u8).collect();
+    let whites: Vec<u8> = notes.iter().copied().filter(|n| !IS_BLACK[*n as usize % 12]).collect();
+    let ww = area.width() / whites.len() as f32;
+    let down: Vec<u8> = app.live.held.keys().copied().collect();
+    let accent = Color32::from_rgb(0x2f, 0x7c, 0xe8);
+    let mut rects: Vec<(u8, Rect)> = Vec::new();
+    for (i, n) in whites.iter().enumerate() {
+        let kr = Rect::from_min_size(pos2(area.min.x + i as f32 * ww, area.min.y), vec2(ww - 1.5, area.height()));
+        p.rect_filled(kr, egui::CornerRadius { nw: 0, ne: 0, sw: 4, se: 4 }, if down.contains(n) { accent } else { Color32::from_gray(0xee) });
+        if n % 12 == 0 {
+            p.text(pos2(kr.center().x, kr.max.y - 14.0), Align2::CENTER_CENTER, c_name(*n), look::semibold(11.0), Color32::from_gray(0x80));
+        }
+        if let Some(k) = typing_label(app.live.octave_c, *n) {
+            p.text(pos2(kr.center().x, kr.max.y - 44.0), Align2::CENTER_CENTER, k, look::semibold(12.0), Color32::from_gray(0x70));
+        }
+        rects.push((*n, kr));
+    }
+    let mut blacks: Vec<(u8, Rect)> = Vec::new();
+    for n in notes.iter().copied().filter(|n| IS_BLACK[*n as usize % 12]) {
+        let i = whites.iter().position(|w| *w == n - 1).unwrap_or(0) as f32;
+        let kr = Rect::from_min_size(pos2(area.min.x + (i + 1.0) * ww - ww * 0.32 - 0.75, area.min.y), vec2(ww * 0.64, area.height() * 0.62));
+        p.rect_filled(kr, egui::CornerRadius { nw: 0, ne: 0, sw: 3, se: 3 }, if down.contains(&n) { accent } else { Color32::from_gray(0x1c) });
+        if let Some(k) = typing_label(app.live.octave_c, n) {
+            p.text(pos2(kr.center().x, kr.max.y - 12.0), Align2::CENTER_CENTER, k, look::semibold(11.0), Color32::from_gray(0xc8));
+        }
+        blacks.push((n, kr));
+    }
+    let resp = ui.interact(area, ui.scope_id().with("mt-piano"), Sense::click_and_drag());
+    let hit = resp.interact_pointer_pos().filter(|_| resp.is_pointer_button_down_on()).and_then(|pt| {
+        blacks.iter().chain(rects.iter()).find(|(_, kr)| kr.contains(pt)).map(|(n, kr)| (*n, ((pt.y - kr.min.y) / kr.height()).clamp(0.0, 1.0)))
+    });
+    let now = hit.map(|h| h.0);
+    if now != app.live.mouse_note {
+        if let Some(n) = app.live.mouse_note.take() {
+            note(app, n, 0);
+        }
+        if let Some((n, y)) = hit {
+            // (higher on the key plays softer, lower louder)
+            note(app, n, (20.0 + y * 107.0).round().clamp(1.0, 127.0) as u8);
+            app.live.mouse_note = Some(n);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn piano_letters_follow_the_typing_keys() {
+        // every Musical Typing key's letter sits on the note it plays, from the octave's C
+        for (key, off) in TYPING {
+            let want = match key {
+                egui::Key::Semicolon => ";".to_string(),
+                egui::Key::Quote => "'".to_string(),
+                k => k.name().to_string(),
+            };
+            assert_eq!(typing_label(48, 48 + off), Some(want.as_str()));
+        }
+        assert_eq!(typing_label(48, 47), None);
+        assert_eq!(typing_label(48, 66), None);
+        assert_eq!(c_name(60), "C3");
+        assert_eq!(c_name(0), "C-2");
     }
 }

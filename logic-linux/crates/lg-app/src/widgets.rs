@@ -60,7 +60,9 @@ pub fn knob_ex(ui: &mut egui::Ui, r: Rect, id: egui::Id, value: &mut f32, min: f
     let a = start + sweep * frac;
     p.line_segment([c + vec2(a.cos(), a.sin()) * (d / 2.0 - 12.0).max(2.0), c + vec2(a.cos(), a.sin()) * (d / 2.0 - 6.0)], Stroke::new(2.0, Color32::WHITE));
     let text = if resp.dragged() || resp.hovered() { shown(*value) } else { label.to_string() };
-    p.with_clip_rect(r.expand2(vec2(pad, 0.0))).text(pos2(r.center().x, r.max.y - 8.0), Align2::CENTER_CENTER, text, look::regular(11.0), if resp.dragged() { look::text() } else { look::text_dim() });
+    // (a long name gets a smaller size, then an ellipsis: never cut off at both sides)
+    let (text, size) = fit_label(&p, &text, r.width() + 2.0 * pad, 11.0);
+    p.with_clip_rect(r.expand2(vec2(pad, 0.0))).text(pos2(r.center().x, r.max.y - 8.0), Align2::CENTER_CENTER, text, look::regular(size), if resp.dragged() { look::text() } else { look::text_dim() });
     if resp.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
     }
@@ -197,4 +199,24 @@ pub fn focus_once(ui: &egui::Ui, te: &egui::Response) {
     if te.lost_focus() {
         ui.data_mut(|d| d.remove::<bool>(key));
     }
+}
+
+/// `text` at `size`, or down to 2 points smaller, or ended with "…", to fit in `max_w` points.
+pub fn fit_label(p: &egui::Painter, text: &str, max_w: f32, size: f32) -> (String, f32) {
+    let w = |t: &str, s: f32| p.layout_no_wrap(t.to_string(), look::regular(s), egui::Color32::WHITE).size().x;
+    for s in [size, size - 1.0, size - 2.0] {
+        if w(text, s) <= max_w {
+            return (text.to_string(), s);
+        }
+    }
+    let s = size - 2.0;
+    let mut chars: Vec<char> = text.chars().collect();
+    while !chars.is_empty() {
+        chars.pop();
+        let t = format!("{}…", chars.iter().collect::<String>().trim_end());
+        if w(&t, s) <= max_w {
+            return (t, s);
+        }
+    }
+    (String::new(), s)
 }
