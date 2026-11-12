@@ -413,6 +413,9 @@ pub fn run_on_track(app: &mut App, t: usize, param: &StripParam, a: &Assignment,
 
 /// A strip assignment's current value 0–1 (feedback).
 pub fn strip_value(app: &App, strip: &Strip, param: &StripParam) -> Option<f32> {
+    if *strip == Strip::Master && *param == StripParam::Volume {
+        return Some(crate::surfpref::master01(app));
+    }
     strip_track(app, strip).map(|t| param_value(app, t, param))
 }
 
@@ -494,6 +497,12 @@ fn set_param(app: &mut App, t: usize, p: &StripParam, v: f32) {
 fn run_assignment(app: &mut App, ctx: &egui::Context, a: &Assignment, v: i32) {
     let res = if a.global_resolution { app.logic_settings.get("Control Surfaces / General / Resolution of Relative Controls:").parse::<f32>().unwrap_or(128.0).max(1.0) } else { a.resolution.max(1) as f32 };
     match &a.class {
+        // Channel Strip Master: the master level (Studio's Stereo Out / master)
+        Class::Strip { strip: Strip::Master, param: StripParam::Volume } => {
+            if let Some(nv) = a.apply(v, crate::surfpref::master01(app), res) {
+                crate::surfpref::set_master01(app, nv);
+            }
+        }
         Class::Strip { strip, param } => {
             let Some(t) = strip_track(app, strip) else { return };
             let cur = param_value(app, t, param);
@@ -769,6 +778,19 @@ fn mcu_in(app: &mut App, ctx: &egui::Context, d: usize, bytes: &[u8]) {
                 if down { app.hub.surf.mods |= bit } else { app.hub.surf.mods &= !bit }
                 return;
             }
+            // Zoom on: an arrow held zooms on (Key Repeat) until released
+            if app.hub.surf.live[d].zoom {
+                let cmd = match n {
+                    mcu::UP => Some("Zoom Vertical Out"),
+                    mcu::DOWN => Some("Zoom Vertical In"),
+                    mcu::LEFT => Some("Zoom Horizontal Out"),
+                    mcu::RIGHT => Some("Zoom Horizontal In"),
+                    _ => None,
+                };
+                if let Some(c) = cmd {
+                    crate::surfpref::hold(down.then_some(c), Instant::now());
+                }
+            }
             if !down {
                 return;
             }
@@ -987,6 +1009,12 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
     }
     crate::surfpref::follow(app);
     crate::surfdialog::tick();
+    if let Some(c) = crate::surfpref::repeat_due(Instant::now()) {
+        let _ = app.key_command(ctx, c);
+    }
+    if crate::surfpref::holding() {
+        ctx.request_repaint_after(Duration::from_millis(30));
+    }
     let focused = ctx.input(|i| i.focused);
     if !focused && app.logic_settings.on("Control Surfaces / General / Bypass all while in background") {
         return;
@@ -2122,6 +2150,10 @@ fn assignment_params(app: &mut App, ui: &mut egui::Ui) {
     }
     let relearn = a.key_repeat && !before.key_repeat;
     if a != before {
+        // a new input port: every assignment on the old port moves with it
+        if a.port != before.port {
+            crate::surfpref::move_port(&mut app.hub.surf.assign.list, &before.port, &a.port);
+        }
         app.hub.surf.assign.list[i] = a;
         changed(app);
     }

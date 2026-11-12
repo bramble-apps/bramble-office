@@ -9,7 +9,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use lg_dsp::Unit;
 
@@ -197,6 +197,56 @@ pub fn feedback_bytes(a: &lg_core::ctrlsurf::Assignment, v: f32) -> Option<Vec<u
         return Some(vec![m[0], m[1], (mode << 4) | pos]);
     }
     Some(m)
+}
+
+/// The master level as a fader position 0–1 (Channel Strip Master).
+pub fn master01(app: &App) -> f32 {
+    let g = app.engine.lock().map(|e| e.master).unwrap_or(1.0).max(1e-6);
+    crate::automation::db_to_logic(20.0 * g.log10()) / 127.0
+}
+
+pub fn set_master01(app: &mut App, v: f32) {
+    if let Ok(mut e) = app.engine.lock() {
+        e.master = 10f32.powf(crate::automation::logic_to_db(v.clamp(0.0, 1.0) * 127.0) / 20.0);
+    }
+}
+
+// ---- Key Repeat for held buttons (Mackie Zoom arrows) ----------------------------------------
+
+/// The repeat delay and rate (as the system's key repeat).
+pub const REPEAT_DELAY: Duration = Duration::from_millis(400);
+pub const REPEAT_EVERY: Duration = Duration::from_millis(60);
+
+thread_local! {
+    static HELD: RefCell<Option<(&'static str, Instant)>> = const { RefCell::new(None) };
+}
+
+/// A repeating button pressed (Some: its command, run once now by the caller) or released.
+pub fn hold(cmd: Option<&'static str>, now: Instant) {
+    HELD.with(|h| *h.borrow_mut() = cmd.map(|c| (c, now + REPEAT_DELAY)));
+}
+
+pub fn holding() -> bool {
+    HELD.with(|h| h.borrow().is_some())
+}
+
+/// The command to repeat now, if one is held and due.
+pub fn repeat_due(now: Instant) -> Option<&'static str> {
+    HELD.with(|h| {
+        let mut h = h.borrow_mut();
+        let (c, at) = (*h)?;
+        (now >= at).then(|| {
+            *h = Some((c, now + REPEAT_EVERY));
+            c
+        })
+    })
+}
+
+/// The MIDI tab's Input changed from `old` to `new`: all assignments using `old` change too.
+pub fn move_port(list: &mut [lg_core::ctrlsurf::Assignment], old: &str, new: &str) {
+    for a in list.iter_mut().filter(|a| a.port == old) {
+        a.port = new.to_string();
+    }
 }
 
 // ---- Jog resolution ----------------------------------------------------------------------------
@@ -565,6 +615,27 @@ mod tests {
         b.max = 127;
         b.feedback = 3;
         assert_eq!(feedback_bytes(&b, 1.0), Some(vec![0xB0, 0x07, 127]));
+    }
+
+    #[test]
+    fn held_zoom_repeats() {
+        let t0 = Instant::now();
+        hold(Some("Zoom Horizontal In"), t0);
+        assert_eq!(repeat_due(t0 + Duration::from_millis(100)), None);
+        assert_eq!(repeat_due(t0 + Duration::from_millis(450)), Some("Zoom Horizontal In"));
+        assert_eq!(repeat_due(t0 + Duration::from_millis(470)), None);
+        assert_eq!(repeat_due(t0 + Duration::from_millis(520)), Some("Zoom Horizontal In"));
+        hold(None, t0);
+        assert_eq!(repeat_due(t0 + Duration::from_secs(2)), None);
+    }
+
+    #[test]
+    fn input_port_moves_all() {
+        use lg_core::ctrlsurf::{parse_msg, Assignment, Class, Strip, StripParam};
+        let mk = |p: &str| Assignment::learned(p, parse_msg("B0 07 Lo7"), Class::Strip { strip: Strip::Selected, param: StripParam::Volume });
+        let mut l = vec![mk("A"), mk("A"), mk("B")];
+        move_port(&mut l, "A", "C");
+        assert_eq!(l.iter().map(|a| a.port.as_str()).collect::<Vec<_>>(), ["C", "C", "B"]);
     }
 
     #[test]
