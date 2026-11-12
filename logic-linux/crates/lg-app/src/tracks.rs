@@ -1065,6 +1065,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         crate::globals::header(app, ui, kind, row, lanes_x);
         p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
         if kind != crate::globals::MOVIE {
+            let n = if kind == crate::globals::ARRANGEMENT { crate::arrmarks::header_name(app) } else { n };
             p.text(pos2(row.min.x + 14.0, row.min.y + GLOBAL_ROW / 2.0), Align2::LEFT_CENTER, n, look::semibold(12.0), look::text_dim());
         }
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
@@ -1080,7 +1081,8 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                 continue;
             }
             _ => {
-                crate::globals::beat_mapping_lane(app, &lp, lane, &x_of);
+                crate::beatmapping::header(app, ui, row, lanes_x);
+                crate::beatmapping::lane(app, ui, lane, &x_of, &tick_of);
                 continue;
             }
         };
@@ -1099,13 +1101,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
                     app.arrangement.push((start, 8 * bar_t as u32, name));
                     app.dirty = true;
                 }
-                let colors = [Color32::from_rgb(0x5a, 0x8f, 0xd6), Color32::from_rgb(0x4f, 0xb0, 0x6a), Color32::from_rgb(0xd6, 0x7a, 0x4a), Color32::from_rgb(0xa8, 0x6a, 0xd6)];
-                for (k, (start, len, name)) in app.arrangement.iter().enumerate() {
-                    let r = Rect::from_min_max(pos2(x_of(*start as f32), row.min.y + 3.0), pos2(x_of((start + len) as f32) - 1.0, row.max.y - 3.0));
-                    let ci = SECTIONS.iter().position(|s| s == name).unwrap_or(k) % colors.len();
-                    lp.rect_filled(r, 4.0, colors[ci]);
-                    lp.with_clip_rect(r).text(pos2(r.min.x + 6.0, r.center().y), Align2::LEFT_CENTER, name, look::semibold(11.5), Color32::WHITE);
-                }
+                crate::arrmarks::lane(app, ui, Rect::from_min_max(row.min, pos2(lanes_x, row.max.y)), row, lane, &x_of, &tick_of);
                 continue;
             }
             1 => {
@@ -1153,8 +1149,14 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         let _ = GLOBAL_ROW;
         match i {
             0 => crate::markers::lane(app, ui, Rect::from_min_max(row.min, pos2(lanes_x, row.max.y)), row, lane, &x_of, &tick_of),
-            1 => crate::arranging::tempo_lane(app, ui, row, lane, &x_of, &tick_of),
-            _ => crate::arranging::signature_lane(app, ui, row, lane, &x_of, &tick_of),
+            1 => {
+                crate::globalclip::lane_focus(app, ui, lane, crate::globalclip::Focus::Tempo, &tick_of);
+                crate::arranging::tempo_lane(app, ui, row, lane, &x_of, &tick_of)
+            }
+            _ => {
+                crate::globalclip::lane_focus(app, ui, lane, crate::globalclip::Focus::Signature, &tick_of);
+                crate::arranging::signature_lane(app, ui, row, lane, &x_of, &tick_of)
+            }
         }
     }
     crate::globals::after_rows(app, ui, &placed, lanes_x);

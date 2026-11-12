@@ -608,6 +608,11 @@ fn rename_field(app: &mut App, ui: &mut egui::Ui, near: Option<Rect>) {
     }
 }
 
+/// A marker at `at` (already snapped), one undo step.
+pub fn create_at(app: &mut App, at: u32) -> Option<usize> {
+    create(app, at, Rounding::None, "Create Marker")
+}
+
 /// The Marker track's (+): a marker at the playhead, rounded to the quarter note.
 pub fn add_button(app: &mut App) {
     let pos = app.position() as u32;

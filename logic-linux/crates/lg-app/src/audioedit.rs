@@ -1942,7 +1942,7 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let b = |x: f32, w: f32| Rect::from_min_size(pos2(x, cy - 12.0), vec2(w, 24.0));
     let scope = app.audio_edit.st.region_scope;
     let sr = b(local.min.x + 152.0, 36.0);
-    let resp = ui.interact(sr, id.with("scope"), Sense::click()).on_hover_text(if scope { "Edit the selected region" } else { "Edit the track" });
+    let resp = ui.interact(sr, id.with("scope"), Sense::click()).on_hover_text(if scope { "Hint Mode: on (off: Beat Marker mode)" } else { "Hint Mode: off (Beat Marker mode)" });
     p.rect_filled(sr, 6.0, if scope { orange() } else { look::group_bg() });
     {
         gl(&p, sr.center(), ph::ARROWS_OUT_LINE_HORIZONTAL, Color32::WHITE);
@@ -1953,6 +1953,7 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     if icon_button(ui, b(local.min.x + 192.0, 36.0), id.with("catch"), app.audio_edit.catch, "Catch Playhead", |p, r, c| gl(p, r.center(), ph::ARROW_LINE_RIGHT, c)).clicked() {
         app.audio_edit.catch = !app.audio_edit.catch;
     }
+    crate::sthints::apply_button(app, ui, pos2(local.min.x + 236.0, cy), file);
     // the readouts: BAR BEAT | TEMPO | x2 /2 | SIGNATURE
     let sel_beat = app.audio_edit.st.selected.filter(|s| *s < map.beats.len());
     let beat_i = sel_beat.unwrap_or_else(|| map.beats.iter().position(|&s| s >= ra - 1e-6).unwrap_or(0));
@@ -2005,10 +2006,7 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     egui::Popup::menu(&sresp).show(|ui| {
         for (n, d) in [(2u8, 4u8), (3, 4), (4, 4), (5, 4), (6, 4), (7, 4), (6, 8), (7, 8), (9, 8), (12, 8)] {
             if ui.add(egui::Button::selectable(map.beats_per_bar == n && map.beat_unit == d, format!("{n}/{d}"))).clicked() {
-                crate::smarttempo::edit(app, file, |m| {
-                    m.beats_per_bar = n;
-                    m.beat_unit = d;
-                });
+                crate::sthints::set_signature(app, file, n, d);
                 ui.close();
             }
         }
@@ -2199,6 +2197,12 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
             mp.vline(ph, header.min.y..=main.max.y, Stroke::new(crate::prefs::playhead_width(), look::playhead()));
         }
     }
+    crate::sthints::draw_locks(&map, &mp, main, &x_of, None);
+    if crate::sthints::hint_view(app, ui, id, main, ruler, &x_of, &s_of, file, rt.as_ref()) {
+        amp_scale(&p, amp, Rect::from_min_max(pos2(amp.min.x, main.min.y + 3.0), pos2(amp.max.x, main.max.y - 3.0)), 25.0, true, 1.0);
+        p.vline(amp.max.x, amp.y_range(), Stroke::new(1.0, look::line()));
+        return;
+    }
     // ---- gestures: the beat markers (click selects, drag moves, double-click: the downbeat),
     // Shift-drag selects beats, a click elsewhere places the playhead
     let gest = Rect::from_min_max(ruler.min, main.max);
@@ -2237,7 +2241,9 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         let (k, _) = ui.data(|d| d.get_temp::<(i64, f64)>(drag_key)).unwrap_or((i64::MIN, 0.0));
         if k >= 0 {
             let mut s = s_of(pp.x).clamp(0.0, secs);
-            if app.audio_edit.st.snap_transients && !ui.input(|i| i.modifiers.shift) {
+            // Snap to Transients, or ⌘-drag: onto the nearest analysis point (transient)
+            if (app.audio_edit.st.snap_transients || ui.input(|i| i.modifiers.command)) && !ui.input(|i| i.modifiers.shift) {
+                let trs = if trs.is_empty() { transients(app, file).into_iter().map(|f| f as f64 / rate as f64).collect() } else { trs.clone() };
                 if let Some(&tsec) = trs.iter().min_by(|a, b| (*a - s).abs().total_cmp(&(*b - s).abs())) {
                     if ((x_of(tsec) - pp.x).abs()) < 6.0 {
                         s = tsec;
@@ -2299,7 +2305,9 @@ fn tempo_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 ui.close();
             }
         }
+        crate::sthints::lock_items(app, ui, file);
     });
+    crate::sthints::handles(app, ui, id, main, &x_of, &s_of, file);
     amp_scale(&p, amp, Rect::from_min_max(pos2(amp.min.x, main.min.y + 3.0), pos2(amp.max.x, main.max.y - 3.0)), 25.0, true, 1.0);
     p.vline(amp.max.x, amp.y_range(), Stroke::new(1.0, look::line()));
     let _ = x;

@@ -297,6 +297,11 @@ pub struct App {
     pub mk: crate::markers::State,
     /// The global tracks shown, their order and heights (globals.rs).
     pub gt: crate::globals::State,
+    pub arrm: crate::arrmarks::State,
+    pub ti: crate::tempointerp::State,
+    pub stm: crate::stmulti::State,
+    pub gc: crate::globalclip::State,
+    pub bm: crate::beatmapping::State,
     /// Project Tempo mode, free tempo recording (tempomode.rs).
     pub tm2: crate::tempomode::State,
     /// The Region inspector's extras, section clipboard, Region Solo, Gain tool (regionparams.rs).
@@ -515,6 +520,11 @@ impl App {
             arr: Default::default(),
             mk: Default::default(),
             gt: Default::default(),
+            arrm: Default::default(),
+            ti: Default::default(),
+            stm: Default::default(),
+            gc: Default::default(),
+            bm: Default::default(),
             tm2: Default::default(),
             rp: Default::default(),
             mix: Default::default(),
@@ -1151,6 +1161,7 @@ impl App {
         // (the markers are the app's: kept with the song for undo)
         if let Some(p) = self.project.as_mut() {
             p.markers = self.markers.clone();
+            p.arrangement = self.arrangement.clone();
         }
         let Some(p) = &self.project else { return };
         self.undo.push((what.to_string(), p.clone(), self.programs.clone()));
@@ -1166,9 +1177,11 @@ impl App {
         let Some((what, p, progs)) = self.undo.pop() else { return };
         if let Some(mut cur) = self.project.take() {
             cur.markers = self.markers.clone();
+            cur.arrangement = self.arrangement.clone();
             self.redo.push((what.clone(), cur, self.programs.clone()));
         }
         self.markers = p.markers.clone();
+        self.arrangement = p.arrangement.clone();
         self.project = Some(p);
         self.programs = progs;
         crate::cellinsp::undone(self);
@@ -1180,9 +1193,11 @@ impl App {
         let Some((what, p, progs)) = self.redo.pop() else { return };
         if let Some(mut cur) = self.project.take() {
             cur.markers = self.markers.clone();
+            cur.arrangement = self.arrangement.clone();
             self.undo.push((what.clone(), cur, self.programs.clone()));
         }
         self.markers = p.markers.clone();
+        self.arrangement = p.arrangement.clone();
         self.project = Some(p);
         self.programs = progs;
         crate::cellinsp::redone(self);
@@ -1207,6 +1222,9 @@ impl App {
 
     pub fn menu_label(&self, label: &str) -> String {
         if let Some(l) = crate::nav::menu_label(self, label) {
+            return l;
+        }
+        if let Some(l) = crate::stmulti::menu_label(self, label) {
             return l;
         }
         match label {
@@ -1387,7 +1405,7 @@ impl App {
         if crate::share::command(self, name) {
             return true;
         }
-        if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
+        if crate::arrmarks::command(self, name) || crate::globalclip::command(self, name) || crate::beatmapping::command(self, name) || crate::stmulti::command(self, name) || crate::tempointerp::command(self, name) || crate::markers::command(self, ctx, name) || crate::globals::command(self, name) || crate::tempomode::command(self, name) {
             return true;
         }
         if crate::plughead::command(self, ctx, name) || crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) || crate::artic::command(self, name) || crate::sbp::command(self, name) {
@@ -1905,6 +1923,9 @@ impl App {
         crate::markers::frame(self, &ctx);
         crate::globals::window(self, &ctx);
         crate::tempomode::frame(self, &ctx);
+        crate::tempointerp::frame(self, &ctx);
+        crate::stmulti::frame(self, &ctx);
+        crate::globalclip::frame(self, &ctx);
         crate::regionparams::windows(self, &ctx);
         crate::hosting::manager(self, &ctx);
         crate::stemsplit::window(self, &ctx);

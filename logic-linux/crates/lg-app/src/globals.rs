@@ -192,6 +192,7 @@ pub fn checked(app: &App, label: &str) -> Option<bool> {
 /// Single Global Track, then each track with a check (and Studio's Transposition).
 pub fn header_menu(app: &mut App, resp: &egui::Response) {
     resp.context_menu(|ui| {
+        crate::arrmarks::header_items(app, ui);
         if ui.add_enabled(app.gt.sel.is_some(), egui::Button::new("Deselect Global Tracks")).clicked() {
             app.gt.sel = None;
             ui.close();

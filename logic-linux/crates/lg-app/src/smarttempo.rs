@@ -51,6 +51,8 @@ pub struct State {
     pub view_start: f64,
     pub sec_per_px: f64,
     pub fitted_for: Option<PathBuf>,
+    /// Hint mode's taps (sthints.rs).
+    pub hint: crate::sthints::State,
 }
 
 impl Default for State {
@@ -73,6 +75,7 @@ impl Default for State {
             view_start: 0.0,
             sec_per_px: 0.02,
             fitted_for: None,
+            hint: Default::default(),
         }
     }
 }
@@ -208,6 +211,7 @@ pub fn edit(app: &mut App, file: &Path, f: impl FnOnce(&mut BeatMap)) -> bool {
         a.undo.push(before);
         a.redo.clear();
     }
+    crate::stmulti::propagate(app, file);
     true
 }
 
@@ -341,7 +345,7 @@ pub fn apply_project_tempo(app: &mut App) -> bool {
     if beats.len() < 2 {
         return false;
     }
-    let map = BeatMap { beats, downbeat: downbeat.unwrap_or(0), beats_per_bar: sig.0, beat_unit: sig.1, variable };
+    let map = BeatMap { beats, downbeat: downbeat.unwrap_or(0), beats_per_bar: sig.0, beat_unit: sig.1, variable, hints: Default::default() };
     let file = rt.file.clone();
     if app.audio_edit.st.maps.contains_key(&file) {
         edit(app, &file, |m| *m = map);
@@ -394,13 +398,16 @@ pub fn set_tempo(app: &mut App, file: &Path, bpm: f64) -> bool {
     edit(app, file, |m| {
         let d = m.beats.get(m.downbeat).copied().unwrap_or(0.0);
         let n = BeatMap::constant(bpm.clamp(5.0, 990.0), d, secs.max(d), m.beats_per_bar);
-        *m = BeatMap { variable: m.variable, beat_unit: m.beat_unit, ..n };
+        *m = BeatMap { variable: m.variable, beat_unit: m.beat_unit, hints: m.hints.clone(), ..n };
     })
 }
 
 /// The Smart Tempo Editor's commands (key commands, its Edit and View menus). False when the
 /// name isn't one, or there's nothing to do it to.
 pub fn command(app: &mut App, name: &str) -> bool {
+    if crate::sthints::command(app, name) {
+        return true;
+    }
     let rt = selected(app);
     let file = rt.as_ref().map(|r| r.file.clone());
     let st = &mut app.audio_edit.st;

@@ -58,7 +58,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Snap and Drag (arranging.rs, lg-core regions, tested): the … menu's Snap values (Smart by zoom, Bar, Beat, Division, Ticks, Frames, Quarter Frames, Samples; signature-aware), Snap Regions to Absolute / Relative Value, and the Drag modes on region moves and right-edge resizes: Overlap, No Overlap (the earlier region shortened), X-Fade (fades over the overlap on audio, No Overlap on MIDI), Shuffle R / L (gaps closed, following regions pushed on resize); regions dragged onto another track of the same kind (a frame shows where; moved on release). [ ] Shuffle on Delete and left-edge resize (in lg-core, not hooked), swapping in Shuffle, Control / Control-Shift drags, Snap in the Piano Roll and other editors, Limit Dragging to One Direction
 - [~] Aliases and clones (lg-core regions, tested): Option-Shift-drag makes an alias (MIDI) or a clone (audio); aliases follow their original's notes and controllers (clones its file window and length) with their own name and region parameters, the parent's name shown under theirs; Make Alias (playhead, selected track, relative positions), Repeat Regions/Events as Alias, Re-Assign Alias, Convert Alias to a (Region) Copy, Select Original Region, Select Aliases of Region, Select / Delete Orphan Aliases; split pieces become plain regions. [ ] the delete-original dialog (orphans are kept), the double-click "edit original / copy" question, alias names in italics, aliases written to the .logicx (saved as copies)
 - [~] MIDI FX (lg-dsp midifx, midifx.rs, tested): working MIDI FX slots in the channel strip (green labels between EQ and instrument, in series, up to 8, bypass, No Plug-in / replace / Insert Below, drag to swap or move), run by the engine on the regions' notes and controllers and on live keys (song clock while playing, a free clock when stopped), each with a window (bypass, Setting menu: Recall Default / Save Setting As… / saved settings, Copy / Paste, the parameters): Arpeggiator (Play / Latch with Reset, Transpose, Gated Transpose, Add, Add Temporarily, Through; Clear, Delete Last; 10 rates; the six note orders with their four variations; Octave Range / Inversions; note length, random length, velocity range / base, crescendo / random, swing, cycle length; Live and Grid mode with 32 steps of on / velocity / length / tie / chord and a running light; Input Snap, root and the 17 scales; an arpeggio zone; 4 controller assignments), Chord Trigger (Single / Multi, trigger range, Learn on two keyboards, Clear / Option-Clear, Chord Transpose), Modifier, Modulator (LFO with 4 shapes, symmetry, similarity, triggers, steps, sync; Delay / Attack / Hold / Release envelope with triggers, steps, to LFO rate / amp; CC / aftertouch / pitch bend targets and channels), Note Repeater, Randomizer (seeded), Transposer (scales, User scale keyboard), Velocity Processor (Compress / Expand, Value / Range, Add / Scale, note range). Slots kept with the project (undo) and on Save in ~/.config/bramble-studio/project-extras. [ ] Scripter (the slot passes events through: no script engine), Record MIDI to Track Here, Learn functions, Arpeggiator Remote zone / Live rest-tie-chord / capture / grid pattern menu / As Played lock, drawn displays (Modulator envelope handles, Randomizer box, Note Repeater bars), plug-in parameter targets, Logic's own window layouts
-- [~] Tempo and signatures (lg-core timeline, arranging.rs, tested): Tempo track points (click adds, drag up / down with Shift finer or left / right, never both; Option-drag copies; drag a line moves both points; double-click or Delete removes), tempo curves (curve point between points, drag to bend, double-click deletes; played by the engine, integrated for time), Extend Left, Replace by Average, Apply Smoothing, tempo point snap, tempo sets (New / Rename / Delete / choose), the Tempo List (window and List Editors tab: Add Tempo, edit tempo and position, pickup, delete, Additional Info with the curve events, Granularity), Tempo Operations (Create Tempo Curve with Linear / Curved / S-Curve, density, continue; Constant; Scale; Stretch; Thin Out; Randomize; Round; red preview), Adjust Tempo using Region Length and Locators (Globally / Create), Beats from Region (beat mapping a MIDI guide region, everything keeps its time); time signature changes at any bar (Signature track double-click / drag / delete, Signature List, the dialog with beat grouping) drive the ruler, the bar lines and the click's beats and accents; key changes kept and shown. Curves are written into the .logicx as tempo events; signature changes, key changes and tempo sets in Studio's project extras. Signature sets (Signature List pop-up, up to nine). [ ] Beat Mapping track (shown, lines only), Tempo Interpreter, tempo fader, recorded tempo changes, copy / paste of tempo points and signatures, key changes transposing chords / score, the LCD / grid snapping by signature everywhere (bbdt elsewhere assumes one signature), Tempo track range drag
+- [~] Tempo and signatures (lg-core timeline, arranging.rs, tested): Tempo track points (click adds, drag up / down with Shift finer or left / right, never both; Option-drag copies; drag a line moves both points; double-click or Delete removes), tempo curves (curve point between points, drag to bend, double-click deletes; played by the engine, integrated for time), Extend Left, Replace by Average, Apply Smoothing, tempo point snap, tempo sets (New / Rename / Delete / choose), the Tempo List (window and List Editors tab: Add Tempo, edit tempo and position, pickup, delete, Additional Info with the curve events, Granularity), Tempo Operations (Create Tempo Curve with Linear / Curved / S-Curve, density, continue; Constant; Scale; Stretch; Thin Out; Randomize; Round; red preview), Adjust Tempo using Region Length and Locators (Globally / Create), Beats from Region (beat mapping a MIDI guide region, everything keeps its time); time signature changes at any bar (Signature track double-click / drag / delete, Signature List, the dialog with beat grouping) drive the ruler, the bar lines and the click's beats and accents; key changes kept and shown. Curves are written into the .logicx as tempo events; signature changes, key changes and tempo sets in Studio's project extras. Signature sets (Signature List pop-up, up to nine). 2026-11-12 (globalclip.rs, lg-core tempoclip, tempointerp.rs, beatmapping.rs; tested): Copy / Paste of tempo points and signatures at the playhead (kept across projects), Select All Inside Locators and Pickup Clock for tempo points, Eraser, ⌃⌥⌘-click typed tempo, Shift-double-click Tempo / Signature List (⌥⇧: Tempo List window), Set Time For Last Selected Tempo Event (Playhead / Manual, LCD or SMPTE text), signature click / Shift-click selection, Option-drag copy, Scissors split (5/4 → 3/4 + 2/4), Join; Tempo track drawn blue as Logic 13 with point values; Tempo Interpreter window (Tap Step, Window, Response, Max. Change, Count-In, Smoothing, Tempo Recording, Pre / Post, flashes; Sync Mode Manual routes Tap Tempo); Beat Mapping track (ruler by zoom, note starts / transients of selected regions, click a line and drag to a note or ⌃-drag anywhere, delete / Eraser / header select-all, title menu with Analyze Transients, Protect MIDI / Flex, Move Selection with First Transient to Nearest Beat, − / + threshold). [ ] Protect Flex has no effect, Tempo Interpreter doesn't mute other tracks, no Auto-enable Tap Tempo setting, pasted tempo points' Position field, Signature List paste asks no bar, tempo fader, recorded tempo changes from the control bar, key changes transposing chords / score, the LCD / grid snapping by signature everywhere (bbdt elsewhere assumes one signature), Tempo track range drag
 - [~] Piano Roll: draw, move, resize (right edge), transpose, nudge, Time and Scale Quantize with Strength and Swing, velocity, local menus; tools: Pencil (click / drag for length, Define as Default Note), Eraser, Scissors, Join, Quantize, Velocity (drag up / down), Brush (paints notes or the Define Brush Pattern pattern); velocity lane (drag across to paint); Time Handles (stretch / squeeze the selection); Collapse Mode; note colours by velocity / region / MIDI channel; Note Labels; scale guides from the project key (Logic 13's look not measured); note clipboard (Copy, Cut, Paste, Paste at Original Position, Paste Replace). MIDI Draw lanes (the lane title's pop-up: Note Velocity, Modulation, Breath, Volume, Pan, Expression, Sustain, Cutoff, Pitch Bend, Aftertouch, Poly Aftertouch, Program Change, any controller; drag to draw on a 1/64 grid, Option-drag erases); regions keep controller / pitch bend / pressure / program events (read from Logic's files, played, shown and edited in the Event List under the notes, split with the region); Mute Notes (⌃M on selected notes: kept grey, not played). [ ] lane events written back into the .logicx, SysEx and meta events, the Mute tool on notes, articulations, Link / One Track / Selected Regions view modes, Scroll in Play
 - [~] MIDI Functions (lg-core functions, tested): Quantize with Strength / Swing and the Quantize key commands (single, triplet and the combined 1/16 & 1/16 Triplet values; Next / Previous Value), all Note End trims (Force Legato, Overlap Correction, to Selected / Following / Repeated, 8-tick gap or 4-tick overlap), Note Start / End to Playhead, Delete Duplicates / Inside / Outside Locators / Outside Region Boundaries / Unselected Within Selection, Length Double / Halve / Change…, Split at Playhead / Rounded Playhead / Locators, Join Notes, Repeat Once / Multiple…, Pickup Clock, Copy MIDI Events… (Copy / Move Merge, Replace, Insert), Set MIDI Channel to Voice Number, Event Channel ±1 / = n, the Piano Roll's Select menu (Following / Same Pitch, Inside Locators, Deselect Outside, Overlapped, Same Note Pitch / Name / Channel / Subposition / Colour, Highest / Lowest, Next / Previous Event, Invert); in the Tracks area they work on the selected MIDI regions' notes. [x] MIDI Transform window (lg-core transform, tested): Select Conditions and Operations (Fix, Add, Sub, Min, Max, Flip, Mul, Div, Scale, Range, Random, ±Rand, Quantize, Q Up, Expo, Crescendo, Reverse) on Position / Pitch / Velocity / Length / Channel, Select Only / Operate Only / Select and Operate, Logic's 17 note presets, 30 user presets saved to ~/.config/bramble-studio/transform-presets.txt with their key commands. [ ] Scale 14bit PitchBd (no pitch bend in regions), the presets' starting values are Studio's (not measured in Logic), Swing A–F and n-Tuplet quantize values, Dequantize of notes, Mute Notes, Convert Sustain Pedal, Paste at Original Position and Length ▸ Double / Halve / Change… / Repeat Multiple… for regions in the Tracks area (those labels run on notes only)
 - [~] Automation: read from projects (Track Automation Root Folder), shown on the tracks (A) with the mode (Off, Read, Touch, Latch, Write) and parameter pop-ups; points added on the line, dragged (selected points together), removed; segment drag; curves (Option / Ctrl-Shift-drag the line, played curved); Automation Select rubber band, Delete, Nudge Automation; marquee ranges deleted or moved (border points added); points at region borders (1 / 2, every border, each for Volume and Pan, visible parameter); Delete Redundant / Orphaned / All; Cycle Through Used Parameters; plug-in parameter lanes (instrument and Audio FX parameters, played by the engine); Touch / Latch / Write record from the faders; Volume / Pan / other channel lanes saved back into the .logicx (byte-identical when unchanged; round-trip tested on E08). autoext.rs (2026-11-11): Trim (T-Touch / T-Latch: offsets folded in at the end of the pass) and Relative (R-Touch / R-Latch / R-Write: a second curve added to the absolute one, Consolidate), mode colours as Logic's, the mode choice for all selected tracks, the Write pass's mode change and Write Automation For; the parameter pop-up's Main / Smart Controls / plug-ins by slot / MIDI, its On/Off (muted lane, gray), Mute automation played; region automation (the Automation button, lanes inside the regions for channel / plug-in parameters and the regions' MIDI CC, pitch bend, aftertouch, program, velocity; the 30 Region Automation key commands; moves / copies / splits with the region; played over the track's) and the Convert / Move commands both ways; automation subtracks (disclosure, Plus / X, reorder, Toggle / Show / Hide / Reset); stepped segments, Pencil drawing, Eraser, Option-click following, Shift selection, Option-drag copy, ramp drag, sideways lock, Copy / Paste between tracks; the header's Trim field; Snap Automation (values, offset); Move Track Automation with Regions (Never / Always / Ask, trails, ramp time); the Automation Event List; Automation Quick Access (Settings, Learn Message); Autoselect in Read; Record Automation with Regions (while recording). [ ] region automation of channel parameters, Relative curves, steps, curves and plug-in / MIDI / screen-control lanes aren't written to the .logicx (format not decoded; MIDI CC region data is, as region events), sends automation, Trim / Relative fader display, collapsed stacks' lanes, Piano Roll snap automation
@@ -117,8 +117,8 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 - [ ] Effects rack: parallel effect chains with splits and macro knobs in any channel strip (the Pedalboard's buses, generalised)
 - [ ] Better Flex Pitch: sharper note detection, smoother pitch curves, editing several notes at once
 - [~] Markers (lg-core markers, markers.rs, tested): lengths (to the next marker unless shorter, never overlapping), colours (Colors window while markers have the focus), SMPTE lock (locked markers keep their time; scene markers can't unlock), marker text (first paragraph = name, saved in the .logicx), marker sets; Marker track: click selects, Option-click locates, drag moves by Snap with a help tag, Option-drag copies, edges resize, a shared edge moves both, ⌘-click / ⇧⌘-click trim, double-click renames, ⌥-double-click opens Marker Text, Pencil adds (quarter note), Eraser deletes, Text tool renames, Delete, ⌘C / ⌘V, the header word's Create Markers From Regions; markers in the ruler when the Marker track is hidden (⌘-drag moves, down out deletes, ⇧-click cycles, ⌘-double-click renames, ⌃⇧⌘-double-click creates); the cycle dropped on the Marker track (vertical drag kept in place, Shift sideways); Marker List (own window and List Editors) with Position / Name / Length typed or slid, Options, View (as time, length as end), Marker Set pop-up, the Marker Text area; Marker Text window with Font; Import / Export / Remove Marker from / to Audio File (WAV cue points). [ ] markers written into recorded / bounced files, Junction tool, tear-off list, USB controller auto-assign
-- [~] Global tracks (globals.rs, tested): which show (Track ▸ Global Tracks items, the headers' menu, Configure Global Tracks with Enable / Disable All and Show Single Track), Single Global Track (⌃⌥⌘G, ' for Marker only, Cycle Through), Show / Hide All, reorder by dragging headers, resize a track or the whole area, Protect buttons. [ ] per-window configuration, global tracks in the editors
-- [~] Smart Tempo modes (tempomode.rs, tested logic): Project Tempo mode in the LCD (KEEP / ADAPT / AUTO menu) and Project Settings; Adapt opens the Tempo track and turns Cycle off; Adapt / Automatic recordings set the project tempo after their analysis (metronome, regions there, Cycle as references); the only region in a range carries its tempo changes when moved / trimmed / deleted; Free Tempo Recording (⌃⌥⌘R) with its four choices or the project default; Region inspector Smart Tempo (Off / On / Align …) and Pitch Source (Off / Key Signature / Region Chords / Chord Track) for MIDI regions; Apply Region Tempo… dialog; Move Region to Beat. [ ] Adapt and free tempo recording not run with live audio (headless), imports don't adapt, tempo curve colours, multitrack sets, Smart Tempo hints
+- [~] Global tracks (globals.rs, tested): which show (Track ▸ Global Tracks items, the headers' menu, Configure Global Tracks with Enable / Disable All and Show Single Track), Single Global Track (⌃⌥⌘G, ' for Marker only, Cycle Through), Show / Hide All, reorder by dragging headers, resize a track or the whole area, Protect buttons. Arrangement markers (arrmarks.rs, lg-core arrmarks, tested): grey sections with centred names as Logic 13; click / Shift-click (contiguous) select, Option-click locates, drag moves the section with its regions, markers and automation (between: later ones make room; onto another: swap; Option: copy; ⌘ onto: replace), gap closes, Delete clears content then the marker, ⌘T splits at the playhead, Junction between / Trim at outer edges, name menu (section names, Rename), double-click rename, Option-double-click: marker + Marker List, Suspend Content Connection (header menu, "Arrangement (suspended)"), undo; protected tracks' regions stay. [ ] per-window configuration, global tracks in the editors, Session Player regions per arrangement marker, tear-off Marker List
+- [~] Smart Tempo modes (tempomode.rs, tested logic): Project Tempo mode in the LCD (KEEP / ADAPT / AUTO menu) and Project Settings; Adapt opens the Tempo track and turns Cycle off; Adapt / Automatic recordings set the project tempo after their analysis (metronome, regions there, Cycle as references); the only region in a range carries its tempo changes when moved / trimmed / deleted; Free Tempo Recording (⌃⌥⌘R) with its four choices or the project default; Region inspector Smart Tempo (Off / On / Align …) and Pitch Source (Off / Key Signature / Region Chords / Chord Track) for MIDI regions; Apply Region Tempo… dialog; Move Region to Beat. 2026-11-12 (sthints.rs, lg-audio hints, stmulti.rs; tested): Hint mode (default; the orange Hint Mode button) with downbeat / beat / signature hints (click upper / lower third, D / T taps, D starts playback, hover signature indicator), hint drag / delete, Apply Changes Automatically or the Apply Changes button (orange after edits), Delete Hints, Convert; Beat Marker mode handles (Set Downbeat, Scale Selection, Scale Left Move Right, Scale All, Move All with default ranges); ⌘-drag snaps to transients; Lock / Unlock Range (darker, lock icon, kept through edits and analyses); Smart Tempo multitrack sets (downmix of contributing files analysed, results and edits for all files, window with Contributes to Analysis, Analyze, Break Up Set, Delete row). [ ] hinted analysis is an even spacing between hints at the analysed tempo (not Logic's range rules), one signature per file, the downmix isn't viewable, sets only from existing regions, analysis / hints / locks not written into the files or .logicx, Adapt and free tempo recording not run with live audio (headless), imports don't adapt, orange / red tempo curve colours
 - [~] Region inspector as Logic 13's (regionparams.rs, lg-core regparams, tested; measured against Apple's Region Inspector Float screenshot): General / Quantize / Fades / Details groups with More areas, name field, colour swatch (region colours drawn; Region Color ▸ As Track Color; Color Regions by Track Color), Gain, Delay in ticks or ms, Transpose with octave pop-up, Fine Tune (10-cent pop-up), Velocity, Dynamics (Fixed), Gate Time (Fixed / Legato), Pitch Source (Off / Key Signature: follows key changes), Clip Length, Flex, Reverse, Q-Swing / Q-Strength / Q-Range / Q-Flam (played), fade lengths, curves and type, Position / Length (bar beat division tick), Lock Time Position (Lock / Unlock SMPTE Position); every selected region edited (relative, Option-Shift absolute, asterisk where they differ); MIDI / Audio Defaults for new recordings; Region Inspector Float (⌥⇧R); the new parameters kept in a project sidecar. [ ] Q-Velocity / Q-Length (no groove templates), Smart Quantize, Smart Tempo / File Tempo / Is a Loop / Speed rows, Fade In Speed Up, Session Player pitch sources, writing the new parameters into Logic's file
 - [~] Cut / Insert Time (regionparams.rs, lg-core regparams, tested): Cut / Copy / Delete / Repeat Section Between Locators, Insert Silence, Insert Section at Playhead (Global, and Selection asking about global events), with tempo changes, markers, arrangement markers, chords, Transposition and whole-bar key / signature changes moved; audio regions cut keep their file offset, gain and fades; toolbar section buttons work. Region Length Double / Halve / Change… (0.25-16), Repeat Regions dialog (copies, adjustment, copies / aliases), Paste at Original Position, Split's Keep / Shorten / Split dialog (Shorten by default), Join normalizes Transpose / Velocity / Dynamics and joins a looped region with its loops; Control / Control-Shift drags; Limit Dragging to One Direction; Gain tool; Toggle Region Solo; marquee ruler, marquee Shift-click ends / grow, click inside splits, Shift-click header toggles a track. [ ] (Selection) works per track, not per region; audio Join mixdown; region solo button and Solo tool hold-to-play; Gain on a marquee
 - [~] Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog
@@ -136,13 +136,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 378 | 595 | 63% |
-| Local menus | 701 | 1191 | 58% |
-| Right-click menus | 1436 | 2575 | 55% |
-| Key commands | 1715 | 2207 | 77% |
+| Menu bar | 380 | 595 | 63% |
+| Local menus | 708 | 1191 | 59% |
+| Right-click menus | 1439 | 2575 | 55% |
+| Key commands | 1718 | 2207 | 77% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 378 of 595
+## Menu bar: 380 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -284,7 +284,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 86/166</summary>
+<details><summary>Edit — 88/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -444,12 +444,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Project Tempo to Region and Downbeat
   - [ ] Write Project Tempo to Audio Files
   - [x] Remove Tempo Information
-  - [ ] Create Smart Tempo Multitrack Set
+  - [x] Create Smart Tempo Multitrack Set
   - [x] Adjust Tempo using Region Length and Locators
   - [ ] Show Beat Mapping Track
   - [x] Show Tempo List  `⌥⇧T`
   - [x] Tempo Operations…
-  - [ ] Tempo Interpreter…
+  - [x] Tempo Interpreter…
 - [ ] Open in External Sample Editor  `⇧W`
 - [x] Open Smart Tempo Editor
 
@@ -790,7 +790,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 701 of 1191
+## Local menus (Edit / Functions / View in each area): 708 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -880,9 +880,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 61/118</summary>
+<details><summary>audiotrack-Edit — 62/118</summary>
 
-- [ ] Undo Edit Hint Marker  `⌘Z`
+- [x] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
 - [ ] Undo History…
 - [ ] Delete Undo History
@@ -1717,9 +1717,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>smarttempo-Edit — 9/18</summary>
+<details><summary>smarttempo-Edit — 13/18</summary>
 
-- [ ] Undo Edit Hint Marker
+- [x] Undo Edit Hint Marker
 - [ ] Can’t Redo
 - [x] Apply Region Tempo to Project Tempo…
 - [x] Apply Project Tempo to Region and Downbeat
@@ -1727,7 +1727,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Apply Changes Automatically
 - [ ] Snap to Transients
 - [x] Analyze Tempo
-- [ ] Delete Hints
+- [x] Delete Hints
 - [x] Remove Tempo Information
 - [x] Revert to Original Recording Tempo
 - [x] Select
@@ -1735,8 +1735,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] All Following
   - [ ] All Previous
 - [x] Set Downbeat to Playhead Position  `⌃D`
-- [ ] Convert all Beat Hints to Downbeat Hints
-- [ ] Convert all Downbeat Hints to Beat Hints
+- [x] Convert all Beat Hints to Downbeat Hints
+- [x] Convert all Downbeat Hints to Beat Hints
 
 </details>
 
@@ -1815,7 +1815,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 85/168</summary>
+<details><summary>tracks-Edit — 87/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1977,12 +1977,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Write Project Tempo to Audio Files
   - [x] Remove Tempo Information
   - [ ] Show Smart Tempo Editor
-  - [ ] Create Smart Tempo Multitrack Set
+  - [x] Create Smart Tempo Multitrack Set
   - [x] Adjust Tempo using Region Length and Locators
   - [ ] Show Beat Mapping Track
   - [x] Show Tempo List  `⌥⇧T`
   - [x] Tempo Operations…
-  - [ ] Tempo Interpreter…
+  - [x] Tempo Interpreter…
 - [ ] Open in External Sample Editor  `⇧W`
 - [x] Open Smart Tempo Editor
 
@@ -2134,7 +2134,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1436 of 2575
+## Right-click menus: 1439 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4085,7 +4085,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 109/172</summary>
+<details><summary>region-audio — 110/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4253,7 +4253,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Project Tempo to Region and Downbeat
   - [ ] Write Project Tempo to Audio File
   - [x] Remove Tempo Information
-  - [ ] Create Smart Tempo Multitrack Set
+  - [x] Create Smart Tempo Multitrack Set
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
@@ -4262,7 +4262,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 135/212</summary>
+<details><summary>region-midi — 136/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4470,7 +4470,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Project Tempo to Region and Downbeat
   - [ ] Write Project Tempo to Audio File
   - [x] Remove Tempo Information
-  - [ ] Create Smart Tempo Multitrack Set
+  - [x] Create Smart Tempo Multitrack Set
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
@@ -4576,7 +4576,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 135/212</summary>
+<details><summary>take-folder-region — 136/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4784,7 +4784,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Apply Project Tempo to Region and Downbeat
   - [ ] Write Project Tempo to Audio File
   - [x] Remove Tempo Information
-  - [ ] Create Smart Tempo Multitrack Set
+  - [x] Create Smart Tempo Multitrack Set
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
@@ -4957,7 +4957,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1715 of 2207
+## Key commands: 1718 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4966,7 +4966,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 544/679</summary>
+<details><summary>Global Commands — 545/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5264,7 +5264,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Performance Meter
 - [x] Open Tempo List…  `⌥⇧T`
 - [x] Open Tempo Operations…
-- [ ] Open Tempo Interpreter…
+- [x] Open Tempo Interpreter…
 - [x] Open Key Command Assignments…  `⌥K`
 - [x] Show/Hide Colors  `⌥C`
 - [x] Enter/Exit Full Screen  `⌃⌘F`
@@ -6164,7 +6164,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Views Showing Time Ruler — 47/80</summary>
+<details><summary>Views Showing Time Ruler — 48/80</summary>
 
 - [ ] Secondary Ruler  `⌃⌥⇧R`
 - [ ] Show/Hide Grid Lines
@@ -6192,7 +6192,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Show All Global Tracks
 - [ ] Tempo Track: Extend Left
 - [ ] Tempo Track: Replace By Average
-- [ ] Tempo Track: Set Time For Last Selected Tempo
+- [x] Tempo Track: Set Time For Last Selected Tempo
 - [x] Region Automation: Volume
 - [x] Region Automation: Panorama
 - [x] Region Automation: Balance
@@ -6276,7 +6276,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 145/249</summary>
+<details><summary>Main Window Tracks — 146/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6407,7 +6407,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Insert Section at Playhead (Global)  `⌃⌘V`
 - [x] Repeat Section Between Locators (Selection)
 - [x] Repeat Section Between Locators (Global)  `⌃⌘R`
-- [ ] Cut Sections of Selected Arrangement Markers  `⌥⌘⌦`
+- [x] Cut Sections of Selected Arrangement Markers  `⌥⌘⌦`
 - [x] Insert Scenes at Playhead  `⌘⤓`
 - [ ] Copy Scenes to Playhead
 - [ ] Separate MIDI Region by MIDI Channel
