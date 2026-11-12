@@ -8,21 +8,15 @@
 
 use std::sync::{Arc, OnceLock};
 
-use crate::dsp::{self, Adsr, CHUNK, Delay, Fade, Ladder, Osc, Rng, Room, Svf, SvfMode, Wave};
+use crate::dsp::{self, Adsr, CHUNK, Delay, Fade, Osc, Rng, Room, Svf, SvfMode, Wave};
 use crate::poly::{Channel, Ctl, Params, Poly, Voice};
 use crate::retro::Lfo;
 use lg_dsp::{Instrument, Param, Plugin, Unit};
 
 pub const VA_SHAPES: &[&str] = &["Sine", "Square", "Saw", "Triangle"];
-pub const SRC_FILTERS: &[&str] = &["Lowpass", "Bandpass", "Highpass", "Notch", "Comb"];
-pub const MASTER_FILTERS: &[&str] = &[
-    "LP 12dB",
-    "LP 24dB Edgy",
-    "LP 24dB Lush",
-    "Bandpass",
-    "Highpass",
-    "Notch",
-];
+/// Source and main filter types (alchemy_filter).
+pub const SRC_FILTERS: &[&str] = crate::alchemy_filter::FILTER_TYPES;
+pub const MASTER_FILTERS: &[&str] = crate::alchemy_filter::FILTER_TYPES;
 pub const PLAY_MODES: &[&str] = &["Poly", "Mono", "Legato"];
 
 include!("alchemy_params.rs");
@@ -132,10 +126,10 @@ struct SourceCfg {
     va_detune: f32,
     va_num: usize,
     va_sync: f32,
-    cutoff: f32,
-    res: f32,
-    ftype: u8,
     keytrack: bool,
+    /// The three source filters: (type, cutoff knob, res knob, drive knob, on); parallel or not.
+    sf: [(u8, f32, f32, f32, bool); 3],
+    sf_par: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -145,6 +139,11 @@ pub(crate) struct AlchShared {
     m_cut: f32,
     m_res: f32,
     m_type: u8,
+    m_on: bool,
+    f2_type: u8,
+    /// Each main filter's FX amount (the rest goes straight to the outputs).
+    m_fx: f32,
+    f2_fx: f32,
     m_drive: f32,
     f2_on: bool,
     f2_cut: f32,
@@ -188,7 +187,7 @@ struct SrcState {
     grains: [Grain; 12],
     gpos: f32,
     gnext: f32,
-    filt: [Svf; 2],
+    sf: [[crate::alchemy_filter::AFilt; 2]; 3],
     nf: Svf,
 }
 
@@ -202,7 +201,7 @@ impl Default for SrcState {
             grains: [Grain::default(); 12],
             gpos: 0.0,
             gnext: 0.0,
-            filt: [Svf::default(); 2],
+            sf: Default::default(),
             nf: Svf::default(),
         }
     }
@@ -217,8 +216,11 @@ pub(crate) struct AlchVoice {
     src: [SrcState; 4],
     amp: Adsr,
     fenv: Adsr,
-    mf: [Ladder; 2],
-    f2: [Svf; 2],
+    mf: [crate::alchemy_filter::AFilt; 2],
+    f2: [crate::alchemy_filter::AFilt; 2],
+    /// What goes past the effects (the main filters' FX amounts below 100 %), this block.
+    pub(crate) dry: [(f32, f32); CHUNK],
+    pub(crate) dry_n: usize,
     rng: Rng,
     fade: Fade,
     killing: bool,
@@ -247,8 +249,10 @@ impl AlchVoice {
             src: Default::default(),
             amp: Adsr::default(),
             fenv: Adsr::default(),
-            mf: [Ladder::new(); 2],
-            f2: [Svf::default(); 2],
+            mf: Default::default(),
+            f2: Default::default(),
+            dry: [(0.0, 0.0); CHUNK],
+            dry_n: 0,
             rng: Rng::new(seed),
             fade: Fade::default(),
             killing: false,
@@ -304,16 +308,10 @@ impl Voice<AlchShared> for AlchVoice {
             s.grains = [Grain::default(); 12];
             s.gpos = sh.src[i].position;
             s.gnext = 0.0;
-            let c = &sh.src[i];
-            let mode = match c.ftype {
-                1 => SvfMode::Band,
-                2 => SvfMode::High,
-                3 => SvfMode::Notch,
-                _ => SvfMode::Low,
-            };
-            for f in &mut s.filt {
-                f.reset();
-                f.mode = mode;
+            if !was {
+                for f in s.sf.iter_mut().flatten() {
+                    f.reset();
+                }
             }
             s.nf = Svf::new(SvfMode::Band, 1200.0, 0.8, rate);
         }
@@ -374,16 +372,8 @@ impl Voice<AlchShared> for AlchVoice {
             .clamp(0.0, 10.0);
         let fc = (20.0 * 2f32.powf(cut)).min(rate * 0.45);
         for c in 0..2 {
-            self.mf[c].set(fc, sh.m_res * 0.95, rate);
-            self.mf[c].poles = if sh.m_type == 0 { 2 } else { 4 };
-            self.mf[c].edgy = sh.m_type == 1;
-            self.mf[c].drive = 1.0 + sh.m_drive * 4.0;
-            self.f2[c].mode = SvfMode::Low;
-            self.f2[c].set(
-                (20.0 * 1000f32.powf(sh.f2_cut)).min(rate * 0.45),
-                0.6 + sh.f2_res * 8.0,
-                rate,
-            );
+            self.mf[c].set(sh.m_type as usize, fc, sh.m_res, sh.m_drive, rate);
+            self.f2[c].set(sh.f2_type as usize, crate::alchemy_filter::cutoff_hz(sh.f2_cut), sh.f2_res, sh.f2_drive, rate);
         }
         // scratch mix of the four sources (stereo), at most CHUNK long
         let mut bl = [0.0f32; CHUNK];
@@ -395,18 +385,16 @@ impl Voice<AlchShared> for AlchVoice {
             }
             let hz = lg_dsp::midi_hz(base + c.semis);
             let st = &mut self.src[si];
-            let sc = (20.0
-                * 1000f32.powf(c.cutoff.clamp(0.0, 1.0))
-                * if c.keytrack {
-                    2f32.powf(key * 0.5)
-                } else {
-                    1.0
-                })
-            .min(rate * 0.45);
-            for f in &mut st.filt {
-                f.set(sc, 0.6 + c.res * 10.0, rate);
+            let kt = if c.keytrack { 2f32.powf(key * 0.5) } else { 1.0 };
+            let mut filt_on = [false; 3];
+            for (k, &(ty, cut, res, drv, on)) in c.sf.iter().enumerate() {
+                filt_on[k] = on && !crate::alchemy_filter::transparent(ty as usize, cut);
+                if filt_on[k] {
+                    for f in &mut st.sf[k] {
+                        f.set(ty as usize, crate::alchemy_filter::cutoff_hz(cut) * kt, res, drv, rate);
+                    }
+                }
             }
-            let filt_on = c.cutoff < 0.999 || c.ftype != 0;
             let (pl, pr) = ((1.0 - c.pan).sqrt(), (1.0 + c.pan).sqrt());
             let vol = c.vol;
             match c.kind {
@@ -556,10 +544,32 @@ impl Voice<AlchShared> for AlchVoice {
                     br[i] += x;
                 }
             }
-            if filt_on {
+            // the source filters: 1 → 2 → 3 in series, or side by side
+            let nf = filt_on.iter().filter(|x| **x).count();
+            if nf > 0 {
                 for i in 0..n {
-                    bl[i] = st.filt[0].run(bl[i]);
-                    br[i] = st.filt[1].run(br[i]);
+                    let (xl, xr) = (bl[i], br[i]);
+                    let (mut yl, mut yr) = (xl, xr);
+                    if c.sf_par {
+                        let (mut sl, mut sr) = (0.0, 0.0);
+                        for k in 0..3 {
+                            if filt_on[k] {
+                                sl += st.sf[k][0].run(xl);
+                                sr += st.sf[k][1].run(xr);
+                            }
+                        }
+                        yl = sl / nf as f32;
+                        yr = sr / nf as f32;
+                    } else {
+                        for k in 0..3 {
+                            if filt_on[k] {
+                                yl = st.sf[k][0].run(yl);
+                                yr = st.sf[k][1].run(yr);
+                            }
+                        }
+                    }
+                    bl[i] = yl;
+                    br[i] = yr;
                 }
             }
             let mut pk = 0.0f32;
@@ -585,26 +595,23 @@ impl Voice<AlchShared> for AlchVoice {
             let (bl2, br2) = self.mix2[i];
             self.mix[i] = (0.0, 0.0);
             self.mix2[i] = (0.0, 0.0);
-            xl = self.mf[0].run(xl);
-            xr = self.mf[1].run(xr);
-            f1p = f1p.max(xl.abs());
-            if sh.f2_on {
-                // series: filter 2 after filter 1 (plus what goes to 2 only); parallel: side by side
-                let (il, ir) = (bl2 + xl * (1.0 - sh.par), br2 + xr * (1.0 - sh.par));
-                let (il, ir) = if sh.f2_drive > 0.0 {
-                    let k = 1.0 + 4.0 * sh.f2_drive;
-                    (dsp::soft_clip(il * k) / k.sqrt(), dsp::soft_clip(ir * k) / k.sqrt())
-                } else {
-                    (il, ir)
-                };
-                let (yl, yr) = (self.f2[0].run(il), self.f2[1].run(ir));
-                f2p = f2p.max(yl.abs());
-                xl = yl + xl * sh.par;
-                xr = yr + xr * sh.par;
-            } else {
-                xl += bl2;
-                xr += br2;
+            if sh.m_on {
+                xl = self.mf[0].run(xl);
+                xr = self.mf[1].run(xr);
             }
+            f1p = f1p.max(xl.abs());
+            // filter 1's FX share goes to the effects; the rest goes on: in series (Par/Ser
+            // 100 %) into filter 2, in parallel (0 %) to the outputs
+            let (e1l, e1r) = (xl * sh.m_fx, xr * sh.m_fx);
+            let (m1l, m1r) = (xl - e1l, xr - e1r);
+            let (il, ir) = (bl2 + m1l * sh.par, br2 + m1r * sh.par);
+            let (yl, yr) = if sh.f2_on { (self.f2[0].run(il), self.f2[1].run(ir)) } else { (il, ir) };
+            f2p = f2p.max(yl.abs());
+            let (e2l, e2r) = (yl * sh.f2_fx, yr * sh.f2_fx);
+            xl = e1l + e2l;
+            xr = e1r + e2r;
+            let dl = m1l * (1.0 - sh.par) + yl - e2l;
+            let dr = m1r * (1.0 - sh.par) + yr - e2r;
             self.fenv.next();
             let mut g = self.amp.next() * vel_g * 0.65 * sh.vol;
             if self.killing {
@@ -612,10 +619,12 @@ impl Voice<AlchShared> for AlchVoice {
             }
             let yl = xl * g * pl;
             let yr = xr * g * pr;
-            peak = peak.max(yl.abs());
+            self.dry[i] = (dl * g * pl, dr * g * pr);
+            peak = peak.max(yl.abs()).max(self.dry[i].0.abs());
             l[i] += yl;
             r[i] += yr;
         }
+        self.dry_n = n;
         self.level = peak;
         self.lv[4] = f1p;
         self.lv[5] = f2p;
@@ -640,6 +649,9 @@ fn self_mix_add(mix: &mut [(f32, f32); CHUNK], i: usize, a: f32, b: f32) {
 /// Each source's F1/F2 knob (A–D), and the Name bar's Limiter.
 pub const ROUTE_F2: u32 = 14610;
 pub const LIMITER: u32 = 14614;
+/// Each source's filter switches, types 2–3, drives and Ser/Par: SRC_FILT + source × 16 + (0–2 on,
+/// 3–4 type of filter 2–3, 5–7 drive, 8 parallel).
+pub const SRC_FILT: u32 = 14620;
 
 /// Perform section values: 8 knobs, 4 XY axes, 4 envelope values.
 pub const PERFORM_IDS: [u32; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
@@ -691,6 +703,18 @@ pub fn all_params() -> &'static [Param] {
             v.push(Param::new(ROUTE_F2 + k as u32, n, 0.0, 1.0, 0.0, Unit::Ratio));
         }
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
+        for (s, l) in ["A", "B", "C", "D"].iter().enumerate() {
+            let b = SRC_FILT + s as u32 * 16;
+            let leak = |x: String| -> &'static str { Box::leak(x.into_boxed_str()) };
+            for k in 0..3u32 {
+                v.push(Param::new(b + k, leak(format!("Filter {} On {l}", k + 1)), 0.0, 1.0, if k == 0 { 1.0 } else { 0.0 }, Unit::OnOff));
+                v.push(Param::new(b + 5 + k, leak(format!("Filter {} Drive {l}", k + 1)), 0.0, 1.0, 0.0, Unit::Ratio));
+            }
+            for k in 1..3u32 {
+                v.push(Param::menu(b + 2 + k, leak(format!("Filter {} Type {l}", k + 1)), SRC_FILTERS, crate::alchemy_filter::LP12_SMOOTH as f32));
+            }
+            v.push(Param::new(b + 8, leak(format!("Filter Par {l}")), 0.0, 1.0, 0.0, Unit::OnOff));
+        }
         v
     })
     .as_slice()
@@ -712,6 +736,10 @@ impl Alchemy {
                 m_cut: 0.6,
                 m_res: 0.2,
                 m_type: 1,
+                m_on: true,
+                f2_type: 0,
+                m_fx: 1.0,
+                f2_fx: 1.0,
                 m_drive: 0.0,
                 f2_on: false,
                 f2_cut: 1.0,
@@ -812,6 +840,10 @@ impl Alchemy {
             m_cut: 0.0,
             m_res: 0.0,
             m_type: 0,
+            m_on: true,
+            f2_type: 0,
+            m_fx: 1.0,
+            f2_fx: 1.0,
             m_drive: 0.0,
             f2_on: false,
             f2_cut: 1.0,
@@ -888,10 +920,13 @@ impl Alchemy {
                 va_detune: det,
                 va_num: num.clamp(1, 4),
                 va_sync: sync,
-                cutoff: p(51 + s as u32),
-                res: p(55 + s as u32),
-                ftype: p(333 + s as u32).round() as u8,
                 keytrack: true,
+                sf: [0usize, 1, 2].map(|k| {
+                    let b = SRC_FILT + s as u32 * 16;
+                    let ty = if k == 0 { p(333 + s as u32) } else { p(b + 2 + k as u32) };
+                    (ty.round().max(0.0) as u8, p(51 + k as u32 * 8 + s as u32), p(55 + k as u32 * 8 + s as u32), p(b + 5 + k as u32), p(b + k as u32) >= 0.5)
+                }),
+                sf_par: p(SRC_FILT + s as u32 * 16 + 8) >= 0.5,
                 route: p(ROUTE_F2 + s as u32),
             };
         }
@@ -899,15 +934,16 @@ impl Alchemy {
         sh.m_cut = (p(85) + d(1) * 0.5).clamp(0.0, 1.0);
         sh.m_res = p(86);
         sh.m_drive = (p(87) + pf[5] * 0.6).clamp(0.0, 1.0);
-        sh.m_type = if p(364) >= 0.5 {
-            p(365).round() as u8
-        } else {
-            0
-        };
+        sh.m_on = p(364) >= 0.5;
+        sh.m_type = p(365).round().max(0.0) as u8;
+        sh.f2_type = p(368).round().max(0.0) as u8;
+        sh.m_fx = p(88);
+        sh.f2_fx = p(92);
         sh.f2_on = p(367) >= 0.5;
         sh.f2_cut = p(89);
         sh.f2_res = p(90);
         sh.f2_drive = p(91);
+        // Par/Ser: 0 % parallel, 100 % series
         sh.par = p(93);
         sh.env_amt = (pf[2] * 0.8).clamp(-1.0, 1.0);
         sh.amp_env = [
@@ -1321,6 +1357,20 @@ impl Instrument for Alchemy {
             sr[..m].fill(0.0);
             self.poly
                 .render(&mut sl[..m], &mut sr[..m], &self.sh, &self.ch.ctl);
+            // what the main filters send past the effects
+            let mut drl = [0.0f32; CHUNK];
+            let mut drr = [0.0f32; CHUNK];
+            let mut any_dry = false;
+            for v in self.poly.voices.iter_mut() {
+                if v.dry_n == m {
+                    for i in 0..m {
+                        drl[i] += v.dry[i].0;
+                        drr[i] += v.dry[i].1;
+                    }
+                    any_dry = true;
+                }
+                v.dry_n = 0;
+            }
             if self.used.envf != 0 {
                 let mut lv = [0.0f32; 6];
                 for v in self.poly.voices.iter().filter(|v| v.on) {
@@ -1352,6 +1402,12 @@ impl Instrument for Alchemy {
             }
             if self.used.envf != 0 {
                 self.mg.levels[7] = sl[..m].iter().chain(&sr[..m]).fold(0.0f32, |a, &b| a.max(b.abs()));
+            }
+            if any_dry {
+                for i in 0..m {
+                    sl[i] += drl[i];
+                    sr[i] += drr[i];
+                }
             }
             if self.limiter {
                 for i in 0..m {

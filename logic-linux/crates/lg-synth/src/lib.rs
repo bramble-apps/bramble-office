@@ -13,6 +13,7 @@
 
 pub mod alchemy;
 pub mod alchemy_extra;
+pub mod alchemy_filter;
 pub mod alchemy_mod;
 pub mod arp;
 pub mod bass;

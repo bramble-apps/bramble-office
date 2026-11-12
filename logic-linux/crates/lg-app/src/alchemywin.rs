@@ -171,9 +171,10 @@ fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>
                 }
                 s => {
                     nav(p, st);
+                    source_filters(p, &ix, st, (s - 1) as u32);
                     let (params, vals) = (p.params, p.vals);
                     let get = |id: u32| ix_get(&ix, vals, id);
-                    let r = p.rect(84.0, 48.0, W - 92.0, 230.0);
+                    let r = p.rect(84.0, 48.0, 700.0, 230.0);
                     let mut set = Vec::new();
                     let mut import = false;
                     let mut child = p.ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)));
@@ -190,6 +191,49 @@ fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>
             perform(p, &ix, st, fx, 528.0);
         }
     }
+}
+
+/// A source's filter module: filters 1–3 (buttons with their on light), On, type ‹ ›, the
+/// type's three knobs, Ser / Par, and the send (F1/F2) to the main filters.
+fn source_filters(p: &mut Pane, ix: &Ix, st: &mut St, s: u32) {
+    use lg_synth::alchemy::{ROUTE_F2, SRC_FILT};
+    let x0 = 800.0;
+    p.ui.painter().line_segment([p.o + vec2(x0 - 10.0, 48.0), p.o + vec2(x0 - 10.0, 282.0)], Stroke::new(1.0, rgb(0x30353d)));
+    p.text(x0, 66.0, Align2::LEFT_CENTER, "FILTER", 12.5, p.skin.text);
+    let b = SRC_FILT + s * 16;
+    let sel_id = egui::Id::unique(("alch-sfsel", p.t, s));
+    let mut sel: u32 = p.ui.data(|d| d.get_temp(sel_id)).unwrap_or(0);
+    for k in 0..3u32 {
+        let r = p.rect(x0 + 60.0 + k as f32 * 34.0, 56.0, 32.0, 20.0);
+        if rack::flat(p, r, &(k + 1).to_string(), sel == k, true, ("sfsel", s, k)) {
+            sel = k;
+        }
+        // the light: that filter is on
+        let on = g(p, ix, b + k) >= 0.5;
+        p.ui.painter().circle_filled(r.right_top() + vec2(-5.0, 5.0), 2.5, if on { ORANGE } else { rgb(0x44484f) });
+    }
+    p.ui.data_mut(|d| d.insert_temp(sel_id, sel));
+    let on = g(p, ix, b + sel) >= 0.5;
+    if rack::flat(p, p.rect(x0, 90.0, 28.0, 20.0), "On", on, true, ("sfon", s, sel)) {
+        p.put(b + sel, if on { 0.0 } else { 1.0 });
+    }
+    let ty_id = if sel == 0 { 333 + s } else { b + 2 + sel };
+    rack::menu_arrows(p, ix, x0 + 32.0, 90.0, 140.0, ty_id);
+    let t = g(p, ix, ty_id).round().max(0.0) as usize;
+    let names = lg_synth::alchemy_filter::knob_names(t);
+    for (j, id) in [51 + sel * 8 + s, 55 + sel * 8 + s, b + 5 + sel].iter().enumerate() {
+        if j == 2 && !lg_synth::alchemy_filter::has_drive(t) {
+            continue;
+        }
+        rack::knob(p, ix, st, x0 + 24.0 + j as f32 * 56.0, 122.0, 38.0, *id, names[j]);
+    }
+    let par = g(p, ix, b + 8) >= 0.5;
+    for (k, l) in ["Ser", "Par"].iter().enumerate() {
+        if rack::flat(p, p.rect(x0 + k as f32 * 36.0, 200.0, 34.0, 20.0), l, par == (k == 1), true, ("sfpar", s, k)) {
+            p.put(b + 8, k as f32);
+        }
+    }
+    rack::knob(p, ix, st, x0 + 250.0, 186.0, 38.0, ROUTE_F2 + s, "F1/F2");
 }
 
 fn ix_get(ix: &Ix, vals: &[f32], id: u32) -> f32 {
@@ -377,12 +421,19 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
         if rack::flat(p, p.rect(560.0, y, 28.0, 20.0), "On", lit, true, ("f-on", k)) {
             p.put(*on, if lit { 0.0 } else { 1.0 });
         }
-        rack::menu_arrows(p, ix, 592.0, y, 96.0, *ty);
-        for (j, (id, l)) in ids.iter().zip(["Cutoff", "Res", "Drive"]).enumerate() {
-            rack::knob(p, ix, st, 594.0 + j as f32 * 50.0, y + 30.0, 38.0, *id, l);
+        rack::menu_arrows(p, ix, 592.0, y, 110.0, *ty);
+        // the knobs take the type's names (Clean filters have no Drive)
+        let t = g(p, ix, *ty).round().max(0.0) as usize;
+        let names = lg_synth::alchemy_filter::knob_names(t);
+        for (j, id) in ids.iter().enumerate() {
+            if j == 2 && !lg_synth::alchemy_filter::has_drive(t) {
+                continue;
+            }
+            rack::knob(p, ix, st, 594.0 + j as f32 * 50.0, y + 30.0, 38.0, *id, names[j]);
         }
+        rack::knob(p, ix, st, 790.0, y + 30.0, 38.0, [88u32, 92][k], "FX Main");
     }
-    rack::knob(p, ix, st, 760.0, 150.0, 30.0, 93, "Par/Ser");
+    rack::knob(p, ix, st, 742.0, 150.0, 28.0, 93, "Par/Ser");
     // master
     for (k, (id, l, x)) in [(94u32, "Vol", 884.0f32), (95, "Pan", 934.0), (96, "Coarse", 1050.0), (97, "Fine", 1100.0)].iter().enumerate() {
         let _ = k;
@@ -691,7 +742,7 @@ fn sources_page(ui: &mut egui::Ui, t: usize, src: u32, params: &[lg_dsp::Param],
         }
     });
     let suffix = format!(" {letter}");
-    let own: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000 && p.name.ends_with(&suffix) && !p.name.contains(" On ") && !p.name.starts_with("Source On") && !p.name.ends_with(&format!("On{suffix}"))).cloned().collect();
+    let own: Vec<lg_dsp::Param> = params.iter().filter(|p| p.id < 1000 && p.name.ends_with(&suffix) && !p.name.contains(" On ") && !p.name.starts_with("Filter ") && !p.name.starts_with("Source On") && !p.name.ends_with(&format!("On{suffix}"))).cloned().collect();
     let vals: Vec<f32> = own.iter().map(|p| get(p.id)).collect();
     set.extend(crate::pluginwin::controls(ui, &own, &vals, &[], &format!("alch-src-{t}-{src}")));
 }
