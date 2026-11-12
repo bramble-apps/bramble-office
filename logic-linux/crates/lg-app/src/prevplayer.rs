@@ -53,8 +53,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, r: Rect) {
         let cy = wr.center().y;
         let half = wr.height() / 2.0 - 2.0;
         let cols = wr.width().floor().max(1.0) as usize;
+        // (drawn to fill the height, as Logic's overviews: scaled by the loudest peak)
+        let top = w.peaks.iter().fold(0f32, |m, x| m.max(*x)).max(1e-4);
         for c in 0..cols {
-            let pk = w.peaks[c * n / cols];
+            let pk = w.peaks.get(c * n / cols).copied().unwrap_or(0.0) / top;
             let x = wr.min.x + c as f32 + 0.5;
             let played = at.is_some_and(|a| (c as f32) < a * wr.width());
             p.vline(x, (cy - pk * half)..=(cy + pk * half).max(cy + 0.5), Stroke::new(1.0, if played { look::accent() } else { look::text_dim() }));
