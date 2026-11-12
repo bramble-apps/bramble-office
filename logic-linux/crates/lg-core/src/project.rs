@@ -53,7 +53,7 @@ pub struct Project {
     /// The Score editor's attributes, staff styles and symbols (lg-core score).
     pub score: crate::score::Score,
     /// Markers (the Marker track): (ticks from bar 1, name).
-    pub markers: Vec<(u32, String)>,
+    pub markers: Vec<crate::markers::Marker>,
     /// Arrangement markers: (ticks from bar 1, length in ticks, name).
     pub arrangement: Vec<(u32, u32, String)>,
     /// Tempo curves and sets, signature and key changes, beat mappings (timeline.rs).

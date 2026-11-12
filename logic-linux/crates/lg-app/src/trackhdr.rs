@@ -1243,6 +1243,9 @@ fn popover(app: &mut App, ctx: &egui::Context) {
 /// Sets the colour of the selected tracks (a group linking Color takes its members along) or of
 /// one channel strip; a track's colour is its channel strip's too.
 pub fn assign_color(app: &mut App, target: ColorFor, color: Option<u8>) {
+    if crate::markers::assign_color(app, color) {
+        return;
+    }
     match target {
         ColorFor::Tracks => {
             let mut tracks = crate::trackarea::selection(app);

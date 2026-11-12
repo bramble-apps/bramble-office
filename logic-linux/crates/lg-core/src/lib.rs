@@ -12,6 +12,7 @@ pub mod environment;
 pub mod events;
 pub mod functions;
 pub mod liveloops;
+pub mod markers;
 pub mod midi;
 pub mod package;
 pub mod mixer;

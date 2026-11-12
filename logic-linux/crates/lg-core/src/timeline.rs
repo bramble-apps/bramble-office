@@ -37,6 +37,79 @@ pub struct Global {
     pub beat_maps: Vec<(u32, f64)>,
     /// Chord track: (tick, length, chord name).
     pub chords: Vec<(u32, u32, String)>,
+    /// Marker sets (the current one's markers are `Project::markers`); empty: one set.
+    pub marker_sets: Vec<crate::markers::MarkerSet>,
+    pub marker_set: usize,
+    /// Signature sets (the current one's changes are `signatures` / `keys`); empty: one set.
+    pub sig_sets: Vec<SigSet>,
+    pub sig_set: usize,
+}
+
+/// A signature set (Logic: Signature List ▸ Signature Set pop-up): its time and key changes
+/// after the first (the initial signature and key show in every set).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SigSet {
+    pub name: String,
+    pub signatures: Vec<(u32, u8, u8)>,
+    pub keys: Vec<(u32, String)>,
+}
+
+/// Logic keeps up to nine signature sets.
+pub const MAX_SIG_SETS: usize = 9;
+
+fn ensure_sig_sets(g: &mut Global) {
+    if g.sig_sets.is_empty() {
+        g.sig_sets.push(SigSet { name: "Signature Set 1".into(), signatures: g.signatures.clone(), keys: g.keys.clone() });
+        g.sig_set = 0;
+    }
+}
+
+/// Chooses signature set `k`: its changes become the current ones.
+pub fn switch_sig_set(g: &mut Global, k: usize) {
+    ensure_sig_sets(g);
+    if k >= g.sig_sets.len() || k == g.sig_set {
+        return;
+    }
+    let cur = g.sig_set;
+    g.sig_sets[cur].signatures = g.signatures.clone();
+    g.sig_sets[cur].keys = g.keys.clone();
+    g.signatures = g.sig_sets[k].signatures.clone();
+    g.keys = g.sig_sets[k].keys.clone();
+    g.sig_set = k;
+}
+
+/// New Set: an empty set (the initial signature and key only) made current; None at nine.
+pub fn new_sig_set(g: &mut Global, name: Option<&str>) -> Option<usize> {
+    ensure_sig_sets(g);
+    if g.sig_sets.len() >= MAX_SIG_SETS {
+        return None;
+    }
+    let name = name.map_or_else(|| format!("Signature Set {}", g.sig_sets.len() + 1), str::to_string);
+    g.sig_sets.push(SigSet { name, ..Default::default() });
+    let k = g.sig_sets.len() - 1;
+    switch_sig_set(g, k);
+    Some(k)
+}
+
+pub fn rename_sig_set(g: &mut Global, name: &str) {
+    ensure_sig_sets(g);
+    let k = g.sig_set;
+    g.sig_sets[k].name = name.to_string();
+}
+
+/// Delete Set: the current set goes, the one before (or after) becomes current.
+pub fn delete_sig_set(g: &mut Global) -> bool {
+    ensure_sig_sets(g);
+    if g.sig_sets.len() < 2 {
+        return false;
+    }
+    let k = g.sig_set;
+    switch_sig_set(g, if k > 0 { k - 1 } else { 1 });
+    g.sig_sets.remove(k);
+    if g.sig_set > k {
+        g.sig_set -= 1;
+    }
+    true
 }
 
 /// The tempo and signature map, ready to look things up.
@@ -700,6 +773,28 @@ pub fn set_key(p: &mut Project, bar: u32, key: &str) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn signature_sets() {
+        let mut g = Global::default();
+        g.signatures.push((4, 3, 4));
+        assert_eq!(new_sig_set(&mut g, None), Some(1));
+        assert!(g.signatures.is_empty());
+        g.keys.push((8, "A minor".into()));
+        switch_sig_set(&mut g, 0);
+        assert_eq!((g.signatures.len(), g.keys.len()), (1, 0));
+        switch_sig_set(&mut g, 1);
+        assert_eq!(g.keys.len(), 1);
+        rename_sig_set(&mut g, "Alt");
+        assert_eq!(g.sig_sets[1].name, "Alt");
+        for _ in 0..10 {
+            new_sig_set(&mut g, None);
+        }
+        assert_eq!(g.sig_sets.len(), MAX_SIG_SETS);
+        while delete_sig_set(&mut g) {}
+        assert_eq!(g.sig_sets.len(), 1);
+    }
+
     use super::*;
 
     fn proj() -> Project {

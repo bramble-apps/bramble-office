@@ -505,7 +505,7 @@ fn remove_scenes(app: &mut App, how: &str) {
     }
     app.checkpoint("Remove Scene Markers");
     let ticks: Vec<u32> = gone.iter().map(|s| tick_of(app, *s - start).round() as u32).collect();
-    app.markers.retain(|(t, n)| !(n.starts_with("Scene ") && ticks.iter().any(|x| x.abs_diff(*t) <= 1)));
+    app.markers.retain(|m| !(m.1.starts_with("Scene ") && ticks.iter().any(|x| x.abs_diff(m.0) <= 1)));
     app.hub.movie.scenes.retain(|s| !gone.contains(s));
     app.dirty = true;
 }
@@ -610,9 +610,12 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
                 // the markers, named in order
                 app.markers.retain(|m| !m.1.starts_with("Scene "));
                 let n = app.hub.movie.scenes.len();
-                let ticks: Vec<u32> = app.hub.movie.scenes.clone().iter().map(|s| tick_of(app, s - start).round() as u32).collect();
-                for (k, t) in ticks.into_iter().enumerate() {
-                    app.markers.push((t, format!("Scene {}", k + 1)));
+                let ticks: Vec<(u32, f64)> = app.hub.movie.scenes.clone().iter().map(|s| (tick_of(app, s - start).round() as u32, s - start)).collect();
+                for (k, (t, secs)) in ticks.into_iter().enumerate() {
+                    // scene markers are SMPTE-locked (and can't be unlocked)
+                    let mut m = lg_core::markers::Marker::new(t, format!("Scene {}", k + 1));
+                    m.2.lock = Some(secs);
+                    app.markers.push(m);
                 }
                 app.markers.sort_by_key(|m| m.0);
                 app.dirty = true;

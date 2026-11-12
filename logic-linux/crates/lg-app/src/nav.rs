@@ -289,7 +289,7 @@ fn contents_span(app: &App) -> (u32, u32) {
 }
 
 /// The project's end: past the last region, a whole bar (Logic's end marker, never before 8 bars).
-fn project_end(app: &App) -> u32 {
+pub fn project_end(app: &App) -> u32 {
     let bar = app.bar_ticks();
     contents_span(app).1.div_ceil(bar).max(8) * bar
 }
@@ -659,7 +659,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             let at = app.cycle.0;
             if !app.markers.iter().any(|m| m.0 == at) {
                 let n = app.markers.len() + 1;
-                app.markers.push((at, format!("Marker {n}")));
+                app.markers.push(lg_core::markers::Marker::new(at, format!("Marker {n}")));
                 app.markers.sort_by_key(|m| m.0);
                 app.dirty = true;
             }

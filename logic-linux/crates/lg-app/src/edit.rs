@@ -903,7 +903,7 @@ impl App {
                     if let Some(rg) = self.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)) {
                         let (s, n) = (rg.start, rg.name.clone());
                         if !self.markers.iter().any(|m| m.0 == s) {
-                            self.markers.push((s, n));
+                            self.markers.push(lg_core::markers::Marker::new(s, n));
                         }
                     }
                 }

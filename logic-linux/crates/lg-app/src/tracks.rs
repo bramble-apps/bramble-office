@@ -19,7 +19,6 @@ use crate::look;
 pub const HEADER_W: f32 = 265.0;
 const GLOBAL_ROW: f32 = 28.0;
 /// Logic 13's global tracks (G) and their heights: the Tempo lane is tall, with its scale.
-const GLOBAL_ROWS: [(&str, f32); 5] = [("Arrangement", GLOBAL_ROW), ("Marker", GLOBAL_ROW), ("Tempo", 64.0), ("Signature", GLOBAL_ROW), ("Chord", GLOBAL_ROW)];
 /// The arrangement markers the (+) adds, in Logic's order.
 pub const SECTIONS: [&str; 8] = ["Intro", "Verse", "Chorus", "Verse", "Chorus", "Bridge", "Chorus", "Outro"];
 pub const ROW_H: f32 = 52.0;
@@ -97,7 +96,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // (Clear/Recall Solo and the Hide button, once they are in use)
     crate::trackhdr::top_row(app, ui, head);
     // the global tracks (G): Marker, Tempo, Signature, between the ruler and the tracks
-    let global_h = if app.global_tracks { GLOBAL_ROWS.iter().map(|r| r.1).sum::<f32>() + if app.ta.show_transposition { TRANSPOSITION_H } else { 0.0 } + crate::movie::track_height(app) } else { 0.0 };
+    let global_h = if app.global_tracks { crate::globals::total_h(app, TRANSPOSITION_H) } else { 0.0 };
     let global = Rect::from_min_max(pos2(area.min.x, ruler.max.y), pos2(area.max.x, ruler.max.y + global_h));
     let lanes = Rect::from_min_max(pos2(ruler.min.x, global.max.y), area.max);
     let headers = Rect::from_min_max(pos2(area.min.x, global.max.y), pos2(head.max.x, area.max.y));
@@ -187,7 +186,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let from_tick = ((from.x - lanes.min.x) / bw + scroll) * bar_t;
             app.drag = if upper(from.y) { Some(Drag::Cycle { from_tick, start: app.cycle }) } else { Some(Drag::Playhead) };
         }
+        // a cycle dragged down (to drop it on the Marker track) keeps its place; Shift lets it
+        // move sideways too
+        let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(pp);
+        let down_drag = pp.y > ruler.max.y && (pp.y - origin.y).abs() > (pp.x - origin.x).abs() && !ui.input(|i| i.modifiers.shift);
         match app.drag {
+            Some(Drag::Cycle { start, .. }) if r_resp.dragged() && down_drag => {
+                app.set_cycle(start);
+            }
             Some(Drag::Cycle { from_tick, start }) if r_resp.dragged() => {
                 let inside = from_tick >= start.0 as f32 && from_tick <= start.1 as f32 && (start.1 - start.0) > 0;
                 let c = if inside {
@@ -214,7 +220,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             _ => {
                 if r_resp.clicked() {
-                    if upper(pp.y) && tick >= ca as f32 && tick <= cb as f32 {
+                    if upper(pp.y) && ui.input(|i| i.modifiers.shift) && cb > ca {
+                        // Shift-click: the nearer cycle border to the click
+                        let t = snap(tick) as u32;
+                        app.set_cycle(if t.abs_diff(ca) <= t.abs_diff(cb) { (t.min(cb.saturating_sub(1)), cb) } else { (ca, t.max(ca + 1)) });
+                    } else if upper(pp.y) && tick >= ca as f32 && tick <= cb as f32 {
                         app.toggle_cycle();
                     } else if !upper(pp.y) {
                         app.locate(snap(tick) as f64);
@@ -224,7 +234,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     }
     if r_resp.drag_stopped() {
+        if let (Some(Drag::Cycle { .. }), Some(pp)) = (app.drag.clone(), ui.input(|i| i.pointer.interact_pos())) {
+            crate::markers::cycle_dropped(app, pp, ((pp.x - lanes.min.x) / bw + scroll) * bar_t);
+        }
         app.drag = None;
+    }
+    {
+        let xo = |t: f32| x_of(t, scroll);
+        let to = |x: f32| ((x - lanes.min.x) / bw + scroll) * bar_t;
+        let shown = !(app.global_tracks && crate::globals::rows(app).iter().any(|r| r.0 == crate::globals::MARKER));
+        crate::markers::ruler(app, ui, ruler, &xo, &to, shown);
     }
     // Autopunch's punch locators (the red strip)
     crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
@@ -995,40 +1014,55 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
     // the headers' right-click menu: which global tracks show (Studio adds Transposition)
     let heads = Rect::from_min_max(area.min, pos2(lanes_x, area.max.y));
     let hresp = ui.interact(heads, ui.scope_id().with("global-heads"), Sense::click());
-    hresp.context_menu(|ui| {
-        crate::menus::show_items(app, ui, crate::menus::context("global-track-header"));
-        ui.separator();
-        let on = app.ta.show_transposition;
-        if ui.button(if on { "✓ Transposition" } else { "Transposition" }).clicked() {
-            app.ta.show_transposition = !on;
-            ui.close();
-        }
-    });
-    if app.ta.show_transposition {
+    crate::globals::header_menu(app, &hresp);
+    if app.ta.show_transposition && !app.gt.single {
         let tr = Rect::from_min_max(pos2(area.min.x, area.max.y - TRANSPOSITION_H), area.max);
         crate::trackarea::transposition_lane(app, ui, tr, lanes_x);
-    }
-    // the Movie track (movie.rs) above the others
-    let movie_h = crate::movie::track_height(app);
-    if movie_h > 0.0 {
-        crate::movie::track_lane(app, ui, Rect::from_min_size(area.min, vec2(area.width(), movie_h)), lanes_x);
     }
     let bar_t = app.bar_ticks() as f32;
     let (scroll, bw) = (app.scroll_x, app.bar_w);
     let x_of = |tick: f32| lanes_x + (tick / bar_t - scroll) * bw;
     let tick_of = |x: f32| ((x - lanes_x) / bw + scroll) * bar_t;
-    let mut top = area.min.y + movie_h;
-    for (i, (n, h)) in GLOBAL_ROWS.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(area.min.x, top), vec2(area.width(), *h));
-        top += h;
+    let mut top = area.min.y;
+    // (the global tracks shown, in their order: globals.rs)
+    let placed: Vec<(usize, Rect)> = crate::globals::rows(app)
+        .into_iter()
+        .map(|(k, h)| {
+            let r = Rect::from_min_size(pos2(area.min.x, top), vec2(area.width(), h));
+            top += h;
+            (k, r)
+        })
+        .collect();
+    for &(kind, row) in &placed {
+        let n = crate::globals::KINDS[kind];
+        crate::globals::header(app, ui, kind, row, lanes_x);
         p.hline(row.x_range(), row.max.y, Stroke::new(1.0, look::line()));
-        p.text(pos2(row.min.x + 14.0, row.min.y + GLOBAL_ROW / 2.0), Align2::LEFT_CENTER, *n, look::semibold(12.0), look::text_dim());
-        // (+) at the right of each global track's header
-        let plus = Rect::from_center_size(pos2(lanes_x - 18.0, row.min.y + GLOBAL_ROW / 2.0), vec2(18.0, 18.0));
-        let presp = ui.interact(plus, ui.scope_id().with(("gplus", i)), Sense::click()).on_hover_text(format!("Add to the {n} track"));
-        crate::glyphs::paint(&p, plus, crate::glyphs::ph::PLUS_CIRCLE, 17.0, if presp.hovered() { look::text() } else { look::text_dim() });
+        if kind != crate::globals::MOVIE {
+            p.text(pos2(row.min.x + 14.0, row.min.y + GLOBAL_ROW / 2.0), Align2::LEFT_CENTER, n, look::semibold(12.0), look::text_dim());
+        }
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
         let lp = ui.painter_at(lane);
+        let i = match kind {
+            crate::globals::ARRANGEMENT => 0,
+            crate::globals::MARKER => 1,
+            crate::globals::TEMPO => 2,
+            crate::globals::SIGNATURE => 3,
+            crate::globals::CHORD => 4,
+            crate::globals::MOVIE => {
+                crate::movie::track_lane(app, ui, row, lanes_x);
+                continue;
+            }
+            _ => {
+                crate::globals::beat_mapping_lane(app, &lp, lane, &x_of);
+                continue;
+            }
+        };
+        // (+) at the right of the Arrangement, Marker, Signature and Chord headers
+        let plus = Rect::from_center_size(pos2(lanes_x - 18.0, row.min.y + GLOBAL_ROW / 2.0), vec2(18.0, 18.0));
+        let presp = ui.interact(plus, ui.scope_id().with(("gplus", i)), Sense::click()).on_hover_text(format!("Add to the {n} track"));
+        if i != 2 {
+            crate::glyphs::paint(&p, plus, crate::glyphs::ph::PLUS_CIRCLE, 17.0, if presp.hovered() { look::text() } else { look::text_dim() });
+        }
         let i = match i {
             0 => {
                 // Arrangement: each (+) appends an 8-bar section after the last (Logic)
@@ -1049,8 +1083,7 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
             }
             1 => {
                 if presp.clicked() {
-                    let ctx = ui.ctx().clone();
-                    app.key_command(&ctx, "Create Marker");
+                    crate::markers::add_button(app);
                 }
                 0
             }
@@ -1092,67 +1125,10 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         let row = Rect::from_min_max(row.min, pos2(row.max.x, row.max.y));
         let _ = GLOBAL_ROW;
         match i {
-            0 => {
-                let resp = ui.interact(lane, ui.scope_id().with("marker-lane"), Sense::click());
-                if resp.double_clicked() {
-                    if let Some(pp) = resp.interact_pointer_pos() {
-                        let at = ((tick_of(pp.x) / bar_t).round() * bar_t).max(0.0) as u32;
-                        if !app.markers.iter().any(|m| m.0 == at) {
-                            let k = app.markers.len() + 1;
-                            app.markers.push((at, format!("Marker {k}")));
-                            app.markers.sort_by_key(|m| m.0);
-                            app.dirty = true;
-                        }
-                    }
-                }
-                let markers = app.markers.clone();
-                for (k, (pos, name)) in markers.iter().enumerate() {
-                    let x = x_of(*pos as f32);
-                    let next = markers.get(k + 1).map_or(lane.max.x, |m| x_of(m.0 as f32));
-                    let tab = Rect::from_min_max(pos2(x, row.min.y + 3.0), pos2(next.min(x + 400.0) - 2.0, row.max.y - 3.0));
-                    lp.rect_filled(tab, 4.0, look::accent().gamma_multiply(0.7));
-                    lp.with_clip_rect(tab).text(pos2(tab.min.x + 6.0, tab.center().y), Align2::LEFT_CENTER, name, look::regular(11.5), Color32::WHITE);
-                    let mr = ui.interact(tab.intersect(lane), ui.scope_id().with(("marker-tab", k)), Sense::click_and_drag());
-                    if mr.dragged() {
-                        if let Some(pp) = mr.interact_pointer_pos() {
-                            let at = ((tick_of(pp.x) / (bar_t / 4.0)).round() * (bar_t / 4.0)).max(0.0) as u32;
-                            if let Some(m) = app.markers.get_mut(k) {
-                                m.0 = at;
-                            }
-                            app.dirty = true;
-                        }
-                    }
-                    if mr.drag_stopped() {
-                        app.markers.sort_by_key(|m| m.0);
-                    }
-                    if mr.double_clicked() {
-                        app.renaming_marker = Some((k, name.clone()));
-                    }
-                    if mr.clicked() {
-                        app.locate(*pos as f64);
-                    }
-                }
-                if let Some((k, text)) = app.renaming_marker.as_mut() {
-                    let k = *k;
-                    if let Some(pos) = app.markers.get(k).map(|m| m.0) {
-                        let er = Rect::from_min_size(pos2(x_of(pos as f32), row.min.y + 3.0), vec2(160.0, 22.0));
-                        let te = ui.put(er, egui::TextEdit::singleline(text).font(look::regular(11.5)));
-                        crate::widgets::focus_once(ui, &te);
-                        if te.lost_focus() {
-                            let name = text.clone();
-                            if let Some(m) = app.markers.get_mut(k) {
-                                m.1 = name;
-                            }
-                            app.renaming_marker = None;
-                            app.dirty = true;
-                        }
-                    } else {
-                        app.renaming_marker = None;
-                    }
-                }
-            }
+            0 => crate::markers::lane(app, ui, Rect::from_min_max(row.min, pos2(lanes_x, row.max.y)), row, lane, &x_of, &tick_of),
             1 => crate::arranging::tempo_lane(app, ui, row, lane, &x_of, &tick_of),
             _ => crate::arranging::signature_lane(app, ui, row, lane, &x_of, &tick_of),
         }
     }
+    crate::globals::after_rows(app, ui, &placed, lanes_x);
 }

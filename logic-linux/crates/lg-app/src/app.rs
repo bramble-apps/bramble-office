@@ -140,7 +140,7 @@ pub struct App {
     pub notes_tab: usize,
     pub project_notes: String,
     pub track_notes: std::collections::HashMap<usize, String>,
-    pub markers: Vec<(u32, String)>,
+    pub markers: Vec<lg_core::markers::Marker>,
     /// The Loop Browser and All Files: search text, the folder shown, the file selected.
     pub files_search: String,
     pub files_dir: Option<PathBuf>,
@@ -293,6 +293,10 @@ pub struct App {
     pub mfx: crate::midifx::Ui,
     /// Snap and Drag modes, the tempo and signature editors (arranging.rs).
     pub arr: crate::arranging::State,
+    /// Markers: selection, focus, the Marker List / Text windows (markers.rs).
+    pub mk: crate::markers::State,
+    /// The global tracks shown, their order and heights (globals.rs).
+    pub gt: crate::globals::State,
     pub plugin_bypass: std::collections::HashSet<usize>,
     /// The instruments' Side Chain choices (sidechain.rs).
     pub side: crate::sidechain::State,
@@ -502,6 +506,8 @@ impl App {
             plugin_window: None,
             mfx: Default::default(),
             arr: Default::default(),
+            mk: Default::default(),
+            gt: Default::default(),
             mix: Default::default(),
             plugin_bypass: Default::default(),
             side: Default::default(),
@@ -1111,6 +1117,10 @@ impl App {
     /// Before an edit: the song as it is goes on the undo list.
     pub fn checkpoint(&mut self, what: &str) {
         self.dirty = true;
+        // (the markers are the app's: kept with the song for undo)
+        if let Some(p) = self.project.as_mut() {
+            p.markers = self.markers.clone();
+        }
         let Some(p) = &self.project else { return };
         self.undo.push((what.to_string(), p.clone(), self.programs.clone()));
         let steps = self.logic_settings.get("General / Editing / Number of Undo Steps:").parse::<usize>().unwrap_or(100).max(1);
@@ -1122,9 +1132,11 @@ impl App {
 
     pub fn undo(&mut self) {
         let Some((what, p, progs)) = self.undo.pop() else { return };
-        if let Some(cur) = self.project.take() {
+        if let Some(mut cur) = self.project.take() {
+            cur.markers = self.markers.clone();
             self.redo.push((what.clone(), cur, self.programs.clone()));
         }
+        self.markers = p.markers.clone();
         self.project = Some(p);
         self.programs = progs;
         self.after_edit();
@@ -1133,9 +1145,11 @@ impl App {
 
     pub fn redo(&mut self) {
         let Some((what, p, progs)) = self.redo.pop() else { return };
-        if let Some(cur) = self.project.take() {
+        if let Some(mut cur) = self.project.take() {
+            cur.markers = self.markers.clone();
             self.undo.push((what.clone(), cur, self.programs.clone()));
         }
+        self.markers = p.markers.clone();
         self.project = Some(p);
         self.programs = progs;
         self.after_edit();
@@ -1336,6 +1350,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::markers::command(self, ctx, name) || crate::globals::command(self, name) {
+            return true;
+        }
         if crate::autoext::command(self, ctx, name) || crate::spx::command(self, name) {
             return true;
         }
@@ -1451,7 +1468,7 @@ impl App {
                 let at = if name == "Create Marker" { ((pos as f64 / bar).round() * bar) as u32 } else { pos };
                 if !self.markers.iter().any(|m| m.0 == at) {
                     let n = self.markers.len() + 1;
-                    self.markers.push((at, format!("Marker {n}")));
+                    self.markers.push(lg_core::markers::Marker::new(at, format!("Marker {n}")));
                     self.markers.sort_by_key(|m| m.0);
                     self.dirty = true;
                 }
@@ -1845,6 +1862,8 @@ impl App {
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::arranging::windows(self, &ctx);
+        crate::markers::frame(self, &ctx);
+        crate::globals::window(self, &ctx);
         crate::hosting::manager(self, &ctx);
         crate::stemsplit::window(self, &ctx);
         crate::newtrack::sheet(self, &ctx);

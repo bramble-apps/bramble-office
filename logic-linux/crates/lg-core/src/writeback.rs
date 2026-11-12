@@ -749,13 +749,22 @@ pub fn read_markers(live: &[&Chunk], p: &mut Project) {
         out.sort_by_key(|m| m.0);
         out
     };
-    p.markers = list(&|c: &Chunk| c.id == 0x40000 && c.index == 22).into_iter().enumerate().map(|(k, (pos, _, name))| (pos, name.replace("##", &(k + 1).to_string()))).collect();
+    p.markers = list(&|c: &Chunk| c.id == 0x40000 && c.index == 22)
+        .into_iter()
+        .enumerate()
+        .map(|(k, (pos, len, text))| {
+            let mut m = crate::markers::Marker::new(pos, "");
+            m.set_full_text(&text.replace("##", &(k + 1).to_string()));
+            m.2.len = if len <= 1 { 0 } else { len };
+            m
+        })
+        .collect();
     p.arrangement = list(&|c: &Chunk| c.id == 0 && c.index == 5);
 }
 
 fn markers(p: &Project, before: &Project, _data: &[u8], chunks: &[Chunk], e: &mut Edits, left: &mut Vec<String>) {
-    let now_m: Vec<(u32, u32, String)> = p.markers.iter().map(|(pos, n)| (*pos, 1, n.clone())).collect();
-    let was_m: Vec<(u32, u32, String)> = before.markers.iter().map(|(pos, n)| (*pos, 1, n.clone())).collect();
+    let now_m: Vec<(u32, u32, String)> = p.markers.iter().map(|m| (m.0, m.2.len, m.full_text())).collect();
+    let was_m: Vec<(u32, u32, String)> = before.markers.iter().map(|m| (m.0, m.2.len, m.full_text())).collect();
     let mut next_id = chunks.iter().filter(|c| c.is("TxSq") && not_undo(c)).map(|c| c.id).max().map_or(0x40000, |m| m + 0x40000);
     let mut new_texts: Vec<Vec<u8>> = Vec::new();
     for (now, was, find, what) in [
@@ -904,7 +913,7 @@ mod tests {
         let p = crate::project::read_project_data(&orig).unwrap();
         // what the reader finds there (format-analysis §10-15)
         assert_eq!(p.markers.len(), 1, "{:?}", p.markers);
-        assert_eq!(p.markers[0], (0, "Marker 1".to_string()));
+        assert_eq!((p.markers[0].0, p.markers[0].1.as_str()), (0, "Marker 1"));
         assert_eq!(p.arrangement.iter().map(|a| a.2.as_str()).collect::<Vec<_>>(), ["Intro", "Verse", "Chorus"]);
         assert_eq!(p.arrangement[1], (30720, 30720, "Verse".to_string()));
         assert_eq!(p.tempo_map, vec![(0, 120.0), (23040, 127.0)], "a change at bar 7");
@@ -933,7 +942,7 @@ mod tests {
         e.signature = (3, 4);
         e.key = "F minor".into();
         e.tempo_map = vec![(0, 120.0), (23040, 127.0), (46080, 90.5)];
-        e.markers = vec![(0, "Top".into()), (7680, "Bridge".into())];
+        e.markers = vec![crate::markers::Marker::new(0, "Top"), crate::markers::Marker::new(7680, "Bridge")];
         e.arrangement[1].2 = "Verse 1".into();
         e.arrangement.push((92160, 15360, "Outro".into()));
         let (_, back, saved) = resave(&e, &orig);
