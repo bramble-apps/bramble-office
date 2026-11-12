@@ -21,10 +21,10 @@ use lg_notation as nt;
 
 use crate::app::App;
 use crate::look;
+use crate::scoreinsp::Dialog;
 
 const TABS_H: f32 = 40.0;
 const LOCAL_H: f32 = 28.0;
-const PART_H: f32 = 64.0;
 const RULER_H: f32 = 26.0;
 const HEAD_W: f32 = 120.0;
 
@@ -131,43 +131,97 @@ pub enum Part {
     /// Slur up, slur down, crescendo, decrescendo.
     Line(usize),
     Clef(usize),
-    /// Text, lyric, chord symbol.
+    /// Text, lyric, chord symbol, then the automatic texts (REGION, INSTR, SONG, DATE).
     Text(usize),
+    /// A note head (lg-core NOTE_HEADS).
+    Head(usize),
+    /// Sustain pedal down (Ped) or up (✱).
+    Pedal(usize),
+    /// Bar lines, repeats, endings, segno and coda (lg-core BarKind::ALL).
+    Bar(usize),
+    /// Trills, ornaments, arpeggio, tremolo, trill accidentals (lg-core ORNAMENTS).
+    Ornament(usize),
+    /// A key signature (fifths + 7).
+    Key(usize),
+    /// A time signature (TIMES).
+    Time(usize),
+    /// Line Break, Page Break, No Line Break, No Page Break.
+    Break(usize),
 }
+
+/// The Part box's symbol groups, in its group buttons' order: (name, number of symbols).
+pub const GROUP_NAMES: [&str; 14] = ["Notes", "Pedal", "Clefs", "Dynamics", "Note Heads", "Accents", "Slurs and Crescendi", "Key Signatures", "Time Signatures", "Bars and Repeats", "Trills", "Rests", "Text", "Layout"];
 
 impl Part {
     /// (group, item) and the groups' sizes, for Next / Previous Part Box Symbol and Group.
-    pub const GROUPS: [usize; 7] = [7, 6, 10, 8, 4, 5, 3];
+    pub const GROUPS: [usize; 14] = [7, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 7, 4];
     pub fn index(self) -> (usize, usize) {
         match self {
             Part::Note(i) => (0, i),
-            Part::Rest(i) => (1, i),
-            Part::Artic(i) => (2, i),
+            Part::Pedal(i) => (1, i),
+            Part::Clef(i) => (2, i),
             Part::Dynamic(i) => (3, i),
-            Part::Line(i) => (4, i),
-            Part::Clef(i) => (5, i),
-            Part::Text(i) => (6, i),
+            Part::Head(i) => (4, i),
+            Part::Artic(i) => (5, i),
+            Part::Line(i) => (6, i),
+            Part::Key(i) => (7, i),
+            Part::Time(i) => (8, i),
+            Part::Bar(i) => (9, i),
+            Part::Ornament(i) => (10, i),
+            Part::Rest(i) => (11, i),
+            Part::Text(i) => (12, i),
+            Part::Break(i) => (13, i),
         }
     }
     pub fn from_index(g: usize, i: usize) -> Part {
-        let i = i.min(Part::GROUPS[g % 7] - 1);
-        match g % 7 {
+        let g = g % Part::GROUPS.len();
+        let i = i.min(Part::GROUPS[g] - 1);
+        match g {
             0 => Part::Note(i),
-            1 => Part::Rest(i),
-            2 => Part::Artic(i),
+            1 => Part::Pedal(i),
+            2 => Part::Clef(i),
             3 => Part::Dynamic(i),
-            4 => Part::Line(i),
-            5 => Part::Clef(i),
-            _ => Part::Text(i),
+            4 => Part::Head(i),
+            5 => Part::Artic(i),
+            6 => Part::Line(i),
+            7 => Part::Key(i),
+            8 => Part::Time(i),
+            9 => Part::Bar(i),
+            10 => Part::Ornament(i),
+            11 => Part::Rest(i),
+            12 => Part::Text(i),
+            _ => Part::Break(i),
+        }
+    }
+    /// The symbol's name (help tags, undo).
+    pub fn name(self) -> String {
+        match self {
+            Part::Note(i) => format!("{} Note", VALUES[i].0),
+            Part::Rest(i) => format!("{} Rest", VALUES[i].0),
+            Part::Artic(i) => ARTICULATIONS[PART_ARTICS[i]].to_string(),
+            Part::Dynamic(i) => DYNAMICS[i].to_string(),
+            Part::Line(i) => LINES[i].to_string(),
+            Part::Clef(i) => format!("{} Clef", CLEFS[i]),
+            Part::Text(i) => TEXTS[i].to_string(),
+            Part::Head(i) => format!("Note Head: {}", lg_core::score::NOTE_HEADS[i]),
+            Part::Pedal(i) => if i == 0 { "Sustain Pedal Down".into() } else { "Sustain Pedal Up".into() },
+            Part::Bar(i) => lg_core::score::BarKind::ALL[i].name().to_string(),
+            Part::Ornament(i) => lg_core::score::ORNAMENTS[i].to_string(),
+            Part::Key(i) => key_name(i as i8 - 7),
+            Part::Time(i) => format!("Time Signature {}", TIMES[i]),
+            Part::Break(i) => lg_core::score::Break::ALL[i].name().to_string(),
         }
     }
 }
+
+/// The Part box's time signatures; the last is the undefined one (asks for its values).
+pub const TIMES: [&str; 11] = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8", "2/2", "3/8", "A/B"];
 
 /// The Part box's articulations (indices into lg-core's ARTICULATIONS).
 pub const PART_ARTICS: [usize; 10] = [2, 3, 4, 5, 6, 7, 0, 8, 9, 10];
 pub const CLEFS: [&str; 5] = ["Treble", "Bass", "Alto", "Tenor", "Percussion"];
-const LINES: [&str; 4] = ["Slur Up", "Slur Down", "Crescendo", "Decrescendo"];
-const TEXTS: [&str; 3] = ["Text", "Lyric", "Chord"];
+pub const LINES: [&str; 4] = ["Slur Up", "Slur Down", "Crescendo", "Decrescendo"];
+pub const TEXTS: [&str; 7] = ["Text", "Lyric", "Chord", "REGION", "INSTR", "SONG", "DATE"];
 
 /// The Score's own view settings (kept in egui's memory; edits to the music are in the project).
 #[derive(Clone, Debug)]
@@ -207,6 +261,13 @@ pub struct State {
     pub key_every_line: bool,
     pub chord_size: f32,
     pub dyn_velocity: [u8; 8],
+    /// The selected text symbol (track id, index) and global bar symbol (index), for the Event
+    /// inspector and Delete.
+    pub sel_symbol: Option<(u64, usize)>,
+    pub sel_bar: Option<usize>,
+    /// A selected pedal marking: (track, region, event).
+    pub sel_pedal: Option<(usize, usize, usize)>,
+    bar_drag_len: bool,
     /// Pages in the Page view (for Go to Page), and the page to bring into view.
     pub pages: usize,
     pub goto_page: Option<usize>,
@@ -244,6 +305,10 @@ impl Default for State {
             dyn_velocity: [16, 32, 48, 64, 80, 96, 112, 127],
             pages: 1,
             goto_page: None,
+            sel_symbol: None,
+            sel_bar: None,
+            sel_pedal: None,
+            bar_drag_len: false,
         }
     }
 }
@@ -372,7 +437,7 @@ pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
 }
 
 /// The display Quantize a track reads with.
-fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
+pub(crate) fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
     let ts = app.project.as_ref().and_then(|p| p.score.track(id));
     let q = ts.and_then(|t| nt::Quant::CHOICES.iter().position(|c| c.0 == t.quantize)).unwrap_or(9);
     (q, ts.is_none_or(|t| !t.no_interpretation), ts.is_some_and(|t| t.syncopation))
@@ -380,6 +445,11 @@ fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
 
 /// The tracks the Score shows: the score set, every MIDI track (Explode Folders), or the
 /// selected region's track.
+/// The region's Max. Dots (Score inspector), 1 by default.
+pub fn max_dots_of(app: &App, id: u64) -> u8 {
+    app.project.as_ref().and_then(|p| p.score.track(id)).map_or(1, |t| if t.max_dots == 0 { 1 } else { t.max_dots - 1 })
+}
+
 fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
     let Some(p) = app.project.as_ref() else { return Vec::new() };
     let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_tracks;
@@ -484,6 +554,7 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 let mut opts = nt::Options::new(sig, key, nt::Quant::CHOICES[q].1, a, b);
                 opts.interpretation = interp;
                 opts.syncopation = synco;
+                opts.max_dots = max_dots_of(app, row.id);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
                     None if two => vec![0, 1],
@@ -500,6 +571,45 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 }
             }
         }
+    }
+    out
+}
+
+/// The shown score engraved for export (scorexml.rs): per staff (track, staff, clef, voices
+/// with every region's items in time order).
+pub(crate) fn engraved_staffs(app: &App, st: &State) -> Vec<(usize, usize, nt::Clef, Vec<nt::Voice>)> {
+    let mut st = st.clone();
+    st.explode_poly = false;
+    let tracks = shown_tracks(app, &st);
+    let rows = rows_for(app, &st, &tracks, 8.0);
+    let segs = engrave_rows(app, &rows);
+    let mut out = Vec::new();
+    for (ri, row) in rows.iter().enumerate() {
+        let mut voices: Vec<nt::Voice> = vec![nt::Voice::default(), nt::Voice::default()];
+        let mut mine: Vec<&Seg> = segs.iter().filter(|s| s.row == ri).collect();
+        mine.sort_by_key(|s| s.from);
+        for seg in mine {
+            let v = &mut voices[seg.hide_rests as usize];
+            let base = v.items.len();
+            let nb = v.beams.len();
+            v.items.extend(seg.voice.items.iter().cloned().map(|mut it| {
+                it.beam = it.beam.map(|b| b + nb);
+                it
+            }));
+            v.beams.extend(seg.voice.beams.iter().cloned().map(|mut b| {
+                b.items.iter_mut().for_each(|i| *i += base);
+                b
+            }));
+            v.tuplets.extend(seg.voice.tuplets.iter().cloned().map(|mut t| {
+                t.first += base;
+                t.last += base;
+                t
+            }));
+        }
+        if voices[1].items.is_empty() {
+            voices.pop();
+        }
+        out.push((row.t, row.staff, row.style.clefs[row.staff.min(row.style.clefs.len() - 1)], voices));
     }
     out
 }
@@ -565,46 +675,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let (sig, project_name) = app.project.as_ref().map(|p| (p.signature, p.name.clone())).unwrap_or(((4, 4), String::new()));
     let bar_t = lg_core::project::bar_ticks(sig) as f32;
     let cur_t = app.selected_region.map_or(first_t, |x| x.0);
-    let cur_id = app.project.as_ref().and_then(|p| p.tracks.get(cur_t)).map_or(0, |t| t.extra.id);
 
-    // the local menus: Layout / Edit / Functions / View; the region's Style, Quantize,
-    // Interpretation and Syncopation (Logic's Region inspector for the Score)
+
+    // the local menus: Layout / Edit / Functions / View
     let local = Rect::from_min_size(pos2(area.min.x, tabs_r.max.y), vec2(area.width(), LOCAL_H));
     p.rect_filled(local, 0.0, look::header_bg());
     ui.scope_builder(egui::UiBuilder::new().max_rect(local.shrink2(vec2(10.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
         crate::menus::local_bar(app, ui, &[("Layout", "score-Layout"), ("Edit", "score-Edit"), ("Functions", "score-Functions"), ("View", "score-View")]);
-        let (q, interp, synco) = quant_of(app, cur_id);
-        let style = style_of(app, cur_t);
-        let own = app.project.as_ref().and_then(|p| p.score.track(cur_id)).is_some_and(|t| !t.style.is_empty());
-        ui.label(egui::RichText::new("Style:").color(look::text_dim()).size(12.0));
-        let mut names: Vec<String> = vec![format!("Auto ({})", if own { "off" } else { style.name })];
-        names.extend(nt::StaffStyle::ALL.iter().map(|s| s.name.to_string()));
-        let cur = if own { nt::StaffStyle::ALL.iter().position(|s| s.name == style.name).map_or(0, |k| k + 1) } else { 0 };
-        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-        let r = Rect::from_min_size(ui.cursor().min + vec2(4.0, 1.0), vec2(120.0, 22.0));
-        if let Some(k) = crate::widgets::choice_slot(ui, r, ui.scope_id().with("sc-style"), cur, &refs) {
-            set_style(app, cur_t, if k == 0 { "" } else { nt::StaffStyle::ALL[k - 1].name });
-        }
-        ui.add_space(128.0);
-        ui.label(egui::RichText::new("Quantize:").color(look::text_dim()).size(12.0));
-        let qn: Vec<&str> = nt::Quant::CHOICES.iter().map(|q| q.0).collect();
-        let r = Rect::from_min_size(ui.cursor().min + vec2(4.0, 1.0), vec2(70.0, 22.0));
-        if let Some(k) = crate::widgets::choice_slot(ui, r, ui.scope_id().with("sc-quant"), q, &qn) {
-            region_param(app, cur_t, "Quantize", |ts| ts.quantize = if k == 9 { String::new() } else { nt::Quant::CHOICES[k].0.to_string() });
-        }
-        ui.add_space(80.0);
-        let mut i = interp;
-        if ui.checkbox(&mut i, egui::RichText::new("Interpretation").size(12.0)).changed() {
-            region_param(app, cur_t, "Interpretation", |ts| ts.no_interpretation = !i);
-        }
-        let mut s = synco;
-        if ui.checkbox(&mut s, egui::RichText::new("Syncopation").size(12.0)).changed() {
-            region_param(app, cur_t, "Syncopation", |ts| ts.syncopation = s);
-        }
     });
     // the Part box strip
-    let part = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(area.width(), PART_H));
-    part_box(ui, part, &mut st, app);
+    // (the Part box and the region's Score parameters are in the Score inspector: scoreinsp.rs)
+    let part = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(area.width(), 0.0));
     let linear = st.view == View::Linear;
     // the Score project settings (scoreset.rs); the View menu's Instrument Names shows full
     // names beside the staffs as well
@@ -705,12 +786,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 .map(|b| segs.iter().filter(|s| (s.from / bar_t as u32) <= b).map(|s| nt::bar_width(&s.voice, b - s.from / bar_t as u32, sp)).fold(12.0 * sp, f32::max))
                 .collect();
             let hw = header_w(key0, true);
-            let systems = nt::systems_with(&widths, (width - hw).max(20.0 * sp), fmt.max_bars, fmt.justify_last);
+            // (manual Line / Page Break and No Line Break symbols)
+            let breaks = app.project.as_ref().map(|p| p.score.breaks.clone()).unwrap_or_default();
+            let brk = |k: usize| match breaks.get(&(bar_lo + k as u32)) {
+                Some(lg_core::score::Break::Line | lg_core::score::Break::Page) => 1,
+                Some(lg_core::score::Break::NoLine) => -1,
+                _ => 0,
+            };
+            let systems = nt::systems_breaks(&widths, (width - hw).max(20.0 * sp), fmt.max_bars, fmt.justify_last, &brk);
             let line_h = block_h + 7.0 * sp + fmt.line_dist * crate::scoreset::SP_PER_CM * sp;
             let x0 = if st.view == View::Page { music.min.x + ((music.width() - page_w) / 2.0).max(12.0) } else { music.min.x };
             let tops: Vec<(usize, f32)> = if st.view == View::Page {
                 let cm = crate::scoreset::SP_PER_CM * sp;
-                nt::paginate_with(systems.len(), line_h, page_h, fmt.top * cm, fmt.bottom * cm, fmt.header * cm)
+                let page_brk = |l: usize| match systems.get(l).and_then(|x| breaks.get(&(bar_lo + x.0 as u32))) {
+                    Some(lg_core::score::Break::Page) => 1,
+                    Some(lg_core::score::Break::NoPage) => -1,
+                    _ => 0,
+                };
+                nt::paginate_breaks(systems.len(), line_h, page_h, fmt.top * cm, fmt.bottom * cm, fmt.header * cm, &page_brk)
             } else {
                 (0..systems.len()).map(|k| (0, 4.0 * sp + k as f32 * line_h)).collect()
             };
@@ -820,6 +913,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let track_of = |t: usize| -> Option<&lg_core::Track> { tracks.iter().position(|&x| x == t).and_then(|k| project_tracks.get(k)) };
     let dragging = st.drag.is_some();
     let mut guide_x: Option<f32> = None;
+    let mut symbol_clicked = false;
+    let repeated = score.repeated_bars(bar_t as u32);
+    let mut bar_drag: Option<(usize, u32, bool)> = None;
+    let mut bar_drag_done = false;
     let (sel_region_now, sel_notes_now) = (app.selected_region, app.selected_notes.clone());
     for (li, line) in lines.iter().enumerate() {
         let line_x1 = *line.xs.last().unwrap_or(&line.x_start);
@@ -869,12 +966,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     headp.text(pos2(nx, bottom - 2.0 * sp), al, name, look::regular(12.0), INK);
                 }
                 draw_header(&headp, x, bottom, sp, fmt.clefs != crate::scoreset::Show::Hide, clef, octave, if fmt.keys != crate::scoreset::Show::Hide { key } else { nt::Key::default() }, (fmt.times != crate::scoreset::Show::Hide).then_some(sig));
+                // a click on the key or the time signature opens its window
+                header_clicks(app, ui, Rect::from_min_max(pos2(x, bottom - 4.0 * sp), pos2(head.max.x, bottom)).intersect(head), x, sp, key_at(line.b0 * bar_t as u32), sig, (rk, true));
             } else {
                 // (Clefs & Signatures: where clefs, keys and time signatures show)
                 let key_on = line.first || (st.key_every_line && fmt.keys.on(line.page_first, line.first));
                 let key_on = key_on && fmt.keys != crate::scoreset::Show::Hide;
                 let time_on = fmt.times.on(line.page_first, line.first);
                 draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, fmt.clefs.on(line.page_first, line.first), clef, octave, if key_on { key } else { nt::Key::default() }, time_on.then_some(sig));
+                header_clicks(app, ui, Rect::from_min_max(pos2(line.x_start, bottom - 4.0 * sp), pos2(line.xs[0], bottom)).intersect(music), line.x_start + 0.4 * sp, sp, key_at(line.b0 * bar_t as u32), sig, (li * 100 + rk, false));
             }
             if !linear && (rk == 0 || rows[rk - 1].t != row.t) {
                 let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first) };
@@ -901,9 +1001,30 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 let has = track_of(row.t).is_some_and(|tr| tr.regions.iter().any(|r| r.audio.is_none() && (r.start as f32) < b as f32 * bar_t + 1.0 && (r.start + r.length) as f32 > (b as f32 - 1.0) * bar_t));
                 let final_bar = !linear && b == line.b1 && line.b1 == bar_hi;
-                if (!linear || has) && (b > line.b0 || !linear) && (linear || b > line.b0) && (!fmt.hide_bar_lines || final_bar) {
-                    let w = if final_bar { 2.5 } else { 1.0 };
-                    mp.vline(x, bottom - 4.0 * sp..=bottom, Stroke::new(w, INK));
+                // (Bars and Repeats symbols replace the bar line; a double repeat at a line
+                // break ends the line and starts the next)
+                let sym = score.bar_at(b * bar_t as u32).map(|x| x.kind);
+                use lg_core::score::BarKind as BK;
+                if !linear && b == line.b0 && matches!(sym, Some(BK::RepeatStart | BK::RepeatBoth)) {
+                    draw_bar(&mp, BK::RepeatStart, x + 0.5 * sp, bottom, sp);
+                } else if (!linear || has) && (b > line.b0 || !linear) && (linear || b > line.b0) && (!fmt.hide_bar_lines || final_bar || sym.is_some()) {
+                    match sym {
+                        Some(BK::RepeatBoth) if !linear && b == line.b1 => draw_bar(&mp, BK::RepeatEnd, x, bottom, sp),
+                        Some(BK::RepeatStart) if !linear && b == line.b1 => {
+                            mp.vline(x, bottom - 4.0 * sp..=bottom, Stroke::new(1.0, INK));
+                        }
+                        Some(k) => draw_bar(&mp, k, x, bottom, sp),
+                        None => {
+                            let w = if final_bar { 2.5 } else { 1.0 };
+                            mp.vline(x, bottom - 4.0 * sp..=bottom, Stroke::new(w, INK));
+                        }
+                    }
+                }
+                // Control-click a bar line: line and page breaks there
+                if rk == 0 && b > line.b0 && x > music.min.x && x < music.max.x {
+                    let br = Rect::from_center_size(pos2(x, bottom - 2.0 * sp), vec2((0.8 * sp).max(5.0), 4.0 * sp));
+                    let resp = ui.interact(br, ui.scope_id().with(("sc-barline", li, b)), Sense::click());
+                    resp.context_menu(|ui| crate::scoreinsp::bar_menu(app, ui, b));
                 }
                 // key changes at a bar inside the line
                 if b > line.b0 && b < line.b1 && score_keys.iter().any(|k| k.0 / bar_t as u32 == b) {
@@ -939,6 +1060,88 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 brace(pp, x - 3.0, bottom - 4.0 * sp, lower, INK);
             }
         }
+        // Bars and Repeats symbols inside bars, bar repeats, endings, segno and coda (global:
+        // the bar signs on every staff, the rest above the top staff)
+        {
+            use lg_core::score::BarKind as BK;
+            let (lo, hi) = (line.b0 * bar_t as u32, line.b1 * bar_t as u32);
+            let top_bottom = line.top + rows.first().map_or(0.0, |r| r.off);
+            for (bi, bs) in score.bars.iter().enumerate() {
+                if bs.tick < lo || bs.tick >= hi.max(lo + 1) {
+                    continue;
+                }
+                let x = x_of(bs.tick as f32);
+                let mut hit: Option<Rect> = None;
+                match bs.kind {
+                    k if k.is_line() => {
+                        if bs.tick % bar_t as u32 != 0 {
+                            for row in &rows {
+                                draw_bar(&mp, k, x + 0.8 * sp, line.top + row.off, sp);
+                            }
+                            hit = Some(Rect::from_min_max(pos2(x, top_bottom - 4.0 * sp), pos2(x + 1.6 * sp, top_bottom)));
+                        }
+                    }
+                    BK::Repeat1 | BK::Repeat2 => {
+                        let bars = if bs.kind == BK::Repeat1 { 1.0 } else { 2.0 };
+                        let cx = (x + x_of(bs.tick as f32 + bars * bar_t)) / 2.0;
+                        for row in &rows {
+                            smufl(&mp, if bs.kind == BK::Repeat1 { '\u{E500}' } else { '\u{E501}' }, pos2(cx, line.top + row.off - 2.0 * sp), sp, INK, true);
+                        }
+                        hit = Some(Rect::from_center_size(pos2(cx, top_bottom - 2.0 * sp), vec2(3.0 * sp, 4.0 * sp)));
+                    }
+                    BK::Ending1 | BK::Ending2 => {
+                        let x2 = x_of((bs.tick + bs.len.max(bar_t as u32 / 4)) as f32).min(*line.xs.last().unwrap_or(&x));
+                        let y = top_bottom - 4.0 * sp - 3.0 * sp;
+                        let ink = Stroke::new(1.0, INK);
+                        mp.line_segment([pos2(x + 0.3 * sp, y + 2.0 * sp), pos2(x + 0.3 * sp, y)], ink);
+                        mp.line_segment([pos2(x + 0.3 * sp, y), pos2(x2 - 0.3 * sp, y)], ink);
+                        // (the second ending is open: no line down at its end)
+                        if bs.kind == BK::Ending1 {
+                            mp.line_segment([pos2(x2 - 0.3 * sp, y), pos2(x2 - 0.3 * sp, y + 2.0 * sp)], ink);
+                        }
+                        let style = score.styles().into_iter().find(|s| s.name == "Repeat Endings").unwrap_or_else(|| lg_core::score::TextStyle::default_named("Plain Text").unwrap());
+                        mp.text(pos2(x + 0.8 * sp, y + 0.3 * sp), Align2::LEFT_TOP, &bs.text, style_font(&style, sp), INK);
+                        hit = Some(Rect::from_min_max(pos2(x, y - 0.5 * sp), pos2(x2, y + 2.0 * sp)));
+                    }
+                    BK::Segno | BK::Coda => {
+                        let c = pos2(x + 0.8 * sp, top_bottom - 4.0 * sp - 2.4 * sp);
+                        smufl(&mp, if bs.kind == BK::Segno { '\u{E047}' } else { '\u{E048}' }, c, sp, INK, true);
+                        hit = Some(Rect::from_center_size(c - vec2(0.0, 1.0 * sp), vec2(3.0 * sp, 3.0 * sp)));
+                    }
+                    _ => {}
+                }
+                if let Some(r) = hit {
+                    if st.sel_bar == Some(bi) {
+                        mp.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
+                    }
+                    let resp = ui.interact(r.intersect(music), ui.scope_id().with(("sc-bar", li, bi)), Sense::click_and_drag());
+                    if resp.clicked() || resp.drag_started() {
+                        st.sel_bar = Some(bi);
+                        st.sel_symbol = None;
+                        app.selected_notes.clear();
+                        symbol_clicked = true;
+                    }
+                    // an ending: dragged by its corner (moves), its right end (length)
+                    if matches!(bs.kind, BK::Ending1 | BK::Ending2) {
+                        if resp.drag_started() {
+                            let from = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.min);
+                            st.bar_drag_len = from.x > r.max.x - 1.5 * sp;
+                            app.checkpoint(if st.bar_drag_len { "Repeat Ending Length" } else { "Move Repeat Ending" });
+                        }
+                        if resp.dragged() {
+                            if let Some(pp) = resp.interact_pointer_pos() {
+                                let grid = bar_t / sig.0.max(1) as f32;
+                                let t_at = ((line.tick_of(pp.x, bar_t) / grid).round() * grid).max(0.0) as u32;
+                                bar_drag = Some((bi, t_at, st.bar_drag_len));
+                            }
+                        }
+                        if resp.drag_stopped() {
+                            bar_drag_done = true;
+                        }
+                    }
+                }
+            }
+        }
         // the music
         for seg in segs.iter() {
             let row = &rows[seg.row];
@@ -946,7 +1149,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let Some(region) = tr.regions.get(seg.rix) else { continue };
             let bottom = line.top + row.off;
             let staff = Staff { bottom };
-            let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32;
+            // (bars under one- and two-bar repeat signs hide their notes and rests)
+            let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32 && !repeated.contains(&(tick / bar_t as u32));
             let sel_here = sel_region_now == Some((row.t, seg.rix));
             let selected = |i: usize| sel_here && sel_notes_now.contains(&i);
             let voice_of = |i: usize| seg.voice.items.iter().find(|it| it.heads.iter().any(|h| h.note == i)).map_or(0, |it| (!it.stem_up) as u8);
@@ -1017,7 +1221,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             let Some(ts) = score.track(row.id) else { continue };
             let bottom = line.top + row.off;
-            for s in ts.symbols.iter().filter(|s| s.staff as usize == row.staff) {
+            for (si, s) in ts.symbols.iter().enumerate().filter(|(_, s)| s.staff as usize == row.staff) {
                 let lo = line.b0 as f32 * bar_t;
                 let hi = line.b1 as f32 * bar_t;
                 let (a, b) = (s.tick as f32, (s.tick + s.len) as f32);
@@ -1026,7 +1230,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 let x = x_of(a.max(lo)) + 0.8 * sp;
                 let x2 = x_of(b.min(hi)) + 0.8 * sp;
-                draw_symbol(&mp, s, x, x2, bottom, sp, st.chord_size);
+                // (automatic text: REGION, INSTR, SONG, DATE)
+                let auto = |k: &str| -> String {
+                    match k {
+                        "REGION" => track_of(row.t).and_then(|tr| tr.regions.iter().find(|r| r.audio.is_none() && s.tick >= r.start && s.tick < r.start + r.length)).map_or_else(|| project_name.clone(), |r| r.name.clone()),
+                        "INSTR" => if st.score_set.is_some() { "Score Set".into() } else { row.name.clone() },
+                        "SONG" => project_name.clone(),
+                        _ => crate::scoreset::today(),
+                    }
+                };
+                let ext = || score.styles().into_iter().find(|x| x.name == "Chord Extension").unwrap_or_else(|| score.style_for(s));
+                let text = SymText { style: score.style_for(s), auto: &auto, ext: &ext };
+                if let Some(r) = draw_symbol(&mp, s, x, x2, bottom, sp, st.chord_size, &text) {
+                    if st.sel_symbol == Some((row.id, si)) {
+                        mp.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
+                    }
+                    let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-sym", li, row.id, si)), Sense::click());
+                    if resp.clicked() {
+                        st.sel_symbol = Some((row.id, si));
+                        app.selected_notes.clear();
+                        symbol_clicked = true;
+                    }
+                }
             }
             // automatic slurs (a note's Slur attribute): to the next note of the region
             if let Some(tr) = track_of(row.t) {
@@ -1054,6 +1279,37 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
         }
+        // sustain pedal markings: the regions' controller 64 events, below a track's lowest staff
+        for (rk, row) in rows.iter().enumerate() {
+            if rows.get(rk + 1).is_some_and(|r| r.t == row.t) {
+                continue;
+            }
+            let Some(tr) = track_of(row.t) else { continue };
+            let bottom = line.top + row.off;
+            let (lo, hi) = (line.b0 * bar_t as u32, line.b1 * bar_t as u32);
+            for (rix, region) in tr.regions.iter().enumerate().filter(|(_, r)| r.audio.is_none()) {
+                for (ei, e) in region.ext.events.iter().enumerate().filter(|(_, e)| crate::scoreinsp::is_pedal(e)) {
+                    let at = region.start + e.pos;
+                    if at < lo || at >= hi {
+                        continue;
+                    }
+                    let c = pos2(x_of(at as f32) + 0.8 * sp, bottom + 4.6 * sp);
+                    smufl(&mp, if e.value >= 64 { '\u{E650}' } else { '\u{E655}' }, c, sp, INK, true);
+                    let r = Rect::from_center_size(c - vec2(0.0, 0.6 * sp), vec2(3.0 * sp, 2.0 * sp));
+                    let resp = ui.interact(r.intersect(music), ui.scope_id().with(("sc-ped", li, row.t, rix, ei)), Sense::click());
+                    if st.sel_pedal == Some((row.t, rix, ei)) {
+                        mp.rect_stroke(r.expand(1.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
+                    }
+                    if resp.clicked() {
+                        st.sel_pedal = Some((row.t, rix, ei));
+                        st.sel_symbol = None;
+                        st.sel_bar = None;
+                        app.selected_notes.clear();
+                        symbol_clicked = true;
+                    }
+                }
+            }
+        }
         // the playhead
         let ph = app.position() as f32;
         if ph >= line.b0 as f32 * bar_t && ph < line.b1 as f32 * bar_t {
@@ -1063,12 +1319,27 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     }
+    // a repeat ending dragged: moved by its corner, lengthened by its right end
+    if let Some((bi, t_at, len)) = bar_drag {
+        if let Some(b) = app.project.as_mut().and_then(|p| p.score.bars.get_mut(bi)) {
+            if len {
+                b.len = t_at.saturating_sub(b.tick).max(bar_t as u32 / 4);
+            } else {
+                b.tick = t_at;
+            }
+        }
+    }
+    if bar_drag_done {
+        app.after_edit();
+    }
     if let Some(x) = guide_x {
         mp.vline(x, music.y_range(), Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 160)));
     }
 
     // a press: select (Shift toggles), start a move
     if let Some((t, rix, note, drag)) = pressed {
+        st.sel_symbol = None;
+        st.sel_bar = None;
         let shift = ui.input(|i| i.modifiers.shift);
         if app.selected_region != Some((t, rix)) {
             app.selected_region = Some((t, rix));
@@ -1156,9 +1427,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             st.drag = None;
         }
     }
+    // a Part box symbol dropped on the score, or a double-click with one selected
+    let dropped = bg.dnd_release_payload::<Part>().map(|p| *p);
     if pressed.is_none() {
-        if bg.double_clicked() {
-            if let Some(pp) = bg.interact_pointer_pos() {
+        let at = if dropped.is_some() { ui.input(|i| i.pointer.interact_pos()) } else if bg.double_clicked() { bg.interact_pointer_pos() } else { None };
+        if let Some(part) = dropped {
+            st.part = part;
+        }
+        if at.is_some() {
+            if let Some(pp) = at {
                 // the line and staff under the pointer
                 if let Some(line) = lines.iter().find(|l| pp.y >= l.top - 9.0 * sp && pp.y <= l.top + block_h + 7.0 * sp && pp.x >= l.x_start) {
                     if let Some((rk, row)) = rows.iter().enumerate().min_by(|a, b| (line.top + a.1.off - 2.0 * sp - pp.y).abs().total_cmp(&(line.top + b.1.off - 2.0 * sp - pp.y).abs())) {
@@ -1170,13 +1447,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                 }
             }
-        } else if bg.clicked() {
+        } else if bg.clicked() && !symbol_clicked {
             app.selected_notes.clear();
+            st.sel_symbol = None;
+            st.sel_bar = None;
+            st.sel_pedal = None;
         }
     }
     // text being typed for a symbol
     if let Some((t, tick, kind, staff, mut text, at)) = st.typing.clone() {
         let mut done = None;
+        let mut tab = false;
         egui::Area::new(egui::Id::unique("lg-score-typing")).fixed_pos(at).order(egui::Order::Foreground).show(&ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.label(egui::RichText::new(match kind {
@@ -1188,6 +1469,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 r.request_focus();
                 if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     done = Some(true);
+                } else if ui.input(|i| i.key_pressed(egui::Key::Tab)) {
+                    done = Some(true);
+                    tab = true;
                 } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     done = Some(false);
                 }
@@ -1197,7 +1481,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if let Some(ok) = done {
             st.typing = None;
             if ok && !text.trim().is_empty() {
-                add_symbol(app, t, Symbol { tick, kind, text: text.trim().to_string(), len: 0, staff }, "Insert Text");
+                add_symbol(app, t, Symbol { tick, kind, text: text.trim().to_string(), len: 0, staff, ..Default::default() }, "Insert Text");
+            }
+            // Tab: on to the next note for the next chord symbol or syllable
+            if tab {
+                let next = app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.regions.iter().filter(|r| r.audio.is_none()).flat_map(|r| r.notes.iter().map(|n| n.pos)).filter(|&q| q > tick).min());
+                if let Some(nx) = next {
+                    st.typing = Some((t, nx, kind, staff, String::new(), at + vec2(((nx - tick) as f32 / bar_t) * st.bar_w.min(400.0), 0.0)));
+                }
             }
         }
     }
@@ -1231,6 +1522,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 /// The Score Project Settings window (Layout ▸ Global Format… and the others) and the Staff
 /// Style window.
 fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
+    crate::scoreinsp::windows(app, ctx, st);
     if let Some(mut tab) = st.settings {
         let mut open = true;
         egui::Window::new("Score Project Settings").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
@@ -1304,7 +1596,7 @@ pub fn set_style(app: &mut App, t: usize, name: &str) {
     region_param(app, t, "Staff Style", |ts| ts.style = name.to_string());
 }
 
-fn region_param(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut lg_core::score::TrackScore)) {
+pub(crate) fn region_param(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut lg_core::score::TrackScore)) {
     let Some(id) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|t| t.extra.id) else { return };
     app.checkpoint(what);
     if let Some(p) = app.project.as_mut() {
@@ -1364,21 +1656,44 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
                 app.selected_notes = vec![i];
                 apply_part(app, st, st.part);
             } else if let Part::Dynamic(d) = st.part {
-                add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff: row.staff as u8 }, "Insert Dynamic");
+                add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Dynamic");
             }
         }
         Part::Line(k) => {
             let kind = [SymbolKind::SlurUp, SymbolKind::SlurDown, SymbolKind::Crescendo, SymbolKind::Decrescendo][k];
-            add_symbol(app, row.t, Symbol { tick: tick_q, kind, text: String::new(), len: bar_t / 2, staff: row.staff as u8 }, LINES[k]);
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind, text: String::new(), len: bar_t / 2, staff: row.staff as u8, ..Default::default() }, LINES[k]);
         }
         Part::Clef(k) => {
             let at_bar = tick_q / bar_t * bar_t;
-            add_symbol(app, row.t, Symbol { tick: at_bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff: row.staff as u8 }, "Insert Clef");
+            add_symbol(app, row.t, Symbol { tick: at_bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Clef");
+        }
+        Part::Text(k) if k >= 3 => {
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::AutoText, text: TEXTS[k].into(), staff: row.staff as u8, ..Default::default() }, "Insert Text");
         }
         Part::Text(k) => {
             let kind = [SymbolKind::Text, SymbolKind::Lyric, SymbolKind::Chord][k];
             st.typing = Some((row.t, tick_q, kind, row.staff as u8, String::new(), at));
         }
+        Part::Head(k) => {
+            if let Some((rix, i)) = nearest_note(app, row.t, tick_q) {
+                app.selected_region = Some((row.t, rix));
+                if !app.selected_notes.contains(&i) {
+                    app.selected_notes = vec![i];
+                }
+                apply_part(app, st, Part::Head(k));
+            }
+        }
+        Part::Pedal(_) => crate::scoreinsp::insert_pedal(app, row.t, tick_q),
+        Part::Bar(k) => {
+            let kind = lg_core::score::BarKind::ALL[k];
+            crate::scoreinsp::insert_bar(app, crate::scoreinsp::bar_snap(tick, bar_t, grid as u32, kind), kind);
+        }
+        Part::Ornament(k) => {
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Ornament, text: lg_core::score::ORNAMENTS[k].into(), staff: row.staff as u8, ..Default::default() }, "Insert Symbol");
+        }
+        Part::Key(k) => insert_key(app, tick_q / bar_t * bar_t, k as i8 - 7),
+        Part::Time(k) => crate::scoreinsp::insert_time(app, tick_q / bar_t, k),
+        Part::Break(k) => crate::scoreinsp::insert_break(app, ((tick + bar_t as f32 / 2.0) / bar_t as f32).floor() as u32, lg_core::score::Break::ALL[k]),
     }
 }
 
@@ -1468,7 +1783,7 @@ pub fn apply_part(app: &mut App, st: &State, part: Part) -> bool {
                 }
                 let ts = p.score.track_mut(id);
                 ts.symbols.retain(|s| !(s.kind == SymbolKind::Dynamic && s.tick == first && s.staff == staff));
-                ts.symbols.push(Symbol { tick: first, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff });
+                ts.symbols.push(Symbol { tick: first, kind: SymbolKind::Dynamic, text: DYNAMICS[d].into(), len: 0, staff, ..Default::default() });
                 ts.symbols.sort_by_key(|s| s.tick);
             }
             app.after_edit();
@@ -1476,170 +1791,49 @@ pub fn apply_part(app: &mut App, st: &State, part: Part) -> bool {
         }
         Part::Line(k) => {
             let kind = [SymbolKind::SlurUp, SymbolKind::SlurDown, SymbolKind::Crescendo, SymbolKind::Decrescendo][k];
-            add_symbol(app, t, Symbol { tick: first, kind, text: String::new(), len: (last - first).max(240), staff }, LINES[k]);
+            add_symbol(app, t, Symbol { tick: first, kind, text: String::new(), len: (last - first).max(240), staff, ..Default::default() }, LINES[k]);
             true
         }
         Part::Clef(k) => {
             let bar = app.bar_ticks();
-            add_symbol(app, t, Symbol { tick: first / bar * bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff }, "Insert Clef");
+            add_symbol(app, t, Symbol { tick: first / bar * bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff, ..Default::default() }, "Insert Clef");
             true
         }
+        // note heads are visual only; the normal head restores the standard one
+        Part::Head(k) => edit_attrs(app, "Note Head", |a| a.head = k as u8),
         _ => false,
     }
 }
 
-/// The Part box: note values (dot, triplet), rests and dynamics on the first row; the
-/// articulations, slurs and hairpins, clefs, text / lyric / chord and the key on the second.
-fn part_box(ui: &mut egui::Ui, r: Rect, st: &mut State, app: &mut App) {
-    let p = ui.painter_at(r);
-    p.rect_filled(r, 0.0, look::pane_bg());
-    p.hline(r.x_range(), r.max.y - 0.5, Stroke::new(1.0, look::line()));
-    let cell = vec2(30.0, 26.0);
-    let ink = look::text();
-    let mut clicked: Option<Part> = None;
-    let button = |ui: &mut egui::Ui, x: f32, y: f32, w: f32, on: bool, id: (&str, usize), tip: &str, draw: &dyn Fn(&egui::Painter, Rect, Color32)| -> bool {
-        let b = Rect::from_min_size(pos2(x, y), vec2(w, cell.y));
-        if b.max.x > r.max.x - 4.0 {
-            return false;
-        }
-        let resp = ui.interact(b, ui.scope_id().with(id), Sense::click()).on_hover_text(tip);
-        let pp = ui.painter_at(b);
-        if on {
-            pp.rect_filled(b, 5.0, look::accent());
-        } else if resp.hovered() {
-            pp.rect_filled(b, 5.0, look::group_bg());
-        }
-        draw(&pp, b, if on { Color32::WHITE } else { ink });
-        resp.clicked()
-    };
-    let y1 = r.min.y + 3.0;
-    let y2 = r.min.y + 3.0 + cell.y + 4.0;
-    let mut x = r.min.x + 10.0;
-    p.text(pos2(x, y1 + cell.y / 2.0), Align2::LEFT_CENTER, "Part Box:", look::regular(12.0), look::text_dim());
-    x += 66.0;
-    for (i, (label, base)) in VALUES.iter().enumerate() {
-        let v = nt::Value { base: *base, dots: 0 };
-        if button(ui, x, y1, cell.x, st.part == Part::Note(i), ("pb-v", i), &format!("{label} Note"), &|pp, b, c| note_icon(pp, b, v, c)) {
-            clicked = Some(Part::Note(i));
-        }
-        x += cell.x + 2.0;
+/// The staff header's key and time signature: a click (Linear view) or Control-click opens
+/// the Key Signature or Time Signature window.
+fn header_clicks(app: &mut App, ui: &mut egui::Ui, r: Rect, x: f32, sp: f32, key: nt::Key, sig: (u8, u8), salt: (usize, bool)) {
+    if r.width() <= 0.0 {
+        return;
     }
-    let on = st.dotted;
-    if button(ui, x, y1, cell.x, on, ("pb-dot", 0), "Dotted", &|pp, b, c| {
-        pp.circle_filled(b.center(), 2.6, c);
-    }) {
-        st.dotted = !st.dotted;
-    }
-    x += cell.x + 2.0;
-    let on = st.triplet;
-    if button(ui, x, y1, cell.x, on, ("pb-trip", 0), "Triplet", &|pp, b, c| {
-        pp.text(b.center(), Align2::CENTER_CENTER, "3", look::bold(13.0), c);
-    }) {
-        st.triplet = !st.triplet;
-    }
-    x += cell.x + 12.0;
-    p.vline(x - 6.0, y1..=y1 + cell.y, Stroke::new(1.0, look::line()));
-    for (i, (label, base)) in VALUES.iter().enumerate().take(6) {
-        let v = nt::Value { base: *base, dots: 0 };
-        if button(ui, x, y1, cell.x, st.part == Part::Rest(i), ("pb-r", i), &format!("{label} Rest"), &|pp, b, c| {
-            rest(pp, b.center().x, b.center().y + 8.0, 4.0, v, false, c);
-        }) {
-            clicked = Some(Part::Rest(i));
-        }
-        x += cell.x + 2.0;
-    }
-    x += 10.0;
-    p.vline(x - 6.0, y1..=y1 + cell.y, Stroke::new(1.0, look::line()));
-    for (i, label) in DYNAMICS.iter().enumerate() {
-        let vel = st.dyn_velocity[i];
-        if button(ui, x, y1, 34.0, st.part == Part::Dynamic(i), ("pb-d", i), &format!("{label} (velocity {vel}: the selected notes)"), &|pp, b, c| {
-            smufl_text(pp, &dynamic_glyphs(label), pos2(b.center().x, b.center().y + 5.0), 4.0, c);
-        }) {
-            clicked = Some(Part::Dynamic(i));
-        }
-        x += 36.0;
-    }
-    // second row
-    let mut x = r.min.x + 76.0;
-    for (i, &a) in PART_ARTICS.iter().enumerate() {
-        if button(ui, x, y2, cell.x, st.part == Part::Artic(i), ("pb-a", i), ARTICULATIONS[a], &|pp, b, c| {
-            artic_glyph(pp, a, pos2(b.center().x, b.center().y + 3.0), 5.0, true, c);
-        }) {
-            clicked = Some(Part::Artic(i));
-        }
-        x += cell.x + 2.0;
-    }
-    x += 10.0;
-    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
-    for (i, name) in LINES.iter().enumerate() {
-        if button(ui, x, y2, cell.x, st.part == Part::Line(i), ("pb-l", i), name, &|pp, b, c| {
-            let (a, z) = (pos2(b.min.x + 6.0, b.center().y), pos2(b.max.x - 6.0, b.center().y));
-            match i {
-                0 | 1 => {
-                    let d = if i == 0 { -6.0 } else { 6.0 };
-                    let pts = bezier([a, pos2(a.x + 4.0, a.y + d), pos2(z.x - 4.0, z.y + d), z], 12);
-                    pp.add(Shape::line(pts, Stroke::new(1.4, c)));
-                }
-                2 => {
-                    pp.line_segment([a, pos2(z.x, z.y - 5.0)], Stroke::new(1.2, c));
-                    pp.line_segment([a, pos2(z.x, z.y + 5.0)], Stroke::new(1.2, c));
-                }
-                _ => {
-                    pp.line_segment([pos2(a.x, a.y - 5.0), z], Stroke::new(1.2, c));
-                    pp.line_segment([pos2(a.x, a.y + 5.0), z], Stroke::new(1.2, c));
-                }
-            }
-        }) {
-            clicked = Some(Part::Line(i));
-        }
-        x += cell.x + 2.0;
-    }
-    x += 10.0;
-    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
-    for (i, name) in CLEFS.iter().enumerate() {
-        if button(ui, x, y2, cell.x, st.part == Part::Clef(i), ("pb-c", i), &format!("{name} Clef"), &|pp, b, c| {
-            let ch = [GCLEF, FCLEF, CCLEF, CCLEF, PERC_CLEF][i];
-            let g = pp.layout_no_wrap(ch.to_string(), look::music(14.0), c);
-            pp.galley(b.center() - g.size() / 2.0, g, c);
-        }) {
-            clicked = Some(Part::Clef(i));
-        }
-        x += cell.x + 2.0;
-    }
-    x += 10.0;
-    p.vline(x - 6.0, y2..=y2 + cell.y, Stroke::new(1.0, look::line()));
-    for (i, name) in TEXTS.iter().enumerate() {
-        if button(ui, x, y2, 44.0, st.part == Part::Text(i), ("pb-t", i), &format!("{name}: double-click the staff, then type"), &|pp, b, c| {
-            pp.text(b.center(), Align2::CENTER_CENTER, ["A", "Lyr", "C7"][i], look::semibold(12.0), c);
-        }) {
-            clicked = Some(Part::Text(i));
-        }
-        x += 46.0;
-    }
-    x += 10.0;
-    // key signature: inserted at the playhead's bar
-    let kb = Rect::from_min_size(pos2(x, y2), vec2(60.0, cell.y));
-    if kb.max.x < r.max.x - 4.0 {
-        ui.scope_builder(egui::UiBuilder::new().max_rect(kb), |ui| {
-            ui.menu_button(egui::RichText::new("Key ⌄").size(12.0).color(ink), |ui| {
-                for f in -7i8..=7 {
-                    let name = key_name(f);
-                    if ui.button(name).clicked() {
-                        let bar = app.bar_ticks();
-                        let at = app.position() as u32 / bar * bar;
-                        insert_key(app, at, f);
-                        ui.close();
-                    }
-                }
-            });
-        });
-    }
-    if let Some(c) = clicked {
-        st.part = c;
-        if !app.selected_notes.is_empty() {
-            apply_part(app, st, c);
+    let resp = ui.interact(r, ui.scope_id().with(("sc-header", salt)), Sense::click());
+    let key_end = x + (3.0 + key.fifths.unsigned_abs() as f32 * 1.1) * sp;
+    let which = |pp: Pos2| if pp.x < x + 2.6 * sp { None } else if pp.x < key_end + 0.4 * sp { Some(true) } else { Some(false) };
+    let ctx = ui.ctx().clone();
+    let key_dlg = Dialog::Key { at: 0, fifths: key.fifths, minor: app.project.as_ref().is_some_and(|p| p.key.contains("minor")) };
+    let time_dlg = Dialog::Time { bar: 0, beats: sig.0.to_string(), value: [1u8, 2, 4, 8, 16, 32].iter().position(|&d| d == sig.1).unwrap_or(2) };
+    if salt.1 && resp.clicked() {
+        match resp.interact_pointer_pos().and_then(which) {
+            Some(true) => crate::scoreinsp::open_dialog(&ctx, key_dlg.clone()),
+            Some(false) => crate::scoreinsp::open_dialog(&ctx, time_dlg.clone()),
+            None => {}
         }
     }
+    resp.context_menu(|ui| {
+        if ui.button("Edit Key Signature…").clicked() {
+            crate::scoreinsp::open_dialog(&ctx, key_dlg.clone());
+            ui.close();
+        }
+        if ui.button("Edit Time Signature…").clicked() {
+            crate::scoreinsp::open_dialog(&ctx, time_dlg.clone());
+            ui.close();
+        }
+    });
 }
 
 /// A key change into the score at a bar (at bar 1: the project's key itself).
@@ -1665,13 +1859,13 @@ pub fn key_name(fifths: i8) -> String {
 
 // ---- drawing -------------------------------------------------------------------------------
 
-const GCLEF: char = '\u{E050}';
+pub(crate) const GCLEF: char = '\u{E050}';
 const GCLEF_8VB: char = '\u{E052}';
 const GCLEF_8VA: char = '\u{E053}';
-const CCLEF: char = '\u{E05C}';
-const FCLEF: char = '\u{E062}';
+pub(crate) const CCLEF: char = '\u{E05C}';
+pub(crate) const FCLEF: char = '\u{E062}';
 const FCLEF_8VB: char = '\u{E064}';
-const PERC_CLEF: char = '\u{E069}';
+pub(crate) const PERC_CLEF: char = '\u{E069}';
 
 /// Clef, key signature and (the first line's) time signature from `x`.
 fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, show_clef: bool, clef: nt::Clef, octave: i8, key: nt::Key, time: Option<(u8, u8)>) {
@@ -1708,7 +1902,7 @@ fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, show_clef: bool,
 }
 
 /// "mf" → SMuFL dynamics letters (p m f r s z n).
-fn dynamic_glyphs(text: &str) -> String {
+pub(crate) fn dynamic_glyphs(text: &str) -> String {
     text.chars()
         .map(|c| match c {
             'p' => '\u{E520}',
@@ -1724,14 +1918,14 @@ fn dynamic_glyphs(text: &str) -> String {
 }
 
 /// A string of SMuFL glyphs centred at `at` (its baseline).
-fn smufl_text(p: &egui::Painter, s: &str, at: Pos2, sp: f32, col: Color32) {
+pub(crate) fn smufl_text(p: &egui::Painter, s: &str, at: Pos2, sp: f32, col: Color32) {
     let g = p.layout_no_wrap(s.to_string(), look::music(4.0 * sp), col);
     let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(g.size().y * 0.8, |gl| gl.pos.y);
     p.galley(pos2(at.x - g.size().x / 2.0, at.y - base), g, col);
 }
 
 /// An articulation (index into ARTICULATIONS) at `at`, above or below the note.
-fn artic_glyph(p: &egui::Painter, a: usize, at: Pos2, sp: f32, above: bool, col: Color32) {
+pub(crate) fn artic_glyph(p: &egui::Painter, a: usize, at: Pos2, sp: f32, above: bool, col: Color32) {
     let pick = |up: u32| char::from_u32(if above { up } else { up + 1 }).unwrap_or(' ');
     let ch = match a {
         0 => '\u{E4C0}',
@@ -1765,8 +1959,60 @@ fn artic_glyph(p: &egui::Painter, a: usize, at: Pos2, sp: f32, above: bool, col:
     p.galley(pos2(at.x - g.size().x / 2.0, at.y - base), g, col);
 }
 
-/// A staff symbol between x and x2 on a staff whose bottom line is at `bottom`.
-fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: f32, chord_size: f32) {
+/// A text style's font at staff space `sp` (Logic's sizes are points on the page, where a staff
+/// space is about 7 points at the default scale).
+pub(crate) fn style_font(st: &lg_core::score::TextStyle, sp: f32) -> egui::FontId {
+    let size = st.size / 7.0 * sp;
+    match (st.family.as_str(), st.bold) {
+        ("Monospace", _) => egui::FontId::monospace(size),
+        ("Bravura", _) => look::music(size),
+        (_, true) => look::bold(size),
+        _ => egui::FontId::new(size, egui::FontFamily::Proportional),
+    }
+}
+
+/// How a staff symbol's text is drawn: its style and what automatic text stands for.
+pub(crate) struct SymText<'a> {
+    pub style: lg_core::score::TextStyle,
+    pub auto: &'a dyn Fn(&str) -> String,
+    /// The Chord Extension style.
+    pub ext: &'a dyn Fn() -> lg_core::score::TextStyle,
+}
+
+/// A chord symbol's lower line (root, letters before the first number), its raised extension
+/// and its slash bass: "Cmaj7/E" → ("Cmaj", "7", "/E"); a comma splits by hand ("Cm,add9").
+pub(crate) fn chord_parts(text: &str) -> (String, String, String) {
+    let (main, bass) = match text.rfind('/') {
+        Some(i) if i > 0 && text[i + 1..].chars().next().is_some_and(|c| c.is_ascii_alphabetic()) => (&text[..i], text[i..].to_string()),
+        _ => (text, String::new()),
+    };
+    if let Some((a, b)) = main.split_once(',') {
+        return (a.to_string(), b.replace(',', ""), bass);
+    }
+    match main.char_indices().skip(1).find(|(_, c)| c.is_ascii_digit()) {
+        Some((i, _)) => (main[..i].to_string(), main[i..].to_string(), bass),
+        None => (main.to_string(), String::new(), bass),
+    }
+}
+
+/// Text at `at` with a style (underline drawn), aligned by the symbol's Align.
+fn styled_text(p: &egui::Painter, s: &Symbol, at: Pos2, text: &str, t: &SymText, sp: f32, col: Color32) -> Rect {
+    let al = match s.align {
+        1 => Align2::CENTER_CENTER,
+        2 => Align2::RIGHT_CENTER,
+        _ => Align2::LEFT_CENTER,
+    };
+    let at = at + vec2(s.dx as f32 * sp / 10.0, -(s.dy as f32) * sp / 10.0);
+    let r = p.text(at, al, text, style_font(&t.style, sp), col);
+    if t.style.underline {
+        p.hline(r.x_range(), r.max.y - 0.1 * sp, Stroke::new(1.0, col));
+    }
+    r
+}
+
+/// A staff symbol between x and x2 on a staff whose bottom line is at `bottom`; text symbols
+/// return where their text went (for clicks).
+fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: f32, chord_size: f32, t: &SymText) -> Option<Rect> {
     let top = bottom - 4.0 * sp;
     match s.kind {
         SymbolKind::Dynamic => smufl_text(p, &dynamic_glyphs(&s.text), pos2(x + 0.6 * sp, bottom + 3.6 * sp), sp, INK),
@@ -1777,15 +2023,37 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
             p.line_segment([pos2(close, y), pos2(open, y - 0.7 * sp)], st);
             p.line_segment([pos2(close, y), pos2(open, y + 0.7 * sp)], st);
         }
-        SymbolKind::Text => {
-            p.text(pos2(x, top - 2.6 * sp), Align2::LEFT_CENTER, &s.text, egui::FontId::new(1.7 * sp, egui::FontFamily::Proportional), INK);
-        }
+        SymbolKind::Text => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &s.text, t, sp, INK)),
+        SymbolKind::AutoText => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &(t.auto)(&s.text), t, sp, INK)),
         SymbolKind::Chord => {
-            p.text(pos2(x, top - 4.4 * sp), Align2::LEFT_CENTER, &s.text, look::bold(2.0 * sp * chord_size), INK);
+            // root (and letters before the first number) on the line, the rest raised in the
+            // Chord Extension style; a comma splits them by hand; a slash bass follows the root
+            let (lower, upper, bass) = chord_parts(&s.text);
+            let mut root = t.style.clone();
+            root.size *= chord_size;
+            let mut ext = (t.ext)();
+            ext.size *= chord_size;
+            let at = pos2(x, top - 4.4 * sp) + vec2(s.dx as f32 * sp / 10.0, -(s.dy as f32) * sp / 10.0);
+            let r1 = p.text(at, Align2::LEFT_CENTER, &lower, style_font(&root, sp), INK);
+            let mut r = r1;
+            if !upper.is_empty() {
+                let r2 = p.text(pos2(r1.max.x + 0.1 * sp, r1.min.y + 0.1 * sp), Align2::LEFT_CENTER, &upper, style_font(&ext, sp), INK);
+                r = r.union(r2);
+            }
+            if !bass.is_empty() {
+                let r3 = p.text(pos2(r.max.x, at.y), Align2::LEFT_CENTER, &bass, style_font(&root, sp), INK);
+                r = r.union(r3);
+            }
+            return Some(r);
         }
         SymbolKind::Lyric => {
-            p.text(pos2(x + 0.6 * sp, bottom + 6.0 * sp), Align2::CENTER_CENTER, &s.text, egui::FontId::new(1.6 * sp, egui::FontFamily::Proportional), INK);
+            let mut s2 = s.clone();
+            if s2.align == 0 {
+                s2.align = 1;
+            }
+            return Some(styled_text(p, &s2, pos2(x + 0.6 * sp, bottom + 6.0 * sp), &s.text, t, sp, INK));
         }
+        SymbolKind::Ornament => ornament(p, &s.text, x, x2, top, bottom, sp, INK),
         SymbolKind::SlurUp | SymbolKind::SlurDown => {
             let up = s.kind == SymbolKind::SlurUp;
             let y = if up { top - 1.0 * sp } else { bottom + 1.0 * sp };
@@ -1804,6 +2072,90 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
             // a clef change is drawn smaller, before the bar's first note
             smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * 0.75, INK, false);
         }
+    }
+    None
+}
+
+/// A bar line of a Bars and Repeats kind at x on a staff (repeat dots in the 2nd and 3rd spaces).
+pub(crate) fn draw_bar(p: &egui::Painter, k: lg_core::score::BarKind, x: f32, bottom: f32, sp: f32) {
+    use lg_core::score::BarKind as BK;
+    let (y0, y1) = (bottom - 4.0 * sp, bottom);
+    let thin = Stroke::new(1.0, INK);
+    let thick = Stroke::new((0.5 * sp).max(2.0), INK);
+    let dots = |dx: f32| {
+        for y in [bottom - 1.5 * sp, bottom - 2.5 * sp] {
+            p.circle_filled(pos2(x + dx, y), 0.25 * sp, INK);
+        }
+    };
+    match k {
+        BK::Double => {
+            p.vline(x - 0.5 * sp, y0..=y1, thin);
+            p.vline(x, y0..=y1, thin);
+        }
+        BK::Final => {
+            p.vline(x - 0.8 * sp, y0..=y1, thin);
+            p.vline(x - 0.25 * sp, y0..=y1, thick);
+        }
+        BK::Dashed => {
+            let mut y = y0;
+            while y < y1 {
+                p.vline(x, y..=(y + 0.5 * sp).min(y1), thin);
+                y += 0.8 * sp;
+            }
+        }
+        BK::RepeatStart => {
+            p.vline(x + 0.25 * sp, y0..=y1, thick);
+            p.vline(x + 0.8 * sp, y0..=y1, thin);
+            dots(1.3 * sp);
+        }
+        BK::RepeatEnd => {
+            p.vline(x - 0.25 * sp, y0..=y1, thick);
+            p.vline(x - 0.8 * sp, y0..=y1, thin);
+            dots(-1.3 * sp);
+        }
+        BK::RepeatBoth => {
+            p.vline(x, y0..=y1, thick);
+            p.vline(x - 0.55 * sp, y0..=y1, thin);
+            p.vline(x + 0.55 * sp, y0..=y1, thin);
+            dots(-1.05 * sp);
+            dots(1.05 * sp);
+        }
+        _ => {
+            p.vline(x, y0..=y1, thin);
+        }
+    }
+}
+
+/// A Trills group symbol (lg-core ORNAMENTS) above the staff at x (a trill line to x2).
+pub(crate) fn ornament(p: &egui::Painter, name: &str, x: f32, x2: f32, top: f32, bottom: f32, sp: f32, col: Color32) {
+    let above = pos2(x + 0.6 * sp, top - 1.6 * sp);
+    match name {
+        "Trill" => smufl(p, '\u{E566}', above, sp, col, true),
+        "Trill Line" => {
+            smufl(p, '\u{E566}', above, sp, col, true);
+            let mut cx = above.x + 1.6 * sp;
+            while cx < x2.max(x + 6.0 * sp) {
+                smufl(p, '\u{EAA4}', pos2(cx, above.y), sp, col, false);
+                cx += 0.9 * sp;
+            }
+        }
+        "Mordent" => smufl(p, '\u{E56D}', above, sp, col, true),
+        "Inverted Mordent" => smufl(p, '\u{E56C}', above, sp, col, true),
+        "Turn" => smufl(p, '\u{E567}', above, sp, col, true),
+        "Inverted Turn" => smufl(p, '\u{E568}', above, sp, col, true),
+        "Arpeggio" => {
+            let mut y = bottom + 0.5 * sp;
+            while y > top - 0.5 * sp {
+                smufl(p, '\u{EAA9}', pos2(x - 0.4 * sp, y), sp, col, true);
+                y -= 1.0 * sp;
+            }
+        }
+        "Tremolo 1" => smufl(p, '\u{E220}', pos2(x + 0.6 * sp, top + 1.0 * sp), sp, col, true),
+        "Tremolo 2" => smufl(p, '\u{E221}', pos2(x + 0.6 * sp, top + 1.0 * sp), sp, col, true),
+        "Tremolo 3" => smufl(p, '\u{E222}', pos2(x + 0.6 * sp, top + 1.0 * sp), sp, col, true),
+        "Sharp" => smufl(p, '\u{E262}', above, sp * 0.7, col, true),
+        "Flat" => smufl(p, '\u{E260}', above, sp * 0.7, col, true),
+        _ => smufl(p, '\u{E261}', above, sp * 0.7, col, true),
     }
 }
 
@@ -1846,13 +2198,41 @@ fn ellipse(c: Pos2, rx: f32, ry: f32, angle: f32, n: usize) -> Vec<Pos2> {
 }
 
 /// A notehead: filled (quarter and shorter), open (half), whole.
-fn notehead(p: &egui::Painter, c: Pos2, sp: f32, base: u8, col: Color32, paper: Color32) {
+pub(crate) fn notehead(p: &egui::Painter, c: Pos2, sp: f32, base: u8, col: Color32, paper: Color32) {
     let _ = paper;
     // SMuFL noteheadWhole / noteheadHalf / noteheadBlack: centred on the baseline
     let ch = match base {
         1 => '\u{E0A2}',
         2 => '\u{E0A3}',
         _ => '\u{E0A4}',
+    };
+    smufl(p, ch, c, sp, col, true);
+}
+
+/// A Part box note head (lg-core NOTE_HEADS), SMuFL: black / white forms by the value.
+pub(crate) fn special_head(p: &egui::Painter, c: Pos2, sp: f32, base: u8, head: u8, col: Color32) {
+    let open = base <= 2;
+    let ch = match head {
+        1 => ['\u{E0A7}', '\u{E0A8}', '\u{E0A9}'][(base.max(1) as usize).min(4).saturating_sub(1).min(2)],
+        2 => '\u{E0B3}',
+        3 => if open { '\u{E0D9}' } else { '\u{E0DB}' },
+        4 => '\u{E0D9}',
+        5 => if open { '\u{E103}' } else { '\u{E101}' },
+        6 => if open { '\u{E0BD}' } else { '\u{E0BE}' },
+        7 => if open { '\u{E0B8}' } else { '\u{E0B9}' },
+        8 => '\u{E0B8}',
+        9 => '\u{E0D9}',
+        10 => {
+            notehead(p, c, sp, base, col, Color32::TRANSPARENT);
+            smufl(p, '\u{E0F5}', c - vec2(0.95 * sp, 0.0), sp, col, true);
+            smufl(p, '\u{E0F6}', c + vec2(0.95 * sp, 0.0), sp, col, true);
+            return;
+        }
+        // gray: shown grey on screen, left out of print
+        _ => {
+            notehead(p, c, sp, base, Color32::from_gray(0x90), Color32::TRANSPARENT);
+            return;
+        }
     };
     smufl(p, ch, c, sp, col, true);
 }
@@ -1905,13 +2285,16 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         for (h_k, h) in it.heads.iter().enumerate().rev() {
             let c = head_center(it, h, staff, sp, x);
             let col = (o.color)(h.note);
-            if h.cross {
+            let head = (o.attr)(h.note).head;
+            if head != 0 {
+                special_head(p, c, sp, it.value.base, head, col);
+            } else if h.cross {
                 smufl(p, '\u{E0A9}', c, sp, col, true);
             } else {
                 notehead(p, c, sp, it.value.base, col, REGION_PAPER);
             }
             if let Some(a) = h.acc {
-                if (last_acc_pos - h.pos).abs() < 6 && last_acc_pos != i32::MAX {
+                if last_acc_pos != i32::MAX && (last_acc_pos - h.pos).abs() < 6 {
                     acc_x -= 1.1 * sp;
                 }
                 if h.guide {
@@ -2122,7 +2505,7 @@ fn band(p: &egui::Painter, a: &[Pos2], b: &[Pos2], col: Color32) {
     p.add(Shape::Path(PathShape::line(b[..n].to_vec(), PathStroke::new(0.7, col))));
 }
 
-fn bezier(pts: [Pos2; 4], n: usize) -> Vec<Pos2> {
+pub(crate) fn bezier(pts: [Pos2; 4], n: usize) -> Vec<Pos2> {
     (0..=n)
         .map(|k| {
             let t = k as f32 / n as f32;
@@ -2133,7 +2516,7 @@ fn bezier(pts: [Pos2; 4], n: usize) -> Vec<Pos2> {
         .collect()
 }
 
-fn tie(p: &egui::Painter, a: Pos2, b: Pos2, lift: f32, sp: f32, col: Color32) {
+pub(crate) fn tie(p: &egui::Painter, a: Pos2, b: Pos2, lift: f32, sp: f32, col: Color32) {
     let c1 = pos2(a.x + (b.x - a.x) * 0.25, a.y + lift);
     let c2 = pos2(a.x + (b.x - a.x) * 0.75, b.y + lift);
     let outer = bezier([a, c1, c2, b], 24);
@@ -2142,7 +2525,7 @@ fn tie(p: &egui::Painter, a: Pos2, b: Pos2, lift: f32, sp: f32, col: Color32) {
     band(p, &outer, &inner, col);
 }
 
-fn flag(p: &egui::Painter, at: Pos2, sp: f32, up: bool, col: Color32) {
+pub(crate) fn flag(p: &egui::Painter, at: Pos2, sp: f32, up: bool, col: Color32) {
     // SMuFL flag8thUp / flag8thDown: their origin is the stem's end (the stem is 0.12 sp wide)
     let ch = if up { '\u{E240}' } else { '\u{E241}' };
     smufl(p, ch, pos2(at.x - 0.06 * sp, at.y), sp, col, false);
@@ -2150,7 +2533,7 @@ fn flag(p: &egui::Painter, at: Pos2, sp: f32, up: bool, col: Color32) {
 
 
 /// Rests at x (centre) on a staff whose bottom line is at `bottom`.
-fn rest(p: &egui::Painter, x: f32, bottom: f32, sp: f32, v: nt::Value, full_bar: bool, col: Color32) {
+pub(crate) fn rest(p: &egui::Painter, x: f32, bottom: f32, sp: f32, v: nt::Value, full_bar: bool, col: Color32) {
     let _ = full_bar;
     let y = |pos: f32| bottom - pos * sp / 2.0;
     // SMuFL rests: the whole rest hangs from the fourth line, the others sit on the middle one
@@ -2167,7 +2550,7 @@ fn rest(p: &egui::Painter, x: f32, bottom: f32, sp: f32, v: nt::Value, full_bar:
 }
 
 /// ♯ ♭ ♮ (and double signs as two) centred at `c`.
-fn accidental(p: &egui::Painter, c: Pos2, sp: f32, alter: i8, col: Color32) {
+pub(crate) fn accidental(p: &egui::Painter, c: Pos2, sp: f32, alter: i8, col: Color32) {
     // SMuFL accidentalFlat / Natural / Sharp / DoubleSharp / DoubleFlat
     let ch = match alter {
         -2 => '\u{E264}',
@@ -2180,7 +2563,7 @@ fn accidental(p: &egui::Painter, c: Pos2, sp: f32, alter: i8, col: Color32) {
 }
 
 /// A SMuFL glyph with its origin (the baseline's left end, or its centre with `centre`) at `at`.
-fn smufl(p: &egui::Painter, ch: char, at: Pos2, sp: f32, col: Color32, centre: bool) {
+pub(crate) fn smufl(p: &egui::Painter, ch: char, at: Pos2, sp: f32, col: Color32, centre: bool) {
     let g = p.layout_no_wrap(ch.to_string(), look::music(4.0 * sp), col);
     let base = g.rows.first().and_then(|r| r.glyphs.first()).map_or(g.size().y * 0.8, |gl| gl.pos.y);
     let w = g.size().x;
@@ -2219,9 +2602,10 @@ fn brace(p: &egui::Painter, x: f32, y0: f32, y1: f32, col: Color32) {
 }
 
 /// A Part box note icon: head, stem, flags.
-fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) {
-    let sp = 4.6;
-    let c = pos2(r.center().x - 2.0, r.center().y + 6.0);
+pub(crate) fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) {
+    // (Logic's Part box notes are tall: the size follows the cell's height)
+    let sp = (r.height() / 6.6).clamp(3.5, 6.2);
+    let c = pos2(r.center().x - 0.2 * sp, r.center().y + 1.5 * sp);
     notehead(p, c, sp, v.base, col, Color32::TRANSPARENT);
     if v.base == 1 || v.base == 2 {
         // the icons on a dark strip: open heads drawn as rings
@@ -2234,6 +2618,9 @@ fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) {
         for f in 0..v.flags() {
             flag(p, pos2(x, top + f as f32 * 0.7 * sp), sp * 0.8, true, col);
         }
+    }
+    for k in 0..v.dots {
+        p.circle_filled(pos2(c.x + (1.1 + 0.6 * k as f32) * sp, c.y - 0.1 * sp), 0.22 * sp, col);
     }
 }
 
@@ -2252,5 +2639,14 @@ mod tests {
     #[test]
     fn dynamics_rise() {
         assert!(State::default().dyn_velocity.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn chord_symbol_lines() {
+        let f = |t: &str| super::chord_parts(t);
+        assert_eq!(f("Cmaj7/E"), ("Cmaj".into(), "7".into(), "/E".into()));
+        assert_eq!(f("F#m7b5"), ("F#m".into(), "7b5".into(), String::new()));
+        assert_eq!(f("Cm,add9"), ("Cm".into(), "add9".into(), String::new()));
+        assert_eq!(f("Bb"), ("Bb".into(), String::new(), String::new()));
     }
 }

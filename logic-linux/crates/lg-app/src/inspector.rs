@@ -37,6 +37,11 @@ pub(crate) fn slot_rect(area: Rect, y: f32) -> Rect {
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    // (with the Score shown: the Score inspector, scoreinsp.rs)
+    if crate::scoreinsp::active(app, ui.ctx()) {
+        crate::scoreinsp::show(app, ui, area);
+        return;
+    }
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));

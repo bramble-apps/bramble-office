@@ -227,7 +227,7 @@ pub fn short_name(full: &str) -> String {
     }
 }
 
-fn today() -> String {
+pub(crate) fn today() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64;
     let days = secs.div_euclid(86_400);
     // (civil date from days since 1970, Howard Hinnant's algorithm)

@@ -172,7 +172,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             let kind = [SymbolKind::SlurUp, SymbolKind::SlurDown, SymbolKind::Crescendo, SymbolKind::Decrescendo][k];
             let at = app.position() as u32;
             let bar = app.bar_ticks();
-            score::add_symbol(app, t, Symbol { tick: at, kind, text: String::new(), len: bar / 2, staff: 0 }, &name["Insert: ".len()..]);
+            score::add_symbol(app, t, Symbol { tick: at, kind, text: String::new(), len: bar / 2, staff: 0, ..Default::default() }, &name["Insert: ".len()..]);
         }
         // ---- note attributes
         "Stems: default" => return attr(app, "Stems", &|a| a.stem = 0),
@@ -284,7 +284,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
                     let next = rg.notes.iter().filter(|n| n.pos > pos).map(|n| n.pos).min().unwrap_or(pos + 480);
                     p.score.edit(id, pos, pitch, |a| a.slur = 0);
                     let kind = if dir == -1 { SymbolKind::SlurDown } else { SymbolKind::SlurUp };
-                    p.score.track_mut(id).symbols.push(Symbol { tick: pos, kind, text: String::new(), len: next - pos, staff: 0 });
+                    p.score.track_mut(id).symbols.push(Symbol { tick: pos, kind, text: String::new(), len: next - pos, staff: 0, ..Default::default() });
                 }
                 p.score.track_mut(id).symbols.sort_by_key(|s| s.tick);
             }
@@ -303,7 +303,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             if let Some(p) = app.project.as_mut() {
                 let ts = p.score.track_mut(id);
                 for (a, b) in runs {
-                    ts.symbols.push(Symbol { tick: a, kind: SymbolKind::SlurUp, text: String::new(), len: b - a, staff: 0 });
+                    ts.symbols.push(Symbol { tick: a, kind: SymbolKind::SlurUp, text: String::new(), len: b - a, staff: 0, ..Default::default() });
                 }
                 ts.symbols.sort_by_key(|s| s.tick);
             }

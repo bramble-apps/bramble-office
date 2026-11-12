@@ -1035,6 +1035,9 @@ impl App {
             | "Automation: Cycle Through Used Parameters" | "Automation: Display Off" | "Show Track Automation" | "Set Automation Select Tool" | "Set Automation Curve Tool" | "Set Fade Tool" | "Set Marquee Tool" => return crate::automation::command(self, name),
             // Delete: selected automation points, the marquee's range, else the selected regions
             "Delete" => {
+                if crate::scoreinsp::delete_selected(self) {
+                    return true;
+                }
                 if crate::automation::delete_selected(self) || crate::regionops::apply_marquee(self, crate::regionops::Cut::Delete) {
                     return true;
                 }

@@ -6,6 +6,8 @@
 //!
 //! Ticks are 960 per quarter note, from bar 1 (tick 0), as everywhere in Studio.
 
+pub mod musicxml;
+
 pub const PPQ: u32 = 960;
 
 /// Pitch class letters C D E F G A B.
@@ -342,7 +344,7 @@ pub struct Item {
     pub triplet: bool,
     /// A whole-bar rest (centred in the bar whatever the metre).
     pub full_bar: bool,
-    /// The bar (0 = bar 1).
+    /// The bar, counted from the engraved span's start (`Options::from`).
     pub bar: u32,
     /// Stem hidden (Stems ▸ Hide).
     pub stem_hidden: bool,
@@ -407,11 +409,13 @@ pub struct Options {
     /// Syncopation (a note across a beat written as one value).
     pub interpretation: bool,
     pub syncopation: bool,
+    /// Max. Dots (region parameter): the most dots a value may have, 0–3 (default 1).
+    pub max_dots: u8,
 }
 
 impl Options {
     pub fn new(sig: (u8, u8), key: Key, quant: Quant, from: u32, to: u32) -> Options {
-        Options { sig, key, quant, from, to, interpretation: false, syncopation: false }
+        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1 }
     }
 }
 
@@ -470,14 +474,21 @@ pub fn display_positions(notes: &[NoteIn], sig: (u8, u8), q: Quant, from: u32) -
 }
 
 /// The values a span is written in from `p` to `e` within one bar (with ties between them).
-fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bool, synco: bool) -> Vec<(u32, u32, Value, bool)> {
+fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bool, synco: bool, max_dots: u8) -> Vec<(u32, u32, Value, bool)> {
     let mut out = Vec::new();
-    let cands: [(u32, Value); 11] = [
+    let cands: [(u32, Value); 18] = [
+        (3840 + 1920 + 960 + 480, Value { base: 1, dots: 3 }),
+        (3840 + 1920 + 960, Value { base: 1, dots: 2 }),
+        (3840 + 1920, Value { base: 1, dots: 1 }),
         (3840, Value { base: 1, dots: 0 }),
+        (1920 + 960 + 480 + 240, Value { base: 2, dots: 3 }),
+        (1920 + 960 + 480, Value { base: 2, dots: 2 }),
         (2880, Value { base: 2, dots: 1 }),
         (1920, Value { base: 2, dots: 0 }),
+        (960 + 480 + 240, Value { base: 4, dots: 2 }),
         (1440, Value { base: 4, dots: 1 }),
         (960, Value { base: 4, dots: 0 }),
+        (480 + 240 + 120, Value { base: 8, dots: 2 }),
         (720, Value { base: 8, dots: 1 }),
         (480, Value { base: 8, dots: 0 }),
         (360, Value { base: 16, dots: 1 }),
@@ -519,7 +530,7 @@ fn decompose(mut p: u32, e: u32, bar0: u32, m: Metre, triplets: &[u32], rest: bo
         let half = m.bar / 2;
         let mut chosen = None;
         for &(v, val) in &cands {
-            if p + v > lim || rel + v > m.bar {
+            if p + v > lim || rel + v > m.bar || val.dots > max_dots {
                 continue;
             }
             // dotted rests only within a beat (a half and a quarter rest, not a dotted half)
@@ -617,7 +628,7 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
                 let f = chords[ci].members.iter().map(|&i| notes[i].synco).find(|&x| x != 0).unwrap_or(0);
                 if f == 0 { o.syncopation } else { f > 0 }
             });
-            let parts = decompose(p, end, bar0, m, &triplets, chord.is_none(), synco);
+            let parts = decompose(p, end, bar0, m, &triplets, chord.is_none(), synco, o.max_dots);
             let last_of_note = end == e;
             let n_parts = parts.len();
             for (k, (tick, dur, value, triplet)) in parts.into_iter().enumerate() {
@@ -1038,6 +1049,54 @@ pub fn paginate_with(lines: usize, line_h: f32, page_h: f32, top: f32, bottom: f
     out
 }
 
+/// `systems_with` honouring manual breaks: `brk(k)` for bar `k` is 1 for a line break before it
+/// (Line or Page Break), −1 for none allowed there (No Line Break: the bars may then overflow
+/// the line), 0 automatic.
+pub fn systems_breaks(widths: &[f32], line_w: f32, max_bars: usize, justify_last: bool, brk: &dyn Fn(usize) -> i8) -> Vec<(usize, usize, f32)> {
+    let max_bars = max_bars.max(1);
+    let mut out = Vec::new();
+    let mut k = 0;
+    while k < widths.len() {
+        let mut w = 0.0;
+        let mut n = 0;
+        while k + n < widths.len() {
+            let at = k + n;
+            if n > 0 && brk(at) > 0 {
+                break;
+            }
+            let fits = n == 0 || (n < max_bars && w + widths[at] <= line_w);
+            if !fits && brk(at) >= 0 {
+                break;
+            }
+            w += widths[at];
+            n += 1;
+        }
+        let last = k + n == widths.len();
+        let scale = if w > 0.0 { (line_w / w).min(if last && !justify_last { 1.5 } else { f32::MAX }) } else { 1.0 };
+        out.push((k, n, scale));
+        k += n;
+    }
+    out
+}
+
+/// `paginate_with` honouring page breaks: `brk(line)` is 1 to start a new page with that line,
+/// −1 to keep it on the page of the line before (No Page Break), 0 automatic.
+pub fn paginate_breaks(lines: usize, line_h: f32, page_h: f32, top: f32, bottom: f32, header: f32, brk: &dyn Fn(usize) -> i8) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    let (mut page, mut y) = (0usize, top + header);
+    for l in 0..lines {
+        let b = brk(l);
+        let full = y + line_h > page_h - bottom && y > top + if page == 0 { header } else { 0.0 };
+        if l > 0 && (b > 0 || (full && b >= 0)) {
+            page += 1;
+            y = top;
+        }
+        out.push((page, y));
+        y += line_h;
+    }
+    out
+}
+
 /// The width a bar needs: a head room, then per item by its value (shorter values closer).
 pub fn bar_width(v: &Voice, bar: u32, space: f32) -> f32 {
     let items = v.items.iter().filter(|it| it.bar == bar);
@@ -1384,5 +1443,37 @@ mod tests {
         let busy = engrave(&(0..16).map(|k| n(k, 67, k as u32 * 240, 240)).collect::<Vec<_>>(), Clef::Treble, &opts(1));
         let empty = engrave(&[], Clef::Treble, &opts(1));
         assert!(bar_width(&busy, 0, 8.0) > bar_width(&empty, 0, 8.0));
+    }
+
+    #[test]
+    fn max_dots_limits_values() {
+        // a dotted half then a quarter rest: with Max. Dots 0 it's a half tied to a quarter
+        let n = [NoteIn { pos: 0, len: 2880, pitch: 60, ..NoteIn::default() }];
+        let mut o = opts(1);
+        let v = engrave(&n, Clef::Treble, &o);
+        assert!(v.items.iter().any(|it| it.value == Value { base: 2, dots: 1 }));
+        o.max_dots = 0;
+        let v = engrave(&n, Clef::Treble, &o);
+        assert!(v.items.iter().all(|it| it.value.dots == 0));
+        // double dots allowed: a double-dotted half
+        let n = [NoteIn { pos: 0, len: 3360, pitch: 60, ..NoteIn::default() }];
+        o.max_dots = 2;
+        let v = engrave(&n, Clef::Treble, &o);
+        assert!(v.items.iter().any(|it| it.value == Value { base: 2, dots: 2 }), "{:?}", v.items.iter().map(|i| i.value).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn manual_breaks() {
+        let w = [10.0; 8];
+        // automatic: 4 bars a line
+        assert_eq!(systems_breaks(&w, 40.0, 99, false, &|_| 0).iter().map(|s| s.1).collect::<Vec<_>>(), vec![4, 4]);
+        // a line break before bar 2, no line break before bar 6 (that line overflows)
+        let lines = systems_breaks(&w, 40.0, 99, false, &|k| match k { 2 => 1, 6 => -1, _ => 0 });
+        assert_eq!(lines.iter().map(|s| (s.0, s.1)).collect::<Vec<_>>(), vec![(0, 2), (2, 5), (7, 1)]);
+        // pages: a page break before line 1 even with room
+        let p = paginate_breaks(3, 10.0, 100.0, 0.0, 0.0, 0.0, &|l| (l == 1) as i8);
+        assert_eq!(p.iter().map(|x| x.0).collect::<Vec<_>>(), vec![0, 1, 1]);
+        let p = paginate_breaks(3, 60.0, 100.0, 0.0, 0.0, 0.0, &|l| -((l == 1) as i8));
+        assert_eq!(p.iter().map(|x| x.0).collect::<Vec<_>>(), vec![0, 0, 1]);
     }
 }
