@@ -37,7 +37,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [~] Browser as Logic 13's (browser.rs, soundlib.rs): All / Loops & One-Shots (Loops / One-Shots buttons) / Instruments / Effects / Plug-in Presets (columns, path bar; Studio's saved settings and .pst files) / Sound Library / SoundFonts, Locations (user folders analysed for type, tempo, key, bars, instrument tags; >60 s not analysed) and Smart Searches; tags by category (genre, instrument with subtags, paired descriptors, group tags with values, sound packs, Your Sounds, Favorites) in All Filters; Name Contains / tag suggestions / "Sounds like" phrase search, chips, Find Similar (tag/tempo/key similarity, 1000 max); favourites; Link to Selection and Replace Mode; preview with volume and Auto Leveling; drag to the tracks (right track type, new tracks below, Add Selected Files to Tracks), New Track with / Place at Playhead, Create Track with Loop ▸ Quick Sampler / Sample Alchemy / Drum Machine Designer (real sampler instruments), Add to DMD; first loop sets tempo and key; audio loops stretched to the project tempo (flex), MIDI loops to the key; Save Patch for Selected Track (Your Patches), Patch Merging, Add to Browser… (regions as loops/one-shots, Your Loops); compact navigation, columns view; all 16 Browser key commands. Only Bramble Sounds' one-shots and the user's own loops: no Apple loops. [ ] Browser Focus triangle on channel-strip slots, Session Player / pattern / chord loops, audio previews of MIDI loops, loops following later tempo or key changes, DMD pad drops, audio-content analysis (tags come from names), region drag into the Browser, legacy/Splice loop import
 - [~] Smart Controls (Y; Window ▸ Open Smart Controls) (smartcontrols.rs, arp.rs): layouts by patch type (Keyboard, Synthesizer, Drums, Orchestral, Guitar & Bass, Audio / Master Effects, Basic, Faders), screen controls mapped to one or more parameters with ranges (channel strip, EQ, sends, instrument, Audio FX), inspector (layout, mapping list, Add Mapping, Learn, external assignment Learn with MIDI CC), header Track / Master / Compare / subviews / routing destinations, the Arpeggiator (Up, Down, Up & Down, Outside In, Random, As Played, Chord; 14 rates; 1–4 octaves; Reflex / Latch / Latch Transpose; note length, velocity) on playback and on live keys; all 6 Smart Controls key commands. 2026-11-11: parameter mapping graphs (scgraph.rs: Scaling ▸ Open, presets, points, bends, Invert / Reset / Copy / Paste), Range Max / Min sliders and Invert Range, the mapping pop-up (Copy / Paste Mapping(s), Delete Mapping, Map all (Unmapped) Controls), three-dot reorder, plug-in window buttons and Control-click Open Plug-in Window, Automatic Smart Controls, Master Effects pop-up, Tuner button on audio tracks, external assignment Learn for several controls, screen control automation (lanes recorded and replayed). [ ] Logic's own per-patch layouts and mappings (not available), arp/mapping state saved in the .logicx, plug-in parameter edits in undo
 - [~] Editors pane: Piano Roll, Score (see below), Step Sequencer (see below), Session Player editors. [ ] audio region parameters into lg-core (offset, fades, gain are app-only), Flex modes beyond one warp, Live Loops (being built) [x] Audio Track / File editors and Smart Tempo (lg-audio: waveform, fades, gain, trims, destructive Functions with backup, tempo and downbeat analysis)
-- [~] Score editor (score.rs, scorecmd.rs, lg-notation, lg-core score): Linear, Wrapped and Page views (lines laid out by content, pages with title, page numbers, page rulers, Go to Page), staff styles (Treble, 8va / 8vb, Bass, Piano grand staff, Alto, Tenor, Drums with the GM drum map and cross heads, Guitar, Bass Guitar, B♭ Trumpet / Clarinet / Tenor Sax, E♭ Alto Sax, F Horn: written transposition and key), the region's Quantize / Interpretation / Syncopation, voice separation (two voices per staff, Explode Polyphony), Explode Folders (every MIDI track), score sets, instrument names, colour views (pitch, velocity, voice, B&W, note colours), duration bars, drag guides; Part box (notes with dot and triplet, articulations, dynamics with MIDI Meaning velocities, slurs, hairpins, clef changes, text, lyrics, chord symbols, key changes); note attributes (stems up / down / hidden / centred / end moved, ties up / down, Beam / Unbeam Selected, accidentals force / hide / guide, enharmonic shifts, Flats↔Sharps, interpretation / syncopation per note, staff assignment, fingering, pick fingers, auto slurs); Fix Displayed Note Positions (and Durations), Assign MIDI Channels based on Score Split, Nudge Position, Paste Multiple; Score Project Settings window (staff size, bar numbers, chord size, key on every line, MIDI Meaning, colours) and Staff Style window; 133/139 of Logic's Score Editor key commands; every edit one undo step (attributes live in the project). Since studio-score3: the Score inspector (scoreinsp.rs) in the main inspector while the Score is shown: Filter (All Instruments and the project's score sets), Region (Style, Quantize, Interpretation, Syncopation, Max. Dots), Event (notes: MIDI Channel, Pitch, Velocity, Length, asterisks for differing values, drags change all; a clicked text object: Staff, Style, Align, Vertical / Horizontal Pos, Lyric), the Part box as Logic's (group buttons, All, Part Box sets New / Rename / Delete, groups reordered by their handles, symbols dragged into the score), channel strips below; new groups: note heads (12, gray), sustain pedal (CC 64 events, alternating, drawn from the region's data), Bars and Repeats (bar lines, repeats, double repeat split at line breaks, one- and two-bar repeats hiding their bars, first / second endings moved and lengthened by dragging, segno, coda; global), Trills (trills, trill line, mordents, turns, arpeggio, tremolos, trill accidentals), key and time signatures (A/B asks), Line / Page / No Line / No Page Break (the layout honours them; bar line Control-click menu, Reset Line Layout), automatic text (REGION, INSTR, SONG, DATE); Key Signature and Time Signature windows (click in Linear view, Control-click elsewhere); Text Styles window (Logic's 18 default styles + the user's, used by text, lyrics, chord root / extension, repeat endings); chord symbols with raised extensions, comma split, Tab to the next note; Score Sets window (sets, order, full / short names, brackets, bar line joins, leave out, Scale 25–250 %); Delete removes a selected symbol; the Score's data (attributes, symbols, bars, breaks, styles, sets, staff styles) saved beside the project (scorefile.rs); File ▸ Export ▸ Score as MusicXML (lg-notation musicxml.rs). [ ] Stem Position Automatic / Side and Independent / Independent Grace are stored but not drawn differently; user-defined staff styles (Duplicate Staff Style only pins the current one), tablature, Extended Layout, Align Object Positions, Layout tool; time signature changes (inserted into the project, the Score lays bars out in the first); No Overlap; user rests, multiple rests, tuplets beyond triplets; chord grids; global / margin text; the Score Sets' Part layout and line-start-only joins; text styles not yet used for page / bar numbers, names, tuplets; fonts beyond Studio's own; floating Part box windows; text of endings not typed; key / clef changes are at bar lines only; score data kept beside the project, not inside the .logicx (and attributes keyed by note position are lost when a note is moved outside the Score); print / PDF; MusicXML import; Logic's exact engraving distances unmeasured
+- [~] Score editor (score.rs, scorecmd.rs, lg-notation, lg-core score): Linear, Wrapped and Page views (lines laid out by content, pages with title, page numbers, page rulers, Go to Page), staff styles (Treble, 8va / 8vb, Bass, Piano grand staff, Alto, Tenor, Drums with the GM drum map and cross heads, Guitar, Bass Guitar, B♭ Trumpet / Clarinet / Tenor Sax, E♭ Alto Sax, F Horn: written transposition and key), the region's Quantize / Interpretation / Syncopation, voice separation (two voices per staff, Explode Polyphony), Explode Folders (every MIDI track), score sets, instrument names, colour views (pitch, velocity, voice, B&W, note colours), duration bars, drag guides; Part box (notes with dot and triplet, articulations, dynamics with MIDI Meaning velocities, slurs, hairpins, clef changes, text, lyrics, chord symbols, key changes); note attributes (stems up / down / hidden / centred / end moved, ties up / down, Beam / Unbeam Selected, accidentals force / hide / guide, enharmonic shifts, Flats↔Sharps, interpretation / syncopation per note, staff assignment, fingering, pick fingers, auto slurs); Fix Displayed Note Positions (and Durations), Assign MIDI Channels based on Score Split, Nudge Position, Paste Multiple; Score Project Settings window (staff size, bar numbers, chord size, key on every line, MIDI Meaning, colours) and Staff Style window; 133/139 of Logic's Score Editor key commands; every edit one undo step (attributes live in the project). Since studio-score3: the Score inspector (scoreinsp.rs) in the main inspector while the Score is shown: Filter (All Instruments and the project's score sets), Region (Style, Quantize, Interpretation, Syncopation, Max. Dots), Event (notes: MIDI Channel, Pitch, Velocity, Length, asterisks for differing values, drags change all; a clicked text object: Staff, Style, Align, Vertical / Horizontal Pos, Lyric), the Part box as Logic's (group buttons, All, Part Box sets New / Rename / Delete, groups reordered by their handles, symbols dragged into the score), channel strips below; new groups: note heads (12, gray), sustain pedal (CC 64 events, alternating, drawn from the region's data), Bars and Repeats (bar lines, repeats, double repeat split at line breaks, one- and two-bar repeats hiding their bars, first / second endings moved and lengthened by dragging, segno, coda; global), Trills (trills, trill line, mordents, turns, arpeggio, tremolos, trill accidentals), key and time signatures (A/B asks), Line / Page / No Line / No Page Break (the layout honours them; bar line Control-click menu, Reset Line Layout), automatic text (REGION, INSTR, SONG, DATE); Key Signature and Time Signature windows (click in Linear view, Control-click elsewhere); Text Styles window (Logic's 18 default styles + the user's, used by text, lyrics, chord root / extension, repeat endings); chord symbols with raised extensions, comma split, Tab to the next note; Score Sets window (sets, order, full / short names, brackets, bar line joins, leave out, Scale 25–250 %); Delete removes a selected symbol; the Score's data (attributes, symbols, bars, breaks, styles, sets, staff styles) saved beside the project (scorefile.rs); File ▸ Export ▸ Score as MusicXML (lg-notation musicxml.rs). Since studio-score4: user staff styles and Logic's Staff Style window (scorestyle.rs, lg-core staffstyle.rs: New Single / Dual / Mapped, Duplicate, rename, Delete, List view with Select Unused, the three View buttons, the overview with type, voices, size, transpose, Lo / Hi range, brackets and bar lines and a live picture, Staff rows (space above / below, size, 30 clefs incl. Drum.N / no clef.N line counts, transpose, key), Voice rows (staff, Rest normal / hide / slash, Stem, Stem Pos., Tie, Tuplet, Beam slant / horiz. / vocal, Color, Head names / fingers / hide) and Assign (split, channel; notes no voice takes hidden), up to 16 voices, add / delete / copy / paste staffs and voices, copy / paste styles between projects, Linear-view clef click menu, double-click a clef opens it, one style for several selected tracks); N-tuplets (scoretuplet.rs, lg-notation TupletSpec: Part box N-tuplet, Tuplet window with n : m, value, Hide bracket / numbers, Show note value, Direction, double values, graphic, Option reuses, double-click edits, Eraser / Delete removes, empty tuplets show rests, override Quantize); No Overlap (region parameter); 1/128 notes and Quantize 128; Score bar Link button, left / Command-click Tool menus (Pointer, Pencil, Eraser, Text, Layout, Zoom, Voice Separation, Solo, Camera) and zoom slider (scoretools.rs, measured against Logic); File ▸ Print (CUPS), Page Setup (paper, orientation), PDF… and the Camera tool: the Page view as a vector PDF (scorepdf.rs, fonts outlined); global text (scoreglobal.rs: Page view header / margins, Pages 1 / 2 / Odd / Even / All, Zone, Align, every score set); chord grids (scoregrid.rs, lg-core chordgrid.rs: Chord Grid Library with Instrument Editor, Chord Grid Selector and Chord Grid Editor, Studio's own guitar / open tunings / ukulele libraries plus user libraries in ~/.config, create / rename / delete / import / export, filters, capo, frets shown, left-handed, play as chord or arpeggio, dots, optional dots, fingers, barres, muted / open, Clear / Reset, Add / Replace; grid symbols in the score: insert, move, Option-copy, scale, Hide Chord Name, double-click to change). [ ] Stem Position Automatic / Side and Independent / Independent Grace are stored but not drawn differently; tablature (TAB clefs stored, not drawn), Extended Layout, Align Object Positions, Layout tool beyond global text, Voice Separation and Solo tools; time signature changes (inserted into the project, the Score lays bars out in the first); user rests, multiple rests; half values in tuplets; regions' own staff styles (per track only); staff style brackets / joins in the score itself (the score set's); Staff Size in percent, not Logic's 0–15; the Score Sets' Part layout and line-start-only joins; text styles not yet used for page / bar numbers, names; fonts beyond Studio's own; floating Part box windows; text of endings not typed; key / clef changes are at bar lines only; score data kept beside the project, not inside the .logicx; Camera to clipboard / images; Chords & Grids settings pane; Logic's own chord grid library contents (Studio's are its own, about 30 grids); MusicXML import; Logic's exact engraving distances unmeasured
 - [~] Step Sequencer (stepseq.rs): playback modes for the pattern and per row (Forward, Reverse, Ping Pong, Shuffle, Pendulum, Wander, Random; Ping Pong / Pendulum end-step repeat as Studio reads Logic's docs, unverified on a Mac), loop start and end per row, Note edit mode, subrows (velocity, gate, chance lanes), step selection with the arrow keys, Copy / Cut / Paste steps, Copy / Paste Row, Row Settings, Paste to New Row, Duplicate Row with Next Assignment, Delete (Unused) Rows, Clear Step / Row / Pattern, Repeat Step, Rotate (pattern, row, values), Transpose (and to the project key), Clear / Randomize Current Edit Mode values, Mono Mode, Live Record and Learn (Add / Assign) from Musical Typing or MIDI keyboards, step colour by region, Rename Row, step rates up / down; Pattern Browser (⌥⇧B) with Save Pattern / Save Template and Store / Revert Default Pattern Template (~/.config/bramble-studio/patterns, pattern-templates); 93/96 key commands. Step Sequencer inspector (stepinsp.rs; View ▸ Show Local Inspector or the toolbar's Pattern Browser | Inspector pill): Pattern / Row / Step tabs, "*" for differing values with relative changes; pattern Legato, Swing (1/8 or 1/16), Key / Scale with No Transpose, Scale Quantize and the Q button, MIDI channel for pattern / row / step, Latch / Slide; step Condition (Always, Recurrence n of m, First / Last Loop), per-step Step Rate (also an edit mode), Articulation, Note Repeat 1–16 with Velocity Ramp / Curve / Distribution, all played and saved in pattern files; editing an off step's value turns it on; View ▸ Sort Rows (By Type / Type and Note / Type and Name, Ascending / Descending). [ ] automation rows (Latch / Slide only stored), chord-degree rows, articulation IDs don't reach instruments, the inspector's settings aren't in the region on undo (an undo re-reads the pattern from the notes), Zoom Focused Row, Display Edit Mode Values options, row drag to reorder, DMD sort, Logic's own pattern library, patterns written into the .logicx (they are regions' notes; Logic's saved patterns are read)
 - [~] Step Input Keyboard (stepinput.rs, ⌥⌘K): Logic's window (chord, values 1/1–1/64, dot, triplet, rest, ppp–fff, Q, channel, keyboard C0–C7), all 49 key commands while it is open, notes from MIDI keyboards, into the selected region at the playhead (the region grows), Diatonic Insert in the Score. [ ] the Score's own step-input cursor
 - [~] Step Editor (stepedit.rs, Window ▸ Open Step Editor): lane sets (GM Drums, Current Events, by hand), velocity beams added / dragged / Option-click removed, Fix Value, Auto Define, Create / Delete / Copy / Paste / Convert lanes, Create Multiple Lanes, 16/16 key commands. [ ] controller and other event lanes, lane sets saved with the project
@@ -133,16 +133,16 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 377 | 595 | 63% |
-| Local menus | 693 | 1191 | 58% |
+| Menu bar | 380 | 595 | 63% |
+| Local menus | 694 | 1191 | 58% |
 | Right-click menus | 1413 | 2575 | 54% |
-| Key commands | 1671 | 2207 | 75% |
+| Key commands | 1677 | 2207 | 75% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 377 of 595
+## Menu bar: 380 of 595
 
 
-<details><summary>Bramble Studio — 25/48</summary>
+<details><summary>Bramble Studio — 26/48</summary>
 
 - [x] About Bramble Studio
 - [ ] Learn About Apple Creator Studio…
@@ -163,7 +163,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] My Info…
   - [x] Reset All Settings Except Key Command Assignments…
   - [x] Plug-in Manager…
-  - [ ] Chord Grid Library…
+  - [x] Chord Grid Library…
 - [ ] Control Surfaces
   - [x] Learn Assignment for “Solo”  `⌘L`
   - [x] Controller Assignments…  `⌥⇧K`
@@ -195,7 +195,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 55/81</summary>
+<details><summary>File — 57/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -233,8 +233,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Tuning…
   - [ ] Assets…
   - [x] Import Project Settings…
-- [ ] Page Setup…
-- [ ] Print  `⌘P`
+- [x] Page Setup…
+- [x] Print  `⌘P`
 - [x] Movie
   - [x] Open Movie…  `⌥⌘O`
   - [x] Remove Movie
@@ -787,7 +787,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 693 of 1191
+## Local menus (Edit / Functions / View in each area): 694 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -1651,7 +1651,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-Layout — 11/15</summary>
+<details><summary>score-Layout — 12/15</summary>
 
 - [x] Show Staff Styles  `⌃⌥⇧S`
 - [x] Show Score Sets  `⌃⌥⇧I`
@@ -1664,7 +1664,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Extended Layout Parameters…  `⌃⌥⇧X`
 - [x] MIDI Meaning…  `⌃⌥⇧M`
 - [x] Colors…  `⌃⌥⇧O`
-- [ ] Chord Grid Library…
+- [x] Chord Grid Library…
 - [ ] Score Settings…
 - [x] Create Score Set from Selection
 - [x] Reset Line Layout
@@ -4954,7 +4954,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1671 of 2207
+## Key commands: 1677 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4963,7 +4963,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 541/679</summary>
+<details><summary>Global Commands — 545/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5199,7 +5199,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Open Surround Settings…
 - [x] Reset All Settings Except Key Command Assignments…
 - [x] Plug-in Manager…
-- [ ] Open Chord Grid Library…
+- [x] Open Chord Grid Library…
 - [x] Open Event List…  `⌘7`
 - [x] Open Main Window…  `⌘1`
 - [x] Open Mixer…  `⌘2`
@@ -5229,7 +5229,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Show/Hide Keyswitches
 - [ ] Show/Hide Keyswitches Window
 - [x] Show/Hide Score Editor  `N`
-- [ ] Show/Hide Staff Style Window  `⌃⌥⇧S`
+- [x] Show/Hide Staff Style Window  `⌃⌥⇧S`
 - [x] Show/Hide Score Sets Window  `⌃⌥⇧I`
 - [ ] Show/Hide Text Style Window
 - [x] Show/Hide Step Sequencer
@@ -5496,8 +5496,8 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Save and Clean Up Project
 - [x] Save as Template…
 - [x] Revert to Saved…
-- [ ] Page Setup…
-- [ ] Print  `⌘P`
+- [x] Page Setup…
+- [x] Print  `⌘P`
 - [x] Import…  `⌘I`
 - [x] Export Selection as MIDI File…  `⌥⌘E`
 - [ ] Export All MIDI Tracks as MIDI File…
@@ -5659,7 +5659,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 66/110</summary>
+<details><summary>Various Windows — 67/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5699,7 +5699,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Layout Tool
 - [ ] Set Voice Separation Tool
 - [ ] Set Resize Tool
-- [ ] Set Camera Tool
+- [x] Set Camera Tool
 - [ ] Set Crosshair Tool
 - [ ] Set MIDI Thru Tool
 - [ ] Set Move Tool
@@ -7263,7 +7263,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Tool Menu — 17/29</summary>
+<details><summary>Tool Menu — 18/29</summary>
 
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
@@ -7287,7 +7287,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Layout Tool  `L`
 - [ ] Voice Separation Tool  `-`
 - [ ] Resize Tool  `Z`
-- [ ] Camera Tool  `C`
+- [x] Camera Tool  `C`
 - [ ] Crosshair Tool  `H`
 - [ ] MIDI Thru Tool  `⇧M`
 - [ ] Move Tool

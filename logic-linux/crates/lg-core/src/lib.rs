@@ -5,6 +5,7 @@
 pub mod arrange;
 pub mod automation;
 pub mod bandsave;
+pub mod chordgrid;
 pub mod chunks;
 pub mod ctrlsurf;
 pub mod displaystate;

@@ -156,7 +156,7 @@ pub const GROUP_NAMES: [&str; 14] = ["Notes", "Pedal", "Clefs", "Dynamics", "Not
 
 impl Part {
     /// (group, item) and the groups' sizes, for Next / Previous Part Box Symbol and Group.
-    pub const GROUPS: [usize; 14] = [9, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 7, 4];
+    pub const GROUPS: [usize; 14] = [9, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 8, 4];
     pub fn index(self) -> (usize, usize) {
         match self {
             Part::Note(i) => (0, i),
@@ -226,7 +226,7 @@ pub const TIMES: [&str; 11] = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", 
 pub const PART_ARTICS: [usize; 10] = [2, 3, 4, 5, 6, 7, 0, 8, 9, 10];
 pub const CLEFS: [&str; 5] = ["Treble", "Bass", "Alto", "Tenor", "Percussion"];
 pub const LINES: [&str; 4] = ["Slur Up", "Slur Down", "Crescendo", "Decrescendo"];
-pub const TEXTS: [&str; 7] = ["Text", "Lyric", "Chord", "REGION", "INSTR", "SONG", "DATE"];
+pub const TEXTS: [&str; 8] = ["Text", "Lyric", "Chord", "REGION", "INSTR", "SONG", "DATE", "Chord Grid"];
 
 /// The Score's own view settings (kept in egui's memory; edits to the music are in the project).
 #[derive(Clone, Debug)]
@@ -1466,6 +1466,60 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if st.sel_symbol == Some((row.id, si)) {
                         mp.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
                     }
+                    if s.kind == SymbolKind::ChordGrid {
+                        // a chord grid: drag to move (Option copies), double-click for another
+                        // chord, Control-click for its scale and Hide Chord Name
+                        let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-grid", li, row.id, si)), Sense::click_and_drag());
+                        if resp.clicked() || resp.drag_started() {
+                            st.sel_symbol = Some((row.id, si));
+                            app.selected_notes.clear();
+                            symbol_clicked = true;
+                        }
+                        if resp.double_clicked() {
+                            crate::scoregrid::open(&ctx, Some(crate::scoregrid::Target { track: row.t, tick: s.tick, staff: s.staff, replace: Some(si) }), 1);
+                        }
+                        if resp.drag_stopped() {
+                            let d = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(egui::Vec2::ZERO, |(a, b)| b - a));
+                            let copy = ctx.input(|i| i.modifiers.alt);
+                            let (dx, dy) = ((d.x * 10.0 / sp).round() as i16, (-d.y * 10.0 / sp).round() as i16);
+                            let rid = row.id;
+                            app.checkpoint(if copy { "Copy Chord Grid" } else { "Move Chord Grid" });
+                            if let Some(ts) = app.project.as_mut().map(|p| p.score.track_mut(rid)) {
+                                if let Some(mut sym) = ts.symbols.get(si).cloned() {
+                                    sym.dx = sym.dx.saturating_add(dx);
+                                    sym.dy = sym.dy.saturating_add(dy);
+                                    if copy {
+                                        ts.symbols.push(sym);
+                                    } else {
+                                        ts.symbols[si] = sym;
+                                    }
+                                }
+                            }
+                            app.after_edit();
+                        }
+                        let rid = row.id;
+                        resp.context_menu(|ui| {
+                            for (lab, v) in [("Reduced", "reduced"), ("Normal", ""), ("Enlarged", "enlarged")] {
+                                if ui.radio(s.style == v, format!("Scale: {lab}")).clicked() {
+                                    app.checkpoint("Chord Grid Scale");
+                                    if let Some(x) = app.project.as_mut().and_then(|p| p.score.track_mut(rid).symbols.get_mut(si)) {
+                                        x.style = v.to_string();
+                                    }
+                                    app.after_edit();
+                                    ui.close();
+                                }
+                            }
+                            if ui.button(if s.align & 1 == 0 { "Hide Chord Name" } else { "Show Chord Name" }).clicked() {
+                                app.checkpoint("Hide Chord Name");
+                                if let Some(x) = app.project.as_mut().and_then(|p| p.score.track_mut(rid).symbols.get_mut(si)) {
+                                    x.align ^= 1;
+                                }
+                                app.after_edit();
+                                ui.close();
+                            }
+                        });
+                        continue;
+                    }
                     let resp = ui.interact(r.expand(2.0).intersect(music), ui.scope_id().with(("sc-sym", li, row.id, si)), Sense::click());
                     if resp.clicked() {
                         st.sel_symbol = Some((row.id, si));
@@ -1850,6 +1904,7 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     crate::scoretuplet::window(app, ctx);
     crate::scorepdf::dialogs(app, ctx, st);
     crate::scoreglobal::window(app, ctx);
+    crate::scoregrid::window(app, ctx);
 }
 
 pub const SETTINGS_TABS: [&str; 6] = ["Global", "Numbers & Names", "Chords & Grids", "Clefs & Signatures", "MIDI Meaning", "Colors"];
@@ -1953,6 +2008,11 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
         Part::Clef(k) => {
             let at_bar = tick_q / bar_t * bar_t;
             add_symbol(app, row.t, Symbol { tick: at_bar, kind: SymbolKind::Clef, text: CLEFS[k].into(), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Clef");
+        }
+        Part::Text(7) => {
+            // a chord grid: the Chord Grid Selector, its OK inserts it here
+            let ctx = app.ctx.clone();
+            crate::scoregrid::open(&ctx, Some(crate::scoregrid::Target { track: row.t, tick: tick_q, staff: row.staff as u8, replace: None }), 1);
         }
         Part::Text(k) if k >= 3 => {
             add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::AutoText, text: TEXTS[k].into(), staff: row.staff as u8, ..Default::default() }, "Insert Text");
@@ -2321,6 +2381,7 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
         SymbolKind::AutoText => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &(t.auto)(&s.text), t, sp, INK)),
         // (drawn with the notes it holds)
         SymbolKind::Tuplet => {}
+        SymbolKind::ChordGrid => return crate::scoregrid::draw_symbol(p, s, x, top, sp, INK, REGION_PAPER),
         SymbolKind::Chord => {
             // root (and letters before the first number) on the line, the rest raised in the
             // Chord Extension style; a comma splits them by hand; a slash bass follows the root

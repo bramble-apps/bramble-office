@@ -79,6 +79,9 @@ pub enum SymbolKind {
     AutoText,
     /// A user N-tuplet (Tuplet window): `text` is "n of base flags" (`TupletText`).
     Tuplet,
+    /// A chord grid: `text` is the grid (chordgrid::Grid::encode); `style` its scale
+    /// ("reduced", "", "enlarged"), `align` 1 hides the chord name, dx / dy its offset.
+    ChordGrid,
 }
 
 /// A tuplet symbol's settings, kept in its text: `n` notes of 1/`base` in the time of `of`;
@@ -479,8 +482,9 @@ fn unesc(s: &str) -> String {
     out
 }
 
-const KINDS: [(SymbolKind, &str); 13] = [
+const KINDS: [(SymbolKind, &str); 14] = [
     (SymbolKind::Tuplet, "tuplet"),
+    (SymbolKind::ChordGrid, "grid"),
     (SymbolKind::Dynamic, "dyn"), (SymbolKind::Text, "text"), (SymbolKind::Lyric, "lyric"), (SymbolKind::Chord, "chord"), (SymbolKind::Crescendo, "cresc"), (SymbolKind::Decrescendo, "decresc"), (SymbolKind::SlurUp, "slurup"), (SymbolKind::SlurDown, "slurdown"), (SymbolKind::Clef, "clef"), (SymbolKind::Ornament, "orn"), (SymbolKind::AutoText, "auto"), (SymbolKind::Text, "text"),
 ];
 

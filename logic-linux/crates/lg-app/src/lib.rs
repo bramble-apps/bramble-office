@@ -116,6 +116,7 @@ mod scoretuplet;
 mod scorepdf;
 mod scoretools;
 mod scoreglobal;
+mod scoregrid;
 mod stepseq;
 mod stepinsp;
 mod cellinsp;

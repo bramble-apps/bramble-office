@@ -614,6 +614,11 @@ fn symbol_icon(p: &egui::Painter, r: Rect, part: Part, dotted: bool, triplet: bo
             let ch = [score::GCLEF, score::FCLEF, score::CCLEF, score::CCLEF, score::PERC_CLEF][i];
             score::smufl(p, ch, c + vec2(0.0, [5.0, -2.0, 1.0, -2.0, 1.0][i]), 2.6, col, true);
         }
+        Part::Text(7) => {
+            // a small chord grid
+            let g = lg_core::chordgrid::Grid::shape(0, 0, "x32010");
+            crate::scoregrid::draw_grid(p, Rect::from_center_size(c + vec2(0.0, 3.0), vec2(12.0, 12.0)), &g, 4, false, false, col, look::pane_bg(), (None, None));
+        }
         Part::Text(i) => {
             let s = ["A", "Lyr", "C7", "REG", "INS", "SNG", "DAT"][i];
             p.text(c, Align2::CENTER_CENTER, s, look::regular(if i == 0 { 15.0 } else { 9.5 }), col);
