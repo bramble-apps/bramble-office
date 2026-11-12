@@ -936,16 +936,6 @@ pub fn midi_take(app: &mut App, from: u32, notes: Vec<Note>, what: &str) {
     let range = (start, start + end.saturating_sub(start).div_ceil(bar).max(1) * bar);
     crate::audioedit::checkpoint(app, what);
     place_midi(app, t, vec![notes], range, false);
-    // Project Settings ▸ Recording ▸ Automatically erase duplicates: the new note stays
-    if crate::projsettings::erase_duplicates(&app.proj) {
-        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
-            for rg in tr.regions.iter_mut().filter(|r| r.start < range.1 && r.start + r.length > range.0) {
-                rg.notes.reverse();
-                lg_core::functions::delete_duplicates(&mut rg.notes, &mut Vec::new());
-                rg.notes.reverse();
-            }
-        }
-    }
     app.after_edit();
 }
 
@@ -1037,11 +1027,20 @@ fn place_midi(app: &mut App, t: usize, passes: Vec<Vec<Note>>, range: (u32, u32)
     }
 }
 
-fn merge_into(app: &mut App, t: usize, r: usize, notes: Vec<Note>, (a, b): (u32, u32)) {
+fn merge_into(app: &mut App, t: usize, r: usize, mut notes: Vec<Note>, (a, b): (u32, u32)) {
+    // Project Settings ▸ Recording ▸ Automatically erase duplicates: the newest of notes within
+    // 100 ticks stays (later cycle passes over earlier ones, the take over the region's)
+    let erase = crate::projsettings::erase_duplicates(&app.proj);
+    if erase {
+        crate::projsettings::erase_near_duplicates(&mut notes);
+    }
     let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) else { return };
     let end = (rg.start + rg.length).max(b);
     rg.start = rg.start.min(a);
     rg.length = end - rg.start;
+    if erase {
+        rg.notes.retain(|o| !notes.iter().any(|n| n.pitch == o.pitch && n.channel == o.channel && n.pos.abs_diff(o.pos) <= 100));
+    }
     rg.notes.extend(notes);
     rg.notes.sort_by_key(|n| n.pos);
     app.selected_region = Some((t, r));

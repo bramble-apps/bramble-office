@@ -321,6 +321,8 @@ struct Line {
     top: f32,
     x_start: f32,
     first: bool,
+    /// The first line of its page (Page view; the first line otherwise).
+    page_first: bool,
 }
 
 impl Line {
@@ -380,7 +382,8 @@ fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
 /// selected region's track.
 fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
     let Some(p) = app.project.as_ref() else { return Vec::new() };
-    let midi = |t: &lg_core::Track| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none());
+    let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_tracks;
+    let midi = |t: &lg_core::Track| t.kind != lg_core::TrackKind::Audio && t.regions.iter().any(|r| r.audio.is_none()) && !(hide_muted && t.mute);
     if let Some(set) = &st.score_set {
         let v: Vec<usize> = p.tracks.iter().enumerate().filter(|(_, t)| set.contains(&t.extra.id) && midi(t)).map(|(i, _)| i).collect();
         if !v.is_empty() {
@@ -390,7 +393,7 @@ fn shown_tracks(app: &App, st: &State) -> Vec<usize> {
     if st.explode_folders {
         return p.tracks.iter().enumerate().filter(|(_, t)| midi(t)).map(|(i, _)| i).collect();
     }
-    app.selected_region.map(|(t, _)| vec![t]).unwrap_or_default()
+    app.selected_region.map(|(t, _)| vec![t]).filter(|v| v.iter().all(|&t| p.tracks.get(t).is_some_and(|tr| !(hide_muted && tr.mute)))).unwrap_or_default()
 }
 
 /// The rows for the shown tracks, with their vertical offsets (in staff spaces × sp).
@@ -421,10 +424,12 @@ fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
 /// split into voices: (notes, voice of each).
 fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn, u8)> {
     let score = app.project.as_ref().map(|p| &p.score);
+    let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_notes;
     let mine: Vec<nt::NoteIn> = region
         .notes
         .iter()
         .enumerate()
+        .filter(|(_, n)| !(hide_muted && n.muted))
         .filter(|(_, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             let staff = match a.staff {
@@ -459,8 +464,9 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
         }
         cuts.sort_unstable();
         cuts.dedup();
+        let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_regions;
         for (rix, region) in track.regions.iter().enumerate() {
-            if region.audio.is_some() {
+            if region.audio.is_some() || (hide_muted && region.muted) {
                 continue;
             }
             let from = region.start / bar_t * bar_t;
@@ -600,7 +606,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let part = Rect::from_min_size(pos2(area.min.x, local.max.y), vec2(area.width(), PART_H));
     part_box(ui, part, &mut st, app);
     let linear = st.view == View::Linear;
-    let head_w = if linear { HEAD_W + if st.names { 80.0 } else { 0.0 } } else { 0.0 };
+    // the Score project settings (scoreset.rs); the View menu's Instrument Names shows full
+    // names beside the staffs as well
+    let fmt = crate::scoreset::fmt(&app.proj);
+    let names_on = st.names || fmt.names;
+    let names_beside = st.names || (fmt.names && !fmt.names_above);
+    let head_w = if linear { HEAD_W + if names_on { 80.0 } else { 0.0 } } else { 0.0 };
     let ruler_h = if linear { RULER_H } else { 0.0 };
     let ruler = Rect::from_min_max(pos2(area.min.x + head_w, part.max.y), pos2(area.max.x, part.max.y + ruler_h));
     let body = Rect::from_min_max(pos2(area.min.x, ruler.max.y), area.max);
@@ -680,22 +691,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let b0 = sx.floor().max(0.0) as u32;
             let n = (music.width() / bw).ceil() as u32 + 2;
             let xs = (0..=n).map(|k| music.min.x + ((b0 + k) as f32 - sx) * bw).collect();
-            lines.push(Line { b0, b1: b0 + n, xs, top, x_start: music.min.x, first: true });
+            lines.push(Line { b0, b1: b0 + n, xs, top, x_start: music.min.x, first: true, page_first: true });
         }
         View::Wrapped | View::Page => {
             let page_w = 120.0 * sp;
             let page_h = 170.0 * sp;
-            let margin = if st.view == View::Page { 9.0 * sp } else { 2.0 * sp } + if st.names { 9.0 * sp } else { 0.0 };
-            let width = if st.view == View::Page { page_w - 2.0 * margin } else { music.width() - 2.0 * margin };
+            let names_w = if names_beside { 9.0 * sp } else { 0.0 };
+            // (Global: the page margins; the wrapped view keeps a narrow edge)
+            let margins = |pg: usize| if st.view == View::Page { let (l, r) = fmt.margins(pg); (l * sp + names_w, r * sp) } else { (2.0 * sp + names_w, 2.0 * sp) };
+            let (ml, mr) = margins(0);
+            let width = if st.view == View::Page { page_w - ml - mr } else { music.width() - ml - mr };
             let widths: Vec<f32> = (bar_lo..bar_hi)
                 .map(|b| segs.iter().filter(|s| (s.from / bar_t as u32) <= b).map(|s| nt::bar_width(&s.voice, b - s.from / bar_t as u32, sp)).fold(12.0 * sp, f32::max))
                 .collect();
             let hw = header_w(key0, true);
-            let systems = nt::systems(&widths, (width - hw).max(20.0 * sp));
-            let line_h = block_h + 11.0 * sp;
+            let systems = nt::systems_with(&widths, (width - hw).max(20.0 * sp), fmt.max_bars, fmt.justify_last);
+            let line_h = block_h + 7.0 * sp + fmt.line_dist * crate::scoreset::SP_PER_CM * sp;
             let x0 = if st.view == View::Page { music.min.x + ((music.width() - page_w) / 2.0).max(12.0) } else { music.min.x };
             let tops: Vec<(usize, f32)> = if st.view == View::Page {
-                nt::paginate(systems.len(), line_h, page_h, 10.0 * sp, 14.0 * sp)
+                let cm = crate::scoreset::SP_PER_CM * sp;
+                nt::paginate_with(systems.len(), line_h, page_h, fmt.top * cm, fmt.bottom * cm, fmt.header * cm)
             } else {
                 (0..systems.len()).map(|k| (0, 4.0 * sp + k as f32 * line_h)).collect()
             };
@@ -713,15 +728,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             for (li, &(b, n, scale)) in systems.iter().enumerate() {
                 let (pg, y) = tops[li];
                 let base_y = if st.view == View::Page { pages[pg].min.y } else { music.min.y - st.scroll_y };
-                let xs_start = x0 + margin;
+                let xs_start = x0 + margins(pg).0;
+                let page_first = li == 0 || tops[li - 1].0 != pg;
                 let key = key_at((bar_lo + b as u32) * bar_t as u32);
-                let hw = header_w(if st.key_every_line || li == 0 { key } else { nt::Key::default() }, li == 0);
+                let key_on = li == 0 || (st.key_every_line && fmt.keys.on(page_first, li == 0));
+                let hw = header_w(if key_on { key } else { nt::Key::default() }, fmt.times.on(page_first, li == 0));
                 let mut xs = vec![xs_start + hw];
                 for k in 0..n {
                     let last = *xs.last().unwrap_or(&0.0);
                     xs.push(last + widths[b + k] * scale);
                 }
-                lines.push(Line { b0: bar_lo + b as u32, b1: bar_lo + (b + n) as u32, xs, top: base_y + y + 5.0 * sp, x_start: xs_start, first: li == 0 });
+                lines.push(Line { b0: bar_lo + b as u32, b1: bar_lo + (b + n) as u32, xs, top: base_y + y + 5.0 * sp, x_start: xs_start, first: li == 0, page_first });
             }
         }
     }
@@ -735,7 +752,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if k == 0 {
             mp.text(pos2(pr.center().x, pr.min.y + 8.0 * sp), Align2::CENTER_CENTER, &project_name, look::semibold(3.0 * sp), INK);
         }
-        mp.text(pos2(pr.max.x - 4.0 * sp, pr.max.y - 4.0 * sp), Align2::RIGHT_CENTER, format!("{}", k + 1), look::regular(1.6 * sp), INK);
+        // (Numbers & Names: the page number's side, top or bottom, distances, prefix)
+        let set_name = if st.score_set.is_some() { "Score Set" } else { "All Instruments" };
+        if let Some(text) = fmt.page_text(k, &project_name, set_name, "Region") {
+            let cm = crate::scoreset::SP_PER_CM * sp;
+            let (hd, vd) = (fmt.page_hdist * cm, fmt.page_vdist * cm);
+            let y = if fmt.page_top { pr.min.y + vd } else { pr.max.y - vd };
+            let (x, al) = match fmt.page_side(k) {
+                0 => (pr.min.x + hd, if fmt.page_top { Align2::LEFT_TOP } else { Align2::LEFT_BOTTOM }),
+                1 => (pr.center().x, if fmt.page_top { Align2::CENTER_TOP } else { Align2::CENTER_BOTTOM }),
+                _ => (pr.max.x - hd, if fmt.page_top { Align2::RIGHT_TOP } else { Align2::RIGHT_BOTTOM }),
+            };
+            mp.text(pos2(x, y), al, text, look::regular(1.6 * sp), INK);
+        }
         if st.rulers {
             // centimetres (a staff space is 1.75 mm on a 21 cm page)
             let cm = 10.0 / 1.75 * sp;
@@ -831,20 +860,38 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if linear {
                 // the header panel
                 for l in 0..5 {
-                    headp.hline(head.min.x + 8.0 + if st.names { 80.0 } else { 0.0 }..=head.max.x, bottom - l as f32 * sp, Stroke::new(1.0, INK));
+                    headp.hline(head.min.x + 8.0 + if names_on { 80.0 } else { 0.0 }..=head.max.x, bottom - l as f32 * sp, Stroke::new(1.0, INK));
                 }
-                let x = head.min.x + 14.0 + if st.names { 80.0 } else { 0.0 };
-                if st.names && (rk == 0 || rows[rk - 1].t != row.t) {
-                    headp.text(pos2(head.min.x + 6.0, bottom - 2.0 * sp), Align2::LEFT_CENTER, &row.name, look::regular(12.0), INK);
+                let x = head.min.x + 14.0 + if names_on { 80.0 } else { 0.0 };
+                let name = if st.names { Some(row.name.clone()) } else { fmt.name_for(&row.name, true) };
+                if let (Some(name), true) = (name, rk == 0 || rows[rk - 1].t != row.t) {
+                    let (nx, al) = if fmt.names_right && !st.names { (head.min.x + 84.0, Align2::RIGHT_CENTER) } else { (head.min.x + 6.0, Align2::LEFT_CENTER) };
+                    headp.text(pos2(nx, bottom - 2.0 * sp), al, name, look::regular(12.0), INK);
                 }
-                draw_header(&headp, x, bottom, sp, clef, octave, key, Some(sig));
-            } else if line.first || st.key_every_line {
-                draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, clef, octave, if line.first || st.key_every_line { key } else { nt::Key::default() }, if line.first { Some(sig) } else { None });
+                draw_header(&headp, x, bottom, sp, fmt.clefs != crate::scoreset::Show::Hide, clef, octave, if fmt.keys != crate::scoreset::Show::Hide { key } else { nt::Key::default() }, (fmt.times != crate::scoreset::Show::Hide).then_some(sig));
             } else {
-                draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, clef, octave, nt::Key::default(), None);
+                // (Clefs & Signatures: where clefs, keys and time signatures show)
+                let key_on = line.first || (st.key_every_line && fmt.keys.on(line.page_first, line.first));
+                let key_on = key_on && fmt.keys != crate::scoreset::Show::Hide;
+                let time_on = fmt.times.on(line.page_first, line.first);
+                draw_header(&mp, line.x_start + 0.4 * sp, bottom, sp, fmt.clefs.on(line.page_first, line.first), clef, octave, if key_on { key } else { nt::Key::default() }, time_on.then_some(sig));
             }
-            if !linear && st.names && line.first && (rk == 0 || rows[rk - 1].t != row.t) {
-                mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, &row.name, look::regular(1.5 * sp), INK);
+            if !linear && (rk == 0 || rows[rk - 1].t != row.t) {
+                let name = if st.names { line.first.then(|| row.name.clone()) } else { fmt.name_for(&row.name, line.first) };
+                if let Some(name) = name {
+                    if names_beside {
+                        mp.text(pos2(line.x_start - 0.6 * sp, bottom - 2.0 * sp), Align2::RIGHT_CENTER, name, look::regular(1.5 * sp), INK);
+                    } else {
+                        // (above the staff, at the left or the right of the line)
+                        let x = if fmt.names_right { line_x1 } else { line.x_start };
+                        mp.text(pos2(x, bottom - 4.0 * sp - 2.2 * sp), if fmt.names_right { Align2::RIGHT_BOTTOM } else { Align2::LEFT_BOTTOM }, name, look::regular(1.5 * sp), INK);
+                    }
+                }
+            }
+            // (a single staff opens with a line unless Open single staffs; several are joined)
+            if !linear && rk == 0 && !(fmt.open_single && rows.len() == 1) {
+                let last = line.top + rows.last().map_or(row.off, |r| r.off);
+                mp.vline(line.x_start, bottom - 4.0 * sp..=last, Stroke::new(1.0, INK));
             }
             // bar lines
             for b in line.b0..=line.b1 {
@@ -853,8 +900,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     continue;
                 }
                 let has = track_of(row.t).is_some_and(|tr| tr.regions.iter().any(|r| r.audio.is_none() && (r.start as f32) < b as f32 * bar_t + 1.0 && (r.start + r.length) as f32 > (b as f32 - 1.0) * bar_t));
-                if (!linear || has) && (b > line.b0 || !linear) && (linear || b > line.b0) {
-                    let w = if !linear && b == line.b1 && line.b1 == bar_hi { 2.5 } else { 1.0 };
+                let final_bar = !linear && b == line.b1 && line.b1 == bar_hi;
+                if (!linear || has) && (b > line.b0 || !linear) && (linear || b > line.b0) && (!fmt.hide_bar_lines || final_bar) {
+                    let w = if final_bar { 2.5 } else { 1.0 };
                     mp.vline(x, bottom - 4.0 * sp..=bottom, Stroke::new(w, INK));
                 }
                 // key changes at a bar inside the line
@@ -868,8 +916,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             // bar numbers at line starts (wrapped and page)
-            if !linear && st.bar_numbers && rk == 0 && !line.first {
-                mp.text(pos2(line.x_start, bottom - 6.0 * sp), Align2::LEFT_BOTTOM, format!("{}", line.b0 + 1), look::regular(1.3 * sp), INK);
+            // (Numbers & Names: step, offset, start, position; the top staff only, or the bottom
+            // one when placed below)
+            let top_row = if fmt.bar_v < 0.0 { rk + 1 == rows.len() } else { rk == 0 };
+            if st.bar_numbers && (!linear || !fmt.bar_hide_linear) && (top_row || !fmt.bar_top_only) {
+                let size = if fmt.bar_follow { 1.3 * sp } else { 11.0 };
+                for b in line.b0..line.b1 {
+                    let Some(n) = fmt.bar_number(b, b == line.b0 && !linear) else { continue };
+                    let x = if fmt.bar_center { (x_of(b as f32 * bar_t) + x_of((b + 1) as f32 * bar_t)) / 2.0 } else if b == line.b0 && !linear { line.x_start } else { x_of(b as f32 * bar_t) };
+                    if x < music.min.x || x > music.max.x {
+                        continue;
+                    }
+                    let (y, al) = if fmt.bar_v >= 0.0 { (bottom - 4.0 * sp - fmt.bar_v * sp, if fmt.bar_center { Align2::CENTER_BOTTOM } else { Align2::LEFT_BOTTOM }) } else { (bottom - fmt.bar_v * sp, if fmt.bar_center { Align2::CENTER_TOP } else { Align2::LEFT_TOP }) };
+                    mp.text(pos2(x, y), al, n.to_string(), look::regular(size), INK);
+                }
             }
             if row.brace {
                 let lower = line.top + rows.get(rk + 1).map_or(row.off, |r| r.off);
@@ -1184,19 +1244,16 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
             ui.separator();
             match tab {
                 0 => {
+                    crate::scoreset::pane(ui, &mut app.proj, "Global");
+                    ui.separator();
                     ui.add(egui::Slider::new(&mut st.space, 3.0..=24.0).text("Staff space (pt)"));
                     ui.add(egui::Slider::new(&mut st.bar_w, 80.0..=2400.0).text("Linear bar width"));
                 }
-                1 => {
-                    ui.checkbox(&mut st.bar_numbers, "Bar numbers at line starts");
-                    ui.checkbox(&mut st.names, "Instrument names");
-                }
+                1 => crate::scoreset::pane(ui, &mut app.proj, "Numbers & Names"),
                 2 => {
                     ui.add(egui::Slider::new(&mut st.chord_size, 0.6..=2.0).text("Chord symbol size"));
                 }
-                3 => {
-                    ui.checkbox(&mut st.key_every_line, "Key signature on every line");
-                }
+                3 => crate::scoreset::pane(ui, &mut app.proj, "Clefs & Signatures"),
                 4 => {
                     ui.label("Dynamics: the velocity each Part box dynamic gives notes");
                     for (k, n) in DYNAMICS.iter().enumerate() {
@@ -1240,7 +1297,7 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     }
 }
 
-pub const SETTINGS_TABS: [&str; 6] = ["Global Format", "Numbers and Names", "Chords and Grids", "Clefs and Signatures", "MIDI Meaning", "Score Colors"];
+pub const SETTINGS_TABS: [&str; 6] = ["Global", "Numbers & Names", "Chords & Grids", "Clefs & Signatures", "MIDI Meaning", "Colors"];
 
 /// Sets a track's staff style (one undo step).
 pub fn set_style(app: &mut App, t: usize, name: &str) {
@@ -1617,7 +1674,7 @@ const FCLEF_8VB: char = '\u{E064}';
 const PERC_CLEF: char = '\u{E069}';
 
 /// Clef, key signature and (the first line's) time signature from `x`.
-fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, clef: nt::Clef, octave: i8, key: nt::Key, time: Option<(u8, u8)>) {
+fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, show_clef: bool, clef: nt::Clef, octave: i8, key: nt::Key, time: Option<(u8, u8)>) {
     let mut x = x;
     // SMuFL clefs: origin on their line (G: 2nd, F: 4th, C: its line, percussion: middle)
     let (ch, line) = match clef {
@@ -1627,8 +1684,10 @@ fn draw_header(p: &egui::Painter, x: f32, bottom: f32, sp: f32, clef: nt::Clef, 
         nt::Clef::Tenor => (CCLEF, 3.0),
         nt::Clef::Percussion => (PERC_CLEF, 2.0),
     };
-    smufl(p, ch, pos2(x, bottom - line * sp), sp, INK, false);
-    x += 3.4 * sp;
+    if show_clef {
+        smufl(p, ch, pos2(x, bottom - line * sp), sp, INK, false);
+        x += 3.4 * sp;
+    }
     if clef != nt::Clef::Percussion {
         for (pos, acc) in key.signature_positions(clef) {
             accidental(p, pos2(x, bottom - pos as f32 * sp / 2.0), sp, acc, INK);

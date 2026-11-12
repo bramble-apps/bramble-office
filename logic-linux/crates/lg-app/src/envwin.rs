@@ -300,7 +300,8 @@ pub fn dispatch(app: &mut App, ctx: &egui::Context, outs: Vec<Out>) {
                     let _ = app.key_command(ctx, &format!("Go to Marker Number {}", val.max(1)));
                 }
                 52 => app.halt(),
-                100 => app.set_tempo(val as f64 + 50.0),
+                // (the tempo fader: ignored while following external time code)
+                100 if !app.hub.sync.ext => app.set_tempo(val as f64 + 50.0),
                 _ => {}
             },
             Out::Touch { obj, ev } => touch(app, obj, ev),

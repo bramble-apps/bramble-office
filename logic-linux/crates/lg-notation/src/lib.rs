@@ -1002,6 +1002,42 @@ pub fn systems(widths: &[f32], line_w: f32) -> Vec<(usize, usize, f32)> {
     out
 }
 
+/// `systems` with Logic's Global settings: at most `max_bars` bars on a line, and the last line
+/// stretched to the full width when `justify_last` (else ragged, as `systems`).
+pub fn systems_with(widths: &[f32], line_w: f32, max_bars: usize, justify_last: bool) -> Vec<(usize, usize, f32)> {
+    let max_bars = max_bars.max(1);
+    let mut out = Vec::new();
+    let mut k = 0;
+    while k < widths.len() {
+        let mut w = 0.0;
+        let mut n = 0;
+        while k + n < widths.len() && n < max_bars && (n == 0 || w + widths[k + n] <= line_w) {
+            w += widths[k + n];
+            n += 1;
+        }
+        let last = k + n == widths.len();
+        let scale = if w > 0.0 { (line_w / w).min(if last && !justify_last { 1.5 } else { f32::MAX }) } else { 1.0 };
+        out.push((k, n, scale));
+        k += n;
+    }
+    out
+}
+
+/// `paginate` with separate top and bottom margins and a header space on the first page.
+pub fn paginate_with(lines: usize, line_h: f32, page_h: f32, top: f32, bottom: f32, header: f32) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    let (mut page, mut y) = (0usize, top + header);
+    for _ in 0..lines {
+        if y + line_h > page_h - bottom && y > top + if page == 0 { header } else { 0.0 } {
+            page += 1;
+            y = top;
+        }
+        out.push((page, y));
+        y += line_h;
+    }
+    out
+}
+
 /// The width a bar needs: a head room, then per item by its value (shorter values closer).
 pub fn bar_width(v: &Voice, bar: u32, space: f32) -> f32 {
     let items = v.items.iter().filter(|it| it.bar == bar);
@@ -1044,6 +1080,18 @@ pub fn split_piano(notes: &[NoteIn]) -> (Vec<NoteIn>, Vec<NoteIn>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn systems_max_bars_and_justify() {
+        let w = vec![10.0; 7];
+        let s = systems_with(&w, 100.0, 3, false);
+        assert_eq!(s.iter().map(|x| x.1).collect::<Vec<_>>(), vec![3, 3, 1]);
+        assert!((s[2].2 - 1.5).abs() < 1e-6, "ragged last line");
+        let j = systems_with(&w, 100.0, 3, true);
+        assert!((j[2].2 - 10.0).abs() < 1e-6, "justified last line");
+        let p = paginate_with(5, 30.0, 100.0, 5.0, 20.0, 10.0);
+        assert_eq!(p.iter().map(|x| x.0).collect::<Vec<_>>(), vec![0, 0, 1, 1, 2]);
+    }
 
     fn opts(bars: u32) -> Options {
         Options::new((4, 4), Key::default(), Quant::default(), 0, bars * 3840)

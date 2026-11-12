@@ -263,9 +263,110 @@ pub struct ClockOut {
     /// The next clock's position (ticks).
     next: f64,
     last: f64,
+    /// poll_mode: clocks are going out (past Clock Start, or a pattern start reached), and the
+    /// pattern start waited for.
+    running: bool,
+    target: f64,
+}
+
+/// Project Settings ▸ Synchronization ▸ MIDI ▸ Clock Mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum ClockMode {
+    /// Start at the next pattern start (Clock Start plus whole pattern lengths); no SPP.
+    Pattern,
+    /// SPP at play start; Stop, SPP and Continue at a cycle jump.
+    #[default]
+    SongStopSppContinue,
+    /// SPP at play start and at every cycle jump.
+    SongSpp,
+    /// SPP at play start only.
+    SongStartOnly,
+}
+
+impl ClockMode {
+    pub const NAMES: [&'static str; 4] = ["Pattern", "Song - SPP at Play Start and Stop/SPP/Continue at Cycle Jump", "Song - SPP at Play Start and Cycle Jump", "Song - SPP at Play Start Only"];
+
+    pub fn parse(s: &str) -> ClockMode {
+        match Self::NAMES.iter().position(|n| *n == s) {
+            Some(0) => ClockMode::Pattern,
+            Some(2) => ClockMode::SongSpp,
+            Some(3) => ClockMode::SongStartOnly,
+            _ if s.starts_with("Pattern") => ClockMode::Pattern,
+            _ => ClockMode::SongStopSppContinue,
+        }
+    }
 }
 
 impl ClockOut {
+    /// Logic's MIDI Clock with its Clock Mode: nothing goes out before `start_at` (Clock Start,
+    /// ticks); playback from there sends SPP and Continue (Start at 1 1 1 1). Pattern mode sends
+    /// Start when the song reaches the next pattern start (`start_at` plus whole `pattern`
+    /// lengths, ticks). A locate or cycle jump while playing is handled as the mode says.
+    pub fn poll_mode(&mut self, playing: bool, song: f64, mode: ClockMode, start_at: f64, pattern: f64) -> Vec<Vec<u8>> {
+        let mut out = Vec::new();
+        let start_at = start_at.max(0.0);
+        let pattern = pattern.max(CLOCK_TICKS);
+        let jumped = playing && self.playing && (song < self.last - 1.0 || song > self.last + PPQ as f64 * 2.0);
+        let next_pattern = |s: f64| if s <= start_at + 1.0 { start_at } else { start_at + ((s - start_at - 1.0) / pattern).ceil() * pattern };
+        if !playing {
+            if self.playing && self.running {
+                out.push(vec![0xFC]);
+            }
+            self.running = false;
+        } else if !self.playing || jumped {
+            match mode {
+                ClockMode::Pattern => {
+                    if self.running {
+                        out.push(vec![0xFC]);
+                    }
+                    self.running = false;
+                    self.target = next_pattern(song);
+                }
+                _ if !self.playing || !self.running => {
+                    self.running = false;
+                    self.target = start_at;
+                }
+                ClockMode::SongStopSppContinue => {
+                    if song >= start_at {
+                        out.extend([vec![0xFC], spp(song).to_vec(), vec![0xFB]]);
+                        self.next = (song / CLOCK_TICKS).ceil() * CLOCK_TICKS;
+                    } else {
+                        out.push(vec![0xFC]);
+                        self.running = false;
+                        self.target = start_at;
+                    }
+                }
+                ClockMode::SongSpp => {
+                    out.push(spp(song.max(start_at)).to_vec());
+                    self.next = (song / CLOCK_TICKS).ceil() * CLOCK_TICKS;
+                }
+                ClockMode::SongStartOnly => {}
+            }
+        }
+        if playing && !self.running && song + 1.0 >= self.target {
+            self.running = true;
+            let at = if mode == ClockMode::Pattern { self.target } else { song.max(self.target) };
+            if mode == ClockMode::Pattern || at <= 0.5 {
+                out.push(vec![0xFA]);
+            } else {
+                out.push(spp(at).to_vec());
+                out.push(vec![0xFB]);
+            }
+            self.next = (at / CLOCK_TICKS).ceil() * CLOCK_TICKS;
+        }
+        if playing && self.running {
+            let mut n = 0;
+            while self.next <= song && n < 96 {
+                out.push(vec![0xF8]);
+                self.next += CLOCK_TICKS;
+                n += 1;
+            }
+        }
+        self.playing = playing;
+        self.last = song;
+        out
+    }
+
     /// `song`: ticks; `jumped`: a locate or cycle jump since the last poll. `song_mode`: send SPP
     /// (Song mode) rather than only Start (Pattern mode).
     pub fn poll(&mut self, playing: bool, song: f64, jumped: bool, song_mode: bool) -> Vec<Vec<u8>> {
@@ -413,6 +514,40 @@ mod tests {
         assert_eq!(c.poll(false, 1920.0, false, true), vec![vec![0xFC]]);
         let mut p = ClockOut::default();
         assert_eq!(p.poll(true, 0.0, false, false)[0], vec![0xFA]);
+    }
+
+    #[test]
+    fn clock_modes() {
+        let q = PPQ as f64;
+        // Clock Start at bar 2 (4/4): nothing before it, then SPP and Continue
+        let mut c = ClockOut::default();
+        assert!(c.poll_mode(true, 0.0, ClockMode::SongStopSppContinue, 4.0 * q, 0.0).is_empty());
+        assert!(c.poll_mode(true, 2.0 * q, ClockMode::SongStopSppContinue, 4.0 * q, 0.0).is_empty());
+        let out = c.poll_mode(true, 4.0 * q, ClockMode::SongStopSppContinue, 4.0 * q, 0.0);
+        assert_eq!(out[0], spp(4.0 * q).to_vec());
+        assert_eq!(out[1], vec![0xFB]);
+        // a cycle jump: Stop, SPP, Continue
+        c.poll_mode(true, 6.0 * q, ClockMode::SongStopSppContinue, 4.0 * q, 0.0);
+        let out = c.poll_mode(true, 4.0 * q, ClockMode::SongStopSppContinue, 4.0 * q, 0.0);
+        assert_eq!(&out[..3], &[vec![0xFC], spp(4.0 * q).to_vec(), vec![0xFB]]);
+        // SPP at play start only: a jump sends nothing but clocks
+        let mut d = ClockOut::default();
+        assert_eq!(d.poll_mode(true, 0.0, ClockMode::SongStartOnly, 0.0, 0.0)[0], vec![0xFA]);
+        d.poll_mode(true, 4.0 * q, ClockMode::SongStartOnly, 0.0, 0.0);
+        let out = d.poll_mode(true, 0.0, ClockMode::SongStartOnly, 0.0, 0.0);
+        assert!(out.iter().all(|m| m[0] == 0xF8));
+        // SPP at every cycle jump, no Stop
+        let mut e = ClockOut::default();
+        e.poll_mode(true, 0.0, ClockMode::SongSpp, 0.0, 0.0);
+        e.poll_mode(true, 4.0 * q, ClockMode::SongSpp, 0.0, 0.0);
+        assert_eq!(e.poll_mode(true, q, ClockMode::SongSpp, 0.0, 0.0)[0], spp(q).to_vec());
+        // Pattern of 1 bar: playing from beat 2 waits for bar 2, then Start
+        let mut p = ClockOut::default();
+        assert!(p.poll_mode(true, q, ClockMode::Pattern, 0.0, 4.0 * q).is_empty());
+        let out = p.poll_mode(true, 4.0 * q, ClockMode::Pattern, 0.0, 4.0 * q);
+        assert_eq!(out[0], vec![0xFA]);
+        assert_eq!(p.poll_mode(false, 4.0 * q, ClockMode::Pattern, 0.0, 4.0 * q), vec![vec![0xFC]]);
+        assert_eq!(ClockMode::parse("Song - SPP at Play Start Only"), ClockMode::SongStartOnly);
     }
 
     #[test]
