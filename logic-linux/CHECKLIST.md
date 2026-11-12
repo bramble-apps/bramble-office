@@ -96,7 +96,7 @@ SoundFont in place of every instrument. The drummer was a stub. Everything below
 - [x] Open GarageBand .band (iOS); [ ] macOS GarageBand sample
 - [~] Save .logicx (lg-core save.rs + writeback.rs, round-trip tested on E02/E23/E24/R01; every sample ProjectData byte-identical when unchanged): notes, regions moved/copied/deleted, new MIDI regions (modelled on the track's own), new audio regions incl. recorded WAVs (AuRg/AuFl modelled on the project's), region names and Loop / Velocity / Transpose, audio fades and file windows (offset, length), tempo and tempo changes, project signature and key, markers and arrangement markers, track names, track and aux fader / pan / mute / solo, group membership and group settings (existing groups), plug-in parameter values, channel automation lanes, MetaData.plist (tempo, signature, key, audio files). Save names what it leaves out. [ ] new / deleted tracks, track order, colours, plug-ins added / removed / bypassed, sends, outputs, new auxes / groups, group names, VCAs, region gain / fade type / other inspector values, mid-song signature and key changes (the app has none), sample rate. [ ] none of it checked in real Logic yet (MAC-QUESTIONS.md)
 - [~] Save .band (lg-core bandsave.rs): the same edits written into the archive's Logic model, Output/metadata.plist tempo / key / signature; untouched when unchanged. [ ] not opened in GarageBand yet
-- [~] Export MIDI, import MIDI and audio, bounce WAV. [ ] AAF/XML, more export formats, stems
+- [~] Bounce and share (share.rs, 2026-11-12, tested): Logic's Bounce window for stereo projects — Destination list (PCM, MP3, M4A: AAC; the clicked row shows its options), PCM AIFF / WAVE / CAF, 8–32-bit float, 11.025–192 kHz (anti-aliased), Interleaved / Split (Bounce Extensions), Dithering (None, POWr #1–#3, UV22HR: Studio's own algorithms in their spirit, not Apple's), MP3 (mono / stereo bit rates, VBR, Quality, best encoding, 10 Hz filter, Joint / Normal stereo, ID3 tags with the ID3 Settings window and default values), M4A (AAC bit rate / VBR, Apple Lossless), Start / End from cycle, selection or project, Mode Automatic / Offline / Realtime (paced, not monitored), Bounce 2nd Cycle Pass, Include Audio Tail, Include Tempo Information (acid chunk: project tempo only), Normalize, Add to Project, Add to Music Library (~/Music/Bramble Studio), remembered folder; MP3 / M4A through ffmpeg. Share ▸ Song to Music (tags, artist/album folders, .m3u playlist), Song to Voice Memos (a folder), Mail (song, or the project zipped; xdg-email). Export ▸ Selection as MIDI File; Import ▸ Audio File / MIDI File / Other; audio and MIDI files dropped from the file manager import at the playhead. Surround projects keep surround_ui's Bounce window. [ ] Burn CD/DVD, AirDrop, GarageBand for iOS / iPad, AAF, Final Cut Pro XML, MusicXML import, Export Selection as Audio File, My Info tags, mono outputs; Bnc bounces the one output (Studio has no other outputs)
 - [~] Project management (lg-app projfile.rs, lg-core package.rs, tested): New from Template… chooser (Empty Project and Studio's layouts, My Templates = Save as Template… copies, opened as an Untitled copy), Save As… / Save A Copy As…, Revert to ▸ Saved and Logic-style Project File Backups (Settings ▸ Auto Backup slots, 10 by default, made on every save), Project Alternatives (New, Edit: rename / open / delete, Export as Project, switch from the submenu; the active one opens: ActiveVariant), Clean Up… (unused audio to the Trash), Consolidate…, Rename…, Show in Finder…, Project Settings window (see Project Settings). [ ] layouts made here can't be saved as .logicx (no Logic-made base; Apple's template data isn't shipped), timed autosave
 
 ## 7. Interaction parity (interactions/ research)
@@ -129,13 +129,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 363 | 595 | 61% |
+| Menu bar | 370 | 595 | 62% |
 | Local menus | 679 | 1191 | 57% |
-| Right-click menus | 1399 | 2575 | 54% |
-| Key commands | 1647 | 2207 | 74% |
+| Right-click menus | 1402 | 2575 | 54% |
+| Key commands | 1648 | 2207 | 74% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 363 of 595
+## Menu bar: 370 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -191,7 +191,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>File — 48/81</summary>
+<details><summary>File — 55/81</summary>
 
 - [x] New  `⇧⌘N`
 - [x] New from Template…  `⌘N`
@@ -241,19 +241,19 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Import
   - [x] Logic Projects…
   - [ ] Live Loops Grid…
-  - [ ] Audio File…  `⇧⌘I`
-  - [ ] MIDI File…
+  - [x] Audio File…  `⇧⌘I`
+  - [x] MIDI File…
   - [ ] MusicXML…
   - [ ] Final Cut Pro XML…
   - [ ] AAF…
   - [x] Create Project from ADM BWF…
-  - [ ] Other…  `⌘I`
+  - [x] Other…  `⌘I`
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [x] Regions as Audio Files…
   - [ ] Audio Files As…
   - [ ] Selection as Audio File…
-  - [ ] Selection as MIDI File…  `⌥⌘E`
+  - [x] Selection as MIDI File…  `⌥⌘E`
   - [ ] Selected Track(s) as MainStage Patch…
   - [ ] Selected Track(s) as MainStage Set…
   - [x] 1 Track as Audio File…  `⌘E`
@@ -269,10 +269,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] And Replace All Tracks…
   - [x] Project or Section…  `⌘B`
 - [ ] Share
-  - [ ] Song to Music…
-  - [ ] Song to Voice Memos…
+  - [x] Song to Music…
+  - [x] Song to Voice Memos…
   - [ ] AirDrop…
-  - [ ] Mail…
+  - [x] Mail…
   - [ ] Project to GarageBand for iOS…
 
 </details>
@@ -2127,7 +2127,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1399 of 2575
+## Right-click menus: 1402 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4078,7 +4078,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 100/172</summary>
+<details><summary>region-audio — 101/172</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4250,12 +4250,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
-  - [ ] Selection as MIDI File…  `⌥⌘E`
+  - [x] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move File out of Project
 
 </details>
 
-<details><summary>region-midi — 126/212</summary>
+<details><summary>region-midi — 127/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4467,7 +4467,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
-  - [ ] Selection as MIDI File…  `⌥⌘E`
+  - [x] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move 0 Files
 
 </details>
@@ -4569,7 +4569,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 126/212</summary>
+<details><summary>take-folder-region — 127/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4781,7 +4781,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Export
   - [x] Add to Browser…  `⌃⇧O`
   - [ ] 1 Region as Audio File…
-  - [ ] Selection as MIDI File…  `⌥⌘E`
+  - [x] Selection as MIDI File…  `⌥⌘E`
   - [ ] Move 0 Files
 
 </details>
@@ -4950,7 +4950,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1647 of 2207
+## Key commands: 1648 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -5790,7 +5790,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 180/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 181/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -6076,7 +6076,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Snap Mode: As Time Quantization
 - [x] Shuffle Left  `⌥[`
 - [x] Shuffle Right  `⌥]`
-- [ ] Bounce…  `⌘B`
+- [x] Bounce…  `⌘B`
 - [x] Create Tempo Change
 - [x] Create Time Signature Change  `⌃⌥⇧T`
 - [x] Create Key Signature Change  `⌃⌥⇧K`

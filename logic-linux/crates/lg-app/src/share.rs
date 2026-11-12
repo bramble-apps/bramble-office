@@ -23,6 +23,7 @@ use crate::look;
 pub const COMMANDS: &[&str] = &[
     "Project or Section…",
     "Bounce Project or Section…",
+    "Bounce…",
     "Song to Music…",
     "Song to Voice Memos…",
     "Mail…",
@@ -289,7 +290,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
         return false;
     }
     match name {
-        "Project or Section…" | "Bounce Project or Section…" => {
+        "Project or Section…" | "Bounce Project or Section…" | "Bounce…" => {
             if crate::surround::active(app) {
                 // (a surround or Spatial Audio project: the Bounce window with Surround Bounce)
                 crate::surround_ui::open_bounce(app);
