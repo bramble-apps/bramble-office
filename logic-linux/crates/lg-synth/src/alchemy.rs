@@ -1756,6 +1756,17 @@ impl Plugin for Alchemy {
             let ty = self.params.get(fx::id(r, sl, 0)).round().max(0.0) as usize;
             return fx::knobs(ty).get((f as usize).wrapping_sub(2)).filter(|_| f >= 2).map(|s| fx::text(s, value));
         }
+        // the Transform pad's Rate (0: Off) and Snap Vol
+        if id == SNAP_RATE {
+            return Some(if value <= 0.0 { "Off".to_string() } else { format!("{:.2} s", value) });
+        }
+        if (SNAPVOL..SNAPVOL + 8).contains(&id) {
+            return Some(format!("{value:.2} dB"));
+        }
+        // the sources' Vol: a gain shown in dB (−∞ … 0 dB)
+        if (19..=22).contains(&id) {
+            return Some(if value <= 1e-5 { "-inf dB".to_string() } else { format!("{:.1} dB", 20.0 * value.log10()) });
+        }
         crate::alchemy_arp::value_text(id, value)
     }
     fn get(&self, id: u32) -> f32 {

@@ -279,7 +279,7 @@ pub fn setting(name: &str) -> Option<Vec<(u32, f32)>> {
                 }
                 "Vector Kick" => {
                     // a short pitch / filter sweep: Time 1>2 9.0 ms, 2>3 303 ms
-                    s.put(4, 1.0).put(37, 0.9).put(36, 0.2).put(110, 0.35).put(112, 0.0);
+                    s.put(4, 1.0).put(37, 0.85).put(36, 0.3).put(110, 0.5).put(112, 0.0);
                     pts[1][0] = 0.009;
                     pts[2][0] = 0.303;
                 }

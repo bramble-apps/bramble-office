@@ -532,7 +532,7 @@ fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
     p.text(852.0, 276.0, Align2::LEFT_CENTER, "Priority", 10.0, p.skin.dim);
     let gm = g(p, ix, lg_synth::alchemy::VOICE + 1).round() as usize;
     for (k, l) in ["Rate", "Time"].iter().enumerate() {
-        if rack::flat(p, p.rect(1066.0 + k as f32 * 35.0, 254.0, 34.0, 20.0), l, gm == k, true, ("glide-mode", k)) {
+        if rack::flat(p, p.rect(1066.0 + k as f32 * 34.0, 254.0, 34.0, 20.0), l, gm == k, true, ("glide-mode", k)) {
             p.put(lg_synth::alchemy::VOICE + 1, k as f32);
         }
     }
@@ -902,12 +902,14 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
             }
             // the noise oscillator: its waveform (‹ ›), Vol, Low Cut and High Cut
             let n0 = lg_synth::alchemy::NOISE + s;
-            rack::menu_arrows(p, ix, 556.0, 132.0, 70.0, n0);
+            rack::menu_arrows(p, ix, 556.0, 132.0, 80.0, n0);
             for (j, (pid, l)) in [(n0 + 4, "Vol"), (n0 + 8, "Low Cut"), (n0 + 12, "High Cut")].iter().enumerate() {
-                k(p, st, 700.0 + j as f32 * 56.0, 124.0, 34.0, *pid, l);
+                k(p, st, 540.0 + j as f32 * 64.0, 170.0, 30.0, *pid, l);
             }
             if !nz {
-                p.ui.painter().rect_filled(p.rect(556.0, 120.0, 300.0, 70.0), 0.0, rgb(0x1c2027).gamma_multiply(0.55));
+                // the noise oscillator off: its controls dimmed
+                p.ui.painter().rect_filled(p.rect(554.0, 128.0, 116.0, 28.0), 0.0, rgb(0x1c2027).gamma_multiply(0.55));
+                p.ui.painter().rect_filled(p.rect(510.0, 166.0, 200.0, 62.0), 0.0, rgb(0x1c2027).gamma_multiply(0.55));
             }
         }
         1 => {

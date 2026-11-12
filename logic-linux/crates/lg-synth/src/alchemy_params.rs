@@ -193,7 +193,7 @@ pub static PARAMS: &[Param] = &[
     Param::new(364, "Filter 1 On", 0.0, 1.0, 1.0, Unit::OnOff),
     Param::menu(365, "Filter 1 Type", MASTER_FILTERS, 1.0),
     Param::new(366, "Filter 1 Fat", 0.0, 1.0, 0.0, Unit::Ratio),
-    Param::menu(371, "PlayMode", PLAY_MODES, 0.0),
+    Param::menu(371, "PlayMode", PLAY_MODES, 1.0),
     Param::new(376, "NmVoices", 1.0, 32.0, 16.0, Unit::None),
     Param::new(391, "PbUp", 0.0, 24.0, 2.0, Unit::Semitones),
     Param::new(396, "PbDown", 0.0, 24.0, 2.0, Unit::Semitones),

@@ -60,6 +60,9 @@ struct Slot {
     age: u64,
 }
 
+/// Poly::priority: none chosen (the instrument's own stealing).
+pub const NO_PRIORITY: u8 = 255;
+
 /// A fixed pool of voices (allocated once). `max` voices may sound; the pool holds extra slots
 /// so a stolen voice can fade out while its replacement starts.
 pub struct Poly<V> {
@@ -72,7 +75,8 @@ pub struct Poly<V> {
     /// The next note-ons add voices to the key (layers, unison) instead of replacing it.
     pub stacking: bool,
     /// Which notes to keep when the polyphony is exceeded: 0 Newest (steal the oldest),
-    /// 1 Oldest (drop the new note), 2 Lowest, 3 Highest.
+    /// 1 Oldest (drop the new note), 2 Lowest, 3 Highest; NO_PRIORITY (the default) steals the
+    /// quietest of the oldest.
     pub priority: u8,
 }
 
@@ -86,7 +90,7 @@ impl<V> Poly<V> {
             counter: 0,
             retrigger_kills: true,
             stacking: false,
-            priority: 0,
+            priority: NO_PRIORITY,
         }
     }
 
@@ -121,10 +125,11 @@ impl<V> Poly<V> {
         let live = (0..self.voices.len())
             .filter(|&i| self.voices[i].active() && !self.slots[i].killed)
             .count();
-        if live >= self.max && self.priority != 0 && !(0..self.voices.len()).any(|i| self.voices[i].active() && !self.slots[i].killed && self.slots[i].released) {
+        if live >= self.max && self.priority != NO_PRIORITY && !(0..self.voices.len()).any(|i| self.voices[i].active() && !self.slots[i].killed && self.slots[i].released) {
             // all voices held: keep the oldest / lowest / highest notes
             let held = (0..self.voices.len()).filter(|&i| self.voices[i].active() && !self.slots[i].killed);
             let victim = match self.priority {
+                0 => held.min_by_key(|&i| self.slots[i].age),
                 2 => held.max_by_key(|&i| self.slots[i].note).filter(|&i| self.slots[i].note > note),
                 3 => held.min_by_key(|&i| self.slots[i].note).filter(|&i| self.slots[i].note < note),
                 _ => None,

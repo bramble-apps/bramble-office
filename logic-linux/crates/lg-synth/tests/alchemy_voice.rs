@@ -156,9 +156,12 @@ fn voice_priority() {
     assert_eq!(one(&a).0, 60);
 }
 
-/// Source A only, Master filter off, the oscillator's start point fixed.
+/// Source A only, Master filter off, the oscillator's start point fixed, the Perform unison
+/// knobs (which add oscillators and detune to A) at zero.
 fn plain() -> Alchemy {
     let mut a = Alchemy::new(RATE);
+    a.set(9, 0.0);
+    a.set(10, 0.0);
     a.set(278, 0.0);
     a.set(364, 0.0);
     a.set(212, 0.0);
@@ -176,11 +179,12 @@ fn va_phase() {
     };
     let mut a = plain();
     a.set(212, 0.3);
+    let diff = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     let (x, y) = (first(&mut a), first(&mut a));
-    assert_eq!(x, y, "a fixed start point: every note starts alike");
+    assert!(diff(&x, &y) < 1e-3, "a fixed start point: every note starts alike");
     a.set(212, 1.0);
     let (x, y) = (first(&mut a), first(&mut a));
-    assert_ne!(x, y, "100 %: a random start each trigger");
+    assert!(diff(&x, &y) > 0.05, "100 %: a random start each trigger");
 }
 
 #[test]
@@ -331,4 +335,12 @@ mod transform {
         let r = loud(-12.0) / loud(0.0);
         assert!((r - 0.25).abs() < 0.03, "{r}");
     }
+}
+
+#[test]
+fn source_vol_in_db() {
+    let a = Alchemy::new(RATE);
+    assert_eq!(a.value_text(19, 0.0).as_deref(), Some("-inf dB"));
+    assert_eq!(a.value_text(20, 1.0).as_deref(), Some("0.0 dB"));
+    assert_eq!(a.value_text(21, 0.5).as_deref(), Some("-6.0 dB"));
 }

@@ -22,7 +22,8 @@ fn tutorial_settings_load_and_play() {
         let n_s = 48000;
         let (mut l, mut r) = (vec![0.0f32; n_s], vec![0.0f32; n_s]);
         for c in (0..n_s).step_by(256) {
-            sc.render(&mut l[c..c + 256], &mut r[c..c + 256]);
+            let e = (c + 256).min(n_s);
+            sc.render(&mut l[c..e], &mut r[c..e]);
         }
         let rms = (l.iter().map(|x| x * x).sum::<f32>() / n_s as f32).sqrt();
         assert!(rms > 1e-4, "{n} plays: {rms}");

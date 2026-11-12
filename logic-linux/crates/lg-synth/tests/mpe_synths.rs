@@ -8,14 +8,20 @@ use lg_synth::es2::Es2;
 const RATE: f32 = 48000.0;
 
 fn hz(x: &mut dyn Instrument) -> f32 {
-    let n = 24000;
+    let n = 256 * 94;
     let (mut l, mut r) = (vec![0.0f32; n], vec![0.0f32; n]);
     for k in (0..n).step_by(256) {
         x.render(&mut l[k..k + 256], &mut r[k..k + 256]);
     }
-    let s = &l[4800..];
-    let z = s.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
-    z as f32 / (s.len() as f32 / RATE)
+    // the fundamental by autocorrelation (40 Hz – 2 kHz)
+    let x = &l[4800..];
+    let corr = |lag: usize| x[..x.len() - lag].iter().zip(&x[lag..]).map(|(a, b)| a * b).sum::<f32>();
+    let (lo, hi) = ((RATE / 2000.0) as usize, (RATE / 40.0) as usize);
+    let best = (lo..hi).map(|lag| (lag, corr(lag))).fold((lo, f32::MIN), |b, c| if c.1 > b.1 { c } else { b });
+    let floor = best.1 * 0.9;
+    // the first lag near the best (not a multiple of the period)
+    let lag = (lo..hi).find(|&k| corr(k) >= floor && corr(k) >= corr(k - 1) && corr(k) >= corr(k + 1)).unwrap_or(best.0);
+    RATE / lag as f32
 }
 
 /// (bent on its own channel, another member channel bent, base channel bent) / unbent.
@@ -23,7 +29,7 @@ fn ratios(make: &dyn Fn() -> Box<dyn Instrument>, bend: &dyn Fn(&mut Box<dyn Ins
     let mut a = make();
     a.note_on_ch(1, 57, 100);
     let base = hz(a.as_mut());
-    let mut run = |ch: u8, v: i16| {
+    let run = |ch: u8, v: i16| {
         let mut b = make();
         b.note_on_ch(1, 57, 100);
         bend(&mut b, ch, v);

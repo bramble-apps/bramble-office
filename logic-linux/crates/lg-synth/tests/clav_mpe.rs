@@ -7,14 +7,20 @@ use lg_synth::clav::{VintageClav, MONO_BEND, MONO_MODE, MONO_MODES};
 const RATE: f32 = 48000.0;
 
 fn hz(c: &mut VintageClav) -> f32 {
-    let n = 24000;
+    let n = 256 * 94;
     let (mut l, mut r) = (vec![0.0f32; n], vec![0.0f32; n]);
     for k in (0..n).step_by(256) {
         c.render(&mut l[k..k + 256], &mut r[k..k + 256]);
     }
+    // the fundamental by autocorrelation (40 Hz – 2 kHz)
     let x = &l[4800..];
-    let z = x.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
-    z as f32 / (x.len() as f32 / RATE)
+    let corr = |lag: usize| x[..x.len() - lag].iter().zip(&x[lag..]).map(|(a, b)| a * b).sum::<f32>();
+    let (lo, hi) = ((RATE / 2000.0) as usize, (RATE / 40.0) as usize);
+    let best = (lo..hi).map(|lag| (lag, corr(lag))).fold((lo, f32::MIN), |b, c| if c.1 > b.1 { c } else { b });
+    let floor = best.1 * 0.9;
+    // the first lag near the best (not a multiple of the period)
+    let lag = (lo..hi).find(|&k| corr(k) >= floor && corr(k) >= corr(k - 1) && corr(k) >= corr(k + 1)).unwrap_or(best.0);
+    RATE / lag as f32
 }
 
 #[test]
