@@ -46,18 +46,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.rect_filled(area, 0.0, look::pane_bg());
     p.vline(area.max.x, area.y_range(), Stroke::new(1.0, look::line()));
     let mut y = area.min.y;
-    let region_name = app.selected_region.and_then(|(t, r)| app.project.as_ref()?.tracks.get(t)?.regions.get(r)).map(|r| r.name.clone());
     let track_name = app.selected_track.and_then(|t| app.project.as_ref()?.tracks.get(t)).map(|t| t.name.clone());
-    let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));
-    if widgets::disclosure(ui, hr, ui.scope_id().with("insp-region"), "Region:", region_name.as_deref().unwrap_or(""), app.inspector_region_open) {
-        app.inspector_region_open = !app.inspector_region_open;
-    }
-    y += 33.0;
-    if app.inspector_region_open {
-        if let Some((t, r)) = app.selected_region {
-            y = region_rows(app, ui, area, y, t, r);
-        }
-    }
+    // the Region part (Logic 13's groups, every selected region, the defaults): regionparams.rs
+    y = crate::regionparams::inspector(app, ui, area, y);
     let hr = Rect::from_min_size(pos2(area.min.x, y), vec2(area.width(), 32.0));
     if widgets::disclosure(ui, hr, ui.scope_id().with("insp-track"), "Track:", track_name.as_deref().unwrap_or(""), app.inspector_track_open) {
         app.inspector_track_open = !app.inspector_track_open;
@@ -85,92 +76,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
 }
 
-type Shown = Box<dyn Fn(f32) -> String>;
-
 fn signed(v: f32) -> String {
     if v == 0.0 { String::new() } else { format!("{v:+.0}") }
-}
-
-fn region_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize, r: usize) -> f32 {
-    let Some(region) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).cloned() else { return y };
-    let p = ui.painter().clone();
-    let mut props = region.props;
-    let mut muted = region.muted;
-    let audio = region.audio.is_some();
-    let id = ui.scope_id().with(("rgn", t, r));
-    let mut changed = false;
-    label(&p, area, y, "Mute");
-    changed |= widgets::check_slot(ui, slot_rect(area, y), id.with("mute"), &mut muted);
-    y += ROW;
-    label(&p, area, y, "Loop");
-    changed |= widgets::check_slot(ui, slot_rect(area, y), id.with("loop"), &mut props.looped);
-    y += ROW;
-    label(&p, area, y, "Quantize");
-    let cur = QUANTIZE.iter().position(|q| q.1 == props.quantize).unwrap_or(0);
-    let names: Vec<&str> = QUANTIZE.iter().map(|q| q.0).collect();
-    if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("q"), cur, &names) {
-        props.quantize = QUANTIZE[i].1;
-        changed = true;
-    }
-    y += ROW;
-    if audio {
-        // Smart Tempo (tempomode.rs)
-        label(&p, area, y, "Smart Tempo");
-        let cur = crate::tempomode::smart_tempo(app, t, r);
-        if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("smart-tempo"), cur, &crate::tempomode::SMART) {
-            crate::flex::checkpoint(app, "Smart Tempo");
-            crate::tempomode::set_smart_tempo(app, t, r, i);
-        }
-        y += ROW;
-    } else {
-        // Pitch Source (globals.rs)
-        label(&p, area, y, "Pitch Source");
-        if let Some(i) = widgets::choice_slot(ui, slot_rect(area, y), id.with("pitch-source"), props.pitch_source as usize, &crate::globals::PITCH_SOURCES) {
-            props.pitch_source = i as u8;
-            changed = true;
-        }
-        y += ROW;
-    }
-    let pct_or = |dflt: f32| move |v: f32| if v == 0.0 { "Fixed".to_string() } else if v == dflt { String::new() } else { format!("{v:.0} %") };
-    let mut rows: Vec<(&str, f32, f32, f32, f32, Shown)> = vec![
-        ("Q-Swing", props.swing as f32, 0.0, 100.0, 50.0, Box::new(|v: f32| format!("{v:.0} %"))),
-        ("Transpose", props.transpose as f32, -96.0, 96.0, 0.0, Box::new(signed)),
-        ("Fine Tune", props.fine_tune as f32, -50.0, 50.0, 0.0, Box::new(signed)),
-    ];
-    if !audio {
-        rows.push(("Velocity", props.velocity as f32, -99.0, 99.0, 0.0, Box::new(signed)));
-        rows.push(("Dynamics", props.dynamics as f32, 0.0, 300.0, 100.0, Box::new(pct_or(100.0))));
-        rows.push(("Gate Time", props.gate_time as f32, 0.0, 200.0, 100.0, Box::new(pct_or(100.0))));
-    }
-    rows.push(("Delay", props.delay as f32, -3840.0, 3840.0, 0.0, Box::new(|v: f32| if v == 0.0 { String::new() } else { format!("{v:+.0} ticks") })));
-    for (i, (name, mut v, min, max, def, shown)) in rows.into_iter().enumerate() {
-        label(&p, area, y, name);
-        let step = if name == "Delay" { 10.0 } else { 1.0 };
-        if widgets::value_slot(ui, slot_rect(area, y), id.with(("v", i)), &mut v, min, max, def, step, &*shown) {
-            changed = true;
-            match name {
-                "Q-Swing" => props.swing = v as u8,
-                "Transpose" => props.transpose = v as i8,
-                "Fine Tune" => props.fine_tune = v as i8,
-                "Velocity" => props.velocity = v as i8,
-                "Dynamics" => props.dynamics = v as u16,
-                "Gate Time" => props.gate_time = v as u16,
-                _ => props.delay = v as i32,
-            }
-        }
-        y += ROW;
-    }
-    if changed {
-        app.checkpoint("Region Parameter");
-        if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
-            rg.props = props;
-            rg.muted = muted;
-        }
-        app.after_edit();
-    }
-    y += 4.0;
-    p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
-    y + 1.0
 }
 
 fn track_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize) -> f32 {

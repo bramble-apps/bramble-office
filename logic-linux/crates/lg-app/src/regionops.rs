@@ -360,15 +360,16 @@ pub fn marquee(app: &mut App, ui: &mut egui::Ui, lanes: Rect, rows_top: f32, row
         }
         let beat = app.bar_ticks() / sig.0.max(1) as u32;
         let div = (beat / 4).max(1);
-        let free = ui.input(|i| i.modifiers.shift);
-        let snap = |t: f32| if free { t.max(0.0) as u32 } else { ((t.max(0.0) / div as f32).round() as u32) * div };
+        // the Snap value; Control: the division; Control-Shift: ticks (regionparams.rs)
+        let m = ui.input(|i| i.modifiers);
+        let px_per_tick = 1.0 / (tick_of(1.0) - tick_of(0.0)).max(1e-6);
         if resp.drag_started() {
             if let Some(o) = ui.input(|i| i.pointer.press_origin()) {
-                app.ta.regions.drag = Some(RDrag::Marquee { tick: snap(tick_of(o.x)), y: o.y });
+                app.ta.regions.drag = Some(RDrag::Marquee { tick: crate::regionparams::marquee_snap(app, tick_of(o.x), div, px_per_tick, m), y: o.y });
             }
         }
         if let (true, Some(RDrag::Marquee { tick, y }), Some(pp)) = (resp.dragged(), app.ta.regions.drag, resp.interact_pointer_pos()) {
-            let now = snap(tick_of(pp.x));
+            let now = crate::regionparams::marquee_snap(app, tick_of(pp.x), div, px_per_tick, m);
             let (y0, y1) = (y.min(pp.y) - rows_top + app.scroll_y, y.max(pp.y) - rows_top + app.scroll_y);
             let tracks: Vec<usize> = rows.iter().filter(|r| r.y + r.h > y0 && r.y < y1).map(|r| r.t).collect();
             if now != tick && !tracks.is_empty() {
@@ -380,9 +381,14 @@ pub fn marquee(app: &mut App, ui: &mut egui::Ui, lanes: Rect, rows_top: f32, row
             app.ta.regions.drag = None;
         }
         if resp.clicked() {
-            app.ta.regions.marquee = None;
-            if let Some(pp) = resp.interact_pointer_pos() {
-                app.locate(snap(tick_of(pp.x)) as f64);
+            // Shift-click: the marquee's end nearest (Option-Shift: farther) moves there, or it
+            // grows to the click; a click inside splits the regions at its borders
+            let at = resp.interact_pointer_pos().map(|pp| (crate::regionparams::marquee_snap(app, tick_of(pp.x), div, px_per_tick, m), rows.iter().find(|r| pp.y - rows_top + app.scroll_y >= r.y && pp.y - rows_top + app.scroll_y < r.y + r.h).map(|r| r.t)));
+            if !at.is_some_and(|(tick, t)| crate::regionparams::marquee_click(app, tick, t, m)) {
+                app.ta.regions.marquee = None;
+                if let Some((tick, _)) = at {
+                    app.locate(tick as f64);
+                }
             }
         }
     }

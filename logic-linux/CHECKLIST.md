@@ -119,6 +119,9 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 - [~] Markers (lg-core markers, markers.rs, tested): lengths (to the next marker unless shorter, never overlapping), colours (Colors window while markers have the focus), SMPTE lock (locked markers keep their time; scene markers can't unlock), marker text (first paragraph = name, saved in the .logicx), marker sets; Marker track: click selects, Option-click locates, drag moves by Snap with a help tag, Option-drag copies, edges resize, a shared edge moves both, ⌘-click / ⇧⌘-click trim, double-click renames, ⌥-double-click opens Marker Text, Pencil adds (quarter note), Eraser deletes, Text tool renames, Delete, ⌘C / ⌘V, the header word's Create Markers From Regions; markers in the ruler when the Marker track is hidden (⌘-drag moves, down out deletes, ⇧-click cycles, ⌘-double-click renames, ⌃⇧⌘-double-click creates); the cycle dropped on the Marker track (vertical drag kept in place, Shift sideways); Marker List (own window and List Editors) with Position / Name / Length typed or slid, Options, View (as time, length as end), Marker Set pop-up, the Marker Text area; Marker Text window with Font; Import / Export / Remove Marker from / to Audio File (WAV cue points). [ ] markers written into recorded / bounced files, Junction tool, tear-off list, USB controller auto-assign
 - [~] Global tracks (globals.rs, tested): which show (Track ▸ Global Tracks items, the headers' menu, Configure Global Tracks with Enable / Disable All and Show Single Track), Single Global Track (⌃⌥⌘G, ' for Marker only, Cycle Through), Show / Hide All, reorder by dragging headers, resize a track or the whole area, Protect buttons. [ ] per-window configuration, global tracks in the editors
 - [~] Smart Tempo modes (tempomode.rs, tested logic): Project Tempo mode in the LCD (KEEP / ADAPT / AUTO menu) and Project Settings; Adapt opens the Tempo track and turns Cycle off; Adapt / Automatic recordings set the project tempo after their analysis (metronome, regions there, Cycle as references); the only region in a range carries its tempo changes when moved / trimmed / deleted; Free Tempo Recording (⌃⌥⌘R) with its four choices or the project default; Region inspector Smart Tempo (Off / On / Align …) and Pitch Source (Off / Key Signature / Region Chords / Chord Track) for MIDI regions; Apply Region Tempo… dialog; Move Region to Beat. [ ] Adapt and free tempo recording not run with live audio (headless), imports don't adapt, tempo curve colours, multitrack sets, Smart Tempo hints
+- [~] Region inspector as Logic 13's (regionparams.rs, lg-core regparams, tested; measured against Apple's Region Inspector Float screenshot): General / Quantize / Fades / Details groups with More areas, name field, colour swatch (region colours drawn; Region Color ▸ As Track Color; Color Regions by Track Color), Gain, Delay in ticks or ms, Transpose with octave pop-up, Fine Tune (10-cent pop-up), Velocity, Dynamics (Fixed), Gate Time (Fixed / Legato), Pitch Source (Off / Key Signature: follows key changes), Clip Length, Flex, Reverse, Q-Swing / Q-Strength / Q-Range / Q-Flam (played), fade lengths, curves and type, Position / Length (bar beat division tick), Lock Time Position (Lock / Unlock SMPTE Position); every selected region edited (relative, Option-Shift absolute, asterisk where they differ); MIDI / Audio Defaults for new recordings; Region Inspector Float (⌥⇧R); the new parameters kept in a project sidecar. [ ] Q-Velocity / Q-Length (no groove templates), Smart Quantize, Smart Tempo / File Tempo / Is a Loop / Speed rows, Fade In Speed Up, Session Player pitch sources, writing the new parameters into Logic's file
+- [~] Cut / Insert Time (regionparams.rs, lg-core regparams, tested): Cut / Copy / Delete / Repeat Section Between Locators, Insert Silence, Insert Section at Playhead (Global, and Selection asking about global events), with tempo changes, markers, arrangement markers, chords, Transposition and whole-bar key / signature changes moved; audio regions cut keep their file offset, gain and fades; toolbar section buttons work. Region Length Double / Halve / Change… (0.25-16), Repeat Regions dialog (copies, adjustment, copies / aliases), Paste at Original Position, Split's Keep / Shorten / Split dialog (Shorten by default), Join normalizes Transpose / Velocity / Dynamics and joins a looped region with its loops; Control / Control-Shift drags; Limit Dragging to One Direction; Gain tool; Toggle Region Solo; marquee ruler, marquee Shift-click ends / grow, click inside splits, Shift-click header toggles a track. [ ] (Selection) works per track, not per region; audio Join mixdown; region solo button and Solo tool hold-to-play; Gain on a marquee
+- [~] Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog
 
 <!-- GENERATED: tool/checklist.py rewrites everything below -->
 
@@ -129,13 +132,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 363 | 595 | 61% |
-| Local menus | 679 | 1191 | 57% |
-| Right-click menus | 1399 | 2575 | 54% |
-| Key commands | 1647 | 2207 | 74% |
+| Menu bar | 369 | 595 | 62% |
+| Local menus | 688 | 1191 | 57% |
+| Right-click menus | 1406 | 2575 | 54% |
+| Key commands | 1666 | 2207 | 75% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 363 of 595
+## Menu bar: 369 of 595
 
 
 <details><summary>Bramble Studio — 25/48</summary>
@@ -277,7 +280,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 78/166</summary>
+<details><summary>Edit — 84/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -300,7 +303,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Overlapped Regions  `⇧O`
   - [ ] Same-Colored Regions  `⇧C`
   - [ ] Empty Regions
-  - [ ] SMPTE-Locked Regions
+  - [x] SMPTE-Locked Regions
   - [x] Similar Regions  `⇧S`
   - [x] Equal Regions  `⇧E`
   - [ ] Next Region  `→`
@@ -425,11 +428,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate by MIDI Channel
   - [ ] Separate by Articulation
 - [ ] Cut/Insert Time
-  - [ ] Cut Section Between Locators  `⌃⌘X`
-  - [ ] Copy Section Between Locators
-  - [ ] Insert Section at Playhead  `⌃⌘V`
-  - [ ] Insert Silence at Locators  `⌃⌘I`
-  - [ ] Repeat Section Between Locators  `⌃⌘R`
+  - [x] Cut Section Between Locators  `⌃⌘X`
+  - [x] Copy Section Between Locators
+  - [x] Insert Section at Playhead  `⌃⌘V`
+  - [x] Insert Silence at Locators  `⌃⌘I`
+  - [x] Repeat Section Between Locators  `⌃⌘R`
   - [x] Copy Scene to Playhead
   - [x] Insert Scene at Playhead  `⌘↘End`
 - [ ] Tempo
@@ -783,7 +786,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 679 of 1191
+## Local menus (Edit / Functions / View in each area): 688 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -1012,11 +1015,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-View — 2/7</summary>
+<details><summary>audiotrack-View — 3/7</summary>
 
 - [x] Show Local Inspector  `⌥⇧I`
 - [ ] Secondary Ruler  `⌃⌥⇧R`
-- [ ] Marquee Ruler
+- [x] Marquee Ruler
 - [ ] Region Transpose
 - [ ] Grid Lines
 - [ ] Marker Lines
@@ -1808,7 +1811,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 77/168</summary>
+<details><summary>tracks-Edit — 83/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1831,7 +1834,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Overlapped Regions  `⇧O`
   - [ ] Same-Colored Regions  `⇧C`
   - [ ] Empty Regions
-  - [ ] SMPTE-Locked Regions
+  - [x] SMPTE-Locked Regions
   - [x] Similar Regions  `⇧S`
   - [x] Equal Regions  `⇧E`
   - [ ] Next Region  `→`
@@ -1957,11 +1960,11 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Separate by MIDI Channel
   - [ ] Separate by Articulation
 - [ ] Cut/Insert Time
-  - [ ] Cut Section Between Locators  `⌃⌘X`
-  - [ ] Copy Section Between Locators
-  - [ ] Insert Section at Playhead  `⌃⌘V`
-  - [ ] Insert Silence at Locators  `⌃⌘I`
-  - [ ] Repeat Section Between Locators  `⌃⌘R`
+  - [x] Cut Section Between Locators  `⌃⌘X`
+  - [x] Copy Section Between Locators
+  - [x] Insert Section at Playhead  `⌃⌘V`
+  - [x] Insert Silence at Locators  `⌃⌘I`
+  - [x] Repeat Section Between Locators  `⌃⌘R`
   - [x] Copy Scene to Playhead
   - [x] Insert Scene at Playhead  `⌘↘End`
 - [ ] Tempo
@@ -1981,7 +1984,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Functions — 47/61</summary>
+<details><summary>tracks-Functions — 48/61</summary>
 
 - [ ] Create MIDI Region
 - [x] Create Pattern Region
@@ -1989,7 +1992,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Rename Regions/Cells/Scenes  `⇧N`
 - [x] Name Regions/Cells by Track Name  `⌥⇧N`
 - [ ] Name Track by Region/Cell Name  `⌥⇧⌘N`
-- [ ] Color Regions/Cells by Track Color  `⌥⇧C`
+- [x] Color Regions/Cells by Track Color  `⌥⇧C`
 - [ ] Color Track by Region/Cell Color  `⌥⇧⌘C`
 - [x] Stem Splitter…
 - [ ] Selection-Based Processing…  `⌥⇧P`
@@ -2097,7 +2100,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 5/25</summary>
+<details><summary>tracks-View — 6/25</summary>
 
 - [ ] Link
   - [x] Off
@@ -2116,7 +2119,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Bars, Beats, Division and Ticks
 - [ ] Tracks
 - [ ] Secondary Ruler  `⌃⌥⇧R`
-- [ ] Marquee Ruler
+- [x] Marquee Ruler
 - [ ] Grid Lines
 - [ ] Marker Lines
 - [x] Scroll in Play  `⌃``
@@ -2127,7 +2130,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1399 of 2575
+## Right-click menus: 1406 of 2575
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4472,7 +4475,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>ruler — 7/16</summary>
+<details><summary>ruler — 13/16</summary>
 
 - [x] Move Locators Forward by Cycle Length  `⇧⌘.`
 - [x] Move Locators Backwards by Cycle Length  `⇧⌘,`
@@ -4483,12 +4486,12 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Split Regions at Playhead  `⌘T`
 - [ ] Split Regions at Locators  `⌥⌘T`
 - [x] Trim Regions to Fill within Locators  `⌥\`
-- [ ] Cut Section Between Locators (Global)  `⌃⌘X`
-- [ ] Insert Silence Between Locators (Global)  `⌃⌘I`
-- [ ] Copy Section Between Locators (Global)
-- [ ] Insert Section at Playhead (Global)  `⌃⌘V`
-- [ ] Repeat Section Between Locators (Global)  `⌃⌘R`
-- [ ] Delete Section Between Locators (Global)
+- [x] Cut Section Between Locators (Global)  `⌃⌘X`
+- [x] Insert Silence Between Locators (Global)  `⌃⌘I`
+- [x] Copy Section Between Locators (Global)
+- [x] Insert Section at Playhead (Global)  `⌃⌘V`
+- [x] Repeat Section Between Locators (Global)  `⌃⌘R`
+- [x] Delete Section Between Locators (Global)
 - [x] Copy Cycle to Live Loops Scene
 
 </details>
@@ -4805,7 +4808,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tool-menu-T-key-tracks-area — 14/18</summary>
+<details><summary>tool-menu-T-key-tracks-area — 15/18</summary>
 
 - [x] Pointer Tool  `T`
 - [x] Pencil Tool  `P`
@@ -4821,7 +4824,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Automation Curve Tool  `W`
 - [x] Marquee Tool  `R`
 - [x] Flex Tool  `X`
-- [ ] Gain Tool  `G`
+- [x] Gain Tool  `G`
 - [ ] Slip Tool
 - [ ] Rotate Tool
 - [ ] Set Previously Set Tool
@@ -4950,7 +4953,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Key commands: 1647 of 2207
+## Key commands: 1666 of 2207
 
 
 <details><summary>None — 0/1</summary>
@@ -4959,7 +4962,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Global Commands — 536/679</summary>
+<details><summary>Global Commands — 538/679</summary>
 
 - [x] Record  `R`
 - [x] Record / Record Repeat
@@ -5109,7 +5112,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Toggle Cycle Mode  `C`
 - [x] Toggle Autopunch Mode  `⌃⌥⌘P`
 - [x] Toggle Replace  `/`
-- [ ] Toggle Region Solo
+- [x] Toggle Region Solo
 - [x] Toggle Solo Tracks (Channel Strips) of Selected Regions/Cells
 - [x] Engage Solo Tracks (Channel Strips) of Selected Regions/Cells  `⌃S`
 - [ ] Set Solo Lock Mode
@@ -5168,7 +5171,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Recall Screenset 7x  `⇧7`
 - [x] Recall Screenset 8x  `⇧8`
 - [x] Recall Screenset 9x  `⇧9`
-- [ ] Region Inspector Float  `⌥⇧R`
+- [x] Region Inspector Float  `⌥⇧R`
 - [x] Import Project Settings…
 - [x] Open Synchronization Project Settings…
 - [x] Open Metronome Project Settings…
@@ -5655,7 +5658,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Various Windows — 65/110</summary>
+<details><summary>Various Windows — 66/110</summary>
 
 - [ ] Undo  `⌘Z`
 - [ ] Redo  `⇧⌘Z`
@@ -5699,7 +5702,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Set Crosshair Tool
 - [ ] Set MIDI Thru Tool
 - [ ] Set Move Tool
-- [ ] Set Gain Tool
+- [x] Set Gain Tool
 - [ ] Set Slip Tool
 - [ ] Set Rotate Tool
 - [ ] Set Previously Set Tool
@@ -5790,7 +5793,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks and Various Editors — 180/290</summary>
+<details><summary>Main Window Tracks and Various Editors — 181/290</summary>
 
 - [x] Show/Hide Automation  `A`
 - [x] Show Track Automation
@@ -6042,7 +6045,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Mute Notes/Regions/Cells/Folders On/Off  `⌃M`
 - [x] Unlock SMPTE Position  `⌘⇞`
 - [x] Lock SMPTE Position  `⌘⇟`
-- [ ] Lock/Unlock SMPTE Position
+- [x] Lock/Unlock SMPTE Position
 - [x] Convert to Scene Marker
 - [ ] Convert to Standard Marker
 - [ ] Snap Mode: Smart
@@ -6269,7 +6272,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Main Window Tracks — 130/249</summary>
+<details><summary>Main Window Tracks — 144/249</summary>
 
 - [ ] Select All Tracks
 - [ ] Select Unused Tracks
@@ -6388,18 +6391,18 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Remove Crossfades
 - [x] Remove Fade Outs
 - [x] Join Regions per Tracks / Fill Cell  `J`
-- [ ] Delete Section Between Locators (Selection)
-- [ ] Delete Section Between Locators (Global)
-- [ ] Cut Section Between Locators (Selection)
-- [ ] Cut Section Between Locators (Global)  `⌃⌘X`
-- [ ] Copy Section Between Locators (Global)
-- [ ] Copy Section Between Locators (Selection)
-- [ ] Insert Silence Between Locators (Selection)
-- [ ] Insert Silence Between Locators (Global)  `⌃⌘I`
-- [ ] Insert Section at Playhead (Selection)
-- [ ] Insert Section at Playhead (Global)  `⌃⌘V`
-- [ ] Repeat Section Between Locators (Selection)
-- [ ] Repeat Section Between Locators (Global)  `⌃⌘R`
+- [x] Delete Section Between Locators (Selection)
+- [x] Delete Section Between Locators (Global)
+- [x] Cut Section Between Locators (Selection)
+- [x] Cut Section Between Locators (Global)  `⌃⌘X`
+- [x] Copy Section Between Locators (Global)
+- [x] Copy Section Between Locators (Selection)
+- [x] Insert Silence Between Locators (Selection)
+- [x] Insert Silence Between Locators (Global)  `⌃⌘I`
+- [x] Insert Section at Playhead (Selection)
+- [x] Insert Section at Playhead (Global)  `⌃⌘V`
+- [x] Repeat Section Between Locators (Selection)
+- [x] Repeat Section Between Locators (Global)  `⌃⌘R`
 - [ ] Cut Sections of Selected Arrangement Markers  `⌥⌘⌦`
 - [x] Insert Scenes at Playhead  `⌘⤓`
 - [ ] Copy Scenes to Playhead
@@ -6461,7 +6464,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Rename Regions/Cells/Scenes  `⇧N`
 - [x] Name Regions/Cells by Track Name  `⌥⇧N`
 - [x] Name Tracks by Region/Cell Name  `⌥⇧⌘N`
-- [ ] Color Regions/Cells by Track Color  `⌥⇧C`
+- [x] Color Regions/Cells by Track Color  `⌥⇧C`
 - [ ] Color Tracks by Region/Cell Color  `⌥⇧⌘C`
 - [ ] Drag Mode: Overlap
 - [ ] Drag Mode: No Overlap
@@ -6485,7 +6488,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Store Track Header Configuration as User Default
 - [ ] Apply Track Header Configuration User Default
 - [ ] Revert to Track Header Configuration Default
-- [ ] Marquee Ruler
+- [x] Marquee Ruler
 - [x] Show/Hide Editor  `E`
 - [x] Show/Hide Note Pad  `⌃⇧P`
 - [x] Show/Hide List Editors  `D`
@@ -7259,7 +7262,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Tool Menu — 16/29</summary>
+<details><summary>Tool Menu — 17/29</summary>
 
 - [x] Pencil Tool  `P`
 - [x] Eraser Tool  `E`
@@ -7287,7 +7290,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [ ] Crosshair Tool  `H`
 - [ ] MIDI Thru Tool  `⇧M`
 - [ ] Move Tool
-- [ ] Gain Tool  `G`
+- [x] Gain Tool  `G`
 - [ ] Slip Tool
 - [ ] Rotate Tool
 

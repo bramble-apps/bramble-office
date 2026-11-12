@@ -520,7 +520,7 @@ pub fn playback(app: &App) -> Vec<(usize, u32, Plan)> {
     for (t, tr) in p.tracks.iter().enumerate() {
         for (r, rg) in tr.regions.iter().enumerate() {
             let Some(a) = &rg.audio else { continue };
-            if rg.muted {
+            if rg.muted || !crate::regionparams::plays(app, t, r) {
                 continue;
             }
             let x = extras(app, t, r);

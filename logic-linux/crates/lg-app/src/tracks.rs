@@ -247,6 +247,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     // Autopunch's punch locators (the red strip)
     crate::recording::ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
+    // the marquee ruler (View ▸ Marquee Ruler): a strip along the ruler's bottom
+    crate::regionparams::marquee_ruler(app, ui, ruler, lanes.min.x, scroll * bar_t, px_per_tick);
     // ---- rows: headers and lanes
     let Some(proj) = app.project.clone() else { return };
     let rows = crate::trackarea::rows(app);
@@ -308,6 +310,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the header: number, icon, name, M S, volume (press on it and drag up or down: the
         // track moves)
         let row_resp = ui.interact(row, ui.scope_id().with(("trackrow", i)), Sense::click_and_drag());
+        // (Shift-click: the track leaves or rejoins the marquee)
+        if row_resp.clicked() && ui.input(|i| i.modifiers.shift) {
+            crate::regionparams::marquee_toggle_track(app, i);
+        }
         if row_resp.clicked() {
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
             crate::trackarea::click_track(app, i, shift, cmd);
@@ -493,6 +499,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             let resp = ui.interact(rr.intersect(lanes), ui.scope_id().with(("region", i, ri)), Sense::click_and_drag());
+            // the Gain tool: the region's gain shown on hover, dragged up or down
+            crate::regionparams::gain_hover(app, ui, rr, i, ri, resp.hovered());
             if resp.hovered() {
                 ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
             }
@@ -505,7 +513,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_track = Some(i);
             }
             crate::menus::context_menu(app, &resp, if r.audio.is_some() { "region-audio" } else { "region-midi" });
-            if resp.dragged() {
+            if resp.dragged() && !crate::regionparams::gain_drag(app, resp.drag_delta().y, ui.input(|i| i.modifiers.shift)) {
                 // (the drag's region: with Option it is the copy, while the pointer is still over
                 // the original)
                 if let (Some(Drag::Region { track, region, from_tick, start }), Some(pp)) = (app.drag, resp.interact_pointer_pos()) {
@@ -514,7 +522,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         let tick = (pp.x - lanes.min.x) / px_per_tick + scroll * bar_t;
                         // Shift: no snapping (with Option-Shift: the alias's own drag)
                         let free = ui.input(|i| i.modifiers.shift && !i.modifiers.alt);
-                        let new = crate::arranging::snap_region(app, start as f32 + tick - from_tick, start, px_per_tick, free);
+                        let raw = start as f32 + tick - from_tick;
+                        let new = crate::arranging::snap_region(app, raw, start, px_per_tick, free);
+                        // Control: by divisions, Control-Shift: by ticks; Limit Dragging to One
+                        // Direction (regionparams.rs)
+                        let new = crate::regionparams::drag_snap(app, ui, raw, start).unwrap_or(new);
+                        let new = if crate::regionparams::drag_axis(app, ui) == Some(false) { start } else { new };
                         move_region(app, track, ri, new);
                         // across tracks: shown on the track under the pointer, moved there on release
                         let under = crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y).map(|r| r.t).filter(|&to| to != track);
@@ -533,9 +546,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
             if resp.drag_stopped() {
+                crate::regionparams::gain_end(app);
                 // the Drag mode (No Overlap, X-Fade, Shuffle…) on the track it ended on
                 if let Some(Drag::Region { track, region, start, .. }) = app.drag {
                     let under = resp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()).and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
+                    let under = under.filter(|_| crate::regionparams::drag_axis(app, ui) != Some(true));
+                    app.rp.axis = None;
                     let (t2, r2) = match under.filter(|&to| to != track).and_then(|to| crate::arranging::move_to_track(app, track, region, to).map(|k| (to, k))) {
                         Some(x) => x,
                         None => (track, region),
@@ -703,6 +719,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         app.center_roll(t, r);
+        if drag && tool == Tool::Gain {
+            crate::regionparams::gain_start(app, t, r);
+            return;
+        }
         if drag {
             // Option-drag: a copy moves, the original stays (Logic)
             let copy = ui.input(|i| i.modifiers.alt);
@@ -805,6 +825,10 @@ fn zoom_at(app: &mut App, factor: f32, at_x: f32, lanes_x: f32) {
 
 fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
     let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)).and_then(|tr| tr.regions.get_mut(r)) else { return };
+    // (Lock Time Position: it stays)
+    if crate::regionparams::locked(rg) {
+        return;
+    }
     let d = start as i64 - rg.start as i64;
     if d == 0 {
         return;
@@ -817,7 +841,7 @@ fn move_region(app: &mut App, t: usize, r: usize, start: u32) {
 
 
 fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: TrackKind, selected: bool, muted: bool, app: &App) {
-    let base = look::region_color(kind);
+    let base = crate::regionparams::region_color(app, region, kind);
     let base = if muted { Color32::from_gray(110) } else { base };
     let body = if selected { look::mix(base, Color32::WHITE, 0.25) } else { base };
     p.rect_filled(r, 4.0, body.gamma_multiply(0.9));
@@ -827,6 +851,8 @@ fn draw_region(p: &egui::Painter, r: Rect, region: &lg_core::Region, kind: Track
         // an alias (or clone) shows an arrow, and its parent's name under its own when zoomed in
         let alias = region.ext.alias_of != 0;
         let name = if alias { format!("↪ {}", if region.name.is_empty() { &region.ext.parent_name } else { &region.name }) } else { region.name.clone() };
+        // (a muted region: its name after a small dot)
+        let name = if region.muted { format!("• {name}") } else { name };
         p.with_clip_rect(header).text(pos2(header.min.x + 4.0, header.center().y), Align2::LEFT_CENTER, name, look::semibold(10.5), Color32::from_rgb(0x10, 0x20, 0x10));
         if alias && r.height() > 40.0 && region.name != region.ext.parent_name && !region.ext.parent_name.is_empty() {
             p.with_clip_rect(r).text(pos2(header.min.x + 4.0, header.max.y + 7.0), Align2::LEFT_CENTER, &region.ext.parent_name, look::regular(9.5), Color32::from_rgb(0x10, 0x20, 0x10).gamma_multiply(0.7));
@@ -968,6 +994,7 @@ fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tic
                 zoom_at(app, f, pp.x, lanes_x);
             }
         }
+        Tool::Gain => return crate::regionparams::gain_click(app, ui, t, r),
         Tool::Text => {
             let cur = app.project.as_ref().map(|p| p.tracks[t].regions[r].name.clone()).unwrap_or_default();
             app.renaming_region = Some((t, r, cur));

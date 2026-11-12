@@ -65,6 +65,7 @@ mod projaudio;
 pub mod projfile;
 pub mod recording;
 mod regionops;
+pub mod regionparams;
 pub mod rollextras;
 mod snap;
 mod newtrack;

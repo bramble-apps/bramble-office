@@ -19,6 +19,7 @@ pub mod mixer;
 pub mod plugin;
 pub mod project;
 pub mod regions;
+pub mod regparams;
 pub mod save;
 pub mod score;
 pub mod sync;
