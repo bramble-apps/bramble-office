@@ -589,6 +589,22 @@ fn bar(app: &App) -> u32 {
     app.bar_ticks().max(1)
 }
 
+/// Whether a recording cell shows the Plus button (Continue Recording, automatic length).
+pub fn plus_shown(s: &State) -> bool {
+    s.rec_continue && s.rec_length != "Cell Length" && s.rec.is_some_and(|r| r.end.is_none())
+}
+
+/// The Plus button: the pass length becomes the nearest bar (or beat) and the next pass starts
+/// there, recording on.
+pub fn plus(app: &mut App) {
+    let (pos, _) = engine_pos(app);
+    let u = rec_unit(app);
+    if let Some(r) = app.live_loops.rec.as_mut().filter(|r| r.end.is_none()) {
+        let len = (((pos - r.start as f64) / u as f64).round().max(1.0) as u32) * u;
+        r.end = Some(r.start + len);
+    }
+}
+
 /// What an automatic recording length rounds to: a bar, or a beat with Automatic (Beats).
 fn rec_unit(app: &App) -> u32 {
     let b = bar(app);
@@ -1475,6 +1491,24 @@ pub fn resize_scenes(s: &mut State, want: usize) {
     s.scene_opts.retain(|k, _| *k < n);
 }
 
+/// Add Audio File… (⇧⌘I) on an empty audio cell: the file in a new cell, as long as it plays
+/// at the project tempo (whole beats). One undo step.
+pub fn add_audio_file(app: &mut App, k: (usize, usize), f: PathBuf) -> bool {
+    let Some(samples) = crate::audio::load_audio(&f) else { return false };
+    let secs = samples.len() as f64 / 2.0 / crate::audio::RATE as f64;
+    let beat = lg_core::events::PPQ as f64;
+    let len = ((secs * app.tempo() / 60.0).round().max(1.0) * beat) as u32;
+    let name = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    crate::cellinsp::undoable(app, "Add Audio File", |app| {
+        let s = &mut app.live_loops;
+        s.cells.insert(k, Cell { name, length: len, audio: Some(f), ..Default::default() });
+        s.scenes = s.scenes.max(k.1 + 1);
+        s.selected = [k].into();
+        app.dirty = true;
+        true
+    })
+}
+
 pub fn move_scene(s: &mut State, from: usize, to: usize) {
     if from == to {
         return;
@@ -1636,6 +1670,12 @@ fn command_at(app: &mut App, name: &str, cell: Option<(usize, usize)>, scene: Op
         "Toggle Grid Horizontal Zoom" => app.live_loops.wide = !app.live_loops.wide,
         "Copy to Live Loops Scene" => return copy_to_scene(app, false),
         "Normalize Region/Cell Gain…" => return crate::cellgain::open(app),
+        "Import Audio File…" => {
+            // ⇧⌘I on an empty audio cell: Add Audio File…
+            let k = app.live_loops.selected.iter().next().copied();
+            let ok = k.is_some_and(|k| !app.live_loops.cells.contains_key(&k) && app.project.as_ref().and_then(|p| p.tracks.get(k.0)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Audio));
+            return ok && command_at(app, "Add Audio File…", k, None);
+        }
         "Copy Cycle to Live Loops Scene" => return copy_to_scene(app, true),
         // playing
         "Stop All Cells" => stop_all(app),
@@ -1749,7 +1789,13 @@ fn command_at(app: &mut App, name: &str, cell: Option<(usize, usize)>, scene: Op
                 stop_track(app, t);
             }
         }
-        "Create MIDI Cell" => {
+        "Add Audio File…" => {
+            let Some(k) = cell.or_else(|| app.live_loops.selected.iter().next().copied()) else { return true };
+            if let Some(f) = kn_ui::files::FileDialog::new().set_title("Add Audio File").add_filter("Audio", crate::soundlib::AUDIO_EXT).pick_file() {
+                add_audio_file(app, k, f);
+            }
+        }
+        "Create MIDI Cell" | "Create Cell" => {
             let Some(k) = cell.or_else(|| app.live_loops.selected.iter().next().copied()) else { return true };
             let name = app.project.as_ref().and_then(|p| p.tracks.get(k.0)).map(|t| t.name.clone()).unwrap_or_default();
             let len = bar(app);
@@ -2071,7 +2117,7 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
                 _ => matches!(
                     b.command.as_str(),
                     "Switch between Live Loops Grid and Tracks View" | "Show Both, Live Loops Grid and Tracks View" | "Copy to Live Loops Scene" | "Stop All Cells" | "Record into Cell" | "Insert Scenes at Playhead"
-                ) || (focused && matches!(b.command.as_str(), "Normalize Region/Cell Gain…" | "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All" | "Select Muted Regions/Cells/Events" | "Select Same-Colored Regions/Cells/Events" | "Select Empty Regions/Cells"))
+                ) || (focused && matches!(b.command.as_str(), "Import Audio File…" | "Normalize Region/Cell Gain…" | "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All" | "Select Muted Regions/Cells/Events" | "Select Same-Colored Regions/Cells/Events" | "Select Empty Regions/Cells"))
                     || (crate::cellinsp::active(app) && b.command == "Bounce Regions/Cells in Place…")
                     || (crate::celledit::active(app) && matches!(b.command.as_str(), "Move Locators Forward by Cycle Length / Loop Forward by Loop Length" | "Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length" | "Double Cycle/Loop Length" | "Halve Cycle/Loop Length")),
             };
@@ -2549,6 +2595,16 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                     }
                 }
             }
+            // Continue Recording with an automatic length: the Plus button sets the length
+            if rec.is_some_and(|x| x.end.is_none()) && plus_shown(&app.live_loops) {
+                let pr = Rect::from_min_size(pos2(r.max.x - 17.0, r.max.y - 17.0), vec2(14.0, 14.0));
+                let presp = ui.interact(pr, id.with("plus"), Sense::click()).on_hover_text("Set Rec-Length and continue");
+                cp.circle_filled(pr.center(), 7.0, if presp.hovered() { Color32::from_gray(70) } else { Color32::from_gray(40) });
+                crate::glyphs::paint(&cp, pr, crate::glyphs::ph::PLUS, 11.0, Color32::WHITE);
+                if presp.clicked() {
+                    plus(app);
+                }
+            }
             if selected {
                 cp.rect_stroke(r, 4.0, Stroke::new(1.5, Color32::from_gray(200)), egui::StrokeKind::Inside);
             }
@@ -2640,7 +2696,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                 }
                 ui.data_mut(|d| d.insert_temp(egui::Id::new("ll-marquee-base"), app.live_loops.selected.clone()));
             }
-            context_menu(app, &resp, if cell.is_some() { "liveloops-midi-cell" } else { "liveloops-empty-cell" }, Some(key), None);
+            let audio_track = app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind == lg_core::TrackKind::Audio);
+            context_menu(app, &resp, if cell.is_some() { "liveloops-midi-cell" } else if audio_track { "liveloops-empty-audio-cell" } else { "liveloops-empty-cell" }, Some(key), None);
         }
         // the track's stop button
         let sb = Rect::from_center_size(pos2(stop_col.center().x, y + row_h / 2.0), vec2(14.0, 14.0));
@@ -3176,6 +3233,37 @@ mod tests {
     }
 
     #[test]
+    fn add_audio_file_to_a_cell() {
+        let mut app = crate::tm::test_app();
+        sync(&mut app);
+        let dir = std::env::temp_dir().join(format!("ll-add-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("Beat.wav");
+        // 1 s of stereo silence at 48 kHz: at 120 bpm, 2 beats
+        let n = 48000u32;
+        let mut w = Vec::new();
+        w.extend_from_slice(b"RIFF");
+        w.extend_from_slice(&(36 + n * 4).to_le_bytes());
+        w.extend_from_slice(b"WAVEfmt ");
+        w.extend_from_slice(&16u32.to_le_bytes());
+        w.extend_from_slice(&1u16.to_le_bytes());
+        w.extend_from_slice(&2u16.to_le_bytes());
+        w.extend_from_slice(&48000u32.to_le_bytes());
+        w.extend_from_slice(&(48000u32 * 4).to_le_bytes());
+        w.extend_from_slice(&4u16.to_le_bytes());
+        w.extend_from_slice(&16u16.to_le_bytes());
+        w.extend_from_slice(b"data");
+        w.extend_from_slice(&(n * 4).to_le_bytes());
+        w.resize(w.len() + (n * 4) as usize, 0);
+        std::fs::write(&f, w).unwrap();
+        app.set_tempo(120.0);
+        assert!(add_audio_file(&mut app, (0, 2), f.clone()));
+        let c = &app.live_loops.cells[&(0, 2)];
+        assert_eq!((c.name.as_str(), c.length, c.audio.as_ref()), ("Beat", 1920, Some(&f)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn play_from_modes() {
         // a 1-bar cell with notes at each beat
         let c = cell(vec![note(0, 60), note(960, 62), note(1920, 64), note(2880, 65)], 3840);
@@ -3251,6 +3339,18 @@ mod tests {
         at(&mut app, 34570.0);
         update(&mut app);
         assert!(app.live_loops.rec.is_none());
+        // Continue Recording, Automatic (Bars): the Plus button sets the pass length (nearest
+        // bar) and the passes go on
+        app.live_loops.rec_length = "Automatic (Bars)".into();
+        at(&mut app, 35000.0);
+        record_into_cell(&mut app, 2, 0);
+        assert!(plus_shown(&app.live_loops));
+        at(&mut app, 38400.0 + 7000.0);
+        plus(&mut app);
+        assert_eq!(app.live_loops.rec.unwrap().end, Some(38400 + 7680));
+        at(&mut app, 46090.0);
+        update(&mut app);
+        assert_eq!(app.live_loops.rec.map(|r| (r.start, r.end)), Some((46080, Some(53760))));
     }
 
     #[test]
@@ -3318,7 +3418,7 @@ mod tests {
         let stop = crate::keymap::bindings().iter().find(|b| b.command == "Stop All Cells").unwrap();
         assert!(stop.key == egui::Key::Enter && stop.cmd);
         // every item of the cell menus is either run here or greyed on purpose
-        for place in ["liveloops-midi-cell", "liveloops-empty-cell", "liveloops-scene-trigger"] {
+        for place in ["liveloops-midi-cell", "liveloops-empty-cell", "liveloops-empty-audio-cell", "liveloops-scene-trigger"] {
             assert!(!crate::menus::context(place).is_empty(), "{place}");
         }
     }

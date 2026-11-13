@@ -189,6 +189,13 @@ Recording ▸
         ✓ Play Cell
         Continue Recording
 
+=== liveloops-empty-audio-cell ===
+Create Cell
+Add Audio File…  [⇧⌘I]
+Paste  (disabled)  [⌘V]
+---
+✓ Stop Playing Cell
+
 === liveloops-midi-cell ===
 Record into Cell  [⌥R]
 Queue Cell Playback  [⌥↩]
