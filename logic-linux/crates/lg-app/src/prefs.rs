@@ -528,9 +528,11 @@ pub fn send_reset(app: &mut App) {
         }
     }
     let after = v.on(&format!("{base}Aftertouch to zero"));
-    let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
+    // (an instrument with No Reset in its Track inspector gets no reset messages)
+    let skip: Vec<bool> = app.project.as_ref().map_or(Vec::new(), |p| p.tracks.iter().map(|t| t.extra.set.midi.no_reset).collect());
+    let n = skip.len();
     if let Ok(mut e) = app.engine.lock() {
-        for t in 0..n {
+        for t in (0..n).filter(|&t| !skip[t]) {
             for &(cc, val) in &msgs {
                 e.live_control(t, cc, val);
             }

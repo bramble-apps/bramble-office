@@ -538,8 +538,9 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         }
         "Rewind one Frame" | "Forward one Frame" | "Rewind by Division Value" | "Forward by Division Value" | "Rewind one 1/8 Note" | "Forward one 1/8 Note" | "Rewind one 1/16 Note" | "Forward one 1/16 Note" | "Rewind by Nudge Value" | "Forward by Nudge Value" => {
             let step = if name.contains("Frame") {
-                // a 25 fps frame at the tempo here
-                (app.tempo() / 60.0 * PPQ as f64 / 25.0).max(1.0)
+                // one frame at the project frame rate (Synchronization ▸ General), at the tempo here
+                let fps = crate::projsettings::smpte_real(&app.proj).1.max(1.0);
+                (app.tempo() / 60.0 * PPQ as f64 / fps).max(1.0)
             } else if name.contains("Division") {
                 app.nav.division as f64
             } else if name.contains("1/8") {

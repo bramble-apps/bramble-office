@@ -1558,7 +1558,7 @@ impl Alchemy {
                 gran: crate::alchemy_gran::GranCfg::read(p, s),
                 pitchc: crate::alchemy_pitch::PitchCfg::read(p, s),
                 va_shape: shape,
-                va_sym: sym,
+                va_sym: sym.clamp(0.05, 0.95), // Sym is effective from 5 to 95 %
                 va_detune: det,
                 va_num: num.clamp(1, 4),
                 va_sync: sync,
