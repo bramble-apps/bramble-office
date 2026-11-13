@@ -844,7 +844,19 @@ impl App {
             }
             if let Some(t) = m.tempo.filter(|_| p.tracks.len() == n) {
                 p.tempo = t;
+                // (an empty project takes the file's tempo changes too)
+                if m.tempos.len() > 1 {
+                    p.tempo_map = m.tempos.iter().map(|(tk, b)| (tk + at, *b)).collect();
+                    if p.tempo_map.first().is_none_or(|x| x.0 != 0) {
+                        p.tempo_map.insert(0, (0, t));
+                    }
+                }
             }
+            // markers (and a copyright notice, as marker text)
+            for (tk, text) in &m.markers {
+                self.markers.push(lg_core::markers::Marker::new(tk + at, text.clone()));
+            }
+            self.markers.sort_by_key(|mk| mk.0);
             self.selected_track = self.project.as_ref().map(|p| p.tracks.len() - 1);
             self.after_edit();
             self.tell(format!("Imported {n} track{}", if n == 1 { "" } else { "s" }));

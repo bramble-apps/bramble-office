@@ -1135,7 +1135,9 @@ pub fn selection_midi(app: &App) -> Option<Vec<u8>> {
         });
     }
     q.tracks.retain(|t| !t.regions.is_empty());
-    Some(lg_core::midi::write(&q))
+    // (Settings ▸ General ▸ Project Handling: a single MIDI region as format 0)
+    let single = sel.len() == 1 && app.logic_settings.get("General / Project Handling / Export MIDI File command saves single MIDI region as format 0.") != "0";
+    Some(if single { lg_core::midi::write_format0(&q) } else { lg_core::midi::write(&q) })
 }
 
 fn export_selection_midi(app: &mut App) {

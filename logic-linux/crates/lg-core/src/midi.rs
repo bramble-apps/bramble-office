@@ -88,8 +88,108 @@ pub fn write(p: &Project) -> Vec<u8> {
     out
 }
 
+/// One region as a format 0 MIDI file: a single track with the tempo, signature and notes.
+pub fn write_format0(p: &Project) -> Vec<u8> {
+    let one = write(p);
+    let Some(rd) = read_chunks(&one) else { return one };
+    // (the format 1 file's tracks merged into one, events in time order)
+    let mut ev: Vec<(u32, Vec<u8>)> = Vec::new();
+    for t in rd {
+        ev.extend(t);
+    }
+    ev.sort_by_key(|e| e.0);
+    ev.retain(|e| e.1.get(..2) != Some(&[0xFF, 0x2F]));
+    let mut out = Vec::new();
+    let mut head = Vec::new();
+    head.extend_from_slice(&0u16.to_be_bytes());
+    head.extend_from_slice(&1u16.to_be_bytes());
+    head.extend_from_slice(&(PPQ as u16).to_be_bytes());
+    chunk(b"MThd", &head, &mut out);
+    chunk(b"MTrk", &track_data(ev), &mut out);
+    out
+}
+
+/// A file's tracks as (absolute tick, raw event) lists (running status expanded).
+fn read_chunks(data: &[u8]) -> Option<Vec<Vec<(u32, Vec<u8>)>>> {
+    let ntrk = u16::from_be_bytes([*data.get(10)?, *data.get(11)?]) as usize;
+    let mut at = 8 + u32::from_be_bytes(data.get(4..8)?.try_into().ok()?) as usize;
+    let mut out = Vec::new();
+    for _ in 0..ntrk {
+        let len = u32::from_be_bytes(data.get(at + 4..at + 8)?.try_into().ok()?) as usize;
+        let d = data.get(at + 8..at + 8 + len)?;
+        at += 8 + len;
+        let (mut i, mut tick, mut status) = (0usize, 0u32, 0u8);
+        let mut ev = Vec::new();
+        while i < d.len() {
+            tick += read_vlq(d, &mut i)?;
+            let mut b = *d.get(i)?;
+            if b & 0x80 != 0 {
+                i += 1;
+                if b < 0xF0 {
+                    status = b;
+                }
+            } else {
+                b = status;
+            }
+            if b == 0xFF {
+                let kind = *d.get(i)?;
+                i += 1;
+                let start = i;
+                let l = read_vlq(d, &mut i)? as usize;
+                let mut e = vec![0xFF, kind];
+                e.extend_from_slice(d.get(start..i + l)?);
+                i += l;
+                ev.push((tick, e));
+            } else {
+                let n = if matches!(b & 0xF0, 0xC0 | 0xD0) { 1 } else { 2 };
+                let mut e = vec![b];
+                e.extend_from_slice(d.get(i..i + n)?);
+                i += n;
+                ev.push((tick, e));
+            }
+        }
+        out.push(ev);
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn format_0_is_one_track() {
+        let mut p = crate::Project { name: "x".into(), tempo: 100.0, signature: (3, 4), ..Default::default() };
+        let mut t = crate::Track::new("Piano", TrackKind::Instrument);
+        t.regions.push(crate::Region { name: "r".into(), start: 0, length: 3840, notes: vec![crate::events::Note { channel: 0, pitch: 60, velocity: 90, pos: 0, len: 480, muted: false }], audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() });
+        p.tracks.push(t);
+        let b = write_format0(&p);
+        assert_eq!(&b[8..12], &[0, 0, 0, 1]);
+        let m = read(&b).unwrap();
+        assert_eq!(m.tracks.len(), 1);
+        assert_eq!(m.tracks[0].2.len(), 1);
+        assert!((m.tempo.unwrap() - 100.0).abs() < 0.01);
+        assert_eq!(m.signature, Some((3, 4)));
+    }
+
+    #[test]
+    fn markers_copyright_and_tempo_changes_are_read() {
+        // one track: copyright, a marker at beat 2, tempo 120 then 60 at beat 2, one note
+        let mut t: Vec<u8> = vec![0x00, 0xFF, 0x02, 0x04];
+        t.extend(b"Me 1");
+        t.extend([0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20, 0x00, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0]);
+        t.extend([0x00, 0xFF, 0x06, 0x05]);
+        t.extend(b"Verse");
+        t.extend([0x00, 0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40, 0x00, 0xFF, 0x2F, 0x00]);
+        let mut f: Vec<u8> = b"MThd".to_vec();
+        f.extend([0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0]);
+        f.extend(b"MTrk");
+        f.extend((t.len() as u32).to_be_bytes());
+        f.extend(t);
+        let m = read(&f).unwrap();
+        assert_eq!(m.markers, vec![(0, "© Me 1".to_string()), (960, "Verse".to_string())]);
+        assert_eq!(m.tempos.len(), 2);
+        assert!((m.tempos[1].1 - 60.0).abs() < 0.01 && m.tempos[1].0 == 960);
+    }
+
     use super::*;
     use crate::events::Note;
     use crate::project::{Region, Track};
@@ -124,6 +224,10 @@ pub struct Imported {
     pub signature: Option<(u8, u8)>,
     /// (name, channel of its first note, notes at 960 PPQ from the file's start).
     pub tracks: Vec<(String, u8, Vec<crate::events::Note>)>,
+    /// Markers (meta 0x06; a copyright notice, 0x02, becomes marker text): (ticks, text).
+    pub markers: Vec<(u32, String)>,
+    /// Every tempo change: (ticks, BPM).
+    pub tempos: Vec<(u32, f64)>,
 }
 
 fn read_vlq(d: &[u8], i: &mut usize) -> Option<u32> {
@@ -185,10 +289,14 @@ pub fn read(data: &[u8]) -> Option<Imported> {
                     i += l;
                     match kind {
                         0x03 if name.is_empty() => name = String::from_utf8_lossy(body).trim().to_string(),
-                        0x51 if l == 3 && out.tempo.is_none() => {
+                        0x51 if l == 3 => {
                             let us = ((body[0] as u32) << 16) | ((body[1] as u32) << 8) | body[2] as u32;
-                            out.tempo = Some(60_000_000.0 / us as f64);
+                            let bpm = 60_000_000.0 / us.max(1) as f64;
+                            out.tempo.get_or_insert(bpm);
+                            out.tempos.push(((tick as f64 * scale).round() as u32, bpm));
                         }
+                        0x06 => out.markers.push(((tick as f64 * scale).round() as u32, String::from_utf8_lossy(body).trim().to_string())),
+                        0x02 => out.markers.push(((tick as f64 * scale).round() as u32, format!("© {}", String::from_utf8_lossy(body).trim()))),
                         0x58 if l >= 2 && out.signature.is_none() => out.signature = Some((body[0], 1u8 << body[1].min(6))),
                         0x2F => break,
                         _ => {}
