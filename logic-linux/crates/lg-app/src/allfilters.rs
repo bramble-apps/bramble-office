@@ -224,6 +224,10 @@ fn draw_pills(ui: &mut egui::Ui, id: &str, at: egui::Pos2, avail: f32, pills: &[
 /// pills. Returns (folded toggled, show more toggled).
 #[allow(clippy::too_many_arguments)]
 fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[Pill], t: Tint, out: &mut Option<Act>, group: &mut Option<(String, String)>) -> (bool, bool) {
+    // (an open card with nothing to show is left out, as Logic leaves out empty categories)
+    if open && pills.is_empty() {
+        return (false, false);
+    }
     let w = ui.available_width();
     let top = ui.cursor().min;
     let inner_w = w - 2.0 * PAD;
@@ -401,7 +405,7 @@ fn content(app: &mut App, ui: &mut egui::Ui, base: &[Item]) {
             })
             .collect();
         let all = app.br.expanded.contains(&more_key("Properties"));
-        if !pills.is_empty() {
+        {
         note(&mut fold, &mut more, "Properties", card(ui, "Properties", is_open(app, "Properties"), Some(all), &pills, magenta(), &mut act, &mut group));
         }
     }
