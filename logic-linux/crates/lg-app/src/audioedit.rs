@@ -104,6 +104,9 @@ enum TDrag {
     Gain { orig: f32, y0: f32 },
     Marquee { from: f64 },
     Flex { src: usize, index: Option<usize> },
+    /// A marquee's audio dragged between its two edge markers (sources), from where they
+    /// played (destination frames) and the press's x.
+    FlexPair { a: usize, b: usize, d0: f64, d1: f64, x0: f32 },
     Zoom { from: f64 },
 }
 
@@ -990,12 +993,15 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let rate_of_file = rate_of(app, file).unwrap_or(48_000) as f64;
     // flex: the transients (grey) and the flex markers (orange)
     let mut flex_hits: Vec<(f32, usize, Option<usize>)> = Vec::new();
+    // (every transient's source frame, for Logic's three- and four-marker clicks)
+    let mut tr_srcs: Vec<usize> = Vec::new();
     if app.audio_edit.show_flex {
         let trs = transients(app, file);
         if let Some(rate) = rate_of(app, file) {
             let (a, bnd) = region_frames(app, rg, &x, rate);
             for f in trs.into_iter().filter(|f| *f >= a && *f < bnd) {
                 let src = f - x.offset;
+                tr_srcs.push(src);
                 let dst = flex_dst(&x.flex, src as f64);
                 let px = sec_x(dst / rate as f64);
                 if x.flex.iter().any(|m| m.0 == src) {
@@ -1082,6 +1088,19 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 "gain" | "curvein" | "curveout" => Some(egui::CursorIcon::ResizeVertical),
                 _ => None,
             };
+            // (Flex on: the pointer says what a click adds: upper half one marker, lower half
+            // three; over a transient or not)
+            let icon = if app.audio_edit.show_flex && crate::flex::track(app, t).on && h.y > rbody.min.y && (z == "body" || z == "flex") && !flex_hits.iter().any(|f| f.2.is_some() && (f.0 - h.x).abs() < 4.0) {
+                let on_tr = flex_hits.iter().any(|f| f.2.is_none() && (f.0 - h.x).abs() < 4.0);
+                Some(match (h.y < rbody.center().y, on_tr) {
+                    (true, true) => egui::CursorIcon::ResizeColumn,
+                    (true, false) => egui::CursorIcon::VerticalText,
+                    (false, true) => egui::CursorIcon::ResizeHorizontal,
+                    (false, false) => egui::CursorIcon::Crosshair,
+                })
+            } else {
+                icon
+            };
             if let Some(i) = icon {
                 ui.ctx().set_cursor_icon(i);
             }
@@ -1105,7 +1124,42 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         if let Some(pp) = ui.input(|i| i.pointer.press_origin()).or(area_resp.interact_pointer_pos()) {
             let z = zone(pp);
             let tk = tick_of(pp.x);
-            let d = match tool {
+            // Flex on: a click in the waveform adds markers as Logic's (flexedit.rs): one in the
+            // upper half, three in the lower; inside a marquee four or three
+            let on_marker = z == "flex" && flex_hits.iter().any(|f| f.2.is_some() && (f.0 - pp.x).abs() < 4.0);
+            let flex_click = tool == crate::edit::Tool::Pointer && app.audio_edit.show_flex && crate::flex::track(app, t).on && pp.y > rbody.min.y && !on_marker && (z == "body" || z == "flex");
+            let flex_d = if flex_click {
+                let upper = pp.y < rbody.center().y;
+                let to_src = |tick: f64| flex_src(&x.flex, (app.seconds_at(tick) - start_sec).max(0.0) * rate as f64).round().max(0.0) as usize;
+                let at = to_src(tk);
+                let near = flex_hits.iter().filter(|f| f.2.is_none() && (f.0 - pp.x).abs() < 4.0).map(|f| f.1).next();
+                let mq = app.audio_edit.marquee.filter(|m| tk >= m.0.min(m.1) && tk <= m.0.max(m.1)).map(|m| (to_src(m.0.min(m.1)), to_src(m.0.max(m.1))));
+                let (adds, moving) = match mq {
+                    Some((a, b)) if b > a + 4 => crate::flexedit::marquee_markers(&tr_srcs, a, b, at, upper),
+                    _ => {
+                        let (v, c) = crate::flexedit::click_markers(&tr_srcs, at, near, upper);
+                        (v, vec![c])
+                    }
+                };
+                checkpoint(app, "Flex Marker");
+                let mut nx = extras(app, t, r);
+                crate::flexedit::add_at(&mut nx.flex, &adds);
+                let map = lg_audio::flex::TimeMap::new(&nx.flex);
+                let d = match moving[..] {
+                    [a, b] => Some(TDrag::FlexPair { a, b, d0: map.dst(a as f64), d1: map.dst(b as f64), x0: pp.x }),
+                    [c] => Some(TDrag::Flex { src: c, index: nx.flex.iter().position(|m| m.0.abs_diff(c) < 2) }),
+                    _ => None,
+                };
+                set_extras(app, t, r, nx);
+                d
+            } else {
+                None
+            };
+            let d = if flex_d.is_some() {
+                app.audio_edit.t_drag = flex_d;
+                None
+            } else {
+                match tool {
                 crate::edit::Tool::Pointer => match z {
                     "start" => Some(TDrag::TrimStart { start: rg.start, length: rg.length, offset: x.offset }),
                     "end" => Some(TDrag::TrimEnd),
@@ -1128,6 +1182,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     Some(TDrag::Flex { src: flex_src(&x.flex, src as f64) as usize, index: None })
                 }
                 _ => None,
+                }
             };
             if let Some(d) = d {
                 if !matches!(d, TDrag::Marquee { .. } | TDrag::Zoom { .. }) {
@@ -1217,6 +1272,21 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 app.help_tag = Some(vec![("Marquee:".into(), crate::app::bbdt(a as u32, sig)), ("Length:".into(), crate::app::bbdt_len((bq - a) as u32, sig))]);
             }
             TDrag::Zoom { from } => app.audio_edit.marquee = Some((from, tick_of(pp.x))),
+            TDrag::FlexPair { a, b, d0, d1, x0 } => {
+                let dx = (app.seconds_at(tick_of(pp.x)) - app.seconds_at(tick_of(x0))) * rate as f64;
+                let mut flex = nx.flex.clone();
+                let ka = flex.iter().position(|m| m.0 == a);
+                let kb = flex.iter().position(|m| m.0 == b);
+                if let (Some(ka), Some(kb)) = (ka, kb) {
+                    let lo = if ka > 0 { flex[ka - 1].1 as f64 + 1.0 } else { 1.0 };
+                    let hi = flex.get(kb + 1).map_or(f64::MAX, |m| m.1 as f64 - 1.0);
+                    let dx = dx.clamp(lo - d0, hi - d1);
+                    flex[ka].1 = (d0 + dx).round().max(1.0) as usize;
+                    flex[kb].1 = (d1 + dx).round().max(flex[ka].1 as f64 + 1.0) as usize;
+                    nx.flex = flex;
+                    set_extras(app, t, r, nx);
+                }
+            }
             TDrag::Flex { src, index, .. } => {
                 let dst_sec = (app.seconds_at(tick_of(pp.x)) - start_sec).clamp(0.0, region_secs);
                 let dst = (dst_sec * rate as f64) as usize;
@@ -1230,6 +1300,10 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     set_extras(app, t, r, nx);
                     app.audio_edit.t_drag = Some(TDrag::Flex { src: src2, index: k2 });
                     return;
+                }
+                // (onto a neighbouring marker: that one jumps to the transient beyond it)
+                if let Some(k) = index.filter(|k| *k < flex.len()) {
+                    crate::flexedit::cross_extend(&mut flex, k, dst, &tr_srcs);
                 }
                 if let Some(k) = index.filter(|k| *k < flex.len()) {
                     flex.remove(k);
