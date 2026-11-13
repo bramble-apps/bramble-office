@@ -106,6 +106,13 @@ pub fn width(app: &App) -> f32 {
 
 /// A position as Logic's LCD writes it: bar, beat, division, tick ("129 1 1 1").
 pub fn bars_text(tick: f64, sig: (u8, u8), div: u32) -> String {
+    // (a division as long as the beat or longer: no third value)
+    let beat_t = lg_core::events::PPQ * 4 / sig.1.max(1) as u32;
+    if div >= beat_t {
+        let (bar, beat, _, _) = split(tick, sig, div);
+        let t = (tick.floor() as i64).rem_euclid(beat_t as i64) + 1;
+        return format!("{bar} {beat} {t}");
+    }
     let (bar, beat, d, t) = split(tick, sig, div);
     format!("{bar} {beat} {d} {t}")
 }
@@ -371,6 +378,8 @@ mod tests {
     fn positions_as_logic_writes_them() {
         assert_eq!(bars_text(0.0, (4, 4), 240), "1 1 1 1");
         assert_eq!(length_text(3840.0 * 4.0, (4, 4), 240), "4 0 0 0");
+        // a 1/4 division in 4/4: three values
+        assert_eq!(bars_text(960.0 + 5.0, (4, 4), 960), "1 2 6");
         assert_eq!(describe(&[0x90, 60, 100]), "1 C3 100");
         assert_eq!(describe(&[0xB1, 1, 64]), "2 CC1 64");
         assert_eq!(notes_text(&[60, 64, 67]), "C");

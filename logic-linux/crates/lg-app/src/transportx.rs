@@ -500,6 +500,25 @@ pub fn after_open(app: &mut App) {
 #[allow(dead_code)]
 fn _unused(_: Rect, _: Color32) {}
 
+/// A position number in the LCD: dragging it up (later) or down (earlier) moves the playhead
+/// by its unit (`step` ticks every 6 points).
+pub fn position_drag(app: &mut App, ui: &mut egui::Ui, r: Rect, step: f64, id: &str) {
+    let resp = ui.interact(r, ui.scope_id().with(id), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+    let key = ui.scope_id().with((id, "acc"));
+    if resp.drag_started() {
+        ui.data_mut(|d| d.insert_temp(key, 0.0f32));
+    }
+    if resp.dragged() {
+        let acc: f32 = ui.data(|d| d.get_temp(key)).unwrap_or(0.0) - resp.drag_delta().y;
+        let steps = (acc / 6.0).trunc();
+        if steps != 0.0 {
+            let p = app.position();
+            app.locate((p + steps as f64 * step).max(0.0));
+        }
+        ui.data_mut(|d| d.insert_temp(key, acc - steps * 6.0));
+    }
+}
+
 pub const DISPLAY_TEMPO: &str = "View / General / Display Tempo As:";
 
 /// The tempo as Settings ▸ View ▸ Display Tempo As writes it: BPM (decimals only when it has

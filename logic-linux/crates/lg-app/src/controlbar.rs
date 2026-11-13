@@ -337,6 +337,9 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
             let c1 = cell(1.0);
             p.text(pos2(c1.center().x, c1.min.y + 22.0), Align2::CENTER_CENTER, format!("{beat_n}"), big, look::lcd_text());
             p.text(pos2(c1.center().x, c1.max.y - 8.0), Align2::CENTER_CENTER, "BEAT", look::semibold(9.0), look::lcd_dim());
+            // dragging the bar or beat number up or down moves the playhead (transportx.rs)
+            crate::transportx::position_drag(app, ui, c0, bar_t, "lcd-bar-drag");
+            crate::transportx::position_drag(app, ui, c1, beat_t, "lcd-beat-drag");
             tempo_cell(app, ui, p, cell(2.0));
             sig_key_cell(app, ui, p, cell(3.0));
         }

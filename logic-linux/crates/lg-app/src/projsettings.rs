@@ -854,8 +854,21 @@ fn body(app: &mut App, ctx: &egui::Context, ui: &mut egui::Ui, pane: &str, sub: 
             }
             "Movie" => movie_pane(app, ui),
             "Audio" if sub == "General" => {
-                if let Some(p) = &app.project {
-                    ui.label(format!("Sample Rate: {:.1} kHz (the project's; Studio plays at {} kHz)", p.sample_rate as f64 / 1000.0, crate::audio::RATE / 1000));
+                // the project's sample rate (Studio's engine converts to its own in real time)
+                if let Some(rate) = app.project.as_ref().map(|p| p.sample_rate) {
+                    ui.horizontal(|ui| {
+                        ui.label("Sample Rate:");
+                        egui::ComboBox::from_id_salt("ps-rate").selected_text(format!("{:.1} kHz", rate as f64 / 1000.0)).show_ui(ui, |ui| {
+                            for r in [44_100u32, 48_000, 88_200, 96_000, 176_400, 192_000] {
+                                if ui.selectable_label(rate == r, format!("{:.1} kHz", r as f64 / 1000.0)).clicked() && r != rate {
+                                    app.checkpoint("Sample Rate");
+                                    if let Some(p) = app.project.as_mut() {
+                                        p.sample_rate = r;
+                                    }
+                                }
+                            }
+                        });
+                    });
                 }
                 crate::surround_ui::project_settings(app, ui);
             }

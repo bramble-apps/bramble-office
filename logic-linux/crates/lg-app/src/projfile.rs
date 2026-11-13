@@ -698,6 +698,19 @@ fn clean_up_candidates(app: &App) -> Vec<PathBuf> {
     package::unused_audio(&p.path, &using)
 }
 
+/// The Clean Up dialog's choices: files unticked (kept) and Delete Backups.
+#[derive(Clone, Debug, Default)]
+struct CleanUpChoice {
+    kept: Vec<PathBuf>,
+    backups: bool,
+}
+
+/// Every alternative's backup slots.
+fn app_backups(app: &App) -> Vec<PathBuf> {
+    let Some(pkg) = package(app) else { return Vec::new() };
+    package::list(&pkg).into_iter().flat_map(|a| package::backups(&a.dir).into_iter().map(|b| b.0)).collect()
+}
+
 /// Moves files to the desktop's Trash (freedesktop: files + a .trashinfo), so Clean Up can be
 /// undone by hand.
 fn to_trash(files: &[PathBuf]) -> usize {
@@ -1179,12 +1192,24 @@ fn ask(app: &mut App, ctx: &egui::Context) {
                 ui.label(format!("Delete the alternative “{n}”? Its folder is removed from the project; this can't be undone."));
             }
             Ask::CleanUp(files) => {
-                ui.label(format!("{} audio file(s) in the project aren't used by any alternative. Move them to the Trash?", files.len()));
+                // (each file with its Delete box: untick to keep it; and the backups)
+                let mut cu: CleanUpChoice = ctx.data(|d| d.get_temp(egui::Id::new("pf-cleanup"))).unwrap_or_default();
+                ui.label(format!("{} audio file(s) aren't used or referenced by any alternative. Move the ticked ones to the Trash?", files.len()));
                 egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
                     for f in files.iter() {
-                        ui.label(f.file_name().unwrap_or_default().to_string_lossy());
+                        let mut del = !cu.kept.contains(f);
+                        if ui.checkbox(&mut del, f.file_name().unwrap_or_default().to_string_lossy()).changed() {
+                            if del {
+                                cu.kept.retain(|k| k != f);
+                            } else {
+                                cu.kept.push(f.clone());
+                            }
+                        }
                     }
                 });
+                let n_backups = app_backups(app).len();
+                ui.add_enabled(n_backups > 0, egui::Checkbox::new(&mut cu.backups, format!("Delete Backups ({n_backups}, all alternatives)")));
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("pf-cleanup"), cu));
             }
             Ask::Switch(_) => {
                 ui.label("Save the changes to this alternative before opening the other one?");
@@ -1242,8 +1267,11 @@ fn ask(app: &mut App, ctx: &egui::Context) {
             }
         }
         Ask::CleanUp(files) => {
-            let n = to_trash(&files);
-            app.tell(format!("Clean Up: {n} unused file(s) moved to the Trash"));
+            let cu: CleanUpChoice = app.ctx.data_mut(|d| d.remove_temp(egui::Id::new("pf-cleanup"))).unwrap_or_default();
+            let chosen: Vec<PathBuf> = files.into_iter().filter(|f| !cu.kept.contains(f)).collect();
+            let n = to_trash(&chosen);
+            let b = if cu.backups { to_trash(&app_backups(app)) } else { 0 };
+            app.tell(format!("Clean Up: {n} unused file(s){} moved to the Trash", if b > 0 { format!(" and {b} backup(s)") } else { String::new() }));
         }
         Ask::Switch(k) => {
             if yes {
