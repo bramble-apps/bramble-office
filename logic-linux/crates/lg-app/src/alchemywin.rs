@@ -24,6 +24,17 @@ const W: f32 = 1146.0;
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let st_id = egui::Id::unique(("alchemy-st", t));
     let mut st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
+    // checks (headless): LG_ALCH_EDIT=1 opens source A's page and its edit window once
+    // (LG_ALCH_EDIT=page: the source page only)
+    static EDIT_ONCE: std::sync::Once = std::sync::Once::new();
+    if std::env::var("LG_ALCH_EDIT").is_ok() {
+        EDIT_ONCE.call_once(|| {
+            st.view = 0;
+            st.page = 1;
+            st.ed.open = std::env::var("LG_ALCH_EDIT").as_deref() != Ok("page");
+            st.ed.sel = vec![(0, 0)];
+        });
+    }
     let mut live = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| Live { levels: a.mg.levels, perform: a.mg.perform, envf: a.mg.envf, time: 0.0 }).unwrap_or_default();
     live.time = ctx.input(|i| i.time);
     // the effects' own parameters, read from the running instrument

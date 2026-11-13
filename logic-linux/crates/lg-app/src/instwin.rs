@@ -407,6 +407,16 @@ fn test_hook(app: &mut App) {
                 app.inst.quick.insert(id, crate::quickwin::QuickDoc { file: files.first().cloned(), audio: Some(std::sync::Arc::new(a)), history: files.first().cloned().into_iter().collect(), ..Default::default() });
             }
         }
+        "Alchemy" => {
+            // the files as one group of source A's zones, played by its Sampler element
+            let fs: Vec<_> = files.iter().filter_map(|f| lg_synth::wav::read_audio(f).ok().map(|a| crate::alchemywin::zone_file(f, &a))).collect();
+            if !fs.is_empty() {
+                let mut d = lg_synth::alchemy_zones::ZoneDoc::default();
+                d.src[0].import(fs, lg_synth::alchemy_zones::Mapping::Pitch, false);
+                app.inst.alch_zones.insert(id, d);
+                set_params(app, t, &[(lg_synth::alchemy_zones::SAMP_ON, 1.0), (297, 0.0)]);
+            }
+        }
         "Drum Machine Designer" => {
             let mut pads = crate::dmdwin::Pads::default();
             for (k, f) in files.iter().enumerate() {

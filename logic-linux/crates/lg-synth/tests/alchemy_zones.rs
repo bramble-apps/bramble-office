@@ -84,6 +84,8 @@ fn release_group_sounds_after_note_off() {
         }
         let mut a = sampler(d);
         a.set(16, 0.0); // shortest Perform release
+        a.set(136, 0.01); // and AHDSR 1's (it shapes Master Vol)
+        a.set(5, 0.0); // no Delay+Reverb tail
         a
     };
     let mut plain = mk(false);
