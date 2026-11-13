@@ -19,6 +19,7 @@ pub mod alchemy_gran;
 pub mod alchemy_fx;
 pub mod alchemy_mod;
 pub mod alchemy_partials;
+pub mod alchemy_pitch;
 pub mod alchemy_zones;
 pub mod arp;
 pub mod bass;

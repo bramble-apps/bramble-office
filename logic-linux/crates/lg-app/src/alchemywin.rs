@@ -901,10 +901,10 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>, 
         0 => playing,
         v => (v - 1) as usize,
     };
-    let names = ["VA", "ADDITIVE", "SPECTRAL", "GRANULAR", "FORMANT", "SAMPLER"];
-    let flags = [297 + s, 293 + s, 309 + s, 313 + s, id(su, ap::FM_ON), az::SAMP_ON + s];
+    let names = ["VA", "ADDITIVE", "SPECTRAL", "GRANULAR", "FORMANT", "SAMPLER", "PITCH"];
+    let flags = [297 + s, 293 + s, 309 + s, 313 + s, id(su, ap::FM_ON), az::SAMP_ON + s, lg_synth::alchemy_pitch::id(su, lg_synth::alchemy_pitch::ON)];
     for (k, n) in names.iter().enumerate() {
-        let r = p.rect(170.0 + k as f32 * 64.0, 56.0, 62.0, 20.0);
+        let r = p.rect(160.0 + k as f32 * 57.0, 56.0, 55.0, 20.0);
         if rack::flat(p, r, n, view == k, true, ("elem", s, k)) {
             st.elem[su] = k as u8 + 1;
         }
@@ -1046,6 +1046,17 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>, 
             }
         }
         5 => sampler_view(p, ix, st, su, zdoc, zpos),
+        6 => {
+            // pitch correction of the additive / spectral partials
+            use lg_synth::alchemy_pitch::{self as pc, id as pid};
+            k(p, st, 150.0, 124.0, 40.0, pid(su, pc::AMOUNT), "Amount");
+            k(p, st, 220.0, 124.0, 40.0, pid(su, pc::SPEED), "Speed");
+            rack::menu_arrows(p, ix, 280.0, 136.0, 120.0, pid(su, pc::RULE));
+            p.text(280.0, 162.0, Align2::LEFT_CENTER, "Pitch", 10.0, p.skin.dim);
+            if !matches!(element(p, ix, s), 1 | 2) {
+                p.text(124.0, 220.0, Align2::LEFT_CENTER, "Pitch correction acts on the Additive and Spectral elements", 10.0, p.skin.dim);
+            }
+        }
         _ => {
             for (j, (f, l)) in [(ap::FM_SHIFT, "Shift"), (ap::FM_SIZE, "Size"), (ap::FM_CENTER, "Center"), (ap::FM_SELECT, "Select")].iter().enumerate() {
                 k(p, st, 150.0 + j as f32 * 64.0, 88.0, 38.0, id(su, *f), l);

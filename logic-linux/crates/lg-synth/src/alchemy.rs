@@ -193,6 +193,8 @@ struct SourceCfg {
     density: f32,
     /// The granular element's own settings (alchemy_gran).
     gran: crate::alchemy_gran::GranCfg,
+    /// Pitch correction of the additive / spectral partials (alchemy_pitch).
+    pitchc: crate::alchemy_pitch::PitchCfg,
     va_shape: u8,
     va_sym: f32,
     va_detune: f32,
@@ -702,6 +704,13 @@ impl Voice<AlchShared> for AlchVoice {
                     let mut pf = [0.0f32; NP];
                     let mut pp = [0.0f32; NP];
                     let used = crate::alchemy_partials::process(&c.part, spectral, &ba, &bq, hz, n as f32 / rate, rate * 0.45, &mut st.ps, &mut pa, &mut pf, &mut pp);
+                    // pitch correction: each partial pulled toward its rule's pitch
+                    let pw = c.pitchc.weight(st.ps.t);
+                    if pw > 0.0 {
+                        for k in 0..used {
+                            pf[k] = crate::alchemy_pitch::correct(pf[k], hz * bq[k], c.pitchc.rule, pw);
+                        }
+                    }
                     if st.ps.lock_phase && st.ps.t <= n as f32 / rate * 1.5 {
                         st.ph = [0.0; NP];
                     }
@@ -1253,6 +1262,7 @@ pub fn all_params() -> &'static [Param] {
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
         v.extend(crate::alchemy_zones::params());
         v.extend(crate::alchemy_gran::params());
+        v.extend(crate::alchemy_pitch::params());
         v.extend(crate::alchemy_partials::params());
         v.extend(crate::alchemy_arp::params());
         v.extend(crate::alchemy_fx::params());
@@ -1546,6 +1556,7 @@ impl Alchemy {
                 speed: p(39 + s as u32),
                 density: p(47 + s as u32),
                 gran: crate::alchemy_gran::GranCfg::read(p, s),
+                pitchc: crate::alchemy_pitch::PitchCfg::read(p, s),
                 va_shape: shape,
                 va_sym: sym,
                 va_detune: det,
