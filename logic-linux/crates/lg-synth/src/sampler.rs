@@ -580,13 +580,14 @@ impl Voice<SamplerShared> for SamplerVoice {
             self.on = false;
             return;
         }
-        let (ls, le) = if z.reverse {
+        let (ls0, le0) = if z.reverse {
             (s0 + e0 - z.loop_end.min(e0), s0 + e0 - z.loop_start.max(s0))
         } else {
             (z.loop_start.max(s0), z.loop_end.min(e0))
         };
-        let looping = looping_mode && le > ls + 1;
-        let llen = (le - ls) as f64;
+        let (mut ls, mut le) = (ls0, le0);
+        let mut looping = looping_mode && le > ls + 1;
+        let mut llen = (le - ls) as f64;
         let phys = |k: usize| if z.reverse { s0 + e0 - 1 - k } else { k };
         let mut peak = 0.0f32;
         let mut i = 0;
@@ -605,6 +606,12 @@ impl Voice<SamplerShared> for SamplerVoice {
                 let s = self.source(rt.src, sh, ctl);
                 let via = (rt.via != Source::None).then(|| self.source(rt.via, sh, ctl));
                 md[rt.target] += sampler_synth::route_value(rt, s, via);
+            }
+            // the loop targets: Loop Start / End move one point, Loop Position both
+            if syn.has_target[target::LOOP_START] || syn.has_target[target::LOOP_END] || syn.has_target[target::LOOP_POS] {
+                (ls, le) = moved_loop(ls0, le0, s0, e0, md[target::LOOP_START], md[target::LOOP_END], md[target::LOOP_POS]);
+                looping = looping_mode && le > ls + 1;
+                llen = (le - ls) as f64;
             }
             for k in 0..LFOS {
                 lfo_rate_mod[k] = md[target::LFO_RATE + k];
@@ -2386,4 +2393,35 @@ pub fn write_test_instrument(dir: &Path) -> std::io::Result<PathBuf> {
     let p = dir.join("test.sfz");
     std::fs::write(&p, sfz)?;
     Ok(p)
+}
+
+/// The loop points (logical frames) moved by the Loop Start, Loop End and Loop Position
+/// modulation values (each −1…1 of the zone's length), kept inside start…end with start < end;
+/// Loop Position keeps the length.
+pub fn moved_loop(ls: usize, le: usize, s0: usize, e0: usize, ms: f32, me: f32, mp: f32) -> (usize, usize) {
+    let len = (e0 - s0) as f32;
+    let shift = mp * len;
+    let lo = (ls as f32 + ms * len + shift).clamp(s0 as f32, e0 as f32 - 2.0);
+    let hi = (le as f32 + me * len + shift).clamp(lo + 2.0, e0 as f32);
+    // Loop Position at the end: slide back so the length stays
+    let (lo, hi) = if mp != 0.0 && hi - lo < (le - ls) as f32 && hi >= e0 as f32 { ((e0 - (le - ls)).max(s0) as f32, e0 as f32) } else { (lo, hi) };
+    (lo as usize, hi as usize)
+}
+
+#[cfg(test)]
+mod loop_target_tests {
+    use super::moved_loop;
+
+    #[test]
+    fn loop_targets_move_the_loop() {
+        // zone 0..1000, loop 400..600
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.1, 0.0, 0.0), (500, 600));
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, -0.1, 0.0), (400, 500));
+        // Loop Position: the whole loop, length kept
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, 0.0, 0.2), (600, 800));
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, 0.0, 0.9), (800, 1000));
+        // start never passes the end
+        let (a, b) = moved_loop(400, 600, 0, 1000, 0.5, 0.0, 0.0);
+        assert!(a < b);
+    }
 }
