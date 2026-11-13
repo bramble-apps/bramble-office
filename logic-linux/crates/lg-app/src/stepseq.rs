@@ -1441,8 +1441,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let cell_w = if with_store(&ctx, |s| s.narrow_steps) { fill_w.min(NARROW_STEP_W) } else { fill_w };
     let cell_x = |k: usize| gx0 + k as f32 * (cell_w + gap_s) + (k / 4) as f32 * (gap_g - gap_s);
     // the playing step
-    let playing_tick = app.position() as i64 - region.start as i64;
-    let in_region = playing_tick >= 0 && (playing_tick as u32) < region.length && app.engine.lock().map(|e| e.playing).unwrap_or(false);
+    // (the project's playhead, or the Preview button's own loop through the pattern)
+    let preview_tick = with_store(&ctx, |s| s.preview.as_ref().map(|pv| pv.start)).map(|start| {
+        let ticks_per_s = app.tempo() / 60.0 * 960.0;
+        let len = (pat.rate.max(1) * pat.steps.max(1) as u32).max(1) as u64;
+        ((ui.input(|i| i.time) - start).max(0.0) * ticks_per_s) as u64 % len
+    });
+    let (playing_tick, in_region) = match preview_tick {
+        Some(t) => (t as i64, true),
+        None => {
+            let t = app.position() as i64 - region.start as i64;
+            (t, t >= 0 && (t as u32) < region.length && app.engine.lock().map(|e| e.playing).unwrap_or(false))
+        }
+    };
+    if preview_tick.is_some() {
+        ui.ctx().request_repaint();
+    }
     let pointer = ui.input(|i| i.pointer.interact_pos());
     let (down, released) = ui.input(|i| (i.pointer.primary_down(), i.pointer.any_released()));
     let mut press = with_store(&ctx, |s| s.press);
@@ -1465,7 +1479,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the row's colour (Logic's: purple for notes; drums by kit piece), its steps on in a
         // lighter shade and off in a dark tint of it
         let rc = if drums { kit_color(&row.name) } else { row_color() };
-        let on_c = look::mix(rc, Color32::WHITE, 0.25);
+        let on_c = look::mix(rc, Color32::WHITE, 0.06);
         let off_c = look::mix(Color32::from_gray(0x12), rc, 0.19);
         if y + row_h(row, rh) < body.min.y || y > body.max.y {
             continue;
@@ -1693,6 +1707,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             if in_region {
                 let rate = row.rate.unwrap_or(pat.rate).max(1);
                 if (playing_tick as u32 / rate) as usize % n == si {
+                    // the playing step: the column lights up, and a step that plays flashes bright
+                    gp.rect_filled(cr, 3.0, Color32::from_white_alpha(if s.on { 90 } else { 22 }));
                     gp.rect_stroke(cr, 3.0, Stroke::new(2.0, Color32::from_gray(0xee)), egui::StrokeKind::Inside);
                 }
             }
@@ -1704,7 +1720,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::menus::context_menu(app, &resp, "stepseq-step-cell");
             // the step selection
             if let Some((a, b)) = sel {
-                if (a.0.min(b.0)..=a.0.max(b.0)).contains(&ri) && (a.1.min(b.1)..=a.1.max(b.1)).contains(&si) {
+                // (a single clicked step isn't shown as a selection: only a dragged range of steps)
+                if a != b && (a.0.min(b.0)..=a.0.max(b.0)).contains(&ri) && (a.1.min(b.1)..=a.1.max(b.1)).contains(&si) {
                     gp.rect_stroke(cr.expand(1.5), 4.0, Stroke::new(2.0, Color32::from_rgb(0xe8, 0xc3, 0x2e)), egui::StrokeKind::Outside);
                 }
             }
@@ -2571,6 +2588,13 @@ fn plain(ui: &mut egui::Ui) {
     v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
     v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
     v.widgets.inactive.bg_stroke = Stroke::NONE;
+    // (hovered / pressed / open: a light tint that leaves the drawn symbol visible, not an
+    // opaque fill over it)
+    for w in [&mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
+        w.weak_bg_fill = Color32::from_white_alpha(18);
+        w.bg_fill = Color32::from_white_alpha(18);
+        w.bg_stroke = Stroke::NONE;
+    }
 }
 
 /// The header's small symbols, drawn (the UI font has no such glyphs).
