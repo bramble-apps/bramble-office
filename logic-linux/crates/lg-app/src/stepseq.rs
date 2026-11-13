@@ -1942,6 +1942,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         let f = m.get(&st);
                         gp.rect_filled(Rect::from_min_max(pos2(cr.min.x, cr.max.y - cr.height() * f), cr.max), 2.0, look::mix((if by_region { region_col } else { on_c }), off_c, 0.25));
                     }
+                    // (a lane edits only its own value, and only on a step that's on: it never
+                    // turns a step on, so the other lanes don't fill in)
+                    if !st.on {
+                        continue;
+                    }
                     let resp = ui.interact(cr, ui.scope_id().with("lg-ss").with(("sub", ri, li, si)), Sense::click_and_drag());
                     if resp.drag_started() || resp.clicked() {
                         app.checkpoint("Change Step");
@@ -1949,7 +1954,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if resp.dragged() || resp.clicked() {
                         if let Some(pp) = resp.interact_pointer_pos() {
                             m.set(&mut pat.rows[ri].steps[si], (cr.max.y - pp.y) / cr.height());
-                            pat.rows[ri].steps[si].on = true;
                             changed = true;
                         }
                     }
