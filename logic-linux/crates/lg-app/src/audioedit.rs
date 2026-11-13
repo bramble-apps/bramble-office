@@ -173,6 +173,8 @@ pub struct AudioEdit {
     pub f_scroll_in_play: bool,
     pub f_amp_zoom: f32,
     f_drag: Option<FDrag>,
+    /// View ▸ Show as Sample & Hold: close up, each sample a flat step.
+    pub sample_hold: bool,
     file_undo: Vec<(PathBuf, AudioFile, String)>,
     file_redo: Vec<(PathBuf, AudioFile, String)>,
     dialog: Option<Dialog>,
@@ -232,6 +234,7 @@ impl Default for AudioEdit {
             f_scroll_in_play: false,
             f_amp_zoom: 1.0,
             f_drag: None,
+            sample_hold: false,
             file_undo: Vec::new(),
             file_redo: Vec::new(),
             dialog: None,
@@ -1708,7 +1711,7 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
             let mid = lane.center().y;
             let half = lane.height() / 2.0 - 2.0;
             if fpp < 2.0 {
-                // close up: the samples joined (sample & hold off)
+                // close up: the samples joined, or with Sample & Hold each held until the next
                 let mut pts = Vec::new();
                 let f0 = fs.floor() as usize;
                 let f1 = (fs + wave_w * fpp).ceil() as usize + 1;
@@ -1716,8 +1719,11 @@ fn file_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize,
                     let v = (l.audio.at(fr, ch) * zoom).clamp(-1.0, 1.0);
                     pts.push(pos2(x_of(fr as f64), mid - v * half));
                 }
+                if app.audio_edit.sample_hold {
+                    pts = hold_steps(&pts, x_of(f1.min(frames) as f64));
+                }
                 if fpp < 0.2 {
-                    for q in &pts {
+                    for q in pts.iter().step_by(if app.audio_edit.sample_hold { 2 } else { 1 }) {
                         wp.circle_filled(*q, 2.0, file_wave());
                     }
                 }
@@ -1993,6 +1999,16 @@ fn prelisten(app: &mut App, file: &Path) {
     if out.write(&tmp).is_ok() {
         app.output.preview(&tmp);
     }
+}
+
+/// Sample & Hold: each point held flat until the next sample's x (the last until `end_x`).
+pub fn hold_steps(pts: &[egui::Pos2], end_x: f32) -> Vec<egui::Pos2> {
+    let mut out = Vec::with_capacity(pts.len() * 2);
+    for (k, q) in pts.iter().enumerate() {
+        out.push(*q);
+        out.push(pos2(pts.get(k + 1).map_or(end_x, |n| n.x), q.y));
+    }
+    out
 }
 
 pub const FE_UNDO_STEPS: &str = "Audio / File Editor / Number of Undo Steps:";
@@ -2632,7 +2648,7 @@ pub const COMMANDS: &[&str] = &[
     "Region Anchor to Previous Transient", "Region Anchor to Next Transient", "Set Region Anchor to Previous Transient", "Set Region Anchor to Next Transient", "Set Region Anchor to Playhead", "Set Region Anchor to Region Start",
     "Snap Edits to Zero Crossings", "Toggle Snap Edits to Zero Crossings", "Lock Position in Track when moving Anchor",
     "Normalize", "Change Gain…", "Fade-In", "Fade-Out", "Silence", "Invert", "Reverse", "Trim", "Remove DC Offset", "Function Settings…", "Time and Pitch Machine…", "Adjust Tempo by Selection and Locators", "Search Peak", "Search Silence",
-    "Samples", "Min:Sec:Ms", "SMPTE Time", "Bars/Beats", "Transient Editing Mode", "Toggle Transient Editing Mode", "Amplitude Percentage", "Amplitude Sample Value", "Scroll in Play", "Show File in Finder", "Show Files in Finder",
+    "Samples", "Min:Sec:Ms", "SMPTE Time", "Bars/Beats", "Transient Editing Mode", "Toggle Transient Editing Mode", "Amplitude Percentage", "Amplitude Sample Value", "Scroll in Play", "Show as Sample & Hold", "Show File in Finder", "Show Files in Finder",
     "Increase Number of Transients", "Decrease Number of Transients",
     "Play/Stop All", "Play/Stop Region", "Play/Stop Region to Anchor", "Play/Stop Region from Anchor",
     "Open Audio File Editor…", "Show/Hide Audio File Editor",
@@ -2662,6 +2678,11 @@ pub fn command(app: &mut App, name: &str) -> bool {
     // Undo, Copy… in the Track tab are the app's (the project's)
     if GENERIC.contains(&name) && (!in_editor(app) || app.audio_edit.tab == Tab::Track) {
         return false;
+    }
+    // (a view mode: no file needed)
+    if name == "Show as Sample & Hold" {
+        app.audio_edit.sample_hold = !app.audio_edit.sample_hold;
+        return true;
     }
     // the editor-wide ones
     match name {
@@ -3113,6 +3134,7 @@ pub fn checked(app: &App, label: &str) -> Option<bool> {
         "Snap Edits to Zero Crossings" => ae.zero_cross,
         "Lock Position in Track when moving Anchor" => ae.lock_anchor,
         "Scroll in Play" => ae.f_scroll_in_play,
+        "Show as Sample & Hold" => ae.sample_hold,
         _ => return None,
     })
 }
@@ -3158,6 +3180,15 @@ pub fn toggle_click(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sample_and_hold_steps() {
+        let s = hold_steps(&[pos2(0.0, 1.0), pos2(10.0, 5.0)], 20.0);
+        assert_eq!(s, vec![pos2(0.0, 1.0), pos2(10.0, 1.0), pos2(10.0, 5.0), pos2(20.0, 5.0)]);
+        let mut app = crate::tm::test_app();
+        let _ = command(&mut app, "Show as Sample & Hold");
+        assert!(app.audio_edit.sample_hold);
+    }
 
     #[test]
     fn file_editor_undo_settings() {

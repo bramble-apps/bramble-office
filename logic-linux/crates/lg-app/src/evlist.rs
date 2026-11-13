@@ -260,12 +260,13 @@ fn region(app: &App) -> Option<(usize, usize, lg_core::Region)> {
     (rg.audio.is_none()).then_some((t, r, rg))
 }
 
-/// Positions as Logic shows them: bar beat division tick, or (as time) h:mm:ss.ms.
+/// Positions as Logic shows them: bar beat division tick, or (as time) SMPTE, with the
+/// project's frame rate and bar 1's SMPTE time (as the control bar's clock).
 fn pos_text(app: &App, st: &State, tick: u32) -> String {
     if st.as_time {
         if let Some(p) = &app.project {
             let s = lg_core::timeline::Map::of(p).secs_at(tick as f64);
-            return time_text(s);
+            return crate::prefs::time_text(&app.logic_settings, &app.proj, s);
         }
     }
     crate::rightpane::bbdt(app, tick)
@@ -280,7 +281,9 @@ fn len_text(app: &App, st: &State, from: u32, len: u32) -> String {
     if st.as_time {
         if let Some(p) = &app.project {
             let m = lg_core::timeline::Map::of(p);
-            return time_text(m.secs_at((from + len) as f64) - m.secs_at(from as f64));
+            // (a length in SMPTE frames, from zero)
+            let (_, fps, drop) = crate::projsettings::smpte(&app.proj);
+            return crate::projsettings::smpte_text(m.secs_at((from + len) as f64) - m.secs_at(from as f64), fps, drop);
         }
     }
     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
@@ -1685,6 +1688,16 @@ pub fn float_window(app: &mut App, ctx: &egui::Context) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn as_time_shows_smpte() {
+        let app = crate::tm::test_app();
+        let st = super::State { as_time: true, ..super::State::default() };
+        let t = super::pos_text(&app, &st, 0);
+        assert_eq!(t.matches(':').count() + t.matches(';').count(), 3, "{t}");
+        let l = super::len_text(&app, &st, 0, lg_core::events::PPQ * 4);
+        assert_eq!(l.matches(':').count() + l.matches(';').count(), 3, "{l}");
+    }
+
     #[test]
     fn columns_move_and_reset() {
         let w = [18.0, 18.0, 100.0, 40.0, 30.0, 42.0, 40.0, 110.0];
