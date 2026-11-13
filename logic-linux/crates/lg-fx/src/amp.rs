@@ -23,13 +23,75 @@ use lg_dsp::{Param, Unit};
 
 pub const AMPS: &[&str] = &[
     "British Amp", "Tweed Amp", "Black Panel Amp", "Silver Panel Amp", "Brown Panel Amp", "Blues Blaster Amp", "Vintage British Amp", "Modern British Amp", "Brown Amp", "British Blues Amp", "Modern American Amp", "Studio Amp",
-    "Boutique British Amp", "Sunshine Amp", "Stadium Amp", "Boutique Retro Amp", "High Octane Amp", "Turbo Amp", "Pawnshop Amp", "Clean Preamp",
+    "Boutique British Amp", "Sunshine Amp", "Stadium Amp", "Boutique Retro Amp", "High Octane Amp", "Turbo Amp", "Pawnshop Amp", "Transparent Preamp",
 ];
 pub const EQ_MODELS: &[&str] = &["British Bright", "US Classic", "Boutique", "Custom EQ Model", "Vintage", "Modern"];
 pub const SPEAKERS: &[&str] = &[
     "British 1x12", "British 2x12", "Tweed 1x12", "Tweed 4x10", "Tweed 1x10", "Black Panel 4x10", "Silver Panel 2x12", "Black Panel 1x10", "Brown Panel 1x12", "Brown Panel 1x15", "Vintage British 4x12", "Modern British 4x12", "Brown 4x12",
     "British Blues 2x12", "Modern American 4x12", "Studio 1x12", "Boutique British 2x12", "Sunshine 4x12", "Sunshine 1x12", "Stadium 4x12", "Stadium 2x12", "Boutique Retro 2x12", "High Octane 4x12", "Turbo 4x12", "Pawnshop 1x8", "DI Box",
 ];
+/// The Model pop-up: preset amp + cabinet + EQ combinations, in Logic's groups ("## " lines
+/// are the group headings). The Transparent Preamp is in the Amp menu only.
+pub const MODELS: &[&str] = &[
+    "## Tweed Combos", "Small Tweed Combo", "Large Tweed Combo", "Mini Tweed Combo",
+    "## Classic American Combos", "Large Black Panel Combo", "Silver Panel Combo", "Mini Black Panel Combo", "Small Brown Panel Combo", "Blues Blaster Combo",
+    "## British Stacks", "Vintage British Stack", "Modern British Stack", "Brown Stack",
+    "## British Combos", "British Blues Combo", "British Combo", "Small British Combo", "Boutique British Combo",
+    "## British Alternatives", "Sunshine Stack", "Small Sunshine Combo", "Stadium Stack", "Stadium Combo",
+    "## Metal Stacks", "Modern American Stack", "High Octane Stack", "Turbo Stack",
+    "## Additional Combos", "Studio Combo", "Boutique Retro Combo", "Pawnshop Combo",
+];
+
+/// A model's amp, EQ model and cabinet (indexes into AMPS, EQ_MODELS, SPEAKERS).
+pub fn model_parts(model: &str) -> Option<(usize, usize, usize)> {
+    let (amp, eq, cab) = match model {
+        "Small Tweed Combo" => ("Tweed Amp", "US Classic", "Tweed 1x12"),
+        "Large Tweed Combo" => ("Tweed Amp", "US Classic", "Tweed 4x10"),
+        "Mini Tweed Combo" => ("Tweed Amp", "US Classic", "Tweed 1x10"),
+        "Large Black Panel Combo" => ("Black Panel Amp", "US Classic", "Black Panel 4x10"),
+        "Silver Panel Combo" => ("Silver Panel Amp", "US Classic", "Silver Panel 2x12"),
+        "Mini Black Panel Combo" => ("Black Panel Amp", "US Classic", "Black Panel 1x10"),
+        "Small Brown Panel Combo" => ("Brown Panel Amp", "US Classic", "Brown Panel 1x12"),
+        "Blues Blaster Combo" => ("Blues Blaster Amp", "US Classic", "Brown Panel 1x15"),
+        "Vintage British Stack" => ("Vintage British Amp", "Vintage", "Vintage British 4x12"),
+        "Modern British Stack" => ("Modern British Amp", "British Bright", "Modern British 4x12"),
+        "Brown Stack" => ("Brown Amp", "Vintage", "Brown 4x12"),
+        "British Blues Combo" => ("British Blues Amp", "Vintage", "British Blues 2x12"),
+        "British Combo" => ("British Amp", "British Bright", "British 2x12"),
+        "Small British Combo" => ("British Amp", "British Bright", "British 1x12"),
+        "Boutique British Combo" => ("Boutique British Amp", "Boutique", "Boutique British 2x12"),
+        "Sunshine Stack" => ("Sunshine Amp", "British Bright", "Sunshine 4x12"),
+        "Small Sunshine Combo" => ("Sunshine Amp", "British Bright", "Sunshine 1x12"),
+        "Stadium Stack" => ("Stadium Amp", "Vintage", "Stadium 4x12"),
+        "Stadium Combo" => ("Stadium Amp", "Vintage", "Stadium 2x12"),
+        "Modern American Stack" => ("Modern American Amp", "Modern", "Modern American 4x12"),
+        "High Octane Stack" => ("High Octane Amp", "Modern", "High Octane 4x12"),
+        "Turbo Stack" => ("Turbo Amp", "Modern", "Turbo 4x12"),
+        "Studio Combo" => ("Studio Amp", "US Classic", "Studio 1x12"),
+        "Boutique Retro Combo" => ("Boutique Retro Amp", "Boutique", "Boutique Retro 2x12"),
+        "Pawnshop Combo" => ("Pawnshop Amp", "US Classic", "Pawnshop 1x8"),
+        _ => return None,
+    };
+    let at = |l: &[&str], n: &str| l.iter().position(|x| *x == n);
+    Some((at(AMPS, amp)?, at(EQ_MODELS, eq)?, at(SPEAKERS, cab)?))
+}
+
+/// Picking a model also sets Amp (18), EQ Model (19) and Speaker (20).
+pub fn amp_links(set: &[(u32, f32)]) -> Vec<(u32, f32)> {
+    let mut out = set.to_vec();
+    for &(id, v) in set {
+        if id == MODEL_ID {
+            if let Some((a, e, c)) = MODELS.get(v.round().max(0.0) as usize).and_then(|m| model_parts(m)) {
+                out.extend([(18, a as f32), (19, e as f32), (20, c as f32)]);
+            }
+        }
+    }
+    out
+}
+
+/// (our own id) the Model pop-up.
+pub const MODEL_ID: u32 = 1001;
+
 pub const MICS: &[&str] = &["Ribbon 121", "Condenser 414", "Dynamic 57", "Dynamic 609", "Condenser 87", "Dynamic 20", "Dynamic 421"];
 const REVERBS: &[&str] = &["Vintage Spring", "Simple Spring", "Mellow Spring", "Bright Spring", "Dark Spring", "Resonant Spring", "Boutique Spring", "Sweet Reverb", "Rich Reverb", "Warm Reverb"];
 
@@ -378,6 +440,8 @@ static AMP_PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(||
         // (our own id) the Sync/Free switch: synced, Speed steps through note values from four
         // bars to 1/64 (straight, triplet, dotted) at the project tempo
         Param::new(1000, "FX Sync", 0.0, 1.0, 0.0, Unit::OnOff),
+        // (our own id) the Model pop-up: British Combo, as the default Amp and Speaker
+        Param::menu(MODEL_ID, "Model", MODELS, 16.0),
     ]
 });
 
@@ -873,5 +937,30 @@ mod fx_sync_tests {
         assert!(triplet);
         // and it follows the tempo
         assert!((amp_fx_hz(0.0, true, 60.0) - 0.0625).abs() < 1e-5);
+    }
+}
+
+#[cfg(test)]
+mod model_tests {
+    use super::*;
+
+    #[test]
+    fn models_set_amp_cabinet_and_eq() {
+        // every model maps to an amp, EQ and cabinet; groups as Logic lists them
+        let models: Vec<&str> = MODELS.iter().copied().filter(|m| !m.starts_with("## ")).collect();
+        assert_eq!(models.len(), 25);
+        assert!(models.iter().all(|m| model_parts(m).is_some()));
+        assert_eq!(MODELS.iter().filter(|m| m.starts_with("## ")).count(), 7);
+        assert_eq!(MODELS[16], "British Combo");
+        let (a, _, c) = model_parts("Large Tweed Combo").unwrap();
+        assert_eq!((AMPS[a], SPEAKERS[c]), ("Tweed Amp", "Tweed 4x10"));
+        let set = amp_links(&[(MODEL_ID, MODELS.iter().position(|m| *m == "Pawnshop Combo").unwrap() as f32)]);
+        assert_eq!(set.len(), 4);
+        assert_eq!(SPEAKERS[set[3].1 as usize], "Pawnshop 1x8");
+        // the Transparent Preamp is an Amp choice, not a model
+        assert!(AMPS.contains(&"Transparent Preamp") && !MODELS.contains(&"Transparent Preamp"));
+        // the default model is the default amp and speaker
+        let (a, _, c) = model_parts(MODELS[16]).unwrap();
+        assert_eq!((a, c), (0, 1));
     }
 }

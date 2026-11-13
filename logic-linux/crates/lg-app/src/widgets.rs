@@ -139,6 +139,11 @@ pub fn choice_slot(ui: &mut egui::Ui, r: Rect, id: egui::Id, current: usize, cho
                 ui.separator();
                 continue;
             }
+            // "## Group": a heading over the entries after it
+            if let Some(h) = c.strip_prefix("## ") {
+                ui.label(egui::RichText::new(h).font(look::semibold(11.0)).color(look::text_dim()));
+                continue;
+            }
             if ui.add(egui::Button::selectable(i == current, *c)).clicked() {
                 out = Some(i);
                 ui.close();

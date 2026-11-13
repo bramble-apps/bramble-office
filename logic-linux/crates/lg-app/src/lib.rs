@@ -66,6 +66,7 @@ mod limview;
 mod live;
 pub mod midifunc;
 pub mod midifx;
+pub mod scripter_ui;
 mod midiwin;
 pub mod liveloops;
 pub mod globals;
