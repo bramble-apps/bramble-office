@@ -170,6 +170,7 @@ pub fn note(app: &mut App, pitch: u8, velocity: u8) {
     if velocity > 0 {
         crate::instwin::note_played(app, pitch);
     }
+    app.lcdc.midi_out = crate::lcdcustom::describe(&[0x90, pitch, velocity]);
     let pos = app.position();
     if velocity > 0 {
         app.live.held.insert(pitch, (pos, velocity));
@@ -193,6 +194,8 @@ pub fn frame(app: &mut App, ctx: &egui::Context) -> Vec<egui::Key> {
     let raw: Vec<RawMsg> = app.live.rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
     let t = app.selected_track.unwrap_or(0);
     for (port, bytes) in raw {
+        // (the Custom LCD's MIDI Activity: the last message in)
+        app.lcdc.midi_in = crate::lcdcustom::describe(&bytes);
         // control surfaces, controller assignments, MTC / MMC: taken before the Environment
         // (remote control events aren't passed on or recorded)
         if crate::envhub::midi_raw(app, ctx, port, &bytes) {
