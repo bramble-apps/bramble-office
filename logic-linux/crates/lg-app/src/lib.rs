@@ -72,6 +72,7 @@ mod brfocus;
 mod cdburn;
 mod fcpxml;
 mod autosave;
+mod paadd;
 pub mod midifunc;
 pub mod midifx;
 mod midiwin;

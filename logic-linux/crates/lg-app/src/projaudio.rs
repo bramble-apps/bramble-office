@@ -78,6 +78,10 @@ pub struct State {
     pub group_name: Option<String>,
     pub confirm_delete: bool,
     pub convert: Option<Convert>,
+    /// ⌘C on a file (⌘V makes a region of it).
+    pub copied: Option<PathBuf>,
+    /// The Optimize sheet: its Additional Preservation (ms).
+    pub optimize_ms: Option<f32>,
     /// The pane's rect (keys go to it under the pointer).
     pub rect: Option<Rect>,
     info_cache: HashMap<PathBuf, Option<FileInfo>>,
@@ -415,9 +419,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
             if app.automated {
                 return true;
             }
-            if let Some(fs) = kn_ui::files::FileDialog::new().set_title("Add Audio File").add_filter("Audio", crate::soundlib::AUDIO_EXT).pick_files() {
-                add_files(app, fs);
-            }
+            crate::paadd::open(app);
         }
         "Add Region" => {
             let Some(f) = app.pa.selected.iter().next().cloned() else { return true };
@@ -436,7 +438,11 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 app.pa.confirm_delete = true;
             }
         }
-        "Optimize Files…" => optimize(app),
+        "Optimize Files…" => {
+            if !app.pa.selected.is_empty() {
+                app.pa.optimize_ms = Some(1000.0);
+            }
+        }
         "Backup Files" => {
             let mut n = 0;
             for f in app.pa.selected.clone() {
@@ -784,7 +790,10 @@ fn move_out(app: &mut App) {
 
 /// Optimize Files: each selected file keeps only the parts its regions use (with a second's
 /// margin), written as a new file next to it; the regions follow.
-fn optimize(app: &mut App) {
+/// Optimize: each file cut to the part its regions use plus `keep_ms` either side, written over
+/// the file (destructive: no undo; the name stays, the file shrinks).
+fn optimize(app: &mut App, keep_ms: f32) {
+    let margin = keep_ms as f64 / 1000.0;
     let sel = app.pa.selected.clone();
     let all = files(app);
     let mut n = 0;
@@ -797,14 +806,23 @@ fn optimize(app: &mut App) {
         let spans: Vec<(f64, f64)> = regions.iter().filter_map(|r| region_span(app, *r).map(|x| (x.1, x.1 + x.2))).collect();
         let lo = spans.iter().map(|s| s.0).fold(f64::MAX, f64::min).max(0.0);
         let hi = spans.iter().map(|s| s.1).fold(0.0, f64::max);
-        let (lo_f, hi_f) = ((((lo - 1.0).max(0.0)) * rate) as usize, (((hi + 1.0) * rate) as usize).min(a.frames()));
+        let (lo_f, hi_f) = ((((lo - margin).max(0.0)) * rate) as usize, (((hi + margin) * rate) as usize).min(a.frames()));
+        if lo_f == 0 && hi_f >= a.frames() {
+            continue;
+        }
+        // (placed regions without an offset start at the file's start: keep them so: the file's start stays)
+        let placed_no_offset: Vec<(usize, usize)> = regions.iter().filter_map(|r| if let RegionRef::Placed(t, k) = r { (!app.audio_edit.regions.contains_key(&(*t, *k))).then_some((*t, *k)) } else { None }).collect();
+        let lo_f = if placed_no_offset.is_empty() { lo_f } else { 0 };
         if lo_f == 0 && hi_f >= a.frames() {
             continue;
         }
         let chans: Vec<Vec<f32>> = a.channels.iter().map(|c| c[lo_f.min(c.len())..hi_f.min(c.len())].to_vec()).collect();
-        let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let to = f.with_file_name(format!("{stem} (optimized).wav"));
-        if write_wav(&to, &chans, a.rate, a.rate, 24).is_err() {
+        // (a WAV file is rewritten in place; another format becomes a WAV of the same name)
+        let wav = f.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+        let to = if wav { f.clone() } else { f.with_extension("wav") };
+        let tmp = f.with_file_name(format!(".{}.optimizing", f.file_name().unwrap_or_default().to_string_lossy()));
+        if write_wav(&tmp, &chans, a.rate, a.rate, 24).is_err() || std::fs::rename(&tmp, &to).is_err() {
+            let _ = std::fs::remove_file(&tmp);
             continue;
         }
         for r in app.audio_edit.regions.values_mut() {
@@ -817,12 +835,9 @@ fn optimize(app: &mut App) {
                 p.start = (p.start - lo_f as f64 / rate).max(0.0);
             }
         }
-        // (placed regions without an offset start at the file's start: keep them so)
-        let placed_no_offset: Vec<(usize, usize)> = regions.iter().filter_map(|r| if let RegionRef::Placed(t, k) = r { (!app.audio_edit.regions.contains_key(&(*t, *k))).then_some((*t, *k)) } else { None }).collect();
-        if !placed_no_offset.is_empty() && lo_f > 0 {
-            continue;
+        if to != f {
+            repoint(app, &f, &to);
         }
-        repoint(app, &f, &to);
         n += 1;
     }
     app.load_engine();
@@ -875,6 +890,28 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
     if app.pa.rename.is_some() {
         return false;
     }
+    // Space: plays or stops the selected file or region (the browser has key focus)
+    if key == egui::Key::Space && !m.command && !m.shift && !m.alt {
+        if let Some((id, path, seg)) = selection_id(app) {
+            let (vol, cyc) = (app.pa.volume, app.pa.cycle);
+            crate::preview::toggle(app, &id, &path, vol, seg, cyc);
+            return true;
+        }
+    }
+    // ⌘C then ⌘V on a file: a new region of it
+    if m.command && !m.shift && !m.alt {
+        if key == egui::Key::C && !app.pa.selected.is_empty() {
+            app.pa.copied = app.pa.selected.iter().next().cloned();
+            return true;
+        }
+        if key == egui::Key::V {
+            if let Some(f) = app.pa.copied.clone() {
+                app.pa.selected = [f].into_iter().collect();
+                app.pa.sel_region = None;
+                return command(app, "Add Region");
+            }
+        }
+    }
     for b in crate::keymap::bindings().iter().filter(|b| b.area == "Project Audio") {
         if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
             let c = b.command.clone();
@@ -918,7 +955,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if cr.clicked() {
         app.pa.cycle = !app.pa.cycle;
     }
-    let vol_r = Rect::from_min_max(pos2(cyc.max.x + 12.0, tools.min.y + 5.0), pos2((cyc.max.x + 140.0).min(tools.max.x - 8.0), tools.max.y - 5.0));
+    // Import Audio (at the right): the Add Audio File dialog
+    let imp = Rect::from_min_size(pos2(tools.max.x - 34.0, play.min.y), vec2(26.0, 24.0));
+    let ir = ui.interact(imp, ui.scope_id().with("pa-import"), Sense::click()).on_hover_text("Import Audio");
+    p.rect_filled(imp, 5.0, if ir.hovered() { look::button_on() } else { look::group_bg() });
+    crate::glyphs::paint(&p, imp, crate::glyphs::ph::FILE_PLUS, 13.0, look::text());
+    if ir.clicked() {
+        crate::paadd::open(app);
+    }
+    let vol_r = Rect::from_min_max(pos2(cyc.max.x + 12.0, tools.min.y + 5.0), pos2((cyc.max.x + 140.0).min(tools.max.x - 44.0), tools.max.y - 5.0));
     crate::glyphs::paint(&p, Rect::from_min_size(vol_r.min - vec2(2.0, 0.0), vec2(14.0, vol_r.height())), crate::glyphs::ph::SPEAKER_HIGH, 11.0, look::text_dim());
     let mut v = app.pa.volume;
     if ui.put(Rect::from_min_max(vol_r.min + vec2(14.0, 0.0), vol_r.max), egui::Slider::new(&mut v, 0.0..=1.5).show_value(false)).on_hover_text("Preview volume").changed() {
@@ -1333,6 +1378,25 @@ fn dialogs(app: &mut App, ctx: &egui::Context) {
                 }
             });
         });
+    }
+    if let Some(mut ms) = app.pa.optimize_ms.take() {
+        let mut keep = true;
+        let mut go = false;
+        egui::Window::new("Optimize Files").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+            ui.label("Removes the parts of the files no region uses. This can't be undone.");
+            ui.add(egui::Slider::new(&mut ms, 0.0..=10_000.0).text("Additional Preservation (ms)"));
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    keep = false;
+                }
+                go = ui.button("OK").clicked();
+            });
+        });
+        if go {
+            optimize(app, ms);
+        } else if keep {
+            app.pa.optimize_ms = Some(ms);
+        }
     }
     if let Some(mut c) = app.pa.convert.take() {
         let mut keep = true;

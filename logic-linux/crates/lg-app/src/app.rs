@@ -367,6 +367,8 @@ pub struct App {
     pub fcp: crate::fcpxml::State,
     /// Autosave (autosave.rs).
     pub autosave: crate::autosave::State,
+    /// Project Audio's Add Audio File dialog (paadd.rs).
+    pub paadd: crate::paadd::State,
     pub pf_tab: usize,
     pub preview: crate::preview::Preview,
     /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
@@ -583,6 +585,7 @@ impl App {
             brf: Default::default(),
             fcp: Default::default(),
             autosave: Default::default(),
+            paadd: Default::default(),
             pf_tab: 0,
             preview: Default::default(),
             nav: Default::default(),
@@ -1992,6 +1995,7 @@ impl App {
         crate::transportx::frame(self, &ctx);
         crate::fcpxml::window(self, &ctx);
         crate::autosave::frame(self, &ctx);
+        crate::paadd::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);
