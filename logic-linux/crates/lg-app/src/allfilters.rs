@@ -565,7 +565,8 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
         // (the close button is the window's focused control from the start, as Logic's: Space or
         // Return closes)
         if resp.has_focus() || !ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) {
-            p.circle_stroke(cc, 14.25 * K, Stroke::new(2.75 * K, Color32::from_rgb(0x41, 0x6d, 0x95)));
+            // (the ring sits on the button's edge, over the grey, and is never clipped by the window)
+            p.with_clip_rect(ctx.content_rect()).circle_stroke(cc, 10.0 * K, Stroke::new(2.75 * K, Color32::from_rgb(0x41, 0x6d, 0x95)));
         }
         let close = resp.clicked() || (!ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) && ui.input(|i| i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::Enter)));
         // the cards, scrolling under the title
