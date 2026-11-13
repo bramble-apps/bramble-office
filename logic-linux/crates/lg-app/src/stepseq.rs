@@ -202,6 +202,44 @@ impl Default for StepPattern {
     }
 }
 
+/// The Row Assignment pop-up's entries: a drum kit's kit pieces (by name), then a Notes submenu
+/// by octave. Returns the chosen note.
+fn assignment_menu(ui: &mut egui::Ui, cur: u8, drums: bool) -> Option<u8> {
+    let mut out = None;
+    if drums {
+        for p in 35..=81u8 {
+            if let Some(n) = drum_name(p) {
+                if ui.selectable_label(p == cur, n).clicked() {
+                    out = Some(p);
+                    ui.close();
+                }
+            }
+        }
+        ui.separator();
+    }
+    ui.menu_button("Notes", |ui| {
+        for oct in 0..11u8 {
+            let lo = oct * 12;
+            ui.menu_button(format!("{} – {}", crate::app::note_name(lo), crate::app::note_name((lo + 11).min(127))), |ui| {
+                for p in lo..=(lo + 11).min(127) {
+                    if ui.selectable_label(p == cur, crate::app::note_name(p)).clicked() {
+                        out = Some(p);
+                        ui.close();
+                    }
+                }
+            });
+        }
+    });
+    out
+}
+
+/// Reassigns a row to note `p`: its steps play that note, and it takes the kit piece's name
+/// (drum rows) or the note's name.
+pub fn assign_row(row: &mut Row, p: u8, drums: bool) {
+    row.pitch = p.min(127);
+    row.name = drum_name(row.pitch).filter(|_| drums).map(str::to_string).unwrap_or_else(|| crate::app::note_name(row.pitch));
+}
+
 /// General MIDI drum names for drum rows (Logic names Drum Machine Designer rows after pads).
 pub fn drum_name(pitch: u8) -> Option<&'static str> {
     Some(match pitch {
@@ -1114,28 +1152,42 @@ fn grid_bg() -> Color32 {
 fn row_color() -> Color32 {
     Color32::from_rgb(0x5a, 0x41, 0xce)
 }
-/// A drum row's colour by its kit piece (Logic colours its drum rows: kicks red, snares and
-/// rims orange, claps yellow, hi-hats green, toms teal, cymbals blue, other percussion pink).
+/// A drum row's lit-step colour by its kit piece, sampled from Logic 13's Drum Machine Designer
+/// pattern (the guide's Step Sequencer figure): kicks magenta, snares orange, hi-hats cyan, toms
+/// green, all fully saturated; claps, cymbals and other percussion follow the same style.
 pub fn kit_color(name: &str) -> Color32 {
     let n = name.to_lowercase();
     let has = |w: &[&str]| w.iter().any(|x| n.contains(x));
     if has(&["kick", "bass drum"]) {
-        Color32::from_rgb(0xe0, 0x4a, 0x43)
+        Color32::from_rgb(0xdb, 0x00, 0xa9)
     } else if has(&["snare", "rim", "stick"]) {
-        Color32::from_rgb(0xe8, 0x86, 0x2e)
+        Color32::from_rgb(0xd6, 0x77, 0x00)
     } else if has(&["clap", "snap"]) {
-        Color32::from_rgb(0xd9, 0xb3, 0x26)
+        Color32::from_rgb(0xd6, 0xb8, 0x00)
     } else if has(&["hat", "hh"]) {
-        Color32::from_rgb(0x3f, 0xb3, 0x5a)
+        Color32::from_rgb(0x00, 0xcd, 0xcb)
     } else if has(&["tom"]) {
-        Color32::from_rgb(0x26, 0xa9, 0xb5)
+        Color32::from_rgb(0x00, 0xcd, 0x00)
     } else if has(&["crash", "ride", "china", "splash", "cymbal"]) {
-        Color32::from_rgb(0x3d, 0x7b, 0xe8)
+        Color32::from_rgb(0x00, 0x7a, 0xff)
     } else if n.is_empty() {
         row_color()
     } else {
-        Color32::from_rgb(0xc8, 0x4f, 0xb8)
+        Color32::from_rgb(0xa8, 0x3c, 0xf0)
     }
+}
+
+/// A row's unlit-step tint: Logic's off steps are the lit colour at about 17% over a near-black
+/// base (sampled: magenta 340f2b, orange 32240f, purple 201b33; cyan 023130 and green 033114 keep
+/// less of the base).
+pub fn off_color(on: Color32) -> Color32 {
+    match on.to_array() {
+        [0x00, 0xcd, 0xcb, _] => return Color32::from_rgb(0x02, 0x31, 0x30),
+        [0x00, 0xcd, 0x00, _] => return Color32::from_rgb(0x03, 0x31, 0x14),
+        _ => {}
+    }
+    let ch = |c: u8| (c as f32 * 0.169 + 15.0).round() as u8;
+    Color32::from_rgb(ch(on.r()), ch(on.g()), ch(on.b()))
 }
 
 fn cell_on() -> Color32 {
@@ -1479,8 +1531,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the row's colour (Logic's: purple for notes; drums by kit piece), its steps on in a
         // lighter shade and off in a dark tint of it
         let rc = if drums { kit_color(&row.name) } else { row_color() };
-        let on_c = look::mix(rc, Color32::WHITE, 0.06);
-        let off_c = look::mix(Color32::from_gray(0x12), rc, 0.19);
+        let on_c = if drums { rc } else { look::mix(rc, Color32::WHITE, 0.06) };
+        let off_c = off_color(rc);
         if y + row_h(row, rh) < body.min.y || y > body.max.y {
             continue;
         }
@@ -1517,26 +1569,45 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         crate::menus::context_menu(app, &sel_resp, "stepseq-row-header");
         // (Logic's: the disclosure › at 8 pt, the round 22 pt icon a little above the middle)
         let ic = pos2(hr.min.x + 31.75, hr.min.y + (rh / 2.0 - 2.25).max(12.0));
-        hp.text(pos2(hr.min.x + 8.0, ic.y), Align2::CENTER_CENTER, "›", look::regular(18.0), look::text_dim());
-        hp.circle_filled(ic, 11.0, rc);
-        // a drum row: its kit piece (Logic's); a note row: ♩
-        if drums {
-            crate::stepicons::kit_piece(&hp, ic, &row.name, Color32::from_gray(0x16));
+        // the disclosure arrow: shows / hides the row's subrows (Option-click: every row's),
+        // turning to ⌄ while open
+        let dr = Rect::from_center_size(pos2(hr.min.x + 8.0, ic.y), vec2(16.0, 22.0));
+        let dresp = ui.interact(dr, ui.scope_id().with("lg-ss").with(("disc", ri)), Sense::click()).on_hover_text(if row.sub { "Hide Subrows" } else { "Show Subrows" });
+        let dcol = if dresp.hovered() { look::text() } else { look::text_dim() };
+        if row.sub {
+            crate::stepicons::caret(&hp, dr.center(), false, dcol);
         } else {
+            hp.text(dr.center(), Align2::CENTER_CENTER, "›", look::regular(18.0), dcol);
+        }
+        if dresp.clicked() {
+            actions.push(Action::Subrows(if alt { None } else { Some(ri) }, !row.sub));
+        }
+        // a drum row: its kit piece in the row's colour, no circle (Logic's); a note row: ♩ on
+        // the purple circle
+        if drums {
+            crate::stepicons::kit_piece(&hp, ic, &row.name, look::mix(rc, Color32::BLACK, 0.12));
+        } else {
+            hp.circle_filled(ic, 11.0, rc);
             hp.text(ic, Align2::CENTER_CENTER, "♩", look::regular(15.0), Color32::from_gray(0x16));
         }
-        let name_pos = pos2(hr.min.x + 55.0, hr.min.y + 10.0);
+        // short rows (below Logic's 48 pt) put everything on one line, centred on the steps
+        let one_line = rh < ROW_H - 2.0;
+        let line1 = if one_line { (hr.min.y + rh / 2.0 - 2.0).max(hr.min.y + 10.0) } else { hr.min.y + 10.0 };
+        let name_pos = pos2(hr.min.x + 55.0, line1);
         let name_r = hp.text(name_pos, Align2::LEFT_CENTER, &row.name, look::semibold(14.0), look::text());
-        // ⌃⌄: the row's note
+        // the name with its ⌃⌄: the Row Assignment pop-up (a drum kit's rows: its kit pieces;
+        // every row: Notes, by octave)
         let ar = Rect::from_min_size(pos2(name_r.max.x + 4.0, name_r.min.y - 2.0), vec2(14.0, 20.0));
         glyph(&hp, ar, Glyph::UpDown, look::text());
-        let ar_resp = ui.interact(ar, ui.scope_id().with("lg-ss").with(("rownote", ri)), Sense::click());
-        if ar_resp.clicked() {
-            let up = ar_resp.interact_pointer_pos().is_some_and(|q| q.y < ar.center().y);
-            actions.push(Action::RowPitch(ri, if up { 1 } else { -1 }));
-        }
+        let ar_resp = ui.interact(name_r.union(ar), ui.scope_id().with("lg-ss").with(("rownote", ri)), Sense::click()).on_hover_text("Row Assignment");
+        egui::Popup::menu(&ar_resp).show(|ui| {
+            if let Some(p) = assignment_menu(ui, row.pitch, drums) {
+                actions.push(Action::Assign(ri, p, drums));
+            }
+        });
         // the row's edit mode
-        let mr = Rect::from_min_max(pos2(hr.max.x - 130.0, hr.min.y + 1.0), pos2(hr.max.x - 1.5, hr.min.y + 21.0));
+        let mr = Rect::from_min_max(pos2(hr.max.x - 130.0, line1 - 9.0), pos2(hr.max.x - 1.5, line1 + 11.0));
+        let mode_w = hp.layout_no_wrap(mode.name().to_string(), look::regular(12.0), look::text()).size().x;
         ui.scope_builder(egui::UiBuilder::new().max_rect(mr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
             plain(ui);
             ui.spacing_mut().button_padding = vec2(0.0, 0.0);
@@ -1549,11 +1620,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             });
         });
-        // second line (rows at least Logic's 48 pt): M S, rate, playback, rotate, octave,
-        // random, clear
-        if rh >= ROW_H - 2.0 {
-        let ly = hr.min.y + 32.0;
-        let mut x = hr.min.x + 57.0;
+        // the controls: M S, rate, playback, rotate, octave, random, clear — on a second line in
+        // rows of Logic's 48 pt, else on the name's line between the name and the edit mode.
+        // Where they don't all fit, the rate leaves first, then playback, then rotate (as Logic's
+        // narrow header); M S, octave, random and clear always stay.
+        {
+        let (ly, mut x, right) = if one_line {
+            // (in one column on every row, after the longest usual names)
+            (line1, (ar.max.x + 8.0).max(hr.min.x + 136.0), hr.max.x - 1.5 - mode_w - 8.0)
+        } else {
+            (hr.min.y + 32.0, hr.min.x + 57.0, hr.max.x - 1.0)
+        };
+        let mut room = right - x - (46.0 + 46.0 + 26.0 + 22.0);
+        let mut fits = |w: f32| {
+            let ok = room >= w;
+            if ok {
+                room -= w;
+            }
+            ok
+        };
+        let show_rot = fits(47.0);
+        let show_play = show_rot && fits(48.0);
+        let show_rate = show_play && fits(64.0);
         let ms = Rect::from_min_size(pos2(x, ly - 10.0), vec2(41.0, 20.0));
         hp.rect_filled(ms, 5.0, Color32::from_gray(0x4f));
         for (k, (lbl, on)) in [("M", row.mute), ("S", row.solo)].iter().enumerate() {
@@ -1568,15 +1656,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         hp.vline(ms.center().x, ms.y_range().shrink(5.0), Stroke::new(1.0, Color32::from_gray(0x3a)));
         x += 46.0;
-        let rate_r = Rect::from_min_size(pos2(x, ly - 10.0), vec2(60.0, 20.0));
-        let rate = row.rate.unwrap_or(pat.rate);
-        rate_box(ui, rate_r, ("row-rate", ri), rate, Color32::from_gray(0x5f), &mut |v| actions.push(Action::RowRate(ri, v)));
-        x += 64.0;
-        if !compact {
+        if show_rate {
+            let rate_r = Rect::from_min_size(pos2(x, ly - 10.0), vec2(60.0, 20.0));
+            let rate = row.rate.unwrap_or(pat.rate);
+            rate_box(ui, rate_r, ("row-rate", ri), rate, Color32::from_gray(0x5f), &mut |v| actions.push(Action::RowRate(ri, v)));
+            x += 64.0;
+        }
+        if show_play {
             play_box(ui, Rect::from_min_size(pos2(x, ly - 10.0), vec2(43.0, 20.0)), ("row-play", ri), row.play.unwrap_or(pat.play), Color32::from_gray(0x5f), &mut |m| actions.push(Action::Play(Some(ri), m)));
             x += 48.0;
         }
-        if !tiny {
+        if show_rot {
         let rot = Rect::from_min_size(pos2(x, ly - 10.0), vec2(41.0, 20.0));
         pill_pair(&hp, rot, Color32::from_gray(0x4f));
         for (k, (s, d)) in [(Glyph::RotLeft, -1i32), (Glyph::RotRight, 1)].iter().enumerate() {
@@ -2308,24 +2398,29 @@ fn row_h(row: &Row, rh: f32) -> f32 {
 
 /// The playback mode pop-up (the arrow box beside the rate).
 fn play_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), cur: Play, fill: Color32, set: &mut dyn FnMut(Play)) {
-    ui.painter().rect_filled(r, 6.0, fill);
     let big = r.height() > 22.0;
+    let resp = pop_field(ui, r, id, fill).on_hover_text(format!("Playback Mode: {}", cur.name()));
     crate::glyphs::paint(ui.painter(), Rect::from_min_max(pos2(r.max.x - 16.0, r.min.y), r.max), crate::glyphs::ph::CARET_UP_DOWN, if big { 15.0 } else { 12.0 }, if big { look::text() } else { look::text_dim() });
-    ui.scope_builder(egui::UiBuilder::new().max_rect(r).id_salt(id), |ui| {
-        plain(ui);
-        ui.painter().text(pos2(r.min.x + if big { 9.5 } else { 15.5 }, r.center().y), Align2::CENTER_CENTER, cur.arrow(), look::regular(if big { 16.0 } else { 14.0 }), look::text());
-        ui.spacing_mut().button_padding = vec2(0.0, 0.0);
-        ui.menu_button(egui::RichText::new(" ".repeat(if big { 12 } else { 13 })).size(14.0), |ui| {
-            for m in Play::ALL {
-                if ui.selectable_label(m == cur, m.name()).clicked() {
-                    set(m);
-                    ui.close();
-                }
+    ui.painter().text(pos2(r.min.x + if big { 9.5 } else { 15.5 }, r.center().y), Align2::CENTER_CENTER, cur.arrow(), look::regular(if big { 16.0 } else { 14.0 }), look::text());
+    egui::Popup::menu(&resp).show(|ui| {
+        for m in Play::ALL {
+            if ui.selectable_label(m == cur, m.name()).clicked() {
+                set(m);
+                ui.close();
             }
-        });
-    })
-    .response
-    .on_hover_text(format!("Playback Mode: {}", cur.name()));
+        }
+    });
+}
+
+/// A pop-up field's body: its fill, and exactly its rect (same size and corners) lit on hover or
+/// while its menu is open.
+fn pop_field(ui: &mut egui::Ui, r: Rect, id: (&str, usize), fill: Color32) -> egui::Response {
+    let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), Sense::click());
+    ui.painter().rect_filled(r, 6.0, fill);
+    if resp.hovered() || egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp)) {
+        ui.painter().rect_filled(r, 6.0, Color32::from_white_alpha(18));
+    }
+    resp
 }
 
 /// Header and toolbar actions, applied once the frame's drawing is done.
@@ -2341,11 +2436,14 @@ enum Action {
     Nudge(Option<usize>, i32),
     /// The page overview's shortcut menu on page k.
     Page(usize, PageOp),
+    /// The disclosure arrow: show / hide the row's (None: every row's) subrows.
+    Subrows(Option<usize>, bool),
     /// A row header dragged from one place to another.
     MoveRow(usize, usize),
     Mute(usize),
     Solo(usize),
-    RowPitch(usize, i32),
+    /// The Row Assignment pop-up: the row's new note (and whether it's a drum kit's row).
+    Assign(usize, u8, bool),
     Mode(usize, Mode),
     Play(Option<usize>, Play),
 }
@@ -2462,6 +2560,10 @@ fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usi
                 pat.rows[k].steps = vec![Step::default(); MAX_STEPS];
             }
         }
+        Action::Subrows(k, on) => match k {
+            Some(k) => pat.rows[k].sub = on,
+            None => pat.rows.iter_mut().for_each(|r| r.sub = on),
+        },
         Action::Mute(k) => {
             let v = !pat.rows[k].mute;
             rows(Some(k)).into_iter().for_each(|k| pat.rows[k].mute = v);
@@ -2470,11 +2572,7 @@ fn apply(pat: &mut StepPattern, a: Action, ctx: &egui::Context, t: usize, r: usi
             let v = !pat.rows[k].solo;
             rows(Some(k)).into_iter().for_each(|k| pat.rows[k].solo = v);
         }
-        Action::RowPitch(k, d) => {
-            let row = &mut pat.rows[k];
-            row.pitch = (row.pitch as i32 + d).clamp(0, 127) as u8;
-            row.name = drum_name(row.pitch).filter(|_| row.name.chars().next().is_some_and(|c| !('A'..='G').contains(&c) || row.name.contains(' '))).map(str::to_string).unwrap_or_else(|| crate::app::note_name(row.pitch));
-        }
+        Action::Assign(k, p, drums) => assign_row(&mut pat.rows[k], p, drums),
         Action::Play(None, m) => pat.play = m,
         Action::Play(Some(k), m) => {
             let base = pat.play;
@@ -2649,22 +2747,21 @@ fn pill_pair(p: &egui::Painter, r: Rect, fill: Color32) {
 
 /// "/16 ⌃⌄": a step rate pop-up.
 fn rate_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), rate: u32, fill: Color32, set: &mut dyn FnMut(u32)) {
-    ui.painter().rect_filled(r, 6.0, fill);
     let big = r.height() > 22.0;
+    let resp = pop_field(ui, r, id, fill);
     crate::glyphs::paint(ui.painter(), Rect::from_min_max(pos2(r.max.x - 18.0, r.min.y), r.max), crate::glyphs::ph::CARET_UP_DOWN, if big { 15.0 } else { 12.0 }, if big { look::text() } else { look::text_dim() });
-    ui.scope_builder(egui::UiBuilder::new().max_rect(r).id_salt(id), |ui| {
-        plain(ui);
-        ui.menu_button(egui::RichText::new(format!("{}    ", rate_name(rate))).font(if big { look::semibold(13.5) } else { look::regular(12.0) }).color(look::text()), |ui| {
-            for (k, (name, v)) in RATES.into_iter().enumerate() {
-                if RATE_GROUPS.contains(&k) {
-                    ui.separator();
-                }
-                if ui.selectable_label(v == rate, name).clicked() {
-                    set(v);
-                    ui.close();
-                }
+    // (the text centred on the field's middle, as Logic's)
+    ui.painter().text(pos2(r.min.x + if big { 9.0 } else { 7.5 }, r.center().y), Align2::LEFT_CENTER, rate_name(rate), if big { look::semibold(13.5) } else { look::regular(12.0) }, look::text());
+    egui::Popup::menu(&resp).show(|ui| {
+        for (k, (name, v)) in RATES.into_iter().enumerate() {
+            if RATE_GROUPS.contains(&k) {
+                ui.separator();
             }
-        });
+            if ui.selectable_label(v == rate, name).clicked() {
+                set(v);
+                ui.close();
+            }
+        }
     });
 }
 
@@ -4170,6 +4267,24 @@ mod tests {
         assert_eq!(auto_row_h(1, 0.0, 480.0), ROW_MAX);
         // open subrows take their room first
         assert_eq!(auto_row_h(4, 90.0, 290.0), 50.0);
+    }
+
+    #[test]
+    fn row_assignment_renames_and_keeps_steps() {
+        let mut row = Row::new("Kick 1", 36);
+        row.steps[2].on = true;
+        assign_row(&mut row, 38, true);
+        assert_eq!((row.pitch, row.name.as_str(), row.steps[2].on), (38, "Snare 1", true));
+        assign_row(&mut row, 60, false);
+        assert_eq!(row.name, crate::app::note_name(60));
+    }
+
+    #[test]
+    fn logic_step_colours() {
+        assert_eq!(off_color(kit_color("Kick 1")), Color32::from_rgb(0x34, 0x0f, 0x2c));
+        assert_eq!(off_color(kit_color("Snare 1")), Color32::from_rgb(0x33, 0x23, 0x0f));
+        assert_eq!(off_color(row_color()), Color32::from_rgb(0x1e, 0x1a, 0x32));
+        assert_eq!(off_color(kit_color("Hi-Hat 1")), Color32::from_rgb(0x02, 0x31, 0x30));
     }
 
     #[test]
