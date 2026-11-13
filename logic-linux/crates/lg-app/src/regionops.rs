@@ -648,6 +648,9 @@ pub fn command(app: &mut App, name: &str) -> bool {
             each_audio(app, "Region Gain", |x| x.gain_db = ((x.gain_db + d).clamp(-96.0, 30.0) * 10.0).round() / 10.0)
         }
         "Normalize Region/Cell Gain…" | "Normalize Region Gain…" => {
+            if crate::cellgain::open(app) {
+                return true;
+            }
             if audio_selection(app).is_empty() {
                 return false;
             }
@@ -738,6 +741,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
 
 pub fn enabled(app: &App, label: &str) -> Option<bool> {
     Some(match label {
+        "Normalize Region Gain…" | "Normalize Region/Cell Gain…" if crate::cellgain::wants(app) => true,
         "Reverse" | "Reverse On/Off" | "Normalize Region Gain…" | "Normalize Region/Cell Gain…" | "Remove Fades" | "Remove Fade-In" | "Remove Fade-Out" | "Remove Crossfade" | "Apply Default Crossfade" => !audio_selection(app).is_empty(),
         "Apply Normalize Region Gain Again" | "Apply Normalize Region/Cell Gain Again" => app.ta.regions.normalized && !audio_selection(app).is_empty(),
         "Apply Last Edited Fade Again" => app.ta.regions.last_fade.is_some() && !audio_selection(app).is_empty(),

@@ -75,6 +75,8 @@ pub struct Cell {
     pub loop_start: u32,
     pub loop_len: Option<u32>,
     pub q_loop: u8,
+    /// Audio cells: gain in dB (Normalize Cell Gain, cellgain.rs).
+    pub gain_db: f32,
 }
 
 impl Cell {
@@ -91,7 +93,7 @@ impl Cell {
 
 impl Default for Cell {
     fn default() -> Self {
-        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1, start: None, loop_start: 0, loop_len: None, q_loop: 0 }
+        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1, start: None, loop_start: 0, loop_len: None, q_loop: 0, gain_db: 0.0 }
     }
 }
 
@@ -185,6 +187,8 @@ pub struct State {
     /// Tracks pausing at their next boundary, and tracks resuming from where they paused.
     pub pausing: BTreeSet<usize>,
     pub resuming: BTreeSet<usize>,
+    /// The Normalize Gain dialog (cellgain.rs).
+    pub norm: crate::cellgain::Dialog,
     pub grid_rect: Option<Rect>,
     /// A cell being dragged (from), copy with ⌥.
     pub drag: Option<(usize, usize)>,
@@ -195,7 +199,7 @@ pub struct State {
     was_playing: bool,
     was_recording: bool,
     audio: Arc<Mutex<HashMap<PathBuf, Option<Arc<Vec<f32>>>>>>,
-    loops: HashMap<(PathBuf, usize, usize), Arc<Vec<f32>>>,
+    loops: HashMap<(PathBuf, usize, usize, u32), Arc<Vec<f32>>>,
     momentary: Option<(usize, usize)>,
     /// Follow actions already queued: (track, scene, its start).
     pub follow_queued: BTreeSet<(usize, usize, u32)>,
@@ -691,8 +695,9 @@ fn audio_for(app: &mut App, track: usize, from_tick: u32, to_tick: u32) -> Vec<(
                 break;
             }
             let (f0, n) = (frames(cf as f64), frames((ct - cf) as f64 / speed as f64));
-            let key = (path.clone(), f0, n);
-            let piece = app.live_loops.loops.entry(key).or_insert_with(|| Arc::new(samples.iter().copied().skip(f0 * 2).take(n * 2).collect())).clone();
+            let g = 10f32.powf(c.gain_db / 20.0);
+            let key = (path.clone(), f0, n, c.gain_db.to_bits());
+            let piece = app.live_loops.loops.entry(key).or_insert_with(|| Arc::new(samples.iter().skip(f0 * 2).take(n * 2).map(|v| v * g).collect())).clone();
             out.push((at, piece));
         }
     }
@@ -717,7 +722,8 @@ pub(crate) fn cell_audio(app: &mut App, c: &Cell, start: u32, to: u32) -> Vec<(u
         .into_iter()
         .map(|(at, cf, ct)| {
             let (f0, n) = (frames(cf as f64), frames((ct - cf) as f64 / speed as f64));
-            (at, Arc::new(samples.iter().copied().skip(f0 * 2).take(n * 2).collect::<Vec<f32>>()))
+            let g = 10f32.powf(c.gain_db / 20.0);
+            (at, Arc::new(samples.iter().skip(f0 * 2).take(n * 2).map(|v| v * g).collect::<Vec<f32>>()))
         })
         .collect()
 }
@@ -1296,6 +1302,9 @@ pub fn copy_source(app: &App) -> Option<CopySource> {
 
 /// The Edit menu's wording of Copy to Live Loops Scene for what it would copy.
 pub fn menu_label(app: &App, label: &str) -> Option<String> {
+    if matches!(label, "Normalize Region Gain…" | "Normalize Region/Cell Gain…") && crate::cellgain::wants(app) {
+        return Some("Normalize Cell Gain…".into());
+    }
     if label != "Copy to Live Loops Scene" {
         return None;
     }
@@ -1618,6 +1627,7 @@ fn command_at(app: &mut App, name: &str, cell: Option<(usize, usize)>, scene: Op
         }
         "Toggle Grid Horizontal Zoom" => app.live_loops.wide = !app.live_loops.wide,
         "Copy to Live Loops Scene" => return copy_to_scene(app, false),
+        "Normalize Region/Cell Gain…" => return crate::cellgain::open(app),
         "Copy Cycle to Live Loops Scene" => return copy_to_scene(app, true),
         // playing
         "Stop All Cells" => stop_all(app),
@@ -2053,7 +2063,7 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
                 _ => matches!(
                     b.command.as_str(),
                     "Switch between Live Loops Grid and Tracks View" | "Show Both, Live Loops Grid and Tracks View" | "Copy to Live Loops Scene" | "Stop All Cells" | "Record into Cell" | "Insert Scenes at Playhead"
-                ) || (focused && matches!(b.command.as_str(), "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All" | "Select Muted Regions/Cells/Events" | "Select Same-Colored Regions/Cells/Events" | "Select Empty Regions/Cells"))
+                ) || (focused && matches!(b.command.as_str(), "Normalize Region/Cell Gain…" | "Rename Regions/Cells/Scenes" | "Cut" | "Copy" | "Paste" | "Select All" | "Select Muted Regions/Cells/Events" | "Select Same-Colored Regions/Cells/Events" | "Select Empty Regions/Cells"))
                     || (crate::cellinsp::active(app) && b.command == "Bounce Regions/Cells in Place…")
                     || (crate::celledit::active(app) && matches!(b.command.as_str(), "Move Locators Forward by Cycle Length / Loop Forward by Loop Length" | "Move Locators Backwards by Cycle Length / Loop Backwards by Loop Length" | "Double Cycle/Loop Length" | "Halve Cycle/Loop Length")),
             };
@@ -2825,6 +2835,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
     if app.live_loops.focused {
         ui.painter().rect_stroke(area.shrink(0.5), 2.0, Stroke::new(1.5, focus_blue()), egui::StrokeKind::Inside);
     }
+    crate::cellgain::dialog(app, ui.ctx());
     // ---- the divider to the timeline (grid and tracks): drag to resize
     if app.live_loops.view == View::Both {
         let edge = Rect::from_min_max(pos2(area.max.x - 3.0, area.min.y), pos2(area.max.x + 3.0, area.max.y));

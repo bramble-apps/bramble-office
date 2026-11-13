@@ -533,13 +533,13 @@ pub fn text(cells: &std::collections::BTreeMap<(usize, usize), Cell>) -> String 
     let d = Cell::default();
     let opt = |v: Option<u32>| v.map_or("-".to_string(), |x| x.to_string());
     for ((t, sc), c) in cells {
-        let same = c.muted == d.muted && c.looped == d.looped && c.reversed == d.reversed && c.transpose == d.transpose && c.quantize == d.quantize && c.quantize_start == d.quantize_start && c.trigger == d.trigger && c.play_from == d.play_from && c.start.is_none() && c.loop_start == 0 && c.loop_len.is_none() && c.q_loop == 0;
+        let same = c.muted == d.muted && c.looped == d.looped && c.reversed == d.reversed && c.transpose == d.transpose && c.quantize == d.quantize && c.quantize_start == d.quantize_start && c.trigger == d.trigger && c.play_from == d.play_from && c.start.is_none() && c.loop_start == 0 && c.loop_len.is_none() && c.q_loop == 0 && c.gain_db == 0.0;
         if same {
             continue;
         }
         out += &format!(
-            "cell\t{t}\t{sc}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            c.muted as u8, c.looped as u8, c.reversed as u8, c.transpose, c.quantize, c.quantize_start, c.trigger, c.play_from, opt(c.start), c.loop_start, opt(c.loop_len), c.q_loop
+            "cell\t{t}\t{sc}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            c.muted as u8, c.looped as u8, c.reversed as u8, c.transpose, c.quantize, c.quantize_start, c.trigger, c.play_from, opt(c.start), c.loop_start, opt(c.loop_len), c.q_loop, c.gain_db
         );
     }
     out
@@ -565,6 +565,7 @@ pub fn apply(cells: &mut std::collections::BTreeMap<(usize, usize), Cell>, text:
         c.loop_start = w[12].parse().unwrap_or(0);
         c.loop_len = w[13].parse().ok();
         c.q_loop = w[14].parse().unwrap_or(0);
+        c.gain_db = w.get(15).and_then(|g| g.parse().ok()).unwrap_or(0.0);
     }
 }
 
