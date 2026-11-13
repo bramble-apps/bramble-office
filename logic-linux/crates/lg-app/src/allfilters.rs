@@ -14,17 +14,22 @@ use crate::glyphs::{self, ph};
 use crate::look;
 use crate::soundlib::{self as sl, Item};
 
-// (sizes in points, measured from the guide's All Filters figure at 2x)
-const PAD: f32 = 8.0;
-const CARD_GAP: f32 = 7.0;
-const CARD_R: f32 = 10.0;
-const HEAD_H: f32 = 29.0;
-const PILL_H: f32 = 18.0;
-const PILL_R: f32 = 5.0;
-const PILL_PAD: f32 = 5.0;
-const GAP_X: f32 = 5.0;
-const GAP_Y: f32 = 6.0;
-const FONT: f32 = 10.0;
+// (sizes in Logic's points, measured from the guide's All Filters figure at 2x, times K)
+/// Studio's UI is drawn larger than Logic's: its Browser filter button is 33 × 24 pt where
+/// Logic's is 27 × 18.5, its list text has a 9.5 pt cap height where Logic's text beside the
+/// window has 8. The window scales by the same ratio so it sits with the UI around it as
+/// Logic's does.
+pub(crate) const K: f32 = 1.25;
+const PAD: f32 = 8.0 * K;
+const CARD_GAP: f32 = 7.0 * K;
+const CARD_R: f32 = 10.0 * K;
+const HEAD_H: f32 = 29.0 * K;
+const PILL_H: f32 = 18.0 * K;
+const PILL_R: f32 = 5.0 * K;
+const PILL_PAD: f32 = 5.0 * K;
+const GAP_X: f32 = 5.0 * K;
+const GAP_Y: f32 = 6.0 * K;
+const FONT: f32 = 10.0 * K;
 
 /// A category's colour: the tag text and a selected tag's fill.
 #[derive(Clone, Copy)]
@@ -130,11 +135,11 @@ fn text(ui: &egui::Ui, s: &str, color: Color32, max: f32, font: egui::FontId) ->
 fn pill_width(ui: &egui::Ui, p: &Pill, max: f32) -> f32 {
     let w = |s: &str| text(ui, s, Color32::WHITE, max, font()).size().x;
     let v = match p {
-        Pill::Tag { text: t, icon, .. } => w(t) + 2.0 * PILL_PAD + if icon.is_some() { 15.0 } else { 0.0 },
-        Pill::Pair { a, b, .. } => w(a) + w(b) + 4.0 * PILL_PAD + 1.0,
+        Pill::Tag { text: t, icon, .. } => w(t) + 2.0 * PILL_PAD + if icon.is_some() { 15.0 * K } else { 0.0 },
+        Pill::Pair { a, b, .. } => w(a) + w(b) + 4.0 * PILL_PAD + K,
         Pill::Group { name, cur, .. } => match cur {
-            Some(v) => w(name) + 3.0 * PILL_PAD + 2.0 + w(v) + 2.0 * PILL_PAD - 2.0,
-            None => w(name) + 2.0 * PILL_PAD + 13.0,
+            Some(v) => w(name) + 5.0 * PILL_PAD + w(v),
+            None => w(name) + 2.0 * PILL_PAD + 13.0 * K,
         },
     };
     v.min(max)
@@ -158,13 +163,13 @@ fn draw_pills(ui: &mut egui::Ui, id: &str, at: egui::Pos2, avail: f32, pills: &[
                 let fill = if *sel { t.fill } else if *sub { sub_fill() } else { pill_fill() };
                 p.rect_filled(r, PILL_R, hover_fill(fill, resp.hovered() && !sel));
                 if *sub && !sel {
-                    p.rect_stroke(r.shrink(0.5), PILL_R - 0.5, Stroke::new(1.0, sub_rim()), egui::StrokeKind::Inside);
+                    p.rect_stroke(r.shrink(0.5 * K), PILL_R - 0.5 * K, Stroke::new(K, sub_rim()), egui::StrokeKind::Inside);
                 }
                 let col = if *sel { Color32::WHITE } else { t.text };
                 let mut tx = r.min.x + PILL_PAD;
                 if let Some(ic) = icon {
-                    glyphs::paint(&p, Rect::from_center_size(pos2(tx + 5.5, r.center().y), vec2(11.0, 11.0)), ic, 11.0, col);
-                    tx += 15.0;
+                    glyphs::paint(&p, Rect::from_center_size(pos2(tx + 5.5 * K, r.center().y), vec2(11.0 * K, 11.0 * K)), ic, 11.0 * K, col);
+                    tx += 15.0 * K;
                 }
                 let g = text(ui, s, col, r.max.x - PILL_PAD - tx, font());
                 p.galley(pos2(tx, r.center().y - g.size().y / 2.0), g, col);
@@ -175,8 +180,9 @@ fn draw_pills(ui: &mut egui::Ui, id: &str, at: egui::Pos2, avail: f32, pills: &[
             Pill::Pair { a, b, sa, sb } => {
                 let wa = text(ui, a, Color32::WHITE, avail, font()).size().x + 2.0 * PILL_PAD;
                 let ra = Rect::from_min_max(r.min, pos2((r.min.x + wa).min(r.max.x), r.max.y));
-                let rb = Rect::from_min_max(pos2(ra.max.x + 1.0, r.min.y), r.max);
-                for (half, s, sel, round) in [(ra, a, *sa, egui::CornerRadius { nw: 5, sw: 5, ne: 0, se: 0 }), (rb, b, *sb, egui::CornerRadius { nw: 0, sw: 0, ne: 5, se: 5 })] {
+                let rb = Rect::from_min_max(pos2(ra.max.x + K, r.min.y), r.max);
+                let cr = PILL_R.round() as u8;
+                for (half, s, sel, round) in [(ra, a, *sa, egui::CornerRadius { nw: cr, sw: cr, ne: 0, se: 0 }), (rb, b, *sb, egui::CornerRadius { nw: 0, sw: 0, ne: cr, se: cr })] {
                     let resp = ui.interact(half, ui.scope_id().with((id, i, s.as_str())), Sense::click());
                     p.rect_filled(half, round, hover_fill(if sel { t.fill } else { pill_fill() }, resp.hovered() && !sel));
                     let col = if sel { Color32::WHITE } else { t.text };
@@ -196,13 +202,13 @@ fn draw_pills(ui: &mut egui::Ui, id: &str, at: egui::Pos2, avail: f32, pills: &[
                 match cur {
                     Some(v) => {
                         // the value: a filled pill inside, at the right
-                        let inner = Rect::from_min_max(pos2(r.min.x + 2.0 * PILL_PAD + gw - 2.0, r.min.y + 2.0), pos2(r.max.x - 2.0, r.max.y - 2.0));
-                        p.rect_filled(inner, PILL_R - 1.5, t.fill);
-                        let g = text(ui, v, Color32::WHITE, inner.width() - 2.0 * PILL_PAD + 4.0, font());
-                        p.galley(pos2(inner.min.x + PILL_PAD - 2.0, inner.center().y - g.size().y / 2.0), g, Color32::WHITE);
+                        let inner = Rect::from_min_max(pos2(r.min.x + 2.0 * PILL_PAD + gw - 2.0 * K, r.min.y + 2.0 * K), pos2(r.max.x - 2.0 * K, r.max.y - 2.0 * K));
+                        p.rect_filled(inner, PILL_R - 1.5 * K, t.fill);
+                        let g = text(ui, v, Color32::WHITE, inner.width() - 2.0 * PILL_PAD + 4.0 * K, font());
+                        p.galley(pos2(inner.min.x + PILL_PAD - 2.0 * K, inner.center().y - g.size().y / 2.0), g, Color32::WHITE);
                     }
                     None => {
-                        glyphs::paint(&p, Rect::from_center_size(pos2(r.max.x - PILL_PAD - 4.5, r.center().y), vec2(9.0, 11.0)), ph::CARET_UP_DOWN, 11.0, t.text);
+                        glyphs::paint(&p, Rect::from_center_size(pos2(r.max.x - PILL_PAD - 4.5 * K, r.center().y), vec2(9.0 * K, 11.0 * K)), ph::CARET_UP_DOWN, 11.0 * K, t.text);
                     }
                 }
                 egui::Popup::menu(&resp).show(|ui| {
@@ -245,7 +251,7 @@ fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[
     let head = Rect::from_min_size(rect.min, vec2(w, HEAD_H));
     let cy = top.y + HEAD_H / 2.0;
     // the name (a click folds or unfolds the card)
-    let g = text(ui, name, head_text(), inner_w * 0.6, look::semibold(10.0));
+    let g = text(ui, name, head_text(), inner_w * 0.6, look::semibold(10.0 * K));
     let name_r = Rect::from_min_size(pos2(rect.min.x + PAD, cy - g.size().y / 2.0), g.size());
     p.galley(name_r.min, g, head_text());
     let fold;
@@ -253,16 +259,16 @@ fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[
     if open {
         if let Some(m) = more {
             let label = if m { "Show Less" } else { "Show More" };
-            let g = text(ui, label, dim_text(), inner_w * 0.4, look::semibold(8.6));
+            let g = text(ui, label, dim_text(), inner_w * 0.4, look::semibold(8.6 * K));
             let mr = Rect::from_min_size(pos2(rect.max.x - PAD - g.size().x, cy - g.size().y / 2.0), g.size());
-            let resp = ui.interact(mr.expand(3.0), ui.scope_id().with((name, "more")), Sense::click());
+            let resp = ui.interact(mr.expand(3.0 * K), ui.scope_id().with((name, "more")), Sense::click());
             p.galley(mr.min, g, if resp.hovered() { head_text() } else { dim_text() });
             more_t = resp.clicked();
         }
         let hr = Rect::from_min_max(head.min, pos2(name_r.max.x + PAD, head.max.y));
         fold = ui.interact(hr, ui.scope_id().with((name, "head")), Sense::click()).clicked();
     } else {
-        glyphs::paint(&p, Rect::from_center_size(pos2(rect.max.x - PAD - 5.0, cy), vec2(10.0, 12.0)), ph::CARET_RIGHT, 12.0, dim_text());
+        glyphs::paint(&p, Rect::from_center_size(pos2(rect.max.x - PAD - 5.0 * K, cy), vec2(10.0 * K, 12.0 * K)), ph::CARET_RIGHT, 12.0 * K, dim_text());
         fold = ui.interact(head, ui.scope_id().with((name, "head")), Sense::click()).clicked();
     }
     if open {
@@ -473,17 +479,17 @@ fn content(app: &mut App, ui: &mut egui::Ui, base: &[Item]) {
 }
 
 // ---- the window (sizes in points from the guide's figure at 2x)
-const WIN_W: f32 = 397.0;
-const WIN_R: f32 = 13.0;
+const WIN_W: f32 = 397.0 * K;
+const WIN_R: f32 = 13.0 * K;
 /// The arrow's tip sits this far right of the filter button, the window this far.
-const TIP_GAP: f32 = 2.0;
-const ARROW_W: f32 = 9.0;
-const ARROW_H: f32 = 16.0;
+const TIP_GAP: f32 = 2.0 * K;
+const ARROW_W: f32 = 9.0 * K;
+const ARROW_H: f32 = 16.0 * K;
 /// The arrow's middle below the window's top.
-const ARROW_Y: f32 = 107.5;
-const TITLE_CY: f32 = 16.0;
-const BODY_TOP: f32 = 32.0;
-const INSET: f32 = 7.0;
+const ARROW_Y: f32 = 107.5 * K;
+const TITLE_CY: f32 = 16.0 * K;
+const BODY_TOP: f32 = 32.0 * K;
+const INSET: f32 = 7.0 * K;
 
 fn win_fill() -> Color32 {
     if dark() { Color32::from_rgba_unmultiplied(0x2f, 0x30, 0x31, 246) } else { Color32::from_rgba_unmultiplied(0xf2, 0xf2, 0xf4, 246) }
@@ -491,8 +497,8 @@ fn win_fill() -> Color32 {
 
 /// The glass's blue glow (the figure's backdrop: strongest left of the middle, fading out).
 fn glow(p: &egui::Painter, win: Rect) {
-    let c = pos2(win.min.x + 57.0, win.min.y + 270.0);
-    let (rx, ry) = (220.0, 170.0);
+    let c = pos2(win.min.x + 57.0 * K, win.min.y + 270.0 * K);
+    let (rx, ry) = (220.0 * K, 170.0 * K);
     let inner = if dark() { Color32::from_rgba_unmultiplied(0x12, 0x40, 0x5e, 235) } else { Color32::from_rgba_unmultiplied(0x9c, 0xc4, 0xe6, 90) };
     let mut mesh = egui::Mesh::default();
     mesh.colored_vertex(c, inner);
@@ -513,7 +519,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
     let screen = ctx.content_rect();
     let left = anchor.max.x + TIP_GAP + ARROW_W;
     let top = (anchor.center().y - ARROW_Y).max(screen.min.y + 4.0);
-    let h = (screen.max.y - 10.0 - top).clamp(200.0, 640.0);
+    let h = (screen.max.y - 10.0 - top).clamp(200.0, 640.0 * K);
     let x = left.min(screen.max.x - WIN_W - 4.0);
     let win = Rect::from_min_size(pos2(x, top), vec2(WIN_W, h));
     let close_id = egui::Id::unique("all-filters-close");
@@ -529,30 +535,30 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
     egui::Area::new(egui::Id::unique("all-filters-window")).order(egui::Order::Foreground).fixed_pos(win.min).show(ctx, |ui| {
         let p = ui.painter().clone();
         // shadow, glass, arrow
-        p.add(egui::Shadow { offset: [0, 10], blur: 34, spread: 0, color: Color32::from_black_alpha(if dark() { 120 } else { 50 }) }.as_shape(win, WIN_R));
+        p.add(egui::Shadow { offset: [0, (10.0 * K) as i8], blur: (34.0 * K) as u8, spread: 0, color: Color32::from_black_alpha(if dark() { 120 } else { 50 }) }.as_shape(win, WIN_R));
         p.rect_filled(win, WIN_R, win_fill());
         let ay = anchor.center().y.clamp(win.min.y + WIN_R + ARROW_H / 2.0, win.max.y - WIN_R - ARROW_H / 2.0);
         p.add(egui::Shape::convex_polygon(vec![pos2(win.min.x + 0.5, ay - ARROW_H / 2.0), pos2(win.min.x - ARROW_W, ay), pos2(win.min.x + 0.5, ay + ARROW_H / 2.0)], win_fill(), Stroke::NONE));
         glow(&p, win);
         ui.allocate_rect(win, Sense::click_and_drag());
         // the title and the round close button (Logic's blue focus ring while it has the focus)
-        let g = text(ui, "All Filters", head_text(), WIN_W - 80.0, look::semibold(10.5));
+        let g = text(ui, "All Filters", head_text(), WIN_W - 80.0, look::semibold(10.5 * K));
         p.galley(pos2(win.center().x - g.size().x / 2.0, win.min.y + TITLE_CY - g.size().y / 2.0), g, head_text());
-        let cc = pos2(win.max.x - 16.75, win.min.y + 15.75);
-        let cr = Rect::from_center_size(cc, vec2(20.0, 20.0));
+        let cc = pos2(win.max.x - 16.75 * K, win.min.y + 15.75 * K);
+        let cr = Rect::from_center_size(cc, vec2(20.0 * K, 20.0 * K));
         let resp = ui.interact(cr, close_id, Sense::click());
         if first {
             resp.request_focus();
         }
-        p.circle_filled(cc, 10.0, if resp.hovered() { kn_ui::theme::rgb(if dark() { 0x5a5a5c } else { 0xc6c6ca }) } else { kn_ui::theme::rgb(if dark() { 0x4c4c4c } else { 0xd8d8dc }) });
-        let d = 3.6;
-        let xs = Stroke::new(1.3, head_text());
+        p.circle_filled(cc, 10.0 * K, if resp.hovered() { kn_ui::theme::rgb(if dark() { 0x5a5a5c } else { 0xc6c6ca }) } else { kn_ui::theme::rgb(if dark() { 0x4c4c4c } else { 0xd8d8dc }) });
+        let d = 3.6 * K;
+        let xs = Stroke::new(1.3 * K, head_text());
         p.line_segment([cc + vec2(-d, -d), cc + vec2(d, d)], xs);
         p.line_segment([cc + vec2(-d, d), cc + vec2(d, -d)], xs);
         // (the close button is the window's focused control from the start, as Logic's: Space or
         // Return closes)
         if resp.has_focus() || !ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) {
-            p.circle_stroke(cc, 14.25, Stroke::new(2.75, Color32::from_rgb(0x41, 0x6d, 0x95)));
+            p.circle_stroke(cc, 14.25 * K, Stroke::new(2.75 * K, Color32::from_rgb(0x41, 0x6d, 0x95)));
         }
         let close = resp.clicked() || (!ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) && ui.input(|i| i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::Enter)));
         // the cards, scrolling under the title
