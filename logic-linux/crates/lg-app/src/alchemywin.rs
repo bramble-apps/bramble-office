@@ -1013,8 +1013,36 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>, 
             }
         }
         3 => {
-            for (j, (pid, l)) in [(35 + s, "Position"), (39 + s, "Speed"), (47 + s, "Density")].iter().enumerate() {
-                k(p, st, 150.0 + j as f32 * 70.0, 124.0, 40.0, *pid, l);
+            use lg_synth::alchemy_gran::{self as gr, id as gid};
+            let sync = g(p, ix, gid(su, gr::SYNC)) >= 0.5;
+            if rack::flat(p, p.rect(124.0, 88.0, 50.0, 20.0), "Sync", sync, true, ("gran-sync", s)) {
+                p.put(gid(su, gr::SYNC), if sync { 0.0 } else { 1.0 });
+            }
+            rack::menu_arrows(p, ix, 190.0, 88.0, 100.0, gid(su, gr::SHAPE));
+            p.text(190.0, 114.0, Align2::LEFT_CENTER, "Grain Shape", 10.0, p.skin.dim);
+            // Sync: Formant Shift in place of Size and Density
+            let mut row: Vec<(u32, &str)> = vec![(35 + s, "Position"), (39 + s, "Speed")];
+            if sync {
+                row.push((gid(su, gr::FORMANT), "Formant"));
+            } else {
+                row.extend([(gid(su, gr::SIZE), "Size"), (gid(su, gr::DENSITY), "Density")]);
+            }
+            row.extend([(gid(su, gr::RTIME), "RTime"), (gid(su, gr::RPAN), "RPan"), (gid(su, gr::VOL), "Volume")]);
+            for (j, (pid, l)) in row.iter().enumerate() {
+                k(p, st, 110.0 + j as f32 * 62.0, 124.0, 36.0, *pid, l);
+            }
+            let taps = [(gid(su, gr::TAPS), "Num Taps"), (gid(su, gr::INTERVAL), "Tap Interval"), (gid(su, gr::DELAY), "Tap Delay"), (gid(su, gr::SPACING), "Tap Spacing"), (gid(su, gr::STOFFSET), "StOffset")];
+            for (j, (pid, l)) in taps.iter().enumerate() {
+                k(p, st, 110.0 + j as f32 * 70.0, 196.0, 36.0, *pid, l);
+            }
+            // Num Taps in whole taps; Tap Interval in semitones unless Shift is held
+            let nt = p.get(gid(su, gr::TAPS));
+            if nt.fract() != 0.0 {
+                p.put(gid(su, gr::TAPS), nt.round());
+            }
+            let iv = p.get(gid(su, gr::INTERVAL));
+            if iv.fract() != 0.0 && !p.ui.input(|i| i.modifiers.shift) && p.set.iter().any(|x| x.0 == gid(su, gr::INTERVAL)) {
+                p.put(gid(su, gr::INTERVAL), iv.round());
             }
         }
         5 => sampler_view(p, ix, st, su, zdoc, zpos),

@@ -191,6 +191,8 @@ struct SourceCfg {
     position: f32,
     speed: f32,
     density: f32,
+    /// The granular element's own settings (alchemy_gran).
+    gran: crate::alchemy_gran::GranCfg,
     va_shape: u8,
     va_sym: f32,
     va_detune: f32,
@@ -286,6 +288,7 @@ struct Grain {
     age: f32,
     len: f32,
     pan: f32,
+    gain: f32,
 }
 
 #[derive(Clone)]
@@ -294,7 +297,7 @@ struct SrcState {
     sync: Osc,
     ph: [f32; NP],
     jit: [f32; NP],
-    grains: [Grain; 12],
+    grains: [Grain; crate::alchemy_gran::GRAINS],
     gpos: f32,
     gnext: f32,
     sf: [[crate::alchemy_filter::AFilt; 2]; 3],
@@ -314,7 +317,7 @@ impl Default for SrcState {
             sync: Osc::default(),
             ph: [0.0; NP],
             jit: [1.0; NP],
-            grains: [Grain::default(); 12],
+            grains: [Grain::default(); crate::alchemy_gran::GRAINS],
             gpos: 0.0,
             gnext: 0.0,
             sf: Default::default(),
@@ -518,7 +521,7 @@ impl Voice<AlchShared> for AlchVoice {
                     s.ph[k] = self.rng.unit();
                     s.jit[k] = 1.0;
                 }
-                s.grains = [Grain::default(); 12];
+                s.grains = [Grain::default(); crate::alchemy_gran::GRAINS];
                 if !was {
                     s.ps.start(self.rng.next_u32());
                 }
@@ -753,22 +756,39 @@ impl Voice<AlchShared> for AlchVoice {
                     if len < 1000.0 {
                         continue;
                     }
-                    let ratio = hz / root;
-                    let density = 8.0 + c.density * 80.0;
-                    let glen = (0.12 - 0.08 * c.density) * rate;
+                    let gc = &c.gran;
+                    // Size and Density: a new grain every Size / Density; Sync: one every period
+                    // of the note (grains two source periods long), Formant Shift the read speed
+                    let (every, glen, ratio) = if gc.sync {
+                        (rate / hz, 2.0 * rate / root, dsp::semis(gc.formant))
+                    } else {
+                        let gl = gc.size_ms / 1000.0 * rate;
+                        (gl / gc.density.max(0.1), gl, hz / root)
+                    };
+                    let stereo = c.play.stereo;
                     for i in 0..n {
                         st.gnext -= 1.0;
                         if st.gnext <= 0.0 {
-                            st.gnext = rate / density * (0.8 + 0.4 * self.rng.unit());
-                            if let Some(g) = st.grains.iter_mut().find(|g| g.age >= g.len) {
-                                let p = (st.gpos + self.rng.bipolar() * 0.02).rem_euclid(1.0);
-                                *g = Grain {
-                                    pos: p * (len - glen * ratio - 4.0).max(1.0),
-                                    inc: ratio,
-                                    age: 0.0,
-                                    len: glen,
-                                    pan: self.rng.bipolar() * 0.5,
-                                };
+                            st.gnext += every;
+                            // a grain per tap: later taps delayed, spaced, pitched and quieter
+                            for tap in 0..gc.taps.clamp(1, 8) {
+                                if let Some(g) = st.grains.iter_mut().find(|g| g.age >= g.len) {
+                                    let jit = self.rng.bipolar() * gc.rtime * glen;
+                                    let p = (st.gpos + tap as f32 * gc.spacing).rem_euclid(1.0);
+                                    let tr = if tap > 0 { dsp::semis(gc.interval * tap as f32) } else { 1.0 };
+                                    let mut pan = 0.0;
+                                    if stereo {
+                                        pan = self.rng.bipolar() * gc.rpan + if tap % 2 == 1 { gc.st_offset } else { -gc.st_offset } * (tap > 0) as u8 as f32;
+                                    }
+                                    *g = Grain {
+                                        pos: (p * (len - glen * ratio * tr - 4.0).max(1.0) + jit).clamp(0.0, len - 2.0),
+                                        inc: ratio * tr,
+                                        age: -(tap as f32 * gc.tap_delay * rate),
+                                        len: glen,
+                                        pan: pan.clamp(-1.0, 1.0),
+                                        gain: crate::alchemy_gran::TAP_VOL[tap as usize],
+                                    };
+                                }
                             }
                         }
                         let mut sl = 0.0;
@@ -777,7 +797,11 @@ impl Voice<AlchShared> for AlchVoice {
                             if g.age >= g.len {
                                 continue;
                             }
-                            let w = 0.5 - 0.5 * dsp::sin_cycles(g.age / g.len + 0.25);
+                            if g.age < 0.0 {
+                                g.age += 1.0;
+                                continue;
+                            }
+                            let w = crate::alchemy_gran::window(gc.shape, g.age / g.len) * g.gain;
                             let ip = g.pos as usize;
                             let fr = g.pos - ip as f32;
                             let a = buf[ip.min(buf.len() - 2)];
@@ -788,7 +812,7 @@ impl Voice<AlchShared> for AlchVoice {
                             g.pos += g.inc;
                             g.age += 1.0;
                         }
-                        let gn = vol * 0.5 / (density * glen / rate).max(1.0).sqrt();
+                        let gn = vol * gc.vol * 0.5 / (glen / every).max(1.0).sqrt();
                         bl[i] = sl * gn * pl;
                         br[i] = sr * gn * pr;
                     }
@@ -1228,6 +1252,7 @@ pub fn all_params() -> &'static [Param] {
         }
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
         v.extend(crate::alchemy_zones::params());
+        v.extend(crate::alchemy_gran::params());
         v.extend(crate::alchemy_partials::params());
         v.extend(crate::alchemy_arp::params());
         v.extend(crate::alchemy_fx::params());
@@ -1520,6 +1545,7 @@ impl Alchemy {
                 position: (p(35 + s as u32) + d(0) * 0.5).clamp(0.0, 1.0),
                 speed: p(39 + s as u32),
                 density: p(47 + s as u32),
+                gran: crate::alchemy_gran::GranCfg::read(p, s),
                 va_shape: shape,
                 va_sym: sym,
                 va_detune: det,

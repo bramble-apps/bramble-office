@@ -155,3 +155,43 @@ fn audition_goes_to_the_outputs() {
     let x = render(&mut a, 0.3);
     assert!((freq(&x) - 880.0).abs() < 12.0);
 }
+
+/// The period (in samples) with the strongest autocorrelation between lo and hi.
+fn period(x: &[f32], lo: usize, hi: usize) -> usize {
+    (lo..hi).max_by(|&a, &b| {
+        let c = |l: usize| x.iter().zip(&x[l..]).map(|(p, q)| p * q).sum::<f32>();
+        c(a).total_cmp(&c(b))
+    }).unwrap()
+}
+
+#[test]
+fn granular_sync_follows_the_note_and_taps_add_streams() {
+    use lg_synth::alchemy_gran::{self as gr, id};
+    let mk = || {
+        let mut a = Alchemy::new(RATE);
+        a.set(277, 1.0);
+        a.set(297, 0.0);
+        a.set(278, 0.0);
+        a.set(313, 1.0);
+        a.set(5, 0.0);
+        a
+    };
+    // Sync: a grain every period of the note
+    let mut a = mk();
+    a.set(id(0, gr::SYNC), 1.0);
+    a.set(id(0, gr::RTIME), 0.0);
+    a.note_on(69, 100);
+    let x = render(&mut a, 0.4);
+    let per = period(&x[9600..14400], 60, 200);
+    assert!((per as f32 - RATE / 440.0).abs() < 3.0, "{per}");
+    // more taps: more grain streams, more level
+    let mut one = mk();
+    let mut four = mk();
+    four.set(id(0, gr::TAPS), 4.0);
+    four.set(id(0, gr::SPACING), 20.0);
+    for a in [&mut one, &mut four] {
+        a.note_on(60, 100);
+    }
+    let (r1, r4) = (rms(&render(&mut one, 0.5)[4800..]), rms(&render(&mut four, 0.5)[4800..]));
+    assert!(r4 > r1 * 1.3, "{r1} {r4}");
+}
