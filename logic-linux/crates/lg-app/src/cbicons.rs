@@ -137,3 +137,99 @@ pub fn pencil(p: &egui::Painter, r: Rect, c: Color32) {
     p.line_segment([a, b], Stroke::new(2.4, c));
     p.add(egui::Shape::convex_polygon(vec![ctr + vec2(-7.2, 7.2), a + vec2(-1.3, -0.4), a + vec2(0.4, 1.3)], c, Stroke::NONE));
 }
+
+/// How far the Metronome's arm swings each way (radians): as far as the icon font's metronome
+/// leans.
+pub const SWING: f32 = 0.733;
+
+/// The Metronome arm's angle (radians from upright, positive leaning right) `beats` beats into
+/// playback: one swing per beat, like a pendulum (a cosine), at the end of a swing exactly on each
+/// beat (left on even beats, right on odd ones) and upright halfway between. Beats come from the
+/// playhead's ticks, so the swing follows every tempo change.
+pub fn metronome_angle(beats: f64) -> f32 {
+    (-(SWING as f64) * (std::f64::consts::PI * beats).cos()) as f32
+}
+
+/// The Metronome as the icon font's (`ph::METRONOME`), drawn so its arm can swing: the tapered
+/// body with rounded corners, the band across its foot, and the arm pivoting at the band's middle,
+/// `angle` radians from upright (0 = at rest). `size` is the glyph size it stands in for.
+pub fn metronome(p: &egui::Painter, r: Rect, size: f32, c: Color32, angle: f32) {
+    // (measured from the glyph drawn 380 px tall: its ink box centre is (183, 210.5))
+    let k = size / 380.0;
+    let ctr = r.center();
+    let at = |x: f32, y: f32| ctr + vec2((x - 183.0) * k, (y - 210.5) * k);
+    let w = 24.0 * k;
+    let s = Stroke::new(w, c);
+    // body: the trapezoid, its corners rounded
+    let corners = [at(143.0, 79.5), at(223.0, 79.5), at(306.0, 340.5), at(60.0, 340.5)];
+    let rad = 9.0 * k;
+    let mut pts = Vec::new();
+    for i in 0..4 {
+        let (prev, v, next) = (corners[(i + 3) % 4], corners[i], corners[(i + 1) % 4]);
+        let a = v + (prev - v).normalized() * rad;
+        let b = v + (next - v).normalized() * rad;
+        for j in 0..=4 {
+            let t = j as f32 / 4.0;
+            pts.push(pos2(
+                (1.0 - t) * (1.0 - t) * a.x + 2.0 * (1.0 - t) * t * v.x + t * t * b.x,
+                (1.0 - t) * (1.0 - t) * a.y + 2.0 * (1.0 - t) * t * v.y + t * t * b.y,
+            ));
+        }
+    }
+    p.add(egui::Shape::closed_line(pts, s));
+    // the band (side to side at the pivot's height)
+    let side = |y: f32| 0.317 * (y - 92.0);
+    p.line_segment([at(139.0 - side(269.5), 269.5), at(227.0 + side(269.5), 269.5)], s);
+    // the arm, with a round end
+    let pivot = at(183.0, 269.5);
+    let tip = pivot + vec2(angle.sin(), -angle.cos()) * (152.0 * k);
+    p.line_segment([pivot, tip], s);
+    p.circle_filled(tip, w / 2.0, c);
+}
+
+#[cfg(test)]
+mod metronome_tests {
+    use super::*;
+
+    #[test]
+    fn the_arm_ends_each_swing_on_the_beat() {
+        // on every beat: at the end of a swing, alternating sides
+        for b in 0..8 {
+            let a = metronome_angle(b as f64);
+            assert!((a.abs() - SWING).abs() < 1e-5, "beat {b}: {a}");
+            assert_eq!(a > 0.0, b % 2 == 1, "beat {b} swings to the {} side", if a > 0.0 { "right" } else { "left" });
+        }
+        // halfway between beats: upright, moving fastest
+        for b in 0..8 {
+            assert!(metronome_angle(b as f64 + 0.5).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn the_swing_eases_like_a_pendulum() {
+        // a quarter of the way through a swing it has covered 1 - cos 45° of the way out
+        let a = metronome_angle(0.25);
+        assert!((a - (-SWING * std::f32::consts::FRAC_1_SQRT_2)).abs() < 1e-5);
+        // slow near the ends, fast in the middle
+        let near_end = (metronome_angle(0.1) - metronome_angle(0.0)).abs();
+        let middle = (metronome_angle(0.55) - metronome_angle(0.45)).abs();
+        assert!(middle > 5.0 * near_end);
+        // the same beat position gives the same angle (it depends on beats, not seconds, so a
+        // tempo change only changes how fast the beats come)
+        assert_eq!(metronome_angle(3.75), metronome_angle(3.75 + 2.0));
+        assert!(metronome_angle(-1.0) > 0.0);
+    }
+
+    #[test]
+    fn beats_from_the_playhead() {
+        let ppq = lg_core::events::PPQ as f64;
+        assert_eq!(super::beats_at(ppq * 3.0, 4), 3.0);
+        assert_eq!(super::beats_at(ppq * 3.0, 8), 6.0);
+    }
+}
+
+/// Beats `ticks` into the project, counting the signature's beat unit (a quarter in 4/4, an
+/// eighth in 6/8), as the metronome clicks.
+pub fn beats_at(ticks: f64, denominator: u32) -> f64 {
+    ticks / (lg_core::events::PPQ as f64 * 4.0 / denominator.max(1) as f64)
+}

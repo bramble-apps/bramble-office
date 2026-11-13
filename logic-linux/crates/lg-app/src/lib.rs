@@ -12,6 +12,7 @@ pub fn shown_name(text: &str) -> String {
 }
 
 pub mod allfiles;
+pub mod allfilters;
 pub mod app;
 pub mod arp;
 pub mod arrmarks;
