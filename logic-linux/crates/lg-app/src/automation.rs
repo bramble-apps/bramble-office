@@ -112,6 +112,39 @@ pub fn db_to_logic(db: f32) -> f32 {
     }
 }
 
+/// Where Logic draws 0 dB in a Volume lane: 0.55 of the lane's height up (measured on Logic's
+/// lanes, research screenshot ui-session-player-drummer: 53.75 of 98 pt), not 90/127 of it.
+pub const VOLUME_ZERO_AT: f32 = 0.55;
+
+/// A lane value (0–127) as a height fraction (0 bottom, 1 top). Volume uses Logic's lane taper:
+/// −∞ at the bottom, 0 dB at [`VOLUME_ZERO_AT`], +6 dB at the top, each side straight on Logic's
+/// fader scale (90 = 0 dB); pan (64 = centre, in the middle) and the rest are straight.
+pub fn frac_of(key: Key, v: f32) -> f32 {
+    if key.plugin.is_none() && !key.rel && key.param == VOLUME {
+        if v <= 90.0 {
+            v.max(0.0) / 90.0 * VOLUME_ZERO_AT
+        } else {
+            VOLUME_ZERO_AT + (v.min(127.0) - 90.0) / 37.0 * (1.0 - VOLUME_ZERO_AT)
+        }
+    } else {
+        v.clamp(0.0, 127.0) / 127.0
+    }
+}
+
+/// The inverse of [`frac_of`].
+pub fn value_of_frac(key: Key, f: f32) -> f32 {
+    let f = f.clamp(0.0, 1.0);
+    if key.plugin.is_none() && !key.rel && key.param == VOLUME {
+        if f <= VOLUME_ZERO_AT {
+            f / VOLUME_ZERO_AT * 90.0
+        } else {
+            90.0 + (f - VOLUME_ZERO_AT) / (1.0 - VOLUME_ZERO_AT) * 37.0
+        }
+    } else {
+        f * 127.0
+    }
+}
+
 /// The lane's value at `tick` (straight lines between points, as Logic draws them).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn value_at(points: &[(u32, u8)], tick: u32) -> Option<f32> {
@@ -265,7 +298,9 @@ pub fn key_label(app: &App, t: usize, k: Key, v: f32) -> String {
         (Some((SC_SLOT | MIDI_SLOT, _)), _) => format!("{v:.0}"),
         (None, MUTE | SOLO) => if v >= 64.0 { "On".into() } else { "Off".into() },
         (Some((slot, id)), _) => plugin_param(app, t, slot, id).map_or(format!("{v:.0}"), |(_, _, lo, hi, _)| format!("{:.2}", lo + v / 127.0 * (hi - lo))),
-        (None, VOLUME) => format!("{:.1} dB", logic_to_db(v)),
+        // (Logic's sign: "+0.0 dB"; the bottom is "-∞ dB")
+        (None, VOLUME) if v <= 0.5 => "-∞ dB".into(),
+        (None, VOLUME) => format!("{:+.1} dB", logic_to_db(v)).replace("-0.0", "+0.0"),
         (None, PAN) => format!("{:+.0}", v - 64.0),
         _ => format!("{v:.0}"),
     }
@@ -521,19 +556,26 @@ pub fn lane_key(app: &mut App, ui: &mut egui::Ui, row: Rect, t: usize, key: Key,
     let pts = lane_now.points.clone();
     let p = ui.painter_at(row);
     p.rect_filled(row, 0.0, Color32::from_black_alpha(70));
-    let inner = row.shrink2(vec2(0.0, 6.0));
-    let y_of = |v: f32| inner.max.y - v / 127.0 * inner.height();
-    let v_of = |y: f32| ((inner.max.y - y) / inner.height() * 127.0).clamp(0.0, 127.0);
+    // (the line reaches the row's edges at the range's ends, as Logic's: +6 dB at the top)
+    let inner = row.shrink2(vec2(0.0, 1.0));
+    let y_of = |v: f32| inner.max.y - frac_of(key, v) * inner.height();
+    let y_abs = |v: f32| inner.max.y - frac_of(key.abs(), v) * inner.height();
+    let v_of = |y: f32| value_of_frac(key, (inner.max.y - y) / inner.height());
     let px_per_tick = ((x_of(960.0) - x_of(0.0)) / 960.0).max(1e-6);
     let snap = |app: &App, tick: f32| crate::autoext::snap_tick(app, tick.max(0.0), px_per_tick) as f32;
-    let col = if lane_now.muted { Color32::from_gray(0x80) } else if key.rel { Color32::from_rgb(0x6a, 0xc8, 0xe8) } else { Color32::from_rgb(0xa8, 0xd8, 0x6a) };
+    // Logic's look: the selected track's curve in the parameter's colour (Volume yellow), 1 pt,
+    // with 5.5 pt points and value labels; other tracks' curves dark gray, their points small
+    let on_sel = app.selected_track == Some(t);
+    let base = if key.rel { Color32::from_rgb(0x6a, 0xc8, 0xe8) } else if key.plugin.is_none() && key.param == VOLUME { Color32::from_rgb(0xfd, 0xef, 0x73) } else { Color32::from_rgb(0xa8, 0xd8, 0x6a) };
+    let col = if lane_now.muted { Color32::from_gray(0x80) } else if on_sel { base } else { Color32::from_gray(0x40) };
+    let label_col = if on_sel { col } else { Color32::from_gray(0x70) };
     let sel_col = Color32::WHITE;
     let current = current_value(app, t, key);
     let selected: Vec<usize> = app.ta.auto.sel.as_ref().filter(|s| s.0 == t && sel_key(app, t) == key).map(|s| s.1.clone()).unwrap_or_default();
     // the relative curve shown: the absolute one behind it
     if key.rel {
         if let Some(abs) = lane_of(app, t, key.abs()).filter(|l| !l.points.is_empty()) {
-            p.add(egui::Shape::line(polyline(abs, row.min.x, row.max.x, x_of, &y_of), Stroke::new(1.0, Color32::from_rgb(0xa8, 0xd8, 0x6a).gamma_multiply(0.4))));
+            p.add(egui::Shape::line(polyline(abs, row.min.x, row.max.x, x_of, &y_abs), Stroke::new(1.0, Color32::from_rgb(0xa8, 0xd8, 0x6a).gamma_multiply(0.4))));
         }
     }
     // the selected range: a gray area between the first and last selected point
@@ -542,11 +584,11 @@ pub fn lane_key(app: &mut App, ui: &mut egui::Ui, row: Rect, t: usize, key: Key,
         p.rect_filled(Rect::from_x_y_ranges(x_of(a as f32)..=x_of(b as f32), row.y_range()), 0.0, Color32::from_white_alpha(18));
     }
     if pts.is_empty() {
-        p.hline(row.x_range(), y_of(current), Stroke::new(1.5, col.gamma_multiply(0.6)));
+        p.hline(row.x_range(), y_of(current), Stroke::new(1.0, col));
     } else {
         let line = polyline(&lane_now, row.min.x, row.max.x, x_of, &y_of);
         // (a stepped curve is drawn a little thinner)
-        let w = if lane_now.steps.is_empty() { 1.8 } else { 1.4 };
+        let w = if lane_now.steps.is_empty() { 1.0 } else { 0.8 };
         p.add(egui::Shape::line(line, Stroke::new(w, col)));
         // the selected points' segments white
         for w2 in selected.windows(2) {
@@ -556,7 +598,7 @@ pub fn lane_key(app: &mut App, ui: &mut egui::Ui, row: Rect, t: usize, key: Key,
                     seg.curves.retain(|c| c.0 == a.0);
                     seg.steps.retain(|s| *s == a.0);
                     let l = polyline(&seg, x_of(a.0 as f32), x_of(b.0 as f32), x_of, &y_of);
-                    p.add(egui::Shape::line(l, Stroke::new(2.0, sel_col)));
+                    p.add(egui::Shape::line(l, Stroke::new(1.0, sel_col)));
                 }
             }
         }
@@ -588,10 +630,15 @@ pub fn lane_key(app: &mut App, ui: &mut egui::Ui, row: Rect, t: usize, key: Key,
         let resp = ui.interact(Rect::from_center_size(c, vec2(12.0, 12.0)), ui.scope_id().with(("autopt", t, key.param, key.plugin, key.rel, k)), Sense::click_and_drag());
         on_point |= resp.hovered() || resp.dragged();
         let is_sel = selected.contains(&k);
-        p.circle_filled(c, if resp.hovered() || resp.dragged() { 5.0 } else { 3.5 }, if is_sel { sel_col } else { col });
-        // (the value next to each point)
+        let r = if resp.hovered() || resp.dragged() { 3.5 } else if on_sel || is_sel { 2.75 } else { 2.0 };
+        p.circle_filled(c, r, if is_sel { sel_col } else { col });
+        // (the value next to each point: 2 pt right, its bottom 4 pt over the point; below the
+        // point when that would leave the lane, so it is never cut off)
         if is_sel || resp.hovered() || pts.len() <= 24 {
-            p.text(c + vec2(6.0, -9.0), Align2::LEFT_CENTER, key_label(app, t, key, *v as f32), look::regular(9.5), if is_sel { sel_col } else { col.gamma_multiply(0.8) });
+            let font = look::semibold(11.0);
+            let h = 13.0; // (the 11 pt label's height)
+            let (anchor, y) = if c.y - 4.0 - h >= row.min.y { (Align2::LEFT_BOTTOM, c.y - 4.0) } else { (Align2::LEFT_TOP, (c.y + 4.0).min(row.max.y - h)) };
+            p.text(pos2(c.x + 2.0, y), anchor, key_label(app, t, key, *v as f32), font, if is_sel { sel_col } else { label_col });
         }
         if resp.double_clicked() || (resp.clicked() && tool == crate::edit::Tool::Eraser) {
             let mut n = lane_now.clone();
@@ -739,9 +786,11 @@ pub fn lane_key(app: &mut App, ui: &mut egui::Ui, row: Rect, t: usize, key: Key,
                 }
                 Some(ADrag::Segment { t: dt, k, y0, orig }) if dt == t => {
                     let mut n = lane_now.clone();
-                    n.points = orig;
                     let f = if ctrl || shift { 0.2 } else { 1.0 };
-                    lg_core::automation::move_segment(&mut n, k, (y0 - pp.y) / inner.height() * 127.0 * f);
+                    // (the delta on the lane's taper, from the segment's first point)
+                    let ok = orig.get(k).map_or(64.0, |p| p.1 as f32);
+                    n.points = orig;
+                    lg_core::automation::move_segment(&mut n, k, v_of(y_of(ok) + (pp.y - y0) * f) - ok);
                     app.help_tag = Some(vec![(key_name(app, t, key), key_label(app, t, key, n.points[k].1 as f32))]);
                     edit = Some(n);
                 }
@@ -1194,6 +1243,19 @@ mod tests {
         let pts = [(0u32, 90u8), (960, 0)];
         assert_eq!(value_at(&pts, 480), Some(45.0));
         assert_eq!(value_at(&pts, 2000), Some(0.0));
+    }
+
+    #[test]
+    fn volume_lane_taper_puts_zero_db_where_logic_does() {
+        let vol = Key::channel(VOLUME);
+        assert!((frac_of(vol, 90.0) - VOLUME_ZERO_AT).abs() < 1e-6);
+        assert_eq!(frac_of(vol, 0.0), 0.0);
+        assert_eq!(frac_of(vol, 127.0), 1.0);
+        for v in [0.0, 30.0, 63.0, 90.0, 100.0, 127.0] {
+            assert!((value_of_frac(vol, frac_of(vol, v)) - v).abs() < 1e-3);
+        }
+        // pan: centre in the middle, straight
+        assert!((frac_of(Key::channel(PAN), 64.0) - 64.0 / 127.0).abs() < 1e-6);
     }
 
     #[test]
