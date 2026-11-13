@@ -141,20 +141,21 @@ pub fn pane(ui: &mut egui::Ui, v: &mut Values) {
     });
     // (laid out like piano keys: the black keys' colours above the white keys')
     if pal.chromatic {
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            for k in [1usize, 3, 6, 8, 10] {
-                well(ui, v, &format!("Pitch {k}"), pal.pitch[k], 26.0);
-                if k == 3 {
-                    ui.add_space(30.0);
-                }
-            }
-        });
-        ui.horizontal(|ui| {
-            for k in [0usize, 2, 4, 5, 7, 9, 11] {
-                well(ui, v, &format!("Pitch {k}"), pal.pitch[k], 26.0);
-            }
-        });
+        // (white keys in a row; each black key centred over the gap between its two whites)
+        const PITCH: f32 = 34.0;
+        let (r, _) = ui.allocate_exact_size(egui::vec2(7.0 * PITCH, 48.0), egui::Sense::hover());
+        let mut put = |ui: &mut egui::Ui, k: usize, x: f32, y: f32| {
+            let cell = egui::Rect::from_min_size(egui::pos2(r.min.x + x, r.min.y + y), egui::vec2(28.0, 20.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(cell), |ui| well(ui, v, &format!("Pitch {k}"), pal.pitch[k], 26.0));
+        };
+        for (i, k) in [0usize, 2, 4, 5, 7, 9, 11].into_iter().enumerate() {
+            put(ui, k, i as f32 * PITCH, 26.0);
+        }
+        for (gap, k) in [(1.0f32, 1usize), (2.0, 3), (4.0, 6), (5.0, 8), (6.0, 10)] {
+            put(ui, k, gap * PITCH - PITCH / 2.0, 0.0);
+        }
+        // (the wells are placed inside the allocated block; keep the rows below clear of it)
+        ui.add_space(30.0);
     } else {
         ui.horizontal(|ui| {
             for k in 0..7 {
@@ -181,18 +182,18 @@ pub fn pane(ui: &mut egui::Ui, v: &mut Values) {
     });
     ui.add_space(6.0);
     ui.label(egui::RichText::new("User Palette").strong());
-    egui::Grid::new("sc-colors-user").num_columns(8).spacing([6.0, 4.0]).show(ui, |ui| {
-        for k in 0..16 {
-            well(ui, v, &format!("User {k}"), pal.user[k], 22.0);
-            let mut name = pal.names[k].clone();
-            if ui.add(egui::TextEdit::singleline(&mut name).desired_width(78.0)).changed() {
-                set(v, &format!("{SUB}Name {k}"), &name);
+    for row in 0..4 {
+        ui.horizontal(|ui| {
+            for k in row * 4..row * 4 + 4 {
+                well(ui, v, &format!("User {k}"), pal.user[k], 22.0);
+                let mut name = pal.names[k].clone();
+                if ui.add_sized([86.0, 20.0], egui::TextEdit::singleline(&mut name)).changed() {
+                    set(v, &format!("{SUB}Name {k}"), &name);
+                }
+                ui.add_space(6.0);
             }
-            if k % 4 == 3 {
-                ui.end_row();
-            }
-        }
-    });
+        });
+    }
     ui.add_space(6.0);
     if ui.button("Defaults").clicked() {
         reset(v);
