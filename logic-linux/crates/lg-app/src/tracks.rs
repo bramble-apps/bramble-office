@@ -568,6 +568,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_track = Some(i);
             }
             crate::menus::context_menu(app, &resp, if r.audio.is_some() { "region-audio" } else { "region-midi" });
+            crate::flex::region_pitch_ui(app, ui, rr, i, ri);
             if resp.dragged() && !crate::regionparams::gain_drag(app, resp.drag_delta().y, ui.input(|i| i.modifiers.shift)) {
                 // (the drag's region: with Option it is the copy, while the pointer is still over
                 // the original)

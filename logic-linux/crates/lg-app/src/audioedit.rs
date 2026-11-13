@@ -737,7 +737,9 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
     let bar_t = app.bar_ticks() as f64;
     // fit the region when it's new to the editor
-    let main = Rect::from_min_max(pos2(body.min.x + AMP_W, body.min.y + LOCAL_H), body.max);
+    // (Flex Pitch shown: Logic's inspector column at the left, flex.rs)
+    let insp_w = if app.audio_edit.show_flex && crate::flex::track(app, t).mode == lg_audio::flex::Mode::Pitch { 150.0 } else { 0.0 };
+    let main = Rect::from_min_max(pos2(body.min.x + insp_w + AMP_W, body.min.y + LOCAL_H), body.max);
     if app.audio_edit.fitted != Some((t, r)) {
         let w = main.width().max(100.0) as f64;
         let span = (rg.length as f64).max(bar_t / 4.0) * 1.08;
@@ -769,7 +771,12 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         p.rect_filled(fr, 6.0, look::group_bg());
         let k = lg_audio::flex::Mode::ALL.iter().position(|m| *m == cur).unwrap_or(0);
         if let Some(k) = crate::widgets::choice_slot(ui, fr, ae_id.with("fmode"), k, &names) {
-            crate::flex::set_mode(app, t, lg_audio::flex::Mode::ALL[k]);
+            // (Shift-choosing: every audio track)
+            if ui.input(|i| i.modifiers.shift) {
+                crate::flex::set_mode_all(app, lg_audio::flex::Mode::ALL[k]);
+            } else {
+                crate::flex::set_mode(app, t, lg_audio::flex::Mode::ALL[k]);
+            }
         }
         bx += 136.0;
         // (what room the tools and the right-hand controls leave)
@@ -835,7 +842,10 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let ruler = Rect::from_min_max(pos2(main.min.x, main.min.y), pos2(main.max.x, main.min.y + 22.0));
     let header = Rect::from_min_max(pos2(main.min.x, ruler.max.y + 1.0), pos2(main.max.x, ruler.max.y + 23.0));
     let wave = Rect::from_min_max(pos2(main.min.x, header.max.y), main.max);
-    let amp = Rect::from_min_max(pos2(body.min.x, main.min.y), pos2(main.min.x, body.max.y));
+    let amp = Rect::from_min_max(pos2(body.min.x + insp_w, main.min.y), pos2(main.min.x, body.max.y));
+    if insp_w > 0.0 {
+        crate::flex::pitch_inspector(app, ui, Rect::from_min_max(pos2(body.min.x, main.min.y), pos2(body.min.x + insp_w, body.max.y)), t, r);
+    }
     p.rect_filled(amp, 0.0, amp_bg());
     p.rect_filled(ruler, 0.0, ruler_bg());
     p.rect_filled(Rect::from_min_max(header.min, wave.max), 0.0, look::lane_bg());
