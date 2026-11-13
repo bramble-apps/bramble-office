@@ -196,6 +196,8 @@ pub struct KeysParams {
     pub complexity: f32,
     pub intensity: f32,
     pub fills: f32,
+    /// how busy a fill is (Fill Complexity), 0..1
+    pub fill_complexity: f32,
     pub swing: f32,
     pub swing_type: SwingType,
     pub feel: f32,
@@ -242,6 +244,7 @@ impl Default for KeysParams {
             complexity: 0.42,
             intensity: 0.71,
             fills: 0.0,
+            fill_complexity: 0.5,
             swing: 0.0,
             swing_type: SwingType::Eighths,
             feel: -0.16,
@@ -678,7 +681,7 @@ pub fn generate_perf(params: &KeysParams, region: &RegionSpec, chords: &[ChordAt
         if params.fills > 0.05 && next < region.end() && region.section_at(next).1 != region.section_at(t0).1 {
             let target = chord_at(chords, next).unwrap_or(Chord::major(0));
             let tv = voice(&target, params.upper_voicing.clamp(1, 8), params.upper_position, prev.as_deref());
-            let run = (2.0 + params.fills * 4.0) as u32;
+            let run = ((2.0 + params.fills * 4.0) * (0.5 + params.fill_complexity.clamp(0.0, 1.0))).max(1.0) as u32;
             let step = beat_t / 4;
             let top = *tv.last().unwrap_or(&72);
             for k in 0..run {

@@ -146,6 +146,8 @@ pub struct BassParams {
     pub intensity: f32,
     /// fills into new sections, 0..1
     pub fills: f32,
+    /// how busy a fill is (Fill Complexity), 0..1: fewer or more notes walking in
+    pub fill_complexity: f32,
     pub swing: f32,
     pub swing_type: SwingType,
     /// -1 pull .. 1 push
@@ -199,6 +201,7 @@ impl Default for BassParams {
             complexity: 0.5,
             intensity: 0.71,
             fills: 0.0,
+            fill_complexity: 0.5,
             swing: 0.0,
             swing_type: SwingType::Sixteenths,
             feel: 0.0,
@@ -448,11 +451,14 @@ pub fn generate_perf(params: &BassParams, region: &RegionSpec, chords: &[ChordAt
         let next = t0 + bar_t;
         let fill = params.fills > 0.05 && ((region.section_at(next).1 != s0 && next < region.end()) || ((b + 1) % 4 == 0 && r.chance(params.fills * 0.6)));
         if fill {
-            let from = beats.saturating_sub(1).max(1) * beat_t;
-            for k in 0..2 {
-                let at = from + k * beat_t / 2;
+            // (Fill Complexity: 1 to 4 notes; at the middle two eighths)
+            let count = (2.0 + ((params.fill_complexity - 0.5) * 4.0).round()).clamp(1.0, 4.0) as u32;
+            let step = if count > 2 { beat_t / 4 } else { beat_t / 2 };
+            let from = (beats.max(1) * beat_t).saturating_sub(count * step).max(beat_t);
+            for k in 0..count {
+                let at = from + k * step;
                 if at < bar_t && !steps.iter().any(|s| s.at == at) {
-                    steps.push(Step { at, tone: if k == 1 { Tone::Approach } else { Tone::Fifth }, accent: -4.0 });
+                    steps.push(Step { at, tone: if k + 1 == count { Tone::Approach } else { Tone::Fifth }, accent: -4.0 });
                 }
             }
         }
@@ -674,6 +680,18 @@ mod tests {
             assert_eq!(first.pitch % 12, chords[b as usize].chord.root, "bar {b}");
             assert!((40..52).contains(&first.pitch));
         }
+    }
+
+    #[test]
+    fn fill_complexity_busier_fills() {
+        let region = RegionSpec::new(0, 3840 * 16, (4, 4));
+        let chords = parse_bars("C Am F G", 0, 3840);
+        let base = BassParams { complexity: 0.3, fills: 1.0, ..Default::default() };
+        let simple = generate(&BassParams { fill_complexity: 0.0, ..base.clone() }, &region, &chords).len();
+        let busy = generate(&BassParams { fill_complexity: 1.0, ..base.clone() }, &region, &chords).len();
+        assert!(busy > simple, "{busy} > {simple}");
+        // the middle keeps the two-eighth walk-in
+        assert_eq!(generate(&base, &region, &chords), generate(&BassParams { fill_complexity: 0.5, ..base.clone() }, &region, &chords));
     }
 
     #[test]
