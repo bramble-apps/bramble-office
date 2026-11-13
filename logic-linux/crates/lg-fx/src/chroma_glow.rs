@@ -21,18 +21,29 @@ use crate::distortion::Over4;
 use crate::util::{Biquad, Coefs, Follower, OnePole, Values, db, flush, plugin_impl};
 use lg_dsp::{Param, Unit};
 
-pub const MODELS: &[&str] = &["Retro Tube", "Modern Tube", "Nostalgia Magnetic Tape", "Squeeze", "Warm Tape"];
+/// Logic 13's models (11.0 called the third Nostalgia Magnetic Tape; its fifth was Warm Tape).
+pub const MODELS: &[&str] = &["Retro Tube", "Modern Tube", "Magnetic", "Squeeze", "Analog Preamp"];
+pub const SLOPES: &[&str] = &["12 dB/Oct", "24 dB/Oct", "36 dB/Oct", "48 dB/Oct"];
+pub const PLACES: &[&str] = &["Pre", "Post"];
 
-static PARAMS: [Param; 13] = [
+static PARAMS: [Param; 20] = [
     Param::menu(1, "Model", MODELS, 0.0),
     Param::menu(2, "Style", &["Style 1", "Style 2"], 0.0),
     Param::new(7, "Level In", -24.0, 24.0, 0.0, Unit::Db),
     Param::new(8, "Level Out", -24.0, 24.0, -1.0, Unit::Db),
     Param::new(9, "Drive", 0.0, 100.0, 35.0, Unit::Percent),
     Param::new(10, "Saturation", 0.0, 100.0, 10.0, Unit::Percent),
-    Param::new(12, "Filter On", 0.0, 1.0, 0.0, Unit::OnOff),
-    Param::new(15, "Filter Frequency", 20.0, 20000.0, 20000.0, Unit::Hz),
-    Param::new(16, "Filter Q", 0.1, 10.0, 0.71, Unit::Ratio),
+    Param::new(12, "High Cut On", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(15, "High Cut Frequency", 20.0, 20000.0, 20000.0, Unit::Hz),
+    Param::new(16, "High Cut Resonance", 0.1, 10.0, 0.71, Unit::Ratio),
+    // (our own ids) the High Cut's slope and place, and the Low Cut section
+    Param::menu(1001, "High Cut Slope", SLOPES, 0.0),
+    Param::menu(1002, "High Cut Pre/Post", PLACES, 1.0),
+    Param::new(1003, "Low Cut On", 0.0, 1.0, 0.0, Unit::OnOff),
+    Param::new(1004, "Low Cut Frequency", 20.0, 20000.0, 20.0, Unit::Hz),
+    Param::new(1005, "Low Cut Resonance", 0.1, 10.0, 0.71, Unit::Ratio),
+    Param::menu(1006, "Low Cut Slope", SLOPES, 0.0),
+    Param::menu(1007, "Low Cut Pre/Post", PLACES, 0.0),
     Param::new(17, "Bypass Below On", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(20, "Bypass Below", 20.0, 2000.0, 500.0, Unit::Hz),
     Param::new(21, "Bypass Below Q", 0.1, 10.0, 0.71, Unit::Ratio),
@@ -48,6 +59,9 @@ pub struct ChromaGlow {
     bump: [Biquad; 2],
     tone: [OnePole; 2],
     filt: [Biquad; 2],
+    /// High Cut / Low Cut: up to four 12 dB stages each, per side.
+    hc: [[Biquad; 4]; 2],
+    lc: [[Biquad; 4]; 2],
     split: [Biquad; 2],
     env: Follower,
     hyst: [f32; 2],
@@ -66,6 +80,8 @@ impl ChromaGlow {
             bump: [Biquad::default(); 2],
             tone: [OnePole::default(); 2],
             filt: [Biquad::default(); 2],
+            hc: [[Biquad::default(); 4]; 2],
+            lc: [[Biquad::default(); 4]; 2],
             split: [Biquad::default(); 2],
             env: Follower::new(rate, 2.0, 80.0),
             hyst: [0.0; 2],
@@ -79,20 +95,28 @@ impl ChromaGlow {
     fn update(&mut self) {
         let (r, p) = (self.rate, &self.p);
         let model = p.idx(1);
-        let tape = model == 2 || model == 4;
+        let tape = model == 2;
         // tape emphasis: lift the highs into the saturation, take them back after
         let (pre, post, bump, tone): (Coefs, Coefs, Coefs, f32) = if tape {
             let e = if model == 2 { 6.0 } else { 3.0 };
             (Coefs::high_shelf(r, 3000.0, 0.7, e), Coefs::high_shelf(r, 3000.0, 0.7, -e), Coefs::peak(r, if model == 2 { 62.0 } else { 90.0 }, 1.1, if model == 2 { 2.0 } else { 2.8 }), if model == 2 { 15000.0 } else { 9000.0 })
         } else {
-            (Coefs::THRU, Coefs::THRU, Coefs::THRU, if model == 0 { 14000.0 } else { 20000.0 })
+            // Analog Preamp: a transformer's low-end weight and a soft top
+            if model == 4 { (Coefs::THRU, Coefs::THRU, Coefs::peak(r, 110.0, 0.8, 1.8), 16000.0) } else { (Coefs::THRU, Coefs::THRU, Coefs::THRU, if model == 0 { 14000.0 } else { 20000.0 }) }
         };
         for s in 0..2 {
             self.pre[s].c = pre;
             self.post[s].c = post;
             self.bump[s].c = bump;
             self.tone[s].set(r, tone.min(r * 0.45));
-            self.filt[s].c = if p.on(12) { Coefs::lowpass(r, p.get(15).min(r * 0.45), p.get(16)) } else { Coefs::THRU };
+            self.filt[s].c = Coefs::THRU;
+            // the steeper the slope, the more stages; the resonance on the last one
+            let (hn, ln) = (p.idx(1001).min(3) + 1, p.idx(1006).min(3) + 1);
+            for k in 0..4 {
+                let q = |n: usize, res: f32| if k + 1 == n { res } else { 0.707 };
+                self.hc[s][k].c = if p.on(12) && k < hn { Coefs::lowpass(r, p.get(15).min(r * 0.45), q(hn, p.get(16))) } else { Coefs::THRU };
+                self.lc[s][k].c = if p.on(1003) && k < ln { Coefs::highpass(r, p.get(1004).min(r * 0.45), q(ln, p.get(1005))) } else { Coefs::THRU };
+            }
             self.split[s].c = Coefs::lowpass(r, p.get(20), p.get(21));
         }
     }
@@ -100,6 +124,9 @@ impl ChromaGlow {
     fn clear(&mut self) {
         for s in 0..2 {
             for b in [&mut self.pre[s], &mut self.post[s], &mut self.bump[s], &mut self.filt[s], &mut self.split[s]] {
+                b.clear();
+            }
+            for b in self.hc[s].iter_mut().chain(self.lc[s].iter_mut()) {
                 b.clear();
             }
             self.os[s].clear();
@@ -128,7 +155,13 @@ fn curve(model: usize, style: usize, u: f32, hyst: &mut f32) -> f32 {
             let k = if style == 0 { 1.0 } else { 1.6 };
             (u * k).tanh() / k + 0.03 * (u * k).tanh().powi(3)
         }
-        2 | 4 => {
+        4 => {
+            // preamp: a gentle asymmetric curve (even harmonics), harder in Colorful
+            let a = if style == 0 { 0.15 } else { 0.4 };
+            let v = u + a * u * u * 0.25;
+            v / (1.0 + v.abs().powf(2.5)).powf(0.4)
+        }
+        2 => {
             // tape: soft symmetric curve with a little lag (hysteresis-like memory)
             let v = u + 0.12 * (*hyst - u);
             *hyst = flush(v);
@@ -151,6 +184,7 @@ impl lg_dsp::Effect for ChromaGlow {
         let sat = (p.get(10) / 100.0 * 0.85 + 0.15).min(1.0);
         let (lin, lout) = (db(p.get(7)), db(p.get(8)));
         let bypass_below = p.on(17);
+        let (hc_pre, lc_pre) = (p.idx(1002) == 0, p.idx(1007) == 0);
         // loudness compensation for Drive (most of it)
         let comp = 1.0 / drive.powf(0.85);
         for i in 0..left.len().min(right.len()) {
@@ -160,7 +194,18 @@ impl lg_dsp::Effect for ChromaGlow {
             }
             let squeeze = if model == 3 { 1.0 / (1.0 + 0.8 * self.env.env.max(0.0)) } else { 1.0 };
             for (s, x) in [&mut left[i], &mut right[i]].into_iter().enumerate() {
-                let input = *x * lin;
+                let mut input = *x * lin;
+                // filters before the saturation (Pre)
+                if lc_pre {
+                    for b in &mut self.lc[s] {
+                        input = b.run(input);
+                    }
+                }
+                if hc_pre {
+                    for b in &mut self.hc[s] {
+                        input = b.run(input);
+                    }
+                }
                 let (low, body) = if bypass_below {
                     let lo = self.split[s].run(input);
                     (lo, input - lo)
@@ -174,10 +219,64 @@ impl lg_dsp::Effect for ChromaGlow {
                 self.dc[s] = flush(self.dc[s] + self.dck * (y - self.dc[s]));
                 let wet = y - self.dc[s];
                 let mixed = body * (1.0 - sat) + wet * sat + low;
-                *x = self.filt[s].run(mixed) * lout;
+                let mut y = self.filt[s].run(mixed);
+                if !lc_pre {
+                    for b in &mut self.lc[s] {
+                        y = b.run(y);
+                    }
+                }
+                if !hc_pre {
+                    for b in &mut self.hc[s] {
+                        y = b.run(y);
+                    }
+                }
+                *x = y * lout;
             }
         }
     }
 }
 
 plugin_impl!(ChromaGlow);
+
+#[cfg(test)]
+mod cut_tests {
+    use super::*;
+    use lg_dsp::{Effect, Plugin};
+
+    fn level(c: &mut ChromaGlow, hz: f32) -> f32 {
+        let n = 9600;
+        let mut l: Vec<f32> = (0..n).map(|i| 0.1 * (crate::util::TAU * hz * i as f32 / 48000.0).sin()).collect();
+        let mut r = l.clone();
+        c.clear();
+        c.process(&mut l, &mut r);
+        (l[n / 2..].iter().map(|x| x * x).sum::<f32>() / (n / 2) as f32).sqrt()
+    }
+
+    #[test]
+    fn low_and_high_cut_slopes_and_models() {
+        assert_eq!(MODELS, &["Retro Tube", "Modern Tube", "Magnetic", "Squeeze", "Analog Preamp"]);
+        let mut c = ChromaGlow::new(48000.0);
+        c.set(10, 0.0);
+        c.set(9, 0.0);
+        let open = level(&mut c, 100.0);
+        // Low Cut at 1 kHz: 100 Hz drops, more with a steeper slope
+        c.set(1003, 1.0);
+        c.set(1004, 1000.0);
+        let gentle = level(&mut c, 100.0);
+        c.set(1006, 3.0);
+        let steep = level(&mut c, 100.0);
+        assert!(gentle < open * 0.05 && steep < gentle * 0.01, "{open} {gentle} {steep}");
+        // High Cut works Pre and Post
+        c.set(1003, 0.0);
+        c.set(12, 1.0);
+        c.set(15, 500.0);
+        for place in [0.0, 1.0] {
+            c.set(1002, place);
+            assert!(level(&mut c, 8000.0) < level(&mut c, 100.0) * 0.01);
+        }
+        // the Analog Preamp model runs and stays finite
+        c.set(1, 4.0);
+        c.set(9, 100.0);
+        assert!(level(&mut c, 200.0).is_finite());
+    }
+}
