@@ -527,8 +527,9 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
         d.insert_temp(egui::Id::unique("all-filters-was-open"), true);
         !was
     });
+    // (the clock is read before taking the data lock: reading it inside would deadlock)
+    let now = ctx.input(|i| i.time);
     let opened = ctx.data_mut(|d| {
-        let now = ctx.input(|i| i.time);
         if first {
             d.insert_temp(egui::Id::unique("all-filters-opened"), now);
         }
