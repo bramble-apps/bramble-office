@@ -194,6 +194,7 @@ impl PlayerSettings {
                 cymbals: KitSection { enabled: true, variation: num(j, "rightHandArticulation1").unwrap_or(0.0) as u8 },
                 percussion: KitSection { enabled: perc > 0, variation: perc },
                 fills: pct(j, "fillsAmount", d.fills),
+                fill_complexity: pct(j, "fillsComp", d.fill_complexity),
                 swing: pct(j, "swing", d.swing),
                 swing_type: swing_type_of(j),
                 feel: pct(j, "pushPull", d.feel),
@@ -217,6 +218,7 @@ impl PlayerSettings {
                 complexity: pct(j, "rComp", d.complexity),
                 intensity: pct(j, "intensity", d.intensity),
                 fills: pct(j, "fillsAmount", d.fills),
+                fill_complexity: pct(j, "fillsComp", d.fill_complexity),
                 swing: pct(j, "swing", d.swing),
                 swing_type: swing_type_of(j),
                 feel: pct(j, "pushPull", d.feel),
@@ -260,6 +262,7 @@ impl PlayerSettings {
                 complexity: pct(j, "rComp", d.complexity),
                 intensity: pct(j, "intensity", d.intensity),
                 fills: pct(j, "fillsAmount", d.fills),
+                fill_complexity: pct(j, "fillsComp", d.fill_complexity),
                 swing: pct(j, "swing", d.swing),
                 swing_type: swing_type_of(j),
                 feel: pct(j, "pushPull", d.feel),
@@ -297,6 +300,7 @@ impl PlayerSettings {
                 j.set("rightHandArticulation1", Json::Num(p.cymbals.variation as f64));
                 j.set("percStyle", Json::Num(if p.percussion.enabled { p.percussion.variation.max(1) as f64 } else { 0.0 }));
                 j.set("fillsAmount", n(p.fills));
+                j.set("fillsComp", n(p.fill_complexity));
                 j.set("swing", n(p.swing));
                 j.set("swingType", Json::Num(swing_type_value(p.swing_type)));
                 j.set("pushPull", n(p.feel));
@@ -320,6 +324,7 @@ impl PlayerSettings {
                 j.set("rComp", n(p.complexity));
                 j.set("intensity", n(p.intensity));
                 j.set("fillsAmount", n(p.fills));
+                j.set("fillsComp", n(p.fill_complexity));
                 j.set("swing", n(p.swing));
                 j.set("swingType", Json::Num(swing_type_value(p.swing_type)));
                 j.set("pushPull", n(p.feel));
@@ -342,6 +347,7 @@ impl PlayerSettings {
                 j.set("rComp", n(p.complexity));
                 j.set("intensity", n(p.intensity));
                 j.set("fillsAmount", n(p.fills));
+                j.set("fillsComp", n(p.fill_complexity));
                 j.set("swing", n(p.swing));
                 j.set("swingType", Json::Num(swing_type_value(p.swing_type)));
                 j.set("pushPull", n(p.feel));

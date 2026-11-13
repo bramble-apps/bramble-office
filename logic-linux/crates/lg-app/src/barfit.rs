@@ -116,7 +116,7 @@ pub(crate) fn text_w(ui: &egui::Ui, text: &str) -> f32 {
 
 /// A zoom slider as Logic's (measured for the Score's, scoretools.rs): a darker pill 75 × 24 pt
 /// with the icon at 10 pt, a 48 pt groove (blue up to the knob) and a 7.5 pt round knob.
-fn slider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, icon: &str, tip: &str) -> bool {
+pub(crate) fn slider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, icon: &str, tip: &str) -> bool {
     let p = ui.painter().clone();
     let y = r.center().y;
     p.rect_filled(r, 6.0, look::mix(look::header_bg(), Color32::BLACK, 0.2));
@@ -505,25 +505,7 @@ fn track_control(app: &mut App, ui: &mut egui::Ui, id: egui::Id, c: TrackCtl, r:
             }
             crate::cbicons::catch(ui.painter(), r, if on { Color32::WHITE } else { look::text() });
         }
-        TrackCtl::Tools => {
-            let p = ui.painter().clone();
-            p.rect_filled(r, 6.0, look::group_bg());
-            for (k, cmd) in [false, true].into_iter().enumerate() {
-                let cr = Rect::from_min_size(pos2(r.min.x + k as f32 * 48.0, r.min.y), vec2(48.0, BTN_H));
-                let tip = if cmd { "Command-click Tool" } else { "Left-click Tool" };
-                let resp = ui.interact(cr, id.with(("tool", k)), Sense::click()).on_hover_text(tip);
-                if resp.hovered() {
-                    p.rect_filled(cr, 6.0, look::button_on());
-                }
-                let cur = if cmd { app.cmd_tool } else { app.tool };
-                glyphs::paint(&p, Rect::from_center_size(pos2(cr.min.x + 18.0, cr.center().y), vec2(20.0, 20.0)), glyphs::tool(cur), 15.0, look::text());
-                chevron(&p, pos2(cr.max.x - 12.0, cr.center().y), look::text());
-                if k == 1 {
-                    p.vline(cr.min.x, (cr.center().y - 7.0)..=(cr.center().y + 7.0), Stroke::new(1.0, look::line()));
-                }
-                egui::Popup::menu(&resp).show(|ui| tool_items(app, ui, cmd));
-            }
-        }
+        TrackCtl::Tools => tools_pill(app, ui, id, r),
         TrackCtl::WaveZoom => {
             let resp = icon_button(ui, r, id.with("wz"), app.keyx.wave_zoom > 1.0, true, "Waveform Zoom (drag up or down to zoom)", ph::WAVEFORM);
             if resp.dragged() {
@@ -568,6 +550,28 @@ fn track_control(app: &mut App, ui: &mut egui::Ui, id: egui::Id, c: TrackCtl, r:
 /// The Snap menu's items after the modes (from the research's "…" menu).
 fn snap_rest() -> &'static [crate::menus::Item] {
     crate::menus::local("tracks-more").iter().find(|i| i.label == "Snap").map_or(&[], |s| s.children.as_slice())
+}
+
+/// The Left-click and Command-click tool pop-ups in one capsule (96 × 24 pt; the Tracks area's,
+/// also the Session Player Editor's).
+pub(crate) fn tools_pill(app: &mut App, ui: &mut egui::Ui, id: egui::Id, r: Rect) {
+    let p = ui.painter().clone();
+    p.rect_filled(r, 6.0, look::group_bg());
+    for (k, cmd) in [false, true].into_iter().enumerate() {
+        let cr = Rect::from_min_size(pos2(r.min.x + k as f32 * 48.0, r.min.y), vec2(48.0, BTN_H));
+        let tip = if cmd { "Command-click Tool" } else { "Left-click Tool" };
+        let resp = ui.interact(cr, id.with(("tool", k)), Sense::click()).on_hover_text(tip);
+        if resp.hovered() {
+            p.rect_filled(cr, 6.0, look::button_on());
+        }
+        let cur = if cmd { app.cmd_tool } else { app.tool };
+        glyphs::paint(&p, Rect::from_center_size(pos2(cr.min.x + 18.0, cr.center().y), vec2(20.0, 20.0)), glyphs::tool(cur), 15.0, look::text());
+        chevron(&p, pos2(cr.max.x - 12.0, cr.center().y), look::text());
+        if k == 1 {
+            p.vline(cr.min.x, (cr.center().y - 7.0)..=(cr.center().y + 7.0), Stroke::new(1.0, look::line()));
+        }
+        egui::Popup::menu(&resp).show(|ui| tool_items(app, ui, cmd));
+    }
 }
 
 fn tool_items(app: &mut App, ui: &mut egui::Ui, cmd: bool) {

@@ -60,6 +60,9 @@ pub struct State {
     pub chord_edit: Option<String>,
     /// Cut / Copy Region Chords
     pub chord_clip: Option<String>,
+    /// The wide editor's fit button is off: the strip follows the zoom slider (on: the region
+    /// fills the strip).
+    pub fit_off: bool,
     /// The preview Play button's saved state (region solo, soloed regions, cycle on, cycle).
     pub preview: Option<(bool, Vec<(usize, usize)>, bool, (u32, u32))>,
 }
@@ -163,8 +166,8 @@ fn presets_file() -> Option<std::path::PathBuf> {
 /// A player's knob settings as text ("kind name=value…").
 fn fields(p: &Player) -> Vec<(&'static str, f32)> {
     match p {
-        Player::Bass(b) => vec![("complexity", b.complexity), ("intensity", b.intensity), ("fills", b.fills), ("swing", b.swing), ("feel", b.feel), ("dead", b.dead_notes), ("slides", b.slides), ("double", b.double_stops), ("muteoff", b.mute_offset), ("dynamics", b.dynamics), ("humanize", b.humanize), ("lowest", b.lowest_note as f32), ("pickup", b.pickup_hits as u8 as f32), ("dynmute", b.dynamic_mute as u8 as f32), ("alignroot", b.align_root as u8 as f32)],
-        Player::Keys(k) => vec![("complexity", k.complexity), ("intensity", k.intensity), ("fills", k.fills), ("swing", k.swing), ("feel", k.feel), ("grace", k.grace_notes), ("dynamics", k.dynamics), ("humanize", k.humanize), ("upper", k.upper_position as f32), ("lower", k.lower_position as f32), ("voicing", k.upper_voicing as f32), ("arp", k.arp_direction as f32)],
+        Player::Bass(b) => vec![("complexity", b.complexity), ("intensity", b.intensity), ("fills", b.fills), ("fillc", b.fill_complexity), ("swing", b.swing), ("feel", b.feel), ("dead", b.dead_notes), ("slides", b.slides), ("double", b.double_stops), ("muteoff", b.mute_offset), ("dynamics", b.dynamics), ("humanize", b.humanize), ("lowest", b.lowest_note as f32), ("pickup", b.pickup_hits as u8 as f32), ("dynmute", b.dynamic_mute as u8 as f32), ("alignroot", b.align_root as u8 as f32)],
+        Player::Keys(k) => vec![("complexity", k.complexity), ("intensity", k.intensity), ("fills", k.fills), ("fillc", k.fill_complexity), ("swing", k.swing), ("feel", k.feel), ("grace", k.grace_notes), ("dynamics", k.dynamics), ("humanize", k.humanize), ("upper", k.upper_position as f32), ("lower", k.lower_position as f32), ("voicing", k.upper_voicing as f32), ("arp", k.arp_direction as f32)],
     }
 }
 
@@ -174,6 +177,7 @@ fn set_field(p: &mut Player, name: &str, v: f32) {
             "complexity" => b.complexity = v,
             "intensity" => b.intensity = v,
             "fills" => b.fills = v,
+            "fillc" => b.fill_complexity = v,
             "swing" => b.swing = v,
             "feel" => b.feel = v,
             "dead" => b.dead_notes = v,
@@ -192,6 +196,7 @@ fn set_field(p: &mut Player, name: &str, v: f32) {
             "complexity" => k.complexity = v,
             "intensity" => k.intensity = v,
             "fills" => k.fills = v,
+            "fillc" => k.fill_complexity = v,
             "swing" => k.swing = v,
             "feel" => k.feel = v,
             "grace" => k.grace_notes = v,
@@ -259,7 +264,7 @@ fn same_kind(a: &Player, b: &Player) -> bool {
 pub fn apply_settings(app: &App, p: &Player, from: &Player) -> Player {
     let mut out = p.clone();
     for (k, v) in fields(from) {
-        if (app.spx.lock_fills && k == "fills") || (app.spx.lock_swing && k == "swing") {
+        if (app.spx.lock_fills && (k == "fills" || k == "fillc")) || (app.spx.lock_swing && k == "swing") {
             continue;
         }
         set_field(&mut out, k, v);
@@ -286,15 +291,23 @@ pub fn style_changed(app: &App, before: &Player, now: &Player) -> Player {
 /// (Keyboard / Bass Player, Change Patch), the Preset pop-up, the Fills and Swing locks.
 /// Returns the player changed.
 pub fn header(app: &mut App, ui: &mut egui::Ui, head: Rect, t: usize, player: &mut Player) {
-    load(app);
-    let p = ui.painter_at(head);
     let x0 = head.min.x + 330.0;
-    // the type pop-up
     let tr = Rect::from_min_size(pos2(x0, head.min.y + 6.0), vec2(118.0, 22.0));
+    type_popup(app, ui, tr, t, player, true);
+    let pr = Rect::from_min_size(pos2(tr.max.x + 8.0, tr.min.y), vec2(120.0, 22.0));
+    preset_popup(app, ui, pr, t, player, false);
+}
+
+/// The Session Player type pop-up (Keyboard / Bass Player, Change Patch): a button in the
+/// compact bar, or (wide) a click on the type over the picture.
+pub fn type_popup(app: &mut App, ui: &mut egui::Ui, tr: Rect, t: usize, player: &mut Player, button: bool) {
+    let p = ui.painter_at(tr.expand(2.0));
     let tresp = ui.interact(tr, ui.scope_id().with(("spx-type", t)), Sense::click()).on_hover_text("Session Player: the type");
-    p.rect_filled(tr, 5.0, look::group_bg());
     let tname = if matches!(player, Player::Bass(_)) { "Bass Player" } else { "Keyboard Player" };
-    p.text(pos2(tr.min.x + 8.0, tr.center().y), Align2::LEFT_CENTER, format!("{tname} ⌄"), look::regular(12.0), look::text());
+    if button {
+        p.rect_filled(tr, 5.0, look::group_bg());
+        p.text(pos2(tr.min.x + 8.0, tr.center().y), Align2::LEFT_CENTER, format!("{tname} ⌄"), look::regular(12.0), look::text());
+    }
     let change_patch = app.spx.change_patch.unwrap_or(true);
     egui::Popup::menu(&tresp).show(|ui| {
         ui.set_min_width(200.0);
@@ -316,11 +329,27 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, head: Rect, t: usize, player: &m
             app.spx.change_patch = Some(!change_patch);
         }
     });
-    // the Preset pop-up
-    let pr = Rect::from_min_size(pos2(tr.max.x + 8.0, tr.min.y), vec2(120.0, 22.0));
+}
+
+/// The preset these settings are (an included or user preset), else "Custom".
+pub fn preset_name(app: &App, player: &Player) -> String {
+    let same = |x: &Player| apply_settings(app, player, x) == *player;
+    included(player).into_iter().find(|(_, x)| same(x)).map(|(n, _)| n.to_string()).or_else(|| app.spx.user.iter().find(|(_, x)| same_kind(x, player) && same(x)).map(|(n, _)| n.clone())).unwrap_or_else(|| "Custom".into())
+}
+
+/// The Preset pop-up: "Preset ⌄" in the compact bar; wide, Logic's field with the preset's name
+/// and the up-down chevrons.
+pub fn preset_popup(app: &mut App, ui: &mut egui::Ui, pr: Rect, t: usize, player: &mut Player, wide: bool) {
+    load(app);
+    let p = ui.painter_at(pr.expand(2.0));
+    let tname = if matches!(player, Player::Bass(_)) { "Bass Player" } else { "Keyboard Player" };
     let presp = ui.interact(pr, ui.scope_id().with(("spx-preset", t)), Sense::click()).on_hover_text("Session Player presets");
-    p.rect_filled(pr, 5.0, look::group_bg());
-    p.text(pos2(pr.min.x + 8.0, pr.center().y), Align2::LEFT_CENTER, "Preset ⌄", look::regular(12.0), look::text());
+    if wide {
+        preset_field(&p, pr, &preset_name(app, player), presp.hovered());
+    } else {
+        p.rect_filled(pr, 5.0, look::group_bg());
+        p.text(pos2(pr.min.x + 8.0, pr.center().y), Align2::LEFT_CENTER, "Preset ⌄", look::regular(12.0), look::text());
+    }
     let mut pick: Option<Player> = None;
     egui::Popup::menu(&presp).show(|ui| {
         ui.set_min_width(240.0);
@@ -405,6 +434,13 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, head: Rect, t: usize, player: &m
     }
 }
 
+/// Logic's wide-bar pop-up field: the value at the left, the up-down chevrons at the right.
+pub fn preset_field(p: &egui::Painter, r: Rect, name: &str, hovered: bool) {
+    p.rect_filled(r, 5.0, if hovered { look::button_on() } else { look::group_bg() });
+    p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, name, look::regular(13.0), look::text());
+    crate::glyphs::paint(p, Rect::from_center_size(pos2(r.max.x - 12.0, r.center().y), vec2(12.0, 12.0)), crate::glyphs::ph::CARET_UP_DOWN, 11.0, look::text());
+}
+
 /// The Keyboard Player's Left Hand and Right Hand buttons (lit: playing; dimmed: muted).
 pub fn hand_buttons(app: &mut App, ui: &mut egui::Ui, at: egui::Pos2, t: usize, r: usize) -> bool {
     let (l, rr) = app.spx.hands.get(&(t, r)).copied().unwrap_or_default();
@@ -416,16 +452,21 @@ pub fn hand_buttons(app: &mut App, ui: &mut egui::Ui, at: egui::Pos2, t: usize, 
         p.rect_filled(b, 6.0, if muted { Color32::from_gray(0x36) } else { crate::spedit::yellow() });
         p.text(b.center(), Align2::CENTER_CENTER, name, look::regular(13.0), if muted { look::text_dim() } else { Color32::BLACK });
         if resp.clicked() {
-            let e = app.spx.hands.entry((t, r)).or_default();
-            if i == 0 {
-                e.0 = !e.0;
-            } else {
-                e.1 = !e.1;
-            }
+            toggle_hand(app, t, r, i);
             changed = true;
         }
     }
     changed
+}
+
+/// Mutes or unmutes a Keyboard Player's hand (0 left, 1 right).
+pub fn toggle_hand(app: &mut App, t: usize, r: usize, i: usize) {
+    let e = app.spx.hands.entry((t, r)).or_default();
+    if i == 0 {
+        e.0 = !e.0;
+    } else {
+        e.1 = !e.1;
+    }
 }
 
 /// After a performance is made: the custom pattern's rhythm and the hands muted.

@@ -35,11 +35,15 @@ pub(crate) fn label_col() -> Color32 {
 }
 
 /// What the editor shows at the top (in points).
-const TITLE_H: f32 = 30.0;
-const BAR_H: f32 = 30.0;
-const RULER_H: f32 = 20.0;
+/// (Logic 13, ui-session-player-drummer.png: the title row 37, the bar 40, the ruler 23, the
+/// region 71 with its 21-point header)
+const TITLE_H: f32 = 37.0;
+const BAR_H: f32 = 40.0;
+const RULER_H: f32 = 23.0;
 const CHORDS_H: f32 = 16.0;
-const REGION_H: f32 = 58.0;
+const REGION_H: f32 = 71.0;
+/// The bar's centre, from the editor's top.
+pub(crate) const BAR_CY: f32 = TITLE_H + BAR_H / 2.0;
 /// The panel's width (Logic: 459 points) and corner radius.
 pub(crate) const PANEL_W: f32 = 459.0;
 pub(crate) const PANEL_R: f32 = 21.0;
@@ -125,7 +129,22 @@ impl Cx {
         self.label(c, label);
         let val = options.get(*cur).copied().unwrap_or("");
         let w = ui.fonts_mut(|f| f.layout_no_wrap(val.into(), look::regular(13.0), Color32::WHITE).size().x);
-        let vr = Rect::from_center_size(c + vec2(0.0, 17.0), vec2(w + 18.0, 18.0));
+        self.popup_value(ui, Rect::from_center_size(c + vec2(0.0, 17.0), vec2(w + 18.0, 18.0)), key, options, cur)
+    }
+
+    /// A pop-up as a row (wide Keyboard Player): the label at `l` (left), the value ending at
+    /// `right`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn popup_row(&self, ui: &mut egui::Ui, l: Pos2, right: f32, key: &str, label: &str, options: &[&str], cur: &mut usize) -> bool {
+        self.p.text(l, Align2::LEFT_CENTER, label, look::regular(13.0), label_col());
+        let val = options.get(*cur).copied().unwrap_or("");
+        let w = ui.fonts_mut(|f| f.layout_no_wrap(val.into(), look::regular(13.0), Color32::WHITE).size().x);
+        self.popup_value(ui, Rect::from_min_max(pos2(right - w - 18.0, l.y - 9.0), pos2(right, l.y + 9.0)), key, options, cur)
+    }
+
+    /// A pop-up's value (yellow, the up-down chevrons) in `vr` and its menu.
+    fn popup_value(&self, ui: &mut egui::Ui, vr: Rect, key: &str, options: &[&str], cur: &mut usize) -> bool {
+        let val = options.get(*cur).copied().unwrap_or("");
         self.p.text(pos2(vr.min.x, vr.center().y), Align2::LEFT_CENTER, val, look::regular(13.0), yellow());
         glyphs::paint(&self.p, Rect::from_center_size(pos2(vr.max.x - 6.0, vr.center().y), vec2(12.0, 12.0)), glyphs::ph::CARET_UP_DOWN, 11.0, yellow());
         let resp = ui.interact(vr.expand(2.0), self.id(key), Sense::click());
@@ -250,10 +269,11 @@ impl Cx {
     }
 }
 
-/// The editor.
-/// The editor's top: the title, the bar (Chords pop-up), the ruler with the Play button, the
-/// region chords and the region (a drummer's hits by kit piece). Returns the controls' area.
+/// The editor's top: the title, the bar (Chords pop-up; wide: the tools, Snap, Catch and the
+/// zoom slider too), the ruler, the region chords and the track's regions (the region's Play
+/// button in its header; a drummer's hits by kit piece). Returns the controls' area.
 pub(crate) fn top(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize, kit: Option<lg_players::kit::KitMap>, regen: &mut bool) -> Option<Rect> {
+    let wide = is_wide(area.width());
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
@@ -262,52 +282,122 @@ pub(crate) fn top(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usi
     p.text(pos2(area.center().x, area.min.y + TITLE_H / 2.0), Align2::CENTER_CENTER, "Session Player", look::semibold(13.0), look::text());
     let bar = Rect::from_min_size(area.min + vec2(0.0, TITLE_H), vec2(area.width(), BAR_H));
     p.hline(area.x_range(), bar.min.y, Stroke::new(1.0, look::line()));
-    chords_popup(app, ui, &p, Rect::from_min_size(bar.min + vec2(10.0, 3.0), vec2(84.0, 24.0)), t, r, regen);
-    // ---- the ruler with the Play button, the chords lane, the region
+    chords_popup(app, ui, &p, Rect::from_min_size(pos2(bar.min.x + 14.0, bar.center().y - 12.0), vec2(76.0, 24.0)), t, r, regen);
+    if wide {
+        bar_right(app, ui, bar, t, r);
+    }
+    // ---- the ruler, the chords lane, the track's regions
     let ruler = Rect::from_min_size(pos2(area.min.x, bar.max.y), vec2(area.width(), RULER_H));
     let region = app.project.as_ref().and_then(|pr| pr.tracks.get(t)?.regions.get(r)).cloned()?;
-    let lane = Rect::from_min_max(pos2(area.min.x + 30.0, ruler.min.y), pos2(area.max.x - 10.0, ruler.max.y + CHORDS_H + REGION_H));
-    p.rect_filled(Rect::from_min_max(ruler.min, pos2(ruler.max.x, ruler.max.y)), 0.0, look::header_bg());
+    let follows = matches!(app.spx.region_chords.get(&(t, r)), Some((true, _)));
+    let chords_h = if follows { CHORDS_H } else { 0.0 };
+    let lane = Rect::from_min_max(pos2(area.min.x + 8.0, ruler.min.y), pos2(area.max.x - 8.0, ruler.max.y + chords_h + REGION_H));
+    p.hline(area.x_range(), ruler.min.y - 0.5, Stroke::new(1.0, Color32::from_gray(0x0c)));
+    p.rect_filled(ruler, 0.0, look::header_bg());
     let bar_t = app.bar_ticks().max(1);
-    let x_of = |tick: u32| lane.min.x + (tick.saturating_sub(region.start)) as f32 / region.length.max(1) as f32 * lane.width();
-    let mut b = region.start - region.start % bar_t;
-    while b < region.start + region.length {
-        if b >= region.start {
-            let x = x_of(b);
-            p.vline(x, ruler.y_range(), Stroke::new(1.0, look::text_dim()));
-            p.text(pos2(x + 3.0, ruler.center().y), Align2::LEFT_CENTER, format!("{}", b / bar_t + 1), look::regular(12.5), look::text());
+    // the view: compact fits the region; wide follows the editor's zoom and scroll (the Piano
+    // Roll's), at least the region fitted
+    let fit = lane.width() / region.length.max(1) as f32;
+    let (v0, ppt) = if wide && app.spx.fit_off { wide_view(app, ui, lane, &region, bar_t) } else { (region.start as f32, fit) };
+    let x_of = |tick: u32| lane.min.x + (tick as f32 - v0) * ppt;
+    let v1 = v0 + lane.width() / ppt;
+    let lp = p.with_clip_rect(lane.intersect(area));
+    let mut b = (v0.max(0.0) as u32) - (v0.max(0.0) as u32) % bar_t;
+    while (b as f32) < v1 {
+        let x = x_of(b);
+        if x >= lane.min.x - 0.5 {
+            lp.vline(x, ruler.y_range(), Stroke::new(1.0, look::text_dim()));
+            lp.text(pos2(x + 3.0, ruler.center().y), Align2::LEFT_CENTER, format!("{}", b / bar_t + 1), look::semibold(12.5), look::text());
+        }
+        // the beats: short ticks
+        let beat_t = (bar_t / app.project.as_ref().map_or(4, |pr| pr.signature.0.max(1) as u32)).max(1);
+        if ppt * beat_t as f32 > 12.0 {
+            for k in 1..bar_t / beat_t {
+                lp.vline(x_of(b + k * beat_t), (ruler.max.y - 5.0)..=ruler.max.y, Stroke::new(1.0, look::text_dim()));
+            }
         }
         b += bar_t;
     }
-    // the preview Play button: the cycle set to the region, the region soloed
-    let play = Rect::from_center_size(pos2(area.min.x + 15.0, ruler.center().y + 8.0), vec2(22.0, 22.0));
-    let previewing = app.spx.preview.is_some();
-    let presp = ui.interact(play, ui.scope_id().with(("sp-play", t, r)), Sense::click()).on_hover_text("Play the region (cycled, soloed)");
-    glyphs::paint(&p, play, if previewing { glyphs::ph_fill::STOP } else { glyphs::ph_fill::PLAY }, 14.0, if previewing { yellow() } else { look::text() });
-    if presp.clicked() {
-        preview(app, t, r);
-    }
     // region chords: shown when the region follows them
-    let chords_lane = Rect::from_min_size(pos2(lane.min.x, ruler.max.y), vec2(lane.width(), CHORDS_H));
-    if let Some((true, _)) = app.spx.region_chords.get(&(t, r)) {
+    let chords_lane = Rect::from_min_size(pos2(lane.min.x, ruler.max.y), vec2(lane.width(), chords_h));
+    if follows {
         for c in crate::spx::region_chords(app, t, r) {
             if c.pos >= region.start && c.pos < region.start + region.length {
                 let x = x_of(c.pos);
-                p.vline(x, chords_lane.y_range(), Stroke::new(1.0, look::text_dim()));
-                p.text(pos2(x + 3.0, chords_lane.center().y), Align2::LEFT_CENTER, c.chord.name(), look::regular(11.0), look::text());
+                lp.vline(x, chords_lane.y_range(), Stroke::new(1.0, look::text_dim()));
+                lp.text(pos2(x + 3.0, chords_lane.center().y), Align2::LEFT_CENTER, c.chord.name(), look::regular(11.0), look::text());
             }
         }
     }
-    let reg = Rect::from_min_size(pos2(lane.min.x, chords_lane.max.y), vec2(lane.width(), REGION_H - 4.0));
-    let col = Color32::from_rgb(0xc3, 0xa6, 0x3a);
-    p.rect_filled(reg, 4.0, col);
-    p.rect_filled(Rect::from_min_size(reg.min, vec2(reg.width(), 14.0)), egui::CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 }, Color32::from_rgb(0xfd, 0xf2, 0xc4));
-    p.text(pos2(reg.min.x + 6.0, reg.min.y + 7.0), Align2::LEFT_CENTER, &region.name, look::regular(11.0), Color32::BLACK);
+    let strip = Rect::from_min_size(pos2(lane.min.x, chords_lane.max.y + 1.0), vec2(lane.width(), REGION_H - 1.0));
+    let regions: Vec<(usize, lg_core::Region)> = app.project.as_ref().and_then(|pr| pr.tracks.get(t)).map(|tr| tr.regions.iter().cloned().enumerate().filter(|(i, x)| *i == r || (wide && (x.start + x.length) as f32 > v0 && (x.start as f32) < v1)).collect()).unwrap_or_default();
+    for (i, rg) in &regions {
+        let reg = Rect::from_min_max(pos2(x_of(rg.start), strip.min.y), pos2(x_of(rg.start + rg.length), strip.max.y));
+        region_box(&lp, reg, rg, kit, ppt, bar_t, *i == r);
+        if *i == r {
+            // the preview Play button: the cycle set to the region, the region soloed
+            let play = Rect::from_min_size(pos2(reg.min.x.max(lane.min.x) + 5.0, reg.min.y + 5.0), vec2(13.0, 11.0));
+            let previewing = app.spx.preview.is_some();
+            let presp = ui.interact(play.expand(3.0), ui.scope_id().with(("sp-play", t, r)), Sense::click()).on_hover_text("Play the region (cycled, soloed)");
+            lp.rect_stroke(play, 2.0, Stroke::new(1.0, REGION_INK), egui::StrokeKind::Inside);
+            if previewing {
+                lp.rect_filled(Rect::from_center_size(play.center(), vec2(5.0, 5.0)), 0.0, REGION_INK);
+            } else {
+                let c = play.center();
+                lp.add(Shape::convex_polygon(vec![c + vec2(-2.0, -3.0), c + vec2(3.0, 0.0), c + vec2(-2.0, 3.0)], REGION_INK, Stroke::NONE));
+            }
+            if presp.clicked() {
+                preview(app, t, r);
+            }
+        } else if ui.interact(reg.intersect(lane), ui.scope_id().with(("sp-region", t, *i)), Sense::click()).on_hover_text("Edit this region").clicked() {
+            app.selected_region = Some((t, *i));
+        }
+    }
+    let body = Rect::from_min_max(pos2(area.min.x, strip.max.y + 2.0), area.max);
+    p.rect_filled(body, 0.0, look::mix(look::pane_bg(), Color32::BLACK, 0.12));
+    p.hline(body.x_range(), body.min.y, Stroke::new(1.0, Color32::from_gray(0x0c)));
+    Some(body)
+}
+
+/// The region strip's ink (names, notes, the Play button): Logic's dark olive.
+const REGION_INK: Color32 = Color32::from_rgb(0x2a, 0x22, 0x05);
+
+/// A region in the strip: the light header (the name, the grid ticks), the notes or hits below.
+fn region_box(p: &egui::Painter, reg: Rect, region: &lg_core::Region, kit: Option<lg_players::kit::KitMap>, ppt: f32, bar_t: u32, selected: bool) {
+    let col = Color32::from_rgb(0xc4, 0xa6, 0x39);
+    let head = Rect::from_min_size(reg.min, vec2(reg.width(), 21.0));
+    p.rect_filled(reg, 3.0, col);
+    p.rect_filled(head, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, Color32::from_rgb(0xfd, 0xf3, 0xc5));
+    p.rect_stroke(reg, 3.0, Stroke::new(1.0, Color32::from_black_alpha(if selected { 230 } else { 140 })), egui::StrokeKind::Inside);
+    // the grid in the header: beats taller, sixteenths short
+    let step = (bar_t / 16).max(1);
+    if ppt * step as f32 > 4.0 {
+        let mut k = 0;
+        while k * step < region.length {
+            let x = reg.min.x + (k * step) as f32 * ppt;
+            let h = if k % 4 == 0 { 6.0 } else { 3.0 };
+            p.vline(x, (head.max.y - h)..=head.max.y, Stroke::new(1.0, Color32::from_rgb(0xd6, 0xc8, 0x8c)));
+            k += 1;
+        }
+    }
+    let name_x = reg.min.x + if selected { 24.0 } else { 6.0 };
+    p.text(pos2(name_x, head.center().y), Align2::LEFT_CENTER, &region.name, look::regular(11.0), REGION_INK);
+    let body = Rect::from_min_max(pos2(reg.min.x, head.max.y), reg.max);
     let (lo, hi) = region.notes.iter().fold((127u8, 0u8), |a, n| (a.0.min(n.pitch), a.1.max(n.pitch)));
-    let ink = look::mix(col, Color32::BLACK, 0.55);
+    // (Logic's: the notes and hits in the header's cream, faint beat lines)
+    let ink = Color32::from_rgb(0xfd, 0xf3, 0xc5);
+    let pc = p.with_clip_rect(body.intersect(p.clip_rect()));
+    let beat = (bar_t / 4).max(1);
+    if ppt * beat as f32 > 8.0 {
+        let mut k = 1;
+        while k * beat < region.length {
+            pc.vline(reg.min.x + (k * beat) as f32 * ppt, body.y_range(), Stroke::new(1.0, look::mix(col, Color32::WHITE, if k % 4 == 0 { 0.22 } else { 0.1 })));
+            k += 1;
+        }
+    }
     for n in &region.notes {
-        let x0 = x_of(n.pos);
-        let x1 = x_of(n.pos + n.len).max(x0 + 2.0);
+        let x0 = reg.min.x + n.pos.saturating_sub(region.start) as f32 * ppt;
+        let x1 = (x0 + n.len as f32 * ppt).max(x0 + 2.0);
         let y = match kit {
             // a drummer's hits by kit piece: cymbals high, kick low
             Some(k) => {
@@ -320,21 +410,77 @@ pub(crate) fn top(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usi
                     Some(Family::Cymbal) => 0.1,
                     _ => 0.45,
                 };
-                reg.min.y + 16.0 + row * (reg.height() - 20.0)
+                body.min.y + 6.0 + row * (body.height() - 12.0)
             }
-            None => reg.max.y - 4.0 - (n.pitch.saturating_sub(lo)) as f32 / (hi.saturating_sub(lo).max(1)) as f32 * (reg.height() - 22.0),
+            None => body.max.y - 6.0 - (n.pitch.saturating_sub(lo)) as f32 / (hi.saturating_sub(lo).max(1)) as f32 * (body.height() - 12.0),
         };
         if kit.is_some() {
             // a drum hit: a triangle, taller when harder
             let hh = 2.0 + n.velocity as f32 / 127.0 * 5.0;
-            p.add(Shape::convex_polygon(vec![pos2(x0, y - hh), pos2(x0 + 3.5, y), pos2(x0, y + hh)], ink, Stroke::NONE));
+            pc.add(Shape::convex_polygon(vec![pos2(x0, y - hh), pos2(x0 + 3.5, y), pos2(x0, y + hh)], ink, Stroke::NONE));
         } else {
-            p.hline(x0..=x1, y, Stroke::new(1.5, ink));
+            pc.hline(x0..=x1, y, Stroke::new(1.5, ink));
+            pc.vline(x0 + 0.5, (y - 2.5)..=(y + 2.5), Stroke::new(1.0, ink));
         }
     }
-    let body = Rect::from_min_max(pos2(area.min.x, reg.max.y + 6.0), area.max);
-    p.hline(body.x_range(), body.min.y - 2.0, Stroke::new(1.0, look::line()));
-    Some(body)
+}
+
+/// The wide layout's view of the strip with the fit button off: (the first tick shown, points
+/// per tick) from the editor's zoom (the Piano Roll's bar width) and scroll; a horizontal wheel
+/// scrolls, Catch keeps the playhead in view while playing.
+fn wide_view(app: &mut App, ui: &egui::Ui, lane: Rect, region: &lg_core::Region, bar_t: u32) -> (f32, f32) {
+    let min_bar_w = lane.width() / 64.0;
+    let bar_w = app.roll_bar_w.max(min_bar_w);
+    let ppt = bar_w / bar_t as f32;
+    let shown = lane.width() / bar_w;
+    if ui.rect_contains_pointer(lane) {
+        let d = ui.input(|i| if i.modifiers.shift { i.smooth_scroll_delta.y } else { i.smooth_scroll_delta.x });
+        if d != 0.0 {
+            app.roll_scroll_x = (app.roll_scroll_x - d / bar_w).max(0.0);
+        }
+    }
+    if app.fit.catch && app.playing() {
+        let at = app.position() as f32 / bar_t as f32;
+        if at < app.roll_scroll_x || at > app.roll_scroll_x + shown - 0.25 {
+            app.roll_scroll_x = at.floor();
+        }
+    }
+    // (the region's start stays reachable: never scrolled past it with the region unseen)
+    let start_bar = (region.start / bar_t) as f32;
+    let end_bar = (region.start + region.length) as f32 / bar_t as f32;
+    if app.roll_scroll_x > end_bar || app.roll_scroll_x + shown < start_bar {
+        app.roll_scroll_x = start_bar;
+    }
+    (app.roll_scroll_x * bar_t as f32, ppt)
+}
+
+/// The wide bar's right side, as Logic's figures: the tools (centred), "Snap:" with the power
+/// toggle and the Snap pop-up, the fit button (Horizontal Auto Zoom), the horizontal zoom
+/// slider.
+fn bar_right(app: &mut App, ui: &mut egui::Ui, bar: Rect, t: usize, r: usize) {
+    let id = ui.scope_id().with(("sp-bar", t, r));
+    let cy = bar.center().y;
+    let p = ui.painter_at(bar);
+    crate::barfit::tools_pill(app, ui, id.with("tools"), Rect::from_center_size(pos2(bar.center().x, cy), vec2(96.0, 24.0)));
+    let zr = Rect::from_min_size(pos2(bar.max.x - 12.0 - 70.0, cy - 12.0), vec2(70.0, 24.0));
+    let mut v = ((app.roll_bar_w / 30.0).ln() / 100.0f32.ln()).clamp(0.0, 1.0);
+    if crate::barfit::slider(ui, zr, id.with("zoom"), &mut v, glyphs::ph::ARROWS_HORIZONTAL, "Horizontal Zoom") {
+        app.roll_bar_w = 30.0 * 100.0f32.powf(v);
+        app.spx.fit_off = true;
+    }
+    let cr = Rect::from_min_size(pos2(zr.min.x - 8.0 - 36.0, cy - 12.0), vec2(36.0, 24.0));
+    if crate::barfit::icon_button(ui, cr, id.with("fit"), !app.spx.fit_off, true, "Horizontal Auto Zoom: the region fills the editor", glyphs::tb::ARROW_AUTOFIT_WIDTH).clicked() {
+        app.spx.fit_off = !app.spx.fit_off;
+    }
+    let sr = Rect::from_min_size(pos2(cr.min.x - 8.0 - 128.0, cy - 12.0), vec2(128.0, 24.0));
+    let sresp = ui.interact(sr, id.with("snap"), Sense::click()).on_hover_text("Snap");
+    crate::spx::preset_field(&p, sr, app.arr.snap.name(), sresp.hovered());
+    egui::Popup::menu(&sresp).show(|ui| crate::arranging::snap_items(app, ui, &[]));
+    let tr = Rect::from_min_size(pos2(sr.min.x - 4.0 - 30.0, cy - 12.0), vec2(30.0, 24.0));
+    if crate::barfit::icon_button(ui, tr, id.with("snap-on"), app.snap_on, true, "Snap to Grid", glyphs::ph::POWER).clicked() {
+        app.snap_on = !app.snap_on;
+    }
+    p.text(pos2(tr.min.x - 5.0, cy), Align2::RIGHT_CENTER, "Snap:", look::regular(13.0), look::text_dim());
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
@@ -342,10 +488,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     let before = player.clone();
     let mut regen = false;
     let Some(body) = top(app, ui, area, t, r, None, &mut regen) else { return };
-    // the Session Player type and the Preset pop-ups (spx.rs), at the bar's right
-    let head = Rect::from_min_max(pos2(area.max.x - 600.0, area.min.y + TITLE_H - 2.0), pos2(area.max.x, area.min.y + TITLE_H + BAR_H));
+    let wide = is_wide(area.width());
     let style_before = player.clone();
-    crate::spx::header(app, ui, head, t, &mut player);
+    if wide {
+        // "Preset:" and the preset's pop-up after Chords (the type: a click on it over the picture)
+        let bar = Rect::from_min_size(area.min + vec2(0.0, TITLE_H), vec2(area.width(), BAR_H));
+        ui.painter().text(pos2(bar.min.x + 101.0, bar.center().y), Align2::LEFT_CENTER, "Preset:", look::regular(13.0), look::text_dim());
+        crate::spx::preset_popup(app, ui, Rect::from_min_size(pos2(bar.min.x + 150.0, bar.center().y - 11.0), vec2(252.0, 22.0)), t, &mut player, true);
+    } else {
+        // the Session Player type and the Preset pop-ups (spx.rs), at the bar's right
+        let head = Rect::from_min_max(pos2(area.max.x - 600.0, area.min.y + TITLE_H + BAR_H / 2.0 - 17.0), pos2(area.max.x, area.min.y + TITLE_H + BAR_H));
+        crate::spx::header(app, ui, head, t, &mut player);
+    }
     // ---- the scrolled controls
     let mut pattern_changed = false;
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
@@ -354,14 +508,52 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
         let top = ui.cursor().min;
         let cx = top.x + w / 2.0;
         let cxs = Cx { p: ui.painter().clone(), base: ui.scope_id().with(("spedit", t, r)) };
-        // the Session Player button (type over style), the sliders, Regenerate
-        let y0 = top.y + 22.0;
         let type_name = match &player {
             Player::Bass(b) if b.style.synth().is_some() => "Synth Bass",
             Player::Bass(_) => "Bass Player",
             Player::Keys(k) if k.style.synth().is_some() => "Synth Keyboard",
             Player::Keys(_) => "Keyboard Player",
         };
+        if wide {
+            let synth = match &player {
+                Player::Bass(b) => b.style.synth().is_some(),
+                Player::Keys(k) => k.style.synth().is_some(),
+            };
+            let pic = if matches!(player, Player::Bass(_)) { Picture::Bass } else { Picture::Piano };
+            let (cpx, ipy) = match &mut player {
+                Player::Bass(b) => (&mut b.complexity, &mut b.intensity),
+                Player::Keys(k) => (&mut k.complexity, &mut k.intensity),
+            };
+            let f = wide_frame(app, ui, &cxs, top, w, pic, cpx, ipy);
+            style_button(ui, &cxs, f.label, type_name, &mut player);
+            // the type pop-up: a click on the type
+            let tw = ui.fonts_mut(|fo| fo.layout_no_wrap(type_name.into(), look::regular(13.0), Color32::WHITE).size().x);
+            crate::spx::type_popup(app, ui, Rect::from_center_size(f.label, vec2(tw + 8.0, 18.0)), t, &mut player, false);
+            if f.regen {
+                player = match &player {
+                    Player::Bass(b) => Player::Bass(b.regenerated()),
+                    Player::Keys(k) => Player::Keys(k.regenerated()),
+                };
+            }
+            let o = f.panel;
+            let bg = cxs.p.add(Shape::Noop);
+            // (the Synth styles' Main keeps its own panel: no figure of it wide)
+            let (pw, h, knobs) = match f.tab {
+                0 if synth => (PANEL_W, main_panel(app, ui, &cxs, o, PANEL_W, t, r, &mut player, &mut pattern_changed), false),
+                0 => (WIDE_PANEL_W, wide_main(app, ui, &cxs, o, t, r, &mut player, &mut pattern_changed), true),
+                1 => (WIDE_PANEL_W, details_panel(ui, &cxs, o, PANEL_W, &mut player, true), true),
+                _ => {
+                    let mr = Rect::from_min_size(o + vec2(16.0, 16.0), vec2(WIDE_PANEL_W - 32.0, 170.0));
+                    pattern_changed |= crate::spx::manual(app, ui, mr, t, r);
+                    (WIDE_PANEL_W, WIDE_PANEL_H, false)
+                }
+            };
+            wide_panel_bg(&cxs, bg, o, pw, h, knobs);
+            ui.allocate_exact_size(vec2(w, o.y + h + 24.0 - top.y), Sense::hover());
+            return;
+        }
+        // the Session Player button (type over style), the sliders, Regenerate
+        let y0 = top.y + 22.0;
         style_button(ui, &cxs, pos2(cx - 83.0, y0), type_name, &mut player);
         let (cpx, ipy) = match &mut player {
             Player::Bass(b) => (&mut b.complexity, &mut b.intensity),
@@ -395,7 +587,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
         let px = cx - pw / 2.0;
         let h = match tab {
             0 => main_panel(app, ui, &cxs, pos2(px, panel_top), pw, t, r, &mut player, &mut pattern_changed),
-            1 => details_panel(ui, &cxs, pos2(px, panel_top), pw, &mut player),
+            1 => details_panel(ui, &cxs, pos2(px, panel_top), pw, &mut player, false),
             _ => {
                 let mr = Rect::from_min_size(pos2(px + 16.0, panel_top + 16.0), vec2(pw - 32.0, 170.0));
                 pattern_changed |= crate::spx::manual(app, ui, mr, t, r);
@@ -427,6 +619,390 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     }
     patterns_dialog(app, ui, t, r);
     chord_editor(app, ui, t, r);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Logic's wide layout (Apple's guide figures of the Session Player Editor): the type and style,
+// the instrument's picture and Regenerate, Complexity and Intensity, then the panel, all in one
+// centred row; the panel holds the knobs (Main) or Feel / Dynamics / Tempo / Humanize (Details)
+// in its right column.
+
+/// The panel's right column (Logic: 258 points, a lighter grey).
+pub(crate) const KNOBS_W: f32 = 258.0;
+pub(crate) const WIDE_PANEL_W: f32 = PANEL_W + KNOBS_W;
+pub(crate) const WIDE_PANEL_H: f32 = 210.0;
+/// From the row's left (the picture's left) to the panel.
+const WIDE_LEFT: f32 = 314.0;
+pub(crate) const WIDE_ROW_W: f32 = WIDE_LEFT + WIDE_PANEL_W;
+
+/// The editor is wide enough for the wide layout (the row and a margin each side).
+pub(crate) fn is_wide(w: f32) -> bool {
+    w >= WIDE_ROW_W + 48.0
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Picture {
+    Bass,
+    Drums,
+    Piano,
+}
+
+/// Where the wide row's parts are: the type label's centre, the panel's origin.
+pub(crate) struct Wide {
+    pub label: Pos2,
+    pub panel: Pos2,
+    pub regen: bool,
+    pub tab: usize,
+}
+
+/// The wide row's frame: the picture, Regenerate, Complexity and Intensity, the tabs. The
+/// caller draws the type and style at `label` and fills the panel.
+pub(crate) fn wide_frame(app: &mut App, ui: &mut egui::Ui, cx: &Cx, top: Pos2, w: f32, pic: Picture, complexity: &mut f32, intensity: &mut f32) -> Wide {
+    let row_x = top.x + ((w - WIDE_ROW_W) / 2.0).max(8.0);
+    let panel = pos2(row_x + WIDE_LEFT, top.y + 56.0);
+    let lx = panel.x - 254.0;
+    picture(&cx.p, pos2(lx, panel.y + 114.0), 60.0, pic);
+    let rg = Rect::from_center_size(pos2(lx, panel.y + 202.0), vec2(83.0, 24.0));
+    let rresp = ui.interact(rg, cx.id("regen"), Sense::click());
+    cx.p.rect_filled(rg, 6.0, Color32::from_gray(if rresp.hovered() { 0x4c } else { 0x41 }));
+    cx.p.text(rg.center(), Align2::CENTER_CENTER, "Regenerate", look::regular(13.0), look::text());
+    for (x, key, label, v) in [(panel.x - 140.0, "cx", "Complexity", complexity), (panel.x - 58.0, "iy", "Intensity", intensity)] {
+        cx.label(pos2(x, panel.y + 26.0), label);
+        cx.vslider(ui, Rect::from_min_max(pos2(x - 2.0, panel.y + 50.0), pos2(x + 2.0, panel.y + 202.0)), key, v);
+    }
+    let mut tab = app.drum_tab.min(2);
+    if cx.seg(ui, Rect::from_center_size(pos2(panel.x + WIDE_PANEL_W / 2.0, panel.y - 17.0), vec2(171.0, 24.0)), "tabs", &["Main", "Details", "Manual"], &mut tab) {
+        app.drum_tab = tab;
+    }
+    Wide { label: pos2(lx, panel.y + 26.0), panel, regen: rresp.clicked(), tab }
+}
+
+/// The wide panel's background: dark, the right column lighter (`knobs`: it's there).
+pub(crate) fn wide_panel_bg(cx: &Cx, bg: egui::layers::ShapeIdx, o: Pos2, w: f32, h: f32, knobs: bool) {
+    let r = Rect::from_min_size(o, vec2(w, h));
+    let mut shapes = vec![Shape::rect_filled(r, PANEL_R, panel_bg())];
+    if knobs {
+        let k = Rect::from_min_max(pos2(o.x + PANEL_W, o.y), r.max);
+        shapes.push(Shape::rect_filled(k, egui::CornerRadius { nw: 0, sw: 0, ne: PANEL_R as u8, se: PANEL_R as u8 }, strip_bg()));
+    }
+    cx.p.set(bg, Shape::Vec(shapes));
+}
+
+/// The instrument's picture as Logic's: yellow line art (dimly filled) on a dark circle.
+pub(crate) fn picture(p: &egui::Painter, c: Pos2, r: f32, pic: Picture) {
+    p.circle_filled(c, r, Color32::from_gray(0x13));
+    let y = yellow();
+    let fill = y.gamma_multiply(0.32);
+    let line = Stroke::new(1.3, y);
+    let at = |x: f32, yy: f32| c + vec2(x, yy) * r;
+    let poly = |pts: &[(f32, f32)]| pts.iter().map(|&(x, yy)| at(x, yy)).collect::<Vec<Pos2>>();
+    let rect = |x0: f32, y0: f32, x1: f32, y1: f32| Rect::from_min_max(at(x0, y0), at(x1, y1));
+    match pic {
+        Picture::Bass => {
+            // a Precision-style bass: the body low at the left, the neck up to the right
+            let (sn, cs) = (-0.8f32).sin_cos();
+            let rot = |pts: &[(f32, f32)]| -> Vec<Pos2> { pts.iter().map(|&(x, yy)| at(0.05 + x * cs - yy * sn, 0.05 + x * sn + yy * cs)).collect() };
+            // (the body larger than the neck, as Logic's drawing)
+            let big = |pts: &[(f32, f32)]| -> Vec<Pos2> { rot(&pts.iter().map(|&(x, yy)| (x * 1.25 - 0.12, yy * 1.25)).collect::<Vec<_>>()) };
+            let body = [(-0.78, -0.02), (-0.74, -0.3), (-0.55, -0.4), (-0.32, -0.32), (-0.1, -0.4), (0.12, -0.5), (0.2, -0.4), (0.06, -0.22), (0.06, 0.2), (0.22, 0.3), (0.14, 0.4), (-0.12, 0.36), (-0.35, 0.44), (-0.62, 0.4), (-0.78, 0.22)];
+            for part in [&body[0..5], &body[4..9], &body[8..14], &[body[13], body[14], body[0], body[4], body[8]][..]] {
+                p.add(Shape::convex_polygon(big(part), fill, Stroke::NONE));
+            }
+            p.add(Shape::closed_line(big(&body), line));
+            // the pickguard, the pickup, the bridge
+            p.add(Shape::closed_line(big(&[(-0.5, -0.3), (-0.12, -0.3), (0.0, -0.18), (0.0, 0.16), (-0.2, 0.3), (-0.5, 0.3)]), Stroke::new(1.0, y.gamma_multiply(0.7))));
+            p.add(Shape::convex_polygon(big(&[(-0.34, -0.14), (-0.24, -0.14), (-0.24, 0.14), (-0.34, 0.14)]), y.gamma_multiply(0.6), line));
+            p.add(Shape::closed_line(big(&[(-0.66, -0.16), (-0.58, -0.16), (-0.58, 0.16), (-0.66, 0.16)]), line));
+            // the neck and the headstock
+            p.add(Shape::convex_polygon(rot(&[(-0.05, -0.08), (0.92, -0.07), (0.92, 0.07), (-0.05, 0.08)]), fill, line));
+            p.add(Shape::convex_polygon(rot(&[(0.92, -0.08), (1.1, -0.11), (1.13, 0.05), (0.92, 0.08)]), fill, line));
+            for k in [-0.045f32, -0.015, 0.015, 0.045] {
+                p.add(Shape::line(vec![big(&[(-0.62, k * 2.0)])[0], rot(&[(1.0, k)])[0]], Stroke::new(0.7, y)));
+            }
+        }
+        Picture::Drums => {
+            // the bass drum, two rack toms, the snare and floor tom, crash and ride on stands
+            let stand = Stroke::new(1.2, y);
+            p.line_segment([at(-0.62, -0.55), at(-0.78, 0.92)], stand);
+            p.line_segment([at(0.66, -0.22), at(0.66, 0.92)], stand);
+            p.add(Shape::ellipse_filled(at(-0.62, -0.56), vec2(0.36, 0.07) * r, fill));
+            p.add(Shape::ellipse_stroke(at(-0.62, -0.56), vec2(0.36, 0.07) * r, line));
+            p.add(Shape::ellipse_filled(at(0.66, -0.24), vec2(0.28, 0.055) * r, fill));
+            p.add(Shape::ellipse_stroke(at(0.66, -0.24), vec2(0.28, 0.055) * r, line));
+            for (x0, y0, x1, y1) in [(-0.84, 0.0, -0.42, 0.24), (0.42, 0.06, 0.82, 0.62), (-0.46, -0.42, -0.04, -0.1), (0.04, -0.42, 0.46, -0.1)] {
+                let b = rect(x0, y0, x1, y1);
+                p.rect_filled(b, 2.0, fill);
+                p.rect_stroke(b, 2.0, line, egui::StrokeKind::Middle);
+                for k in 1..4 {
+                    let x = b.min.x + b.width() * k as f32 / 4.0;
+                    p.line_segment([pos2(x, b.min.y), pos2(x, b.max.y)], Stroke::new(0.8, y.gamma_multiply(0.7)));
+                }
+            }
+            p.circle_filled(at(0.0, 0.42), 0.44 * r, Color32::from_gray(0x13));
+            p.circle_filled(at(0.0, 0.42), 0.44 * r, fill);
+            p.circle_stroke(at(0.0, 0.42), 0.44 * r, line);
+            p.circle_stroke(at(0.0, 0.42), 0.36 * r, Stroke::new(0.8, y.gamma_multiply(0.7)));
+            p.line_segment([at(-0.36, 0.86), at(0.36, 0.86)], stand);
+        }
+        Picture::Piano => {
+            // a grand piano from the side, the lid open
+            p.add(Shape::convex_polygon(poly(&[(-0.84, -0.28), (-0.78, -0.36), (0.56, -0.98), (0.62, -0.92)]), fill, line));
+            p.line_segment([at(0.12, -0.28), at(-0.02, -0.62)], Stroke::new(1.0, y));
+            let case = rect(-0.84, -0.28, 0.98, 0.14);
+            p.rect_filled(case, 2.0, fill);
+            p.rect_stroke(case, 2.0, line, egui::StrokeKind::Middle);
+            p.line_segment([at(-0.8, -0.06), at(0.94, -0.06)], Stroke::new(0.8, y.gamma_multiply(0.7)));
+            p.line_segment([at(-0.8, 0.04), at(0.94, 0.04)], Stroke::new(0.8, y.gamma_multiply(0.5)));
+            p.rect_filled(rect(-0.98, -0.1, -0.84, 0.12), 1.0, y.gamma_multiply(0.5));
+            for (x0, x1) in [(-0.8, -0.7), (0.78, 0.88)] {
+                p.rect_stroke(rect(x0, 0.14, x1, 0.74), 1.0, line, egui::StrokeKind::Middle);
+            }
+            p.line_segment([at(0.02, 0.14), at(0.02, 0.62)], Stroke::new(1.0, y.gamma_multiply(0.7)));
+            p.rect_stroke(rect(-0.06, 0.62, 0.1, 0.7), 1.0, Stroke::new(1.0, y.gamma_multiply(0.7)), egui::StrokeKind::Middle);
+        }
+    }
+}
+
+/// A lock (Fill Amount / Swing: kept when presets or styles change) at `c`.
+pub(crate) fn lock_at(app: &mut App, ui: &mut egui::Ui, cx: &Cx, c: Pos2, i: usize) {
+    let (name, on) = if i == 0 { ("Fills", app.spx.lock_fills) } else { ("Swing", app.spx.lock_swing) };
+    let r = Rect::from_center_size(c, vec2(16.0, 16.0));
+    let resp = ui.interact(r.expand(2.0), cx.id("lock").with(i), Sense::click()).on_hover_text(format!("Lock {name}: kept when switching presets or styles"));
+    glyphs::paint(&cx.p, r, if on { glyphs::ph_fill::LOCK_SIMPLE } else { glyphs::ph::LOCK_SIMPLE_OPEN }, 12.0, if on { yellow() } else { label_col() });
+    if resp.clicked() {
+        if i == 0 {
+            app.spx.lock_fills = !app.spx.lock_fills;
+        } else {
+            app.spx.lock_swing = !app.spx.lock_swing;
+        }
+    }
+}
+
+/// The wide panel's right column in Main: Fill Amount and Fill Complexity (one lock), Swing
+/// (its lock) and the note value (8th / 16th).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn knob_column(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, fills: &mut f32, fills_default: f32, fill_complexity: &mut f32, swing: &mut f32, swing_type: &mut SwingType) {
+    let pct = |v: f32| format!("{:.0}", v * 100.0);
+    let (c1, c2) = (o.x + 60.0, o.x + 176.0);
+    let label_w = |s: &str| cx.p.layout_no_wrap(s.into(), look::regular(13.0), Color32::WHITE).size().x;
+    cx.knob(ui, pos2(c1, o.y + 26.0), "fills", "Fill Amount", fills, 0.0, 1.0, fills_default, &pct);
+    lock_at(app, ui, cx, pos2(c1 + label_w("Fill Amount") / 2.0 + 10.0, o.y + 25.0), 0);
+    cx.knob(ui, pos2(c1, o.y + 129.0), "fillc", "Fill Complexity", fill_complexity, 0.0, 1.0, 0.5, &pct);
+    cx.knob(ui, pos2(c2, o.y + 60.0), "swing", "Swing", swing, 0.0, 1.0, 0.0, &pct);
+    lock_at(app, ui, cx, pos2(c2 + label_w("Swing") / 2.0 + 10.0, o.y + 59.0), 1);
+    let nr = Rect::from_center_size(pos2(c2, o.y + 164.0), vec2(38.0, 20.0));
+    let resp = ui.interact(nr, cx.id("swingtype"), Sense::click()).on_hover_text("Swing: eighth or sixteenth notes");
+    cx.p.rect_filled(nr, 5.0, Color32::from_gray(if resp.hovered() { 0x44 } else { 0x36 }));
+    cx.p.text(nr.center(), Align2::CENTER_CENTER, if *swing_type == SwingType::Eighths { "8th" } else { "16th" }, look::regular(12.0), label_col());
+    if resp.clicked() {
+        *swing_type = if *swing_type == SwingType::Eighths { SwingType::Sixteenths } else { SwingType::Eighths };
+    }
+}
+
+/// Feel (Pull / Push), Dynamics, Tempo and Humanize: the strip under the Details panel
+/// (compact), or the wide panel's right column.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn feel_controls(ui: &mut egui::Ui, cx: &Cx, area: Rect, wide: bool, feel: &mut f32, dynamics: &mut f32, tempo: &mut TempoFeel, humanize: &mut f32, human_default: f32) {
+    let (feel_c, dyn_c, tempo_c, human_c) = if wide {
+        let (a, b) = (area.min.x + 70.0, area.min.x + 185.0);
+        (pos2(a, area.min.y + 26.0), pos2(b, area.min.y + 26.0), pos2(a, area.min.y + 163.0), pos2(b, area.min.y + 126.0))
+    } else {
+        cx.p.rect_filled(area, egui::CornerRadius { nw: 0, ne: 0, sw: PANEL_R as u8, se: PANEL_R as u8 }, strip_bg());
+        let at = |fx: f32| pos2(area.min.x + fx / PANEL_W * area.width(), area.min.y + 21.0);
+        (at(80.0), at(180.0), at(280.0), at(380.0))
+    };
+    cx.knob(ui, feel_c, "feel", "Feel", feel, -1.0, 1.0, 0.0, &|v| if v.abs() < 0.02 { "Center".into() } else if v > 0.0 { format!("Push {:.0}", v * 100.0) } else { format!("Pull {:.0}", -v * 100.0) });
+    cx.p.text(feel_c + vec2(-20.0, 87.0), Align2::CENTER_CENTER, "Pull", look::regular(12.0), look::text_dim());
+    cx.p.text(feel_c + vec2(20.0, 87.0), Align2::CENTER_CENTER, "Push", look::regular(12.0), look::text_dim());
+    cx.knob(ui, dyn_c, "dyn", "Dynamics", dynamics, 0.0, 2.0, 1.0, &|v| format!("{:.0} %", v * 100.0));
+    let mut ti = TempoFeel::ALL.iter().position(|x| *x == *tempo).unwrap_or(1);
+    if cx.popup(ui, tempo_c, "tempo", "Tempo", &TempoFeel::ALL.map(|x| x.name()), &mut ti) {
+        *tempo = TempoFeel::ALL[ti];
+    }
+    cx.knob(ui, human_c, "human", "Humanize", humanize, 0.0, 1.0, human_default, &|v| format!("{:.0}", v * 100.0));
+}
+
+/// The pattern badge (its number) and dots, and "Follow: …" under them (yellow value); a click
+/// opens the Patterns dialog.
+pub(crate) fn pattern_row(ui: &mut egui::Ui, cx: &Cx, badge: Pos2, dots: &[&synth::Dots], spacing: f32, number: &str, follow: &str) -> bool {
+    let x0 = badge.x + 28.0;
+    let w = 16.8 * spacing;
+    let resp = ui.interact(Rect::from_min_max(pos2(badge.x - 12.0, badge.y - 12.0), pos2(x0 + w, badge.y + 26.0)), cx.id("pattern-row"), Sense::click()).on_hover_text("Patterns");
+    cx.p.circle_filled(badge, 9.0, Color32::from_gray(if resp.hovered() { 0x4a } else { 0x3a }));
+    cx.p.text(badge, Align2::CENTER_CENTER, number, look::regular(11.5), label_col());
+    for (k, d) in dots.iter().enumerate() {
+        cx.dots(pos2(x0, badge.y + (k as f32 - (dots.len() - 1) as f32 / 2.0) * 13.0 - if dots.len() > 1 { 2.0 } else { 0.0 }), d, spacing);
+    }
+    let fy = badge.y + if dots.len() > 1 { 22.0 } else { 17.0 };
+    let g = cx.p.layout_no_wrap("Follow: ".into(), look::regular(11.5), label_col());
+    let gw = g.size().x;
+    cx.p.galley(pos2(x0 - 4.0, fy - g.size().y / 2.0), g, label_col());
+    cx.p.text(pos2(x0 - 4.0 + gw, fy), Align2::LEFT_CENTER, follow, look::regular(11.5), yellow());
+    resp.clicked()
+}
+
+/// What a bass or keyboard player follows ("Chord Rhythm", a track, "Off").
+fn follow_name(app: &App, t: usize, r: usize, chords: bool) -> String {
+    match app.spx.follow_track.get(&(t, r)).and_then(|f| app.project.as_ref()?.tracks.get(*f)) {
+        Some(tr) => tr.name.clone(),
+        None if chords => "Chord Rhythm".into(),
+        None => "Off".into(),
+    }
+}
+
+/// The pattern a bass or keyboard player plays: its dots, its number and name.
+fn pattern_shown(app: &App, t: usize, r: usize, player: &Player) -> (synth::Dots, usize, String) {
+    let (kind, sel) = pattern_of(player);
+    let custom = app.spx.patterns.get(&(t, r)).is_some_and(|p| p.steps.iter().any(|s| *s));
+    let list = synth::patterns(kind);
+    // (the style's own pattern when none is chosen)
+    let own = match player {
+        Player::Bass(b) if b.style == BassStyle::Synth808 => 5,
+        Player::Bass(b) if b.style == BassStyle::SynthPump => 3,
+        Player::Keys(k) if k.style == KeysStyle::SynthRhythmic => 3,
+        _ => 0,
+    }
+    .min(list.len() - 1);
+    let i = sel.filter(|i| *i < list.len()).unwrap_or(own);
+    let name = if custom { "Custom".to_string() } else { sel.and_then(|i| list.get(i)).map_or("Style Default".to_string(), |p| p.0.to_string()) };
+    (list[i].1, i + 1, name)
+}
+
+/// The wide Main panel of a Bass or Keyboard Player (not the Synth styles); returns its height.
+#[allow(clippy::too_many_arguments)]
+fn wide_main(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, t: usize, r: usize, player: &mut Player, pattern_changed: &mut bool) -> f32 {
+    let (dots, number, _) = pattern_shown(app, t, r, player);
+    let divider = |y: f32, x0: f32, x1: f32| cx.p.hline(x0..=x1, y, Stroke::new(1.0, Color32::from_gray(0x1e)));
+    let follows_chords = match &*player {
+        Player::Bass(b) => b.follow_chords,
+        Player::Keys(k) => k.follow_chords,
+    };
+    let follow = follow_name(app, t, r, follows_chords);
+    match player {
+        Player::Bass(b) => {
+            if pattern_row(ui, cx, pos2(o.x + 116.0, o.y + 28.0), &[&dots], 12.3, &number.to_string(), &follow) {
+                app.spx.patterns_open = true;
+            }
+            divider(o.y + 56.0, o.x, o.x + PANEL_W);
+            let opts = b.style.melody_options();
+            let mut m = b.melody as usize;
+            if cx.popup(ui, pos2(o.x + 90.0, o.y + 86.0), "melody", "Melody", opts, &mut m) {
+                b.melody = m as u8;
+            }
+            let mut oc = b.octaves as usize;
+            if cx.popup(ui, pos2(o.x + 228.0, o.y + 86.0), "octaves", "Octaves", &OCTAVE_OPTIONS, &mut oc) {
+                b.octaves = oc as u8;
+            }
+            let mut ph = b.phrasing as usize;
+            if cx.popup(ui, pos2(o.x + 364.0, o.y + 86.0), "phrasing", "Phrasing", &PHRASING_OPTIONS, &mut ph) {
+                b.phrasing = ph as u8;
+            }
+            divider(o.y + 136.0, o.x, o.x + PANEL_W);
+            lowest_note(ui, cx, o, &mut b.lowest_note);
+            knob_column(app, ui, cx, pos2(o.x + PANEL_W, o.y), &mut b.fills, 0.0, &mut b.fill_complexity, &mut b.swing, &mut b.swing_type);
+        }
+        Player::Keys(k) => {
+            // the hands (lit: playing), the pattern
+            let (lm, rm) = app.spx.hands.get(&(t, r)).copied().unwrap_or_default();
+            for (i, (x, muted)) in [(80.0, lm), (123.0, rm)].into_iter().enumerate() {
+                let hr = Rect::from_center_size(pos2(o.x + x, o.y + 28.0), vec2(26.0, 26.0));
+                let resp = ui.interact(hr, cx.id("hand").with(i), Sense::click()).on_hover_text(if i == 0 { "Left Hand: click to mute or unmute" } else { "Right Hand: click to mute or unmute" });
+                glyphs::paint(&cx.p, hr, glyphs::ph_fill::HAND_PALM, 24.0, if muted { Color32::from_gray(0x60) } else { yellow() });
+                if resp.clicked() {
+                    crate::spx::toggle_hand(app, t, r, i);
+                    *pattern_changed = true;
+                }
+            }
+            if pattern_row(ui, cx, pos2(o.x + 200.0, o.y + 28.0), &[&dots], 12.1, &number.to_string(), &follow) {
+                app.spx.patterns_open = true;
+            }
+            divider(o.y + 54.0, o.x, o.x + PANEL_W);
+            let (mut lo, mut hi) = (k.lower_position, k.upper_position);
+            if hands_strip(ui, cx, Rect::from_min_max(pos2(o.x + 33.0, o.y + 67.0), pos2(o.x + 420.0, o.y + 96.0)), &mut lo, &mut hi) {
+                k.lower_position = lo;
+                k.upper_position = hi;
+            }
+            cx.p.vline(o.x + 228.0, (o.y + 110.0)..=(o.y + WIDE_PANEL_H - 6.0), Stroke::new(1.0, Color32::from_gray(0x1e)));
+            for (x, s) in [(32.0, "Left Hand"), (243.0, "Right Hand")] {
+                cx.p.text(pos2(o.x + x, o.y + 124.0), Align2::LEFT_CENTER, s, look::semibold(13.0), label_col());
+            }
+            hand_popups(ui, cx, o, k);
+            knob_column(app, ui, cx, pos2(o.x + PANEL_W, o.y), &mut k.fills, 0.0, &mut k.fill_complexity, &mut k.swing, &mut k.swing_type);
+        }
+    }
+    WIDE_PANEL_H
+}
+
+/// The Keyboard Player's hand pop-ups (wide Main): Left Hand Voicing and Style, Right Hand
+/// Voicing and Movement, as label · value rows.
+fn hand_popups(ui: &mut egui::Ui, cx: &Cx, o: Pos2, k: &mut lg_players::keys::KeysParams) {
+    let lv_opts: Vec<(LeftHand, &str)> = LeftHand::VOICINGS.iter().copied().filter(|(l, _)| *l != LeftHand::Broken || k.style == KeysStyle::SynthRhythmic).collect();
+    let mut lv = lv_opts.iter().position(|x| x.0 == k.left_hand).unwrap_or(0);
+    if cx.popup_row(ui, pos2(o.x + 32.0, o.y + 155.0), o.x + 208.0, "lhv", "Voicing", &lv_opts.iter().map(|x| x.1).collect::<Vec<_>>(), &mut lv) {
+        k.left_hand = lv_opts[lv].0;
+    }
+    let n_styles = if k.style == KeysStyle::SynthRhythmic { 7 } else { 6 };
+    let mut ls = (k.lh_style as usize).min(n_styles - 1);
+    if cx.popup_row(ui, pos2(o.x + 32.0, o.y + 187.0), o.x + 208.0, "lhs", "Style", &LH_STYLES[..n_styles], &mut ls) {
+        k.lh_style = ls as u8;
+    }
+    let voicings = k.style.voicings();
+    let mut rv = voicings.iter().position(|v| *v == k.rh_voicing).unwrap_or(0);
+    let names: Vec<&str> = voicings.iter().map(|v| v.name()).collect();
+    if cx.popup_row(ui, pos2(o.x + 243.0, o.y + 155.0), o.x + 419.0, "rhv", "Voicing", &names, &mut rv) {
+        k.rh_voicing = voicings[rv];
+    }
+    let mut mv = k.rh_movement as usize;
+    if cx.popup_row(ui, pos2(o.x + 243.0, o.y + 187.0), o.x + 419.0, "rhm", "Movement", &RH_MOVEMENT, &mut mv) {
+        k.rh_movement = mv as u8;
+    }
+}
+
+/// Lowest Note (wide Bass Main): the name and the note, a dark strip with the note's line;
+/// click or drag to set it (B0 … E3).
+fn lowest_note(ui: &mut egui::Ui, cx: &Cx, o: Pos2, note: &mut u8) {
+    let (min, max) = (23u8, 52u8);
+    cx.label(pos2(o.x + 136.0, o.y + 155.0), "Lowest Note");
+    cx.p.text(pos2(o.x + 344.0, o.y + 155.0), Align2::CENTER_CENTER, crate::app::note_name(*note), look::regular(13.0), yellow());
+    let sr = Rect::from_min_max(pos2(o.x + 99.0, o.y + 174.0), pos2(o.x + 357.0, o.y + 200.0));
+    cx.p.rect_filled(sr, 4.0, Color32::from_gray(0x0c));
+    let resp = ui.interact(sr, cx.id("lowest"), Sense::click_and_drag()).on_hover_text("Lowest Note: click or drag");
+    if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
+        *note = (min as f32 + ((pp.x - sr.min.x - 6.0) / (sr.width() - 12.0)).clamp(0.0, 1.0) * (max - min) as f32).round() as u8;
+    }
+    let x = sr.min.x + 6.0 + ((*note).clamp(min, max) - min) as f32 / (max - min) as f32 * (sr.width() - 12.0);
+    cx.p.vline(x, sr.y_range().shrink(5.0), Stroke::new(2.5, yellow()));
+}
+
+/// The Keyboard Player's hand positions (wide Main): a dark strip with a handle (a hand) for
+/// each; drag them (low keys at the left).
+fn hands_strip(ui: &mut egui::Ui, cx: &Cx, sr: Rect, lo: &mut u8, hi: &mut u8) -> bool {
+    let (min, max) = (41u8, 84u8);
+    let span = (max - min) as f32;
+    let inner = sr.shrink2(vec2(16.0, 0.0));
+    let x_of = |n: u8| inner.min.x + (n.clamp(min, max) - min) as f32 / span * inner.width();
+    let n_of = |x: f32| (min as f32 + ((x - inner.min.x) / inner.width()).clamp(0.0, 1.0) * span).round() as u8;
+    cx.p.rect_filled(sr, 4.0, Color32::from_gray(0x0c));
+    let mut changed = false;
+    for (i, v) in [0usize, 1].into_iter().zip([*lo, *hi]) {
+        let h = Rect::from_center_size(pos2(x_of(v), sr.center().y), vec2(30.0, sr.height()));
+        let resp = ui.interact(h, cx.id("hand-pos").with(i), Sense::drag()).on_hover_text(if i == 0 { "Left Hand position" } else { "Right Hand position" });
+        if let (true, Some(pp)) = (resp.dragged(), resp.interact_pointer_pos()) {
+            let n = n_of(pp.x);
+            if i == 0 {
+                let n = n.min(hi.saturating_sub(5));
+                changed |= n != *lo;
+                *lo = n;
+            } else {
+                let n = n.max(*lo + 5);
+                changed |= n != *hi;
+                *hi = n;
+            }
+        }
+        cx.p.rect_filled(h, 3.0, Color32::from_gray(if resp.hovered() || resp.dragged() { 0x33 } else { 0x2a }));
+        glyphs::paint(&cx.p, h, glyphs::ph::HAND_PALM, 13.0, yellow());
+    }
+    changed
 }
 
 /// The Session Player button: the type above the style (yellow); a click opens the Session
@@ -762,17 +1338,8 @@ pub(crate) fn swing_type(ui: &mut egui::Ui, cx: &Cx, c: Pos2, st: &mut SwingType
 
 /// The Fill Amount / Swing locks (kept when presets or styles change).
 pub(crate) fn locks(app: &mut App, ui: &mut egui::Ui, cx: &Cx, c: Pos2) {
-    for (i, (name, on)) in [("Fills", app.spx.lock_fills), ("Swing", app.spx.lock_swing)].into_iter().enumerate() {
-        let r = Rect::from_center_size(c + vec2(if i == 0 { -16.0 } else { 16.0 }, 0.0), vec2(26.0, 20.0));
-        let resp = ui.interact(r, cx.id("lock").with(i), Sense::click()).on_hover_text(format!("Lock {name}: kept when switching presets or styles"));
-        glyphs::paint(&cx.p, r, if on { glyphs::ph::LOCK } else { glyphs::ph::LOCK_OPEN }, 14.0, if on { yellow() } else { look::text_dim() });
-        if resp.clicked() {
-            if i == 0 {
-                app.spx.lock_fills = !app.spx.lock_fills;
-            } else {
-                app.spx.lock_swing = !app.spx.lock_swing;
-            }
-        }
+    for i in 0..2 {
+        lock_at(app, ui, cx, c + vec2(if i == 0 { -16.0 } else { 16.0 }, 0.0), i);
     }
 }
 
@@ -1051,7 +1618,7 @@ fn envelope_view(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, e: 
 }
 
 /// The Details panel; returns its height.
-fn details_panel(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, player: &mut Player) -> f32 {
+fn details_panel(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, player: &mut Player, wide: bool) -> f32 {
     let pct = |v: f32| format!("{:.0}", v * 100.0);
     let at = |fx: f32, dy: f32| pos2(o.x + fx / PANEL_W * w, o.y + dy);
     let top_h;
@@ -1143,7 +1710,8 @@ fn details_panel(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, player: &mut Playe
                 cx.knob(ui, at(229.5, y), "grace", "Grace Notes", &mut k.grace_notes, 0.0, 1.0, 0.33, &pct);
                 y += 116.0;
             }
-            // the hands' voicings and styles
+            // the hands' voicings and styles (wide: in Main)
+            if !wide {
             let voicings = k.style.voicings();
             let mut rv = voicings.iter().position(|v| *v == k.rh_voicing).unwrap_or(0);
             let names: Vec<&str> = voicings.iter().map(|v| v.name()).collect();
@@ -1166,6 +1734,7 @@ fn details_panel(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, player: &mut Playe
                 k.lh_style = ls as u8;
             }
             y += 50.0;
+            }
             // the style's own
             match k.style {
                 KeysStyle::FullChords => {
@@ -1208,24 +1777,17 @@ fn details_panel(ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, player: &mut Playe
             top_h = y + 4.0;
         }
     }
-    // the strip: Feel, Dynamics, Tempo, Humanize
-    let sy = o.y + top_h;
-    let strip = Rect::from_min_size(pos2(o.x, sy), vec2(w, 130.0));
-    cx.p.rect_filled(strip, egui::CornerRadius { nw: 0, ne: 0, sw: PANEL_R as u8, se: PANEL_R as u8 }, strip_bg());
+    // Feel, Dynamics, Tempo, Humanize: the strip (wide: the right column)
     let (feel, dynamics, tempo, humanize) = match player {
         Player::Bass(b) => (&mut b.feel, &mut b.dynamics, &mut b.tempo, &mut b.humanize),
         Player::Keys(k) => (&mut k.feel, &mut k.dynamics, &mut k.tempo, &mut k.humanize),
     };
-    let sat = |fx: f32| pos2(o.x + fx / PANEL_W * w, sy + 21.0);
-    cx.knob(ui, sat(80.0), "feel", "Feel", feel, -1.0, 1.0, 0.0, &|v| if v.abs() < 0.02 { "Center".into() } else if v > 0.0 { format!("Push {:.0}", v * 100.0) } else { format!("Pull {:.0}", -v * 100.0) });
-    cx.p.text(sat(80.0) + vec2(-20.0, 87.0), Align2::CENTER_CENTER, "Pull", look::regular(12.0), look::text_dim());
-    cx.p.text(sat(80.0) + vec2(20.0, 87.0), Align2::CENTER_CENTER, "Push", look::regular(12.0), look::text_dim());
-    cx.knob(ui, sat(180.0), "dyn", "Dynamics", dynamics, 0.0, 2.0, 1.0, &|v| format!("{:.0} %", v * 100.0));
-    let mut ti = TempoFeel::ALL.iter().position(|x| *x == *tempo).unwrap_or(1);
-    if cx.popup(ui, sat(280.0), "tempo", "Tempo", &TempoFeel::ALL.map(|x| x.name()), &mut ti) {
-        *tempo = TempoFeel::ALL[ti];
+    if wide {
+        let h = top_h.max(WIDE_PANEL_H);
+        feel_controls(ui, cx, Rect::from_min_size(pos2(o.x + PANEL_W, o.y), vec2(KNOBS_W, h)), true, feel, dynamics, tempo, humanize, 0.25);
+        return h;
     }
-    cx.knob(ui, sat(380.0), "human", "Humanize", humanize, 0.0, 1.0, 0.25, &pct);
+    feel_controls(ui, cx, Rect::from_min_size(pos2(o.x, o.y + top_h), vec2(w, 130.0)), false, feel, dynamics, tempo, humanize, 0.25);
     top_h + 130.0
 }
 
@@ -1325,6 +1887,16 @@ fn patterns_dialog(app: &mut App, ui: &mut egui::Ui, t: usize, r: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wide_layout_from_the_rows_width() {
+        // (Logic's figures: the row is about 1030 points; the compact screenshot's 629-point
+        // editor is compact)
+        assert!(!is_wide(629.0));
+        assert!(!is_wide(WIDE_ROW_W));
+        assert!(is_wide(WIDE_ROW_W + 48.0));
+        assert!(is_wide(1495.0));
+    }
 
     #[test]
     fn pattern_choice_is_per_kind() {

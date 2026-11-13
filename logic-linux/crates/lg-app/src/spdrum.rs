@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Shape};
 use lg_players::character::{drummers_in, Genre};
-use lg_players::drummer::{DrummerParams, KitSection, SnareMode, TempoFeel, CYMBAL_CHOICES, CYMBAL_VARIATIONS, KICK_SNARE_VARIATIONS, PERCUSSION_VARIATIONS, PERC_CHOICES, TOM_CHOICES};
+use lg_players::drummer::{DrummerParams, KitSection, SnareMode, CYMBAL_CHOICES, CYMBAL_VARIATIONS, KICK_SNARE_VARIATIONS, PERCUSSION_VARIATIONS, PERC_CHOICES, TOM_CHOICES};
 use lg_players::kit::{Family, KitMap};
 
 use crate::app::App;
@@ -148,6 +148,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     let kit = ch.kit_map();
     let mut regen = false;
     let Some(body) = spedit::top(app, ui, area, t, r, Some(kit), &mut regen) else { return };
+    let wide = spedit::is_wide(area.width());
+    if wide {
+        // "Preset:" and the drummer's preset pop-up after Chords
+        preset_popup(ui, area, t, r, &mut params);
+    }
     let mut manual = app.spdrum.manual.get(&(t, r)).cloned().unwrap_or_default();
     let manual_before = manual.clone();
     let bar_t = app.bar_ticks().max(1);
@@ -157,25 +162,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
         let top = ui.cursor().min;
         let cx = top.x + w / 2.0;
         let cxs = Cx { p: ui.painter().clone(), base: ui.scope_id().with(("spdrum", t, r)) };
+        if wide {
+            let f = spedit::wide_frame(app, ui, &cxs, top, w, spedit::Picture::Drums, &mut params.complexity, &mut params.intensity);
+            who_button(ui, &cxs, f.label, &mut params);
+            if f.regen {
+                params = params.regenerated();
+            }
+            let o = f.panel;
+            let bg = cxs.p.add(Shape::Noop);
+            let (h, knobs) = match f.tab {
+                0 => (wide_main(app, ui, &cxs, o, &mut params, &region, kit, bar_t, t, r), true),
+                1 => (details_panel(app, ui, &cxs, o, PANEL_W, &mut params, true), true),
+                _ => (manual_panel(ui, &cxs, o, spedit::WIDE_PANEL_W, &mut manual).max(spedit::WIDE_PANEL_H), false),
+            };
+            spedit::wide_panel_bg(&cxs, bg, o, spedit::WIDE_PANEL_W, h, knobs);
+            ui.allocate_exact_size(vec2(w, o.y + h + 24.0 - top.y), Sense::hover());
+            return;
+        }
         let y0 = top.y + 22.0;
         // the Session Player button: Acoustic / Electronic Drummer over the drummer
-        cxs.label(pos2(cx - 83.0, y0), if ch.electronic() { "Electronic Drummer" } else { "Acoustic Drummer" });
-        let sr = Rect::from_center_size(pos2(cx - 83.0, y0 + 9.0), vec2(150.0, 38.0));
-        let sresp = ui.interact(sr, cxs.id("who"), Sense::click()).on_hover_text("Session Player: choose the drummer");
-        cxs.p.text(pos2(cx - 83.0, y0 + 18.0), Align2::CENTER_CENTER, ch.name, look::regular(13.0), if sresp.hovered() { Color32::WHITE } else { yellow() });
-        egui::Popup::menu(&sresp).show(|ui| {
-            ui.set_min_width(240.0);
-            for g in GENRES {
-                ui.menu_button(g.name(), |ui| {
-                    for c in drummers_in(g) {
-                        if ui.add(egui::Button::selectable(c.id == ch.id, c.name).shortcut_text(format!("{} · {}", c.personality, c.kit))).clicked() {
-                            params = DrummerParams { seed: params.seed, ..DrummerParams::for_character(c) };
-                            ui.close();
-                        }
-                    }
-                });
-            }
-        });
+        who_button(ui, &cxs, pos2(cx - 83.0, y0), &mut params);
         cxs.label(pos2(cx + 21.0, y0), "Complexity");
         cxs.label(pos2(cx + 105.0, y0), "Intensity");
         let st = y0 + 24.0;
@@ -198,7 +204,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
         let bg = cxs.p.add(Shape::Noop);
         let h = match tab {
             0 => main_panel(app, ui, &cxs, o, pw, &mut params, &region, kit, bar_t),
-            1 => details_panel(app, ui, &cxs, o, pw, &mut params),
+            1 => details_panel(app, ui, &cxs, o, pw, &mut params, false),
             _ => manual_panel(ui, &cxs, o, pw, &mut manual),
         };
         cxs.p.set(bg, Shape::rect_filled(Rect::from_min_size(o, vec2(pw, h)), PANEL_R, spedit::panel_bg()));
@@ -221,31 +227,202 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
     }
 }
 
+/// The Session Player button: Acoustic / Electronic Drummer over the drummer (yellow); a click
+/// chooses the drummer by genre.
+fn who_button(ui: &mut egui::Ui, cxs: &Cx, c: Pos2, params: &mut DrummerParams) {
+    let ch = params.character();
+    cxs.label(c, if ch.electronic() { "Electronic Drummer" } else { "Acoustic Drummer" });
+    let sr = Rect::from_center_size(c + vec2(0.0, 9.0), vec2(150.0, 38.0));
+    let sresp = ui.interact(sr, cxs.id("who"), Sense::click()).on_hover_text("Session Player: choose the drummer");
+    cxs.p.text(c + vec2(0.0, 18.0), Align2::CENTER_CENTER, ch.name, look::regular(13.0), if sresp.hovered() { Color32::WHITE } else { yellow() });
+    egui::Popup::menu(&sresp).show(|ui| {
+        ui.set_min_width(240.0);
+        for g in GENRES {
+            ui.menu_button(g.name(), |ui| {
+                for c in drummers_in(g) {
+                    if ui.add(egui::Button::selectable(c.id == ch.id, c.name).shortcut_text(format!("{} · {}", c.personality, c.kit))).clicked() {
+                        *params = DrummerParams { seed: params.seed, ..DrummerParams::for_character(c) };
+                        ui.close();
+                    }
+                }
+            });
+        }
+    });
+}
+
+/// The wide bar's "Preset:" pop-up for a drummer: the drummer's own settings ("Default") or
+/// "Custom"; Recall Default.
+fn preset_popup(ui: &mut egui::Ui, area: Rect, t: usize, r: usize, params: &mut DrummerParams) {
+    let cy = area.min.y + spedit::BAR_CY;
+    ui.painter().text(pos2(area.min.x + 101.0, cy), Align2::LEFT_CENTER, "Preset:", look::regular(13.0), look::text_dim());
+    let pr = Rect::from_min_size(pos2(area.min.x + 150.0, cy - 11.0), vec2(252.0, 22.0));
+    let default = DrummerParams { seed: params.seed, ..DrummerParams::for_character(params.character()) };
+    let resp = ui.interact(pr, ui.scope_id().with(("sd-preset", t, r)), Sense::click()).on_hover_text("Drummer presets");
+    crate::spx::preset_field(&ui.painter_at(pr.expand(2.0)), pr, if *params == default { "Default" } else { "Custom" }, resp.hovered());
+    egui::Popup::menu(&resp).show(|ui| {
+        ui.set_min_width(240.0);
+        if ui.add(egui::Button::selectable(*params == default, "Default")).clicked() || ui.button("Recall Default").clicked() {
+            *params = default.clone();
+            ui.close();
+        }
+    });
+}
+
+fn piece_on(p: &DrummerParams, i: usize) -> bool {
+    match i {
+        0 => p.percussion.enabled,
+        1 => p.cymbals.enabled,
+        2 => p.crashes_on,
+        3 => p.toms_on,
+        _ => p.kick_snare.enabled,
+    }
+}
+
+fn set_piece(p: &mut DrummerParams, i: usize, on: bool) {
+    match i {
+        0 => p.percussion.enabled = on,
+        1 => p.cymbals.enabled = on,
+        2 => p.crashes_on = on,
+        3 => p.toms_on = on,
+        _ => p.kick_snare.enabled = on,
+    }
+}
+
+/// A kit piece drawn as line art (the wide layout's, as Logic's figure): the hi-hat, a cymbal, a
+/// shaker, the kick drum from the front, a drum from the side.
+fn kit_art(p: &egui::Painter, b: Rect, i: usize, col: Color32) {
+    let c = b.center();
+    let line = egui::Stroke::new(1.3, col);
+    let fill = col.gamma_multiply(0.35);
+    match i {
+        1 => {
+            for dy in [-5.0, -2.0] {
+                p.add(Shape::ellipse_filled(c + vec2(0.0, dy), vec2(11.0, 2.6), fill));
+                p.add(Shape::ellipse_stroke(c + vec2(0.0, dy), vec2(11.0, 2.6), line));
+            }
+            p.line_segment([c + vec2(0.0, -10.0), c + vec2(0.0, 10.0)], line);
+            p.line_segment([c + vec2(-6.0, 10.0), c + vec2(6.0, 10.0)], line);
+        }
+        2 => {
+            let pts: Vec<Pos2> = (0..24).map(|k| {
+                let a = k as f32 / 24.0 * std::f32::consts::TAU;
+                let (x, y) = (a.cos() * 12.0, a.sin() * 3.2);
+                c + vec2(x * 0.96 + y * 0.28, y - x * 0.28)
+            }).collect();
+            p.add(Shape::convex_polygon(pts, fill, line));
+        }
+        0 => {
+            let r = Rect::from_center_size(c, vec2(10.0, 21.0));
+            p.rect_filled(r, 3.0, fill);
+            p.rect_stroke(r, 3.0, line, egui::StrokeKind::Middle);
+            for dy in [-5.0, 0.0, 5.0] {
+                p.hline(r.x_range(), c.y + dy, egui::Stroke::new(1.0, col));
+            }
+        }
+        4 => {
+            p.circle_filled(c + vec2(0.0, -1.0), 10.0, fill);
+            p.circle_stroke(c + vec2(0.0, -1.0), 10.0, line);
+            p.circle_stroke(c + vec2(0.0, -1.0), 4.0, egui::Stroke::new(1.0, col));
+            p.line_segment([c + vec2(-6.0, 7.0), c + vec2(-9.0, 12.0)], line);
+            p.line_segment([c + vec2(6.0, 7.0), c + vec2(9.0, 12.0)], line);
+        }
+        _ => {
+            let r = Rect::from_center_size(c + vec2(0.0, 1.0), vec2(22.0, 13.0));
+            p.rect_filled(r, 2.0, fill);
+            p.rect_stroke(r, 2.0, line, egui::StrokeKind::Middle);
+            for k in 1..4 {
+                p.vline(r.min.x + r.width() * k as f32 / 4.0, r.y_range(), egui::Stroke::new(1.0, col));
+            }
+        }
+    }
+}
+
+/// A kit-piece button (lit: plays, dimmed: muted); a click plays or mutes the group. `size` 0:
+/// line art (wide), else the icon at that size.
+fn piece_button(ui: &mut egui::Ui, cx: &Cx, b: Rect, p: &mut DrummerParams, i: usize, size: f32) {
+    let on = piece_on(p, i);
+    let resp = ui.interact(b, cx.id("piece").with(i), Sense::click()).on_hover_text(format!("{}: click to play or mute", GROUPS[i].0));
+    let col = if on { yellow() } else { Color32::from_gray(0x60) };
+    if size == 0.0 {
+        kit_art(&cx.p, b, i, col);
+    } else {
+        glyphs::paint(&cx.p, b, piece_icon(i), size, col);
+    }
+    if resp.clicked() {
+        set_piece(p, i, !on);
+    }
+}
+
+/// A group's pattern variation badge (A = Auto, the pad decides); a click picks the next,
+/// Option-click Auto.
+fn variation_badge(ui: &mut egui::Ui, cx: &Cx, badge: Pos2, p: &mut DrummerParams, i: usize) {
+    let sec: Option<(&mut KitSection, u8)> = match i {
+        0 => Some((&mut p.percussion, PERCUSSION_VARIATIONS)),
+        1 => Some((&mut p.cymbals, CYMBAL_VARIATIONS)),
+        4 => Some((&mut p.kick_snare, KICK_SNARE_VARIATIONS)),
+        _ => None,
+    };
+    if let Some((sec, max)) = sec {
+        let resp = ui.interact(Rect::from_center_size(badge, vec2(20.0, 20.0)), cx.id("var").with(i), Sense::click()).on_hover_text("Pattern variation: click for the next, Option-click for Auto");
+        cx.p.circle_filled(badge, 9.0, Color32::from_gray(if resp.hovered() { 0x4a } else { 0x3a }));
+        let txt = if sec.variation == 0 { "A".to_string() } else { format!("{}", sec.variation) };
+        cx.p.text(badge, Align2::CENTER_CENTER, txt, look::regular(11.5), spedit::label_col());
+        if resp.clicked() {
+            sec.variation = if ui.input(|x| x.modifiers.alt) { 0 } else { (sec.variation + 1) % (max + 1) };
+        }
+    }
+}
+
+/// The wide Main panel (Logic's figure): the cymbals and percussion row (Hi-Hat, Cymbals,
+/// Percussion) and the kick and snare row (Kick & Snare, Toms), each with its variation badge
+/// and dots (kick and snare: two lines), Follow under them; the knobs in the right column.
+#[allow(clippy::too_many_arguments)]
+fn wide_main(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, p: &mut DrummerParams, region: &lg_core::Region, kit: KitMap, bar_t: u32, t: usize, r: usize) -> f32 {
+    let percussion_only = p.character().genre == Genre::Percussion;
+    for (k, i) in [1usize, 2, 0].into_iter().enumerate() {
+        piece_button(ui, cx, Rect::from_center_size(pos2(o.x + 37.0 + k as f32 * 48.0, o.y + 51.0), vec2(30.0, 28.0)), p, i, 0.0);
+    }
+    for (k, i) in [4usize, 3].into_iter().enumerate() {
+        piece_button(ui, cx, Rect::from_center_size(pos2(o.x + 62.0 + k as f32 * 47.0, o.y + 157.0), vec2(30.0, 28.0)), p, i, 0.0);
+    }
+    cx.p.hline(o.x..=(o.x + PANEL_W), o.y + 104.0, egui::Stroke::new(1.0, Color32::from_gray(0x1e)));
+    variation_badge(ui, cx, pos2(o.x + 185.0, o.y + 51.0), p, 1);
+    variation_badge(ui, cx, pos2(o.x + 185.0, o.y + 157.0), p, 4);
+    let top_dots = group_dots(&region.notes, kit, &[Family::HiHat, Family::Cymbal], region.start, bar_t);
+    let snare = group_dots(&region.notes, kit, &[Family::Snare], region.start, bar_t);
+    let kick = group_dots(&region.notes, kit, &[Family::Kick], region.start, bar_t);
+    let sp = 12.1;
+    cx.dots(pos2(o.x + 213.0, o.y + 51.0), &top_dots, sp);
+    cx.dots(pos2(o.x + 213.0, o.y + 149.0), &snare, sp);
+    cx.dots(pos2(o.x + 213.0, o.y + 162.0), &kick, sp);
+    if !percussion_only {
+        let follow = match app.spx.follow_track.get(&(t, r)).and_then(|f| app.project.as_ref()?.tracks.get(*f)) {
+            Some(tr) => tr.name.clone(),
+            None if !app.spdrum.chords_off.get(&(t, r)).copied().unwrap_or(false) => "Chord Rhythm".into(),
+            None => "Off".into(),
+        };
+        let g = cx.p.layout_no_wrap("Follow: ".into(), look::regular(11.5), spedit::label_col());
+        let fy = o.y + 180.0;
+        let fr = Rect::from_min_size(pos2(o.x + 209.0, fy - 8.0), vec2(200.0, 16.0));
+        let gw = g.size().x;
+        cx.p.galley(pos2(fr.min.x, fy - g.size().y / 2.0), g, spedit::label_col());
+        cx.p.text(pos2(fr.min.x + gw, fy), Align2::LEFT_CENTER, follow, look::regular(11.5), yellow());
+        if ui.interact(fr, cx.id("follow"), Sense::click()).on_hover_text("Kick and snare patterns: Follow Rhythm Of").clicked() {
+            app.spdrum.patterns_open = true;
+        }
+    }
+    spedit::knob_column(app, ui, cx, pos2(o.x + PANEL_W, o.y), &mut p.fills, 0.35, &mut p.fill_complexity, &mut p.swing, &mut p.swing_type);
+    spedit::WIDE_PANEL_H
+}
+
 #[allow(clippy::too_many_arguments)]
 fn main_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: &mut DrummerParams, region: &lg_core::Region, kit: KitMap, bar_t: u32) -> f32 {
     let percussion_only = p.character().genre == Genre::Percussion;
     let mut y = o.y + 26.0;
     for (i, (name, fams)) in GROUPS.iter().enumerate() {
-        let on = match i {
-            0 => p.percussion.enabled,
-            1 => p.cymbals.enabled,
-            2 => p.crashes_on,
-            3 => p.toms_on,
-            _ => p.kick_snare.enabled,
-        };
+        let on = piece_on(p, i);
         // the kit-piece button: lit plays, dimmed mutes
-        let ib = Rect::from_center_size(pos2(o.x + 34.0, y), vec2(32.0, 28.0));
-        let iresp = ui.interact(ib, cx.id("piece").with(i), Sense::click()).on_hover_text(format!("{name}: click to play or mute"));
-        glyphs::paint(&cx.p, ib, piece_icon(i), 20.0, if on { yellow() } else { Color32::from_gray(0x60) });
-        if iresp.clicked() {
-            match i {
-                0 => p.percussion.enabled = !on,
-                1 => p.cymbals.enabled = !on,
-                2 => p.crashes_on = !on,
-                3 => p.toms_on = !on,
-                _ => p.kick_snare.enabled = !on,
-            }
-        }
+        piece_button(ui, cx, Rect::from_center_size(pos2(o.x + 34.0, y), vec2(32.0, 28.0)), p, i, 20.0);
         // the name selects the group (its Details pop-ups)
         let nr = Rect::from_min_size(pos2(o.x + 56.0, y - 11.0), vec2(96.0, 22.0));
         let sel = app.spdrum.selected == Some(i);
@@ -259,22 +436,7 @@ fn main_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: &mu
         }
         // the pattern variation (a badge: A = Auto, the pad decides) and its dots (from the
         // region's first bar)
-        let sec: Option<(&mut KitSection, u8)> = match i {
-            0 => Some((&mut p.percussion, PERCUSSION_VARIATIONS)),
-            1 => Some((&mut p.cymbals, CYMBAL_VARIATIONS)),
-            4 => Some((&mut p.kick_snare, KICK_SNARE_VARIATIONS)),
-            _ => None,
-        };
-        let badge = pos2(o.x + 172.0, y);
-        if let Some((sec, max)) = sec {
-            let resp = ui.interact(Rect::from_center_size(badge, vec2(20.0, 20.0)), cx.id("var").with(i), Sense::click()).on_hover_text("Pattern variation: click for the next, Option-click for Auto");
-            cx.p.circle_filled(badge, 9.0, Color32::from_gray(if resp.hovered() { 0x4a } else { 0x3a }));
-            let txt = if sec.variation == 0 { "A".to_string() } else { format!("{}", sec.variation) };
-            cx.p.text(badge, Align2::CENTER_CENTER, txt, look::regular(11.5), spedit::label_col());
-            if resp.clicked() {
-                sec.variation = if ui.input(|x| x.modifiers.alt) { 0 } else { (sec.variation + 1) % (max + 1) };
-            }
-        }
+        variation_badge(ui, cx, pos2(o.x + 172.0, y), p, i);
         let d = group_dots(&region.notes, kit, fams, region.start, bar_t);
         cx.dots(pos2(o.x + 196.0, y), &d, 11.0);
         if i == 4 && !percussion_only {
@@ -299,7 +461,7 @@ fn main_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: &mu
     y + 120.0 - o.y
 }
 
-fn details_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: &mut DrummerParams) -> f32 {
+fn details_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: &mut DrummerParams, wide: bool) -> f32 {
     let pct = |v: f32| format!("{:.0}", v * 100.0);
     let at = |fx: f32, dy: f32| pos2(o.x + fx / PANEL_W * w, o.y + dy);
     let electronic = p.character().electronic();
@@ -352,20 +514,13 @@ fn details_panel(app: &mut App, ui: &mut egui::Ui, cx: &Cx, o: Pos2, w: f32, p: 
             _ => {}
         }
     }
-    // the strip: Feel, Dynamics, Tempo, Humanize
-    let sy = o.y + y + 28.0;
-    let strip = Rect::from_min_size(pos2(o.x, sy), vec2(w, 130.0));
-    cx.p.rect_filled(strip, egui::CornerRadius { nw: 0, ne: 0, sw: PANEL_R as u8, se: PANEL_R as u8 }, spedit::strip_bg());
-    let sat = |fx: f32| pos2(o.x + fx / PANEL_W * w, sy + 21.0);
-    cx.knob(ui, sat(80.0), "feel", "Feel", &mut p.feel, -1.0, 1.0, 0.0, &|v| if v.abs() < 0.02 { "Center".into() } else if v > 0.0 { format!("Push {:.0}", v * 100.0) } else { format!("Pull {:.0}", -v * 100.0) });
-    cx.p.text(sat(80.0) + vec2(-20.0, 87.0), Align2::CENTER_CENTER, "Pull", look::regular(12.0), look::text_dim());
-    cx.p.text(sat(80.0) + vec2(20.0, 87.0), Align2::CENTER_CENTER, "Push", look::regular(12.0), look::text_dim());
-    cx.knob(ui, sat(180.0), "dyn", "Dynamics", &mut p.dynamics, 0.0, 2.0, 1.0, &|v| format!("{:.0} %", v * 100.0));
-    let mut ti = TempoFeel::ALL.iter().position(|x| *x == p.tempo).unwrap_or(1);
-    if cx.popup(ui, sat(280.0), "tempo", "Tempo", &TempoFeel::ALL.map(|x| x.name()), &mut ti) {
-        p.tempo = TempoFeel::ALL[ti];
+    // Feel, Dynamics, Tempo, Humanize: the strip (wide: the right column)
+    if wide {
+        let h = (y + 28.0).max(spedit::WIDE_PANEL_H);
+        spedit::feel_controls(ui, cx, Rect::from_min_size(pos2(o.x + PANEL_W, o.y), vec2(spedit::KNOBS_W, h)), true, &mut p.feel, &mut p.dynamics, &mut p.tempo, &mut p.humanize, 0.22);
+        return h;
     }
-    cx.knob(ui, sat(380.0), "human", "Humanize", &mut p.humanize, 0.0, 1.0, 0.22, &pct);
+    spedit::feel_controls(ui, cx, Rect::from_min_size(pos2(o.x, o.y + y + 28.0), vec2(w, 130.0)), false, &mut p.feel, &mut p.dynamics, &mut p.tempo, &mut p.humanize, 0.22);
     y + 28.0 + 130.0
 }
 
