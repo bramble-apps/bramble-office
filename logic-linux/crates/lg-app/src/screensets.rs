@@ -217,6 +217,50 @@ pub fn frame(app: &mut App) {
     }
 }
 
+/// Another project's screensets (Import Project Settings ▸ Screensets): Studio's own memory
+/// of them, else its DisplayState.plist's; `now` fills what they don't say.
+pub fn sets_of(file: &Path, now: Layout) -> Vec<Set> {
+    if let Some((sets, _)) = store_path(Some(file)).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| parse_store(&t, now)) {
+        return sets;
+    }
+    let Some(ds) = lg_core::displaystate::read(file) else { return Vec::new() };
+    ds.screensets
+        .iter()
+        .map(|s| {
+            let mut l = now;
+            l.browser = s.browser.unwrap_or(l.browser);
+            l.inspector = s.inspector.unwrap_or(l.inspector);
+            l.control_bar = s.control_bar.unwrap_or(l.control_bar);
+            l.toolbar = s.toolbar.unwrap_or(l.toolbar);
+            Set { slot: s.slot, name: s.name.clone(), locked: s.locked, layout: l }
+        })
+        .collect()
+}
+
+/// Imported screensets go into the active project: each replaces the one with its number.
+pub fn import_sets(app: &mut App, sets: Vec<Set>) -> bool {
+    if sets.is_empty() {
+        return false;
+    }
+    ensure(app);
+    for s in sets {
+        app.screens.sets.retain(|x| x.slot != s.slot);
+        app.screens.sets.push(s);
+    }
+    app.screens.sets.sort_by_key(|s| s.slot);
+    let cur = app.screens.current;
+    if let Some(l) = app.screens.sets.iter().find(|s| s.slot == cur).map(|s| s.layout) {
+        apply(app, l);
+    }
+    app.dirty = true;
+    true
+}
+
+/// The layout now (for `sets_of`).
+pub fn current_layout(app: &App) -> Layout {
+    layout(app)
+}
+
 fn go(app: &mut App, slot: u32) {
     ensure(app);
     let now = layout(app);
@@ -587,6 +631,20 @@ mod tests {
 
     fn l(x: f32) -> Layout {
         Layout { browser: true, inspector: true, control_bar: true, toolbar: false, bottom: Bottom::None, right_pane: None, list_tab: 0, browser_w: 300.0, header_w: 265.0, editor_h: 300.0, mixer_h: 420.0, bar_w: 70.0, scroll_x: x, scroll_y: 0.0, v_zoom: 1.0, global_tracks: false, automation: false }
+    }
+
+    #[test]
+    fn imported_screensets_replace_same_numbers() {
+        let mut app = crate::tm::test_app();
+        frame(&mut app);
+        let n = app.screens.sets.len();
+        let base = current_layout(&app);
+        let sets = vec![Set { slot: 1, name: "Imported".into(), locked: true, layout: base }, Set { slot: 7, name: "Seven".into(), locked: false, layout: new_layout(base) }];
+        assert!(import_sets(&mut app, sets));
+        assert_eq!(app.screens.sets.iter().find(|s| s.slot == 1).map(|s| s.name.as_str()), Some("Imported"));
+        assert!(app.screens.sets.iter().any(|s| s.slot == 7 && s.name == "Seven"));
+        assert_eq!(app.screens.sets.len(), n.max(1) + 1);
+        assert!(!import_sets(&mut app, Vec::new()));
     }
 
     #[test]
