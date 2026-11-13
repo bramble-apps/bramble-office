@@ -130,6 +130,11 @@ fn events(mut stream: TcpStream) {
         let _ = tx.send(json!({ "type": "welcome", "id": s.id, "name": s.name, "linked": true }).to_string());
         s.conns.insert(k, Conn { id: format!("web:{k}"), name: "Web Remote".into(), linked: true, tx });
         s.resend = true;
+        if let Some(c) = s.conns.get(&k) {
+            for v in [&s.last_state, &s.last_thumbs].into_iter().flatten() {
+                let _ = c.tx.send(v.clone());
+            }
+        }
         wake(&s);
         k
     };

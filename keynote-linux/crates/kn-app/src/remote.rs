@@ -82,6 +82,10 @@ struct Shared {
     /// What was sent last (playing, slide, step, revision), and a remote that wants it all again.
     sent: String,
     resend: bool,
+    /// The last state and slide list sent: a remote that connects while the window isn't
+    /// being drawn (no frames, so nothing is published) gets them at once.
+    last_state: Option<String>,
+    last_thumbs: Option<String>,
     thumbs_asked: bool,
     ctx: Option<egui::Context>,
     /// The web remote's secret (in its link) and its port (0: not started).
@@ -229,6 +233,11 @@ fn serve(stream: TcpStream) {
         s.conns.insert(k, Conn { id: id.clone(), name: name.clone(), linked, tx });
         if linked {
             s.resend = true;
+            if let Some(c) = s.conns.get(&k) {
+                for v in [&s.last_state, &s.last_thumbs].into_iter().flatten() {
+                    let _ = c.tx.send(v.clone());
+                }
+            }
         }
         wake(&s);
         k
@@ -397,7 +406,9 @@ fn steps_of(app: &mut App, index: usize) -> usize {
 pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
     let (any, resend, thumbs) = {
         let mut s = shared();
-        let any = s.enabled && s.conns.values().any(|c| c.linked);
+        // while Remotes is on, kept current even with no remote connected, so one that
+        // connects while the window isn't drawn still gets the slide at once
+        let any = s.enabled;
         (any, std::mem::take(&mut s.resend), std::mem::take(&mut s.thumbs_asked))
     };
     if !any {
@@ -408,6 +419,7 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
         let mut s = shared();
         if resend || s.sent != "nodoc" {
             s.sent = "nodoc".into();
+            s.last_state = Some(json!({ "type": "nodoc" }).to_string());
             for c in s.conns.values().filter(|c| c.linked) {
                 send(c, json!({ "type": "nodoc" }));
             }
@@ -417,9 +429,11 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
     let count = app.slides.len();
     if thumbs {
         let list: Vec<Value> = (0..count).map(|i| json!({ "index": i, "skipped": app.slides[i].skipped, "image": picture(app, i, usize::MAX, 240) })).collect();
-        let s = shared();
+        let mut s = shared();
+        let v = json!({ "type": "thumbs", "slides": list });
+        s.last_thumbs = Some(v.to_string());
         for c in s.conns.values().filter(|c| c.linked) {
-            send(c, json!({ "type": "thumbs", "slides": list }));
+            send(c, v.clone());
         }
     }
     let (index, step) = at.unwrap_or((app.cur, usize::MAX));
@@ -451,6 +465,7 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
         s.laser = None;
     }
     s.sent = key;
+    s.last_state = Some(v.to_string());
     for c in s.conns.values().filter(|c| c.linked) {
         send(c, v.clone());
     }
