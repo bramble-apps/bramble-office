@@ -1257,6 +1257,9 @@ impl App {
         if let Some(l) = crate::stmulti::menu_label(self, label) {
             return l;
         }
+        if let Some(l) = crate::liveloops::menu_label(self, label) {
+            return l;
+        }
         match label {
             "Hide Browser" if !self.show_browser => "Show Browser".into(),
             "Hide Inspector" if !self.show_inspector => "Show Inspector".into(),
