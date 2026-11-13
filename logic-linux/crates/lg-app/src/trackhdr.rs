@@ -939,7 +939,9 @@ pub fn top_row(app: &mut App, ui: &mut egui::Ui, head: Rect) {
         // (its own slot right of the +, Duplicate and global-tracks S buttons, the same 32.5 × 24
         // pt size, 43 pt apart, as tracks.rs lays those out)
         let _ = x;
-        let r = Rect::from_min_size(pos2(head.min.x + 10.0 + 3.0 * 43.0, head.min.y + (head.height() - 1.0 - 24.0) / 2.0), vec2(32.5, 24.0));
+        // (after the Clear Solo button when that shows)
+        let slot = if app.tm.ui.solo_button { 4.0 } else { 3.0 };
+        let r = Rect::from_min_size(pos2(head.min.x + 10.0 + slot * 43.0, head.min.y + (head.height() - 1.0 - 24.0) / 2.0), vec2(32.5, 24.0));
         let resp = ui.interact(r, ui.scope_id().with("hide-view"), Sense::click()).on_hover_text("Toggle Hide View (H)");
         let (fill, ink) = if app.ta.show_hidden { (Color32::from_rgb(0x52, 0xc0, 0x3c), Color32::BLACK) } else if hidden { (Color32::from_rgb(0xe8, 0x9a, 0x2c), Color32::BLACK) } else { (look::group_bg(), look::text()) };
         p.rect_filled(r, 6.0, fill);
