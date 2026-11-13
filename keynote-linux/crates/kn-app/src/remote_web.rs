@@ -167,63 +167,55 @@ fn lan_ip() -> String {
         .unwrap_or_else(|| "127.0.0.1".into())
 }
 
-/// Settings > Remotes > Web Remote: the QR code on a white tile and, beside it (under it when
-/// the window is narrow), the address, Copy Link, New Link and the browsers connected.
+/// Settings > Remotes > Web Remote: the QR code centred on a white tile, then Address (Copy),
+/// Connected Browsers and Reset Link rows, as a System Settings group.
 pub(super) fn settings(ui: &mut egui::Ui) {
+    use super::{group, hairline, label, note, row, small_button, title, value};
     let (key, port, browsers) = {
         let s = shared();
         (s.web_key.clone(), s.web_port, s.conns.values().filter(|c| c.id.starts_with("web:")).count())
     };
-    super::title(ui, "Web Remote");
+    title(ui, "Web Remote");
     if port == 0 {
-        super::group(ui, |ui| super::row(ui, |ui| { ui.label(egui::RichText::new("The web remote couldn\u{2019}t start: its network ports are in use.").size(12.5)); }, |_| {}));
+        group(ui, |ui| row(ui, |ui| value(ui, "Couldn\u{2019}t start: its network ports are in use"), |_| {}));
         return;
     }
     let ip = lan_ip();
     let url = format!("http://{ip}:{port}/?k={key}");
     let mut new_link = false;
-    super::group(ui, |ui| {
-        let wide = ui.available_width() >= 360.0;
-        let side = if wide { 148.0 } else { ui.available_width().min(200.0) };
-        let info = |ui: &mut egui::Ui, new_link: &mut bool| {
-            ui.spacing_mut().item_spacing.y = 6.0;
-            ui.label(egui::RichText::new("Scan with a phone or tablet").size(13.0));
-            ui.label(egui::RichText::new("Or open this address in a browser on the same network:").size(11.5).color(crate::theme::TEXT_DIM()));
-            ui.add(egui::Label::new(egui::RichText::new(format!("{ip}:{port}")).size(12.5).monospace()).selectable(true));
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Copy Link").clicked() {
+    group(ui, |ui| {
+        ui.add_space(14.0);
+        ui.vertical_centered(|ui| {
+            qr(ui, &url, 156.0_f32.min(ui.available_width() - 20.0));
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("Scan with a phone or tablet on the same network").size(12.0).color(crate::theme::TEXT_DIM()));
+        });
+        ui.add_space(12.0);
+        hairline(ui);
+        row(
+            ui,
+            |ui| label(ui, "Address"),
+            |ui| {
+                if small_button(ui, "Copy Link", None).clicked() {
                     ui.ctx().copy_text(url.clone());
                 }
-                if ui.add(egui::Button::new(egui::RichText::new("New Link").color(Color32::from_rgb(0xff, 0x45, 0x3a)))).on_hover_text("Make a new link; pages opened with the old one stop working").clicked() {
-                    *new_link = true;
+                ui.add(egui::Label::new(egui::RichText::new(format!("{ip}:{port}")).size(13.0).color(crate::theme::TEXT_DIM())).selectable(true));
+            },
+        );
+        hairline(ui);
+        row(ui, |ui| label(ui, "Connected Browsers"), |ui| value(ui, &browsers.to_string()));
+        hairline(ui);
+        row(
+            ui,
+            |ui| label(ui, "Reset Link"),
+            |ui| {
+                if small_button(ui, "Reset\u{2026}", Some(Color32::from_rgb(0xff, 0x45, 0x3a))).clicked() {
+                    new_link = true;
                 }
-            });
-            let (dot, t) = if browsers > 0 {
-                (Color32::from_rgb(0x34, 0xc7, 0x59), format!("{browsers} browser{} connected", if browsers == 1 { "" } else { "s" }))
-            } else {
-                (crate::theme::TEXT_DIM(), "No browsers connected".to_string())
-            };
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::new(8.0, 8.0), egui::Sense::hover());
-                ui.painter().circle_filled(r.center(), 3.5, dot);
-                ui.label(egui::RichText::new(t).size(11.5).color(crate::theme::TEXT_DIM()));
-            });
-        };
-        ui.add_space(10.0);
-        if wide {
-            ui.horizontal_top(|ui| {
-                qr(ui, &url, side);
-                ui.add_space(14.0);
-                ui.vertical(|ui| info(ui, &mut new_link));
-            });
-        } else {
-            ui.vertical_centered(|ui| qr(ui, &url, side));
-            ui.add_space(10.0);
-            info(ui, &mut new_link);
-        }
-        ui.add_space(10.0);
+            },
+        );
     });
-    super::note(ui, "Anyone with the link can control the slideshow.");
+    note(ui, "Anyone with the link can control the slideshow. Resetting makes a new link; pages opened with the old one stop working.");
     if new_link {
         new_key();
     }

@@ -516,32 +516,44 @@ pub fn draw_overlay(painter: &Painter, rect: Rect) {
 
 /// Settings > Remotes: Enable; the remotes looking for this computer (Link, then the code and
 /// Confirm); the remotes linked (Unlink).
-// ---- Settings > Remotes, laid out as System Settings: a title, a rounded group of rows (the
-// label at the left, its control at the right, hairlines between), a small note under it.
+// ---- Settings > Remotes, laid out as macOS System Settings (Bluetooth, Sharing): a section
+// title, an inset rounded group of 36 pt rows (label at the left, value or control at the right,
+// hairlines between), a small grey note under the group.
 
-/// A group's fill: a step lighter than the window (white in light mode).
-fn group_fill(ui: &egui::Ui) -> Color32 {
-    if ui.visuals().dark_mode { Color32::from_rgb(0x2e, 0x2e, 0x30) } else { Color32::WHITE }
+/// A group's fill and edge: a step lighter than the window, a faint line round it.
+fn group_fill(ui: &egui::Ui) -> (Color32, Color32) {
+    if ui.visuals().dark_mode {
+        (Color32::from_rgb(0x2c, 0x2c, 0x2e), Color32::from_white_alpha(14))
+    } else {
+        (Color32::WHITE, Color32::from_black_alpha(18))
+    }
 }
 
 /// A section's title above its group.
 pub(super) fn title(ui: &mut egui::Ui, t: &str) {
-    ui.add_space(14.0);
-    ui.label(egui::RichText::new(t).size(13.0).strong().color(crate::theme::TEXT()));
-    ui.add_space(4.0);
+    ui.add_space(18.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        ui.label(egui::RichText::new(t).size(13.0).strong().color(crate::theme::TEXT()));
+    });
+    ui.add_space(6.0);
 }
 
 /// The small grey note under a group.
 pub(super) fn note(ui: &mut egui::Ui, t: &str) {
-    ui.add_space(4.0);
-    ui.add(egui::Label::new(egui::RichText::new(t).size(11.5).color(crate::theme::TEXT_DIM())).wrap());
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        ui.add(egui::Label::new(egui::RichText::new(t).size(11.0).color(crate::theme::TEXT_DIM())).wrap());
+    });
 }
 
-/// A rounded group; `rows` adds its rows (with `hairline` between them).
+/// An inset rounded group; `rows` adds its rows (with `hairline` between them).
 pub(super) fn group(ui: &mut egui::Ui, rows: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::new().fill(group_fill(ui)).corner_radius(10.0).inner_margin(egui::Margin::symmetric(12, 2)).show(ui, |ui| {
+    let (fill, edge) = group_fill(ui);
+    egui::Frame::new().fill(fill).stroke(Stroke::new(1.0, edge)).corner_radius(10.0).inner_margin(egui::Margin::symmetric(10, 0)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
         rows(ui);
     });
 }
@@ -552,26 +564,52 @@ pub(super) fn hairline(ui: &mut egui::Ui) {
     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, crate::theme::SEPARATOR()));
 }
 
-/// A row: `left` from the left edge, `right` from the right edge, centred in 40 pt.
-pub(super) fn row(ui: &mut egui::Ui, left: impl FnOnce(&mut egui::Ui), right: impl FnOnce(&mut egui::Ui)) {
+/// A row `h` points tall: `left` from the left edge, `right` from the right edge, both centred.
+pub(super) fn row_h(ui: &mut egui::Ui, h: f32, left: impl FnOnce(&mut egui::Ui), right: impl FnOnce(&mut egui::Ui)) {
     let w = ui.available_width();
-    ui.allocate_ui_with_layout(egui::vec2(w, 40.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.set_min_size(egui::vec2(w, 40.0));
+    ui.allocate_ui_with_layout(egui::vec2(w, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_size(egui::vec2(w, h));
         left(ui);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
     });
 }
 
-/// A device's status dot and name, with "Connected" or "Not connected" under it.
-fn device(ui: &mut egui::Ui, name: &str, status: &str, on: bool) {
-    let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-    ui.painter().circle_filled(r.center(), 4.0, if on { Color32::from_rgb(0x34, 0xc7, 0x59) } else { crate::theme::TEXT_DIM() });
-    ui.add_space(4.0);
-    ui.vertical(|ui| {
-        ui.spacing_mut().item_spacing.y = 1.0;
-        ui.add(egui::Label::new(egui::RichText::new(name).size(13.0)).truncate());
-        ui.label(egui::RichText::new(status).size(11.0).color(crate::theme::TEXT_DIM()));
-    });
+/// A 36 pt row.
+pub(super) fn row(ui: &mut egui::Ui, left: impl FnOnce(&mut egui::Ui), right: impl FnOnce(&mut egui::Ui)) {
+    row_h(ui, 36.0, left, right);
+}
+
+/// A row's label (13 pt) and a grey value (13 pt).
+pub(super) fn label(ui: &mut egui::Ui, t: &str) {
+    ui.label(egui::RichText::new(t).size(13.0).color(crate::theme::TEXT()));
+}
+pub(super) fn value(ui: &mut egui::Ui, t: &str) {
+    ui.label(egui::RichText::new(t).size(13.0).color(crate::theme::TEXT_DIM()));
+}
+
+/// A small push button (macOS's small control size).
+pub(super) fn small_button(ui: &mut egui::Ui, t: &str, color: Option<Color32>) -> egui::Response {
+    let mut text = egui::RichText::new(t).size(12.0);
+    if let Some(c) = color {
+        text = text.color(c);
+    }
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = egui::vec2(9.0, 2.0);
+        ui.add(egui::Button::new(text).min_size(egui::vec2(0.0, 22.0)).corner_radius(6.0))
+    })
+    .inner
+}
+
+/// A device's icon (a phone in a grey circle, as Bluetooth's list) and its name.
+fn device(ui: &mut egui::Ui, name: &str) {
+    let (r, _) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::hover());
+    let p = ui.painter();
+    p.circle_filled(r.center(), 13.0, if ui.visuals().dark_mode { Color32::from_rgb(0x48, 0x48, 0x4a) } else { Color32::from_rgb(0xe5, 0xe5, 0xea) });
+    let phone = Rect::from_center_size(r.center(), egui::vec2(8.0, 13.0));
+    let ink = crate::theme::TEXT();
+    p.rect_stroke(phone, 2.0, Stroke::new(1.3, ink), egui::StrokeKind::Inside);
+    p.hline(phone.x_range().shrink(2.5), phone.max.y - 2.6, Stroke::new(1.0, ink));
+    label(ui, name);
 }
 
 pub fn settings_tab(ui: &mut egui::Ui) {
@@ -589,17 +627,11 @@ fn tab_body(ui: &mut egui::Ui) {
         let s = shared();
         (s.enabled, s.name.clone())
     };
-    ui.add_space(4.0);
+    ui.add_space(6.0);
     group(ui, |ui| {
         row(
             ui,
-            |ui| {
-                ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 1.0;
-                    ui.label(egui::RichText::new("Keydeck Remote").size(13.0));
-                    ui.label(egui::RichText::new("Control slideshows from a phone or tablet").size(11.0).color(crate::theme::TEXT_DIM()));
-                });
-            },
+            |ui| label(ui, "Keydeck Remote"),
             |ui| {
                 if crate::theme::toggle(ui, &mut enabled).changed() {
                     let mut s = shared();
@@ -615,7 +647,7 @@ fn tab_body(ui: &mut egui::Ui) {
             },
         );
     });
-    note(ui, &format!("On a phone or tablet with Keydeck, choose Play > Keydeck Remote, then link it to \u{201c}{name}\u{201d} here. Or use the web remote below in any browser."));
+    note(ui, &format!("Control slideshows on \u{201c}{name}\u{201d} from a phone or tablet. In Keydeck on the device, choose Play > Keydeck Remote, then link it here, or use the web remote in any browser."));
     if !enabled {
         return;
     }
@@ -623,10 +655,33 @@ fn tab_body(ui: &mut egui::Ui) {
     {
         let s = shared();
         let looking: Vec<(u64, String)> = s.conns.iter().filter(|(_, c)| !c.linked).map(|(k, c)| (*k, c.name.clone())).collect();
-        title(ui, "Nearby");
+        title(ui, "Linked Devices");
+        group(ui, |ui| {
+            if s.linked.is_empty() {
+                row(ui, |ui| value(ui, "No linked devices"), |_| {});
+            }
+            for (i, l) in s.linked.iter().enumerate() {
+                if i > 0 {
+                    hairline(ui);
+                }
+                let on = s.conns.values().any(|c| c.linked && c.id == l.id);
+                row_h(
+                    ui,
+                    40.0,
+                    |ui| device(ui, &l.name),
+                    |ui| {
+                        if small_button(ui, "Unlink", None).clicked() {
+                            act = Some(("unlink", 0, l.id.clone()));
+                        }
+                        value(ui, if on { "Connected" } else { "Not Connected" });
+                    },
+                );
+            }
+        });
+        title(ui, "Nearby Devices");
         group(ui, |ui| {
             if looking.is_empty() {
-                row(ui, |ui| { ui.label(egui::RichText::new("No remotes are looking for this computer").size(12.5).color(crate::theme::TEXT_DIM())); }, |_| {});
+                row(ui, |ui| value(ui, "No devices are looking for this computer"), |_| {});
             }
             for (i, (k, n)) in looking.into_iter().enumerate() {
                 if i > 0 {
@@ -636,21 +691,22 @@ fn tab_body(ui: &mut egui::Ui) {
                     Some((pk, code)) if *pk == k => Some(code.clone()),
                     _ => None,
                 };
-                row(
+                row_h(
                     ui,
-                    |ui| device(ui, &n, if code.is_some() { "Check that this code shows on the device" } else { "Wants to link" }, false),
+                    40.0,
+                    |ui| device(ui, &n),
                     |ui| match &code {
                         Some(code) => {
-                            if ui.button("Confirm").clicked() {
+                            if small_button(ui, "Confirm", None).clicked() {
                                 act = Some(("confirm", k, String::new()));
                             }
-                            if ui.button("Cancel").clicked() {
+                            if small_button(ui, "Cancel", None).clicked() {
                                 act = Some(("cancel", k, String::new()));
                             }
-                            ui.label(egui::RichText::new(code).size(20.0).strong().monospace());
+                            ui.label(egui::RichText::new(code).size(17.0).strong().monospace());
                         }
                         None => {
-                            if ui.button("Link").clicked() {
+                            if small_button(ui, "Link", None).clicked() {
                                 act = Some(("link", k, String::new()));
                             }
                         }
@@ -658,27 +714,7 @@ fn tab_body(ui: &mut egui::Ui) {
                 );
             }
         });
-        title(ui, "Linked");
-        group(ui, |ui| {
-            if s.linked.is_empty() {
-                row(ui, |ui| { ui.label(egui::RichText::new("No linked remotes yet").size(12.5).color(crate::theme::TEXT_DIM())); }, |_| {});
-            }
-            for (i, l) in s.linked.iter().enumerate() {
-                if i > 0 {
-                    hairline(ui);
-                }
-                let on = s.conns.values().any(|c| c.linked && c.id == l.id);
-                row(
-                    ui,
-                    |ui| device(ui, &l.name, if on { "Connected" } else { "Not connected" }, on),
-                    |ui| {
-                        if ui.button("Unlink").clicked() {
-                            act = Some(("unlink", 0, l.id.clone()));
-                        }
-                    },
-                );
-            }
-        });
+        note(ui, "When you link a device, check that the same code shows on both.");
     }
     match act {
         Some(("link", k, _)) => link(k),
