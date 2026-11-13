@@ -8,6 +8,9 @@
 //! The track key commands and the Add button's modifier clicks use the same Details.
 
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
+
+/// The kit a new Pattern track plays when no default patch was saved.
+const PATTERN_KIT: &str = "Drum Synth Kit";
 use lg_core::trackmix::{External, RegionType};
 use lg_core::TrackKind;
 
@@ -722,6 +725,13 @@ pub fn create_tracks(app: &mut App, ctx: &egui::Context, d: &Details, n: usize) 
                             u.slot = 2;
                             tr.plugins.push(u);
                             tr.name = name.clone();
+                        }
+                    }
+                    // (a Pattern track with no saved default plays a drum kit, so its first
+                    // pattern opens on kit rows: Kick, Snare, Clap, hi-hats…)
+                    Inst::DefaultPatch if pattern && !crate::trackops::load_default_patch(app, t) => {
+                        if let Some(it) = crate::soundlib::patch_items().into_iter().find(|i| i.name == PATTERN_KIT) {
+                            crate::browser::load_patch(app, t, &it);
                         }
                     }
                     Inst::DefaultPatch => {
