@@ -338,6 +338,19 @@ impl Engine {
         self.program_changes();
     }
 
+    /// The SoundFont read now (shared, e.g. with the Browser's previews).
+    pub fn soundfont_data(&self) -> Option<Arc<rustysynth::SoundFont>> {
+        self.sf.clone()
+    }
+
+    /// Uses a SoundFont already read (`path`: where it came from).
+    pub fn use_soundfont(&mut self, path: Option<PathBuf>, sf: Arc<rustysynth::SoundFont>) {
+        self.synths.clear();
+        self.sf = Some(sf);
+        self.soundfont = path;
+        self.program_changes();
+    }
+
     /// Each track's instrument plug-in: built when the track's choice changes.
     pub fn build_units(&mut self) {
         self.units.resize_with(self.tracks.len(), Units::default);
@@ -1178,7 +1191,12 @@ pub fn bounce(tracks: Vec<PlayTrack>, tempo: f64, tempo_map: Vec<(u32, f64)>, so
 /// Renders a prepared engine offline from `from` to `to` (ticks), then its tail: `tail_secs`
 /// more at most, ending early once the sound has faded when `until_silent` (Bounce in Place,
 /// freeze files, exporting tracks and regions). Interleaved stereo at RATE.
-pub fn render_offline(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_silent: bool) -> Vec<f32> {
+pub fn render_offline(e: Engine, from: u32, to: u32, tail_secs: f32, until_silent: bool) -> Vec<f32> {
+    render_offline_while(e, from, to, tail_secs, until_silent, &|| true)
+}
+
+/// `render_offline`, stopping early (what's made so far) as soon as `go` says false.
+pub fn render_offline_while(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_silent: bool, go: &dyn Fn() -> bool) -> Vec<f32> {
     // (offline renders run to `to`, past the Project End marker if asked)
     e.end = None;
     e.pos = from as f64;
@@ -1186,6 +1204,9 @@ pub fn render_offline(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_s
     let mut out = Vec::new();
     let mut buf = vec![0f32; 2 * BLOCK];
     while e.pos < to as f64 {
+        if !go() {
+            return out;
+        }
         e.render(&mut buf);
         out.extend_from_slice(&buf);
     }
@@ -1194,6 +1215,9 @@ pub fn render_offline(mut e: Engine, from: u32, to: u32, tail_secs: f32, until_s
     let blocks = (tail_secs.max(0.0) * RATE as f32) as usize / BLOCK;
     let mut quiet = 0;
     for _ in 0..blocks {
+        if !go() {
+            break;
+        }
         e.render(&mut buf);
         out.extend_from_slice(&buf);
         quiet = if buf.iter().all(|x| x.abs() < 1e-4) { quiet + 1 } else { 0 };
