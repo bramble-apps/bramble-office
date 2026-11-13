@@ -72,6 +72,60 @@ pub const INPUT_MODE: u32 = 1032;
 pub const PREDELAY_SYNC: u32 = 1033;
 pub const XOVER: u32 = 1034;
 pub const LATENCY_COMP: u32 = 1035;
+/// The display mode bar's Volume Env and Density Env On/Off (Filter Env On/Off is `FILTER`:
+/// it switches the filter and its envelope together, as Logic's does).
+pub const VOL_ENV_ON: u32 = 1036;
+pub const DENS_ENV_ON: u32 = 1037;
+pub const FILTER_ENV_ON: u32 = FILTER;
+
+/// The display mode bar's views: Volume Env, Filter Env, Density Env, Output EQ.
+pub const VIEWS: [&str; 4] = ["Volume Env", "Filter Env", "Density Env", "Output EQ"];
+
+/// Which display mode bar view a parameter belongs to (None: always in the parameter bar).
+pub fn view_of(id: u32) -> Option<usize> {
+    match id {
+        V_INIT | V_ATTACK | V_DECAY | V_END | DECAY_EXP | VOL_ENV_ON => Some(0),
+        F_INIT | F_ATTACK | F_MAX | F_DECAY | F_END | FILTER | F_MODE | F_RES => Some(1),
+        INIT_DENS | END_DENS | RAMP_TIME | REFL_SHAPE | DENS_ENV_ON => Some(2),
+        EQ_ON => Some(3),
+        _ if (EQ_BASE..EQ_BASE + 18).contains(&id) => Some(3),
+        _ => None,
+    }
+}
+
+/// The view's On/Off parameter.
+pub fn view_switch(view: usize) -> u32 {
+    [VOL_ENV_ON, FILTER, DENS_ENV_ON, EQ_ON][view.min(3)]
+}
+
+/// An envelope's shape over the IR (0..1 in time) for the main display, `points` long, from
+/// the parameter values `g`: 0 volume, 1 filter (cutoff level), 2 density.
+pub fn envelope_curve(g: &dyn Fn(u32) -> f32, which: usize, points: usize) -> Vec<f32> {
+    (0..points)
+        .map(|i| {
+            let t = i as f32 / (points.max(2) - 1) as f32;
+            match which {
+                0 => {
+                    let (vi, va, vd, ve) = (g(V_INIT) / 100.0, g(V_ATTACK) * 0.5, g(V_DECAY).max(0.02), g(V_END) / 100.0);
+                    if t < va {
+                        vi + (1.0 - vi) * t / va.max(1e-4)
+                    } else {
+                        let k = ((t - va) / (vd * (1.0 - va)).max(1e-4)).min(1.0);
+                        if g(DECAY_EXP) >= 0.5 { ve.max(1e-3).powf(k) } else { 1.0 + (ve - 1.0) * k }
+                    }
+                }
+                1 => {
+                    let (fi, fa, fm, fd, fe) = (g(F_INIT) / 100.0, g(F_ATTACK) * 0.5, g(F_MAX) / 100.0, g(F_DECAY), g(F_END) / 100.0);
+                    if t < fa { fi + (fm - fi) * t / fa.max(1e-4) } else { fm + (fe - fm) * ((t - fa) / (fd.max(0.02) * (1.0 - fa)).max(1e-4)).min(1.0) }
+                }
+                _ => {
+                    let (d0, d1, ramp) = (g(INIT_DENS) / 100.0, g(END_DENS).clamp(0.0, 1.0), g(RAMP_TIME).clamp(0.01, 1.0));
+                    d0 + (d1 - d0) * (t / ramp).min(1.0)
+                }
+            }
+        })
+        .collect()
+}
 
 static BASE_PARAMS: [Param; 22] = [
     Param::new(DRY, "Output Dry", -96.0, 6.0, 0.0, Unit::Db),
@@ -130,6 +184,8 @@ static PARAMS: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
         Param::new(PREDELAY_SYNC, "Predelay Sync", 0.0, 1.0, 0.0, Unit::OnOff),
         Param::new(XOVER, "X-Over", 50.0, 2000.0, 300.0, Unit::Hz),
         Param::new(LATENCY_COMP, "Latency Compensation", 0.0, 1.0, 0.0, Unit::OnOff),
+        Param::new(VOL_ENV_ON, "Volume Env", 0.0, 1.0, 1.0, Unit::OnOff),
+        Param::new(DENS_ENV_ON, "Density Env", 0.0, 1.0, 1.0, Unit::OnOff),
     ]);
     v
 });
@@ -292,6 +348,7 @@ impl SpaceConvolver {
         let (vi, va, vd, ve) = (p.get(V_INIT) / 100.0, p.get(V_ATTACK), p.get(V_DECAY), p.get(V_END) / 100.0);
         let exp = p.idx(DECAY_EXP) == 1;
         let filter = p.on(FILTER);
+        let vol_env = p.on(VOL_ENV_ON);
         let (fi, fa, fm, fd, fe) = (p.get(F_INIT) / 100.0, p.get(F_ATTACK), p.get(F_MAX) / 100.0, p.get(F_DECAY), p.get(F_END) / 100.0);
         let att_n = (va * 0.5 * n as f32) as usize;
         let dec_n = (vd.max(0.02) * n as f32).max(1.0);
@@ -300,7 +357,7 @@ impl SpaceConvolver {
             let t = i as f32 / n as f32;
             let att = if i < att_n { vi + (1.0 - vi) * (i as f32 / att_n.max(1) as f32) } else { 1.0 };
             let k = ((i.saturating_sub(att_n)) as f32 / dec_n).min(1.0);
-            let vol = att * if exp { (ve.max(1e-3)).powf(k) } else { 1.0 + (ve - 1.0) * k };
+            let vol = if !vol_env { 1.0 } else { att * if exp { (ve.max(1e-3)).powf(k) } else { 1.0 + (ve - 1.0) * k } };
             let cut = if filter {
                 let fa_n = fa * 0.5;
                 let lvl = if t < fa_n { fi + (fm - fi) * t / fa_n.max(1e-4) } else { fm + (fe - fm) * ((t - fa_n) / (fd.max(0.02) * (1.0 - fa_n)).max(1e-4)).min(1.0) };
@@ -427,12 +484,14 @@ impl SpaceConvolver {
         let secs = (BASE_SECS * p.get(LENGTH) / 100.0 * p.get(SIZE)).clamp(0.05, MAX_SECS);
         let n = ((secs * rate) as usize).min(self.ir[0].len());
         self.ir_len = n;
-        let (vi, va, vd, ve) = (p.get(V_INIT) / 100.0, p.get(V_ATTACK), p.get(V_DECAY), p.get(V_END) / 100.0);
+        // Volume Env off: no attack, a plain fall over the whole length (the room's own decay)
+        let (vi, va, vd, ve) = if p.on(VOL_ENV_ON) { (p.get(V_INIT) / 100.0, p.get(V_ATTACK), p.get(V_DECAY), p.get(V_END) / 100.0) } else { (1.0, 0.0, 1.0, 0.3) };
         let (fi, fa, fm, fd, fe) = (p.get(F_INIT) / 100.0, p.get(F_ATTACK), p.get(F_MAX) / 100.0, p.get(F_DECAY), p.get(F_END) / 100.0);
         let filter = p.on(FILTER);
         let mode = p.idx(F_MODE);
         let res = p.get(F_RES) / 100.0;
-        let (d0, d1) = (p.get(INIT_DENS) / 100.0, p.get(END_DENS).clamp(0.0, 1.0));
+        // Density Env off: full density from the start
+        let (d0, d1) = if p.on(DENS_ENV_ON) { (p.get(INIT_DENS) / 100.0, p.get(END_DENS).clamp(0.0, 1.0)) } else { (1.0, 1.0) };
         let (s_lo, s_hi) = (p.get(SPREAD_LO).clamp(0.0, 2.0) / 2.0, p.get(SPREAD_HI).clamp(0.0, 2.0) / 2.0);
         let att_n = (va * 0.5 * secs * rate) as usize;
         // decay: the volume falls by ~60 dB over (decay time x length), ending at End Level
@@ -670,6 +729,43 @@ mod tests {
         let at3 = (0..20000).max_by(|a, b| y[*a].abs().partial_cmp(&y[*b].abs()).unwrap()).unwrap();
         assert!((at3 as i64 - 2401).abs() <= 2, "{at3}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn display_mode_bar_switches_turn_envelopes_off() {
+        // Volume Env off: a slow attack no longer holds back the start
+        let mut s = SpaceConvolver::new(48000.0);
+        s.set(DRY, -96.0);
+        s.set(V_INIT, 0.0);
+        s.set(V_ATTACK, 1.0);
+        let early = |y: &[f32]| y[..2400].iter().map(|v| v * v).sum::<f32>() / y.iter().map(|v| v * v).sum::<f32>().max(1e-12);
+        let a = early(&impulse_response(&mut s, 48000));
+        s.set(VOL_ENV_ON, 0.0);
+        s.reset();
+        let b = early(&impulse_response(&mut s, 48000));
+        assert!(b > a * 2.0, "{a} {b}");
+        // Density Env off: the start is as dense as the rest
+        let mut s = SpaceConvolver::new(48000.0);
+        s.set(DRY, -96.0);
+        s.set(INIT_DENS, 0.0);
+        s.set(RAMP_TIME, 1.0);
+        let zeros = |y: &[f32]| y[100..2500].iter().filter(|v| v.abs() < 1e-7).count();
+        let za = zeros(&impulse_response(&mut s, 4800));
+        s.set(DENS_ENV_ON, 0.0);
+        s.reset();
+        let zb = zeros(&impulse_response(&mut s, 4800));
+        assert!(zb < za, "{za} {zb}");
+        // the views own their parameters; Filter Env On/Off is the filter's switch
+        assert_eq!(view_of(V_DECAY), Some(0));
+        assert_eq!(view_of(F_RES), Some(1));
+        assert_eq!(view_of(INIT_DENS), Some(2));
+        assert_eq!(view_of(EQ_BASE + 4), Some(3));
+        assert_eq!(view_of(WET), None);
+        assert_eq!(view_switch(1), FILTER);
+        let g = |id: u32| PARAMS.iter().find(|p| p.id == id).map_or(0.0, |p| p.default);
+        let c = envelope_curve(&g, 0, 50);
+        assert_eq!(c.len(), 50);
+        assert!(c[49] < c[10]);
     }
 
     #[test]

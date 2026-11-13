@@ -37,11 +37,13 @@ pub struct DeEsser {
     gr: f32,
     att: f32,
     rel: f32,
+    /// the Detection meter's level (dB; relative to the full band in Relative mode)
+    det: f32,
 }
 
 impl DeEsser {
     pub fn new(rate: f32) -> DeEsser {
-        let mut d = DeEsser { p: Values::new(&DEESSER_PARAMS), rate, band: [Biquad::default(); 2], band_env: Follower::new(rate, 0.5, 30.0), full_env: Follower::new(rate, 0.5, 30.0), gr: 0.0, att: coef(rate, 1.0), rel: coef(rate, 50.0) };
+        let mut d = DeEsser { p: Values::new(&DEESSER_PARAMS), rate, band: [Biquad::default(); 2], band_env: Follower::new(rate, 0.5, 30.0), full_env: Follower::new(rate, 0.5, 30.0), gr: 0.0, att: coef(rate, 1.0), rel: coef(rate, 50.0), det: -96.0 };
         d.update();
         d
     }
@@ -56,6 +58,7 @@ impl DeEsser {
         self.band_env.env = 0.0;
         self.full_env.env = 0.0;
         self.gr = 0.0;
+        self.det = -96.0;
     }
     fn tail_secs(&self) -> f32 {
         0.0
@@ -78,6 +81,7 @@ impl lg_dsp::Effect for DeEsser {
             let band_db = 10.0 * be.max(1e-12).log10();
             // relative: the band's level against the whole signal's (0 dB = all sibilance)
             let level = if relative { band_db - 10.0 * fe.max(1e-12).log10() } else { band_db };
+            self.det = level.max(-96.0);
             let over = level - thr;
             let target = (over * 1.5).clamp(0.0, max);
             let k = if target > self.gr { self.att } else { self.rel };
@@ -95,6 +99,12 @@ impl lg_dsp::Effect for DeEsser {
                 right[i] = r - br * (1.0 - g);
             }
         }
+    }
+
+    /// The Detection meter (dB), the Reduction meter (dB) and whether it is processing (the
+    /// meters turn from blue to yellow).
+    fn readouts(&self) -> Vec<(&'static str, f32)> {
+        vec![("Detection", self.det), ("Reduction", self.gr), ("Processing", if self.gr > 0.05 { 1.0 } else { 0.0 })]
     }
 }
 
@@ -311,6 +321,27 @@ mod tests {
         let mut v2 = v.clone();
         d.process(&mut v, &mut v2);
         assert!((rms(&v) / v0 - 1.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn deesser_meters_report_detection_and_reduction() {
+        let rate = 48000.0;
+        let mut d = DeEsser::new(rate);
+        let mut l: Vec<f32> = (0..24000).map(|i| 0.3 * (crate::util::TAU * 7000.0 * i as f32 / rate).sin()).collect();
+        let mut r = l.clone();
+        d.process(&mut l, &mut r);
+        let ro = d.readouts();
+        let get = |n: &str| ro.iter().find(|x| x.0 == n).unwrap().1;
+        assert!(get("Detection") > d.p.get(1), "{}", get("Detection"));
+        assert!(get("Reduction") > 1.0);
+        assert_eq!(get("Processing"), 1.0);
+        // quiet low tone: nothing processed (blue)
+        let mut d = DeEsser::new(rate);
+        d.set(6, 1.0);
+        let mut l: Vec<f32> = (0..24000).map(|i| 0.01 * (crate::util::TAU * 200.0 * i as f32 / rate).sin()).collect();
+        let mut r = l.clone();
+        d.process(&mut l, &mut r);
+        assert_eq!(d.readouts()[2].1, 0.0);
     }
 
     #[test]

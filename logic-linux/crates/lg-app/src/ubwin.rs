@@ -145,6 +145,11 @@ fn key_note(v: usize) -> u8 {
     if v < 24 { 36 + v as u8 } else { 60 }
 }
 
+/// Where the file loaded into sound `v`'s oscillator 2 came from (for Show in Finder).
+fn sample_path_id(t: usize, v: usize) -> egui::Id {
+    egui::Id::unique(("ub-sample-path", t, v))
+}
+
 fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
     let parts: Vec<&str> = a.split(':').collect();
     let n = |i: usize| parts.get(i).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
@@ -255,6 +260,7 @@ fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
                             v
                         });
                         if let Some(v) = v {
+                            ctx.data_mut(|d| d.insert_temp(sample_path_id(t, v), f.clone()));
                             instwin::checkpoint(app, t, "Load Sample");
                             instwin::set_params(app, t, &[(vid(v, ub::O2_ON), 1.0), (vid(v, ub::O2_MODE), 1.0)]);
                         }
@@ -264,10 +270,21 @@ fn act(app: &mut App, ctx: &egui::Context, t: usize, a: &str) {
             }
         }
         "unload-sample" => {
-            instwin::with_inst::<Ultrabeat, _>(app, t, |u| {
+            if let Some(v) = instwin::with_inst::<Ultrabeat, _>(app, t, |u| {
                 let v = u.selected();
                 u.unload_sample(v);
-            });
+                v
+            }) {
+                ctx.data_mut(|d| d.remove::<std::path::PathBuf>(sample_path_id(t, v)));
+            }
+        }
+        "show-sample" => {
+            // Show in Finder: open the loaded sample's folder in the file manager
+            let v = instwin::with_inst::<Ultrabeat, _>(app, t, |u| u.selected());
+            let dir = v.and_then(|v| ctx.data(|d| d.get_temp::<std::path::PathBuf>(sample_path_id(t, v)))).and_then(|f| f.parent().map(|d| d.to_path_buf()));
+            if let Some(dir) = dir {
+                let _ = std::process::Command::new("xdg-open").arg(dir).stdin(std::process::Stdio::null()).spawn();
+            }
         }
         "learn" => {
             instwin::with_inst::<Ultrabeat, _>(app, t, |u| u.start_learn(n(1)));
@@ -700,6 +717,11 @@ fn oscillator2(p: &mut Pane, s: &Snap, v: usize) {
                 }
                 if ui.add_enabled(s.sample.is_some(), egui::Button::new("Unload Sample")).clicked() {
                     acts.push("unload-sample".into());
+                    ui.close();
+                }
+                let known = s.sample.is_some() && ui.ctx().data(|d| d.get_temp::<std::path::PathBuf>(sample_path_id(p.t, v)).is_some());
+                if ui.add_enabled(known, egui::Button::new("Show in Finder")).clicked() {
+                    acts.push("show-sample".into());
                     ui.close();
                 }
             });
