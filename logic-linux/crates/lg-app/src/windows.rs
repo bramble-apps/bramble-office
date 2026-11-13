@@ -191,8 +191,15 @@ fn screenset_sheet(app: &mut App, ctx: &egui::Context) {
         match &mut next {
             Sheet::Rename(name) => {
                 ui.label("Name");
-                let te = ui.add(egui::TextEdit::singleline(name).desired_width(240.0));
-                crate::widgets::focus_once(ui, &te);
+                ui.horizontal(|ui| {
+                    let te = ui.add(egui::TextEdit::singleline(name).desired_width(240.0));
+                    crate::widgets::focus_once(ui, &te);
+                    // Auto Name: named after the windows it shows (and kept up to date)
+                    if ui.button("Auto Name").on_hover_text("Name the screenset after its visible windows").clicked() {
+                        name.clear();
+                        ok = true;
+                    }
+                });
             }
             Sheet::Duplicate(n, name) => {
                 egui::Grid::new("dup-ss").num_columns(2).show(ui, |ui| {

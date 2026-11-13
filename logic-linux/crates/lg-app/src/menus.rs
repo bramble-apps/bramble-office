@@ -248,7 +248,7 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
     if !it.children.is_empty() && crate::movie::menu_ui(app, ui, &it.label) {
         return;
     }
-    if crate::stretch::menu_ui(app, ui, it) || crate::tm::menu_ui(app, ui, it) || crate::mixext::menu_ui(app, ui, it) || crate::arranging::menu_ui(app, ui, it) || crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) || crate::autoext::menu_ui(app, ui, it) || crate::cellinsp::menu_ui(app, ui, it) || crate::scoreattr::menu_ui(app, ui, it) || crate::stepseq::menu_ui(app, ui, it) {
+    if crate::rolllink::menu_ui(app, ui, it) || crate::stretch::menu_ui(app, ui, it) || crate::tm::menu_ui(app, ui, it) || crate::mixext::menu_ui(app, ui, it) || crate::arranging::menu_ui(app, ui, it) || crate::keycmds::menu_ui(app, ui, it) || crate::prefs::menu_ui(app, ui, it) || crate::recording::menu_ui(app, ui, it) || crate::nav::menu_ui(app, ui, it) || crate::screensets::menu_ui(app, ui, it) || crate::projfile::menu_ui(app, ui, it) || crate::autoext::menu_ui(app, ui, it) || crate::cellinsp::menu_ui(app, ui, it) || crate::scoreattr::menu_ui(app, ui, it) || crate::stepseq::menu_ui(app, ui, it) {
         return;
     }
     if !it.children.is_empty() {
@@ -279,6 +279,9 @@ fn item_ui(app: &mut App, ui: &mut egui::Ui, it: &Item, fired: &mut Option<Strin
 }
 
 pub(crate) fn checked(app: &App, label: &str) -> bool {
+    if let Some(c) = crate::rolllink::checked(app, label) {
+        return c;
+    }
     if let Some(c) = crate::tm::checked(app, label).or_else(|| crate::autoext::checked(app, label)) {
         return c;
     }
@@ -373,6 +376,7 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
             }
             let resp = ui.menu_button(format!("{title}    "), |ui| {
                 app.midi.menu_roll = name.starts_with("pianoroll");
+                crate::rolllink::set_menu(name);
                 show_items(app, ui, local(name));
                 if *name == "pianoroll-View" {
                     crate::rollextras::view_items(app, ui);

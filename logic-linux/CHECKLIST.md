@@ -149,13 +149,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 399 | 596 | 66% |
-| Local menus | 748 | 1191 | 62% |
-| Right-click menus | 1469 | 2577 | 57% |
+| Menu bar | 402 | 596 | 67% |
+| Local menus | 760 | 1191 | 63% |
+| Right-click menus | 1477 | 2581 | 57% |
 | Key commands | 1808 | 2207 | 81% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 399 of 596
+## Menu bar: 402 of 596
 
 
 <details><summary>Bramble Studio — 26/48</summary>
@@ -297,7 +297,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 98/166</summary>
+<details><summary>Edit — 100/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -338,7 +338,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Same-Colored
   - [ ] Instrument
   - [ ] MIDI
-  - [ ] Audio
+  - [x] Audio
   - [ ] Aux
   - [ ] Sub/VCA
   - [x] Summing Stack
@@ -375,7 +375,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -783,7 +783,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Help — 12/16</summary>
+<details><summary>Help — 13/16</summary>
 
 - [ ] Send Bramble Studio Feedback
 - [x] Quick Help
@@ -794,7 +794,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Bramble Studio Help
 - [x] Bramble Studio Instruments
 - [x] Bramble Studio Effects
-- [ ] Bramble Studio Control Surfaces Support
+- [x] Bramble Studio Control Surfaces Support
 - [x] What’s New in Bramble Studio
 - [x] Release Notes
 - [x] Bramble Studio Support
@@ -804,7 +804,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 748 of 1191
+## Local menus (Edit / Functions / View in each area): 760 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -894,7 +894,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 69/118</summary>
+<details><summary>audiotrack-Edit — 70/118</summary>
 
 - [x] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -954,7 +954,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -1045,7 +1045,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Edit — 66/100</summary>
+<details><summary>eventlist-Edit — 67/100</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1100,7 +1100,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -1183,9 +1183,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-View — 4/17</summary>
+<details><summary>eventlist-View — 5/17</summary>
 
-- [ ] Link
+- [x] Link
   - [x] Off
   - [ ] Same Level
   - [x] Content
@@ -1236,14 +1236,14 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-more — 10/15</summary>
+<details><summary>mixer-more — 11/15</summary>
 
 - [ ] Sends on Faders
   - [x] Off
 - [x] Single
 - [ ] Tracks
 - [x] All
-- [ ] Audio
+- [x] Audio
 - [x] Inst
 - [ ] Aux
 - [x] Bus
@@ -1269,13 +1269,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>mixer-View — 26/52</summary>
+<details><summary>mixer-View — 27/52</summary>
 
 - [ ] Hide Legend  `⌥⇧I`
 - [ ] Link Control Surfaces
 - [x] Autoscroll to Selection
 - [ ] Scroll To
-  - [ ] Audio
+  - [x] Audio
   - [x] Instruments
   - [x] Auxiliaries
   - [x] Buses
@@ -1326,7 +1326,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-Edit — 76/100</summary>
+<details><summary>pianoroll-Edit — 77/100</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1381,7 +1381,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -1465,9 +1465,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-View — 8/16</summary>
+<details><summary>pianoroll-View — 9/16</summary>
 
-- [ ] Link
+- [x] Link
 - [ ] One Track
 - [ ] Selected Regions
 - [x] Hide Local Inspector  `⌥⇧I`
@@ -1688,9 +1688,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>score-View — 23/38</summary>
+<details><summary>score-View — 24/38</summary>
 
-- [ ] Link
+- [x] Link
   - [x] Off
   - [ ] Same Level
   - [x] Content
@@ -1829,7 +1829,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 97/168</summary>
+<details><summary>tracks-Edit — 99/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1870,7 +1870,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Same-Colored
   - [ ] Instrument
   - [ ] MIDI
-  - [ ] Audio
+  - [x] Audio
   - [ ] Aux
   - [ ] Sub/VCA
   - [x] Summing Stack
@@ -1907,7 +1907,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -2068,13 +2068,13 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-more — 9/45</summary>
+<details><summary>tracks-more — 10/45</summary>
 
 - [x] Snap
   - [ ] Snap to Grid  `⌘G`
   - [ ] Smart
   - [ ] Bar
-  - [ ] Beat
+  - [x] Beat
   - [ ] Division
   - [ ] Ticks
   - [ ] Frames
@@ -2118,9 +2118,9 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-View — 9/25</summary>
+<details><summary>tracks-View — 10/25</summary>
 
-- [ ] Link
+- [x] Link
   - [x] Off
   - [ ] Same Level
   - [x] Content
@@ -2148,7 +2148,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1469 of 2577
+## Right-click menus: 1477 of 2581
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -2352,6 +2352,15 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Rec-End Action
     - [x] Play Cell
     - [x] Continue Recording
+
+</details>
+
+<details><summary>liveloops-empty-audio-cell — 4/4</summary>
+
+- [x] Create Cell
+- [x] Add Audio File…  `⇧⌘I`
+- [x] Paste  `⌘V`
+- [x] Stop Playing Cell
 
 </details>
 
@@ -3758,7 +3767,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-note — 47/321</summary>
+<details><summary>pianoroll-note — 48/321</summary>
 
 - [x] Define as Default Note
 - [x] Cut  `⌘X`
@@ -4049,7 +4058,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 - [x] Nudge Region/Event/Marquee Length Right by Nudge Value  `⌥⇧→`
 - [ ] Set Nudge Value to
   - [ ] Bar  `⌃⌥M`
-  - [ ] Beat  `⌃⌥B`
+  - [x] Beat  `⌃⌥B`
   - [ ] Division  `⌃⌥D`
   - [ ] 10 Ticks
   - [ ] Tick  `⌃⌥T`
@@ -4099,7 +4108,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 118/174</summary>
+<details><summary>region-audio — 119/174</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4162,7 +4171,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -4278,7 +4287,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 142/212</summary>
+<details><summary>region-midi — 143/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4380,7 +4389,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`
@@ -4592,7 +4601,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 142/212</summary>
+<details><summary>take-folder-region — 143/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4694,7 +4703,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [ ] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
-    - [ ] Beat  `⌃⌥B`
+    - [x] Beat  `⌃⌥B`
     - [ ] Division  `⌃⌥D`
     - [ ] 10 Ticks
     - [ ] Tick  `⌃⌥T`

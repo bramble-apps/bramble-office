@@ -1293,6 +1293,9 @@ impl App {
         if let Some(l) = crate::stmulti::menu_label(self, label) {
             return l;
         }
+        if let Some(l) = crate::liveloops::menu_label(self, label) {
+            return l;
+        }
         match label {
             "Hide Browser" if !self.show_browser => "Show Browser".into(),
             "Hide Inspector" if !self.show_inspector => "Show Inspector".into(),
@@ -1316,7 +1319,7 @@ impl App {
     }
 
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
-        if crate::audioedit::command(self, cmd) || crate::barfit::command(self, cmd) || crate::listwin::command(self, ctx, cmd) {
+        if crate::audioedit::command(self, cmd) || crate::rolllink::command(self, cmd) || crate::barfit::command(self, cmd) || crate::listwin::command(self, ctx, cmd) {
             return;
         }
         match cmd {
