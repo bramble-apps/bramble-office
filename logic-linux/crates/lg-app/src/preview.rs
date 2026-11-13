@@ -276,7 +276,7 @@ pub fn play_rendered(app: &mut App, id: &str, gain: f32, seconds: f64, render: R
     app.preview.looped = false;
 }
 
-/// Samples still being made: silence until they're ready (two seconds at most), then them.
+/// Samples still being made: silence until they're ready (15 s at most), then them.
 struct Pending {
     ready: Arc<std::sync::OnceLock<Vec<f32>>>,
     at: usize,
@@ -293,7 +293,10 @@ impl Iterator for Pending {
         }
         let Some(s) = self.ready.get() else {
             self.waited += 1;
-            return (self.waited < 4 * crate::audio::RATE as usize).then_some(0.0);
+            // (a first click also loads the patch onto the track, so the render can take a few
+            // seconds while the instrument's samples load: keep waiting; a newer preview or Stop
+            // ends this one through `stop`)
+            return (self.waited < 30 * crate::audio::RATE as usize).then_some(0.0);
         };
         let x = *s.get(self.at)?;
         self.at += 1;
