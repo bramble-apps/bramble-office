@@ -35,7 +35,7 @@ use crate::soundlib::{self as sl, Item, Kind, LoopType, Search};
 
 /// The Browser key commands and menu items this file runs.
 pub const COMMANDS: &[&str] = &[
-    "View Info", "Play/Stop Preview", "Clear Applied Tags", "Toggle All Filters", "Save Patch for Selected Track…", "Enable Patch Merging", "Add Location", "Add Smart Search", "New Track with Selected Item", "Replace Patch", "Find Similar", "Add to Favorites", "Rename", "Delete", "Show in Finder", "Toggle Columns View",
+    "View Info", "Play/Stop Preview", "Clear Applied Tags", "Toggle All Filters", "Save Patch for Selected Track…", "Save as Patch", "Enable Patch Merging", "Add Location", "Add Smart Search", "New Track with Selected Item", "Replace Patch", "Find Similar", "Add to Favorites", "Rename", "Delete", "Show in Finder", "Toggle Columns View",
     "Search in Browser", "Show Loops & One-Shots in Browser", "Show Instruments in Browser", "Show Effects in Browser",
     // the loop shortcut menu
     "New Track with Loop", "Place Loop at Playhead", "Create Track with Loop", "Quick Sampler", "Sample Alchemy", "Drum Machine Designer",
@@ -990,10 +990,13 @@ pub fn run(app: &mut App, name: &str, focused: bool) -> bool {
             app.br.typed.clear();
         }
         "Toggle All Filters" => app.br.all_filters = !app.br.all_filters,
-        "Save Patch for Selected Track…" => {
+        // (the track header's shortcut menu ▸ Save as Patch too)
+        "Save Patch for Selected Track…" | "Save as Patch" => {
             if let Some(t) = app.selected_track.filter(|_| !track_kind(app).is_some_and(|k| k.2)) {
                 let n = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
                 app.br.patch_name = Some(n);
+                // (its name sheet is the Browser's)
+                app.show_browser = true;
             }
         }
         "Enable Patch Merging" => {
