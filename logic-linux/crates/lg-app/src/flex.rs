@@ -83,6 +83,12 @@ pub const COMMANDS: &[&str] = &[
 pub struct TrackFlex {
     pub on: bool,
     pub mode: Mode,
+    /// The Track inspector's parameters of the Flex Time algorithms (Logic's defaults).
+    pub params: lg_audio::flex::Params,
+    /// Flex Pitch's: Formant Shift (semitones, added to the notes' own) and Formants (false:
+    /// Process always, true: Keep Unvoiced Formants).
+    pub formant_shift: f32,
+    pub keep_unvoiced: bool,
 }
 
 /// A file's Flex Pitch analysis (the whole file).
@@ -161,6 +167,7 @@ pub struct State {
     pub scale_root: u8,
     pub scale_minor: bool,
     gain_drag: bool,
+    param_edit_at: f64,
     /// The Flex Pitch notes selected in the Audio Track Editor: (track, region, note).
     pub note_sel: Vec<(usize, usize, usize)>,
     /// Remove Silence's sheet (open) and its last values.
@@ -181,7 +188,7 @@ pub fn track(app: &App, t: usize) -> TrackFlex {
     let on = app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| {
         (0..tr.regions.len()).any(|r| app.audio_edit.regions.get(&(t, r)).is_some_and(|x| !x.flex.is_empty() || !x.pitch.is_empty() || x.follow))
     });
-    TrackFlex { on, mode: Mode::Polyphonic }
+    TrackFlex { on, mode: Mode::Polyphonic, ..Default::default() }
 }
 
 /// Before an edit of flex settings, markers or the project: one undo step for all of it.
@@ -212,7 +219,9 @@ fn sync_undo(app: &mut App) {
 
 pub fn set_mode(app: &mut App, t: usize, mode: Mode) {
     checkpoint(app, "Flex Mode");
-    app.flex.tracks.insert(t, TrackFlex { on: true, mode });
+    let was = track(app, t);
+    app.flex.tracks.insert(t, TrackFlex { on: true, mode, ..was });
+    freeze_source_only(app, t);
     app.after_edit();
 }
 
@@ -222,10 +231,25 @@ pub fn set_mode_all(app: &mut App, mode: Mode) {
     let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
     for t in 0..n {
         if is_audio_track(app, t) {
-            app.flex.tracks.insert(t, TrackFlex { on: true, mode });
+            let was = track(app, t);
+            app.flex.tracks.insert(t, TrackFlex { on: true, mode, ..was });
+            freeze_source_only(app, t);
         }
     }
     app.after_edit();
+}
+
+/// Choosing a flex algorithm switches the track's Freeze Mode to Source Only (Logic's).
+fn freeze_source_only(app: &mut App, t: usize) {
+    if let Some(s) = crate::tm::set_mut(app, t) {
+        s.freeze_mode = lg_core::trackmix::FreezeMode::SourceOnly;
+    }
+}
+
+/// The track's Flex Time parameters and Flex Pitch's Formants choice, as the engine plays them.
+pub fn params_for(app: &App, t: usize) -> (lg_audio::flex::Params, bool) {
+    let f = track(app, t);
+    (f.params, f.keep_unvoiced)
 }
 
 fn is_audio_track(app: &App, t: usize) -> bool {
@@ -386,7 +410,7 @@ fn stretch_reg(app: &mut App, g: Reg, len: f64) {
     // the Time Stretching Algorithm on a track without Flex of its own (stretch.rs)
     if !app.flex.tracks.contains_key(&g.t) {
         let mode = crate::stretch::mode(&app.ctx);
-        app.flex.tracks.insert(g.t, TrackFlex { on: true, mode });
+        app.flex.tracks.insert(g.t, TrackFlex { on: true, mode, ..Default::default() });
     }
 }
 
@@ -416,7 +440,7 @@ pub fn quantize_audio(app: &mut App, grid: u32) -> bool {
     }
     for &(t, _) in &ts {
         if !track(app, t).on {
-            app.flex.tracks.insert(t, TrackFlex { on: true, mode: Mode::Polyphonic });
+            app.flex.tracks.insert(t, TrackFlex { on: true, mode: Mode::Polyphonic, ..Default::default() });
         }
     }
     let keep = app.quantize_grid;
@@ -492,7 +516,17 @@ pub fn plan_for(app: &App, t: usize, rg: &lg_core::Region, x: &RegionAudio) -> (
     if !tf.on {
         return (Mode::Polyphonic, Vec::new(), Vec::new());
     }
-    let notes = if tf.mode == Mode::Pitch { x.pitch.iter().filter(|n| !n.is_neutral()).cloned().collect() } else { Vec::new() };
+    let notes = if tf.mode != Mode::Pitch {
+        Vec::new()
+    } else if tf.formant_shift.abs() > 1e-3 {
+        // (the track's Formant Shift: on every note)
+        let file = rg.audio.as_ref().map(|a| a.file.clone()).unwrap_or_default();
+        let mut v = region_notes(app, x, &file, usize::MAX);
+        v.iter_mut().for_each(|n| n.formant_cents += tf.formant_shift * 100.0);
+        v
+    } else {
+        x.pitch.iter().filter(|n| !n.is_neutral()).cloned().collect()
+    };
     let mut flex = x.flex.clone();
     if x.follow {
         if let Some(f) = follow_anchors(app, rg, x) {
@@ -1853,6 +1887,88 @@ fn hslider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, lo: f32, hi: f
     changed
 }
 
+/// The Track inspector's Flex rows on an audio track (Logic's): Flex Mode, then the chosen
+/// algorithm's parameters (Slicing: Fill Gaps, Decay, Slice Length; Rhythmic: Loop Length,
+/// Decay, Loop Offset; Monophonic: Percussive; Polyphonic: Complex; Tempophone: Grain Size,
+/// Crossfade; Flex Pitch: Formant Shift, Formants). Shift-choosing a mode sets every audio track.
+pub fn inspector_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize) -> f32 {
+    use crate::inspector::{label, slot_rect, ROW};
+    if !is_audio_track(app, t) {
+        return y;
+    }
+    let p = ui.painter().clone();
+    let id = ui.scope_id().with(("trk-flex", t));
+    let f = track(app, t);
+    let names: Vec<&str> = std::iter::once("Off").chain(Mode::ALL.iter().map(|m| m.name())).collect();
+    let cur = if f.on { Mode::ALL.iter().position(|m| *m == f.mode).map_or(0, |k| k + 1) } else { 0 };
+    label(&p, area, y, "Flex Mode");
+    if let Some(k) = crate::widgets::choice_slot(ui, slot_rect(area, y), id.with("mode"), cur, &names) {
+        if k == 0 {
+            checkpoint(app, "Flex On/Off");
+            app.flex.tracks.insert(t, TrackFlex { on: false, ..f });
+            app.after_edit();
+        } else if ui.input(|i| i.modifiers.shift) {
+            set_mode_all(app, Mode::ALL[k - 1]);
+        } else {
+            set_mode(app, t, Mode::ALL[k - 1]);
+        }
+    }
+    y += ROW;
+    if !f.on {
+        return y;
+    }
+    let mut n = f;
+    let check = |ui: &mut egui::Ui, y: &mut f32, key: &str, name: &str, v: &mut bool| {
+        label(&p, area, *y, name);
+        crate::widgets::check_slot(ui, slot_rect(area, *y), id.with(key), v);
+        *y += ROW;
+    };
+    let num = |ui: &mut egui::Ui, y: &mut f32, key: &str, name: &str, v: &mut f32, lo: f32, hi: f32, def: f32, step: f32, shown: &dyn Fn(f32) -> String| {
+        label(&p, area, *y, name);
+        crate::widgets::value_slot(ui, slot_rect(area, *y), id.with(key), v, lo, hi, def, step, shown);
+        *y += ROW;
+    };
+    let d = lg_audio::flex::Params::default();
+    match f.mode {
+        Mode::Slicing => {
+            check(ui, &mut y, "fill", "Fill Gaps", &mut n.params.fill_gaps);
+            num(ui, &mut y, "decay", "Decay", &mut n.params.decay, 0.0, 1.0, d.decay, 0.01, &|v| format!("{v:.2}"));
+            num(ui, &mut y, "slen", "Slice Length", &mut n.params.slice_length, 0.0, 100.0, 100.0, 1.0, &|v| format!("{v:.0} %"));
+        }
+        Mode::Rhythmic => {
+            num(ui, &mut y, "llen", "Loop Length", &mut n.params.loop_length, 0.0, 100.0, 100.0, 1.0, &|v| format!("{v:.0} %"));
+            num(ui, &mut y, "ldecay", "Decay", &mut n.params.loop_decay, 0.0, 1.0, 0.0, 0.01, &|v| format!("{v:.2}"));
+            num(ui, &mut y, "loff", "Loop Offset", &mut n.params.loop_offset_ms, 0.0, 100.0, 0.0, 1.0, &|v| format!("{v:.0} ms"));
+        }
+        Mode::Monophonic => check(ui, &mut y, "perc", "Percussive", &mut n.params.percussive),
+        Mode::Polyphonic => check(ui, &mut y, "complex", "Complex", &mut n.params.complex),
+        Mode::Tempophone => {
+            num(ui, &mut y, "grain", "Grain Size", &mut n.params.grain_ms, 5.0, 500.0, d.grain_ms, 1.0, &|v| format!("{v:.0} ms"));
+            num(ui, &mut y, "xfade", "Crossfade", &mut n.params.crossfade, 0.0, 1.0, d.crossfade, 0.01, &|v| format!("{v:.2}"));
+        }
+        Mode::Pitch => {
+            num(ui, &mut y, "fshift", "Formant Shift", &mut n.formant_shift, -12.0, 12.0, 0.0, 1.0, &|v| format!("{v:+.0}"));
+            label(&p, area, y, "Formants");
+            if let Some(k) = crate::widgets::choice_slot(ui, slot_rect(area, y), id.with("formants"), n.keep_unvoiced as usize, &["Process always", "Keep Unvoiced Formants"]) {
+                n.keep_unvoiced = k == 1;
+            }
+            y += ROW;
+        }
+        Mode::Speed => {}
+    }
+    if n != f {
+        // (one undo step a drag: a new step only after a pause)
+        let now = ui.input(|i| i.time);
+        if now - app.flex.param_edit_at > 0.6 {
+            checkpoint(app, "Flex Parameter");
+        }
+        app.flex.param_edit_at = now;
+        app.flex.tracks.insert(t, n);
+        app.after_edit();
+    }
+    y
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1891,7 +2007,7 @@ mod tests {
             lg_audio::stretch::detect_pitch(&l[20_000..26_000], 48_000, 60.0, 1500.0).unwrap()
         };
         // stretched to 0.75 s → 1.0 s by a marker at the end: same pitch, longer
-        let plan = audioedit::Plan { file: path.clone(), offset: 0, seconds: 1.0, gain_db: 0.0, fades: Default::default(), flex: vec![(36_000, 48_000)], reverse: false, mode: Mode::Polyphonic, notes: Vec::new() };
+        let plan = audioedit::Plan { file: path.clone(), offset: 0, seconds: 1.0, gain_db: 0.0, fades: Default::default(), flex: vec![(36_000, 48_000)], reverse: false, mode: Mode::Polyphonic, notes: Vec::new(), params: Default::default(), keep_unvoiced: false };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 96_000);
         assert!((pitch_of(&out) - 220.0).abs() < 3.0, "{}", pitch_of(&out));

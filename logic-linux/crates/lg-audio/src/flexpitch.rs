@@ -356,6 +356,12 @@ pub fn to_midi(notes: &[Note]) -> Vec<(usize, usize, u8, u8)> {
 
 /// Plays the notes' edits on interleaved `data` (its pitch track `tr`); the length stays.
 pub fn render(data: &[f32], channels: usize, tr: &Track, notes: &[Note]) -> Vec<f32> {
+    render_opts(data, channels, tr, notes, false)
+}
+
+/// `render`; `keep_unvoiced` (Logic's Formants: Keep Unvoiced Formants): the formants of the
+/// unvoiced parts (sibilants, plosives) left as they are.
+pub fn render_opts(data: &[f32], channels: usize, tr: &Track, notes: &[Note], keep_unvoiced: bool) -> Vec<f32> {
     let c = channels.max(1);
     let frames = data.len() / c;
     if notes.iter().all(Note::is_neutral) || frames == 0 {
@@ -386,7 +392,7 @@ pub fn render(data: &[f32], channels: usize, tr: &Track, notes: &[Note]) -> Vec<
             let slow = if v.is_empty() { centre } else { v.iter().sum::<f32>() / v.len() as f32 };
             let new = centre + n.shift_cents + n.drift_at(i as f32 / (b - a) as f32) * (slow - centre) + n.vibrato * (here - slow);
             ratio[k] = 2f32.powf((new - here) / 1200.0);
-            formant[k] = 2f32.powf(n.formant_cents / 1200.0);
+            formant[k] = if keep_unvoiced && tr.f0[k] <= 0.0 { 1.0 } else { 2f32.powf(n.formant_cents / 1200.0) };
             gain[k] = 10f32.powf(n.gain_db / 20.0);
         }
     }

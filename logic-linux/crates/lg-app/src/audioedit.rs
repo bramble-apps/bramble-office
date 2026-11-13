@@ -477,6 +477,9 @@ pub struct Plan {
     /// The track's Flex mode, and Flex Pitch's edited notes (frames of the file).
     pub mode: lg_audio::flex::Mode,
     pub notes: Vec<lg_audio::flexpitch::Note>,
+    /// The track's Flex Time parameters, and Flex Pitch's Keep Unvoiced Formants.
+    pub params: lg_audio::flex::Params,
+    pub keep_unvoiced: bool,
 }
 
 impl Plan {
@@ -504,14 +507,14 @@ impl Plan {
                 n.end -= self.offset;
                 n
             }).collect();
-            part.data = lg_audio::flexpitch::render(&part.data, c, &tr, &notes);
+            part.data = lg_audio::flexpitch::render_opts(&part.data, c, &tr, &notes, self.keep_unvoiced);
         }
         if !self.flex.is_empty() {
             let trs = match self.mode {
-                lg_audio::flex::Mode::Slicing | lg_audio::flex::Mode::Rhythmic | lg_audio::flex::Mode::Polyphonic => lg_audio::transients::detect(&part.data, part.channels, part.rate, 0.5),
+                lg_audio::flex::Mode::Slicing | lg_audio::flex::Mode::Rhythmic | lg_audio::flex::Mode::Polyphonic => lg_audio::transients::detect(&part.data, part.channels, part.rate, self.params.sensitivity()),
                 _ => Vec::new(),
             };
-            part.data = lg_audio::flex::render(&part.data, part.channels, part.rate, &self.flex, out_frames, self.mode, &trs);
+            part.data = lg_audio::flex::render_with(&part.data, part.channels, part.rate, &self.flex, out_frames, self.mode, &trs, &self.params);
         }
         part.data.resize(out_frames.min(part.data.len() / part.channels) * part.channels, 0.0);
         if self.reverse {
@@ -541,7 +544,8 @@ pub fn playback(app: &App) -> Vec<(usize, u32, Plan)> {
             let x = extras(app, t, r);
             let seconds = app.seconds_at((rg.start + rg.length) as f64) - app.seconds_at(rg.start as f64);
             let (mode, flex, notes) = crate::flex::plan_for(app, t, rg, &x);
-            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex, reverse: x.reverse, mode, notes }));
+            let (params, keep_unvoiced) = crate::flex::params_for(app, t);
+            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex, reverse: x.reverse, mode, notes, params, keep_unvoiced }));
         }
     }
     out
@@ -3089,7 +3093,7 @@ mod tests {
         let mut a = AudioFile::new(48_000, 1, vec![0.5; 48_000]);
         a.bits = 16;
         a.write(&path).unwrap();
-        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false, mode: Default::default(), notes: Vec::new() };
+        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false, mode: Default::default(), notes: Vec::new(), params: Default::default(), keep_unvoiced: false };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 48_000);
         assert_eq!(out[0], 0.0);

@@ -817,6 +817,7 @@ pub fn inspector_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, 
         label(&p, area, y, "Q-Reference");
         crate::widgets::check_slot(ui, slot_rect(area, y), id.with("qref"), &mut new.q_reference);
         y += ROW;
+        y = crate::flex::inspector_rows(app, ui, area, y, t);
     } else {
         let names: Vec<&str> = RegionType::ALL.iter().map(|x| x.name()).collect();
         let cur = RegionType::ALL.iter().position(|x| *x == set.default_region).unwrap_or(0);

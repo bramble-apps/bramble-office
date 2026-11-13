@@ -613,7 +613,7 @@ fn place(app: &mut App, t: usize, d: &DragItem, at: u32) -> bool {
         // one flex marker at the loop's end: the loop plays at the project tempo
         let src = (secs * rate) as usize;
         x.flex = vec![(src, (src as f64 * k) as usize)];
-        app.flex.tracks.insert(t, crate::flex::TrackFlex { on: true, mode: lg_audio::flex::Mode::Polyphonic });
+        app.flex.tracks.insert(t, crate::flex::TrackFlex { on: true, mode: lg_audio::flex::Mode::Polyphonic, ..Default::default() });
     }
     // Auto Leveling: the region gain brings loops to one level (the file is left as it is)
     if app.br.saved.flag("auto_level", true) && it.is_some() {
