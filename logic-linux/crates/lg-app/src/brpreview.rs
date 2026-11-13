@@ -129,20 +129,24 @@ fn chord(app: &mut App, it: &Item) {
     let cat = crate::browser::patch_category(&it.name);
     let program = crate::app::patch_program(&cat, &it.name);
     let drums = is_kit(&cat, &it.category) || kit_named(&it.name);
-    let sf = app.engine.lock().unwrap_or_else(|e| e.into_inner()).soundfont.clone();
+    let (sf, data) = {
+        let e = app.engine.lock().unwrap_or_else(|e| e.into_inner());
+        (e.soundfont.clone(), e.soundfont_data())
+    };
     let name = it.name.clone();
     // (LG_PREVIEW_WAV=<dir>, for checks without a sound device: each chord also goes to a WAV)
     let dump = std::env::var_os("LG_PREVIEW_WAV").map(std::path::PathBuf::from);
-    let render = move || {
-        let s = render_preview(sf.as_deref(), &name, program, drums);
-        if let Some(d) = dump {
+    let render: crate::preview::Render = Box::new(move |go: &dyn Fn() -> bool| {
+        let _one = Rendering::start();
+        let s = render_preview_with(sf.as_deref(), data, &name, program, drums, go);
+        if let Some(d) = dump.filter(|_| go()) {
             let (l, r): (Vec<f32>, Vec<f32>) = s.chunks(2).map(|f| (f[0], f.get(1).copied().unwrap_or(0.0))).unzip();
             let rate = crate::audio::RATE;
             let _ = crate::projaudio::write_wav(&d.join(format!("{name}.wav")), &[l, r], rate, rate, 16);
             eprintln!("LG_PREVIEW_WAV {name} program {program}");
         }
         s
-    };
+    });
     let gain = app.br.volume;
     crate::preview::play_rendered(app, &it.id, gain, CHORD_SECONDS + 0.5, render);
 }
@@ -166,9 +170,44 @@ pub fn render_chord(soundfont: Option<&std::path::Path>, instrument: &str, progr
 /// on a patch set to mono, as a preview of its sound), or for a drum kit a bar of the kit
 /// (kick, snare, hi-hat) on the drum channel.
 pub fn render_preview(soundfont: Option<&std::path::Path>, instrument: &str, program: u8, drums: bool) -> Vec<f32> {
+    render_preview_with(soundfont, None, instrument, program, drums, &|| true)
+}
+
+/// Renders running now and the most at once (the preview thread renders one at a time).
+static RENDERING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static MOST_AT_ONCE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+struct Rendering;
+
+impl Rendering {
+    fn start() -> Rendering {
+        use std::sync::atomic::Ordering::SeqCst;
+        let n = RENDERING.fetch_add(1, SeqCst) + 1;
+        MOST_AT_ONCE.fetch_max(n, SeqCst);
+        Rendering
+    }
+}
+
+impl Drop for Rendering {
+    fn drop(&mut self) {
+        RENDERING.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// The most preview renders that ran at once.
+pub fn most_at_once() -> usize {
+    MOST_AT_ONCE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// `render_preview` with the engine's SoundFont already read (`data`, so each preview doesn't
+/// read the file again) and a check `go` that stops it early (a newer preview replaced it).
+pub fn render_preview_with(soundfont: Option<&std::path::Path>, data: Option<std::sync::Arc<rustysynth::SoundFont>>, instrument: &str, program: u8, drums: bool, go: &dyn Fn() -> bool) -> Vec<f32> {
     let mut e = crate::audio::Engine::new();
     e.tempo = 120.0;
-    e.load_soundfont(soundfont);
+    match data {
+        Some(sf) => e.use_soundfont(soundfont.map(std::path::Path::to_path_buf), sf),
+        None => e.load_soundfont(soundfont),
+    }
     let ppq = lg_core::events::PPQ as f64;
     let len = (CHORD_SECONDS * 2.0 * ppq) as u32; // 120 BPM: two beats a second
     let notes = if drums { kit_notes(len) } else { chord_notes(len) };
@@ -193,7 +232,7 @@ pub fn render_preview(soundfont: Option<&std::path::Path>, instrument: &str, pro
     if let Some(ins) = e.units.get_mut(0).and_then(|u| u.instrument.as_mut()) {
         poly(ins.as_mut());
     }
-    crate::audio::render_offline(e, 0, len, 0.5, true)
+    crate::audio::render_offline_while(e, 0, len, 0.5, true, go)
 }
 
 /// A mono-set instrument made polyphonic (three voices at least) for the chord: Polyphony /

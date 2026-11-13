@@ -91,7 +91,9 @@ impl Preview {
         if let Some(s) = self.stop.take() {
             s.store(true, Ordering::Relaxed);
         }
-        self.playing = None;
+        if self.playing.take().is_some() {
+            cancel_render();
+        }
     }
 
     pub fn is_playing(&self, id: &str, now: f64) -> bool {
@@ -179,16 +181,92 @@ pub fn toggle(app: &mut App, id: &str, path: &Path, gain: f32, segment: Option<(
     app.preview.looped = looped;
 }
 
+/// A render for the preview thread: it's given a check that says whether to go on (false: a
+/// newer preview replaced it, so it stops early).
+pub type Render = Box<dyn FnOnce(&dyn Fn() -> bool) -> Vec<f32> + std::marker::Send>;
+
+struct Job {
+    generation: u64,
+    render: Render,
+    ready: Arc<std::sync::OnceLock<Vec<f32>>>,
+}
+
+/// The one thread that renders previews (patches' chords): one render at a time; a new
+/// request replaces one still waiting and tells the one in progress to stop; a render that
+/// panics only ends that preview.
+struct Renderer {
+    slot: std::sync::Mutex<Option<Job>>,
+    wake: std::sync::Condvar,
+    generation: std::sync::atomic::AtomicU64,
+    busy: AtomicBool,
+}
+
+fn renderer() -> &'static Renderer {
+    static R: std::sync::OnceLock<&'static Renderer> = std::sync::OnceLock::new();
+    R.get_or_init(|| {
+        let r: &'static Renderer = Box::leak(Box::new(Renderer { slot: Default::default(), wake: Default::default(), generation: Default::default(), busy: AtomicBool::new(false) }));
+        let _ = std::thread::Builder::new().name("preview-render".into()).spawn(move || loop {
+            let job = {
+                let mut slot = r.slot.lock().unwrap_or_else(|e| e.into_inner());
+                loop {
+                    if let Some(j) = slot.take() {
+                        break j;
+                    }
+                    slot = r.wake.wait(slot).unwrap_or_else(|e| e.into_inner());
+                }
+            };
+            let current = |g: u64| r.generation.load(Ordering::SeqCst) == g;
+            if !current(job.generation) {
+                continue;
+            }
+            r.busy.store(true, Ordering::SeqCst);
+            let g = job.generation;
+            let go = move || current(g);
+            let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (job.render)(&go)));
+            r.busy.store(false, Ordering::SeqCst);
+            match out {
+                Ok(s) if current(g) => {
+                    let _ = job.ready.set(s);
+                }
+                Ok(_) => {}
+                Err(_) => {
+                    eprintln!("preview render failed (the app goes on)");
+                    let _ = job.ready.set(Vec::new());
+                }
+            }
+        });
+        r
+    })
+}
+
+/// Stops the preview render in progress or waiting (a newer preview, or Stop).
+pub fn cancel_render() {
+    renderer().generation.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Whether the preview thread is rendering now (for tests).
+pub fn rendering() -> bool {
+    let r = renderer();
+    r.busy.load(Ordering::SeqCst) || r.slot.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+}
+
+/// Samples for `render` made on the preview thread (replacing any render before it): they
+/// appear in the returned cell when ready.
+pub fn submit_render(render: Render) -> Arc<std::sync::OnceLock<Vec<f32>>> {
+    let r = renderer();
+    let generation = r.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let ready = Arc::new(std::sync::OnceLock::new());
+    *r.slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(Job { generation, render, ready: ready.clone() });
+    r.wake.notify_one();
+    ready
+}
+
 /// Samples made off the interface thread (`render`, e.g. a patch's chord), played once at
 /// `gain` as soon as they're ready; silent until then. `seconds`: how long the speaker shows.
-pub fn play_rendered(app: &mut App, id: &str, gain: f32, seconds: f64, render: impl FnOnce() -> Vec<f32> + std::marker::Send + 'static) {
+pub fn play_rendered(app: &mut App, id: &str, gain: f32, seconds: f64, render: Render) {
     app.preview.stop();
     app.preview.set_volume(gain);
-    let ready = Arc::new(std::sync::OnceLock::new());
-    let r2 = ready.clone();
-    std::thread::spawn(move || {
-        let _ = r2.set(render());
-    });
+    let ready = submit_render(render);
     let stop = Arc::new(AtomicBool::new(false));
     app.output.add_source(Pending { ready, at: 0, waited: 0, gain: app.preview.gain.clone(), stop: stop.clone() });
     app.preview.stop = Some(stop);
@@ -282,4 +360,37 @@ fn midi(app: &mut App, id: &str, path: &Path) {
     app.preview.started = app.ctx.input(|i| i.time);
     app.preview.seconds = total;
     app.preview.looped = false;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wait(cell: &std::sync::OnceLock<Vec<f32>>) -> Option<Vec<f32>> {
+        let t = std::time::Instant::now();
+        while cell.get().is_none() && t.elapsed().as_secs() < 10 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        cell.get().cloned()
+    }
+
+    /// A newer render replaces older ones (they stop early, give nothing); one that panics only
+    /// ends itself and the thread renders the next.
+    #[test]
+    fn newest_render_wins_and_a_panic_doesnt_stop_the_thread() {
+        let first = submit_render(Box::new(|go: &dyn Fn() -> bool| {
+            while go() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            vec![9.0]
+        }));
+        for k in 0..40 {
+            submit_render(Box::new(move |_: &dyn Fn() -> bool| vec![k as f32]));
+        }
+        let boom = submit_render(Box::new(|_: &dyn Fn() -> bool| panic!("a bad patch")));
+        assert_eq!(wait(&boom), Some(Vec::new()));
+        let last = submit_render(Box::new(|_: &dyn Fn() -> bool| vec![1.0, 2.0]));
+        assert_eq!(wait(&last), Some(vec![1.0, 2.0]));
+        assert!(first.get().is_none(), "a replaced render still gave samples");
+    }
 }

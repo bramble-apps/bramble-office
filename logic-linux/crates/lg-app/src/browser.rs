@@ -128,6 +128,9 @@ pub struct State {
     pub view: Cat,
     pub selected: Vec<String>,
     items: Vec<Item>,
+    /// Link to Selection's reference patch: the selected track's patch when that track was
+    /// selected (the list's order then stays put while sounds are clicked and loaded).
+    pub link_anchor: Option<(usize, String)>,
     loaded: bool,
     pub all_filters: bool,
     pub expanded: HashSet<String>,
@@ -164,7 +167,7 @@ pub struct State {
 
 impl Default for State {
     fn default() -> State {
-        State { saved: sl::Saved::default(), search: Search::default(), typed: String::new(), view: Cat::Instruments, selected: Vec::new(), items: Vec::new(), loaded: false, all_filters: false, expanded: HashSet::new(), show_more: HashSet::new(), info: None, renaming: None, deleting: None, smart_name: None, smart_rename: None, location_rename: None, patch_name: None, add_to_browser: None, volume: 0.8, drag: None, multi_drop: None, lanes: Rect::NOTHING, rect: Rect::NOTHING, search_rect: Rect::NOTHING, linked: None, preset_slot: None, preset_path: Vec::new(), column_path: Vec::new(), locations_open: true, smart_open: true, swept: None, sweeping: false }
+        State { saved: sl::Saved::default(), search: Search::default(), typed: String::new(), view: Cat::Instruments, selected: Vec::new(), items: Vec::new(), link_anchor: None, loaded: false, all_filters: false, expanded: HashSet::new(), show_more: HashSet::new(), info: None, renaming: None, deleting: None, smart_name: None, smart_rename: None, location_rename: None, patch_name: None, add_to_browser: None, volume: 0.8, drag: None, multi_drop: None, lanes: Rect::NOTHING, rect: Rect::NOTHING, search_rect: Rect::NOTHING, linked: None, preset_slot: None, preset_path: Vec::new(), column_path: Vec::new(), locations_open: true, smart_open: true, swept: None, sweeping: false }
     }
 }
 
@@ -311,27 +314,32 @@ pub fn results(app: &App) -> Vec<Item> {
     if let Some((id, _)) = &s.similar {
         if let Some(r) = item(app, id).or_else(|| similar_ref(app, id)) {
             let mut scored: Vec<(f32, Item)> = v.into_iter().filter(|x| x.id != r.id).map(|x| (sl::similarity(&r, &x), x)).collect();
-            scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+            scored.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.name.cmp(&b.1.name)).then_with(|| a.1.id.cmp(&b.1.id)));
             scored.truncate(sl::SIMILAR_MAX);
             return scored.into_iter().map(|x| x.1).collect();
         }
     }
     if app.browser_sort_name {
-        v.sort_by_key(|x| x.name.to_lowercase());
+        v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.name.cmp(&b.name)).then_with(|| a.id.cmp(&b.id)));
     } else {
         // Relevance: Logic's order for patches (its first 30 as listed, then by category);
         // Link to Selection with no search: the track's patch first, then similar ones
         let pos: std::collections::HashMap<&str, usize> = patches().iter().enumerate().map(|(i, p)| (p.2.as_str(), i)).collect();
-        v.sort_by_key(|x| {
+        // (ties: by name, then by id, so the order never depends on how the items were read)
+        v.sort_by_cached_key(|x| {
             let p = pos.get(x.name.as_str()).copied().unwrap_or(usize::MAX);
-            if x.kind == Kind::Patch && x.pack == "Logic Patches" {
+            let (a, b, n) = if x.kind == Kind::Patch && x.pack == "Logic Patches" {
                 if p < 30 { (0, p, String::new()) } else { (1 + relevance(&x.category) as usize, 0, x.name.clone()) }
             } else {
                 (20 + x.kind as usize, 0, x.name.to_lowercase())
-            }
+            };
+            (a, b, n, x.name.clone(), x.id.clone())
         });
+        // (the reference is the patch the track had when it was selected, not the one a click
+        // just loaded: clicking sounds never reorders the list)
+        let anchor = app.br.link_anchor.as_ref().filter(|(t, _)| app.selected_track == Some(*t)).map(|a| a.1.as_str());
         if app.browser_link && s.is_empty() && matches!(app.br.view, Cat::Instruments | Cat::Effects) {
-            if let Some(cur) = current_patch(app).and_then(|n| v.iter().position(|x| x.name == n)) {
+            if let Some(cur) = anchor.and_then(|n| v.iter().position(|x| x.name == n)) {
                 let c = v.remove(cur);
                 let mut rest: Vec<(f32, Item)> = v.into_iter().map(|x| (sl::similarity(&c, &x), x)).collect();
                 rest.sort_by(|a, b| b.0.total_cmp(&a.0));
@@ -1389,6 +1397,7 @@ fn link_to_selection(app: &mut App) {
     }
     let changed_kind = app.br.linked.is_none_or(|(_, k)| (k == TrackKind::Audio) != (kind == TrackKind::Audio));
     app.br.linked = Some((t, kind));
+    app.br.link_anchor = current_patch(app).map(|n| (t, n));
     if changed_kind && matches!(app.br.view, Cat::Instruments | Cat::Effects) {
         app.br.view = if kind == TrackKind::Audio { Cat::Effects } else { Cat::Instruments };
     }
@@ -2752,6 +2761,63 @@ mod tests {
         assert_eq!(key_shift("F#", "C"), 6);
         assert_eq!(key_shift("B♭", "C"), 2);
         assert_eq!(key_shift("C", "C"), 0);
+    }
+
+    fn rss_mb() -> usize {
+        std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("VmRSS:").and_then(|v| v.trim().trim_end_matches("kB").trim().parse::<usize>().ok()))).unwrap_or(0) / 1024
+    }
+
+    fn instruments_app() -> App {
+        let mut app = crate::tm::test_app();
+        app.selected_track = Some(1);
+        app.show_browser = true;
+        app.br.view = Cat::Instruments;
+        ensure_loaded(&mut app);
+        app
+    }
+
+    fn ids(app: &App) -> Vec<String> {
+        results(app).into_iter().map(|i| i.id).collect()
+    }
+
+    /// Clicking (selecting, previewing, Replace Mode loading the patch) keeps the list's order.
+    #[test]
+    fn clicking_sounds_keeps_the_order() {
+        let mut app = instruments_app();
+        link_to_selection(&mut app);
+        let before = ids(&app);
+        assert!(before.len() > 40);
+        for k in [35usize, 3, 50, 12, 35, 7, 60] {
+            let it = results(&app)[k.min(before.len() - 1)].clone();
+            let was = app.br.selected.first() == Some(&it.id);
+            app.br.selected = vec![it.id.clone()];
+            click_item(&mut app, &it, was);
+            link_to_selection(&mut app);
+            assert_eq!(ids(&app), before, "the order changed after clicking {}", it.name);
+        }
+    }
+
+    /// Many previews in a row (kits, keys, synths): at most one renders at a time, nothing panics.
+    #[test]
+    fn many_previews_in_a_row() {
+        let mut app = instruments_app();
+        let m0 = rss_mb();
+        let list = results(&app);
+        let kits = list.iter().filter(|i| crate::brpreview::kit_named(&i.name)).take(10);
+        let rest = list.iter().filter(|i| !crate::brpreview::kit_named(&i.name)).take(40);
+        for it in kits.chain(rest).cloned().collect::<Vec<_>>() {
+            let was = app.br.selected.first() == Some(&it.id);
+            app.br.selected = vec![it.id.clone()];
+            click_item(&mut app, &it, was);
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        let t = std::time::Instant::now();
+        while crate::preview::rendering() && t.elapsed().as_secs() < 30 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!crate::preview::rendering(), "the last preview never finished");
+        assert!(crate::brpreview::most_at_once() <= 1, "{} previews rendered at once", crate::brpreview::most_at_once());
+        eprintln!("RSS {m0} MB before, {} MB after 50 previews", rss_mb());
     }
 
     #[test]
