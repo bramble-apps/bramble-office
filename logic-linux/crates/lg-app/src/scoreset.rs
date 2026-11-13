@@ -366,6 +366,7 @@ pub fn pane(ui: &mut egui::Ui, v: &mut Values, sub: &str) {
             check(ui, v, cs, "Hide bar lines", true);
             ui.label(egui::RichText::new("Hide bar lines hides the automatic bar lines; the final double bar line stays.").small().color(crate::look::text_dim()));
         }
+        "Colors" => crate::scorecolors::pane(ui, v),
         _ => {}
     }
 }

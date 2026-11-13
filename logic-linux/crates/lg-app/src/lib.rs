@@ -225,6 +225,7 @@ mod tracksview;
 mod mididisp;
 mod recentplug;
 mod timeruler;
+mod scorecolors;
 mod focus;
 mod regiontrim;
 mod regionclip;

@@ -774,44 +774,20 @@ fn y_at(bottom: f32, pos: i32, sp: f32) -> f32 {
     bottom - pos as f32 * sp / 2.0
 }
 
-/// The colour of a note in the View ▸ Colors mode (and its own Color attribute).
-fn note_color(colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
-    const PALETTE: [Color32; 16] = [
-        INK,
-        Color32::from_rgb(0xd0, 0x30, 0x30),
-        Color32::from_rgb(0xe0, 0x80, 0x20),
-        Color32::from_rgb(0xc0, 0xa0, 0x10),
-        Color32::from_rgb(0x50, 0xa0, 0x30),
-        Color32::from_rgb(0x20, 0x90, 0x90),
-        Color32::from_rgb(0x30, 0x60, 0xd0),
-        Color32::from_rgb(0x80, 0x40, 0xc0),
-        Color32::from_rgb(0xc0, 0x40, 0x90),
-        Color32::from_rgb(0x70, 0x50, 0x30),
-        Color32::from_rgb(0x60, 0x60, 0x60),
-        Color32::from_rgb(0x90, 0x20, 0x20),
-        Color32::from_rgb(0x20, 0x70, 0x40),
-        Color32::from_rgb(0x20, 0x40, 0x90),
-        Color32::from_rgb(0xa0, 0x70, 0x00),
-        Color32::from_rgb(0x50, 0x20, 0x70),
-    ];
+/// The colour of a note in the View ▸ Colors mode (and its own Color attribute), in the
+/// project's Colors pane palette (scorecolors.rs).
+fn note_color(pal: &crate::scorecolors::Palette, colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
     match colors {
         Colors::BlackWhite => INK,
-        Colors::Pitch => {
-            let h = (n.pitch % 12) as f32 / 12.0;
-            egui::ecolor::Hsva::new(h, 0.8, 0.7, 1.0).into()
-        }
-        Colors::Velocity => {
-            // blue (soft) through green to red (loud), as Logic's velocity colours
-            let h = (1.0 - n.velocity as f32 / 127.0) * 0.66;
-            egui::ecolor::Hsva::new(h, 0.85, 0.75, 1.0).into()
-        }
+        Colors::Pitch => pal.of_pitch(n.pitch),
+        Colors::Velocity => pal.of_velocity(n.velocity),
         Colors::Voice => if voice == 0 { Color32::from_rgb(0x20, 0x50, 0xc0) } else { Color32::from_rgb(0xc0, 0x40, 0x20) },
         Colors::Normal => match attr.color {
-            // (a note's own Pitch / Velocity Color, Color 0–15)
-            17 => note_color(Colors::Pitch, n, voice, attr),
-            18 => note_color(Colors::Velocity, n, voice, attr),
+            // (a note's own Pitch / Velocity Color, Color 0–15 from the User Palette)
+            17 => note_color(pal, Colors::Pitch, n, voice, attr),
+            18 => note_color(pal, Colors::Velocity, n, voice, attr),
             0 => INK,
-            c => PALETTE[(c as usize - 1) % 16],
+            c => pal.user[(c as usize - 1) % 16],
         },
     }
 }
@@ -823,6 +799,7 @@ pub fn ruler_unit_cm(v: &crate::settings::Values) -> f32 {
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ruler_cm = ruler_unit_cm(&app.logic_settings);
+    let pal = crate::scorecolors::Palette::from(&app.proj);
     let ctx = ui.ctx().clone();
     let mut st = state(&ctx);
     // a print / PDF / Camera job: this frame draws every page for it (scorepdf.rs)
@@ -1437,15 +1414,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 // the voice's Color (only in View ▸ Colors ▸ Normal; a note's own colour wins)
                 if st.colors == Colors::Normal && a.color == 0 && seg.vdef.color > 0 {
                     return match seg.vdef.color {
-                        1 => note_color(Colors::Pitch, &n, 0, &a),
-                        2 => note_color(Colors::Velocity, &n, 0, &a),
-                        c => note_color(Colors::Normal, &n, 0, &NoteAttr { color: (c - 3) % 16 + 1, ..a }),
+                        1 => note_color(&pal, Colors::Pitch, &n, 0, &a),
+                        2 => note_color(&pal, Colors::Velocity, &n, 0, &a),
+                        c => note_color(&pal, Colors::Normal, &n, 0, &NoteAttr { color: (c - 3) % 16 + 1, ..a }),
                     };
                 }
-                note_color(st.colors, &n, voice_of(i), &a)
+                note_color(&pal, st.colors, &n, voice_of(i), &a)
             };
             let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
-            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing };
+            // (Colors pane: rests take the voice's own colour when Rests is on)
+            let rest_col = if pal.rests && st.colors == Colors::Normal && seg.vdef.color >= 3 { pal.user[(seg.vdef.color as usize - 3) % 16] } else { INK };
+            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing, parts: [pal.accidentals, pal.dots, pal.ties], rest_col };
             let numbers = draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
             // a user tuplet's number: double-click edits it (Tuplet window), the Eraser deletes it
             for (tick, r) in numbers {
@@ -2177,6 +2156,9 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
                     }
                 }
                 _ => {
+                    crate::scorecolors::pane(ui, &mut app.proj);
+                    ui.separator();
+                    ui.label("View ▸ Colors:");
                     for (c, n) in [(Colors::Normal, "Normal"), (Colors::Pitch, "Pitch"), (Colors::Velocity, "Velocity"), (Colors::Voice, "Voice Assignment"), (Colors::BlackWhite, "Black & White")] {
                         if ui.radio(st.colors == c, n).clicked() {
                             st.colors = c;
@@ -2839,6 +2821,9 @@ struct DrawOpts<'a> {
     beat: u32,
     /// Hidden items shown (on screen; print leaves them out).
     show_hidden: bool,
+    /// Colors pane: accidentals, dots and ties in their note's colour (else black); the rests'.
+    parts: [bool; 3],
+    rest_col: Color32,
 }
 
 fn y_of(staff: &Staff, pos: i32, sp: f32) -> f32 {
@@ -2935,7 +2920,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
                 }
             } else if here && !o.hide_rests {
                 let cx = if it.full_bar { x_of((it.tick + it.dur / 2) as f32) } else { x + 0.8 * sp + 0.6 * sp };
-                rest(p, cx, staff.bottom, sp, it.value, it.full_bar, INK);
+                rest(p, cx, staff.bottom, sp, it.value, it.full_bar, o.rest_col);
             }
             tied_in.clear();
             continue;
@@ -2971,6 +2956,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
         for (h_k, h) in it.heads.iter().enumerate().rev() {
             let c = head_center(it, h, staff, sp, x);
             let col = (o.color)(h.note);
+            let (acc_col, dot_col, tie_col) = (if o.parts[0] { col } else { INK }, if o.parts[1] { col } else { INK }, if o.parts[2] { col } else { INK });
             let head = (o.attr)(h.note).head;
             // (the Size attribute: the head drawn larger or smaller)
             let hsp = sp * lg_core::score::size_scale((o.attr)(h.note).size);
@@ -2998,10 +2984,10 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
                 let ax = acc_x + (o.attr)(h.note).acc_pos as f32 * 0.1 * sp;
                 if h.guide {
                     // a guide accidental, in brackets
-                    p.text(pos2(ax - 0.9 * sp, c.y), Align2::CENTER_CENTER, "(", egui::FontId::proportional(2.2 * sp), col);
-                    p.text(pos2(ax + 0.75 * sp, c.y), Align2::CENTER_CENTER, ")", egui::FontId::proportional(2.2 * sp), col);
+                    p.text(pos2(ax - 0.9 * sp, c.y), Align2::CENTER_CENTER, "(", egui::FontId::proportional(2.2 * sp), acc_col);
+                    p.text(pos2(ax + 0.75 * sp, c.y), Align2::CENTER_CENTER, ")", egui::FontId::proportional(2.2 * sp), acc_col);
                 }
-                accidental(p, pos2(ax, c.y), sp, a, col);
+                accidental(p, pos2(ax, c.y), sp, a, acc_col);
                 if h.guide {
                     acc_x -= 0.9 * sp;
                 }
@@ -3009,7 +2995,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
             }
             for d in 0..it.value.dots {
                 let dy = if h.pos % 2 == 0 { -sp / 2.0 } else { 0.0 };
-                p.circle_filled(pos2(base_x + w + 0.5 * sp + d as f32 * 0.6 * sp + if shifted && it.stem_up { w } else { 0.0 }, c.y + dy), 0.18 * sp, col);
+                p.circle_filled(pos2(base_x + w + 0.5 * sp + d as f32 * 0.6 * sp + if shifted && it.stem_up { w } else { 0.0 }, c.y + dy), 0.18 * sp, dot_col);
             }
             if h.tie && !h.tie_hidden && !gray_out {
                 let next = v.items.get(k + 1).and_then(|next| next.heads.iter().find(|x| x.pitch == h.pitch).map(|nh| (next, nh)));
@@ -3030,7 +3016,7 @@ fn draw_voice(p: &egui::Painter, v: &nt::Voice, staff: &Staff, sp: f32, x_of: &d
                     _ => pos2(c.x + 3.0 * sp, c.y + dir * 0.45 * sp),
                 };
                 let lift = dir * (0.6 * sp + (b.x - a.x) * 0.05).min(1.6 * sp);
-                tie(p, a, b, lift, sp, col);
+                tie(p, a, b, lift, sp, tie_col);
             }
         }
         // articulations and fingering: on the side away from the stem (fermatas above), not on
