@@ -18,7 +18,7 @@ use crate::look;
 
 /// The key commands and menu items this file runs (Project Audio group, its local menus).
 pub const COMMANDS: &[&str] = &[
-    "Select Previous Audio File", "Select Next Audio File", "Show Audio File Details", "Hide Audio File Details", "Rename…", "Add Audio File…", "Add Region", "Delete Files", "Optimize Files…", "Backup Files", "Copy/Convert Files…", "Move Files out of Project", "Select Used", "Select Unused", "Show All Regions", "Hide All Regions", "Import Region Information", "Export Region Information", "Create Group…", "Delete Selected Audio File Groups",
+    "Select Previous Audio File", "Select Next Audio File", "Show Audio File Details", "Hide Audio File Details", "Rename…", "Add Audio File…", "Add Region", "Delete Files", "Optimize Files…", "Backup Files", "Copy/Convert Files…", "Move Files out of Project", "Select Used", "Select Unused", "Show All Regions", "Hide All Regions", "Import Region Information", "Export Region Information", "Save Region(s) As…", "Create Group…", "Delete Selected Audio File Groups",
     "Open Project Audio", "Open Project Audio…", "Show/Hide Project Audio", "Show/Hide All Files Browser",
 ];
 
@@ -102,6 +102,8 @@ pub struct Convert {
     pub rate: u32,
     pub bits: u16,
     pub move_refs: bool,
+    /// One file copied: its new name (several keep theirs).
+    pub name: String,
 }
 
 /// What a file's header says.
@@ -448,10 +450,12 @@ pub fn command(app: &mut App, name: &str) -> bool {
         }
         "Copy/Convert Files…" => {
             if !app.pa.selected.is_empty() {
-                app.pa.convert = Some(Convert { rate: crate::audio::RATE, bits: 24, move_refs: true });
+                let name = if app.pa.selected.len() == 1 { app.pa.selected.iter().next().and_then(|f| f.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_default() } else { String::new() };
+                app.pa.convert = Some(Convert { rate: crate::audio::RATE, bits: 24, move_refs: true, name });
             }
         }
         "Move Files out of Project" => move_out(app),
+        "Save Region(s) As…" => save_regions(app),
         "Export Region Information" => export_regions(app),
         "Import Region Information" => import_regions(app),
         "Create Group…" => {
@@ -683,6 +687,7 @@ fn convert(app: &mut App, c: Convert) {
     for f in app.pa.selected.clone() {
         let Ok(a) = lg_synth::wav::read_audio(&f) else { continue };
         let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let stem = if c.name.trim().is_empty() { stem } else { c.name.trim().replace('/', "-") };
         let to = dir.join(format!("{stem}.wav"));
         if to == f {
             continue;
@@ -704,6 +709,54 @@ fn convert(app: &mut App, c: Convert) {
     }
     app.load_engine();
     app.tell(format!("Converted {n} file{}", if n == 1 { "" } else { "s" }));
+}
+
+/// The regions chosen (the selected region, else every region of the selected files) as
+/// (file, name, start, length) in seconds.
+fn chosen_regions(app: &mut App) -> Vec<(PathBuf, String, f64, f64)> {
+    if let Some(r) = app.pa.sel_region {
+        let file = files(app).into_iter().find(|f| f.1.contains(&r)).map(|f| f.0);
+        return file.into_iter().filter_map(|f| region_span(app, r).map(|(n, s, l)| (f, n, s, l))).collect();
+    }
+    let mut out = Vec::new();
+    for (f, regs) in files(app) {
+        if app.pa.selected.contains(&f) {
+            for r in regs {
+                if let Some((n, s, l)) = region_span(app, r) {
+                    out.push((f.clone(), n, s, l));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Audio File ▸ Save Region(s) As…: each region as an audio file of its own.
+fn save_regions(app: &mut App) {
+    let regs = chosen_regions(app);
+    if regs.is_empty() {
+        app.tell("Select a region or a file with regions first");
+        return;
+    }
+    let dir = if app.automated { std::env::var_os("LG_SAVE_REGIONS").map(PathBuf::from) } else { kn_ui::files::FileDialog::new().set_title("Save Region(s) As").pick_folder() };
+    let Some(dir) = dir else { return };
+    let mut n = 0;
+    for (f, name, start, len) in regs {
+        let Ok(a) = lg_synth::wav::read_audio(&f) else { continue };
+        let (from, to) = slice_frames(a.rate, start, len, a.channels.first().map_or(0, |c| c.len()));
+        let chans: Vec<Vec<f32>> = a.channels.iter().map(|c| c[from..to.min(c.len())].to_vec()).collect();
+        if write_wav(&dir.join(format!("{}.wav", name.replace('/', "-"))), &chans, a.rate, a.rate, 24).is_ok() {
+            n += 1;
+        }
+    }
+    app.tell(format!("Saved {n} region{} as audio files", if n == 1 { "" } else { "s" }));
+}
+
+/// A region's frames in its file.
+pub fn slice_frames(rate: u32, start: f64, len: f64, total: usize) -> (usize, usize) {
+    let a = ((start * rate as f64) as usize).min(total);
+    let b = (((start + len) * rate as f64) as usize).clamp(a, total);
+    (a, b)
 }
 
 fn move_out(app: &mut App) {
@@ -1024,7 +1077,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if !matches!(row, Row::Heading(_)) && clicked.is_none() {
                         select_row(app, &row, false, false);
                     }
-                    for c in ["Add Region", "Rename…", "Delete Files", "Backup Files", "Export Region Information", "Import Region Information"] {
+                    for c in ["Add Region", "Rename…", "Delete Files", "Backup Files", "Copy/Convert Files…", "Save Region(s) As…", "Export Region Information", "Import Region Information"] {
                         if ui.button(c).clicked() {
                             command(app, c);
                             ui.close();
@@ -1186,7 +1239,7 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
     });
     ui.menu_button("Audio File", |ui| {
         ui.set_min_width(240.0);
-        for (c, k) in [("Add Audio File…", "⌃F"), ("Add Region", "⌃R"), ("", ""), ("Delete Files", "⌘⌫"), ("Optimize Files…", "⌃O"), ("Backup Files", "⌃B"), ("Copy/Convert Files…", "⌃K"), ("Move Files out of Project", ""), ("", ""), ("Import Region Information", "⌃I"), ("Export Region Information", "⌃E")] {
+        for (c, k) in [("Add Audio File…", "⌃F"), ("Add Region", "⌃R"), ("", ""), ("Delete Files", "⌘⌫"), ("Optimize Files…", "⌃O"), ("Backup Files", "⌃B"), ("Copy/Convert Files…", "⌃K"), ("Move Files out of Project", ""), ("", ""), ("Import Region Information", "⌃I"), ("Export Region Information", "⌃E"), ("Save Region(s) As…", "")] {
             if c.is_empty() {
                 ui.separator();
                 continue;
@@ -1295,6 +1348,13 @@ fn dialogs(app: &mut App, ctx: &egui::Context) {
                     ui.selectable_value(&mut c.bits, b, format!("{b} Bit"));
                 }
             });
+            // (one file: a new name for the copy)
+            if app.pa.selected.len() == 1 {
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut c.name);
+                });
+            }
             ui.checkbox(&mut c.move_refs, "Change file references in regions");
             ui.horizontal(|ui| {
                 if ui.button("Cancel").clicked() {
@@ -1335,6 +1395,8 @@ mod tests {
         assert_eq!(next_region_name("Organ", 2), "Organ.2");
         assert_eq!(attributes_name(16, 1, "AIFF"), "16 bit Mono AIFF");
         assert_eq!(attributes_name(24, 2, "wav"), "24 bit Stereo WAVE");
+        assert_eq!(slice_frames(1000, 0.5, 0.25, 2000), (500, 750));
+        assert_eq!(slice_frames(1000, 1.9, 1.0, 2000), (1900, 2000));
     }
 
     use super::*;
