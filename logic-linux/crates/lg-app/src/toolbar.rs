@@ -252,7 +252,7 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
                         _ => ui.label(""),
                     };
                     match i {
-                        0 => ui.checkbox(&mut app.cb_show.capture, "Capture as Recording"),
+                        0 => ui.checkbox(&mut app.cb_show.capture, "Flashback Capture"),
                         1 => ui.checkbox(&mut app.cb_show.replace, "Replace"),
                         2 => ui.checkbox(&mut app.cb_show.autopunch, "Autopunch"),
                         3 => ui.add_enabled(false, egui::Checkbox::new(&mut true, "Stop, Play, Record, Cycle")),

@@ -179,7 +179,9 @@ impl Default for Mix {
 
 /// A new plug-in for a slot (its settings come from the stand-in's defaults when opened).
 pub fn new_plugin(name: &str) -> Plugin {
-    Plugin { name: name.to_string(), preset: "#default".into(), params: Vec::new(), channel: 0, slot: 3, bypass: false }
+    // (Save Setting As Default: that setting loads whenever the plug-in is inserted)
+    let params = crate::pluginwin::user_default_floats(name).unwrap_or_default();
+    Plugin { name: name.to_string(), preset: "#default".into(), params, channel: 0, slot: 3, bypass: false }
 }
 
 /// The insert list a track's engine strip runs: its Audio FX (slot 3 on, not its Channel EQ,

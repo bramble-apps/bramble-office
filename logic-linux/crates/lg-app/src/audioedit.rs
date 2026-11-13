@@ -104,6 +104,9 @@ enum TDrag {
     Gain { orig: f32, y0: f32 },
     Marquee { from: f64 },
     Flex { src: usize, index: Option<usize> },
+    /// A marquee's audio dragged between its two edge markers (sources), from where they
+    /// played (destination frames) and the press's x.
+    FlexPair { a: usize, b: usize, d0: f64, d1: f64, x0: f32 },
     Zoom { from: f64 },
 }
 
@@ -477,6 +480,9 @@ pub struct Plan {
     /// The track's Flex mode, and Flex Pitch's edited notes (frames of the file).
     pub mode: lg_audio::flex::Mode,
     pub notes: Vec<lg_audio::flexpitch::Note>,
+    /// The track's Flex Time parameters, and Flex Pitch's Keep Unvoiced Formants.
+    pub params: lg_audio::flex::Params,
+    pub keep_unvoiced: bool,
 }
 
 impl Plan {
@@ -504,14 +510,14 @@ impl Plan {
                 n.end -= self.offset;
                 n
             }).collect();
-            part.data = lg_audio::flexpitch::render(&part.data, c, &tr, &notes);
+            part.data = lg_audio::flexpitch::render_opts(&part.data, c, &tr, &notes, self.keep_unvoiced);
         }
         if !self.flex.is_empty() {
             let trs = match self.mode {
-                lg_audio::flex::Mode::Slicing | lg_audio::flex::Mode::Rhythmic | lg_audio::flex::Mode::Polyphonic => lg_audio::transients::detect(&part.data, part.channels, part.rate, 0.5),
+                lg_audio::flex::Mode::Slicing | lg_audio::flex::Mode::Rhythmic | lg_audio::flex::Mode::Polyphonic => lg_audio::transients::detect(&part.data, part.channels, part.rate, self.params.sensitivity()),
                 _ => Vec::new(),
             };
-            part.data = lg_audio::flex::render(&part.data, part.channels, part.rate, &self.flex, out_frames, self.mode, &trs);
+            part.data = lg_audio::flex::render_with(&part.data, part.channels, part.rate, &self.flex, out_frames, self.mode, &trs, &self.params);
         }
         part.data.resize(out_frames.min(part.data.len() / part.channels) * part.channels, 0.0);
         if self.reverse {
@@ -541,7 +547,8 @@ pub fn playback(app: &App) -> Vec<(usize, u32, Plan)> {
             let x = extras(app, t, r);
             let seconds = app.seconds_at((rg.start + rg.length) as f64) - app.seconds_at(rg.start as f64);
             let (mode, flex, notes) = crate::flex::plan_for(app, t, rg, &x);
-            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex, reverse: x.reverse, mode, notes }));
+            let (params, keep_unvoiced) = crate::flex::params_for(app, t);
+            out.push((t, rg.start, Plan { file: a.file.clone(), offset: x.offset, seconds, gain_db: x.gain_db, fades: x.fades, flex, reverse: x.reverse, mode, notes, params, keep_unvoiced }));
         }
     }
     out
@@ -696,9 +703,10 @@ fn amp_scale(p: &Painter, col: Rect, lane: Rect, step: f32, percent: bool, zoom:
 // Audio Track Editor
 
 const SNAPS: [&str; 7] = ["Smart", "Bar", "Beat", "Division", "Ticks", "Frames", "Samples"];
-const TRACK_TOOLS: [crate::edit::Tool; 12] = {
+const TRACK_TOOLS: [crate::edit::Tool; 14] = {
     use crate::edit::Tool::*;
-    [Pointer, Pencil, Eraser, Text, Scissors, Glue, Solo, Mute, Zoom, Fade, Marquee, Flex]
+    // (Vibrato and Volume: Flex Pitch's, only here, not in the Tracks area)
+    [Pointer, Pencil, Eraser, Text, Scissors, Glue, Solo, Mute, Zoom, Fade, Marquee, Flex, Vibrato, Volume]
 };
 
 fn snap_tick(app: &App, tick: f64, px_per_tick: f64) -> f64 {
@@ -736,7 +744,9 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
     let bar_t = app.bar_ticks() as f64;
     // fit the region when it's new to the editor
-    let main = Rect::from_min_max(pos2(body.min.x + AMP_W, body.min.y + LOCAL_H), body.max);
+    // (Flex Pitch shown: Logic's inspector column at the left, flex.rs)
+    let insp_w = if app.audio_edit.show_flex && crate::flex::track(app, t).mode == lg_audio::flex::Mode::Pitch { 150.0 } else { 0.0 };
+    let main = Rect::from_min_max(pos2(body.min.x + insp_w + AMP_W, body.min.y + LOCAL_H), body.max);
     if app.audio_edit.fitted != Some((t, r)) {
         let w = main.width().max(100.0) as f64;
         let span = (rg.length as f64).max(bar_t / 4.0) * 1.08;
@@ -768,7 +778,12 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         p.rect_filled(fr, 6.0, look::group_bg());
         let k = lg_audio::flex::Mode::ALL.iter().position(|m| *m == cur).unwrap_or(0);
         if let Some(k) = crate::widgets::choice_slot(ui, fr, ae_id.with("fmode"), k, &names) {
-            crate::flex::set_mode(app, t, lg_audio::flex::Mode::ALL[k]);
+            // (Shift-choosing: every audio track)
+            if ui.input(|i| i.modifiers.shift) {
+                crate::flex::set_mode_all(app, lg_audio::flex::Mode::ALL[k]);
+            } else {
+                crate::flex::set_mode(app, t, lg_audio::flex::Mode::ALL[k]);
+            }
         }
         bx += 136.0;
         // (what room the tools and the right-hand controls leave)
@@ -834,7 +849,10 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let ruler = Rect::from_min_max(pos2(main.min.x, main.min.y), pos2(main.max.x, main.min.y + 22.0));
     let header = Rect::from_min_max(pos2(main.min.x, ruler.max.y + 1.0), pos2(main.max.x, ruler.max.y + 23.0));
     let wave = Rect::from_min_max(pos2(main.min.x, header.max.y), main.max);
-    let amp = Rect::from_min_max(pos2(body.min.x, main.min.y), pos2(main.min.x, body.max.y));
+    let amp = Rect::from_min_max(pos2(body.min.x + insp_w, main.min.y), pos2(main.min.x, body.max.y));
+    if insp_w > 0.0 {
+        crate::flex::pitch_inspector(app, ui, Rect::from_min_max(pos2(body.min.x, main.min.y), pos2(body.min.x + insp_w, body.max.y)), t, r);
+    }
     p.rect_filled(amp, 0.0, amp_bg());
     p.rect_filled(ruler, 0.0, ruler_bg());
     p.rect_filled(Rect::from_min_max(header.min, wave.max), 0.0, look::lane_bg());
@@ -975,12 +993,15 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
     let rate_of_file = rate_of(app, file).unwrap_or(48_000) as f64;
     // flex: the transients (grey) and the flex markers (orange)
     let mut flex_hits: Vec<(f32, usize, Option<usize>)> = Vec::new();
+    // (every transient's source frame, for Logic's three- and four-marker clicks)
+    let mut tr_srcs: Vec<usize> = Vec::new();
     if app.audio_edit.show_flex {
         let trs = transients(app, file);
         if let Some(rate) = rate_of(app, file) {
             let (a, bnd) = region_frames(app, rg, &x, rate);
             for f in trs.into_iter().filter(|f| *f >= a && *f < bnd) {
                 let src = f - x.offset;
+                tr_srcs.push(src);
                 let dst = flex_dst(&x.flex, src as f64);
                 let px = sec_x(dst / rate as f64);
                 if x.flex.iter().any(|m| m.0 == src) {
@@ -1067,6 +1088,19 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 "gain" | "curvein" | "curveout" => Some(egui::CursorIcon::ResizeVertical),
                 _ => None,
             };
+            // (Flex on: the pointer says what a click adds: upper half one marker, lower half
+            // three; over a transient or not)
+            let icon = if app.audio_edit.show_flex && crate::flex::track(app, t).on && h.y > rbody.min.y && (z == "body" || z == "flex") && !flex_hits.iter().any(|f| f.2.is_some() && (f.0 - h.x).abs() < 4.0) {
+                let on_tr = flex_hits.iter().any(|f| f.2.is_none() && (f.0 - h.x).abs() < 4.0);
+                Some(match (h.y < rbody.center().y, on_tr) {
+                    (true, true) => egui::CursorIcon::ResizeColumn,
+                    (true, false) => egui::CursorIcon::VerticalText,
+                    (false, true) => egui::CursorIcon::ResizeHorizontal,
+                    (false, false) => egui::CursorIcon::Crosshair,
+                })
+            } else {
+                icon
+            };
             if let Some(i) = icon {
                 ui.ctx().set_cursor_icon(i);
             }
@@ -1090,7 +1124,42 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
         if let Some(pp) = ui.input(|i| i.pointer.press_origin()).or(area_resp.interact_pointer_pos()) {
             let z = zone(pp);
             let tk = tick_of(pp.x);
-            let d = match tool {
+            // Flex on: a click in the waveform adds markers as Logic's (flexedit.rs): one in the
+            // upper half, three in the lower; inside a marquee four or three
+            let on_marker = z == "flex" && flex_hits.iter().any(|f| f.2.is_some() && (f.0 - pp.x).abs() < 4.0);
+            let flex_click = tool == crate::edit::Tool::Pointer && app.audio_edit.show_flex && crate::flex::track(app, t).on && pp.y > rbody.min.y && !on_marker && (z == "body" || z == "flex");
+            let flex_d = if flex_click {
+                let upper = pp.y < rbody.center().y;
+                let to_src = |tick: f64| flex_src(&x.flex, (app.seconds_at(tick) - start_sec).max(0.0) * rate as f64).round().max(0.0) as usize;
+                let at = to_src(tk);
+                let near = flex_hits.iter().filter(|f| f.2.is_none() && (f.0 - pp.x).abs() < 4.0).map(|f| f.1).next();
+                let mq = app.audio_edit.marquee.filter(|m| tk >= m.0.min(m.1) && tk <= m.0.max(m.1)).map(|m| (to_src(m.0.min(m.1)), to_src(m.0.max(m.1))));
+                let (adds, moving) = match mq {
+                    Some((a, b)) if b > a + 4 => crate::flexedit::marquee_markers(&tr_srcs, a, b, at, upper),
+                    _ => {
+                        let (v, c) = crate::flexedit::click_markers(&tr_srcs, at, near, upper);
+                        (v, vec![c])
+                    }
+                };
+                checkpoint(app, "Flex Marker");
+                let mut nx = extras(app, t, r);
+                crate::flexedit::add_at(&mut nx.flex, &adds);
+                let map = lg_audio::flex::TimeMap::new(&nx.flex);
+                let d = match moving[..] {
+                    [a, b] => Some(TDrag::FlexPair { a, b, d0: map.dst(a as f64), d1: map.dst(b as f64), x0: pp.x }),
+                    [c] => Some(TDrag::Flex { src: c, index: nx.flex.iter().position(|m| m.0.abs_diff(c) < 2) }),
+                    _ => None,
+                };
+                set_extras(app, t, r, nx);
+                d
+            } else {
+                None
+            };
+            let d = if flex_d.is_some() {
+                app.audio_edit.t_drag = flex_d;
+                None
+            } else {
+                match tool {
                 crate::edit::Tool::Pointer => match z {
                     "start" => Some(TDrag::TrimStart { start: rg.start, length: rg.length, offset: x.offset }),
                     "end" => Some(TDrag::TrimEnd),
@@ -1113,6 +1182,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     Some(TDrag::Flex { src: flex_src(&x.flex, src as f64) as usize, index: None })
                 }
                 _ => None,
+                }
             };
             if let Some(d) = d {
                 if !matches!(d, TDrag::Marquee { .. } | TDrag::Zoom { .. }) {
@@ -1202,6 +1272,21 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 app.help_tag = Some(vec![("Marquee:".into(), crate::app::bbdt(a as u32, sig)), ("Length:".into(), crate::app::bbdt_len((bq - a) as u32, sig))]);
             }
             TDrag::Zoom { from } => app.audio_edit.marquee = Some((from, tick_of(pp.x))),
+            TDrag::FlexPair { a, b, d0, d1, x0 } => {
+                let dx = (app.seconds_at(tick_of(pp.x)) - app.seconds_at(tick_of(x0))) * rate as f64;
+                let mut flex = nx.flex.clone();
+                let ka = flex.iter().position(|m| m.0 == a);
+                let kb = flex.iter().position(|m| m.0 == b);
+                if let (Some(ka), Some(kb)) = (ka, kb) {
+                    let lo = if ka > 0 { flex[ka - 1].1 as f64 + 1.0 } else { 1.0 };
+                    let hi = flex.get(kb + 1).map_or(f64::MAX, |m| m.1 as f64 - 1.0);
+                    let dx = dx.clamp(lo - d0, hi - d1);
+                    flex[ka].1 = (d0 + dx).round().max(1.0) as usize;
+                    flex[kb].1 = (d1 + dx).round().max(flex[ka].1 as f64 + 1.0) as usize;
+                    nx.flex = flex;
+                    set_extras(app, t, r, nx);
+                }
+            }
             TDrag::Flex { src, index, .. } => {
                 let dst_sec = (app.seconds_at(tick_of(pp.x)) - start_sec).clamp(0.0, region_secs);
                 let dst = (dst_sec * rate as f64) as usize;
@@ -1215,6 +1300,10 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     set_extras(app, t, r, nx);
                     app.audio_edit.t_drag = Some(TDrag::Flex { src: src2, index: k2 });
                     return;
+                }
+                // (onto a neighbouring marker: that one jumps to the transient beyond it)
+                if let Some(k) = index.filter(|k| *k < flex.len()) {
+                    crate::flexedit::cross_extend(&mut flex, k, dst, &tr_srcs);
                 }
                 if let Some(k) = index.filter(|k| *k < flex.len()) {
                     flex.remove(k);
@@ -3099,7 +3188,7 @@ mod tests {
         let mut a = AudioFile::new(48_000, 1, vec![0.5; 48_000]);
         a.bits = 16;
         a.write(&path).unwrap();
-        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false, mode: Default::default(), notes: Vec::new() };
+        let plan = Plan { file: path.clone(), offset: 12_000, seconds: 0.5, gain_db: -6.0206, fades: RegionFades { in_ms: 100, ..Default::default() }, flex: Vec::new(), reverse: false, mode: Default::default(), notes: Vec::new(), params: Default::default(), keep_unvoiced: false };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 48_000);
         assert_eq!(out[0], 0.0);

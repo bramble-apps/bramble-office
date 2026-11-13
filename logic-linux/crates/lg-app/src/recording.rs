@@ -45,7 +45,7 @@ impl InputSel {
         if self == InputSel::Stereo { 2 } else { 1 }
     }
     /// A stereo input frame as this input hears it (a mono input on both sides).
-    fn pick(self, l: f32, r: f32) -> (f32, f32) {
+    pub(crate) fn pick(self, l: f32, r: f32) -> (f32, f32) {
         match self {
             InputSel::Input1 => (l, l),
             InputSel::Input2 => (r, r),
@@ -100,12 +100,14 @@ pub struct EngineRec {
     pub tap: VecDeque<f32>,
     /// An instrument's side chain listens to the live input.
     pub side_listen: bool,
+    /// Audio Flashback Capture's buffer (flashback.rs).
+    pub flash: crate::flashback::Buf,
 }
 
 impl EngineRec {
     /// The input for a block of `frames` (stereo, interleaved), when something needs it.
     pub fn input(&mut self, frames: usize) -> Option<Vec<f32>> {
-        let need = self.capturing || !self.monitored.is_empty() || self.tuner || self.side_listen;
+        let need = self.capturing || !self.monitored.is_empty() || self.tuner || self.side_listen || self.flash.armed;
         let out = match &mut self.feed {
             Feed::None => return None,
             Feed::Device(q) => {
@@ -508,13 +510,13 @@ pub fn audio_dir(app: &App) -> PathBuf {
 }
 
 /// "Audio 1#01.wav", the next number free in `dir`.
-fn file_name(dir: &Path, track: &str) -> PathBuf {
+pub(crate) fn file_name(dir: &Path, track: &str) -> PathBuf {
     let base = track.replace(['/', '\\', ':'], "-");
     (1..).map(|n| dir.join(format!("{base}#{n:02}.wav"))).find(|p| !p.exists()).unwrap()
 }
 
 impl App {
-    fn engine_lock(&self) -> std::sync::MutexGuard<'_, crate::audio::Engine> {
+    pub(crate) fn engine_lock(&self) -> std::sync::MutexGuard<'_, crate::audio::Engine> {
         self.engine.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -539,7 +541,7 @@ fn audio_targets(app: &App) -> Vec<usize> {
     v
 }
 
-fn midi_target(app: &App) -> Option<usize> {
+pub(crate) fn midi_target(app: &App) -> Option<usize> {
     let p = app.project.as_ref()?;
     let ok = |t: usize| p.tracks.get(t).is_some_and(|tr| tr.kind != TrackKind::Audio);
     let armed: Vec<usize> = { let mut a: Vec<usize> = app.armed.iter().copied().filter(|&t| ok(t)).collect(); a.sort(); a };
@@ -689,7 +691,7 @@ pub fn update(app: &mut App) {
     if !mon.is_empty() {
         ensure_feed(app);
     }
-    let needs_device = !mon.is_empty() || recording_audio;
+    let needs_device = !mon.is_empty() || recording_audio || crate::flashback::wants_input(app);
     {
         let mut e = app.engine_lock();
         if e.rec.monitored != mon {
@@ -988,7 +990,7 @@ fn overlapping(app: &App, t: usize, a: u32, b: u32) -> Vec<usize> {
 }
 
 /// The MIDI recording's passes placed on track `t` over `range`.
-fn place_midi(app: &mut App, t: usize, passes: Vec<Vec<Note>>, range: (u32, u32), cycle: bool) {
+pub(crate) fn place_midi(app: &mut App, t: usize, passes: Vec<Vec<Note>>, range: (u32, u32), cycle: bool) {
     let name = app.project.as_ref().and_then(|p| p.tracks.get(t)).map_or(String::new(), |tr| tr.name.clone());
     let (a, b) = range;
     let all: Vec<Note> = passes.iter().flatten().copied().collect();
@@ -1103,7 +1105,7 @@ fn replace_midi(app: &mut App, t: usize, (a, b): (u32, u32), (first, last): (u32
 }
 
 /// The audio recording's passes placed on track `t`.
-fn place_audio(app: &mut App, t: usize, mut regions: Vec<Region>, cycle: Option<(u32, u32)>) {
+pub(crate) fn place_audio(app: &mut App, t: usize, mut regions: Vec<Region>, cycle: Option<(u32, u32)>) {
     // (Settings ▸ Audio ▸ Devices ▸ Recording Delay)
     crate::recsettings::delay_regions(app, &mut regions);
     let a = regions.iter().map(|r| r.start).min().unwrap_or(0);
@@ -1333,7 +1335,7 @@ pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> boo
 }
 
 /// A choice in one of the Record submenus: (checked, available); `set` picks it.
-fn choice(app: &mut App, menu: &str, part: usize, label: &str, set: bool) -> (bool, bool) {
+pub(crate) fn choice(app: &mut App, menu: &str, part: usize, label: &str, set: bool) -> (bool, bool) {
     match menu {
         "Count-in" => {
             let v = if label == "None" {

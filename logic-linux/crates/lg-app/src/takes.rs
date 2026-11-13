@@ -30,13 +30,16 @@ pub struct Ui {
     /// The take or comp being renamed (⇧T): folder, the text so far.
     pub renaming: Option<(usize, String)>,
     swipe: Option<Swipe>,
+    /// A comp section's edge (0 left, 1 right) or middle (2) being dragged: folder, section,
+    /// what, the press tick, the folder before.
+    comp_drag: Option<(usize, usize, u8, f32, TakeFolder)>,
     /// Waveforms of the takes' files: a peak per PEAK frames, the file's rate.
     peaks: HashMap<PathBuf, Arc<(Vec<f32>, u32)>>,
 }
 
 impl Default for Ui {
     fn default() -> Self {
-        Ui { quick_swipe: true, snap: false, focus: None, renaming: None, swipe: None, peaks: HashMap::new() }
+        Ui { quick_swipe: true, snap: false, focus: None, renaming: None, swipe: None, comp_drag: None, peaks: HashMap::new() }
     }
 }
 
@@ -704,10 +707,69 @@ fn take_lanes(app: &mut App, ui: &mut egui::Ui, lane: Rect, fi: usize, f: &TakeF
                 // click: the take plays whole; drag (Quick Swipe Comping): that part into the comp
                 let resp = ui.interact(tr, ui.scope_id().with(("take-lane", fi, k)), Sense::click_and_drag());
                 let snap = |t: f32| if snap_on { ((t / beat).round() * beat).max(0.0) } else { t.max(0.0) };
-                if resp.clicked() {
+                // comp edits (Logic's): a take selection's edges and middle drag (its neighbours
+                // follow; Shift: alone), Shift-click removes it, Shift-click on the take's header
+                // removes the take or fills what no take plays
+                let comp = match f.active {
+                    Active::Comp(c) if c < f.comps.len() => Some(c),
+                    _ => None,
+                };
+                let secs = f.active_sections();
+                let shift = ui.input(|i| i.modifiers.shift);
+                let hit = |px: f32| -> Option<(usize, u8)> {
+                    let ks = lg_core::takes::section_at(&secs, k, to_tick(px).max(0.0) as u32)
+                        .or_else(|| secs.iter().position(|s| s.take == k && ((x(s.start as f32) - px).abs() < 5.0 || (x(s.end as f32) - px).abs() < 5.0)))?;
+                    let s = secs[ks];
+                    Some((ks, if (x(s.start as f32) - px).abs() < 5.0 { 0 } else if (x(s.end as f32) - px).abs() < 5.0 { 1 } else { 2 }))
+                };
+                if let (Some(_), Some(h)) = (comp, resp.hover_pos()) {
+                    if let Some((_, w)) = hit(h.x).filter(|_| h.y > tr.min.y + 12.0) {
+                        ui.ctx().set_cursor_icon(if w == 2 { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeColumn });
+                    }
+                }
+                if resp.clicked() && shift && comp.is_some() {
+                    let c = comp.unwrap();
+                    let pp = resp.interact_pointer_pos().unwrap_or(tr.center());
+                    let (ts, te) = (take.start, take.start + take.length);
+                    let new = if pp.y < tr.min.y + 12.0 {
+                        Some(lg_core::takes::header_shift_click(&secs, k, ts, te))
+                    } else {
+                        hit(pp.x).map(|(ks, _)| lg_core::takes::remove_section(&secs, ks))
+                    };
+                    if let Some(new) = new {
+                        edit(app, fi, "Edit Comp", |f| f.comps[c].sections = new);
+                    }
+                } else if resp.clicked() {
                     edit(app, fi, "Select Take", |f| f.select(Active::Take(k)));
                 }
-                if resp.drag_started() && app.rec.takes.quick_swipe {
+                let press = ui.input(|i| i.pointer.press_origin());
+                let comp_hit = comp.and(press).filter(|pp| pp.y > tr.min.y + 12.0).and_then(|pp| hit(pp.x));
+                if resp.drag_started() && comp_hit.is_some() {
+                    let (ks, w) = comp_hit.unwrap();
+                    crate::audioedit::checkpoint(app, "Edit Comp");
+                    app.rec.takes.comp_drag = Some((fi, ks, w, press.map_or(0.0, |pp| to_tick(pp.x)), f.clone()));
+                }
+                if let (true, Some(pp), Some((dfi, ks, w, from, before))) = (resp.dragged(), resp.interact_pointer_pos(), app.rec.takes.comp_drag.clone()) {
+                    if dfi == fi {
+                        if let Active::Comp(c) = before.active {
+                            let old = &before.comps[c].sections;
+                            let new = match w {
+                                2 => lg_core::takes::move_section(old, ks, (snap(to_tick(pp.x)) - snap(from)) as i64),
+                                _ => lg_core::takes::move_edge(old, ks, w == 0, snap(to_tick(pp.x)) as u32, shift),
+                            };
+                            let mut nf = before.clone();
+                            nf.comps[c].sections = new;
+                            if let Some(x) = folder_mut(app, fi) {
+                                *x = nf;
+                            }
+                        }
+                    }
+                }
+                if resp.drag_stopped() && app.rec.takes.comp_drag.take().is_some() {
+                    sync(app, fi);
+                    app.after_edit();
+                }
+                if resp.drag_started() && comp_hit.is_none() && app.rec.takes.quick_swipe {
                     let from_tick = ui.input(|i| i.pointer.press_origin()).map_or(0.0, |pp| snap(to_tick(pp.x)));
                     crate::audioedit::checkpoint(app, "Quick Swipe Comping");
                     app.rec.takes.swipe = Some(Swipe { folder: fi, take: k, from_tick, before: f.clone() });

@@ -58,6 +58,7 @@ pub const COMMANDS: &[&str] = &[
     "Analyze Audio for Flex Editing", "Create MIDI Track from Flex Pitch Data",
     "Remove Silence from Audio Region…", "Remove Silence…",
     "Set Flex Tool",
+    "Set All to Perfect Pitch", "Set All to Original Pitch",
     // the audio editors' groups (audioedit::command runs them in their tab)
     "Play/Stop All", "Play/Stop Region", "Play/Stop Region to Anchor", "Play/Stop Region from Anchor",
     "Create Backup", "Revert to Backup", "Save A Copy of Audio File As…", "Save Selection As…",
@@ -82,6 +83,12 @@ pub const COMMANDS: &[&str] = &[
 pub struct TrackFlex {
     pub on: bool,
     pub mode: Mode,
+    /// The Track inspector's parameters of the Flex Time algorithms (Logic's defaults).
+    pub params: lg_audio::flex::Params,
+    /// Flex Pitch's: Formant Shift (semitones, added to the notes' own) and Formants (false:
+    /// Process always, true: Keep Unvoiced Formants).
+    pub formant_shift: f32,
+    pub keep_unvoiced: bool,
 }
 
 /// A file's Flex Pitch analysis (the whole file).
@@ -93,6 +100,8 @@ pub struct Pitch {
 #[derive(Clone, Copy, Debug)]
 enum Hot {
     Body,
+    Start,
+    End,
     Fine,
     DriftIn,
     DriftOut,
@@ -110,6 +119,15 @@ struct NoteDrag {
     orig: Note,
     y0: f32,
     row_h: f32,
+    /// Moving or resizing in time: where the press was, destination frames a point, the
+    /// markers before, (left bound, note start, note end, right bound) in source frames, the
+    /// note's start and end as it played (destination frames), moved sideways yet.
+    x0: f32,
+    fpp: f64,
+    flex: Vec<(usize, usize)>,
+    span: (f64, f64, f64, f64),
+    d: (f64, f64),
+    moved: bool,
 }
 
 /// Remove Silence's settings (Logic's defaults).
@@ -140,6 +158,18 @@ pub struct State {
     pub correction: f32,
     pub correct_to_key: bool,
     drag: Option<NoteDrag>,
+    /// A Tracks-area pitch bar being dragged: (track, region, note, the note before, press y).
+    bar_drag: Option<(usize, usize, usize, Note, f32)>,
+    /// The ATE Flex Pitch inspector: Time Quantize (index), Strength (None: 100), Scale
+    /// Quantize's key and scale, a Gain drag running.
+    pub time_q: usize,
+    pub q_strength: Option<f32>,
+    pub scale_root: u8,
+    pub scale_minor: bool,
+    gain_drag: bool,
+    param_edit_at: f64,
+    /// The Flex Pitch notes selected in the Audio Track Editor: (track, region, note).
+    pub note_sel: Vec<(usize, usize, usize)>,
     /// Remove Silence's sheet (open) and its last values.
     pub silence_open: bool,
     pub silence: Silence,
@@ -158,7 +188,7 @@ pub fn track(app: &App, t: usize) -> TrackFlex {
     let on = app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| {
         (0..tr.regions.len()).any(|r| app.audio_edit.regions.get(&(t, r)).is_some_and(|x| !x.flex.is_empty() || !x.pitch.is_empty() || x.follow))
     });
-    TrackFlex { on, mode: Mode::Polyphonic }
+    TrackFlex { on, mode: Mode::Polyphonic, ..Default::default() }
 }
 
 /// Before an edit of flex settings, markers or the project: one undo step for all of it.
@@ -189,8 +219,37 @@ fn sync_undo(app: &mut App) {
 
 pub fn set_mode(app: &mut App, t: usize, mode: Mode) {
     checkpoint(app, "Flex Mode");
-    app.flex.tracks.insert(t, TrackFlex { on: true, mode });
+    let was = track(app, t);
+    app.flex.tracks.insert(t, TrackFlex { on: true, mode, ..was });
+    freeze_source_only(app, t);
     app.after_edit();
+}
+
+/// The mode for every audio track (Shift-choosing it).
+pub fn set_mode_all(app: &mut App, mode: Mode) {
+    checkpoint(app, "Flex Mode");
+    let n = app.project.as_ref().map_or(0, |p| p.tracks.len());
+    for t in 0..n {
+        if is_audio_track(app, t) {
+            let was = track(app, t);
+            app.flex.tracks.insert(t, TrackFlex { on: true, mode, ..was });
+            freeze_source_only(app, t);
+        }
+    }
+    app.after_edit();
+}
+
+/// Choosing a flex algorithm switches the track's Freeze Mode to Source Only (Logic's).
+fn freeze_source_only(app: &mut App, t: usize) {
+    if let Some(s) = crate::tm::set_mut(app, t) {
+        s.freeze_mode = lg_core::trackmix::FreezeMode::SourceOnly;
+    }
+}
+
+/// The track's Flex Time parameters and Flex Pitch's Formants choice, as the engine plays them.
+pub fn params_for(app: &App, t: usize) -> (lg_audio::flex::Params, bool) {
+    let f = track(app, t);
+    (f.params, f.keep_unvoiced)
 }
 
 fn is_audio_track(app: &App, t: usize) -> bool {
@@ -351,7 +410,7 @@ fn stretch_reg(app: &mut App, g: Reg, len: f64) {
     // the Time Stretching Algorithm on a track without Flex of its own (stretch.rs)
     if !app.flex.tracks.contains_key(&g.t) {
         let mode = crate::stretch::mode(&app.ctx);
-        app.flex.tracks.insert(g.t, TrackFlex { on: true, mode });
+        app.flex.tracks.insert(g.t, TrackFlex { on: true, mode, ..Default::default() });
     }
 }
 
@@ -381,7 +440,7 @@ pub fn quantize_audio(app: &mut App, grid: u32) -> bool {
     }
     for &(t, _) in &ts {
         if !track(app, t).on {
-            app.flex.tracks.insert(t, TrackFlex { on: true, mode: Mode::Polyphonic });
+            app.flex.tracks.insert(t, TrackFlex { on: true, mode: Mode::Polyphonic, ..Default::default() });
         }
     }
     let keep = app.quantize_grid;
@@ -457,7 +516,17 @@ pub fn plan_for(app: &App, t: usize, rg: &lg_core::Region, x: &RegionAudio) -> (
     if !tf.on {
         return (Mode::Polyphonic, Vec::new(), Vec::new());
     }
-    let notes = if tf.mode == Mode::Pitch { x.pitch.iter().filter(|n| !n.is_neutral()).cloned().collect() } else { Vec::new() };
+    let notes = if tf.mode != Mode::Pitch {
+        Vec::new()
+    } else if tf.formant_shift.abs() > 1e-3 {
+        // (the track's Formant Shift: on every note)
+        let file = rg.audio.as_ref().map(|a| a.file.clone()).unwrap_or_default();
+        let mut v = region_notes(app, x, &file, usize::MAX);
+        v.iter_mut().for_each(|n| n.formant_cents += tf.formant_shift * 100.0);
+        v
+    } else {
+        x.pitch.iter().filter(|n| !n.is_neutral()).cloned().collect()
+    };
     let mut flex = x.flex.clone();
     if x.follow {
         if let Some(f) = follow_anchors(app, rg, x) {
@@ -602,6 +671,11 @@ fn apply_correction(app: &mut App, t: usize, r: usize) {
 /// Runs a Flex command by its Logic name; false when it isn't one or doesn't apply now.
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
     let _ = ctx;
+    match name {
+        "Set All to Perfect Pitch" => return set_all(app, true),
+        "Set All to Original Pitch" => return set_all(app, false),
+        _ => {}
+    }
     if let Some(mode) = Mode::from_label(name) {
         let Some(t) = app.selected_track.filter(|&t| is_audio_track(app, t)) else { return false };
         set_mode(app, t, mode);
@@ -838,7 +912,7 @@ fn quantize(app: &mut App) -> bool {
         let rate = g.rate;
         let to_tick = |d: f64| crate::smarttempo::tick_at(app, start_sec + d / rate);
         let to_dst = |tick: f64| (app.seconds_at(tick) - start_sec) * rate;
-        let q = lg_audio::flex::quantize(&trs, &base, |d| to_dst(((to_tick(d) / grid).round() * grid).max(start_tick)), 1.0, (to_dst(start_tick + grid / 2.0)).max(1.0));
+        let q = lg_audio::flex::quantize(&trs, &base, |d| to_dst(((to_tick(d) / grid).round() * grid).max(start_tick)), strength(app) as f64 / 100.0, (to_dst(start_tick + grid / 2.0)).max(1.0));
         todo.push((g, q));
     }
     checkpoint(app, "Quantize");
@@ -1033,7 +1107,12 @@ pub fn header(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
     let k = Mode::ALL.iter().position(|m| *m == f.mode).unwrap_or(0);
     p.rect_filled(mr, 4.0, look::group_bg());
     if let Some(k) = crate::widgets::choice_slot(ui, mr, ui.scope_id().with(("flexmode", t)), k, &names) {
-        set_mode(app, t, Mode::ALL[k]);
+        // (Shift-choosing: every audio track)
+        if ui.input(|i| i.modifiers.shift) {
+            set_mode_all(app, Mode::ALL[k]);
+        } else {
+            set_mode(app, t, Mode::ALL[k]);
+        }
     }
 }
 
@@ -1066,17 +1145,21 @@ pub fn draw_region(app: &App, p: &egui::Painter, rr: Rect, t: usize, r: usize) {
         if notes.is_empty() {
             return;
         }
-        let lo = notes.iter().map(|n| n.target()).fold(f32::MAX, f32::min) - 1.0;
-        let hi = notes.iter().map(|n| n.target()).fold(f32::MIN, f32::max) + 1.0;
+        // the pitch bars: from the zero line (perfect pitch), up when sharp, down when flat,
+        // ±50 cents to the edges
         let inner = Rect::from_min_max(pos2(rr.min.x, rr.min.y + 16.0), pos2(rr.max.x, rr.max.y - 2.0));
+        let (zero, half) = (inner.center().y, inner.height() / 2.0);
+        p.hline(inner.x_range(), zero, Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x20, 0x10, 0x40, 140)));
+        let bar = Color32::from_rgba_unmultiplied(0x20, 0x10, 0x40, 200);
         for n in notes {
             let (s, e) = (n.start.saturating_sub(x.offset) as f64, n.end.saturating_sub(x.offset) as f64);
             let (x0, x1) = (x_of(map.dst(s)).max(rr.min.x), x_of(map.dst(e)).min(rr.max.x));
             if x1 <= x0 {
                 continue;
             }
-            let y = inner.max.y - (n.target() - lo) / (hi - lo).max(1.0) * inner.height();
-            p.line_segment([pos2(x0, y), pos2(x1, y)], Stroke::new(3.0, Color32::from_rgba_unmultiplied(0x20, 0x10, 0x40, 200)));
+            let y = zero - deviation(&n) / 50.0 * half;
+            let (a, b) = if (y - zero).abs() < 1.5 { (zero - 1.5, zero + 1.5) } else { (y.min(zero), y.max(zero)) };
+            p.rect_filled(Rect::from_min_max(pos2(x0 + 0.5, a), pos2((x1 - 0.5).max(x0 + 1.0), b)), 1.0, bar);
         }
     }
 }
@@ -1159,9 +1242,127 @@ pub fn editor_bar(app: &mut App, ui: &mut egui::Ui, at: Pos2, room: f32, t: usiz
     bx
 }
 
+/// Flex markers that play the source span [s0, s1) (source frames from the region's start) at
+/// destination [d0, d1): the audio from `lo` to `s0` and from `s1` to `hi` stretched to fit,
+/// `lo` and `hi` staying where they play. Markers between `lo` and `hi` give way.
+pub fn place_span(flex: &[(usize, usize)], lo: f64, s0: f64, s1: f64, hi: f64, d0: f64, d1: f64) -> Vec<(usize, usize)> {
+    let map = TimeMap::new(flex);
+    let (dlo, dhi) = (map.dst(lo), map.dst(hi));
+    let d0 = d0.clamp(dlo + 1.0, (dhi - 2.0).max(dlo + 1.0));
+    let d1 = d1.clamp(d0 + 1.0, (dhi - 1.0).max(d0 + 1.0));
+    let mut out: Vec<(usize, usize)> = flex.iter().copied().filter(|m| (m.0 as f64) <= lo + 1.0 || (m.0 as f64) >= hi - 1.0).collect();
+    for (s, d) in [(lo, dlo), (s0, d0), (s1, d1), (hi, dhi)] {
+        if s < 1.0 || out.iter().any(|m| (m.0 as f64 - s).abs() < 2.0) {
+            continue;
+        }
+        out.push((s.round() as usize, d.round().max(1.0) as usize));
+    }
+    out.sort_by_key(|m| m.0);
+    // (both columns rising)
+    let mut v: Vec<(usize, usize)> = Vec::new();
+    for m in out {
+        if v.last().is_none_or(|l| m.0 > l.0 && m.1 > l.1) {
+            v.push(m);
+        }
+    }
+    v
+}
+
+/// Note `k` split at file frame `at`: two notes with its edits.
+pub fn split_note(notes: &mut Vec<Note>, k: usize, at: usize) -> bool {
+    let Some(n) = notes.get(k).cloned() else { return false };
+    if at <= n.start + 64 || at + 64 >= n.end {
+        return false;
+    }
+    let mut b = n.clone();
+    b.start = at;
+    notes[k].end = at;
+    notes.insert(k + 1, b);
+    true
+}
+
+/// The notes `ks` (indexes) made one: from the first's start to the last's end, the pitch and
+/// edits of the longest.
+pub fn join_notes(notes: &mut Vec<Note>, ks: &[usize]) -> bool {
+    let mut ks: Vec<usize> = ks.iter().copied().filter(|&k| k < notes.len()).collect();
+    ks.sort_unstable();
+    ks.dedup();
+    if ks.len() < 2 {
+        return false;
+    }
+    let longest = ks.iter().copied().max_by_key(|&k| notes[k].end - notes[k].start).unwrap();
+    let mut n = notes[longest].clone();
+    n.start = ks.iter().map(|&k| notes[k].start).min().unwrap();
+    n.end = ks.iter().map(|&k| notes[k].end).max().unwrap();
+    n.level_db = ks.iter().map(|&k| notes[k].level_db).fold(f32::MIN, f32::max);
+    for &k in ks.iter().rev() {
+        notes.remove(k);
+    }
+    let at = notes.iter().position(|m| m.start > n.start).unwrap_or(notes.len());
+    notes.insert(at, n);
+    true
+}
+
+/// Set to Perfect Pitch: to the nearest semitone (the other edits kept).
+pub fn perfect(n: &mut Note) {
+    n.shift_cents = (n.target().round() - n.pitch) * 100.0;
+}
+
+/// Set to Original Pitch: as played.
+pub fn original(n: &mut Note) {
+    n.shift_cents = 0.0;
+}
+
+/// The region's notes, edited by `f` (one undo step).
+fn edit_notes(app: &mut App, t: usize, r: usize, what: &str, f: impl FnOnce(&mut Vec<Note>) -> bool) -> bool {
+    let Some(g) = reg(app, t, r) else { return false };
+    let mut notes = region_notes(app, &g.x, &g.file, g.src_end());
+    if notes.is_empty() {
+        return false;
+    }
+    let before = notes.clone();
+    if !f(&mut notes) || notes == before {
+        return false;
+    }
+    checkpoint(app, what);
+    let mut x = audioedit::extras(app, t, r);
+    x.pitch = notes;
+    audioedit::set_extras(app, t, r, x);
+    app.after_edit();
+    true
+}
+
+/// The Flex Pitch notes selected in the Audio Track Editor (their region and indexes).
+fn note_sel(app: &App, t: usize, r: usize) -> Vec<usize> {
+    app.flex.note_sel.iter().filter(|s| s.0 == t && s.1 == r).map(|s| s.2).collect()
+}
+
+/// Join (⌘J) with Flex Pitch notes selected in the Audio Track Editor: they become one note.
+pub fn join_command(app: &mut App, name: &str) -> bool {
+    if !matches!(name, "Join" | "Join Regions" | "Join Regions/Notes") || app.flex.note_sel.is_empty() || !app.audio_edit.show_flex {
+        return false;
+    }
+    let (t, r) = (app.flex.note_sel[0].0, app.flex.note_sel[0].1);
+    if app.selected_region != Some((t, r)) || track(app, t).mode != Mode::Pitch {
+        return false;
+    }
+    let ks = note_sel(app, t, r);
+    if edit_notes(app, t, r, "Join", |n| join_notes(n, &ks)) {
+        app.flex.note_sel.clear();
+    }
+    true
+}
+
 /// The Flex Pitch notes over the Track editor's region (Flex shown, the track in Flex Pitch):
 /// drawn and edited. `x_of`: the x of a destination frame (from the region's start). True when
 /// a note took the pointer.
+///
+/// As Logic's: drag a note up or down for its pitch, sideways to move it in time (the audio
+/// around it stretched by flex markers), its left or right edge to resize it; the hotspots: Pitch
+/// Drift at the start (upper left) and end (upper right), Vibrato (upper middle), Gain (lower
+/// left), Fine Pitch (lower middle), Formant Shift (lower right). The Scissors split a note, the
+/// Join tool (or ⌘J) joins selected notes, the Vibrato and Volume tools drag a note's vibrato or
+/// gain; double-click sets perfect pitch; the shortcut menu has Set to Perfect / Original Pitch.
 pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize, x_of: &dyn Fn(f64) -> f32) -> bool {
     if !app.audio_edit.show_flex || track(app, t).mode != Mode::Pitch {
         return false;
@@ -1195,6 +1396,13 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
     let hop = analysis.track.hop;
     let note_h = (row_h * 0.85).clamp(6.0, 18.0);
     let hover = ui.input(|i| i.pointer.hover_pos());
+    let (cmd, shift) = ui.input(|i| (i.modifiers.command, i.modifiers.shift));
+    let tool = if cmd { app.audio_edit.cmd_tool } else { app.audio_edit.tool };
+    // destination frames a point (x_of is linear)
+    let fpp = 1000.0 / ((x_of(1000.0) - x_of(0.0)) as f64).max(1e-6);
+    let dst_at = |x: f32| ((x - x_of(0.0)) as f64 * fpp).max(0.0);
+    let src_len = g.src_end().saturating_sub(off) as f64;
+    let selected = note_sel(app, t, r);
     let mut took = false;
     let accent = Color32::from_rgb(0x9b, 0x6b, 0xe8);
     for (k, n) in notes.iter().enumerate() {
@@ -1206,8 +1414,9 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
         let yc = y_of(n.target());
         let nr = Rect::from_min_max(pos2(x0, yc - note_h / 2.0), pos2(x1, yc + note_h / 2.0));
         let edited = !n.is_neutral();
-        p.rect_filled(nr, 3.0, if edited { accent.gamma_multiply(0.85) } else { accent.gamma_multiply(0.45) });
-        p.rect_stroke(nr, 3.0, Stroke::new(1.0, accent), egui::StrokeKind::Inside);
+        let sel = selected.contains(&k);
+        p.rect_filled(nr, 3.0, if sel { accent } else if edited { accent.gamma_multiply(0.85) } else { accent.gamma_multiply(0.45) });
+        p.rect_stroke(nr, 3.0, Stroke::new(1.0, if sel { Color32::WHITE } else { accent }), egui::StrokeKind::Inside);
         // the pitch curve as it will play
         let centre = n.pitch * 100.0;
         let mut pts = Vec::new();
@@ -1221,7 +1430,8 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
                 let here = flexpitch::hz_to_midi(f) * 100.0;
                 let v: Vec<f32> = (k2.saturating_sub(smooth).max(ka)..(k2 + smooth + 1).min(kb)).filter_map(|q| (analysis.track.f0[q] > 0.0).then(|| flexpitch::hz_to_midi(analysis.track.f0[q]) * 100.0)).collect();
                 let slow = if v.is_empty() { centre } else { v.iter().sum::<f32>() / v.len() as f32 };
-                let new = centre + n.shift_cents + n.drift * (slow - centre) + n.vibrato * (here - slow);
+                let at = (k2 - ka) as f32 / (kb - ka).max(1) as f32;
+                let new = centre + n.shift_cents + n.drift_at(at) * (slow - centre) + n.vibrato * (here - slow);
                 let src = (k2 * hop).saturating_sub(off) as f64;
                 pts.push(pos2(x_of(g.map.dst(src)), y_of(new / 100.0)));
             } else if pts.len() > 1 {
@@ -1234,19 +1444,21 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
         if pts.len() > 1 {
             p.add(egui::Shape::line(pts, Stroke::new(1.3, Color32::WHITE)));
         }
-        // hotspots
+        // hotspots (Logic's: drift at the top corners, vibrato top middle; gain, fine pitch and
+        // formant shift along the bottom)
         let hots = [
             (Hot::DriftIn, pos2(nr.min.x + 4.0, nr.min.y)),
-            (Hot::Fine, pos2(nr.center().x, nr.min.y)),
+            (Hot::Vibrato, pos2(nr.center().x, nr.min.y)),
             (Hot::DriftOut, pos2(nr.max.x - 4.0, nr.min.y)),
             (Hot::Gain, pos2(nr.min.x + 4.0, nr.max.y)),
-            (Hot::Vibrato, pos2(nr.center().x, nr.max.y)),
+            (Hot::Fine, pos2(nr.center().x, nr.max.y)),
             (Hot::Formant, pos2(nr.max.x - 4.0, nr.max.y)),
         ];
         let id = ui.scope_id().with(("fpnote", t, r, k));
         let resp = ui.interact(nr.expand(4.0), id, Sense::click_and_drag());
         let over = hover.is_some_and(|h| nr.expand(5.0).contains(h));
-        if over && nr.width() > 24.0 {
+        let pointer = tool == crate::edit::Tool::Pointer;
+        if over && pointer && nr.width() > 24.0 {
             for (_, c) in hots {
                 p.circle_filled(c, 3.0, Color32::WHITE);
                 p.circle_stroke(c, 3.0, Stroke::new(1.0, accent));
@@ -1256,34 +1468,121 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
             took = true;
             let tip = format!("{}{}  {:+.0} ct", names[(n.target().round() as i32).rem_euclid(12) as usize], n.target().round() as i32 / 12 - 1, (n.target() - n.target().round()) * 100.0);
             app.help_tag = Some(vec![("Flex Pitch:".into(), tip)]);
+            if let Some(h) = hover {
+                let edge = pointer && h.y > nr.min.y + 3.0 && h.y < nr.max.y - 3.0 && ((h.x - nr.min.x).abs() < 4.0 || (h.x - nr.max.x).abs() < 4.0);
+                ui.ctx().set_cursor_icon(match tool {
+                    crate::edit::Tool::Scissors => egui::CursorIcon::Crosshair,
+                    crate::edit::Tool::Vibrato | crate::edit::Tool::Volume => egui::CursorIcon::ResizeVertical,
+                    _ if edge => egui::CursorIcon::ResizeHorizontal,
+                    _ => egui::CursorIcon::Default,
+                });
+            }
         }
+        // clicks: select (Shift adds), split, join
+        if resp.clicked() {
+            let pp = resp.interact_pointer_pos().unwrap_or(nr.center());
+            match tool {
+                crate::edit::Tool::Scissors => {
+                    let at = off + g.map.src(dst_at(pp.x)).round().max(0.0) as usize;
+                    edit_notes(app, t, r, "Split", |ns| split_note(ns, k, at));
+                    app.flex.note_sel.clear();
+                }
+                crate::edit::Tool::Glue => {
+                    let mut ks = selected.clone();
+                    if !ks.contains(&k) {
+                        ks = vec![k];
+                        // (an unselected note joins the next one)
+                        if k + 1 < notes.len() {
+                            ks.push(k + 1);
+                        }
+                    }
+                    edit_notes(app, t, r, "Join", |ns| join_notes(ns, &ks));
+                    app.flex.note_sel.clear();
+                }
+                _ => {
+                    if !shift {
+                        app.flex.note_sel.clear();
+                    }
+                    if let Some(i) = app.flex.note_sel.iter().position(|s| *s == (t, r, k)) {
+                        app.flex.note_sel.remove(i);
+                    } else {
+                        app.flex.note_sel.push((t, r, k));
+                    }
+                }
+            }
+        }
+        resp.context_menu(|ui| {
+            let ks = if selected.contains(&k) { selected.clone() } else { vec![k] };
+            if ui.button("Set to Perfect Pitch").clicked() {
+                edit_notes(app, t, r, "Set to Perfect Pitch", |ns| {
+                    ks.iter().for_each(|&i| if let Some(n) = ns.get_mut(i) { perfect(n) });
+                    true
+                });
+                ui.close();
+            }
+            if ui.button("Set to Original Pitch").clicked() {
+                edit_notes(app, t, r, "Set to Original Pitch", |ns| {
+                    ks.iter().for_each(|&i| if let Some(n) = ns.get_mut(i) { original(n) });
+                    true
+                });
+                ui.close();
+            }
+        });
         if resp.drag_started() {
             let pp = ui.input(|i| i.pointer.press_origin()).unwrap_or(nr.center());
-            let hot = if nr.width() > 24.0 { hots.iter().find(|(_, c)| c.distance(pp) < 6.0).map_or(Hot::Body, |h| h.0) } else { Hot::Body };
-            checkpoint(app, "Flex Pitch");
-            let mut x = audioedit::extras(app, t, r);
-            if x.pitch.is_empty() {
-                x.pitch = notes.clone();
-                audioedit::set_extras(app, t, r, x);
+            let edge_l = (pp.x - nr.min.x).abs() < 4.0 && pp.y > nr.min.y + 3.0 && pp.y < nr.max.y - 3.0;
+            let edge_r = (pp.x - nr.max.x).abs() < 4.0 && pp.y > nr.min.y + 3.0 && pp.y < nr.max.y - 3.0;
+            let hot = match tool {
+                crate::edit::Tool::Vibrato => Some(Hot::Vibrato),
+                crate::edit::Tool::Volume => Some(Hot::Gain),
+                crate::edit::Tool::Pointer | crate::edit::Tool::Pencil => Some(if nr.width() > 24.0 { hots.iter().find(|(_, c)| c.distance(pp) < 6.0).map(|h| h.0) } else { None }.unwrap_or(if edge_l { Hot::Start } else if edge_r { Hot::End } else { Hot::Body })),
+                _ => None,
+            };
+            if let Some(hot) = hot {
+                checkpoint(app, "Flex Pitch");
+                let mut x = audioedit::extras(app, t, r);
+                if x.pitch.is_empty() {
+                    x.pitch = notes.clone();
+                    audioedit::set_extras(app, t, r, x.clone());
+                }
+                // the stretch bounds: the neighbouring notes (else the region's ends)
+                let lo_s = if k > 0 { notes[k - 1].end.saturating_sub(off) as f64 } else { 0.0 }.min(s);
+                let hi_s = notes.get(k + 1).map_or(src_len, |m| m.start.saturating_sub(off) as f64).max(e);
+                app.flex.drag = Some(NoteDrag { t, r, note: k, hot, orig: n.clone(), y0: pp.y, row_h, x0: pp.x, fpp, flex: x.flex.clone(), span: (lo_s, s, e, hi_s), d: (g.map.dst(s), g.map.dst(e)), moved: false });
             }
-            app.flex.drag = Some(NoteDrag { t, r, note: k, hot, orig: n.clone(), y0: pp.y, row_h });
         }
         if resp.dragged() {
             if let (Some(d), Some(pp)) = (app.flex.drag.clone(), resp.interact_pointer_pos()) {
                 if d.t == t && d.r == r && d.note == k {
                     let dy = d.y0 - pp.y;
+                    let dx = (pp.x - d.x0) as f64 * d.fpp;
                     let mut nn = d.orig.clone();
+                    let mut flex = None;
+                    let (lo_s, s0, s1, hi_s) = d.span;
                     match d.hot {
-                        Hot::Body => nn.shift_cents = d.orig.shift_cents + (dy / d.row_h.max(1.0)).round() * 100.0,
+                        Hot::Body => {
+                            nn.shift_cents = d.orig.shift_cents + (dy / d.row_h.max(1.0)).round() * 100.0;
+                            // (sideways past a few points: moved in time)
+                            if d.moved || (pp.x - d.x0).abs() > 4.0 {
+                                if let Some(dd) = app.flex.drag.as_mut() {
+                                    dd.moved = true;
+                                }
+                                flex = Some(place_span(&d.flex, lo_s, s0, s1, hi_s, d.d.0 + dx, d.d.1 + dx));
+                            }
+                        }
+                        Hot::Start => flex = Some(place_span(&d.flex, lo_s, s0, s1, hi_s, d.d.0 + dx, d.d.1)),
+                        Hot::End => flex = Some(place_span(&d.flex, lo_s, s0, s1, hi_s, d.d.0, d.d.1 + dx)),
                         Hot::Fine => nn.shift_cents = d.orig.shift_cents + dy.round(),
-                        Hot::DriftIn | Hot::DriftOut => nn.drift = (d.orig.drift + dy / 60.0).clamp(0.0, 2.0),
+                        Hot::DriftIn => nn.drift = (d.orig.drift + dy / 60.0).clamp(0.0, 2.0),
+                        Hot::DriftOut => nn.drift_out = (d.orig.drift_out + dy / 60.0).clamp(0.0, 2.0),
                         Hot::Vibrato => nn.vibrato = (d.orig.vibrato + dy / 60.0).clamp(0.0, 2.0),
                         Hot::Gain => nn.gain_db = (d.orig.gain_db + dy / 4.0).clamp(-30.0, 12.0).round(),
                         Hot::Formant => nn.formant_cents = (d.orig.formant_cents + dy * 5.0).clamp(-1200.0, 1200.0).round(),
                     }
                     app.help_tag = Some(vec![match d.hot {
                         Hot::Body | Hot::Fine => ("Pitch:".into(), format!("{:+.0} ct", nn.shift_cents)),
-                        Hot::DriftIn | Hot::DriftOut => ("Pitch Drift:".into(), format!("{:.0} %", nn.drift * 100.0)),
+                        Hot::Start | Hot::End => ("Length:".into(), format!("{:.3} s", (s1 - s0) / g.rate)),
+                        Hot::DriftIn | Hot::DriftOut => ("Pitch Drift:".into(), format!("{:.0} %", if matches!(d.hot, Hot::DriftIn) { nn.drift } else { nn.drift_out } * 100.0)),
                         Hot::Vibrato => ("Vibrato:".into(), format!("{:.0} %", nn.vibrato * 100.0)),
                         Hot::Gain => ("Gain:".into(), format!("{:+.0} dB", nn.gain_db)),
                         Hot::Formant => ("Formant Shift:".into(), format!("{:+.0} ct", nn.formant_cents)),
@@ -1291,6 +1590,9 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
                     let mut x = audioedit::extras(app, t, r);
                     if let Some(slot) = x.pitch.get_mut(k) {
                         *slot = nn;
+                    }
+                    if let Some(f) = flex {
+                        x.flex = f;
                     }
                     audioedit::set_extras(app, t, r, x);
                 }
@@ -1300,21 +1602,376 @@ pub fn pitch_view(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usi
             app.flex.drag = None;
             app.after_edit();
         }
-        if resp.double_clicked() {
-            // perfect pitch: to the nearest semitone
-            checkpoint(app, "Set to Perfect Pitch");
-            let mut x = audioedit::extras(app, t, r);
-            if x.pitch.is_empty() {
-                x.pitch = notes.clone();
-            }
-            if let Some(slot) = x.pitch.get_mut(k) {
-                slot.shift_cents = (slot.target().round() - slot.pitch) * 100.0;
-            }
-            audioedit::set_extras(app, t, r, x);
-            app.after_edit();
+        if resp.double_clicked() && tool == crate::edit::Tool::Pointer {
+            edit_notes(app, t, r, "Set to Perfect Pitch", |ns| ns.get_mut(k).is_some_and(|n| {
+                perfect(n);
+                true
+            }));
         }
     }
     took
+}
+
+/// The audio regions on Flex Pitch tracks a region command works on.
+fn pitch_targets(app: &App) -> Vec<(usize, usize)> {
+    targets(app).into_iter().filter(|&(t, _)| track(app, t).on && track(app, t).mode == Mode::Pitch).collect()
+}
+
+pub fn enabled(app: &App, label: &str) -> Option<bool> {
+    match label {
+        "Set All to Perfect Pitch" | "Set All to Original Pitch" => Some(!pitch_targets(app).is_empty()),
+        _ => None,
+    }
+}
+
+/// Set All to Perfect / Original Pitch on the selected regions.
+fn set_all(app: &mut App, perfect_pitch: bool) -> bool {
+    let what = if perfect_pitch { "Set All to Perfect Pitch" } else { "Set All to Original Pitch" };
+    let ts = pitch_targets(app);
+    let mut first = true;
+    for (t, r) in ts {
+        let Some(g) = reg(app, t, r) else { continue };
+        if !app.flex.pitch.contains_key(&g.file) && pitch_now(app, &g.file).is_none() {
+            continue;
+        }
+        let Some(g) = reg(app, t, r) else { continue };
+        let mut notes = region_notes(app, &g.x, &g.file, g.src_end());
+        for n in &mut notes {
+            if perfect_pitch { perfect(n) } else { original(n) }
+        }
+        if first {
+            checkpoint(app, what);
+            first = false;
+        }
+        let mut x = audioedit::extras(app, t, r);
+        x.pitch = notes;
+        audioedit::set_extras(app, t, r, x);
+    }
+    if !first {
+        app.after_edit();
+    }
+    true
+}
+
+/// The Tracks area's quick Flex Pitch edits (Show Flex on, a Flex Pitch track): each note's
+/// pitch bar, from the region's zero line (perfect pitch) up when sharp, down when flat, ±50
+/// cents to the edge. Drag a bar toward the line to tune the note within its semitone; drag one
+/// on the line away to move it a semitone up or down; double-click for the original pitch; the
+/// shortcut menu: Set to Perfect Pitch, Set to Original Pitch. (The other Flex Pitch edits are
+/// in the Audio Track Editor.)
+pub fn region_pitch_ui(app: &mut App, ui: &mut egui::Ui, rr: Rect, t: usize, r: usize) {
+    if !app.flex.show || rr.height() < 24.0 {
+        return;
+    }
+    let tf = track(app, t);
+    if !tf.on || tf.mode != Mode::Pitch {
+        return;
+    }
+    let Some(g) = reg(app, t, r) else { return };
+    if g.frames <= 0.0 || !app.flex.pitch.contains_key(&g.file) {
+        return;
+    }
+    let notes = region_notes(app, &g.x, &g.file, g.src_end());
+    let inner = Rect::from_min_max(pos2(rr.min.x, rr.min.y + 16.0), pos2(rr.max.x, rr.max.y - 2.0));
+    let half = inner.height() / 2.0;
+    let x_of = |d: f64| rr.min.x + (d / g.frames) as f32 * rr.width();
+    for (k, n) in notes.iter().enumerate() {
+        let (s, e) = (n.start.saturating_sub(g.x.offset) as f64, n.end.saturating_sub(g.x.offset) as f64);
+        let (x0, x1) = (x_of(g.map.dst(s)).max(rr.min.x), x_of(g.map.dst(e)).min(rr.max.x));
+        if x1 - x0 < 2.0 {
+            continue;
+        }
+        let hit = Rect::from_min_max(pos2(x0, inner.min.y), pos2(x1, inner.max.y));
+        let resp = ui.interact(hit, ui.scope_id().with(("fpbar", t, r, k)), Sense::click_and_drag());
+        if resp.hovered() {
+            app.help_tag = Some(vec![("Flex Pitch:".into(), format!("{:+.0} ct", deviation(n)))]);
+        }
+        if resp.drag_started() {
+            checkpoint(app, "Flex Pitch");
+            let mut x = audioedit::extras(app, t, r);
+            if x.pitch.is_empty() {
+                x.pitch = notes.clone();
+                audioedit::set_extras(app, t, r, x);
+            }
+            let y0 = ui.input(|i| i.pointer.press_origin()).map_or(inner.center().y, |p| p.y);
+            app.flex.bar_drag = Some((t, r, k, n.clone(), y0));
+        }
+        if resp.dragged() {
+            if let (Some((dt, dr, dk, orig, y0)), Some(pp)) = (app.flex.bar_drag.clone(), resp.interact_pointer_pos()) {
+                if (dt, dr, dk) == (t, r, k) {
+                    let nn = bar_drag(&orig, y0 - pp.y, half);
+                    app.help_tag = Some(vec![("Flex Pitch:".into(), format!("{:+.0} ct", deviation(&nn)))]);
+                    let mut x = audioedit::extras(app, t, r);
+                    if let Some(slot) = x.pitch.get_mut(k) {
+                        *slot = nn;
+                    }
+                    audioedit::set_extras(app, t, r, x);
+                }
+            }
+        }
+        if resp.drag_stopped() {
+            app.flex.bar_drag = None;
+            app.after_edit();
+        }
+        if resp.double_clicked() {
+            edit_notes(app, t, r, "Set to Original Pitch", |ns| ns.get_mut(k).is_some_and(|n| {
+                original(n);
+                true
+            }));
+        }
+        resp.context_menu(|ui| {
+            if ui.button("Set to Perfect Pitch").clicked() {
+                edit_notes(app, t, r, "Set to Perfect Pitch", |ns| ns.get_mut(k).is_some_and(|n| {
+                    perfect(n);
+                    true
+                }));
+                ui.close();
+            }
+            if ui.button("Set to Original Pitch").clicked() {
+                edit_notes(app, t, r, "Set to Original Pitch", |ns| ns.get_mut(k).is_some_and(|n| {
+                    original(n);
+                    true
+                }));
+                ui.close();
+            }
+        });
+    }
+}
+
+/// How far a note plays from its nearest semitone (cents; + sharp).
+pub fn deviation(n: &Note) -> f32 {
+    (n.target() - n.target().round()) * 100.0
+}
+
+/// A pitch bar dragged up by `dy` points (`half`: points from the zero line to the edge, 50
+/// cents): a note off the line is tuned within its semitone (stopping on the line); a note on
+/// the line moves a semitone each time the drag passes the edge.
+pub fn bar_drag(orig: &Note, dy: f32, half: f32) -> Note {
+    let mut n = orig.clone();
+    let dev0 = deviation(orig);
+    let cents = dy / half.max(1.0) * 50.0;
+    if dev0.abs() < 3.0 {
+        let steps = (cents / 50.0).trunc();
+        n.shift_cents = orig.shift_cents - dev0 + steps * 100.0;
+    } else {
+        let mut new = (dev0 + cents).clamp(-49.0, 49.0);
+        // (toward the line, it stops there)
+        if new * dev0 < 0.0 {
+            new = 0.0;
+        }
+        n.shift_cents = orig.shift_cents + (new - dev0);
+    }
+    n
+}
+
+/// Time Quantize's choices (Logic's ATE pop-up) and their grids (ticks).
+const TIME_Q: [(&str, u32); 7] = [("Off", 0), ("1/1 Note", 3840), ("1/2 Note", 1920), ("1/4 Note", 960), ("1/8 Note", 480), ("1/16 Note", 240), ("1/32 Note", 120)];
+const ROOTS: [&str; 12] = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+
+/// Time quantize strength (percent; Logic's default 100).
+pub fn strength(app: &App) -> f32 {
+    app.flex.q_strength.unwrap_or(100.0)
+}
+
+/// The Audio Track Editor's inspector column for Flex Pitch (Logic's): Time Quantize and its
+/// Strength, Scale Quantize (key, scale and its Q button), and Gain for the selected notes
+/// (drag sideways).
+pub fn pitch_inspector(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r: usize) {
+    let p = ui.painter_at(area);
+    p.rect_filled(area, 0.0, look::group_bg().gamma_multiply(0.6));
+    p.vline(area.max.x - 0.5, area.y_range(), Stroke::new(1.0, Color32::from_black_alpha(90)));
+    let id = ui.scope_id().with(("fpinsp", t, r));
+    let x0 = area.min.x + 8.0;
+    let w = area.width() - 16.0;
+    let mut y = area.min.y + 10.0;
+    let label = |p: &egui::Painter, y: f32, s: &str| p.text(pos2(x0, y), Align2::LEFT_TOP, s, look::regular(11.0), look::text_dim());
+    let slot = |y: f32, w: f32, dx: f32| Rect::from_min_size(pos2(x0 + dx, y), vec2(w, 20.0));
+    // Time Quantize, Strength
+    label(&p, y, "Time Quantize");
+    y += 15.0;
+    let tq = slot(y, w, 0.0);
+    p.rect_filled(tq, 4.0, look::group_bg());
+    if let Some(k) = crate::widgets::choice_slot(ui, tq, id.with("tq"), app.flex.time_q, &TIME_Q.map(|q| q.0)) {
+        app.flex.time_q = k;
+        if TIME_Q[k].1 > 0 {
+            let keep = (app.selected_region, app.selected_regions.clone());
+            app.selected_region = Some((t, r));
+            app.selected_regions = vec![(t, r)];
+            quantize_audio(app, TIME_Q[k].1);
+            (app.selected_region, app.selected_regions) = keep;
+        }
+    }
+    y += 26.0;
+    label(&p, y, "Strength");
+    y += 15.0;
+    let sr = slot(y, w, 0.0);
+    let mut v = strength(app);
+    if hslider(ui, sr, id.with("str"), &mut v, 0.0, 100.0, &|v| format!("{v:.0}")) {
+        app.flex.q_strength = Some(v.round());
+    }
+    y += 30.0;
+    // Scale Quantize: key and scale, Q
+    label(&p, y, "Scale Quantize");
+    y += 15.0;
+    let kr = slot(y, 44.0, 0.0);
+    p.rect_filled(kr, 4.0, look::group_bg());
+    if let Some(k) = crate::widgets::choice_slot(ui, kr, id.with("sqk"), app.flex.scale_root as usize, &ROOTS) {
+        app.flex.scale_root = k as u8;
+    }
+    let mr = slot(y, w - 44.0 - 34.0, 48.0);
+    p.rect_filled(mr, 4.0, look::group_bg());
+    if let Some(k) = crate::widgets::choice_slot(ui, mr, id.with("sqm"), app.flex.scale_minor as usize, &["Major", "Minor"]) {
+        app.flex.scale_minor = k == 1;
+    }
+    let qr = slot(y, 28.0, w - 28.0);
+    let q = ui.interact(qr, id.with("sqq"), Sense::click()).on_hover_text("Scale Quantize the notes");
+    p.rect_filled(qr, 4.0, if q.hovered() { look::button_on() } else { look::group_bg() });
+    p.text(qr.center(), Align2::CENTER_CENTER, "Q", look::regular(12.0), look::text());
+    if q.clicked() {
+        let scale = flexpitch::key_scale(app.flex.scale_root, app.flex.scale_minor);
+        edit_notes(app, t, r, "Scale Quantize", |ns| {
+            flexpitch::correct(ns, &scale, 1.0);
+            true
+        });
+    }
+    y += 30.0;
+    // Gain of the selected notes (dragged sideways)
+    label(&p, y, "Gain");
+    y += 15.0;
+    let gr = slot(y, w, 0.0);
+    let sel = note_sel(app, t, r);
+    let mut g = {
+        let x = audioedit::extras(app, t, r);
+        sel.first().and_then(|&k| x.pitch.get(k)).map_or(0.0, |n| n.gain_db)
+    };
+    let resp_id = id.with("gain");
+    if hslider(ui, gr, resp_id, &mut g, -30.0, 12.0, &|v| format!("{v:+.1} dB")) && !sel.is_empty() {
+        if app.flex.drag.is_none() && ui.ctx().is_being_dragged(resp_id) && !app.flex.gain_drag {
+            checkpoint(app, "Flex Pitch Gain");
+            app.flex.gain_drag = true;
+        }
+        let mut x = audioedit::extras(app, t, r);
+        for &k in &sel {
+            if let Some(n) = x.pitch.get_mut(k) {
+                n.gain_db = g;
+            }
+        }
+        audioedit::set_extras(app, t, r, x);
+    }
+    if app.flex.gain_drag && !ui.ctx().is_being_dragged(resp_id) {
+        app.flex.gain_drag = false;
+        app.after_edit();
+    }
+}
+
+/// A horizontal value bar: drag sideways (Shift: finer), Option-click resets to the middle.
+fn hslider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, lo: f32, hi: f32, shown: &dyn Fn(f32) -> String) -> bool {
+    let resp = ui.interact(r, id, Sense::click_and_drag());
+    // (Logic's: a thin track with a round thumb, the value to its right)
+    let p = ui.painter();
+    let f = ((*v - lo) / (hi - lo)).clamp(0.0, 1.0);
+    let track = Rect::from_min_max(pos2(r.min.x + 6.0, r.center().y - 1.5), pos2(r.max.x - 58.0, r.center().y + 1.5));
+    p.rect_filled(track, 1.5, look::group_bg());
+    let tx = track.min.x + track.width() * f;
+    p.rect_filled(Rect::from_min_max(track.min, pos2(tx, track.max.y)), 1.5, look::accent());
+    p.circle_filled(pos2(tx, r.center().y), 6.0, Color32::from_gray(0xe8));
+    p.circle_stroke(pos2(tx, r.center().y), 6.0, Stroke::new(0.5, Color32::from_black_alpha(90)));
+    p.text(pos2(r.max.x - 2.0, r.center().y), Align2::RIGHT_CENTER, shown(*v), look::regular(11.0), look::text());
+    if resp.hovered() || resp.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+    }
+    let mut changed = false;
+    if resp.dragged() {
+        let fine = if ui.input(|i| i.modifiers.shift) { 0.25 } else { 1.0 };
+        let nv = (*v + resp.drag_delta().x / r.width() * (hi - lo) * fine).clamp(lo, hi);
+        if nv != *v {
+            *v = nv;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// The Track inspector's Flex rows on an audio track (Logic's): Flex Mode, then the chosen
+/// algorithm's parameters (Slicing: Fill Gaps, Decay, Slice Length; Rhythmic: Loop Length,
+/// Decay, Loop Offset; Monophonic: Percussive; Polyphonic: Complex; Tempophone: Grain Size,
+/// Crossfade; Flex Pitch: Formant Shift, Formants). Shift-choosing a mode sets every audio track.
+pub fn inspector_rows(app: &mut App, ui: &mut egui::Ui, area: Rect, mut y: f32, t: usize) -> f32 {
+    use crate::inspector::{label, slot_rect, ROW};
+    if !is_audio_track(app, t) {
+        return y;
+    }
+    let p = ui.painter().clone();
+    let id = ui.scope_id().with(("trk-flex", t));
+    let f = track(app, t);
+    let names: Vec<&str> = std::iter::once("Off").chain(Mode::ALL.iter().map(|m| m.name())).collect();
+    let cur = if f.on { Mode::ALL.iter().position(|m| *m == f.mode).map_or(0, |k| k + 1) } else { 0 };
+    label(&p, area, y, "Flex Mode");
+    if let Some(k) = crate::widgets::choice_slot(ui, slot_rect(area, y), id.with("mode"), cur, &names) {
+        if k == 0 {
+            checkpoint(app, "Flex On/Off");
+            app.flex.tracks.insert(t, TrackFlex { on: false, ..f });
+            app.after_edit();
+        } else if ui.input(|i| i.modifiers.shift) {
+            set_mode_all(app, Mode::ALL[k - 1]);
+        } else {
+            set_mode(app, t, Mode::ALL[k - 1]);
+        }
+    }
+    y += ROW;
+    if !f.on {
+        return y;
+    }
+    let mut n = f;
+    let check = |ui: &mut egui::Ui, y: &mut f32, key: &str, name: &str, v: &mut bool| {
+        label(&p, area, *y, name);
+        crate::widgets::check_slot(ui, slot_rect(area, *y), id.with(key), v);
+        *y += ROW;
+    };
+    let num = |ui: &mut egui::Ui, y: &mut f32, key: &str, name: &str, v: &mut f32, lo: f32, hi: f32, def: f32, step: f32, shown: &dyn Fn(f32) -> String| {
+        label(&p, area, *y, name);
+        crate::widgets::value_slot(ui, slot_rect(area, *y), id.with(key), v, lo, hi, def, step, shown);
+        *y += ROW;
+    };
+    let d = lg_audio::flex::Params::default();
+    match f.mode {
+        Mode::Slicing => {
+            check(ui, &mut y, "fill", "Fill Gaps", &mut n.params.fill_gaps);
+            num(ui, &mut y, "decay", "Decay", &mut n.params.decay, 0.0, 1.0, d.decay, 0.01, &|v| format!("{v:.2}"));
+            num(ui, &mut y, "slen", "Slice Length", &mut n.params.slice_length, 0.0, 100.0, 100.0, 1.0, &|v| format!("{v:.0} %"));
+        }
+        Mode::Rhythmic => {
+            num(ui, &mut y, "llen", "Loop Length", &mut n.params.loop_length, 0.0, 100.0, 100.0, 1.0, &|v| format!("{v:.0} %"));
+            num(ui, &mut y, "ldecay", "Decay", &mut n.params.loop_decay, 0.0, 1.0, 0.0, 0.01, &|v| format!("{v:.2}"));
+            num(ui, &mut y, "loff", "Loop Offset", &mut n.params.loop_offset_ms, 0.0, 100.0, 0.0, 1.0, &|v| format!("{v:.0} ms"));
+        }
+        Mode::Monophonic => check(ui, &mut y, "perc", "Percussive", &mut n.params.percussive),
+        Mode::Polyphonic => check(ui, &mut y, "complex", "Complex", &mut n.params.complex),
+        Mode::Tempophone => {
+            num(ui, &mut y, "grain", "Grain Size", &mut n.params.grain_ms, 5.0, 500.0, d.grain_ms, 1.0, &|v| format!("{v:.0} ms"));
+            num(ui, &mut y, "xfade", "Crossfade", &mut n.params.crossfade, 0.0, 1.0, d.crossfade, 0.01, &|v| format!("{v:.2}"));
+        }
+        Mode::Pitch => {
+            num(ui, &mut y, "fshift", "Formant Shift", &mut n.formant_shift, -12.0, 12.0, 0.0, 1.0, &|v| format!("{v:+.0}"));
+            label(&p, area, y, "Formants");
+            if let Some(k) = crate::widgets::choice_slot(ui, slot_rect(area, y), id.with("formants"), n.keep_unvoiced as usize, &["Process always", "Keep Unvoiced Formants"]) {
+                n.keep_unvoiced = k == 1;
+            }
+            y += ROW;
+        }
+        Mode::Speed => {}
+    }
+    if n != f {
+        // (one undo step a drag: a new step only after a pause)
+        let now = ui.input(|i| i.time);
+        if now - app.flex.param_edit_at > 0.6 {
+            checkpoint(app, "Flex Parameter");
+        }
+        app.flex.param_edit_at = now;
+        app.flex.tracks.insert(t, n);
+        app.after_edit();
+    }
+    y
 }
 
 #[cfg(test)]
@@ -1355,7 +2012,7 @@ mod tests {
             lg_audio::stretch::detect_pitch(&l[20_000..26_000], 48_000, 60.0, 1500.0).unwrap()
         };
         // stretched to 0.75 s → 1.0 s by a marker at the end: same pitch, longer
-        let plan = audioedit::Plan { file: path.clone(), offset: 0, seconds: 1.0, gain_db: 0.0, fades: Default::default(), flex: vec![(36_000, 48_000)], reverse: false, mode: Mode::Polyphonic, notes: Vec::new() };
+        let plan = audioedit::Plan { file: path.clone(), offset: 0, seconds: 1.0, gain_db: 0.0, fades: Default::default(), flex: vec![(36_000, 48_000)], reverse: false, mode: Mode::Polyphonic, notes: Vec::new(), params: Default::default(), keep_unvoiced: false };
         let out = plan.render().unwrap();
         assert_eq!(out.len(), 96_000);
         assert!((pitch_of(&out) - 220.0).abs() < 3.0, "{}", pitch_of(&out));
@@ -1368,6 +2025,60 @@ mod tests {
         // (the second render comes from the cache, the same)
         assert_eq!(plan.render().unwrap(), out);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_moved_note_stretches_its_neighbours_only() {
+        // a note from 1000 to 2000 (bounds 500 and 3000) moved 200 later
+        let m = place_span(&[], 500.0, 1000.0, 2000.0, 3000.0, 1200.0, 2200.0);
+        assert_eq!(m, vec![(500, 500), (1000, 1200), (2000, 2200), (3000, 3000)]);
+        let map = TimeMap::new(&m);
+        assert!((map.dst(1500.0) - 1700.0).abs() < 1.0);
+        assert!((map.dst(4000.0) - 4000.0).abs() < 1.0);
+        // resized: only the end moves; it can't pass the bound
+        let m = place_span(&[], 500.0, 1000.0, 2000.0, 3000.0, 1000.0, 5000.0);
+        assert_eq!(m[2], (2000, 2999));
+        // an old marker inside gives way, one outside stays
+        let m = place_span(&[(1500, 1500), (4000, 4100)], 500.0, 1000.0, 2000.0, 3000.0, 900.0, 1900.0);
+        assert!(m.contains(&(4000, 4100)) && !m.iter().any(|x| x.0 == 1500));
+    }
+
+    #[test]
+    fn notes_split_join_and_retune() {
+        let mut ns = vec![Note::new(0, 1000, 60.0, -10.0), Note::new(1000, 3000, 62.3, -12.0)];
+        ns[1].shift_cents = 20.0;
+        assert!(split_note(&mut ns, 1, 2000));
+        assert_eq!(ns.len(), 3);
+        assert_eq!((ns[1].start, ns[1].end, ns[2].start, ns[2].end), (1000, 2000, 2000, 3000));
+        assert_eq!(ns[2].shift_cents, 20.0);
+        // (not at the very edge)
+        assert!(!split_note(&mut ns, 0, 10));
+        assert!(join_notes(&mut ns, &[0, 1]));
+        assert_eq!(ns.len(), 2);
+        assert_eq!((ns[0].start, ns[0].end), (0, 2000));
+        assert!(!join_notes(&mut ns, &[1]));
+        // 62.3 + 20 ct = 62.5: perfect → 63 (rounds half up), original → as played
+        let mut n = ns[1].clone();
+        perfect(&mut n);
+        assert!((n.target() - 63.0).abs() < 1e-3);
+        original(&mut n);
+        assert_eq!(n.target(), 62.3);
+    }
+
+    #[test]
+    fn pitch_bars_tune_within_the_semitone_or_step_off_the_line() {
+        let mut n = Note::new(0, 1000, 60.0, -10.0);
+        n.shift_cents = 30.0;
+        assert!((deviation(&n) - 30.0).abs() < 1e-3);
+        // dragged down toward the line: stops on it
+        assert!(deviation(&bar_drag(&n, -40.0, 20.0)).abs() < 1e-3);
+        assert!((deviation(&bar_drag(&n, -4.0, 20.0)) - 20.0).abs() < 1e-3);
+        // on the line: a semitone each time the drag reaches the edge
+        let mut on = n.clone();
+        on.shift_cents = 0.0;
+        assert_eq!(bar_drag(&on, 10.0, 20.0).target(), 60.0);
+        assert_eq!(bar_drag(&on, 21.0, 20.0).target(), 61.0);
+        assert_eq!(bar_drag(&on, -45.0, 20.0).target(), 58.0);
     }
 
     #[test]

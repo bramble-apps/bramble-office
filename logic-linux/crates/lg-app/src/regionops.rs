@@ -540,7 +540,7 @@ fn region_peak(app: &App, t: usize, r: usize) -> Option<f32> {
     let a = rg.audio.as_ref()?;
     let x = audioedit::extras(app, t, r);
     let (mode, flex, notes) = crate::flex::plan_for(app, t, rg, &x);
-    let plan = audioedit::Plan { file: a.file.clone(), offset: x.offset, seconds: seconds(app, rg.start, rg.start + rg.length), gain_db: 0.0, fades: RegionFades::default(), flex, reverse: false, mode, notes };
+    let plan = audioedit::Plan { file: a.file.clone(), offset: x.offset, seconds: seconds(app, rg.start, rg.start + rg.length), gain_db: 0.0, fades: RegionFades::default(), flex, reverse: false, mode, notes, params: crate::flex::params_for(app, t).0, keep_unvoiced: crate::flex::params_for(app, t).1 };
     let s = plan.render()?;
     Some(s.iter().fold(0f32, |m, v| m.max(v.abs())))
 }

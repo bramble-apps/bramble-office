@@ -484,6 +484,8 @@
       ---
       Enable Auto Set Locators
 === Record ===
+  Flashback Capture
+  ---
   Count-in ▸
       None
       ✓ 1 Bar

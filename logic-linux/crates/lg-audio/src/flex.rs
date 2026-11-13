@@ -19,6 +19,43 @@
 
 use crate::fft::{hann, Fft};
 
+/// Each Flex Time algorithm's own parameters (Logic's Track inspector), Logic's defaults.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Params {
+    /// Slicing: Fill Gaps (the decay fills the gap after a slice moved away from the next),
+    /// Decay (0..1: how long that fill rings out, 1 = 1 s), Slice Length (percent of each slice
+    /// played: less removes pre-attack, a gated sound).
+    pub fill_gaps: bool,
+    pub decay: f32,
+    pub slice_length: f32,
+    /// Rhythmic: Loop Length (percent of the looped end of a slice), Decay (0..1: the loop fades
+    /// over the gap), Loop Offset (ms: the loop moved earlier, up to 100).
+    pub loop_length: f32,
+    pub loop_decay: f32,
+    pub loop_offset_ms: f32,
+    /// Monophonic: Percussive (on: short frames keep attacks; off: long frames for bowed or
+    /// wind sounds, without glitches).
+    pub percussive: bool,
+    /// Polyphonic: Complex (more transients found inside the sound).
+    pub complex: bool,
+    /// Tempophone: Grain Size (ms) and Crossfade (0 hard … 1 the whole grain).
+    pub grain_ms: f32,
+    pub crossfade: f32,
+}
+
+impl Default for Params {
+    fn default() -> Params {
+        Params { fill_gaps: true, decay: 0.1, slice_length: 100.0, loop_length: 100.0, loop_decay: 0.0, loop_offset_ms: 0.0, percussive: true, complex: false, grain_ms: 50.0, crossfade: 0.25 }
+    }
+}
+
+impl Params {
+    /// The transient detector's sensitivity for this mode (Complex: more).
+    pub fn sensitivity(&self) -> f32 {
+        if self.complex { 0.8 } else { 0.5 }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Mode {
     Slicing,
@@ -124,6 +161,12 @@ impl TimeMap {
 /// Renders `out_frames` frames of interleaved `data` through the flex markers in `mode`.
 /// `transients`: the source's transients (frames), the slice points and phase resets.
 pub fn render(data: &[f32], channels: usize, rate: u32, anchors: &[(usize, usize)], out_frames: usize, mode: Mode, transients: &[usize]) -> Vec<f32> {
+    render_with(data, channels, rate, anchors, out_frames, mode, transients, &Params::default())
+}
+
+/// `render` with the mode's parameters.
+#[allow(clippy::too_many_arguments)]
+pub fn render_with(data: &[f32], channels: usize, rate: u32, anchors: &[(usize, usize)], out_frames: usize, mode: Mode, transients: &[usize], p: &Params) -> Vec<f32> {
     let c = channels.max(1);
     let map = TimeMap::new(anchors);
     if map.is_identity() {
@@ -133,11 +176,12 @@ pub fn render(data: &[f32], channels: usize, rate: u32, anchors: &[(usize, usize
     }
     match mode {
         Mode::Polyphonic => vocoder(data, c, rate, &map, out_frames, transients),
-        Mode::Monophonic | Mode::Pitch => wsola(data, c, rate, &map, out_frames, 0.024),
-        Mode::Slicing => slices(data, c, rate, &map, out_frames, transients, false),
-        Mode::Rhythmic => slices(data, c, rate, &map, out_frames, transients, true),
+        Mode::Monophonic => wsola(data, c, rate, &map, out_frames, if p.percussive { 0.024 } else { 0.06 }),
+        Mode::Pitch => wsola(data, c, rate, &map, out_frames, 0.024),
+        Mode::Slicing => slices(data, c, rate, &map, out_frames, transients, false, p),
+        Mode::Rhythmic => slices(data, c, rate, &map, out_frames, transients, true, p),
         Mode::Speed => speed(data, c, &map, out_frames),
-        Mode::Tempophone => tempophone(data, c, rate, &map, out_frames, 0.05, 0.25),
+        Mode::Tempophone => tempophone(data, c, rate, &map, out_frames, (p.grain_ms as f64 / 1000.0).clamp(0.005, 0.5), (p.crossfade as f64).clamp(0.0, 1.0)),
     }
 }
 
@@ -380,7 +424,8 @@ fn vocoder(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, 
 }
 
 /// Slicing and Rhythmic: slices at the transients and the markers, each kept at its speed.
-fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, transients: &[usize], fill: bool) -> Vec<f32> {
+#[allow(clippy::too_many_arguments)]
+fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, transients: &[usize], fill: bool, p: &Params) -> Vec<f32> {
     let frames = data.len() / c;
     let mut cuts: Vec<usize> = vec![0];
     cuts.extend(transients.iter().copied().filter(|&t| t > 0 && t < frames));
@@ -394,7 +439,10 @@ fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, t
         let o0 = map.dst(s0 as f64).round() as usize;
         let o1 = if i + 1 < cuts.len() { map.dst(s1 as f64).round() as usize } else { out_frames };
         let room = o1.saturating_sub(o0).min(out_frames.saturating_sub(o0));
-        let len = s1 - s0;
+        // (Slicing's Slice Length: only that part of each slice plays)
+        let full = s1 - s0;
+        let len = if fill { full } else { ((full as f32 * p.slice_length.clamp(0.0, 100.0) / 100.0) as usize).clamp(fade.min(full), full) };
+        let s1 = s0 + len;
         if room == 0 {
             continue;
         }
@@ -418,8 +466,12 @@ fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, t
             }
             if fill && len > 4 * fade {
                 // Rhythmic: the slice's end looped into the gap, crossfaded
-                let lp = (len / 2).min((rate as f64 * 0.06) as usize).max(2 * fade);
-                let ls = s1 - lp;
+                let lp = (((len / 2).min((rate as f64 * 0.06) as usize)) as f32 * p.loop_length.clamp(1.0, 100.0) / 100.0) as usize;
+                let lp = lp.max(2 * fade);
+                let off = ((p.loop_offset_ms.clamp(0.0, 100.0) / 1000.0 * rate as f32) as usize).min(s1 - lp - s0);
+                let ls = s1 - lp - off;
+                // (Decay: the loop fades out over the gap; 0 holds it)
+                let span = (room - len).max(1) as f32;
                 let mut o = o0 + len - fade;
                 while o < o0 + room {
                     for j in 0..lp {
@@ -434,6 +486,10 @@ fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, t
                         if lp - j < fade {
                             g = g.min((lp - j) as f32 / fade as f32);
                         }
+                        if p.loop_decay > 0.0 {
+                            let k = at.saturating_sub(o0 + len) as f32 / span;
+                            g *= (1.0 - k * p.loop_decay.clamp(0.0, 1.0)).max(0.0);
+                        }
                         let end = o0 + room - at;
                         if end < fade && i + 1 < cuts.len() {
                             g *= end as f32 / fade as f32;
@@ -447,6 +503,41 @@ fn slices(data: &[f32], c: usize, rate: u32, map: &TimeMap, out_frames: usize, t
                         put(&mut out, at, ls + j, g);
                     }
                     o += lp - fade;
+                }
+            } else if !fill && p.fill_gaps && p.decay > 0.0 && len > 4 * fade && i + 1 < cuts.len() {
+                // Slicing's Fill Gaps: the slice's end rings on into the gap, decaying
+                let tail = (len / 2).min((rate as f64 * 0.03) as usize).max(2 * fade);
+                let tau = p.decay.clamp(0.0, 1.0) * rate as f32;
+                let mut o = o0 + len - fade;
+                let mut base = 1.0f32;
+                while o < o0 + room && base > 1e-3 {
+                    for j in 0..tail {
+                        let at = o + j;
+                        if at >= o0 + room || at >= out_frames {
+                            break;
+                        }
+                        let mut g = base * (-((at - (o0 + len - fade)) as f32) / tau.max(1.0)).exp();
+                        if j < fade {
+                            g *= j as f32 / fade as f32;
+                            if at < o0 + len {
+                                for ch in 0..c {
+                                    out[at * c + ch] *= 1.0 - j as f32 / fade as f32;
+                                }
+                            }
+                        }
+                        if tail - j < fade {
+                            g *= (tail - j) as f32 / fade as f32;
+                        }
+                        let end = o0 + room - at;
+                        if end < fade {
+                            g *= end as f32 / fade as f32;
+                        }
+                        put(&mut out, at, s1 - tail + j, g);
+                    }
+                    o += tail - fade;
+                    if tau < 1.0 {
+                        base = 0.0;
+                    }
                 }
             } else if !fill && i + 1 < cuts.len() {
                 // Slicing: a short fade before the silence
@@ -648,11 +739,26 @@ mod tests {
         let x = sine(rate, 250.0, n, 1);
         // the slice from 4000 moved to 6000: 2000 frames of gap after the first slice
         let anchors = [(4000, 6000)];
-        let s = render(&x, 1, rate, &anchors, n + 2000, Mode::Slicing, &[4000]);
+        let off = Params { fill_gaps: false, ..Params::default() };
+        let s = render_with(&x, 1, rate, &anchors, n + 2000, Mode::Slicing, &[4000], &off);
         assert!(rms(&s[4200..5800]) < 0.01, "{}", rms(&s[4200..5800]));
+        // Fill Gaps (Logic's default): the slice rings on, decaying (Decay 0.1 s)
+        let f = render(&x, 1, rate, &anchors, n + 2000, Mode::Slicing, &[4000]);
+        assert!(rms(&f[4010..4400]) > 0.2, "{}", rms(&f[4010..4400]));
+        assert!(rms(&f[5400..5900]) < rms(&f[4010..4400]) * 0.5);
+        // Slice Length 50 %: the second half of each slice is silent (gated)
+        let g = render_with(&x, 1, rate, &anchors, n + 2000, Mode::Slicing, &[4000], &Params { slice_length: 50.0, ..off });
+        assert!(rms(&g[500..1800]) > 0.3 && rms(&g[2200..3800]) < 0.01, "{}", rms(&g[2200..3800]));
         assert!(rms(&s[6200..8000]) > 0.3);
         let r = render(&x, 1, rate, &anchors, n + 2000, Mode::Rhythmic, &[4000]);
         assert!(rms(&r[4200..5800]) > 0.25, "{}", rms(&r[4200..5800]));
+        // Rhythmic Decay: the loop fades over the gap
+        let d = render_with(&x, 1, rate, &anchors, n + 2000, Mode::Rhythmic, &[4000], &Params { loop_decay: 1.0, ..Params::default() });
+        assert!(rms(&d[5500..5950]) < rms(&r[5500..5950]) * 0.5);
+        // (Loop Offset: still filled, from earlier in the slice)
+        let o = render_with(&x, 1, rate, &anchors, n + 2000, Mode::Rhythmic, &[4000], &Params { loop_offset_ms: 50.0, ..Params::default() });
+        assert!(rms(&o[4200..5800]) > 0.25);
+        assert!(Params { complex: true, ..Params::default() }.sensitivity() > Params::default().sensitivity());
         // Slicing keeps each slice's speed: the pitch is the same
         let f = detect_pitch(&s[7000..9000], rate, 60.0, 1500.0).unwrap();
         assert!((f - 250.0).abs() < 3.0);

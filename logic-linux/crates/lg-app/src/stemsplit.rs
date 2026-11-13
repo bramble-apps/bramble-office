@@ -116,7 +116,7 @@ fn apply(app: &mut App, st: &State) {
     let x = crate::audioedit::extras(app, t, r);
     let secs = crate::regionops::seconds_pub(app, rg.start, rg.start + rg.length);
     let (mode, flex, notes) = crate::flex::plan_for(app, t, &rg, &x);
-    let plan = crate::audioedit::Plan { file: a.file.clone(), offset: x.offset, seconds: secs, gain_db: x.gain_db, fades: Default::default(), flex, reverse: x.reverse, mode, notes };
+    let plan = crate::audioedit::Plan { file: a.file.clone(), offset: x.offset, seconds: secs, gain_db: x.gain_db, fades: Default::default(), flex, reverse: x.reverse, mode, notes, params: crate::flex::params_for(app, t).0, keep_unvoiced: crate::flex::params_for(app, t).1 };
     let Some(samples) = plan.render() else {
         app.tell("Couldn't read the region's audio");
         return;

@@ -67,7 +67,9 @@ pub struct Note {
     /// Edits: the pitch moved by (cents; whole semitones from dragging, Fine Pitch adds the
     /// rest), Pitch Drift and Vibrato (1 = as played, 0 = flat), Gain (dB), Formant Shift (cents).
     pub shift_cents: f32,
+    /// Pitch Drift at the note's start (`drift`) and end (`drift_out`), blended across it.
     pub drift: f32,
+    pub drift_out: f32,
     pub vibrato: f32,
     pub gain_db: f32,
     pub formant_cents: f32,
@@ -75,12 +77,17 @@ pub struct Note {
 
 impl Note {
     pub fn new(start: usize, end: usize, pitch: f32, level_db: f32) -> Note {
-        Note { start, end, pitch, level_db, shift_cents: 0.0, drift: 1.0, vibrato: 1.0, gain_db: 0.0, formant_cents: 0.0 }
+        Note { start, end, pitch, level_db, shift_cents: 0.0, drift: 1.0, drift_out: 1.0, vibrato: 1.0, gain_db: 0.0, formant_cents: 0.0 }
     }
 
     /// Unedited.
     pub fn is_neutral(&self) -> bool {
-        self.shift_cents.abs() < 0.05 && (self.drift - 1.0).abs() < 1e-3 && (self.vibrato - 1.0).abs() < 1e-3 && self.gain_db.abs() < 0.01 && self.formant_cents.abs() < 0.05
+        self.shift_cents.abs() < 0.05 && (self.drift - 1.0).abs() < 1e-3 && (self.drift_out - 1.0).abs() < 1e-3 && (self.vibrato - 1.0).abs() < 1e-3 && self.gain_db.abs() < 0.01 && self.formant_cents.abs() < 0.05
+    }
+
+    /// Pitch Drift `at` (0 the start … 1 the end of the note).
+    pub fn drift_at(&self, at: f32) -> f32 {
+        self.drift + (self.drift_out - self.drift) * at.clamp(0.0, 1.0)
     }
 
     /// The pitch it plays at (MIDI, fractional).
@@ -349,6 +356,12 @@ pub fn to_midi(notes: &[Note]) -> Vec<(usize, usize, u8, u8)> {
 
 /// Plays the notes' edits on interleaved `data` (its pitch track `tr`); the length stays.
 pub fn render(data: &[f32], channels: usize, tr: &Track, notes: &[Note]) -> Vec<f32> {
+    render_opts(data, channels, tr, notes, false)
+}
+
+/// `render`; `keep_unvoiced` (Logic's Formants: Keep Unvoiced Formants): the formants of the
+/// unvoiced parts (sibilants, plosives) left as they are.
+pub fn render_opts(data: &[f32], channels: usize, tr: &Track, notes: &[Note], keep_unvoiced: bool) -> Vec<f32> {
     let c = channels.max(1);
     let frames = data.len() / c;
     if notes.iter().all(Note::is_neutral) || frames == 0 {
@@ -377,9 +390,9 @@ pub fn render(data: &[f32], channels: usize, tr: &Track, notes: &[Note]) -> Vec<
             let hi = (i + smooth + 1).min(cents.len());
             let v: Vec<f32> = cents[lo..hi].iter().flatten().copied().collect();
             let slow = if v.is_empty() { centre } else { v.iter().sum::<f32>() / v.len() as f32 };
-            let new = centre + n.shift_cents + n.drift * (slow - centre) + n.vibrato * (here - slow);
+            let new = centre + n.shift_cents + n.drift_at(i as f32 / (b - a) as f32) * (slow - centre) + n.vibrato * (here - slow);
             ratio[k] = 2f32.powf((new - here) / 1200.0);
-            formant[k] = 2f32.powf(n.formant_cents / 1200.0);
+            formant[k] = if keep_unvoiced && tr.f0[k] <= 0.0 { 1.0 } else { 2f32.powf(n.formant_cents / 1200.0) };
             gain[k] = 10f32.powf(n.gain_db / 20.0);
         }
     }
@@ -585,6 +598,7 @@ mod tests {
         let (tr, mut ns) = analyze(&g, 1, rate);
         assert_eq!(ns.len(), 1, "{ns:?}");
         ns[0].drift = 0.0;
+        ns[0].drift_out = 0.0;
         let y = render(&g, 1, &tr, &ns);
         let t2 = track(&y, rate);
         let early: Vec<f32> = t2.f0[12..30].iter().filter(|&&f| f > 0.0).copied().collect();

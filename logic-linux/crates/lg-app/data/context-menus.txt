@@ -2146,6 +2146,8 @@ Export ▸
     1 Region as Audio File…
     Selection as MIDI File…  (disabled)  [⌥⌘E]
     Move File out of Project
+Set All to Perfect Pitch
+Set All to Original Pitch
 ---
 
 === region-midi ===

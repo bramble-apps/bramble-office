@@ -340,10 +340,30 @@ pub(crate) fn settings_dir(plugin: &str) -> Option<std::path::PathBuf> {
     Some(base.join("bramble-studio").join("plug-in-settings").join(plugin.replace('/', "-")))
 }
 
+/// The setting Save Setting As Default writes (loaded whenever the plug-in is inserted).
+pub const USER_DEFAULT: &str = "#user-default";
+
+/// The plug-in's user default setting file, when one was saved.
+pub fn user_default(plugin: &str) -> Option<std::path::PathBuf> {
+    settings_dir(plugin).map(|d| d.join(format!("{USER_DEFAULT}.txt"))).filter(|p| p.exists())
+}
+
+/// A new slot's settings from the user default (Save Setting As Default), as saved floats.
+pub fn user_default_floats(plugin: &str) -> Option<Vec<f32>> {
+    let pairs = read_setting(&user_default(plugin)?)?;
+    let mut fx = crate::units::effect(plugin, crate::audio::RATE as f32)?;
+    for (id, v) in pairs {
+        fx.set(id, v);
+    }
+    let params = fx.params().to_vec();
+    let values: Vec<f32> = params.iter().map(|p| fx.get(p.id)).collect();
+    Some(floats_of(&params, &values, &[]))
+}
+
 /// The settings saved for a plug-in (name, path), by name.
 pub fn saved_settings(plugin: &str) -> Vec<(String, std::path::PathBuf)> {
     let Some(dir) = settings_dir(plugin) else { return Vec::new() };
-    let mut v: Vec<(String, std::path::PathBuf)> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "txt")).map(|p| (p.file_stem().unwrap_or_default().to_string_lossy().into_owned(), p)).collect();
+    let mut v: Vec<(String, std::path::PathBuf)> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "txt") && !p.file_stem().is_some_and(|n| n.to_string_lossy().starts_with('#'))).map(|p| (p.file_stem().unwrap_or_default().to_string_lossy().into_owned(), p)).collect();
     v.sort();
     v
 }
@@ -502,6 +522,10 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     let mut load: Option<(String, std::path::PathBuf)> = None;
     let mut reset = false;
     let mut save: Option<String> = None;
+    // Settings ▸ Save Setting As Default / Recall Default Setting / Delete “…”
+    let mut save_default = false;
+    let mut recall_default = false;
+    let mut delete: Option<String> = None;
     let comparing = app.mix.compare.contains_key(&(s, k));
     let hslot = crate::hosting::Slot::Fx(s, k);
     let hosted = crate::hosting::hosted_info(app, hslot).is_some();
@@ -565,6 +589,25 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
             }
             if ui.button("Reset Setting").clicked() {
                 reset = true;
+                ui.close();
+            }
+            ui.separator();
+            // (Save Setting: over the current setting's file, once it has one)
+            let named = !slot.preset.is_empty() && !slot.preset.starts_with('#');
+            if ui.add_enabled(named, egui::Button::new("Save Setting")).clicked() {
+                save = Some(slot.preset.clone());
+                ui.close();
+            }
+            if ui.button("Save Setting As Default").clicked() {
+                save_default = true;
+                ui.close();
+            }
+            if ui.add_enabled(user_default(&name).is_some(), egui::Button::new("Recall Default Setting")).clicked() {
+                recall_default = true;
+                ui.close();
+            }
+            if ui.add_enabled(named, egui::Button::new(if named { format!("Delete “{}”", slot.preset) } else { "Delete".into() })).clicked() {
+                delete = Some(slot.preset.clone());
                 ui.close();
             }
             ui.separator();
@@ -731,6 +774,24 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     }
     if let Some((n, path)) = load {
         load_setting(app, s, k, &n, &path);
+    }
+    if save_default && write_setting(&name, USER_DEFAULT, &params, &values).is_some() {
+        app.tell(format!("{name}: this setting now loads whenever it is opened"));
+    }
+    if recall_default {
+        if let Some(path) = user_default(&name) {
+            load_setting(app, s, k, "#default", &path);
+        }
+    }
+    if let Some(n) = delete {
+        if let Some(dir) = settings_dir(&name) {
+            let _ = std::fs::remove_file(dir.join(format!("{}.txt", n.replace('/', "-"))));
+            crate::mixstate::edit_inserts(app, s, |v| {
+                if let Some(u) = v.get_mut(k) {
+                    u.preset = "#default".into();
+                }
+            });
+        }
     }
     if step != 0 {
         step_setting(app, s, k, step);

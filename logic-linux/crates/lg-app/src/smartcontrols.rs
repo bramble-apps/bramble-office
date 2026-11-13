@@ -38,6 +38,8 @@ pub enum Target {
     Instrument(u32),
     /// An Audio FX's parameter: insert index, parameter id (on the view's strip).
     Effect(usize, u32),
+    /// Non-automatable ▸ Main ▸ Articulation ID: the track's live articulation (artic.rs).
+    Articulation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -210,6 +212,10 @@ pub fn parameters(app: &App, v: View) -> Vec<(Target, String, ParamInfo)> {
         for (b, name) in [(1usize, "Low Shelf Gain"), (2, "Low Mid Gain"), (3, "Mid Gain"), (4, "High Mid Gain"), (5, "Mid 2 Gain"), (6, "High Shelf Gain")] {
             out.push((Target::EqGain(b), format!("Channel EQ ▸ {name}"), info(name, -24.0, 24.0, 0.0, lg_dsp::Unit::Db, eq.bands[b].gain)));
         }
+        if app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| tr.kind != lg_core::TrackKind::Audio) {
+            let cur = app.artic.live.get(&t).and_then(|s| s.current).unwrap_or(0) as f32;
+            out.push((Target::Articulation, "Non-automatable ▸ Main ▸ Articulation ID".into(), info("Articulation ID", 0.0, artic_max(app, t), 0.0, lg_dsp::Unit::None, cur)));
+        }
         let inst = app.instrument_for(t).map(|n| crate::soundlib::plugin_of(&n).to_string()).unwrap_or_default();
         if let Some((params, values)) = app.engine.lock().ok().and_then(|e| e.instrument_params(t)) {
             for (p, val) in params.into_iter().zip(values) {
@@ -223,6 +229,25 @@ pub fn parameters(app: &App, v: View) -> Vec<(Target, String, ParamInfo)> {
         }
     }
     out
+}
+
+/// The highest articulation ID a track's set uses (32 without a set).
+fn artic_max(app: &App, t: usize) -> f32 {
+    app.artic.tracks.get(&t).map(|s| s.artics.iter().map(|a| a.id).max().unwrap_or(1)).unwrap_or(32).max(1) as f32
+}
+
+/// A new mapping of `t` for a control of `kind`: Articulation ID from 1 to the next ID (a
+/// button switches between two) or to the highest used (a knob), as Logic sets the range.
+fn mapping_for(all: &[(Target, String, ParamInfo)], t: Target, kind: Kind) -> Mapping {
+    let mut m = Mapping::new(t);
+    if t == Target::Articulation {
+        if let Some(p) = param_of(all, t) {
+            let span = (p.max - p.min).max(1.0);
+            m.lo = (1.0 - p.min) / span;
+            m.hi = if kind == Kind::Button { (2.0f32.min(p.max) - p.min) / span } else { 1.0 };
+        }
+    }
+    m
 }
 
 fn param_of(all: &[(Target, String, ParamInfo)], t: Target) -> Option<&ParamInfo> {
@@ -264,6 +289,12 @@ pub fn set_target(app: &mut App, v: View, target: Target, value: f32) {
                 }
             }
             app.dirty = true;
+        }
+        (View::Track(t), Target::Articulation) => {
+            let id = value.round().clamp(0.0, 255.0) as u8;
+            let mut sw = app.artic.live.get(&t).cloned().unwrap_or_default();
+            sw.current = (id > 0).then_some(id);
+            app.artic.live.insert(t, sw);
         }
         (View::Track(t), Target::Instrument(id)) => {
             if let Ok(mut e) = app.engine.lock() {
@@ -1091,7 +1122,7 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
             ui.menu_button("Unmapped", |ui| {
                 let mut t = Target::Volume;
                 if param_menu(ui, &all, &mut t) {
-                    c.maps.push(Mapping::new(t));
+                    c.maps.push(mapping_for(&all, t, c.kind));
                     if c.label.is_empty() {
                         c.label = all.iter().find(|x| x.0 == t).map(|x| x.2.name.clone()).unwrap_or_default();
                     }
@@ -1184,7 +1215,7 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, v: View) {
                 let mut t = Target::Volume;
                 if param_menu(ui, &all, &mut t) {
                     if !c.maps.iter().any(|m| m.target == t) {
-                        c.maps.push(Mapping::new(t));
+                        c.maps.push(mapping_for(&all, t, c.kind));
                     }
                     if c.label.is_empty() {
                         c.label = all.iter().find(|x| x.0 == t).map(|x| x.2.name.clone()).unwrap_or_default();
@@ -1341,6 +1372,18 @@ fn eq_thumb(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn articulation_mappings_start_at_one() {
+        let info = ParamInfo { name: "Articulation ID".into(), min: 0.0, max: 4.0, default: 0.0, unit: lg_dsp::Unit::None, value: 0.0 };
+        let all = vec![(Target::Articulation, "Non-automatable ▸ Main ▸ Articulation ID".to_string(), info)];
+        let b = mapping_for(&all, Target::Articulation, Kind::Button);
+        // a button: IDs 1 and 2; a knob: 1 to the highest
+        assert_eq!((b.param_share(0.0) * 4.0, b.param_share(1.0) * 4.0), (1.0, 2.0));
+        let k = mapping_for(&all, Target::Articulation, Kind::Knob);
+        assert_eq!((k.param_share(0.0) * 4.0, k.param_share(1.0) * 4.0), (1.0, 4.0));
+        assert_eq!(mapping_for(&all, Target::Volume, Kind::Knob).lo, 0.0);
+    }
 
     #[test]
     fn mapping_ranges() {

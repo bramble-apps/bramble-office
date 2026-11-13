@@ -325,9 +325,123 @@ pub fn put(secs: &[Section], new: Section) -> Vec<Section> {
     joined
 }
 
+
+/// Comp edits (Logic's "Edit comps"): the section of `secs` at tick `at`.
+pub fn section_at(secs: &[Section], take: usize, at: u32) -> Option<usize> {
+    secs.iter().position(|s| s.take == take && at >= s.start && at < s.end)
+}
+
+/// A section's edge dragged to `to`: its neighbour across that edge follows (no gap, no
+/// overlap); `alone` (Shift): only this section changes, so it can only shorten, leaving
+/// silence.
+pub fn move_edge(secs: &[Section], k: usize, left: bool, to: u32, alone: bool) -> Vec<Section> {
+    let mut v = secs.to_vec();
+    let Some(s) = v.get(k).copied() else { return v };
+    if left {
+        let lo = if alone { s.start } else { v.iter().filter(|o| o.end <= s.start && o.take != usize::MAX).map(|o| o.start + 1).max().unwrap_or(0) };
+        let to = to.clamp(lo, s.end - 1);
+        // (the neighbour ending where this starts)
+        if !alone {
+            if let Some(n) = v.iter_mut().find(|o| o.end == s.start) {
+                n.end = to.max(n.start + 1);
+            } else if to < s.start {
+                // (a gap before: extending eats into what plays there)
+                v = put(&v, Section { start: to, end: s.start, take: s.take });
+            }
+        }
+        if let Some(x) = v.iter_mut().find(|o| o.take == s.take && o.end == s.end) {
+            x.start = to;
+        }
+    } else {
+        let hi = if alone { s.end } else { v.iter().filter(|o| o.start >= s.end).map(|o| o.end - 1).min().unwrap_or(u32::MAX) };
+        let to = to.clamp(s.start + 1, hi);
+        if !alone {
+            if let Some(n) = v.iter_mut().find(|o| o.start == s.end) {
+                n.start = to.min(n.end - 1);
+            } else if to > s.end {
+                v = put(&v, Section { start: s.end, end: to, take: s.take });
+            }
+        }
+        if let Some(x) = v.iter_mut().find(|o| o.take == s.take && o.start == s.start) {
+            x.end = to;
+        }
+    }
+    let v: Vec<Section> = v.into_iter().filter(|o| o.end > o.start).collect();
+    put(&v, Section { start: 0, end: 0, take: usize::MAX }).into_iter().filter(|o| o.take != usize::MAX).collect()
+}
+
+/// A section moved by `d` ticks (dragging its middle): its neighbours lengthen or shorten to
+/// meet it.
+pub fn move_section(secs: &[Section], k: usize, d: i64) -> Vec<Section> {
+    let Some(s) = secs.get(k).copied() else { return secs.to_vec() };
+    let (a, b) = ((s.start as i64 + d).max(0) as u32, (s.end as i64 + d).max(1) as u32);
+    let mut v: Vec<Section> = secs.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, o)| *o).collect();
+    for o in &mut v {
+        if o.end == s.start {
+            o.end = a;
+        }
+        if o.start == s.end {
+            o.start = b;
+        }
+    }
+    let v: Vec<Section> = v.into_iter().filter(|o| o.end > o.start).collect();
+    put(&v, Section { start: a, end: b, take: s.take })
+}
+
+/// Shift-click on a take selection: it leaves the comp (silence there).
+pub fn remove_section(secs: &[Section], k: usize) -> Vec<Section> {
+    secs.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, s)| *s).collect()
+}
+
+/// Shift-click on a take's header: with selections, the whole take leaves the comp; without,
+/// it takes every part of [a, b) no other take plays.
+pub fn header_shift_click(secs: &[Section], take: usize, a: u32, b: u32) -> Vec<Section> {
+    if secs.iter().any(|s| s.take == take) {
+        return secs.iter().filter(|s| s.take != take).copied().collect();
+    }
+    let mut v = secs.to_vec();
+    let mut at = a;
+    let mut sorted = secs.to_vec();
+    sorted.sort_by_key(|s| s.start);
+    for s in sorted.iter().chain(std::iter::once(&Section { start: b, end: b, take })) {
+        if s.start > at && at < b {
+            v.push(Section { start: at, end: s.start.min(b), take });
+        }
+        at = at.max(s.end);
+    }
+    v.sort_by_key(|s| s.start);
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sec(start: u32, end: u32, take: usize) -> Section {
+        Section { start, end, take }
+    }
+
+    #[test]
+    fn comp_edges_move_with_their_neighbours_or_alone() {
+        let v = vec![sec(0, 100, 0), sec(100, 200, 1), sec(200, 300, 2)];
+        // the middle one's right edge out: the next one shortens
+        assert_eq!(move_edge(&v, 1, false, 250, false), vec![sec(0, 100, 0), sec(100, 250, 1), sec(250, 300, 2)]);
+        // in: the next one extends (no gap)
+        assert_eq!(move_edge(&v, 1, false, 150, false), vec![sec(0, 100, 0), sec(100, 150, 1), sec(150, 300, 2)]);
+        // Shift: only it shortens, a gap
+        assert_eq!(move_edge(&v, 1, false, 150, true), vec![sec(0, 100, 0), sec(100, 150, 1), sec(200, 300, 2)]);
+        assert_eq!(move_edge(&v, 1, true, 50, true), vec![sec(0, 100, 0), sec(100, 200, 1), sec(200, 300, 2)]);
+        // the middle moved: both neighbours meet it
+        assert_eq!(move_section(&v, 1, 30), vec![sec(0, 130, 0), sec(130, 230, 1), sec(230, 300, 2)]);
+        assert_eq!(remove_section(&v, 1), vec![sec(0, 100, 0), sec(200, 300, 2)]);
+    }
+
+    #[test]
+    fn header_shift_clicks_remove_or_fill() {
+        let v = vec![sec(0, 100, 0), sec(200, 300, 2)];
+        assert_eq!(header_shift_click(&v, 0, 0, 300), vec![sec(200, 300, 2)]);
+        assert_eq!(header_shift_click(&v, 1, 0, 400), vec![sec(0, 100, 0), sec(100, 200, 1), sec(200, 300, 2), sec(300, 400, 1)]);
+    }
     use crate::events::Note;
 
     fn region(start: u32, length: u32) -> Region {
