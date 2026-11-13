@@ -70,6 +70,22 @@ pub fn builtin_def(s: nt::StaffStyle) -> StaffStyleDef {
     if s.clefs.len() > 1 {
         d.voices[0].split = s.split;
     }
+    while d.staffs.len() < s.clefs.len() {
+        let k = d.staffs.len();
+        let st = StaffDef { clef: StaffDef::clef_index(clef_name(s.clefs[k], 0)), transpose: s.transpose, ..Default::default() };
+        d.add_staff(Some(k - 1), st);
+    }
+    // a polyphonic style (Piano 1/3+4, Organ 1/1/5): a voice per MIDI channel; a channel on two
+    // staffs splits at the style's split pitch
+    if let Some(layout) = s.channel_layout() {
+        d.voices.clear();
+        for (k, chans) in layout.iter().enumerate() {
+            for &c in chans {
+                let lower = layout[k + 1..].iter().any(|l| l.contains(&c));
+                d.voices.push(VoiceDef { staff: k as u8, channel: c, split: if lower { s.split } else { 0 }, ..Default::default() });
+            }
+        }
+    }
     d
 }
 
@@ -798,8 +814,69 @@ fn params(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
                     ui.end_row();
                 }
             });
+            if cur.mapped {
+                drum_groups(app, ui, w, cur);
+            }
         });
     });
+}
+
+/// A mapped style's drum groups: under each staff and voice, the groups the voice shows, each
+/// with its Pos; + adds one to the selected voice.
+fn drum_groups(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
+    let name = cur.name.clone();
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Drum Groups").strong());
+        if ui.small_button("+").on_hover_text("Add a drum group to the selected voice").clicked() {
+            let k = w.voice.unwrap_or(0).min(cur.voices.len().saturating_sub(1));
+            let used: Vec<String> = cur.voices.iter().flat_map(|v| v.groups.iter().map(|g| g.0.clone())).collect();
+            let g = crate::scoredrums::groups(app).into_iter().find(|g| !used.contains(g)).unwrap_or_else(|| "Kick".into());
+            edit(app, &name, "Add Drum Group", |d| d.voices[k].groups.push((g, 0)));
+        }
+    });
+    let all = crate::scoredrums::groups(app);
+    let names: Vec<&str> = all.iter().map(|s| s.as_str()).collect();
+    let line = ui.visuals().widgets.noninteractive.bg_stroke;
+    for (s, _) in cur.staffs.iter().enumerate() {
+        // (the hierarchy: a line above each staff, voice and group row)
+        ui.add(egui::Separator::default().spacing(2.0));
+        ui.label(egui::RichText::new(format!("Staff {}", s + 1)).small().strong());
+        for k in cur.voices_on(s) {
+            let v = &cur.voices[k];
+            ui.horizontal(|ui| {
+                ui.add_space(12.0);
+                let r = ui.selectable_label(w.voice == Some(k), egui::RichText::new(format!("Voice {}", k + 1)).small());
+                if r.clicked() {
+                    w.voice = Some(k);
+                    w.staff = Some(s);
+                }
+                let y = r.rect.top() - 1.0;
+                ui.painter().hline(r.rect.left()..=r.rect.left() + 260.0, y, line);
+            });
+            for (gi, (g, pos)) in v.groups.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.add_space(28.0);
+                    let cur_i = names.iter().position(|n| n == g).unwrap_or(0);
+                    if let Some(x) = popup(ui, ("ssw-grp", k, gi), cur_i, &names, 90.0) {
+                        let new = names[x].to_string();
+                        edit(app, &name, "Drum Group", |d| d.voices[k].groups[gi].0 = new);
+                    }
+                    ui.label(egui::RichText::new("Pos").small());
+                    let mut p = *pos as f32 / 2.0;
+                    if ui.add(egui::DragValue::new(&mut p).range(-12.0..=12.0).speed(0.1).fixed_decimals(1)).changed() {
+                        let v = (p * 2.0).round() as i8;
+                        edit(app, &name, "Drum Group Pos", |d| d.voices[k].groups[gi].1 = v);
+                    }
+                    if ui.small_button("–").on_hover_text("Remove the group from the voice").clicked() {
+                        edit(app, &name, "Remove Drum Group", |d| {
+                            d.voices[k].groups.remove(gi);
+                        });
+                    }
+                });
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -821,5 +898,22 @@ mod tests {
         assert_eq!((n.written(60), n.clefs, n.name), (36, &[nt::Clef::Treble][..], "Mine"));
         // interned: the same slice twice
         assert!(std::ptr::eq(to_nt(&d).name, n.name));
+    }
+
+    #[test]
+    fn polyphonic_predefined_styles_take_voices_by_channel() {
+        let organ = builtin_def(nt::StaffStyle::by_name("Organ 1/1/5").unwrap());
+        assert_eq!(organ.staffs.len(), 3);
+        assert_eq!(organ.staffs.iter().map(|s| s.clef_name()).collect::<Vec<_>>(), ["Treble", "Bass", "Bass"]);
+        // channel 1 splits at C3 between the manuals; channel 5 is the pedal staff (channels 0-based)
+        assert_eq!((organ.staff_for(72, 0), organ.staff_for(48, 0), organ.staff_for(36, 4)), (0, 1, 2));
+        assert!(!organ.takes(1));
+        let p = builtin_def(nt::StaffStyle::by_name("Piano 1+2/3+4").unwrap());
+        assert_eq!(p.voices.len(), 4);
+        assert_eq!((p.staff_for(40, 1), p.staff_for(80, 2), p.staff_for(80, 3)), (0, 1, 1));
+        assert_eq!(p.voices_on(1), vec![2, 3]);
+        assert_eq!(p.type_name(), "Dual");
+        let d = builtin_def(nt::StaffStyle::by_name("# Drums").unwrap());
+        assert_eq!((d.mapped, d.shown_name().as_str()), (true, "# Drums"));
     }
 }

@@ -134,7 +134,7 @@ pub const GROUP_NAMES: [&str; 14] = ["Notes", "Pedal", "Clefs", "Dynamics", "Not
 
 impl Part {
     /// (group, item) and the groups' sizes, for Next / Previous Part Box Symbol and Group.
-    pub const GROUPS: [usize; 14] = [9, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, 6, 8, 4];
+    pub const GROUPS: [usize; 14] = [9, 2, 5, 8, 12, 10, 4, 15, 11, 13, 13, MULTI_REST + 1, 8, 4];
     pub fn index(self) -> (usize, usize) {
         match self {
             Part::Note(i) => (0, i),
@@ -179,6 +179,7 @@ impl Part {
     pub fn name(self) -> String {
         match self {
             Part::Note(i) => format!("{} Note", VALUES[i].0),
+            Part::Rest(MULTI_REST) => "Multiple Rest".to_string(),
             Part::Rest(i) => format!("{} Rest", VALUES[i].0),
             Part::Artic(i) => ARTICULATIONS[PART_ARTICS[i]].to_string(),
             Part::Dynamic(i) => DYNAMICS[i].to_string(),
@@ -195,6 +196,42 @@ impl Part {
             Part::NTuplet => "N-tuplet".to_string(),
         }
     }
+}
+
+/// The Rests group's last symbol: the multiple bar rest (after the six rest values).
+pub const MULTI_REST: usize = 6;
+
+/// A track's multiple bar rests: (first bar, bars covered, church style, symbol index); Auto
+/// Length ones run to the bar of the next note (else `end_bar`).
+pub fn multi_rests(app: &App, t: usize, bar_t: u32, end_bar: u32) -> Vec<(u32, u32, bool, usize)> {
+    let Some(tr) = app.project.as_ref().and_then(|p| p.tracks.get(t)) else { return Vec::new() };
+    let Some(ts) = app.project.as_ref().and_then(|p| p.score.track(tr.extra.id)) else { return Vec::new() };
+    let bar_t = bar_t.max(1);
+    ts.symbols
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.kind == SymbolKind::MultiRest)
+        .map(|(i, s)| {
+            let m = lg_core::score::MultiRestText::parse(&s.text);
+            let start = s.tick / bar_t;
+            let next = tr.regions.iter().filter(|r| r.audio.is_none()).flat_map(|r| r.notes.iter().map(|n| n.pos)).filter(|&p| p >= start * bar_t).min().map(|p| p / bar_t);
+            (start, m.span(start, next, end_bar.max(start + 1)), m.church, i)
+        })
+        .collect()
+}
+
+/// Bars a multiple rest covers in every shown track: drawn as one (all but the first, None
+/// width), the first one widened.
+fn merged_bars(spans: &[Vec<(u32, u32, bool, usize)>]) -> std::collections::HashSet<u32> {
+    let covered = |v: &Vec<(u32, u32, bool, usize)>| -> std::collections::HashSet<u32> { v.iter().flat_map(|m| m.0 + 1..m.0 + m.1).collect() };
+    let mut it = spans.iter();
+    let Some(first) = it.next() else { return Default::default() };
+    let mut out = covered(first);
+    for v in it {
+        let c = covered(v);
+        out.retain(|b| c.contains(b));
+    }
+    out
 }
 
 /// The Part box's time signatures; the last is the undefined one (asks for its values).
@@ -533,7 +570,7 @@ pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
     let pitches: Vec<u8> = tr.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
     let lname = tr.name.to_lowercase();
     if tr.kind == lg_core::TrackKind::Drummer || ["drum", "kit", "beat", "perc"].iter().any(|w| lname.contains(w)) {
-        return nt::StaffStyle::by_name("Drums").unwrap_or(nt::StaffStyle::ALL[0]);
+        return nt::StaffStyle::by_name("# Drums").unwrap_or(nt::StaffStyle::ALL[0]);
     }
     let piano = ["piano", "keys", "grand", "steinway", "rhodes", "clav", "organ", "harpsichord"].iter().any(|w| lname.contains(w));
     nt::StaffStyle::auto(&pitches, piano)
@@ -556,6 +593,20 @@ pub(crate) fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
 
 /// The tracks the Score shows: the score set, every MIDI track (Explode Folders), or the
 /// selected region's track.
+/// A track's user rests on a staff (Part box rests, kept as score symbols).
+pub fn user_rests(app: &App, id: u64, staff: usize) -> Vec<nt::UserRest> {
+    let Some(ts) = app.project.as_ref().and_then(|p| p.score.track(id)) else { return Vec::new() };
+    ts.symbols.iter().filter(|s| s.kind == SymbolKind::Rest && s.staff as usize == staff).filter_map(|s| Some(nt::UserRest { pos: s.tick, value: rest_value(&s.text)? })).collect()
+}
+
+/// A user rest symbol's value ("8 1": a dotted eighth).
+pub fn rest_value(text: &str) -> Option<nt::Value> {
+    let mut w = text.split_whitespace();
+    let base: u8 = w.next()?.parse().ok().filter(|b: &u8| b.is_power_of_two() && *b <= 128)?;
+    let dots: u8 = w.next().and_then(|d| d.parse().ok()).unwrap_or(0).min(2);
+    Some(nt::Value { base, dots })
+}
+
 /// The region's Max. Dots (Score inspector), 1 by default.
 pub fn max_dots_of(app: &App, id: u64) -> u8 {
     app.project.as_ref().and_then(|p| p.score.track(id)).map_or_else(|| crate::scoreattr::defaults().max_dots, |t| if t.max_dots == 0 { 1 } else { t.max_dots - 1 })
@@ -622,25 +673,30 @@ fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
 fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn, u8)> {
     let score = app.project.as_ref().map(|p| &p.score);
     let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_notes;
+    // (a mapped style: only keys in a drum group show)
+    let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
+    // (and a note's drum group picks its voice, where the style lists the group)
+    let voice_of = |pitch: u8, chan: u8| drums.as_ref().and_then(|d| row.def.group_voice(&d.get(pitch as usize)?.group)).map_or_else(|| row.def.voice_for(pitch, chan), |g| g.0);
     let mine: Vec<nt::NoteIn> = region
         .notes
         .iter()
         .enumerate()
         .filter(|(_, n)| !(hide_muted && n.muted) && row.def.in_range(n.pitch) && row.def.takes(n.channel))
+        .filter(|(_, n)| drums.as_ref().is_none_or(|d| crate::scoredrums::shown(d, n.pitch)))
         .filter(|(_, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             let staff = match a.staff {
                 1 => 0,
                 -1 => row.style.clefs.len() - 1,
                 // the style's voices (split pitch, MIDI channel) put it on a staff
-                _ => row.def.staff_for(n.pitch, n.channel),
+                _ => row.def.voices.get(voice_of(n.pitch, n.channel)).map_or(0, |v| v.staff as usize).min(row.def.staffs.len().saturating_sub(1)),
             };
             staff == row.staff
         })
         .map(|(i, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             // the voice's Stem, Tie and Beam where the note has no attribute of its own
-            let v = row.def.voices.get(row.def.voice_for(n.pitch, n.channel)).cloned().unwrap_or_default();
+            let v = row.def.voices.get(voice_of(n.pitch, n.channel)).cloned().unwrap_or_default();
             let stem = if a.stem != 0 { a.stem } else { [0, 1, -1, 2][v.stem.min(3) as usize] };
             let tie = if a.tie != 0 { a.tie } else { [0, 1, -1][v.tie.min(2) as usize] };
             let beam = if a.beam != 0 { a.beam } else if v.beam == 2 { -1 } else { 0 };
@@ -652,7 +708,7 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
     if on_staff.len() > 1 {
         let chan: Vec<u8> = mine.iter().map(|x| region.notes.get(x.index).map_or(0, |n| n.channel)).collect();
         let voices: Vec<u8> = mine.iter().zip(chan).map(|(x, c)| {
-            let vi = row.def.voice_for(region.notes.get(x.index).map_or(x.pitch, |n| n.pitch), c);
+            let vi = voice_of(region.notes.get(x.index).map_or(x.pitch, |n| n.pitch), c);
             (on_staff.iter().position(|&k| k == vi).unwrap_or(0) > 0) as u8
         }).collect();
         return mine.into_iter().zip(voices).collect();
@@ -706,6 +762,10 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.syncopation = synco;
                 opts.max_dots = max_dots_of(app, row.id);
                 opts.tuplets = crate::scoretuplet::specs(app, row.id);
+                opts.rests = user_rests(app, row.id, row.staff);
+                if row.def.mapped {
+                    opts.drum_map = Some(crate::scoredrums::places(&crate::scoredrums::rows_for(app, row.t), Some(&row.def)));
+                }
                 opts.no_overlap = p.score.track(row.id).map_or_else(|| crate::scoreattr::defaults().no_overlap, |x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
@@ -929,6 +989,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if lo == u32::MAX { (0, 1) } else { (lo, hi.max(lo + 1)) }
     };
 
+    // multiple rests: each shown track's, and the bars all of them cover
+    let mut multi: std::collections::HashMap<usize, Vec<(u32, u32, bool, usize)>> = Default::default();
+    for &t in &tracks {
+        multi.insert(t, multi_rests(app, t, bar_t as u32, bar_hi));
+    }
+    let merged = if multi.values().any(|v| !v.is_empty()) { merged_bars(&tracks.iter().map(|t| multi[t].clone()).collect::<Vec<_>>()) } else { Default::default() };
+    let multi_hidden = |t: usize, bar: u32| multi.get(&t).is_some_and(|v| v.iter().any(|m| bar >= m.0 && bar < m.0 + m.1));
+
     // paper
     let mp = ui.painter_at(music);
     let headp = ui.painter_at(head);
@@ -964,6 +1032,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             let widths: Vec<f32> = (bar_lo..bar_hi)
                 .map(|b| segs.iter().filter(|s| (s.from / bar_t as u32) <= b).map(|s| nt::bar_width(&s.voice, b - s.from / bar_t as u32, sp)).fold(12.0 * sp, f32::max))
                 .collect();
+            // (multiple rests in every shown track: their bars drawn as one, wide enough for it)
+            let widths: Vec<f32> = widths.iter().enumerate().map(|(k, &w)| {
+                let b = bar_lo + k as u32;
+                if merged.contains(&b) { 0.0 } else if merged.contains(&(b + 1)) { w.max(16.0 * sp) } else { w }
+            }).collect();
             let hw = header_w(key0, true);
             // (manual Line / Page Break and No Line Break symbols)
             let breaks = app.project.as_ref().map(|p| p.score.breaks.clone()).unwrap_or_default();
@@ -1417,7 +1490,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             // (the staff style's Size: the staff's notes at its size)
             let sp = sp * row.size();
             // (bars under one- and two-bar repeat signs hide their notes and rests)
-            let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32 && !repeated.contains(&(tick / bar_t as u32));
+            // (and bars under a multiple rest)
+            let in_line = |tick: u32| tick >= line.b0 * bar_t as u32 && tick < line.b1 * bar_t as u32 && !repeated.contains(&(tick / bar_t as u32)) && !multi_hidden(row.t, tick / bar_t as u32);
             let sel_here = sel_region_now == Some((row.t, seg.rix));
             let selected = |i: usize| sel_here && sel_notes_now.contains(&i);
             let voice_of = |i: usize| seg.voice.items.iter().find(|it| it.heads.iter().any(|h| h.note == i)).map_or(0, |it| (!it.stem_up) as u8);
@@ -1437,7 +1511,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 note_color(st.colors, &n, voice_of(i), &a)
             };
-            let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+            // (a mapped style: a note without a head of its own takes its key's Head)
+            let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
+            let attr = |i: usize| {
+                let n = region.notes.get(i);
+                let mut a = n.map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+                if let (Some(d), Some(n)) = (&drums, n) {
+                    if a.head == 0 {
+                        a.head = d.get(n.pitch as usize).map_or(0, |r| r.head.min(lg_core::score::NOTE_HEADS.len() as u8 - 1));
+                    }
+                }
+                a
+            };
             let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing };
             let numbers = draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
             // a user tuplet's number: double-click edits it (Tuplet window), the Eraser deletes it
@@ -1551,7 +1636,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             for (si, s) in ts.symbols.iter().enumerate().filter(|(_, s)| s.staff as usize == row.staff) {
                 let lo = line.b0 as f32 * bar_t;
                 let hi = line.b1 as f32 * bar_t;
-                let (a, b) = (s.tick as f32, (s.tick + s.len) as f32);
+                // (a multiple rest spans its bars)
+                let bars = multi.get(&row.t).and_then(|v| v.iter().find(|m| m.3 == si)).map_or(1, |m| m.1);
+                let len = if s.kind == SymbolKind::MultiRest { bars * bar_t as u32 } else { s.len };
+                let (a, b) = (s.tick as f32, (s.tick + len) as f32);
                 if b < lo || a >= hi {
                     continue;
                 }
@@ -1567,7 +1655,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                 };
                 let ext = || score.styles().into_iter().find(|x| x.name == "Chord Extension").unwrap_or_else(|| score.style_for(s));
-                let text = SymText { style: score.style_for(s), auto: &auto, ext: &ext };
+                let text = SymText { style: score.style_for(s), auto: &auto, ext: &ext, clef_scale: fmt.clef_change, bars };
                 if let Some(r) = draw_symbol(&mp, s, x, x2, bottom, sp, st.chord_size, &text) {
                     if st.sel_symbol == Some((row.id, si)) {
                         mp.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
@@ -1653,6 +1741,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                         st.sel_symbol = Some((row.id, si));
                         app.selected_notes.clear();
                         symbol_clicked = true;
+                    }
+                    if s.kind == SymbolKind::MultiRest && resp.double_clicked() {
+                        crate::scorerest::open(&ctx, row.id, si, &s.text, bars);
                     }
                     // double-click (Pointer) or a Text tool click: edit its text in place
                     let editable = matches!(s.kind, SymbolKind::Text | SymbolKind::Lyric | SymbolKind::Chord);
@@ -2190,6 +2281,7 @@ fn windows(app: &mut App, ctx: &egui::Context, st: &mut State, t: usize) {
     }
     crate::scorestyle::clef_menu(app, ctx);
     crate::scoretuplet::window(app, ctx);
+    crate::scorerest::window(app, ctx);
     crate::scoreattr::window(app, ctx);
     crate::scorepdf::dialogs(app, ctx, st);
     crate::scoreglobal::window(app, ctx);
@@ -2261,7 +2353,7 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
         Part::Note(v) => {
             let (clef, _) = clef_at(app, row, tick_q);
             let pitch = if clef == nt::Clef::Percussion {
-                drum_at(pos)
+                crate::scoredrums::pitch_at(&crate::scoredrums::rows_for(app, row.t), pos).unwrap_or_else(|| drum_at(pos))
             } else {
                 let wk = row.style.written_key(key);
                 (nt::pitch_at(clef, pos, wk) as i32 - row.style.transpose as i32).clamp(0, 127) as u8
@@ -2272,7 +2364,15 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
             }
             insert_note(app, row.t, tick_q, pitch, len, 80);
         }
-        Part::Rest(_) => app.tell("Rests are drawn by the Score itself (user rests aren't available yet)"),
+        Part::Rest(MULTI_REST) => {
+            // a multiple rest at the bar's start, Auto Length (double-click for its settings)
+            let at_bar = tick_q / bar_t * bar_t;
+            add_symbol(app, row.t, Symbol { tick: at_bar, kind: SymbolKind::MultiRest, text: lg_core::score::MultiRestText { bars: None, church: false }.text(), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Multiple Rest");
+        }
+        Part::Rest(v) => {
+            // a user rest at the place (its value from the Part box, the dot button)
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Rest, text: format!("{} {}", VALUES[v].1, st.dotted as u8), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Rest");
+        }
         Part::NTuplet => {
             // on the note nearest the place (its start), else the place; Option: the last settings
             let at = nearest_note(app, row.t, tick_q).and_then(|(rix, i)| app.project.as_ref()?.tracks.get(row.t)?.regions.get(rix)?.notes.get(i).map(|n| n.pos)).filter(|&p| p.abs_diff(tick_q) < bar_t / 2).unwrap_or(tick_q);
@@ -2634,6 +2734,10 @@ pub(crate) struct SymText<'a> {
     pub auto: &'a dyn Fn(&str) -> String,
     /// The Chord Extension style.
     pub ext: &'a dyn Fn() -> lg_core::score::TextStyle,
+    /// Smaller Clef Changes (Clefs & Signatures): a clef change's size.
+    pub clef_scale: f32,
+    /// A multiple rest: the bars it covers.
+    pub bars: u32,
 }
 
 /// A chord symbol's lower line (root, letters before the first number), its raised extension
@@ -2668,6 +2772,39 @@ fn styled_text(p: &egui::Painter, s: &Symbol, at: Pos2, text: &str, t: &SymText,
     r
 }
 
+/// A multiple rest from x to x2 (its bars): modern, an H-bar on the middle line; church
+/// style, four- and two-bar rest blocks and a whole rest; the count above in the Multiple
+/// Rests text style. Returns its area (for clicks).
+fn multi_rest(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: f32, t: &SymText) -> Rect {
+    let m = lg_core::score::MultiRestText::parse(&s.text);
+    let y = |pos: f32| bottom - pos * sp / 2.0;
+    let (l, r) = (x + 0.6 * sp, (x2 - 1.6 * sp).max(x + 4.0 * sp));
+    if m.church && t.bars <= 9 {
+        // (4-bar rests: longa; 2-bar: breve rest; a whole rest for an odd bar)
+        let mut glyphs = vec!['\u{E4E1}'; (t.bars / 4) as usize];
+        glyphs.extend(std::iter::repeat_n('\u{E4E2}', ((t.bars % 4) / 2) as usize));
+        if t.bars % 2 == 1 {
+            glyphs.push('\u{E4E3}');
+        }
+        let n = glyphs.len().max(1) as f32;
+        let step = 1.6 * sp;
+        let mut cx = (l + r) / 2.0 - (n - 1.0) * step / 2.0;
+        for g in glyphs {
+            let line = if g == '\u{E4E3}' { 6.0 } else { 4.0 };
+            smufl(p, g, pos2(cx, y(line)), sp, INK, true);
+            cx += step;
+        }
+    } else {
+        // the H-bar: a thick bar on the middle line between two vertical strokes
+        p.rect_filled(Rect::from_min_max(pos2(l, y(4.0) - 0.45 * sp), pos2(r, y(4.0) + 0.45 * sp)), 0.0, INK);
+        for ex in [l, r] {
+            p.vline(ex, y(6.0)..=y(2.0), Stroke::new(0.16 * sp, INK));
+        }
+    }
+    let num = styled_text(p, &Symbol { align: 1, ..s.clone() }, pos2((l + r) / 2.0, y(8.0) - 1.6 * sp), &t.bars.to_string(), t, sp, INK);
+    Rect::from_min_max(pos2(l, y(8.0) - 2.6 * sp), pos2(r, y(0.0))).union(num)
+}
+
 /// A staff symbol between x and x2 on a staff whose bottom line is at `bottom`; text symbols
 /// return where their text went (for clicks).
 fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: f32, chord_size: f32, t: &SymText) -> Option<Rect> {
@@ -2685,6 +2822,9 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
         SymbolKind::AutoText => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &(t.auto)(&s.text), t, sp, INK)),
         // (drawn with the notes it holds)
         SymbolKind::Tuplet => {}
+        // (the engraver writes a user rest; its place, for selecting and the Eraser)
+        SymbolKind::MultiRest => return Some(multi_rest(p, s, x, x2, bottom, sp, t)),
+        SymbolKind::Rest => return Some(Rect::from_center_size(pos2(x + 0.6 * sp, bottom - 2.0 * sp), vec2(1.6 * sp, 3.0 * sp))),
         SymbolKind::ChordGrid => return crate::scoregrid::draw_symbol(p, s, x, top, sp, INK, REGION_PAPER),
         SymbolKind::Chord => {
             // root (and letters before the first number) on the line, the rest raised in the
@@ -2730,8 +2870,8 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
                 nt::Clef::Tenor => (CCLEF, 3.0),
                 nt::Clef::Percussion => (PERC_CLEF, 2.0),
             };
-            // a clef change is drawn smaller, before the bar's first note
-            smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * 0.75, INK, false);
+            // a clef change is drawn smaller (Smaller Clef Changes), before the bar's first note
+            smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * t.clef_scale, INK, false);
         }
     }
     None

@@ -503,15 +503,45 @@ pub struct MapRow {
     pub ch: u8,
     /// 1–16 (the top outlet is 1).
     pub cable: u8,
+    /// Notation (a mapped staff style): the head (index into score::NOTE_HEADS), the place on
+    /// the staff in half lines from the top line (Rel. Pos. shows half of it: whole numbers on
+    /// lines, halves in spaces; up is positive) and the drum group ("" = not shown).
     pub head: u8,
     pub relpos: i8,
     pub group: String,
 }
 
 impl MapRow {
+    /// A note's row as Logic starts it: General MIDI drum notation (heads, places, groups).
     pub fn default_for(n: u8) -> MapRow {
-        MapRow { name: note_name(n), out: n, vel: 0, ch: 0, cable: 1, head: 0, relpos: 0, group: String::new() }
+        let (head, relpos, group) = gm_drum_notation(n);
+        MapRow { name: note_name(n), out: n, vel: 0, ch: 0, cable: 1, head, relpos, group: group.to_string() }
     }
+}
+
+/// The predefined drum groups (Mapped Instrument window ▸ Group); a project adds its own.
+pub const DRUM_GROUPS: [&str; 6] = ["Kick", "Snare", "Hi-Hat", "Toms", "Cymbals", "Percussion"];
+
+/// General MIDI drum notation for a key: (head, Rel. Pos. in half lines, group). Kick in the
+/// bottom space, snare in the third space, toms around it, hi-hats and cymbals above the staff
+/// with cross heads; other percussion in the middle space; keys outside 35–81 in no group.
+pub fn gm_drum_notation(n: u8) -> (u8, i8, &'static str) {
+    // (places in half spaces up from the bottom line; the top line is 8)
+    let (pos, cross, group): (i8, bool, &str) = match n {
+        35 | 36 => (1, false, "Kick"),
+        37..=40 => (5, false, "Snare"),
+        41 | 43 => (2, false, "Toms"),
+        45 | 47 => (6, false, "Toms"),
+        48 | 50 => (7, false, "Toms"),
+        42 | 46 => (9, true, "Hi-Hat"),
+        44 => (-1, true, "Hi-Hat"),
+        49 | 52 | 55 | 57 => (10, true, "Cymbals"),
+        51 | 53 | 59 => (8, true, "Cymbals"),
+        54 | 56 | 69 | 70 | 75 => (9, false, "Percussion"),
+        58 | 60..=68 | 71..=74 | 76..=81 => (4, false, "Percussion"),
+        _ => (4, false, ""),
+    };
+    (cross as u8, pos - 8, group)
 }
 
 /// General MIDI drum names (key 35–81), for Initialize ▸ Names as General MIDI.
@@ -3009,6 +3039,20 @@ mod tests {
         o.set("vol_on", 1);
         let s = instrument_setup(o, "");
         assert_eq!(s, vec![Ev::new(0xB0, 2, 0, 0), Ev::new(0xC0, 2, 5, 0), Ev::new(0xB0, 2, 7, 100)]);
+    }
+
+    #[test]
+    fn mapped_instrument_gm_notation_defaults() {
+        // kick in the bottom space (3.5 lines below the top line), hi-hat a cross above it
+        let k = MapRow::default_for(36);
+        assert_eq!((k.head, k.relpos, k.group.as_str()), (0, -7, "Kick"));
+        let h = MapRow::default_for(42);
+        assert_eq!((h.head, h.relpos, h.group.as_str()), (1, 1, "Hi-Hat"));
+        assert_eq!(MapRow::default_for(38).group, "Snare");
+        assert_eq!(MapRow::default_for(49).group, "Cymbals");
+        assert_eq!(MapRow::default_for(45).group, "Toms");
+        // outside the GM drum keys: no group (not shown in a mapped style)
+        assert_eq!(MapRow::default_for(20).group, "");
     }
 
     #[test]

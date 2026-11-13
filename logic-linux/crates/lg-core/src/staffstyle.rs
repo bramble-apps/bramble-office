@@ -86,6 +86,9 @@ pub struct VoiceDef {
     pub split: u8,
     /// MIDI channel 1–16 the voice takes (0 = all).
     pub channel: u8,
+    /// A mapped style: the drum groups the voice shows, each with its Pos (a vertical offset
+    /// for all the group's notes, in half lines like Rel. Pos.).
+    pub groups: Vec<(String, i8)>,
 }
 
 /// A staff style.
@@ -288,6 +291,9 @@ impl StaffStyleDef {
         }
         for v in &self.voices {
             out += &format!("ssvoice\t{} {} {} {} {} {} {} {} {} {} {}\n", v.staff, v.rest, v.stem, v.stem_pos, v.tie, v.tuplet, v.beam, v.head, v.color, v.split, v.channel);
+            for (g, pos) in &v.groups {
+                out += &format!("ssgroup\t{}\t{pos}\n", esc(g));
+            }
         }
         out
     }
@@ -310,18 +316,48 @@ impl StaffStyleDef {
                 let v: Vec<i64> = w[1].split(' ').map(|x| x.parse().unwrap_or(0)).collect();
                 let g = |k: usize| v.get(k).copied().unwrap_or(0) as u8;
                 if let Some(s) = list.last_mut() {
-                    s.voices.push(VoiceDef { staff: g(0), rest: g(1), stem: g(2), stem_pos: g(3), tie: g(4), tuplet: g(5), beam: g(6), head: g(7), color: g(8), split: g(9), channel: g(10) });
+                    s.voices.push(VoiceDef { staff: g(0), rest: g(1), stem: g(2), stem_pos: g(3), tie: g(4), tuplet: g(5), beam: g(6), head: g(7), color: g(8), split: g(9), channel: g(10), groups: Vec::new() });
+                }
+                true
+            }
+            Some("ssgroup") if w.len() >= 3 => {
+                if let Some(v) = list.last_mut().and_then(|s| s.voices.last_mut()) {
+                    v.groups.push((unesc(w[1]), n(2) as i8));
                 }
                 true
             }
             _ => false,
         }
     }
+
+    /// A mapped style: the voice that shows a drum group (None: the group is in no voice, so
+    /// the note goes by channel and split like any other) and the group's Pos.
+    pub fn group_voice(&self, group: &str) -> Option<(usize, i8)> {
+        self.voices.iter().enumerate().find_map(|(k, v)| v.groups.iter().find(|g| g.0 == group).map(|g| (k, g.1)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mapped_voices_take_drum_groups() {
+        let mut d = StaffStyleDef::mapped_style("Kit");
+        d.add_voice(Some(0), None);
+        d.voices[0].groups = vec![("Hi-Hat".into(), 0), ("Snare".into(), 2)];
+        d.voices[1].groups = vec![("Kick".into(), -1)];
+        assert_eq!(d.group_voice("Snare"), Some((0, 2)));
+        assert_eq!(d.group_voice("Kick"), Some((1, -1)));
+        assert_eq!(d.group_voice("Toms"), None);
+        let text = d.to_lines(&|s| s.replace(' ', "_"));
+        let mut list = Vec::new();
+        for l in text.lines() {
+            let w: Vec<&str> = l.split('\t').collect();
+            assert!(StaffStyleDef::read_line(&mut list, &w, &|s| s.replace('_', " ")));
+        }
+        assert_eq!(list, vec![d]);
+    }
 
     #[test]
     fn voices_assign_by_split_and_channel() {
