@@ -814,8 +814,69 @@ fn params(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
                     ui.end_row();
                 }
             });
+            if cur.mapped {
+                drum_groups(app, ui, w, cur);
+            }
         });
     });
+}
+
+/// A mapped style's drum groups: under each staff and voice, the groups the voice shows, each
+/// with its Pos; + adds one to the selected voice.
+fn drum_groups(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
+    let name = cur.name.clone();
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Drum Groups").strong());
+        if ui.small_button("+").on_hover_text("Add a drum group to the selected voice").clicked() {
+            let k = w.voice.unwrap_or(0).min(cur.voices.len().saturating_sub(1));
+            let used: Vec<String> = cur.voices.iter().flat_map(|v| v.groups.iter().map(|g| g.0.clone())).collect();
+            let g = crate::scoredrums::groups(app).into_iter().find(|g| !used.contains(g)).unwrap_or_else(|| "Kick".into());
+            edit(app, &name, "Add Drum Group", |d| d.voices[k].groups.push((g, 0)));
+        }
+    });
+    let all = crate::scoredrums::groups(app);
+    let names: Vec<&str> = all.iter().map(|s| s.as_str()).collect();
+    let line = ui.visuals().widgets.noninteractive.bg_stroke;
+    for (s, _) in cur.staffs.iter().enumerate() {
+        // (the hierarchy: a line above each staff, voice and group row)
+        ui.add(egui::Separator::default().spacing(2.0));
+        ui.label(egui::RichText::new(format!("Staff {}", s + 1)).small().strong());
+        for k in cur.voices_on(s) {
+            let v = &cur.voices[k];
+            ui.horizontal(|ui| {
+                ui.add_space(12.0);
+                let r = ui.selectable_label(w.voice == Some(k), egui::RichText::new(format!("Voice {}", k + 1)).small());
+                if r.clicked() {
+                    w.voice = Some(k);
+                    w.staff = Some(s);
+                }
+                let y = r.rect.top() - 1.0;
+                ui.painter().hline(r.rect.left()..=r.rect.left() + 260.0, y, line);
+            });
+            for (gi, (g, pos)) in v.groups.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.add_space(28.0);
+                    let cur_i = names.iter().position(|n| n == g).unwrap_or(0);
+                    if let Some(x) = popup(ui, ("ssw-grp", k, gi), cur_i, &names, 90.0) {
+                        let new = names[x].to_string();
+                        edit(app, &name, "Drum Group", |d| d.voices[k].groups[gi].0 = new);
+                    }
+                    ui.label(egui::RichText::new("Pos").small());
+                    let mut p = *pos as f32 / 2.0;
+                    if ui.add(egui::DragValue::new(&mut p).range(-12.0..=12.0).speed(0.1).fixed_decimals(1)).changed() {
+                        let v = (p * 2.0).round() as i8;
+                        edit(app, &name, "Drum Group Pos", |d| d.voices[k].groups[gi].1 = v);
+                    }
+                    if ui.small_button("–").on_hover_text("Remove the group from the voice").clicked() {
+                        edit(app, &name, "Remove Drum Group", |d| {
+                            d.voices[k].groups.remove(gi);
+                        });
+                    }
+                });
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 
 use crate::app::App;
 use lg_core::environment::{Kind, MapRow, DRUM_GROUPS};
+use lg_core::staffstyle::StaffStyleDef;
 use std::sync::Arc;
 
 /// Where the project's own drum groups are kept (one per line).
@@ -17,9 +18,10 @@ pub fn rows_for(app: &App, t: usize) -> Arc<Vec<MapRow>> {
     Arc::new((0..128u8).map(|n| obj.map_or_else(|| MapRow::default_for(n), |o| o.map_row(n))).collect())
 }
 
-/// Each key's place on the staff, in half spaces up from the bottom line (lg-notation).
-pub fn places(rows: &[MapRow]) -> Arc<Vec<i32>> {
-    Arc::new(rows.iter().map(|r| 8 + r.relpos as i32).collect())
+/// Each key's place on the staff, in half spaces up from the bottom line (lg-notation): its
+/// Rel. Pos., moved by its group's Pos in the staff style.
+pub fn places(rows: &[MapRow], style: Option<&StaffStyleDef>) -> Arc<Vec<i32>> {
+    Arc::new(rows.iter().map(|r| 8 + r.relpos as i32 + style.and_then(|s| s.group_voice(&r.group)).map_or(0, |g| g.1 as i32)).collect())
 }
 
 /// Whether a key shows (it's in a drum group).
@@ -96,7 +98,7 @@ mod tests {
     #[test]
     fn gm_map_places_and_groups() {
         let rows: Vec<MapRow> = (0..128u8).map(MapRow::default_for).collect();
-        let p = places(&rows);
+        let p = places(&rows, None);
         // the kick in the bottom space, the snare in the third, the closed hi-hat above the staff
         assert_eq!((p[36], p[38], p[42]), (1, 5, 9));
         // they agree with lg-notation's General MIDI drum places
@@ -106,6 +108,11 @@ mod tests {
         assert!(shown(&rows, 36) && !shown(&rows, 20));
         assert_eq!(pitch_at(&rows, 1), Some(35));
         assert_eq!(pitch_at(&rows, 5), Some(37));
+        // a style's group Pos moves all the group's notes
+        let mut s = StaffStyleDef::mapped_style("Kit");
+        s.voices[0].groups = vec![("Snare".into(), 2)];
+        let q = places(&rows, Some(&s));
+        assert_eq!((q[38], q[40], q[36]), (7, 7, 1));
     }
 
     #[test]

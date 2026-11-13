@@ -638,6 +638,8 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
     let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_notes;
     // (a mapped style: only keys in a drum group show)
     let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
+    // (and a note's drum group picks its voice, where the style lists the group)
+    let voice_of = |pitch: u8, chan: u8| drums.as_ref().and_then(|d| row.def.group_voice(&d.get(pitch as usize)?.group)).map_or_else(|| row.def.voice_for(pitch, chan), |g| g.0);
     let mine: Vec<nt::NoteIn> = region
         .notes
         .iter()
@@ -650,14 +652,14 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
                 1 => 0,
                 -1 => row.style.clefs.len() - 1,
                 // the style's voices (split pitch, MIDI channel) put it on a staff
-                _ => row.def.staff_for(n.pitch, n.channel),
+                _ => row.def.voices.get(voice_of(n.pitch, n.channel)).map_or(0, |v| v.staff as usize).min(row.def.staffs.len().saturating_sub(1)),
             };
             staff == row.staff
         })
         .map(|(i, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             // the voice's Stem, Tie and Beam where the note has no attribute of its own
-            let v = row.def.voices.get(row.def.voice_for(n.pitch, n.channel)).cloned().unwrap_or_default();
+            let v = row.def.voices.get(voice_of(n.pitch, n.channel)).cloned().unwrap_or_default();
             let stem = if a.stem != 0 { a.stem } else { [0, 1, -1, 2][v.stem.min(3) as usize] };
             let tie = if a.tie != 0 { a.tie } else { [0, 1, -1][v.tie.min(2) as usize] };
             let beam = if a.beam != 0 { a.beam } else if v.beam == 2 { -1 } else { 0 };
@@ -669,7 +671,7 @@ fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn,
     if on_staff.len() > 1 {
         let chan: Vec<u8> = mine.iter().map(|x| region.notes.get(x.index).map_or(0, |n| n.channel)).collect();
         let voices: Vec<u8> = mine.iter().zip(chan).map(|(x, c)| {
-            let vi = row.def.voice_for(region.notes.get(x.index).map_or(x.pitch, |n| n.pitch), c);
+            let vi = voice_of(region.notes.get(x.index).map_or(x.pitch, |n| n.pitch), c);
             (on_staff.iter().position(|&k| k == vi).unwrap_or(0) > 0) as u8
         }).collect();
         return mine.into_iter().zip(voices).collect();
@@ -725,7 +727,7 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.tuplets = crate::scoretuplet::specs(app, row.id);
                 opts.rests = user_rests(app, row.id, row.staff);
                 if row.def.mapped {
-                    opts.drum_map = Some(crate::scoredrums::places(&crate::scoredrums::rows_for(app, row.t)));
+                    opts.drum_map = Some(crate::scoredrums::places(&crate::scoredrums::rows_for(app, row.t), Some(&row.def)));
                 }
                 opts.no_overlap = p.score.track(row.id).map_or_else(|| crate::scoreattr::defaults().no_overlap, |x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
