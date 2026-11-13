@@ -1041,6 +1041,12 @@ fn click_item(app: &mut App, it: &Item, was_selected: bool) {
             None => app.tell("Select a track first"),
         }
     }
+    // (as Logic: the first click on an instrument patch only selects it, loading it in Replace
+    // Mode; clicking the highlighted patch again plays its preview. Loops and one-shots keep
+    // Play Preview on Selection.)
+    if it.kind == Kind::Patch && !was_selected {
+        return;
+    }
     crate::brpreview::click(app, it, crate::brpreview::Click::Row { was_selected });
 }
 
@@ -2806,9 +2812,10 @@ mod tests {
         let kits = list.iter().filter(|i| crate::brpreview::kit_named(&i.name)).take(10);
         let rest = list.iter().filter(|i| !crate::brpreview::kit_named(&i.name)).take(40);
         for it in kits.chain(rest).cloned().collect::<Vec<_>>() {
-            let was = app.br.selected.first() == Some(&it.id);
+            // (a patch's first click only selects it; the second, on the highlighted patch, previews)
             app.br.selected = vec![it.id.clone()];
-            click_item(&mut app, &it, was);
+            click_item(&mut app, &it, false);
+            click_item(&mut app, &it, true);
             std::thread::sleep(std::time::Duration::from_millis(15));
         }
         let t = std::time::Instant::now();
@@ -2818,6 +2825,19 @@ mod tests {
         assert!(!crate::preview::rendering(), "the last preview never finished");
         assert!(crate::brpreview::most_at_once() <= 1, "{} previews rendered at once", crate::brpreview::most_at_once());
         eprintln!("RSS {m0} MB before, {} MB after 50 previews", rss_mb());
+    }
+
+    /// As Logic: the first click on an instrument patch selects it without a preview; a click on
+    /// the highlighted patch plays it.
+    #[test]
+    fn a_patch_previews_on_its_second_click() {
+        let mut app = instruments_app();
+        let it = results(&app).into_iter().find(|i| i.kind == Kind::Patch && crate::brpreview::previewable(i)).unwrap();
+        app.br.selected = vec![it.id.clone()];
+        click_item(&mut app, &it, false);
+        assert!(app.preview.playing.is_none(), "the first click previewed");
+        click_item(&mut app, &it, true);
+        assert_eq!(app.preview.playing.as_deref(), Some(it.id.as_str()));
     }
 
     #[test]
