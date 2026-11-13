@@ -32,6 +32,10 @@ pub enum Tool {
     Finger,
     /// The Gain tool: drag an audio region up or down for its gain (regionparams.rs).
     Gain,
+    /// The Audio Track Editor's Flex Pitch tools: drag a note up or down for its vibrato or its
+    /// gain (flex.rs).
+    Vibrato,
+    Volume,
 }
 
 impl Tool {
@@ -55,6 +59,8 @@ impl Tool {
             Tool::Brush => "Brush Tool",
             Tool::Finger => "Finger Tool",
             Tool::Gain => "Gain Tool",
+            Tool::Vibrato => "Vibrato Tool",
+            Tool::Volume => "Volume Tool",
         }
     }
 
@@ -83,6 +89,7 @@ impl Tool {
             Tool::Brush => "B",
             Tool::Finger => "F",
             Tool::Gain => "G",
+            Tool::Vibrato | Tool::Volume => "",
         }
     }
 }

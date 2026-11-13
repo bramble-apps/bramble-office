@@ -55,6 +55,7 @@ pub mod glyphs;
 pub mod edit;
 pub mod eq;
 pub mod flex;
+pub mod flashback;
 pub mod follow;
 mod inspector;
 pub mod keymap;

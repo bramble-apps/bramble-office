@@ -696,9 +696,10 @@ fn amp_scale(p: &Painter, col: Rect, lane: Rect, step: f32, percent: bool, zoom:
 // Audio Track Editor
 
 const SNAPS: [&str; 7] = ["Smart", "Bar", "Beat", "Division", "Ticks", "Frames", "Samples"];
-const TRACK_TOOLS: [crate::edit::Tool; 12] = {
+const TRACK_TOOLS: [crate::edit::Tool; 14] = {
     use crate::edit::Tool::*;
-    [Pointer, Pencil, Eraser, Text, Scissors, Glue, Solo, Mute, Zoom, Fade, Marquee, Flex]
+    // (Vibrato and Volume: Flex Pitch's, only here, not in the Tracks area)
+    [Pointer, Pencil, Eraser, Text, Scissors, Glue, Solo, Mute, Zoom, Fade, Marquee, Flex, Vibrato, Volume]
 };
 
 fn snap_tick(app: &App, tick: f64, px_per_tick: f64) -> f64 {

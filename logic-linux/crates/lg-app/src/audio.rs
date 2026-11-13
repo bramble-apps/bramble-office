@@ -798,11 +798,15 @@ impl Engine {
             }
             self.pos = to;
             self.rec.capture(from, tps, input.as_deref());
+            if !self.rec.capturing {
+                self.rec.flash.take(from, tps, input.as_deref(), !was);
+            }
             if let (true, Some((a, b))) = (self.cycle_on, self.cycle) {
                 if b > a && self.pos >= b as f64 {
                     self.all_off();
                     self.pos = a as f64;
                     self.rec.wrapped();
+                    self.rec.flash.wrapped();
                     // (Chase on cycle jump)
                     if self.chase.cfg.on_cycle_jump {
                         self.chase_due = true;

@@ -189,6 +189,8 @@ pub struct App {
     pub audio_edit: crate::audioedit::AudioEdit,
     /// Flex Time / Flex Pitch: the tracks' settings, pitch analyses (flex.rs).
     pub flex: crate::flex::State,
+    /// Flashback Capture's kept performance (flashback.rs).
+    pub fb: crate::flashback::State,
     /// Automation shown on the tracks (A); each track's mode and the lane its header shows.
     pub show_automation: bool,
     pub auto_mode: std::collections::HashMap<usize, crate::automation::AutoMode>,
@@ -440,6 +442,7 @@ impl App {
             pal: crate::palette::State { name: crate::palette::load_saved(automated), ..Default::default() },
             audio_edit: Default::default(),
             flex: Default::default(),
+            fb: Default::default(),
             show_automation: false,
             auto_mode: Default::default(),
             auto_param: Default::default(),
@@ -1427,6 +1430,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::flex::join_command(self, name) {
+            return true;
+        }
         if crate::listwin::command(self, ctx, name) || crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
             return true;
         }
@@ -1448,7 +1454,7 @@ impl App {
         if crate::instwin::command(self, ctx, name) || crate::browser::command(self, name) || crate::projaudio::global(self, name) || crate::smartcontrols::command(self, name) {
             return true;
         }
-        if crate::flex::command(self, ctx, name) || crate::hosting::command(self, name) || crate::arranging::command(self, name) {
+        if crate::flex::command(self, ctx, name) || crate::flashback::command(self, name) || crate::hosting::command(self, name) || crate::arranging::command(self, name) {
             return true;
         }
         if crate::nav::command(self, ctx, name) || crate::screensets::command(self, ctx, name) || crate::toolbar::command(self, ctx, name) || crate::windows::command(self, name) {
@@ -1581,7 +1587,7 @@ impl App {
                 }
             }
             "Record" | "Record / Record Toggle" => crate::recording::record_pressed(self, name),
-            "Capture as Recording" => self.capture_recording(),
+            "Capture as Recording" | "Flashback Capture" => crate::flashback::capture(self),
             "Discard Recording and Return to Last Play Position" => crate::recording::discard(self),
             "Toggle Metronome Click" => {
                 let on = {
@@ -2033,6 +2039,7 @@ impl eframe::App for App {
         crate::noterepeat::frame(self, &ctx);
         crate::recording::update(self);
         crate::flex::update(self);
+        crate::flashback::update(self);
         crate::hosting::idle(self, &ctx);
         crate::tm::frame(self, &ctx);
         let m = if kn_ui::winframe::system_title_bar() { 0.0 } else { kn_ui::winframe::margin() };

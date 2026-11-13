@@ -135,22 +135,26 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     {
         app.play_stop();
     }
-    if button(ui, b[2], "record", app.recording(), true, "Record (R)", |p, r, _| {
+    let rec_b = button(ui, b[2], "record", app.recording(), true, "Record (R)", |p, r, _| {
         icon(p, r, ph_fill::CIRCLE, look::record_red());
-    })
-    .clicked()
-    {
+    });
+    if rec_b.clicked() {
         app.key_command(ui.ctx(), "Record");
     }
+    crate::flashback::record_button_menu(app, &rec_b);
     let mut cyc_i = 3;
     if !narrow {
         let mut slot = 3;
-        if app.cb_show.capture && button(ui, b[slot], "capture", false, true, "Capture as Recording (⇧R)", |p, r, _| {
-            crate::cbicons::capture(p, r, look::record_red());
-        })
-        .clicked()
-        {
-            app.key_command(ui.ctx(), "Capture as Recording");
+        if app.cb_show.capture {
+            // (dimmed until there is something to capture)
+            let can = crate::flashback::available(app);
+            let fb = button(ui, b[slot], "capture", false, can, "Flashback Capture (⇧R)", |p, r, c| {
+                crate::cbicons::capture(p, r, if can { look::record_red() } else { c });
+            });
+            if fb.clicked() {
+                app.key_command(ui.ctx(), "Flashback Capture");
+            }
+            crate::flashback::button_menu(app, &fb);
         }
         slot += usize::from(app.cb_show.capture);
         if app.cb_show.replace && button(ui, b[slot], "replace", app.replace_mode, true, "Replace", |p, r, c| {

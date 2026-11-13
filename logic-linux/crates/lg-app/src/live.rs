@@ -185,6 +185,8 @@ pub fn note(app: &mut App, pitch: u8, velocity: u8) {
             }
         }
     }
+    let ch = app.engine.lock().map_or(0, |e| e.live_channel);
+    crate::flashback::note_in(app, ch, pitch, velocity);
 }
 
 /// Each frame: MIDI messages in, and Musical Typing's keys when its window is open. Returns the
@@ -266,6 +268,7 @@ pub fn sequencer_in(app: &mut App, ctx: &egui::Context, status: u8, a: u8, b: u8
                     }
                     app.live.sustain = on;
                 }
+crate::flashback::cc_in(app, status & 0x0F, a, b);
                 if let Ok(mut e) = app.engine.lock() {
                     e.live_control(t, a, b as u16);
                 }
