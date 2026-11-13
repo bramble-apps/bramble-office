@@ -24,7 +24,7 @@ const PILL_R: f32 = 5.0;
 const PILL_PAD: f32 = 5.0;
 const GAP_X: f32 = 5.0;
 const GAP_Y: f32 = 6.0;
-const FONT: f32 = 11.0;
+const FONT: f32 = 10.0;
 /// Tags shown before Show More.
 const FIRST: usize = 12;
 
@@ -236,15 +236,15 @@ fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[
     let head = Rect::from_min_size(rect.min, vec2(w, HEAD_H));
     let cy = top.y + HEAD_H / 2.0;
     // the name (a click folds or unfolds the card)
-    let g = text(ui, name, head_text(), inner_w * 0.6, look::semibold(12.0));
+    let g = text(ui, name, head_text(), inner_w * 0.6, look::semibold(10.0));
     let name_r = Rect::from_min_size(pos2(rect.min.x + PAD, cy - g.size().y / 2.0), g.size());
     p.galley(name_r.min, g, head_text());
-    let mut fold = false;
+    let fold;
     let mut more_t = false;
     if open {
         if let Some(m) = more {
             let label = if m { "Show Less" } else { "Show More" };
-            let g = text(ui, label, dim_text(), inner_w * 0.4, look::semibold(11.0));
+            let g = text(ui, label, dim_text(), inner_w * 0.4, look::semibold(8.6));
             let mr = Rect::from_min_size(pos2(rect.max.x - PAD - g.size().x, cy - g.size().y / 2.0), g.size());
             let resp = ui.interact(mr.expand(3.0), ui.scope_id().with((name, "more")), Sense::click());
             p.galley(mr.min, g, if resp.hovered() { head_text() } else { dim_text() });
