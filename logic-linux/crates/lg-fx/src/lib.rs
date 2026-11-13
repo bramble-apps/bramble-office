@@ -203,6 +203,7 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
 pub fn linked(name: &str, set: &[(u32, f32)]) -> Vec<(u32, f32)> {
     match name {
         "Amp Designer" => amp::amp_links(set),
+        "Stereo Delay" => delays::stereo_delay_links(set),
         _ => set.to_vec(),
     }
 }
