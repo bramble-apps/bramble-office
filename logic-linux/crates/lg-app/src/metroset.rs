@@ -95,6 +95,13 @@ pub fn pane(app: &mut App, ui: &mut egui::Ui) {
     ui.indent("metro-simple", |ui| {
         let rec = check(app, ui, "Click while recording", "Click while recording", !simple);
         ui.indent("metro-rec", |ui| check(app, ui, "Only during count-in", "Only during count-in", !simple && rec));
+        // Click while playing: the Metronome button's own state (Simple mode off)
+        let mut on = app.engine.lock().map(|e| e.metronome).unwrap_or(false);
+        if ui.add_enabled(!simple, egui::Checkbox::new(&mut on, "Click while playing")).changed() {
+            if let Ok(mut e) = app.engine.lock() {
+                e.metronome = on;
+            }
+        }
     });
     check(app, ui, "Polyphonic clicks", "Polyphonic clicks", true);
     ui.add_space(6.0);
@@ -209,6 +216,16 @@ pub fn menu(app: &mut App, resp: &egui::Response) {
                 remember(app, l, on);
                 crate::projsettings::apply(app);
                 app.dirty = true;
+            }
+            if l == "Only during count-in" {
+                // (Click While Playing: what the button turns on and off; the button turns
+                // purple)
+                let mut on = app.engine.lock().map(|e| e.metronome).unwrap_or(false);
+                if ui.add_enabled(!app.proj.on(&k("Simple mode")), egui::Checkbox::new(&mut on, "Click While Playing")).changed() {
+                    if let Ok(mut e) = app.engine.lock() {
+                        e.metronome = on;
+                    }
+                }
             }
             if l == "Polyphonic clicks" {
                 ui.separator();
