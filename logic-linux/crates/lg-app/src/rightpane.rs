@@ -126,7 +126,24 @@ fn notes(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut tab = app.notes_tab;
     tabs(ui, tr, "notes-tab", &["Project", "Track"], &mut tab);
     app.notes_tab = tab;
-    let body = Rect::from_min_max(pos2(area.min.x + 10.0, tr.max.y + 10.0), area.max - vec2(10.0, 10.0));
+    // the menu bar: the Text Edit button (pencil; while editing a blue Done button)
+    let bar = Rect::from_min_size(pos2(area.min.x + 10.0, tr.max.y + 8.0), vec2(area.width() - 20.0, 24.0));
+    let edit_id = egui::Id::new(("notes-editing", tab));
+    let mut editing: bool = ui.data(|d| d.get_temp(edit_id)).unwrap_or(false);
+    let br = Rect::from_min_size(pos2(bar.max.x - if editing { 52.0 } else { 28.0 }, bar.min.y), vec2(if editing { 52.0 } else { 28.0 }, 22.0));
+    let bresp = ui.interact(br, edit_id.with("btn"), egui::Sense::click()).on_hover_text(if tab == 0 { "Project Text Edit" } else { "Track Text Edit" });
+    let p = ui.painter();
+    if editing {
+        p.rect_filled(br, 6.0, look::accent());
+        p.text(br.center(), egui::Align2::CENTER_CENTER, "Done", look::semibold(12.0), egui::Color32::WHITE);
+    } else {
+        p.rect_filled(br, 6.0, if bresp.hovered() { look::button_on() } else { look::group_bg() });
+        crate::glyphs::paint(p, br, crate::glyphs::ph::PENCIL_SIMPLE, 14.0, look::text());
+    }
+    if bresp.clicked() {
+        editing = toggle_edit(editing);
+    }
+    let body = Rect::from_min_max(pos2(area.min.x + 10.0, bar.max.y + 8.0), area.max - vec2(10.0, 10.0));
     let text = if tab == 0 {
         &mut app.project_notes
     } else {
@@ -135,12 +152,35 @@ fn notes(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     };
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
     let before = text.clone();
+    let hint = if tab == 0 { "Notes about this project" } else { "Notes about this track" };
     egui::ScrollArea::vertical().id_salt(("notes", tab)).show(&mut child, |ui| {
-        ui.add_sized(vec2(body.width(), body.height().max(200.0)), egui::TextEdit::multiline(text).font(look::regular(13.0)).frame(egui::Frame::NONE).hint_text(if tab == 0 { "Notes about this project" } else { "Notes about this track" }));
+        if editing {
+            let te = ui.add_sized(vec2(body.width(), body.height().max(200.0)), egui::TextEdit::multiline(text).font(look::regular(13.0)).frame(egui::Frame::NONE).hint_text(hint));
+            // (the insertion point at once)
+            if bresp.clicked() {
+                te.request_focus();
+            }
+        } else {
+            // read only until Edit (or a double-click)
+            let shown = if text.is_empty() { hint.to_string() } else { text.clone() };
+            let col = if text.is_empty() { look::text_dim() } else { look::text() };
+            let (rect, r) = ui.allocate_exact_size(vec2(body.width(), body.height().max(200.0)), egui::Sense::click());
+            let g = ui.painter().layout(shown, look::regular(13.0), col, rect.width());
+            ui.painter().galley(rect.min + vec2(0.0, 0.5), g, col);
+            if r.double_clicked() {
+                editing = true;
+            }
+        }
     });
+    ui.data_mut(|d| d.insert_temp(edit_id, editing));
     if *text != before {
         app.dirty = true;
     }
+}
+
+/// The Text Edit button: Edit ⇄ Done.
+fn toggle_edit(editing: bool) -> bool {
+    !editing
 }
 
 // ---- Loop Browser and All Files
