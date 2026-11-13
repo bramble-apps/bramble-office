@@ -176,6 +176,15 @@ pub struct State {
     /// Smart Pickup (the grid's Quantize Start menu): a cell triggered late starts at once, at
     /// the position it would have had from the last boundary.
     pub smart_pickup: bool,
+    /// Track Activation: tracks whose cells (not their regions) are active. A cell starting
+    /// makes its track's cells active; stopping it leaves them so (the regions stay silent) until
+    /// the Track Activation button switches the track to its regions.
+    pub cells_own: BTreeSet<usize>,
+    /// Paused tracks (Option-click Pause): the scene of the cell to resume.
+    pub paused: BTreeMap<usize, usize>,
+    /// Tracks pausing at their next boundary, and tracks resuming from where they paused.
+    pub pausing: BTreeSet<usize>,
+    pub resuming: BTreeSet<usize>,
     pub grid_rect: Option<Rect>,
     /// A cell being dragged (from), copy with ⌥.
     pub drag: Option<(usize, usize)>,
@@ -757,7 +766,7 @@ pub fn update(app: &mut App) {
             }
             let starts: Vec<(usize, usize)> = s.plays.iter().filter_map(|(&t, p)| p.current.map(|c| (t, c.0))).collect();
             for (t, sc) in starts {
-                let f = play_from_pos(s, t, sc, pos.max(0.0) as u32, None);
+                let f = if s.resuming.remove(&t) { s.stopped_at.get(&(t, sc)).copied() } else { play_from_pos(s, t, sc, pos.max(0.0) as u32, None) };
                 if let Some(p) = s.plays.get_mut(&t) {
                     p.from = f;
                 }
@@ -805,6 +814,11 @@ pub fn update(app: &mut App) {
                             s.perf_log.push((*t, sc, st, Some(x)));
                         }
                         p.current = None;
+                        if s.pausing.remove(t) {
+                            // paused: the regions take over until it resumes
+                            s.paused.insert(*t, sc);
+                            s.cells_own.remove(t);
+                        }
                         let pf = p.from.take();
                         if let Some(cp) = s.cells.get(&(*t, sc)).and_then(|c| cell_pos(&pf.map_or_else(|| c.clone(), |f| with_from(c, f)), None, st, x)) {
                             s.stopped_at.insert((*t, sc), cp);
@@ -836,7 +850,7 @@ pub fn update(app: &mut App) {
             }
         }
         for (t, sc, at, prev) in started {
-            let f = play_from_pos(s, t, sc, at, prev);
+            let f = if s.resuming.remove(&t) { s.stopped_at.get(&(t, sc)).copied() } else { play_from_pos(s, t, sc, at, prev) };
             if let Some(p) = s.plays.get_mut(&t) {
                 p.from = f;
             }
@@ -845,6 +859,11 @@ pub fn update(app: &mut App) {
             }
         }
         s.plays.retain(|_, p| p.current.is_some() || p.next.is_some());
+        let on: Vec<usize> = s.plays.iter().filter(|p| p.1.current.is_some()).map(|p| *p.0).collect();
+        for t in on {
+            s.cells_own.insert(t);
+            s.paused.remove(&t);
+        }
         if playing {
             crate::follow::step(s, pos, b);
         }
@@ -870,7 +889,9 @@ pub fn update(app: &mut App) {
 fn feed(app: &mut App, pos: f64, b: u32) {
     let from = (pos as u32).saturating_sub(b);
     let to = pos as u32 + 4 * b;
-    let busy: Vec<usize> = app.live_loops.plays.keys().copied().collect();
+    let mut busy: Vec<usize> = app.live_loops.plays.keys().copied().collect();
+    // (tracks whose cells are active stay silent while their cells are stopped)
+    busy.extend(app.live_loops.cells_own.iter().filter(|t| !app.live_loops.plays.contains_key(t)));
     let mut want: Vec<(usize, Vec<(u32, u32, u8, u8)>, Vec<(u32, Arc<Vec<f32>>)>)> = Vec::new();
     for &t in &busy {
         let n = notes_for(app, t, from, to);
@@ -908,7 +929,84 @@ fn feed(app: &mut App, pos: f64, b: u32) {
 
 /// Whether the track's cell has taken it over (draw its regions grey; they don't sound).
 pub fn takes_over(app: &App, track: usize) -> bool {
-    app.live_loops.active(track)
+    app.live_loops.active(track) || app.live_loops.cells_own.contains(&track)
+}
+
+/// Which side a track's Track Activation button shows active: Some(true) cells, Some(false)
+/// regions; None for the top button when tracks differ.
+pub fn activation(s: &State, t: Option<usize>) -> Option<bool> {
+    let on = |t: usize| s.active(t) || s.cells_own.contains(&t);
+    match t {
+        Some(t) => Some(on(t)),
+        None => {
+            let mut tracks: Vec<usize> = s.cells.keys().map(|k| k.0).collect();
+            tracks.dedup();
+            let n = tracks.iter().filter(|t| on(**t)).count();
+            if n == 0 {
+                Some(false)
+            } else if n == tracks.len() {
+                Some(true)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// A Track Activation button: switches a stopped track between its cells and its regions (the
+/// regions sound at once). The top one (None) makes the regions of every track with stopped
+/// cells active, or (all regions already) the cells again.
+pub fn toggle_activation(s: &mut State, t: Option<usize>) {
+    match t {
+        Some(t) if s.active(t) => {}
+        Some(t) => {
+            if !s.cells_own.remove(&t) {
+                s.cells_own.insert(t);
+            }
+        }
+        None => {
+            let stopped: Vec<usize> = s.cells_own.iter().copied().filter(|t| !s.active(*t)).collect();
+            if stopped.is_empty() {
+                let tracks: Vec<usize> = s.cells.keys().map(|k| k.0).collect();
+                s.cells_own.extend(tracks);
+            } else {
+                for t in stopped {
+                    s.cells_own.remove(&t);
+                }
+            }
+        }
+    }
+}
+
+/// Option-click Pause: the track's cell stops at its next boundary and its regions take over;
+/// Resume plays it on from there.
+pub fn pause_track(app: &mut App, t: usize) {
+    if app.live_loops.active(t) {
+        stop_track(app, t);
+        app.live_loops.pausing.insert(t);
+    }
+}
+
+pub fn resume_track(app: &mut App, t: usize) {
+    if let Some(sc) = app.live_loops.paused.remove(&t) {
+        app.live_loops.resuming.insert(t);
+        trigger(app, t, sc, false);
+    }
+}
+
+/// The bottom Pause (Option-click): every playing cell; Resume: every paused one.
+pub fn pause_all(app: &mut App) {
+    let t: Vec<usize> = app.live_loops.plays.keys().copied().collect();
+    for t in t {
+        pause_track(app, t);
+    }
+}
+
+pub fn resume_all(app: &mut App) {
+    let t: Vec<usize> = app.live_loops.paused.keys().copied().collect();
+    for t in t {
+        resume_track(app, t);
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -918,6 +1016,11 @@ pub fn takes_over(app: &App, track: usize) -> bool {
 /// from the playhead's bar); a click on the playing cell stops it at the boundary.
 pub fn trigger(app: &mut App, t: usize, scene: usize, retrigger: bool) {
     let Some(c) = app.live_loops.cells.get(&(t, scene)).cloned() else { return };
+    if app.live_loops.paused.get(&t) == Some(&scene) {
+        // the paused cell's Resume
+        app.live_loops.paused.remove(&t);
+        app.live_loops.resuming.insert(t);
+    }
     let (pos, playing) = engine_pos(app);
     app.live_loops.pending.remove(&(t, scene));
     if !playing {
@@ -2083,6 +2186,15 @@ pub fn rect_path(c: Pos2, h: f32, frac: f32) -> Vec<Pos2> {
     out
 }
 
+/// A Track Activation button's ◁▷: the solid side is the active one (Some(true): cells ◀).
+fn activation_arrows(p: &egui::Painter, c: Pos2, cells: Option<bool>, col: Color32) {
+    use crate::glyphs::{ph, ph_fill};
+    let l = if cells == Some(true) { ph_fill::CARET_LEFT } else { ph::CARET_LEFT };
+    let r = if cells == Some(false) { ph_fill::CARET_RIGHT } else { ph::CARET_RIGHT };
+    crate::glyphs::paint(p, Rect::from_center_size(c - vec2(4.5, 0.0), vec2(10.0, 12.0)), l, 11.0, col);
+    crate::glyphs::paint(p, Rect::from_center_size(c + vec2(4.5, 0.0), vec2(10.0, 12.0)), r, 11.0, col);
+}
+
 /// The circle in a cell's middle: ▶ to start, ■ while playing (hover), the ring filling with
 /// the cell's position, dashed while queued.
 fn draw_ring(p: &egui::Painter, c: Pos2, state: RingState, frac: f32, hovered: bool, t: f64, looped: bool) {
@@ -2297,11 +2409,12 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         let sr = Rect::from_min_max(pos2(stop_col.min.x, head.min.y), pos2(stop_col.max.x, head.max.y));
         hp.rect_filled(sr, 0.0, look::header_bg());
         let c = sr.center();
-        crate::glyphs::paint(&hp, Rect::from_center_size(c - vec2(4.5, 0.0), vec2(10.0, 12.0)), crate::glyphs::ph::CARET_LEFT, 11.0, look::text());
-        crate::glyphs::paint(&hp, Rect::from_center_size(c + vec2(4.5, 0.0), vec2(10.0, 12.0)), crate::glyphs::ph_fill::CARET_RIGHT, 11.0, look::text());
-        let resp = ui.interact(sr, ui.scope_id().with("ll-split"), Sense::click()).on_hover_text("Show/Hide Tracks area");
+        // the top Track Activation button: the solid arrow points to what is active on all
+        // tracks (cells ◀, regions ▶); both hollow when the tracks differ
+        activation_arrows(&hp, c, activation(&app.live_loops, None), look::text());
+        let resp = ui.interact(sr, ui.scope_id().with("ll-split"), Sense::click()).on_hover_text("Track Activation");
         if resp.clicked() {
-            command(app, "Show/Hide Tracks area");
+            toggle_activation(&mut app.live_loops, None);
         }
         p.hline(area.x_range(), head.max.y, Stroke::new(1.0, look::line()));
     }
@@ -2505,10 +2618,27 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         if sb.max.y < cells_r.max.y && sb.min.y > cells_r.min.y {
             let active = app.live_loops.active(t);
             let resp = ui.interact(sb.expand(3.0), ui.scope_id().with(("ll-stop", t)), Sense::click());
-            if active {
-                p.rect_filled(Rect::from_center_size(sb.center(), vec2(9.0, 9.0)), 1.0, if resp.hovered() { Color32::WHITE } else { Color32::from_gray(199) });
+            let col = if resp.hovered() { Color32::WHITE } else { Color32::from_gray(199) };
+            if active && alt {
+                // Option: Pause
+                crate::glyphs::paint(&p, sb, crate::glyphs::ph_fill::PAUSE, 11.0, col);
+                if resp.on_hover_text("Pause").clicked() {
+                    pause_track(app, t);
+                }
+            } else if active {
+                p.rect_filled(Rect::from_center_size(sb.center(), vec2(9.0, 9.0)), 1.0, col);
                 if resp.clicked() {
                     stop_track(app, t);
+                }
+            } else if app.live_loops.paused.contains_key(&t) {
+                play_glyph(&p, sb.center(), 6.0, col);
+                if resp.on_hover_text("Resume").clicked() {
+                    resume_track(app, t);
+                }
+            } else if app.live_loops.cells.keys().any(|k| k.0 == t) {
+                activation_arrows(&p, sb.center(), activation(&app.live_loops, Some(t)), col);
+                if resp.on_hover_text("Track Activation").clicked() {
+                    toggle_activation(&mut app.live_loops, Some(t));
                 }
             }
         }
@@ -2630,7 +2760,13 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         }
         // the arrow triggers the scene; the area under it (the name) selects it
         let on_arrow = resp.interact_pointer_pos().is_some_and(|pp| up.contains(pp));
-        if resp.clicked() && on_arrow {
+        if resp.clicked() && on_arrow && alt && playing_scene {
+            // Option-click a playing scene: its cells pause, their regions take over
+            let tr: Vec<usize> = (0..n_tracks).filter(|t| app.live_loops.cells.contains_key(&(*t, sc))).collect();
+            for t in tr {
+                pause_track(app, t);
+            }
+        } else if resp.clicked() && on_arrow {
             trigger_scene(app, sc);
         } else if resp.double_clicked() {
             app.live_loops.renaming = Some((None, sc, app.live_loops.scene_opts.get(&sc).map(|s| s.name.clone()).unwrap_or_default()));
@@ -2668,9 +2804,22 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
     // Stop All Cells
     let sa = Rect::from_center_size(pos2(stop_col.center().x, trig.center().y + 3.0), vec2(9.0, 9.0));
     let resp = ui.interact(sa.expand(6.0), ui.scope_id().with("ll-stop-all"), Sense::click()).on_hover_text("Stop All Cells (⌘↩)");
-    p.rect_filled(sa, 1.0, if resp.hovered() { Color32::WHITE } else { Color32::from_gray(199) });
-    if resp.clicked() {
-        stop_all(app);
+    let col = if resp.hovered() { Color32::WHITE } else { Color32::from_gray(199) };
+    if alt && !app.live_loops.paused.is_empty() && !app.live_loops.any_active() {
+        play_glyph(&p, sa.center(), 6.0, col);
+        if resp.clicked() {
+            resume_all(app);
+        }
+    } else if alt {
+        crate::glyphs::paint(&p, sa.expand(2.0), crate::glyphs::ph_fill::PAUSE, 11.0, col);
+        if resp.clicked() {
+            pause_all(app);
+        }
+    } else {
+        p.rect_filled(sa, 1.0, col);
+        if resp.clicked() {
+            stop_all(app);
+        }
     }
     // the focus ring
     if app.live_loops.focused {
@@ -2938,6 +3087,61 @@ mod tests {
         assert_eq!(s.scenes, 7);
         resize_scenes(&mut s, 1);
         assert_eq!(s.scenes, 2);
+    }
+
+    #[test]
+    fn track_activation_and_pause() {
+        let mut app = crate::tm::test_app();
+        sync(&mut app);
+        let at = |app: &mut App, pos: f64| {
+            let mut e = app.engine.lock().unwrap();
+            e.playing = true;
+            e.pos = pos;
+        };
+        app.live_loops.was_playing = true;
+        app.live_loops.quantize = "1 Bar".into();
+        let c = cell(vec![note(0, 60), note(960, 62), note(1920, 64), note(2880, 65)], 3840);
+        app.live_loops.cells.insert((0, 0), c.clone());
+        app.live_loops.cells.insert((1, 0), c.clone());
+        // nothing played yet: the regions are active everywhere
+        assert_eq!(activation(&app.live_loops, None), Some(false));
+        at(&mut app, 100.0);
+        trigger(&mut app, 0, 0, false);
+        at(&mut app, 3850.0);
+        update(&mut app);
+        assert!(app.live_loops.active(0) && takes_over(&app, 0));
+        // tracks differ: both arrows of the top button hollow
+        assert_eq!(activation(&app.live_loops, None), None);
+        // stopping the cell leaves the regions silent
+        stop_track(&mut app, 0);
+        at(&mut app, 7690.0);
+        update(&mut app);
+        assert!(!app.live_loops.active(0));
+        assert!(takes_over(&app, 0));
+        assert_eq!(activation(&app.live_loops, Some(0)), Some(true));
+        // Track Activation: the regions at once; again: the cells
+        toggle_activation(&mut app.live_loops, Some(0));
+        assert!(!takes_over(&app, 0));
+        toggle_activation(&mut app.live_loops, Some(0));
+        assert!(takes_over(&app, 0));
+        // the top button: regions on every track with stopped cells
+        toggle_activation(&mut app.live_loops, None);
+        assert!(!takes_over(&app, 0));
+        // Pause: stops at the next bar, the regions take over; Resume plays on from there
+        trigger(&mut app, 0, 0, false);
+        at(&mut app, 11530.0);
+        update(&mut app);
+        assert!(app.live_loops.active(0));
+        at(&mut app, 12000.0);
+        pause_track(&mut app, 0);
+        at(&mut app, 15370.0);
+        update(&mut app);
+        assert!(!app.live_loops.active(0) && !takes_over(&app, 0));
+        assert_eq!(app.live_loops.paused.get(&0), Some(&0));
+        resume_track(&mut app, 0);
+        at(&mut app, 19210.0);
+        update(&mut app);
+        assert!(app.live_loops.active(0) && app.live_loops.paused.is_empty());
     }
 
     #[test]
