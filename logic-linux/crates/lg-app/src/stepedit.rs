@@ -85,6 +85,70 @@ pub struct State {
     rect: Option<Rect>,
     /// Ticks per step.
     pub grid: u32,
+    /// The Step Editor's tool (its own tool menu).
+    pub tool: StepTool,
+    /// Selected steps: (lane, step position in song ticks).
+    pub sel_steps: Vec<(usize, u32)>,
+    /// A drag of one of several selected steps: every selected step's value when it started,
+    /// and the pressed step's.
+    group: Option<(Vec<((usize, u32), u8)>, u8)>,
+    /// The lane a Pencil or Eraser stroke (or a Shift-drag selection) runs on, and where it
+    /// started.
+    stroke: Option<(usize, u32)>,
+    /// The Line tool's start (lane, position, value) while dragging; where the last line ended.
+    line: Option<(usize, u32, u8)>,
+    line_end: Option<(usize, u32, u8)>,
+    /// Where the line being drawn ends now.
+    line_cur: Option<(usize, u32, u8)>,
+}
+
+/// The Step Editor's tools (Logic: Pointer, Pencil, Eraser, Line).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum StepTool {
+    #[default]
+    Pointer,
+    Pencil,
+    Eraser,
+    Line,
+}
+
+impl StepTool {
+    pub const ALL: [StepTool; 4] = [StepTool::Pointer, StepTool::Pencil, StepTool::Eraser, StepTool::Line];
+    pub fn name(self) -> &'static str {
+        match self {
+            StepTool::Pointer => "Pointer Tool",
+            StepTool::Pencil => "Pencil Tool",
+            StepTool::Eraser => "Eraser Tool",
+            StepTool::Line => "Line Tool",
+        }
+    }
+    fn icon(self) -> &'static str {
+        match self {
+            StepTool::Pointer => crate::glyphs::ph::CURSOR,
+            StepTool::Pencil => crate::glyphs::ph::PENCIL_SIMPLE,
+            StepTool::Eraser => crate::glyphs::ph::ERASER,
+            StepTool::Line => crate::glyphs::ph::LINE_SEGMENT,
+        }
+    }
+}
+
+/// A step edit: (lane, position, Some(value) / None removes, create the step if empty).
+type Op = (usize, u32, Option<u8>, bool);
+
+/// A group of step values moved by `d`: their differences kept, stopping when one reaches
+/// `lo` or `hi`.
+pub fn group_values(vals: &[u8], d: i32, lo: u8, hi: u8) -> Vec<u8> {
+    let min = vals.iter().map(|&v| lo as i32 - v as i32).max().unwrap_or(0).min(0);
+    let max = vals.iter().map(|&v| hi as i32 - v as i32).min().unwrap_or(0).max(0);
+    let d = d.clamp(min, max);
+    vals.iter().map(|&v| (v as i32 + d) as u8).collect()
+}
+
+/// The values along a line from (a, va) to (b, vb), one per step of `grid`.
+pub fn line_values(a: u32, va: u8, b: u32, vb: u8, grid: u32) -> Vec<(u32, u8)> {
+    let (a, va, b, vb) = if a <= b { (a, va, b, vb) } else { (b, vb, a, va) };
+    let n = ((b - a) / grid.max(1)).max(1) as f32;
+    (0..=((b - a) / grid.max(1))).map(|i| (a + i * grid, (va as f32 + (vb as f32 - va as f32) * i as f32 / n).round().clamp(0.0, 127.0) as u8)).collect()
 }
 
 fn id() -> egui::Id {
@@ -258,6 +322,23 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let reg = region(app);
+    // Delete: the selected steps (the window has key focus)
+    if !st.sel_steps.is_empty() && crate::focus::clicked_in(app, st.rect) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) | i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) {
+        if let Some((t, r, _)) = reg.clone() {
+            let lanes = st.sets.get(st.set).map(|s| s.1.clone()).unwrap_or_default();
+            let grid = if st.grid == 0 { 240 } else { st.grid };
+            // (latest first, so earlier notes keep their places)
+            let mut ops: Vec<Op> = st.sel_steps.iter().map(|&(k, q)| (k, q, None, false)).collect();
+            ops.sort_by(|a, b| b.1.cmp(&a.1));
+            app.checkpoint("Delete events");
+            if let Some(region) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+                apply_ops(region, &lanes, &ops, grid);
+            }
+            app.selected_notes.clear();
+            with(ctx, |s| s.sel_steps.clear());
+            app.after_edit();
+        }
+    }
     let mut edit: Option<(usize, u32, Option<u8>)> = None; // (lane, pos, Some(value) set / None remove)
     let mut drag_vel: Option<(Ev, u8, bool)> = None;
     let mut lane_steps: Option<usize> = None;
@@ -265,6 +346,15 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     let mut reorder: Option<(usize, usize)> = None;
     let mut select_lane: Option<(usize, bool)> = None;
     let mut set_pick: Option<usize> = None;
+    let mut ops: Vec<Op> = Vec::new();
+    let mut begin: Option<&'static str> = None;
+    let mut new_sel: Option<Vec<(usize, u32)>> = None;
+    let mut set_fixed: Option<(usize, u8)> = None;
+    let mut menu_cmd: Option<&'static str> = None;
+    let mut stroke_start: Option<(usize, u32)> = None;
+    let mut line_start: Option<(usize, u32, u8)> = None;
+    let mut line_now: Option<(usize, u32, u8)> = None;
+    let mut group_start: Option<(Vec<((usize, u32), u8)>, u8)> = None;
     let resp = egui::Window::new("Step Editor").id(egui::Id::unique("lg-step-editor-window")).open(&mut open).default_size(vec2(760.0, 360.0)).resizable(true).show(ctx, |ui| {
         let st = state(ui.ctx());
         ui.horizontal(|ui| {
@@ -291,6 +381,22 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             if ui.checkbox(&mut auto, "Auto Define").changed() {
                 with(ui.ctx(), |s| s.auto_define = auto);
             }
+            ui.separator();
+            for t in StepTool::ALL {
+                let on = st.tool == t;
+                let b = ui.add(egui::Button::selectable(on, egui::RichText::new(t.icon()).family(crate::glyphs::family()).size(14.0))).on_hover_text(t.name());
+                if b.clicked() {
+                    with(ui.ctx(), |s| s.tool = t);
+                }
+            }
+            ui.menu_button("Delete MIDI Events", |ui| {
+                for n in ["Duplicates", "Inside Locators", "Outside Locators", "Outside Region Boundaries", "Unselected Within Selection"] {
+                    if ui.button(n).clicked() {
+                        menu_cmd = Some(n);
+                        ui.close();
+                    }
+                }
+            });
             ui.separator();
             let grids = [("1/8", 480u32), ("1/16", 240), ("1/32", 120)];
             let g = if st.grid == 0 { 240 } else { st.grid };
@@ -361,27 +467,136 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                         p.rect_filled(Rect::from_min_max(pos2(cr.min.x + 2.0, cr.max.y - cr.height() * f), pos2(cr.max.x - 2.0, cr.max.y)), 1.0, look::mix(Color32::from_rgb(0x3a, 0x9a, 0xf0), Color32::from_rgb(0xf0, 0x50, 0x3a), f));
                     }
                     let r = ui.interact(cr, ui.scope_id().with(("se-cell", k, s)), Sense::click_and_drag());
-                    let vel_at = |y: f32| (((cr.max.y - y) / cr.height()).clamp(0.05, 1.0) * 127.0).round() as u8;
-                    if r.clicked() {
-                        match ev {
-                            Some(_) if alt => edit = Some((k, pos, None)),
-                            Some((i, _)) => {
-                                if let Some(pp) = r.interact_pointer_pos() {
-                                    drag_vel = Some((i, vel_at(pp.y), true));
+                    let vel_at = |y: f32| (((cr.max.y - y) / cr.height()).clamp(0.0, 1.0) * 127.0).round() as u8;
+                    let here = (k, pos);
+                    if ev.is_some() && st.sel_steps.contains(&here) {
+                        p.rect_stroke(cr, 1.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
+                    }
+                    let (shift, down) = ui.input(|i| (i.modifiers.shift, i.pointer.primary_down()));
+                    let y_now = ui.input(|i| i.pointer.latest_pos()).map(|p| p.y);
+                    match st.tool {
+                        StepTool::Eraser => {
+                            // a click or a drag over steps removes them
+                            if r.drag_started() || r.clicked() {
+                                begin = Some("Delete events");
+                                stroke_start = Some((k, pos));
+                            }
+                            if ev.is_some() && (r.clicked() || r.drag_started() || (down && st.stroke.is_some() && r.contains_pointer())) {
+                                ops.push((k, pos, None, false));
+                            }
+                        }
+                        StepTool::Pencil => {
+                            if r.clicked() {
+                                match ev {
+                                    // Fix Value: an existing step's value becomes the preset
+                                    Some((_, v)) if st.fix_value => set_fixed = Some((k, v)),
+                                    Some(_) => {
+                                        begin = Some("Change Velocity");
+                                        ops.push((k, pos, r.interact_pointer_pos().map(|pp| vel_at(pp.y)), false));
+                                    }
+                                    None => {
+                                        begin = Some("Insert events");
+                                        let v = if st.fix_value { l.fixed } else { r.interact_pointer_pos().map_or(100, |pp| vel_at(pp.y)) };
+                                        ops.push((k, pos, Some(v), true));
+                                    }
                                 }
                             }
-                            None => {
-                                let v = if st.fix_value { l.fixed } else { r.interact_pointer_pos().map_or(100, |pp| vel_at(pp.y)) };
-                                edit = Some((k, pos, Some(v)));
+                            if r.drag_started() {
+                                begin = Some("Insert events");
+                                stroke_start = Some((k, pos));
+                            }
+                            // a horizontal drag draws steps following the pointer
+                            if (r.drag_started() || (down && st.stroke.is_some_and(|s| s.0 == k) && r.contains_pointer())) && !(st.fix_value && ev.is_some()) {
+                                let v = if st.fix_value { l.fixed } else { y_now.map_or(100, vel_at) };
+                                ops.push((k, pos, Some(v), true));
                             }
                         }
-                    } else if r.dragged() {
-                        if let (Some((i, _)), Some(pp)) = (ev, r.interact_pointer_pos()) {
-                            drag_vel = Some((i, vel_at(pp.y), false));
+                        StepTool::Line => {
+                            if r.drag_started() {
+                                let v = match st.line_end {
+                                    // pressed where the last line ended: it goes on from there
+                                    Some((lk, lp, lv)) if lk == k && lp == pos => lv,
+                                    _ if st.fix_value => l.fixed,
+                                    _ => r.interact_pointer_pos().map_or(100, |pp| vel_at(pp.y)),
+                                };
+                                line_start = Some((k, pos, v));
+                            }
+                        }
+                        StepTool::Pointer => {
+                            if r.clicked() {
+                                match ev {
+                                    Some(_) if alt => edit = Some((k, pos, None)),
+                                    Some(_) if shift => {
+                                        let mut v = st.sel_steps.clone();
+                                        if let Some(i) = v.iter().position(|x| *x == here) {
+                                            v.remove(i);
+                                        } else {
+                                            v.push(here);
+                                        }
+                                        new_sel = Some(v);
+                                    }
+                                    Some((i, _)) => {
+                                        new_sel = Some(vec![here]);
+                                        if let Some(pp) = r.interact_pointer_pos() {
+                                            drag_vel = Some((i, vel_at(pp.y).max(1), true));
+                                        }
+                                    }
+                                    None => {
+                                        let v = if st.fix_value { l.fixed } else { r.interact_pointer_pos().map_or(100, |pp| vel_at(pp.y)) };
+                                        edit = Some((k, pos, Some(v)));
+                                    }
+                                }
+                            } else if r.drag_started() && shift {
+                                // Shift-drag: the steps along the lane are selected
+                                stroke_start = Some((k, pos));
+                            } else if r.drag_started() && ev.is_some() && st.sel_steps.contains(&here) && st.sel_steps.len() > 1 && !st.fix_value {
+                                app.checkpoint("Change Velocity");
+                                let vals: Vec<((usize, u32), u8)> = st.sel_steps.iter().filter_map(|&(lk, lp)| Some(((lk, lp), hit(lanes.get(lk)?, &rg, lp, grid)?.1))).collect();
+                                group_start = Some((vals, ev.map_or(0, |e| e.1)));
+                            } else if r.dragged() && st.group.is_none() && st.stroke.is_none() && !st.fix_value {
+                                if let (Some((i, _)), Some(pp)) = (ev, r.interact_pointer_pos()) {
+                                    drag_vel = Some((i, vel_at(pp.y).max(1), false));
+                                }
+                            }
+                            if r.drag_started() && ev.is_some() && !shift && !(st.sel_steps.contains(&here) && st.sel_steps.len() > 1) {
+                                app.checkpoint("Change Velocity");
+                            }
+                            if down && shift && st.stroke.is_some_and(|s| s.0 == k) && r.contains_pointer() {
+                                if let Some((_, from)) = st.stroke {
+                                    let (a, b) = (from.min(pos), from.max(pos));
+                                    new_sel = Some((0..steps).map(|s2| rg.start + s2 as u32 * grid).filter(|&q| q >= a && q <= b && hit(l, &rg, q, grid).is_some()).map(|q| (k, q)).collect());
+                                }
+                            }
+                            if let (Some((vals, v0)), true) = (&st.group, r.dragged()) {
+                                if let Some(pp) = r.interact_pointer_pos() {
+                                    let d = vel_at(pp.y) as i32 - *v0 as i32;
+                                    let olds: Vec<u8> = vals.iter().map(|x| x.1).collect();
+                                    let lo = if vals.iter().any(|x| lanes.get(x.0 .0).is_some_and(|l| l.status == 0x90)) { 1 } else { 0 };
+                                    for (x, nv) in vals.iter().zip(group_values(&olds, d, lo, 127)) {
+                                        ops.push((x.0 .0, x.0 .1, Some(nv), false));
+                                    }
+                                    p.text(pp + vec2(12.0, -12.0), Align2::LEFT_BOTTOM, format!("{}", (*v0 as i32 + d).clamp(0, 127)), look::semibold(11.0), Color32::WHITE);
+                                }
+                            }
                         }
                     }
-                    if r.drag_started() && ev.is_some() {
-                        app.checkpoint("Change Velocity");
+                    if r.dragged() && matches!(st.tool, StepTool::Pointer | StepTool::Pencil) && st.group.is_none() {
+                        if let (Some(pp), Some(_)) = (r.interact_pointer_pos(), ev) {
+                            p.text(pp + vec2(12.0, -12.0), Align2::LEFT_BOTTOM, format!("{}", vel_at(pp.y)), look::semibold(11.0), Color32::WHITE);
+                        }
+                    }
+                }
+                // the Line tool's line, with the position and value under the pointer
+                if let (Some((lk, lpos, lv)), Some(pp)) = (st.line.or(line_start), ui.input(|i| i.pointer.latest_pos())) {
+                    if lk == k && ui.input(|i| i.pointer.primary_down()) {
+                        let x0 = rect.min.x + 130.0 + ((lpos - rg.start) / grid) as f32 * cell_w + cell_w / 2.0;
+                        let y0 = y + 2.0 + (lane_h - 6.0) * (1.0 - lv as f32 / 127.0);
+                        p.line_segment([pos2(x0, y0), pp], Stroke::new(1.5, Color32::WHITE));
+                        let s2 = (((pp.x - rect.min.x - 130.0) / cell_w).floor().max(0.0) as u32).min(steps as u32 - 1);
+                        let v = (((y + lane_h - 4.0 - pp.y) / (lane_h - 6.0)).clamp(0.0, 1.0) * 127.0).round() as u8;
+                        let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
+                        p.text(pp + vec2(12.0, -12.0), Align2::LEFT_BOTTOM, format!("Position: {}   Value: {v}", crate::app::bbdt(rg.start + s2 * grid, sig)), look::semibold(11.0), Color32::WHITE);
+                        line_now = Some((k, rg.start + s2 * grid, v));
                     }
                 }
                 p.hline(rect.x_range(), y + lane_h - 1.0, Stroke::new(1.0, Color32::from_gray(0x10)));
@@ -392,6 +607,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     if let Some(r) = resp.as_ref().map(|r| r.response.rect) {
         with(ctx, |s| s.rect = Some(r));
     }
+    step_gestures(app, ctx, reg.clone(), StepInput { ops, begin, new_sel, set_fixed, menu_cmd, stroke_start, line_start, line_now, group_start });
     if let Some(k) = set_pick {
         with(ctx, |s| {
             s.set = k;
@@ -510,6 +726,132 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     }
     if !open {
         with(ctx, |s| s.open = false);
+    }
+}
+
+/// What the steps' gestures did this frame.
+struct StepInput {
+    ops: Vec<Op>,
+    begin: Option<&'static str>,
+    new_sel: Option<Vec<(usize, u32)>>,
+    set_fixed: Option<(usize, u8)>,
+    menu_cmd: Option<&'static str>,
+    stroke_start: Option<(usize, u32)>,
+    line_start: Option<(usize, u32, u8)>,
+    line_now: Option<(usize, u32, u8)>,
+    group_start: Option<(Vec<((usize, u32), u8)>, u8)>,
+}
+
+/// Applies the Step Editor's tool gestures: Eraser and Pencil strokes, the Line tool (Option
+/// on release: every empty grid position gets a step too, but no notes), group value drags,
+/// step selection (the note lanes' steps are the selected notes, so Delete removes them).
+fn step_gestures(app: &mut App, ctx: &egui::Context, reg: Option<(usize, usize, lg_core::Region)>, inp: StepInput) {
+    let st = state(ctx);
+    let down = ctx.input(|i| i.pointer.primary_down());
+    let alt = ctx.input(|i| i.modifiers.alt);
+    let lanes = st.sets.get(st.set).map(|s| s.1.clone()).unwrap_or_default();
+    let grid = if st.grid == 0 { 240 } else { st.grid };
+    if let Some(n) = inp.menu_cmd {
+        app.key_command(ctx, n);
+    }
+    if let Some((k, v)) = inp.set_fixed {
+        lanes_mut(ctx, |l, _| {
+            if let Some(x) = l.get_mut(k) {
+                x.fixed = v;
+            }
+        });
+    }
+    with(ctx, |s| {
+        if inp.stroke_start.is_some() {
+            s.stroke = inp.stroke_start;
+        }
+        if inp.line_start.is_some() {
+            s.line = inp.line_start;
+        }
+        if inp.group_start.is_some() {
+            s.group = inp.group_start.clone();
+        }
+        if inp.line_now.is_some() {
+            s.line_cur = inp.line_now;
+        }
+    });
+    let mut ops = inp.ops;
+    // the line is drawn on release
+    if let (Some((k, a, va)), false) = (st.line.or(inp.line_start), down) {
+        if let (Some((lk, b, vb)), Some(l)) = (inp.line_now.or(st.line_cur), lanes.get(k)) {
+            if lk == k {
+                let create = alt && l.status != 0x90;
+                for (q, v) in line_values(a, va, b, vb, grid) {
+                    ops.push((k, q, Some(v), create));
+                }
+                with(ctx, |s| s.line_end = Some((k, b, vb)));
+                if !ops.is_empty() {
+                    app.checkpoint("Line Tool");
+                }
+            }
+        }
+        with(ctx, |s| {
+            s.line = None;
+            s.line_cur = None;
+        });
+    }
+    if !down {
+        with(ctx, |s| {
+            s.stroke = None;
+            s.group = None;
+        });
+    }
+    if let Some(v) = inp.new_sel {
+        // the selected steps; their notes are the selected notes
+        if let Some((_, _, rg)) = &reg {
+            app.selected_notes = v.iter().filter_map(|&(k, q)| match hit(lanes.get(k)?, rg, q, grid)? {
+                (Ev::Note(i), _) => Some(i),
+                _ => None,
+            }).collect();
+        }
+        with(ctx, |s| s.sel_steps = v);
+    }
+    let Some((t, r, _)) = reg else { return };
+    if ops.is_empty() {
+        return;
+    }
+    if let Some(what) = inp.begin {
+        app.checkpoint(what);
+    }
+    let removed = ops.iter().any(|o| o.2.is_none());
+    if let Some(region) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+        apply_ops(region, &lanes, &ops, grid);
+    }
+    if removed {
+        app.selected_notes.clear();
+        with(ctx, |s| s.sel_steps.clear());
+    }
+    if !down || removed {
+        app.after_edit();
+    }
+}
+
+/// Step edits on a region: a value set (or a step made when `create`, and allowed: the Line
+/// tool makes no notes), or a step removed.
+pub fn apply_ops(region: &mut lg_core::Region, lanes: &[Lane], ops: &[Op], grid: u32) {
+    for &(k, q, val, create) in ops {
+        let Some(l) = lanes.get(k) else { continue };
+        let found = hit(l, region, q, grid);
+        match (val, found) {
+            (Some(v), Some((Ev::Note(i), _))) => {
+                if let Some(n) = region.notes.get_mut(i) {
+                    n.velocity = v.max(1);
+                }
+            }
+            (Some(v), Some((Ev::Ctl(i), _))) => {
+                if let Some(e) = region.ext.events.get_mut(i) {
+                    e.value = v.min(127);
+                }
+            }
+            (Some(v), None) if create => set_step(region, l, q, grid, Some(v), None),
+            (None, Some((ev, _))) => set_step(region, l, q, grid, None, Some(ev)),
+            _ => {}
+        }
     }
 }
 
@@ -641,6 +983,25 @@ fn lane_inspector(ui: &mut egui::Ui, lanes: &[Lane], sel: &[usize]) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn step_tools() {
+        assert_eq!(super::group_values(&[100, 120], 20, 1, 127), [107, 127]);
+        assert_eq!(super::group_values(&[10, 40], -30, 1, 127), [1, 31]);
+        assert_eq!(super::line_values(0, 0, 960, 120, 240), [(0, 0), (240, 30), (480, 60), (720, 90), (960, 120)]);
+        assert_eq!(super::line_values(480, 100, 0, 0, 240), [(0, 0), (240, 50), (480, 100)]);
+        let l = super::Lane { pitch: 36, name: "Kick".into(), fixed: 100, status: 0x90, use_number: true, delay: 0, len: 0, channel: None };
+        let c = super::Lane { status: 0xB0, pitch: 7, ..l.clone() };
+        let mut rg = lg_core::Region { name: "R".into(), start: 0, length: 3840, notes: Vec::new(), audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() };
+        // the Line tool (create) makes controller steps, never notes
+        super::apply_ops(&mut rg, &[l.clone(), c], &[(0, 0, Some(90), false), (1, 0, Some(50), true), (1, 240, Some(60), true)], 240);
+        assert!(rg.notes.is_empty());
+        assert_eq!(rg.ext.events.len(), 2);
+        super::apply_ops(&mut rg, &[l.clone()], &[(0, 0, Some(90), true), (0, 240, Some(80), true)], 240);
+        assert_eq!(rg.notes.len(), 2);
+        super::apply_ops(&mut rg, &[l], &[(0, 240, None, false)], 240);
+        assert_eq!(rg.notes.len(), 1);
+    }
+
     use super::*;
 
     #[test]

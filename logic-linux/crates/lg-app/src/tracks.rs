@@ -541,9 +541,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     let name = text.clone();
                     app.renaming_region = None;
                     app.checkpoint("Rename Region");
-                    if let Some(x) = app.project.as_mut().and_then(|p| p.tracks.get_mut(rt)?.regions.get_mut(rri)) {
-                        x.name = name;
+                    // several selected: all get the name (a number at its end counts up)
+                    let mut sel = app.region_selection();
+                    if !sel.contains(&(rt, rri)) {
+                        sel = vec![(rt, rri)];
                     }
+                    crate::regconvert::rename_all(app, &sel, &name);
                     app.after_edit();
                 }
             }
@@ -650,8 +653,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
             if eresp.drag_stopped() {
                 if let Some(Drag::RegionEnd { track, region, length }) = app.drag {
-                    // Option: time stretch (stretch.rs)
-                    if ui.input(|i| i.modifiers.alt) {
+                    // Option-Shift: every selected region gets this one's length (absolute)
+                    if ui.input(|i| i.modifiers.alt && i.modifiers.shift) {
+                        crate::regconvert::same_length(app, track, region);
+                    } else if ui.input(|i| i.modifiers.alt) {
+                        // Option: time stretch (stretch.rs)
                         crate::stretch::option_resize(app, track, region, length);
                     } else {
                         crate::arranging::after_resize(app, track, region, length);
@@ -1167,7 +1173,6 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
             p.text(pos2(row.min.x + 20.0, row.min.y + 10.5), Align2::LEFT_CENTER, n, look::regular(13.5), look::text());
         }
         let lane = Rect::from_min_max(pos2(lanes_x, row.min.y), row.max);
-        let lp = ui.painter_at(lane);
         let i = match kind {
             crate::globals::ARRANGEMENT => 0,
             crate::globals::MARKER => 1,
@@ -1215,31 +1220,8 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
             }
             3 => 2,
             _ => {
-                // the Chord track: one chord per bar (the players follow it); click to type them
-                let text = if app.chord_text.trim().is_empty() { "C Am F G".to_string() } else { app.chord_text.clone() };
-                for (k, name) in text.split_whitespace().enumerate() {
-                    let x = x_of(k as f32 * bar_t);
-                    let cr = Rect::from_min_size(pos2(x + 1.0, row.min.y + 3.0), vec2(bw - 2.0, row.height() - 6.0));
-                    lp.rect_filled(cr, 4.0, Color32::from_rgb(0x8e, 0x6c, 0xd6).gamma_multiply(0.75));
-                    lp.with_clip_rect(cr).text(pos2(cr.min.x + 5.0, cr.center().y), Align2::LEFT_CENTER, name, look::semibold(11.5), Color32::WHITE);
-                }
-                let id = ui.scope_id().with("chord-edit");
-                let editing: Option<String> = ui.data(|d| d.get_temp(id));
-                if let Some(mut t) = editing {
-                    let er = Rect::from_min_size(pos2(lane.min.x + 4.0, row.min.y + 3.0), vec2(320.0, 22.0));
-                    let te = ui.put(er, egui::TextEdit::singleline(&mut t).hint_text("C Am F G (one per bar)").font(look::regular(12.0)));
-                    crate::widgets::focus_once(ui, &te);
-                    if te.lost_focus() {
-                        ui.data_mut(|d| d.remove::<String>(id));
-                        app.chord_text = t;
-                        app.dirty = true;
-                        crate::players::regenerate_all(app);
-                    } else {
-                        ui.data_mut(|d| d.insert_temp(id, t));
-                    }
-                } else if ui.interact(lane, ui.scope_id().with("chord-lane"), Sense::click()).on_hover_text("Click to type the chords (one per bar)").clicked() || presp.clicked() {
-                    ui.data_mut(|d| d.insert_temp(id, text));
-                }
+                // the Chord track (chordtrk.rs)
+                crate::chordtrk::lane(app, ui, row, lane, &x_of, &tick_of, presp.clicked());
                 continue;
             }
         };

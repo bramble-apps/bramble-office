@@ -542,6 +542,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Select Overlapped Regions/Events" | "Overlapped Notes" | "Select Overlapped Notes" if roll => select(app, |notes, _, _| f::select_overlapped(notes)),
         "Select Equal Regions/Events" | "Same Note Pitch" if roll => select(app, |notes, sel, _| f::select_same_pitch(notes, sel)),
         "Select Similar Regions/Events" | "Same Note Name" if roll => select(app, |notes, sel, _| f::select_same_name(notes, sel)),
+        "Select Muted Regions/Cells/Events" | "Muted Notes" if roll => select(app, |notes, _, _| (0..notes.len()).filter(|&i| notes[i].muted).collect()),
         "Select Same Channels" | "Same MIDI Channel" => select(app, |notes, sel, _| f::select_same_channel(notes, sel)),
         "Select Same Subpositions" | "Same Subposition" if roll => select(app, |notes, sel, i| f::select_same_subposition(notes, sel, i.start, i.bar)),
         "Select Same-Colored Regions/Cells/Events" | "Same-Colored Notes" if roll => {

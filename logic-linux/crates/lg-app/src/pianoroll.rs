@@ -155,10 +155,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if pitch % 12 == 0 && rows.collapsed.is_none() {
             kp.text(pos2(keys.max.x - 3.0, key_r.center().y), Align2::RIGHT_CENTER, format!("C{}", pitch / 12 - 2), look::semibold(9.5), Color32::from_gray(0x40));
         }
-        let kr = ui.interact(key_r, ui.scope_id().with(("key", pitch)), Sense::click());
+        let kr = ui.interact(key_r, ui.scope_id().with(("key", pitch)), Sense::click_and_drag());
         crate::menus::context_menu(app, &kr, "pianoroll-keyboard");
+        // a key selects the region's notes of its pitch; Shift-click or a drag over keys: the
+        // notes of that pitch range (Logic)
+        let kid = ui.scope_id().with("key-anchor");
         if kr.clicked() {
             preview(app, ti, pitch);
+            let shift = ui.input(|i| i.modifiers.shift);
+            let from = if shift { ui.data(|d| d.get_temp::<u8>(kid)).unwrap_or(pitch) } else { pitch };
+            app.selected_notes = notes_in_pitch_range(&region.notes, from, pitch);
+            if !shift {
+                ui.data_mut(|d| d.insert_temp(kid, pitch));
+            }
+        }
+        if kr.dragged() {
+            if let Some(pp) = kr.interact_pointer_pos() {
+                app.selected_notes = notes_in_pitch_range(&region.notes, pitch, rows.pitch_at(pp.y));
+            }
         }
     }
     // bars and beats
@@ -263,12 +277,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     // (Option-Shift: every selected note to the pressed note's velocity)
                     let same = ui.input(|i| i.modifiers.alt && i.modifiers.shift);
                     let to = orig.get(k).map(|o| (o.velocity as i32 + d).clamp(1, 127) as u8);
+                    // (as a group they stop at a limit; Option: on past it)
+                    let past = ui.input(|i| i.modifiers.alt && !i.modifiers.shift);
+                    let olds: Vec<u8> = targets.iter().map(|&i| orig.get(i).map_or(64, |o| o.velocity)).collect();
+                    let news = dragged_velocities(&olds, d, past);
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
-                        for &i in &targets {
-                            if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
+                        for (j, &i) in targets.iter().enumerate() {
+                            if let Some(n) = rg.notes.get_mut(i) {
                                 n.velocity = match (same, to) {
                                     (true, Some(v)) => v,
-                                    _ => (o.velocity as i32 + d).clamp(1, 127) as u8,
+                                    _ => news[j],
                                 };
                             }
                         }
@@ -279,11 +297,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 (Some(RollDrag::Resize { from_x, orig, targets }), Some(pp)) => {
                     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
-                    let dt = crate::rollsnap::length_delta(app, ui.ctx(), tick_at(pp.x) - tick_at(from_x), ppt);
+                    let (ctrl, alt, shift) = ui.input(|i| (i.modifiers.ctrl, i.modifiers.alt, i.modifiers.shift));
+                    let raw = tick_at(pp.x) - tick_at(from_x);
+                    // (Option or Control alone: finer, by ticks, the grid ignored)
+                    let dt = if (alt || ctrl) && !shift { raw.round() } else { crate::rollsnap::length_delta(app, ui.ctx(), raw, ppt) };
                     if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
+                        let pressed = orig.get(k).map(|o| (o.pos, (o.len as f32 + dt).max(1.0) as u32));
                         for &i in &targets {
                             if let (Some(o), Some(n)) = (orig.get(i), rg.notes.get_mut(i)) {
-                                n.len = (o.len as f32 + dt).max(1.0) as u32;
+                                n.len = resized_len((o.pos, o.len), pressed, dt, shift, alt);
                             }
                         }
                         if let Some(n) = rg.notes.get(k) {
@@ -729,6 +751,36 @@ fn scale_root(key: &str) -> u8 {
 }
 
 /// A note's colour: by velocity (Logic's default), by the region's colour, or by MIDI channel.
+/// A note's new length while one (`pressed`: its position and new length) is resized: Shift:
+/// every selected note ends where the pressed one does; Option-Shift: all get its length;
+/// otherwise each changes by `dt`.
+pub fn resized_len(orig: (u32, u32), pressed: Option<(u32, u32)>, dt: f32, shift: bool, alt: bool) -> u32 {
+    match (shift, alt, pressed) {
+        (true, true, Some((_, l))) => l.max(1),
+        (true, false, Some((p, l))) => (p + l).saturating_sub(orig.0).max(1),
+        _ => (orig.1 as f32 + dt).max(1.0) as u32,
+    }
+}
+
+/// Velocities after a drag by `d`: as a group they stop when one reaches 1 or 127; with
+/// `past` (Option) each goes on to its own limit.
+pub fn dragged_velocities(orig: &[u8], d: i32, past: bool) -> Vec<u8> {
+    let d = if past {
+        d
+    } else {
+        let lo = orig.iter().map(|&v| 1 - v as i32).max().unwrap_or(0);
+        let hi = orig.iter().map(|&v| 127 - v as i32).min().unwrap_or(0);
+        d.clamp(lo.min(0), hi.max(0))
+    };
+    orig.iter().map(|&v| (v as i32 + d).clamp(1, 127) as u8).collect()
+}
+
+/// The notes whose pitch lies between two keys (either order).
+pub fn notes_in_pitch_range(notes: &[lg_core::events::Note], a: u8, b: u8) -> Vec<usize> {
+    let (lo, hi) = (a.min(b), a.max(b));
+    (0..notes.len()).filter(|&i| (lo..=hi).contains(&notes[i].pitch)).collect()
+}
+
 fn note_color(by: crate::midifunc::NoteColor, n: &lg_core::events::Note, region: Color32) -> Color32 {
     match by {
         crate::midifunc::NoteColor::Velocity => velocity_color(n.velocity),
@@ -973,6 +1025,20 @@ pub fn scale_of(key: &str) -> [bool; 12] {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resize_velocity_keys() {
+        assert_eq!(super::resized_len((0, 480), Some((960, 480)), 0.0, true, false), 1440);
+        assert_eq!(super::resized_len((0, 480), Some((960, 240)), 0.0, true, true), 240);
+        assert_eq!(super::resized_len((0, 480), Some((960, 240)), 120.0, false, false), 600);
+        assert_eq!(super::dragged_velocities(&[100, 120], 20, false), [107, 127]);
+        assert_eq!(super::dragged_velocities(&[100, 120], 20, true), [120, 127]);
+        assert_eq!(super::dragged_velocities(&[5, 60], -10, false), [1, 56]);
+        let n = |pitch| lg_core::events::Note { channel: 0, pitch, velocity: 100, pos: 0, len: 1, muted: false };
+        let notes = [n(60), n(62), n(64), n(60)];
+        assert_eq!(super::notes_in_pitch_range(&notes, 60, 60), [0, 3]);
+        assert_eq!(super::notes_in_pitch_range(&notes, 63, 61), [1]);
+    }
+
     use super::*;
 
     #[test]

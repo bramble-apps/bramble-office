@@ -1253,6 +1253,27 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     }
                 }
                 TDrag::Marquee { .. } => {}
+                TDrag::Move { start, .. } => {
+                    // Option: a copy goes there, the region stays; either way what it lands on
+                    // is cut where they overlap (the Drag mode, as in the Tracks area)
+                    let moved_to = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)).map(|g| g.start);
+                    let mut k = r;
+                    if ui.input(|i| i.modifiers.alt) && moved_to.is_some_and(|m| m != start) {
+                        let x = extras(app, t, r);
+                        if let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) {
+                            let mut c = tr.regions[r].clone();
+                            c.source = None;
+                            c.origin = tr.regions[r].source.clone().or(tr.regions[r].origin.clone());
+                            tr.regions[r].start = start;
+                            tr.regions.push(c);
+                            k = tr.regions.len() - 1;
+                        }
+                        set_extras(app, t, k, x);
+                        app.selected_region = Some((t, k));
+                    }
+                    crate::arranging::after_move(app, t, k);
+                    app.after_edit();
+                }
                 _ => app.after_edit(),
             }
         }

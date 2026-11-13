@@ -37,6 +37,10 @@ pub struct Global {
     pub beat_maps: Vec<(u32, f64)>,
     /// Chord track: (tick, length, chord name).
     pub chords: Vec<(u32, u32, String)>,
+    /// Chord groups on the Chord track: (start tick, length); the chords inside belong to it.
+    pub chord_groups: Vec<(u32, u32)>,
+    /// Looped chords or chord groups: (the looped unit's start tick, where the loop ends).
+    pub chord_loops: Vec<(u32, u32)>,
     /// Marker sets (the current one's markers are `Project::markers`); empty: one set.
     pub marker_sets: Vec<crate::markers::MarkerSet>,
     pub marker_set: usize,
