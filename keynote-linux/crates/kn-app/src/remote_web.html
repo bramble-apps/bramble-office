@@ -213,7 +213,7 @@ function size(el, x, y, w, h) { Object.assign(el.style, { left: x + "px", top: y
 
 // ---- the screens
 function render() {
-  const showDevices = !intro && (devices || conn !== "connected");
+  const showDevices = !intro && (devices || conn !== "connected" || st.nodoc === true);
   $("intro").hidden = !intro;
   $("devices").hidden = !showDevices;
   $("controls").hidden = intro || showDevices;
@@ -239,6 +239,7 @@ function renderDevices() {
   const text = t => { const d = document.createElement("div"); d.className = "dim"; d.textContent = t; s.appendChild(d); };
   if (conn === "disabled") text("Remotes are turned off on " + (name ? n : "the computer") + ". In Keydeck there, choose Settings > Remotes, then select Enable.");
   else if (conn === "expired") text("This link no longer works. On " + (name ? n : "the computer") + ", in Keydeck choose Settings > Remotes, then open the link shown under Web Remote.");
+  else if (conn === "connected" && st.nodoc) text("No presentation is open on " + (name ? n : "the computer") + ". Open one in Keydeck there.");
   else if (conn !== "connected") text(name ? "Connecting to " + n + "…" : "Looking for Keydeck on this network…\nOn the computer, open Keydeck, choose Keydeck > Settings, click Remotes, then select Enable.");
   else {
     const b = document.createElement("button");
@@ -546,6 +547,7 @@ function connect() {
         break;
       }
       case "thumbs": thumbs = m.slides || []; fillThumbs(); break;
+      case "nodoc": st = { nodoc: true }; cur = null; next = null; showStarted = null; break;
     }
     render();
   };

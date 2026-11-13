@@ -400,7 +400,18 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
         let any = s.enabled && s.conns.values().any(|c| c.linked);
         (any, std::mem::take(&mut s.resend), std::mem::take(&mut s.thumbs_asked))
     };
-    if !any || app.doc.is_none() {
+    if !any {
+        return;
+    }
+    if app.doc.is_none() {
+        // nothing open: the remotes say so (once) instead of showing an empty slide
+        let mut s = shared();
+        if resend || s.sent != "nodoc" {
+            s.sent = "nodoc".into();
+            for c in s.conns.values().filter(|c| c.linked) {
+                send(c, json!({ "type": "nodoc" }));
+            }
+        }
         return;
     }
     let count = app.slides.len();
