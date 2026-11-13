@@ -36,6 +36,8 @@ pub fn cursor(ctx: &egui::Context, tool: Tool, at: Pos2) {
     let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("roll-tool-cursor")));
     let galley = p.layout_no_wrap(shape.glyph.to_string(), egui::FontId::new(CURSOR_SIZE, fam), Color32::WHITE);
     let pos = at - tip_offset(ink(&galley), shape);
+    // (the Eraser: the line under it in the font, left of the tip once turned, left out)
+    let p = if tool == Tool::Eraser { p.with_clip_rect(Rect::everything_right_of(at.x - 1.5)) } else { p };
     // (a dark outline under the white glyph, as macOS draws tool cursors)
     for d in [vec2(-1.0, 0.0), vec2(1.0, 0.0), vec2(0.0, -1.0), vec2(0.0, 1.0)] {
         p.add(egui::epaint::TextShape::new(pos + d, galley.clone(), Color32::BLACK).with_override_text_color(Color32::BLACK).with_angle(shape.angle));
@@ -59,7 +61,8 @@ pub struct Shape {
 /// click landing on their tip: the Pencil, Brush and Eraser (drawn tip down-left: turned a
 /// quarter right), the Finger (pointing up: turned 45° left), the Scissors (blades to the right:
 /// turned 135° left; the point between the blade tips) and the Join tool's drop (point up:
-/// turned 45° left). The others (Solo, Mute, Quantize, Velocity…) upright, centred.
+/// turned 45° left). The Finger stays an upright pointing hand (macOS's, as Logic uses it),
+/// its fingertip the hotspot. The others (Solo, Mute, Quantize, Velocity…) upright, centred.
 pub fn shape(tool: Tool) -> Shape {
     use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
     let glyph = crate::glyphs::tool(tool);
@@ -68,18 +71,12 @@ pub fn shape(tool: Tool) -> Shape {
         Tool::Pencil => (FRAC_PI_2, (0.02, 0.98)),
         Tool::Brush => (FRAC_PI_2, (0.01, 0.99)),
         Tool::Eraser => (FRAC_PI_2, (0.04, 0.84)),
-        Tool::Finger => (-FRAC_PI_4, (0.44, 0.0)),
+        Tool::Finger => (0.0, (0.44, 0.0)),
         Tool::Scissors => (-3.0 * FRAC_PI_4, (1.0, 0.5)),
         Tool::Glue => (-FRAC_PI_4, (0.51, 0.0)),
         _ => (0.0, (0.5, 0.5)),
     };
     Shape { glyph, angle, tip }
-}
-
-/// A tool's cursor glyph and its hotspot (fractions of the glyph's drawn shape).
-pub fn glyph(tool: Tool) -> (&'static str, (f32, f32)) {
-    let s = shape(tool);
-    (s.glyph, s.tip)
 }
 
 /// The drawn shape of a laid-out glyph (from the galley's origin).
@@ -151,12 +148,12 @@ pub fn menu_rows(ui: &mut egui::Ui, tools: &[Tool], cur: Tool) -> Option<Tool> {
     let widest = tools.iter().map(|t| ui.fonts_mut(|f| f.layout_no_wrap(t.name().into(), font.clone(), Color32::WHITE).size().x)).fold(0.0, f32::max);
     let key_w = tools.iter().map(|t| ui.fonts_mut(|f| f.layout_no_wrap(t.key().into(), font.clone(), Color32::WHITE).size().x)).fold(0.0, f32::max);
     // (Logic: the name 56 pt in from the menu's edge; keys ending 16 pt in from the right)
-    ui.set_min_width(MENU_TEXT_X - margin + widest + 28.0 + key_w + 16.0 - margin);
+    let w = MENU_TEXT_X - margin + widest + 28.0 + key_w + 16.0 - margin;
     let mut picked = None;
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for &t in tools {
-            let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), MENU_ROW), egui::Sense::click());
+            let (row, resp) = ui.allocate_exact_size(vec2(w, MENU_ROW), egui::Sense::click());
             let edge = row.min.x - margin;
             let hl = Rect::from_min_max(pos2(edge + 4.0, row.min.y + 1.0), pos2(row.max.x + margin - 4.0, row.max.y - 1.0));
             let hot = resp.hovered();
@@ -245,7 +242,7 @@ mod tests {
     fn tip_tools_point_to_the_top_left_with_the_hotspot_at_the_tip() {
         // a square glyph box 16 pt wide, its shape from (1, 2) to (17, 18)
         let ink = Rect::from_min_size(pos2(1.0, 2.0), vec2(16.0, 16.0));
-        for t in [Tool::Pencil, Tool::Brush, Tool::Eraser, Tool::Finger, Tool::Scissors, Tool::Glue] {
+        for t in [Tool::Pencil, Tool::Brush, Tool::Eraser, Tool::Scissors, Tool::Glue] {
             let s = shape(t);
             // turned, the tip is the shape's top-left-most point: every corner of the turned
             // shape lies right of or below it
@@ -264,9 +261,11 @@ mod tests {
         let rot = egui::emath::Rot2::from_angle(s.angle);
         let c = rot * (ink.center().to_vec2()) - tip_offset(ink, s);
         assert!(c.x > 0.0 && c.y > 0.0);
-        // the others stay upright, centred
+        // the Finger upright, its fingertip the hotspot; the others upright, centred
+        assert_eq!(shape(Tool::Finger).angle, 0.0);
+        assert_eq!(shape(Tool::Finger).tip.1, 0.0);
         assert_eq!(shape(Tool::Solo).angle, 0.0);
-        assert_eq!(glyph(Tool::Mute).1, (0.5, 0.5));
+        assert_eq!(shape(Tool::Mute).tip, (0.5, 0.5));
     }
 
     #[test]

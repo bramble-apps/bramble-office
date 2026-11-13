@@ -118,14 +118,6 @@ pub fn length_delta(app: &App, ctx: &egui::Context, dt: f32, px_per_tick: f32) -
     }
 }
 
-/// A position for a new note (the grid line at or before it).
-pub fn floor(app: &App, ctx: &egui::Context, tick: f32, px_per_tick: f32) -> f32 {
-    match grid(app, ctx, px_per_tick) {
-        Some(g) => ((tick / g).floor() * g).max(0.0),
-        None => tick.max(0.0),
-    }
-}
-
 pub fn round(app: &App, ctx: &egui::Context, tick: f32, px_per_tick: f32) -> f32 {
     match grid(app, ctx, px_per_tick) {
         Some(g) => ((tick / g).round() * g).max(0.0),

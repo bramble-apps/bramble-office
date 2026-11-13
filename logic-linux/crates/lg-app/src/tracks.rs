@@ -275,6 +275,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut region_pressed = None;
     // (registered first, so regions on top of it take their own clicks)
     let empty = ui.interact(lanes, ui.scope_id().with("lanes-bg"), Sense::click());
+    // (kept each frame: the Pencil's region goes where the button went down)
+    let empty_press = crate::rolltools::press_pos(ui, &empty);
     let below_tracks = empty.interact_pointer_pos().or(ui.ctx().pointer_hover_pos()).is_some_and(|pp| pp.y > headers.min.y + rows_h - app.scroll_y);
     crate::menus::context_menu(app, &empty, if below_tracks { "tracks-empty-below" } else { "tracks-area-empty-lane" });
     // a header being dragged: where it would land (the others slide to make room; the lanes
@@ -703,17 +705,25 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         let to = move |x: f32| (x - lanes.min.x) / px_per_tick + scroll * bar_t;
         let xo = move |tick: f32| x_of(tick, scroll);
         crate::regionops::marquee(app, ui, lanes, headers.min.y, &rows, &to, &xo, tool == Tool::Marquee);
+        // the pointer takes the tool's shape over the lanes, as in the Piano Roll (rolltools.rs)
+        if let Some(h) = ui.input(|i| i.pointer.hover_pos()).filter(|h| lanes.contains(*h)) {
+            if ui.ctx().layer_id_at(h).is_none_or(|l| l.order == egui::Order::Background) {
+                crate::rolltools::cursor(ui.ctx(), tool, h);
+            }
+        }
     }
     // click on an empty lane: nothing selected; with the Pencil, a new empty region of a bar
     if empty.clicked() && region_pressed.is_none() {
         let tool = if ui.input(|i| i.modifiers.command) { app.cmd_tool } else { app.tool };
-        let pp = empty.interact_pointer_pos();
+        // (where the button went down, as the Piano Roll's Pencil: rolltools.rs)
+        let pp = empty_press;
         let row = pp.and_then(|pp| crate::trackarea::row_at(&rows, pp.y - headers.min.y + app.scroll_y)).map(|r| r.t);
         if let (Tool::Pencil, Some(pp), Some(t)) = (tool, pp, row.filter(|&t| proj.tracks[t].extra.stack.is_none())) {
             if proj.tracks[t].kind != TrackKind::Audio {
-                let tick = ((pp.x - lanes.min.x) / px_per_tick + scroll * bar_t).max(0.0) as u32;
+                // (the bar at or before the tip; a bar line in the pointer's pixel counts as at it)
+                let axis = crate::rolltools::Axis { left: lanes.min.x, scroll, bar_w: px_per_tick * bar_t, bar_t };
                 let bar = bar_t as u32;
-                let start = (tick / bar) * bar;
+                let start = axis.snap_floor(pp.x, Some(bar_t), 1.0 / ui.ctx().pixels_per_point()) as u32;
                 // (the track's Default Region Type: a pattern region on a Pattern track)
                 if proj.tracks[t].extra.set.default_region == lg_core::trackmix::RegionType::Pattern {
                     crate::stepseq::new_pattern_region(app, &ui.ctx().clone(), t, start);

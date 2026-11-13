@@ -77,7 +77,8 @@ pub fn tool(t: crate::edit::Tool) -> &'static str {
         Tool::Zoom => ph::MAGNIFYING_GLASS,
         Tool::Fade => br::FADE,
         Tool::Automation => ph::LINE_SEGMENTS,
-        Tool::Marquee => ph::CROSSHAIR_SIMPLE,
+        // (Logic's: a thin cross, as its pointer)
+        Tool::Marquee => ph::PLUS,
         Tool::Flex => br::FLEX,
         Tool::Velocity => ph::CHART_BAR,
         Tool::Quantize => ph::MAGNET,

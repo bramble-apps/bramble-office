@@ -107,6 +107,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let axis = crate::rolltools::Axis { left: grid.min.x, scroll: sx, bar_w: bw, bar_t };
     let x_of = move |tick: f32| axis.x_of(tick);
     let tick_at = move |x: f32| axis.tick_at(x);
+    ui.data_mut(|d| d.insert_temp(egui::Id::unique("roll-axis"), axis));
     let ppt = bw / bar_t;
     // (a physical pixel, in points; lines and note starts are drawn in the pixel their
     // position falls in, so a click in that pixel is on them)

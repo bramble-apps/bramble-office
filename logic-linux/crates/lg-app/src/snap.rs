@@ -193,6 +193,14 @@ impl eframe::App for Snap {
                     self.app.selected_notes = (0..n).collect();
                 }
             }
+            // LG_ROLL="bar_w scroll": the Piano Roll's zoom (a bar's width) and scroll (bars)
+            if let Ok(v) = std::env::var("LG_ROLL") {
+                let v: Vec<f32> = v.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                if let [w, sx] = v[..] {
+                    self.app.roll_bar_w = w;
+                    self.app.roll_scroll_x = sx;
+                }
+            }
             if std::env::var_os("LG_SEND").is_some() {
                 self.app.add_send(1, 0);
                 self.app.add_send(2, 0);
@@ -215,6 +223,13 @@ impl eframe::App for Snap {
                         eprintln!("track {:?}: {:?}", t.name, t.regions.iter().map(|r| (r.start, r.length, r.notes.len())).collect::<Vec<_>>());
                     }
                 }
+                // (the Piano Roll's notes and time axis: click-accuracy checks)
+                if let Some((t, r)) = self.app.selected_region {
+                    if let Some(rg) = p_notes(&self.app, t, r) {
+                        eprintln!("notes {:?}", rg.iter().map(|n| (n.pos, n.len, n.pitch)).collect::<Vec<_>>());
+                    }
+                }
+                eprintln!("roll axis {:?} tool {:?}", ctx.data(|d| d.get_temp::<crate::rolltools::Axis>(egui::Id::unique("roll-axis"))), self.app.roll_tool);
                 eprintln!("selected {:?} undo {:?}", self.app.selected_region, self.app.undo.iter().map(|u| u.0.clone()).collect::<Vec<_>>());
             }
             let ctx2 = ctx.clone();
@@ -229,6 +244,10 @@ impl eframe::App for Snap {
         }
         ctx.request_repaint();
     }
+}
+
+fn p_notes(app: &app::App, t: usize, r: usize) -> Option<&[lg_core::events::Note]> {
+    Some(&app.project.as_ref()?.tracks.get(t)?.regions.get(r)?.notes)
 }
 
 /// A minimal PNG writer (stored deflate blocks, no compression library needed).
