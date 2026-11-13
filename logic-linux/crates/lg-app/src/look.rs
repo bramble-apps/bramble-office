@@ -247,18 +247,30 @@ pub fn ta_header_line() -> Color32 {
 }
 /// The lanes (and the empty area under the tracks).
 pub fn ta_lane() -> Color32 {
+    if let Some(c) = crate::tracksview::lane(false) {
+        return c;
+    }
     pick(0x141414, 0xf4f4f6)
 }
 /// The selected track's lane.
 pub fn ta_lane_selected() -> Color32 {
+    if let Some(c) = crate::tracksview::lane(true) {
+        return c;
+    }
     pick(0x1b1b1b, 0xe6eaf2)
 }
 /// The line at the bottom of each lane.
 pub fn ta_lane_line() -> Color32 {
+    if let Some(c) = crate::tracksview::h_line() {
+        return c;
+    }
     pick(0x202020, 0xdcdce0)
 }
 /// The bar lines over the track lanes (only where there are tracks).
 pub fn ta_bar_line() -> Color32 {
+    if let Some(c) = crate::tracksview::v_line() {
+        return c;
+    }
     if dark() { Color32::from_white_alpha(36) } else { Color32::from_black_alpha(30) }
 }
 /// The ruler's strips, its cycle band while Cycle is off, its ticks.

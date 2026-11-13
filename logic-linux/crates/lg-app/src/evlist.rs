@@ -864,10 +864,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
                 }
             };
             slot(ui, cell(cx[4], cols[4].1), "evl-ch", Field::Ch, &|v| format!("{}", v as i32 + 1), &mut edit);
+            // (Settings ▸ View ▸ General ▸ Display MIDI Data As: velocity and controller values)
+            let dm = app.logic_settings.get(crate::mididisp::KEY);
+            let dm2 = dm.clone();
+            let dm3 = dm.clone();
             let (num_shown, val_shown): (Box<dyn Fn(f32) -> String>, Box<dyn Fn(f32) -> String>) = match row {
-                Row::N(_) => (Box::new(|v| crate::app::note_name(v as u8)), Box::new(|v| format!("{v:.0}"))),
+                Row::N(_) => (Box::new(|v| crate::app::note_name(v as u8)), Box::new(move |v| crate::mididisp::value_text(&dm, v))),
                 Row::E(i) => match rg.ext.events[i].kind & 0xF0 {
-                    0xA0 => (Box::new(|v| crate::app::note_name(v as u8)), Box::new(|v| format!("{v:.0}"))),
+                    0xA0 => (Box::new(|v| crate::app::note_name(v as u8)), Box::new(move |v| crate::mididisp::value_text(&dm2, v))),
+                    0xB0 => (Box::new(|v| format!("{v:.0}")), Box::new(move |v| crate::mididisp::value_text(&dm3, v))),
                     0xE0 => {
                         let e = rg.ext.events[i];
                         (Box::new(move |_| format!("{}", e.number)), Box::new(move |_| format!("{}", e.value)))

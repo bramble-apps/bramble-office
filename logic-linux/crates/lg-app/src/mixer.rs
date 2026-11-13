@@ -174,6 +174,7 @@ fn bar_controls(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    crate::recentplug::sync(&app.logic_settings);
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());
     p.hline(area.x_range(), area.min.y, Stroke::new(1.0, look::line()));
@@ -393,6 +394,10 @@ fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String
         picked = Some(None);
         ui.close();
     }
+    // (Show recent plug-in list in plug-in menu: the last picks first)
+    if let Some(n) = crate::recentplug::menu_items(ui, false) {
+        picked = Some(Some(n));
+    }
     fn walk(ui: &mut egui::Ui, items: &[crate::menus::Item], current: Option<&str>, picked: &mut Option<Option<String>>) {
         for it in items {
             if it.separator {
@@ -444,6 +449,9 @@ fn plugin_menu(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String
     }
     if picked.is_some() {
         ui.data_mut(|d| d.remove::<bool>(egui::Id::unique("fx-menu-legacy")));
+    }
+    if let Some(Some(n)) = &picked {
+        crate::recentplug::used(false, n);
     }
     picked
 }

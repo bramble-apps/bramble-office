@@ -101,7 +101,8 @@ pub fn draw_loops(app: &App, p: &egui::Painter, rr: Rect, t: usize, r: usize, x_
     }
     let until = loop_end(app, t, r);
     let kind = app.project.as_ref().map_or(TrackKind::Instrument, |p| p.tracks[t].kind);
-    let col = look::region_color(kind).gamma_multiply(0.45);
+    // (Settings ▸ View ▸ Tracks ▸ Shaded loops: the repetitions shaded, else in the region's colour)
+    let col = if app.logic_settings.on(crate::tracksview::SHADED) { look::region_color(kind).gamma_multiply(0.45) } else { look::region_color(kind) };
     let mut at = rg.start + rg.length;
     let mut k = 0;
     // (skip straight to the first repetition in view: scrolled far right, the early ones are off)
@@ -317,6 +318,13 @@ pub fn fades(app: &mut App, ui: &egui::Ui, rr: Rect, clip: Rect, t: usize, r: us
 /// Crossfades regions `a` and `b` (b after a on track t) over `ms`: where they overlap, over
 /// the overlap; where they only touch, each is lengthened by half of it into the other when
 /// its file has the audio (as Logic needs material from both sides).
+/// Settings ▸ Audio ▸ Editing ▸ Crossfade Time and Crossfade Curve: the default crossfade.
+pub fn default_crossfade(v: &crate::settings::Values) -> (u16, i8) {
+    let ms = v.get("Audio / Editing / Crossfade Time:").trim().parse::<f32>().unwrap_or(DEFAULT_CROSSFADE_MS as f32).clamp(1.0, 200.0);
+    let curve = v.get("Audio / Editing / Crossfade Curve:").trim().parse::<f32>().unwrap_or(0.0).clamp(-100.0, 100.0);
+    (ms.round() as u16, curve.round() as i8)
+}
+
 pub fn crossfade(app: &mut App, t: usize, a: usize, b: usize, ms: u16, kind: FadeType) {
     let (Some(ra), Some(rb)) = (region(app, t, a).cloned(), region(app, t, b).cloned()) else { return };
     let (Some(fa), Some(fb)) = (ra.audio.as_ref().map(|x| x.file.clone()), rb.audio.as_ref().map(|x| x.file.clone())) else { return };
@@ -664,13 +672,19 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 return false;
             }
             audioedit::checkpoint(app, "Apply Default Crossfade");
+            let (dms, dcurve) = default_crossfade(&app.logic_settings);
             let mut done = 0;
             for &(t, a) in &sel {
                 let Some(ra) = region(app, t, a).cloned() else { continue };
                 let end = ra.start + ra.length;
                 let b = app.project.as_ref().and_then(|p| p.tracks[t].regions.iter().enumerate().find(|(k, o)| *k != a && o.audio.is_some() && o.start > ra.start && o.start <= end + 2).map(|(k, _)| k));
                 if let Some(b) = b {
-                    crossfade(app, t, a, b, DEFAULT_CROSSFADE_MS, FadeType::X);
+                    crossfade(app, t, a, b, dms, FadeType::X);
+                    let (mut na, mut nb) = (audioedit::extras(app, t, a), audioedit::extras(app, t, b));
+                    na.fades.out_curve = dcurve;
+                    nb.fades.in_curve = dcurve;
+                    audioedit::set_extras(app, t, a, na);
+                    audioedit::set_extras(app, t, b, nb);
                     done += 1;
                 }
             }
@@ -678,8 +692,8 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 // (no neighbours: short fades in and out, as Logic's default on single regions)
                 for (t, r) in sel {
                     let mut x = audioedit::extras(app, t, r);
-                    x.fades.in_ms = x.fades.in_ms.max(DEFAULT_CROSSFADE_MS);
-                    x.fades.out_ms = x.fades.out_ms.max(DEFAULT_CROSSFADE_MS);
+                    x.fades.in_ms = x.fades.in_ms.max(dms);
+                    x.fades.out_ms = x.fades.out_ms.max(dms);
                     audioedit::set_extras(app, t, r, x);
                 }
             }
@@ -797,6 +811,15 @@ mod tests {
         let notes = (0..len / 480).map(|k| lg_core::events::Note { channel: 0, pitch: 60, velocity: 90, pos: start + k * 480, len: 240, muted: false }).collect();
         let src = lg_core::project::Source { folder: 0x40000, pos: start, seq: Some(0x100000), audio_region: 0 };
         (Region { name: "r".into(), start, length: len, notes, audio: None, muted: false, source: Some(src), origin: None, props: Default::default(), ext: Default::default() }, RegionAudio::default())
+    }
+
+    #[test]
+    fn default_crossfade_follows_settings() {
+        let mut v = crate::settings::Values::default();
+        assert_eq!(default_crossfade(&v), (20, 0));
+        v.0.insert("Audio / Editing / Crossfade Time:".into(), "120".into());
+        v.0.insert("Audio / Editing / Crossfade Curve:".into(), "-40".into());
+        assert_eq!(default_crossfade(&v), (120, -40));
     }
 
     #[test]

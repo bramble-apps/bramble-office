@@ -816,7 +816,13 @@ fn note_color(colors: Colors, n: &Note, voice: u8, attr: &NoteAttr) -> Color32 {
     }
 }
 
+/// The page rulers' unit in centimetres: 1, or 2.54 with Display distance values in inches.
+pub fn ruler_unit_cm(v: &crate::settings::Values) -> f32 {
+    if v.on("Score /  / Display distance values in inches") { 2.54 } else { 1.0 }
+}
+
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    let ruler_cm = ruler_unit_cm(&app.logic_settings);
     let ctx = ui.ctx().clone();
     let mut st = state(&ctx);
     // a print / PDF / Camera job: this frame draws every page for it (scorepdf.rs)
@@ -1052,8 +1058,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             mp.rect_stroke(inner, 0.0, Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x30, 0x70, 0xe0, 150)), egui::StrokeKind::Middle);
         }
         if st.rulers {
-            // centimetres (a staff space is 1.75 mm on a 21 cm page)
-            let cm = 10.0 / 1.75 * sp;
+            // centimetres (a staff space is 1.75 mm on a 21 cm page), or inches with Settings ▸
+            // Score ▸ Display distance values in inches
+            let cm = 10.0 / 1.75 * sp * ruler_cm;
             let top = Rect::from_min_size(pr.min - vec2(0.0, 2.2 * sp), vec2(pr.width(), 2.0 * sp));
             mp.rect_filled(top, 0.0, look::header_bg());
             let mut i = 0;
@@ -3346,6 +3353,14 @@ pub(crate) fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ruler_in_inches() {
+        let mut v = crate::settings::Values::default();
+        assert_eq!(ruler_unit_cm(&v), 1.0);
+        v.0.insert("Score /  / Display distance values in inches".into(), "1".into());
+        assert_eq!(ruler_unit_cm(&v), 2.54);
+    }
 
     #[test]
     fn pages_in_pairs() {
