@@ -2136,11 +2136,20 @@ fn item_menu(app: &mut App, ui: &mut egui::Ui, it: &Item) -> Option<String> {
 /// Columns view: patches by category, then subcategory, then name.
 /// The columns view's columns for the open path: categories, then the chosen category's
 /// subcategories, then the chosen subcategory's patches.
+pub const USER_PATCHES: &str = "User Patches";
+
 pub(crate) fn column_lists(items: &[Item], path: &[String]) -> Vec<Vec<String>> {
-    let cat_of = |i: &Item| -> (String, String) { patches().iter().find(|p| p.2 == i.name).map(|p| (p.0.clone(), p.1.clone())).unwrap_or((i.category.clone(), String::new())) };
+    // (saved patches in a User Patches folder at the top; the rest by category, alphabetically
+    // whatever the sort order, as Logic's column layout)
+    let cat_of = |i: &Item| -> (String, String) {
+        if i.user && i.kind == Kind::Patch {
+            return (USER_PATCHES.to_string(), String::new());
+        }
+        patches().iter().find(|p| p.2 == i.name).map(|p| (p.0.clone(), p.1.clone())).unwrap_or((i.category.clone(), String::new()))
+    };
     let mut cols: Vec<Vec<String>> = Vec::new();
     let mut cats: Vec<String> = items.iter().map(|i| cat_of(i).0).collect();
-    cats.sort_by_key(|c| (relevance(c), c.clone()));
+    cats.sort_by_key(|c| (c != USER_PATCHES, c.to_lowercase()));
     cats.dedup();
     cols.push(cats);
     if let Some(c) = path.first().cloned() {
@@ -2149,7 +2158,9 @@ pub(crate) fn column_lists(items: &[Item], path: &[String]) -> Vec<Vec<String>> 
         subs.dedup();
         cols.push(subs);
         if let Some(s) = path.get(1).cloned() {
-            cols.push(items.iter().filter(|i| cat_of(i) == (c.clone(), s.clone())).map(|i| i.name.clone()).collect());
+            let mut names: Vec<String> = items.iter().filter(|i| cat_of(i) == (c.clone(), s.clone())).map(|i| i.name.clone()).collect();
+            names.sort_by_key(|n| n.to_lowercase());
+            cols.push(names);
         }
     }
     cols
@@ -2217,6 +2228,31 @@ fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     let items: Vec<Item> = results(app);
     let col_w = (list.width() / 3.0).max(120.0);
     let p = ui.painter().clone();
+    // the path bar below the columns: a click on a folder opens it
+    let bar = Rect::from_min_max(pos2(list.min.x, list.max.y - 20.0), list.max);
+    let list = Rect::from_min_max(list.min, pos2(list.max.x, bar.min.y));
+    p.rect_filled(bar, 0.0, look::header_bg());
+    p.hline(bar.x_range(), bar.min.y, Stroke::new(1.0, look::line()));
+    let root = if app.br.view == Cat::Effects { "Effects" } else { "Instruments" };
+    let mut x = bar.min.x + 8.0;
+    let mut go_to: Option<usize> = None;
+    for (k, part) in std::iter::once(root.to_string()).chain(app.br.column_path.iter().cloned()).enumerate() {
+        if k > 0 {
+            p.text(pos2(x, bar.center().y), Align2::LEFT_CENTER, "›", look::regular(11.0), look::text_dim());
+            x += 10.0;
+        }
+        let g = p.layout_no_wrap(part.clone(), look::regular(11.0), look::text_dim());
+        let seg = Rect::from_min_size(pos2(x, bar.min.y), vec2(g.size().x + 2.0, bar.height()));
+        let resp = ui.interact(seg, ui.scope_id().with(("bpath", k)), Sense::click());
+        p.galley_with_override_text_color(pos2(x, bar.center().y - g.size().y / 2.0), g, if resp.hovered() { look::text() } else { look::text_dim() });
+        if resp.clicked() {
+            go_to = Some(k);
+        }
+        x = seg.max.x + 4.0;
+    }
+    if let Some(k) = go_to {
+        app.br.column_path.truncate(k);
+    }
     let cols = column_lists(&items, &app.br.column_path);
     let current = current_patch(app);
     let chosen_name = app.br.selected.first().and_then(|s| items.iter().find(|i| &i.id == s)).map(|i| i.name.clone());
