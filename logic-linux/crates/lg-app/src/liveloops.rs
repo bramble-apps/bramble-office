@@ -181,6 +181,8 @@ pub struct State {
     /// Smart Pickup (the grid's Quantize Start menu): a cell triggered late starts at once, at
     /// the position it would have had from the last boundary.
     pub smart_pickup: bool,
+    /// The recording was stopped by hand: the cell plays when it ends.
+    pub rec_play: bool,
     /// Track Activation: tracks whose cells (not their regions) are active. A cell starting
     /// makes its track's cells active; stopping it leaves them so (the regions stay silent) until
     /// the Track Activation button switches the track to its regions.
@@ -907,6 +909,10 @@ pub fn update(app: &mut App) {
             }
         }
     }
+    // performance recording needs Cycle off: it records from the playhead
+    if recording && !app.live_loops.was_recording && app.live_loops.performance && app.cycle_on() {
+        app.toggle_cycle();
+    }
     // performance recording: the cells played become regions when recording ends
     if app.live_loops.was_recording && !recording {
         perform_to_tracks(app, pos as u32);
@@ -1160,6 +1166,10 @@ pub fn trigger_scene(app: &mut App, scene: usize) {
 /// it stops at the next bar and the cell plays (Rec-End Action: Play Cell).
 pub fn record_into_cell(app: &mut App, t: usize, scene: usize) {
     let (pos, playing) = engine_pos(app);
+    // (not during a Live Loops performance recording)
+    if app.live_loops.rec.is_none() && app.live_loops.performance && app.recording() {
+        return;
+    }
     let b = bar(app);
     if let Some(r) = app.live_loops.rec {
         if r.end.is_none() || app.live_loops.rec_end == "Continue Recording" {
@@ -1167,6 +1177,7 @@ pub fn record_into_cell(app: &mut App, t: usize, scene: usize) {
             let u = rec_unit(app);
             let end = if playing { next_boundary(pos, Some(u)).max(r.start + u) } else { pos as u32 };
             app.live_loops.rec_continue = false;
+            app.live_loops.rec_play = true;
             app.live_loops.rec = Some(Rec { end: Some(end), ..r });
             if !playing {
                 finish_cell_recording(app, end);
@@ -1187,6 +1198,7 @@ pub fn record_into_cell(app: &mut App, t: usize, scene: usize) {
     // Rec-Length Cell Length: the recording is as long as the cell (a new cell: the default length)
     let end = (app.live_loops.rec_length == "Cell Length").then(|| start + app.live_loops.cells.get(&(t, scene)).map_or_else(|| crate::celldefaults::new_cell(app, t, String::new()).length, |c| c.length).max(1));
     app.live_loops.rec_continue = app.live_loops.rec_end == "Continue Recording";
+    app.live_loops.rec_play = false;
     app.live_loops.rec = Some(Rec { track: t, scene, start, end });
     stop_track(app, t);
 }
@@ -1220,7 +1232,7 @@ fn finish_cell_recording(app: &mut App, end: u32) {
         // Continue Recording: the next pass starts at once, as long as this one; it replaces or
         // merges per the Recording mode
         s.rec = Some(Rec { start: end, end: Some(end + (end - r.start)), ..r });
-    } else if s.rec_end == "Play Cell" {
+    } else if s.rec_end == "Play Cell" || std::mem::take(&mut s.rec_play) {
         let p = s.play(r.track);
         p.current = Some((r.scene, end, None));
         p.next = None;
@@ -2691,7 +2703,10 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                 } else {
                     s.selected = [key].into();
                     let centre = resp.interact_pointer_pos().is_some_and(|pp| pp.distance(r.center()) <= RING_R + 4.0);
-                    if cell.is_some() && alt {
+                    if centre && app.live_loops.rec.is_some_and(|x| (x.track, x.scene) == key) {
+                        // the recording cell's button: stops the recording, the cell plays
+                        record_into_cell(app, t, sc);
+                    } else if cell.is_some() && alt {
                         command_at(app, "Queue Cell Playback", Some(key), None);
                     } else if cell.as_ref().is_some_and(|c| c.trigger != "Momentary") && centre {
                         trigger(app, t, sc, false);
@@ -3431,6 +3446,8 @@ mod tests {
         at(&mut app, 34570.0);
         update(&mut app);
         assert!(app.live_loops.rec.is_none());
+        // stopped by hand: the cell plays even with Continue Recording
+        assert!(app.live_loops.plays.get(&0).is_some_and(|p| p.current.is_some_and(|c| c.0 == 0 && c.1 == 34560)));
         // Continue Recording, Automatic (Bars): the Plus button sets the pass length (nearest
         // bar) and the passes go on
         app.live_loops.rec_length = "Automatic (Bars)".into();
