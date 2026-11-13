@@ -492,25 +492,20 @@ const BODY_TOP: f32 = 32.0 * K;
 const INSET: f32 = 7.0 * K;
 
 fn win_fill() -> Color32 {
-    if dark() { Color32::from_rgba_unmultiplied(0x2f, 0x30, 0x31, 246) } else { Color32::from_rgba_unmultiplied(0xf2, 0xf2, 0xf4, 246) }
+    if dark() { Color32::from_rgb(0x2f, 0x30, 0x31) } else { Color32::from_rgb(0xf2, 0xf2, 0xf4) }
 }
 
-/// The glass's blue glow (the figure's backdrop: strongest left of the middle, fading out).
-fn glow(p: &egui::Painter, win: Rect) {
-    let c = pos2(win.min.x + 57.0 * K, win.min.y + 270.0 * K);
-    let (rx, ry) = (220.0 * K, 170.0 * K);
-    let inner = if dark() { Color32::from_rgba_unmultiplied(0x12, 0x40, 0x5e, 235) } else { Color32::from_rgba_unmultiplied(0x9c, 0xc4, 0xe6, 90) };
-    let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(c, inner);
-    let n = 48;
-    for i in 0..=n {
-        let a = i as f32 / n as f32 * std::f32::consts::TAU;
-        mesh.colored_vertex(c + vec2(a.cos() * rx, a.sin() * ry), Color32::TRANSPARENT);
+/// The opening animation, as a macOS popover's: the window grows out of its arrow from 90% with a
+/// small, quickly settling overshoot, and fades in over the first 0.12 s. Returns (scale, opacity,
+/// still running).
+fn pop_in(t: f32) -> (f32, f32, bool) {
+    const DUR: f32 = 0.42;
+    if t >= DUR {
+        return (1.0, 1.0, false);
     }
-    for i in 0..n as u32 {
-        mesh.add_triangle(0, i + 1, i + 2);
-    }
-    p.with_clip_rect(win.shrink2(vec2(0.0, WIN_R))).add(egui::Shape::mesh(mesh));
+    // a damped spring from 0.9 to 1 (peaks about 2% over, settles by DUR)
+    let s = 1.0 - 0.1 * (-t * 14.0).exp() * (t * 22.0).cos();
+    (s, (t / 0.12).min(1.0), true)
 }
 
 /// The All Filters window floating beside the Browser's filter button `anchor`, over the
@@ -532,14 +527,25 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
         d.insert_temp(egui::Id::unique("all-filters-was-open"), true);
         !was
     });
-    egui::Area::new(egui::Id::unique("all-filters-window")).order(egui::Order::Foreground).fixed_pos(win.min).show(ctx, |ui| {
+    let opened = ctx.data_mut(|d| {
+        let now = ctx.input(|i| i.time);
+        if first {
+            d.insert_temp(egui::Id::unique("all-filters-opened"), now);
+        }
+        now - d.get_temp::<f64>(egui::Id::unique("all-filters-opened")).unwrap_or(now)
+    });
+    let (scale, alpha, running) = pop_in(opened as f32);
+    if running {
+        ctx.request_repaint();
+    }
+    let area = egui::Area::new(egui::Id::unique("all-filters-window")).order(egui::Order::Foreground).fixed_pos(win.min).show(ctx, |ui| {
+        ui.set_opacity(alpha);
         let p = ui.painter().clone();
-        // shadow, glass, arrow
+        // shadow, the solid panel, arrow
         p.add(egui::Shadow { offset: [0, (10.0 * K) as i8], blur: (34.0 * K) as u8, spread: 0, color: Color32::from_black_alpha(if dark() { 120 } else { 50 }) }.as_shape(win, WIN_R));
         p.rect_filled(win, WIN_R, win_fill());
         let ay = anchor.center().y.clamp(win.min.y + WIN_R + ARROW_H / 2.0, win.max.y - WIN_R - ARROW_H / 2.0);
         p.add(egui::Shape::convex_polygon(vec![pos2(win.min.x + 0.5, ay - ARROW_H / 2.0), pos2(win.min.x - ARROW_W, ay), pos2(win.min.x + 0.5, ay + ARROW_H / 2.0)], win_fill(), Stroke::NONE));
-        glow(&p, win);
         ui.allocate_rect(win, Sense::click_and_drag());
         // the title and the round close button (Logic's blue focus ring while it has the focus)
         let g = text(ui, "All Filters", head_text(), WIN_W - 80.0, look::semibold(10.5 * K));
@@ -570,6 +576,9 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
             app.br.all_filters = false;
         }
     });
+    // grow from the arrow's tip (the filter button), like a popover
+    let tip = pos2(win.min.x - ARROW_W, anchor.center().y.clamp(win.min.y, win.max.y));
+    ctx.set_transform_layer(area.response.layer_id, egui::emath::TSTransform::new((tip.to_vec2() * (1.0 - scale)).into(), scale));
 }
 
 /// Forgets that the window was open (so it takes the focus again next time).
@@ -635,5 +644,17 @@ mod tests {
         assert_eq!(super::fx_category("ChromaVerb"), Some("Reverb"));
         assert_eq!(super::fx_category("No Such Plug-in"), None);
         assert_eq!(super::fx_categories().first(), Some(&"Amps and Pedals"));
+    }
+}
+
+#[cfg(test)]
+mod pop_tests {
+    #[test]
+    fn pops_in_with_a_small_overshoot_and_settles() {
+        let (s0, a0, run0) = super::pop_in(0.0);
+        assert!((s0 - 0.9).abs() < 1e-4 && a0 == 0.0 && run0);
+        let peak = (1..42).map(|k| super::pop_in(k as f32 / 100.0).0).fold(0.0f32, f32::max);
+        assert!(peak > 1.0 && peak < 1.04, "peak {peak}");
+        assert_eq!(super::pop_in(0.5), (1.0, 1.0, false));
     }
 }
