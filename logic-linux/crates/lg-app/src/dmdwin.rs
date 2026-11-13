@@ -103,6 +103,10 @@ fn pad_name(app: &App, t: usize, pads: &Pads, note: u8) -> String {
         let k = (note - FIRST_PAD) as usize;
         (get(dmd::pad_param(k, 0)).round() as usize, get(dmd::pad_param(k, 1)).round() as u8)
     }).unwrap_or((0, note));
+    // an empty pad shows only its slot label
+    if kit >= dmd::NO_KIT as usize {
+        return String::new();
+    }
     let piece = match lg_synth::drums::piece_of(src) {
         Some(lg_synth::drums::Group::Kick) => "Kick",
         Some(lg_synth::drums::Group::Snare) => if src == 39 { "Clap" } else if src == 37 { "Rim" } else { "Snare" },

@@ -14,6 +14,10 @@ fn main() {
     let only = std::env::args().nth(1).unwrap_or_default().to_lowercase();
     let mut fam: BTreeMap<String, Vec<&'static str>> = BTreeMap::new();
     for n in patches::known_patch_names() {
+        // (Empty Pad is Empty Kit: both silent)
+        if n == "Empty Pad" {
+            continue;
+        }
         if let Some(c) = patches::family(n) {
             fam.entry(format!("{c:?}")).or_default().push(n);
         }

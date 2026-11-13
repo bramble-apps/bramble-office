@@ -20,6 +20,7 @@ pub mod alchemy_mod;
 pub mod alchemy_partials;
 pub mod arp;
 pub mod bass;
+pub mod character;
 pub mod clav;
 pub mod dmd;
 pub mod drums;

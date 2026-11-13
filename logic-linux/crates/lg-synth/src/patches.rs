@@ -106,7 +106,17 @@ fn has(s: &str, words: &[&str]) -> bool {
 pub fn patch(logic_patch_name: &str) -> Option<PatchSpec> {
     let name = logic_patch_name.trim().trim_end_matches(".patch");
     let low = name.to_lowercase();
-    if let Some(s) = hand_voiced(&low) {
+    let mut s = table_patch(name, &low)?;
+    crate::character::voice(&mut s, &low);
+    Some(s)
+}
+
+/// The patch table's choice (instrument and its keyword settings), before the name's own
+/// character (`character::voice`) is added.
+fn table_patch(name: &str, low: &str) -> Option<PatchSpec> {
+    let low = low.to_string();
+    if let Some(mut s) = hand_voiced(&low) {
+        s.category = family(name);
         return Some(s);
     }
     if let Ok(i) = names::NAMES.binary_search_by(|(n, _)| n.cmp(&name)) {
@@ -137,8 +147,7 @@ pub struct FxSpec {
 /// The Audio FX a patch loads onto its channel strip (Studio's own effects, chosen from the
 /// patch's name and folder: amp, tremolo, chorus, EQ, compression, room…).
 pub fn fx_chain(logic_patch_name: &str) -> Vec<FxSpec> {
-    let _ = logic_patch_name;
-    Vec::new()
+    crate::character::fx_chain(logic_patch_name)
 }
 
 /// The library folder of a patch name (None: not in the table).

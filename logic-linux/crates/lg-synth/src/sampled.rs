@@ -186,5 +186,10 @@ pub fn sound_for_patch(name: &str, spec: &PatchSpec) -> Option<&'static Sound> {
 
 /// The sampled stand-in for a patch, when the library is installed.
 pub fn for_patch(name: &str, spec: &PatchSpec, rate: f32) -> Option<Box<dyn Instrument>> {
-    boxed(sound_for_patch(name, spec)?.id, rate)
+    let mut s = boxed(sound_for_patch(name, spec)?.id, rate)?;
+    // the patch's own character on the sampled instrument (tuning, filter, envelope)
+    for (id, v) in crate::character::sampler_settings(name) {
+        s.set(id, v);
+    }
+    Some(s)
 }
