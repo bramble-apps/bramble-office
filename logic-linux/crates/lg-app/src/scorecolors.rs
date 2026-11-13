@@ -8,7 +8,7 @@ use egui::Color32;
 
 use crate::projsettings::{set, Values};
 
-const SUB: &str = "Score / Colors / ";
+pub const SUB: &str = "Score / Colors / ";
 pub const TYPES: [&str; 2] = ["Diatonic", "Chromatic"];
 
 /// The pane's colours and switches, read once per frame.

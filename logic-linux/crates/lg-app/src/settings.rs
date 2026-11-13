@@ -435,6 +435,25 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                     right = xx;
                     pitch = 26.0;
                 }
+                "button" if row.label == "Selection Color:" => {
+                    // (Score's colour well: a capsule ring with the colour's swatch inside)
+                    let col = crate::score::selection_color(&values);
+                    let wr = Rect::from_min_size(pos2(x0, ry + 1.25), vec2(44.5, 21.5));
+                    p.rect_filled(wr, 10.75, c(0x3b3a39));
+                    let inner = wr.shrink2(vec2(3.0, 3.0));
+                    p.rect_filled(inner, 7.75, col);
+                    p.rect_stroke(inner, 7.75, Stroke::new(1.0, look::mix(col, Color32::WHITE, 0.2)), egui::StrokeKind::Inside);
+                    let resp = ui.interact(wr, id, Sense::click());
+                    egui::Popup::from_toggle_button_response(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                        let mut v = col;
+                        if egui::widgets::color_picker::color_picker_color32(ui, &mut v, egui::widgets::color_picker::Alpha::Opaque) {
+                            values.0.insert(key.clone(), format!("#{:02x}{:02x}{:02x}", v.r(), v.g(), v.b()));
+                            changed = true;
+                        }
+                    });
+                    right = wr.max.x;
+                    pitch = 31.0;
+                }
                 "button" => {
                     // (Apply: on while the device settings differ from the running output's)
                     let disabled = if text == "Apply" { !crate::prefs::apply_pending(&values) } else { disabled };
@@ -450,6 +469,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                         if !crate::prefs::button(app, &bkey) {
                             app.tell(format!("“{text}” isn't available yet"));
                         }
+                        // (a button may change a value: Remove clears the External Sample Editor)
+                        values = app.logic_settings.clone();
                     }
                     right = br.max.x;
                     pitch = 31.0;

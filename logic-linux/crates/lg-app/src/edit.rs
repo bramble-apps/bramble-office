@@ -601,7 +601,7 @@ impl App {
                     self.each_region("Nudge Length", |rg, _| rg.length = (rg.length as i64 + d).max(1) as u32);
                 }
             }
-            "Slip Right by Nudge Value" | "Slip Left by Nudge Value" | "Rotate Right by Nudge Value" | "Rotate Left by Nudge Value" => {
+            "Slip Right by Nudge Value" | "Slip Left by Nudge Value" | "Rotate Right by Nudge Value" | "Rotate Left by Nudge Value" | "Slip Right" | "Slip Left" | "Rotate Right" | "Rotate Left" => {
                 let d = if name.contains("Right") { self.nudge as i64 } else { -(self.nudge as i64) };
                 let rotate = name.starts_with("Rotate");
                 self.each_region(if rotate { "Rotate" } else { "Slip" }, |rg, _| {
@@ -1154,5 +1154,25 @@ impl App {
             _ => return false,
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn slip_and_rotate_menu_items_move_notes() {
+        let mut app = crate::tm::test_app();
+        app.set_project(crate::demo::song(), true);
+        let p = app.project.as_ref().unwrap();
+        let (t, r) = p.tracks.iter().enumerate().find_map(|(t, tr)| tr.regions.iter().position(|g| g.notes.len() > 1).map(|r| (t, r))).unwrap();
+        let before: Vec<u32> = p.tracks[t].regions[r].notes.iter().map(|n| n.pos).collect();
+        app.selected_region = Some((t, r));
+        app.selected_regions = vec![(t, r)];
+        app.nudge = 10;
+        let ctx = egui::Context::default();
+        assert!(app.edit_command(&ctx, "Rotate Right"));
+        let after: Vec<u32> = app.project.as_ref().unwrap().tracks[t].regions[r].notes.iter().map(|n| n.pos).collect();
+        assert_ne!(before, after);
+        assert!(app.edit_command(&ctx, "Slip Left"));
     }
 }

@@ -149,13 +149,13 @@ Source: Logic Pro Help user poll and comments (pushpatterns.com, "Logic Pro 13 u
 
 | Area | Done | Of | % |
 |---|---:|---:|---:|
-| Menu bar | 402 | 596 | 67% |
-| Local menus | 760 | 1191 | 63% |
-| Right-click menus | 1477 | 2581 | 57% |
+| Menu bar | 406 | 596 | 68% |
+| Local menus | 776 | 1191 | 65% |
+| Right-click menus | 1489 | 2581 | 57% |
 | Key commands | 1808 | 2207 | 81% |
 Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) against the source. `[x]` = works in Studio.
 
-## Menu bar: 402 of 596
+## Menu bar: 406 of 596
 
 
 <details><summary>Bramble Studio — 26/48</summary>
@@ -297,7 +297,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>Edit — 100/166</summary>
+<details><summary>Edit — 104/166</summary>
 
 - [ ] Undo Create New Tracks  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -369,10 +369,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -804,7 +804,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Local menus (Edit / Functions / View in each area): 760 of 1191
+## Local menus (Edit / Functions / View in each area): 776 of 1191
 
 
 <details><summary>audiofile-AudioFile — 4/7</summary>
@@ -894,7 +894,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>audiotrack-Edit — 70/118</summary>
+<details><summary>audiotrack-Edit — 74/118</summary>
 
 - [x] Undo Edit Hint Marker  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -948,10 +948,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -1045,7 +1045,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>eventlist-Edit — 67/100</summary>
+<details><summary>eventlist-Edit — 71/100</summary>
 
 - [ ] Undo Insert events  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1094,10 +1094,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] To Playhead  `;`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -1326,7 +1326,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>pianoroll-Edit — 77/100</summary>
+<details><summary>pianoroll-Edit — 81/100</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1375,10 +1375,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] To Playhead  `;`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -1829,7 +1829,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>tracks-Edit — 99/168</summary>
+<details><summary>tracks-Edit — 103/168</summary>
 
 - [ ] Undo Insert  `⌘Z`
 - [ ] Can’t Redo  `⇧⌘Z`
@@ -1901,10 +1901,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -2148,7 +2148,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-## Right-click menus: 1477 of 2581
+## Right-click menus: 1489 of 2581
 
 
 <details><summary>arrangement-marker-dropdown — 0/1</summary>
@@ -4108,7 +4108,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-audio — 119/174</summary>
+<details><summary>region-audio — 123/174</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4165,10 +4165,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -4287,7 +4287,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>region-midi — 143/212</summary>
+<details><summary>region-midi — 147/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4383,10 +4383,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`
@@ -4601,7 +4601,7 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
 
 </details>
 
-<details><summary>take-folder-region — 143/212</summary>
+<details><summary>take-folder-region — 147/212</summary>
 
 - [x] Mute Regions/Cells  `⌃M`
 - [x] Loop  `⌃L`
@@ -4697,10 +4697,10 @@ Generated from `crates/lg-app/data/*.txt` (Logic Pro 13, from the research) agai
   - [x] Shuffle Right  `⌥]`
   - [x] Nudge Left  `⌥←`
   - [x] Nudge Right  `⌥→`
-  - [ ] Slip Left  `⌃⌥←`
-  - [ ] Slip Right  `⌃⌥→`
-  - [ ] Rotate Left  `⌃⌥⌘←`
-  - [ ] Rotate Right  `⌃⌥⌘→`
+  - [x] Slip Left  `⌃⌥←`
+  - [x] Slip Right  `⌃⌥→`
+  - [x] Rotate Left  `⌃⌥⌘←`
+  - [x] Rotate Right  `⌃⌥⌘→`
   - [ ] Set Nudge Value to
     - [ ] Bar  `⌃⌥M`
     - [x] Beat  `⌃⌥B`

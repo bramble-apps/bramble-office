@@ -857,6 +857,15 @@ pub fn ruler_unit_cm(v: &crate::settings::Values) -> f32 {
     if v.on("Score /  / Display distance values in inches") { 2.54 } else { 1.0 }
 }
 
+pub const SELECTION_COLOR: &str = "Score /  / Selection Color:";
+
+/// Settings ▸ Score ▸ Selection Color: the colour selected Score objects take (Logic's green
+/// until one is picked; Reset goes back to it).
+pub fn selection_color(v: &crate::settings::Values) -> Color32 {
+    let h = v.get(SELECTION_COLOR);
+    u32::from_str_radix(h.trim_start_matches('#'), 16).ok().filter(|_| h.trim_start_matches('#').len() == 6).map_or(Color32::from_rgb(0x80, 0xb0, 0x66), |x| Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8))
+}
+
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ruler_cm = ruler_unit_cm(&app.logic_settings);
     let pal = crate::scorecolors::Palette::from(&app.proj);
@@ -1181,7 +1190,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     crate::menus::context_menu(app, &bg, "score-background");
 
-    let sel_color = if st.printing { INK } else { look::mix(look::accent(), Color32::BLACK, 0.1) };
+    let sel_color = if st.printing { INK } else { selection_color(&app.logic_settings) };
     let mut pressed: Option<(usize, usize, usize, bool)> = None;
     let score = app.project.as_ref().map(|p| p.score.clone()).unwrap_or_default();
     let project_tracks: Vec<lg_core::Track> = app.project.as_ref().map(|p| tracks.iter().map(|&t| p.tracks[t].clone()).collect()).unwrap_or_default();
@@ -3479,6 +3488,16 @@ pub(crate) fn note_icon(p: &egui::Painter, r: Rect, v: nt::Value, col: Color32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selection_color_setting() {
+        let mut v = crate::settings::Values::default();
+        assert_eq!(selection_color(&v), Color32::from_rgb(0x80, 0xb0, 0x66));
+        v.0.insert(SELECTION_COLOR.into(), "#ff0010".into());
+        assert_eq!(selection_color(&v), Color32::from_rgb(0xff, 0, 0x10));
+        v.0.remove(SELECTION_COLOR);
+        assert_eq!(selection_color(&v), Color32::from_rgb(0x80, 0xb0, 0x66));
+    }
 
     #[test]
     fn ruler_in_inches() {

@@ -229,12 +229,23 @@ fn items_sub(app: &mut App, ui: &mut egui::Ui, items: &[crate::menus::Item], sub
             continue;
         }
         let ok = can(sub, &it.label);
-        let label = if checked(a, sub, &it.label) { format!("✓ {}", it.label) } else { it.label.clone() };
+        let shown = shown_label(app, sub, &it.label);
+        let label = if checked(a, sub, &it.label) { format!("✓ {shown}") } else { shown };
         let short = crate::keycmds::shortcut_for(app, &it.label).unwrap_or_else(|| it.shortcut.clone());
         if ui.add_enabled(ok, egui::Button::new(label).shortcut_text(short)).clicked() {
             run(app, ui.ctx(), sub, &it.label);
             ui.close();
         }
+    }
+}
+
+/// An item's text: the Colors submenu's "Color n" items show the User Palette's names
+/// (Score Project Settings ▸ Colors).
+fn shown_label(app: &App, sub: &str, item: &str) -> String {
+    let n = item.strip_prefix("Color ").and_then(|n| n.parse::<usize>().ok()).filter(|n| *n < 16);
+    match n {
+        Some(n) if sub == "Colors" => crate::scorecolors::Palette::from(&app.proj).names[n].clone(),
+        _ => item.to_string(),
     }
 }
 
@@ -962,6 +973,15 @@ pub fn follow_drag(app: &mut App, ctx: &egui::Context, sp: f32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn colors_show_palette_names() {
+        let mut app = crate::tm::test_app();
+        assert_eq!(shown_label(&app, "Colors", "Color 3"), "Color 3");
+        app.proj.0.insert(format!("{}Name 3", crate::scorecolors::SUB), "Strings".into());
+        assert_eq!(shown_label(&app, "Colors", "Color 3"), "Strings");
+        assert_eq!(shown_label(&app, "Stems", "Color 3"), "Color 3");
+    }
 
     #[test]
     fn submenu_items_map_to_commands() {
