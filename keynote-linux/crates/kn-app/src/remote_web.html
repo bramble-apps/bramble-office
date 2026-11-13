@@ -205,8 +205,9 @@ function go(dir) {
     back.push({ st, cur, next });
     if (back.length > 50) back.shift();
     stale = { key: at(st), until: Date.now() + 1500 };
-    st = Object.assign({}, st, { optimistic: true });
-    cur = next; next = null;
+    const after = st.after || null;
+    st = Object.assign({}, st, { optimistic: true, after: null });
+    cur = next; next = after;
     render();
   } else if (dir < 0 && back.length) {
     const b = back.pop();

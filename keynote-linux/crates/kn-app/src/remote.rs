@@ -446,9 +446,17 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
     let steps = steps_of(app, index);
     let step_n = step.min(steps);
     // next: the next build here, else the next slide that isn't skipped
-    let next = if at.is_some() && step_n < steps { Some((index, step_n + 1)) } else { (index + 1..count).find(|&i| !app.slides[i].skipped).map(|i| (i, if at.is_some() { 0 } else { usize::MAX })) };
+    let playing = at.is_some();
+    let next_of = |app: &mut App, (i, s): (usize, usize)| -> Option<(usize, usize)> {
+        let n = steps_of(app, i);
+        if playing && s < n { Some((i, s + 1)) } else { (i + 1..count).find(|&j| !app.slides[j].skipped).map(|j| (j, if playing { 0 } else { usize::MAX })) }
+    };
+    let next = next_of(app, (index, step_n));
     let current = picture(app, index, step_n, 960);
     let next_pic = next.and_then(|(i, s)| picture(app, i, s, 960));
+    // the one after next too: a remote shows it as Next the moment Next is tapped, before
+    // this state comes back (no blank box flickering in)
+    let after_pic = next.and_then(|n| next_of(app, n)).and_then(|(i, s)| picture(app, i, s, 960));
     let number = app.slides[..=index].iter().filter(|s| !s.skipped).count();
     let notes = app.slides.get(index).and_then(|s| app.doc.as_ref().map(|d| d.notes(s.slide))).unwrap_or_default();
     let size = app.doc.as_ref().map(|d| d.slide_size()).unwrap_or(kn_model::Size { w: 1920.0, h: 1080.0 });
@@ -456,7 +464,7 @@ pub fn publish(app: &mut App, at: Option<(usize, usize)>) {
     let v = json!({
         "type": "state", "playing": at.is_some(), "slide": index, "step": step_n, "steps": steps, "count": count,
         "number": number, "visible": app.slides.iter().filter(|s| !s.skipped).count(), "notes": notes, "title": title,
-        "current": current, "next": next_pic, "aspect": size.h / size.w,
+        "current": current, "next": next_pic, "after": after_pic, "aspect": size.h / size.w,
     });
     let mut s = shared();
     if s.sent.split(':').nth(1) != key.split(':').nth(1) || !key.starts_with("true") {
