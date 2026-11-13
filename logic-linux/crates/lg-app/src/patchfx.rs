@@ -34,7 +34,7 @@ pub fn apply(app: &mut App, t: usize, name: &str) {
     if !is_library_patch(name) {
         return;
     }
-    let list: Vec<lg_core::Plugin> = inserts(name)
+    let list: Vec<lg_core::plugin::Plugin> = inserts(name)
         .into_iter()
         .map(|(n, floats)| {
             let mut u = crate::mixstate::new_plugin(&n);
