@@ -822,7 +822,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Show/Hide Tempo List" => open_list(app, 2, true),
         "Open Signature List" | "Open Signature List…" => open_list(app, 3, false),
         "Show/Hide Signature List" => open_list(app, 3, true),
-        "Show Play Surface" => return app.key_command(ctx, "Show/Hide Musical Typing"),
+        "Show Play Surface" => return crate::playsurface::command(app, "Show Play Surface"),
         "Open MIDI Transform" => return app.key_command(ctx, "Open Transform…"),
         "Open Audio Track Editor" | "Show/Hide Audio Track Editor" | "Open Audio File Editor" | "Open Audio File Editor…" | "Show/Hide Audio File Editor" | "Open Smart Tempo Editor" | "Open Smart Tempo Editor…" => {
             if !crate::audioedit::is_audio_region(app) {

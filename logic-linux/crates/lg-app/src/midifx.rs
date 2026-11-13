@@ -267,6 +267,16 @@ fn edit(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut Vec<MidiFxSlot>
     push_slots(app, t);
 }
 
+/// Edits a track's MIDI plug-in slots as one undo step (the Play Surface's Arpeggiator button).
+pub fn edit_slots(app: &mut App, t: usize, what: &str, f: impl FnOnce(&mut Vec<MidiFxSlot>)) {
+    edit(app, t, what, f);
+}
+
+/// A new slot with the plug-in's default settings.
+pub fn slot(name: &str) -> MidiFxSlot {
+    new_slot(name)
+}
+
 fn new_slot(name: &str) -> MidiFxSlot {
     MidiFxSlot { name: name.to_string(), values: midifx::defaults(name), bypass: false }
 }

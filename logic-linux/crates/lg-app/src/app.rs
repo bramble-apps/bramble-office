@@ -351,8 +351,18 @@ pub struct App {
     pub keyx: crate::keyextra::State,
     /// Track headers and the Mixer beyond the first draft (tm.rs).
     pub tm: crate::tm::State,
+    /// The Play Surface windows (playsurface.rs).
+    pub ps: crate::playsurface::State,
+    /// Optional transport buttons, shuttling, giant displays, Project Information (transportx.rs).
+    pub tx: crate::transportx::State,
     pub pa: crate::projaudio::State,
     pub af: crate::allfiles::State,
+    /// The All Files Browser's search conditions, recent searches and bookmarks (afsearch.rs).
+    pub afs: crate::afsearch::State,
+    /// Track Import (trackimport.rs).
+    pub tim: crate::trackimport::State,
+    /// The Browser Focus triangle (brfocus.rs).
+    pub brf: crate::brfocus::State,
     pub pf_tab: usize,
     pub preview: crate::preview::Preview,
     /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
@@ -554,6 +564,8 @@ impl App {
             br: Default::default(),
             sc: Default::default(),
             ax: Default::default(),
+            ps: Default::default(),
+            tx: Default::default(),
             spx: Default::default(),
             spdrum: Default::default(),
             artic: Default::default(),
@@ -562,6 +574,9 @@ impl App {
             tm: Default::default(),
             pa: Default::default(),
             af: Default::default(),
+            afs: Default::default(),
+            tim: Default::default(),
+            brf: Default::default(),
             pf_tab: 0,
             preview: Default::default(),
             nav: Default::default(),
@@ -1293,7 +1308,7 @@ impl App {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!f));
             }
             "New" | "New from Template…" => crate::projfile::new_project(self, cmd),
-            "Open…" | "Logic Projects…" => self.open_dialog(),
+            "Open…" => self.open_dialog(),
             "Close Project" => {
                 self.stop();
                 self.set_project(crate::demo::song(), true);
@@ -1336,6 +1351,7 @@ impl App {
     /// Key presses: Logic's key commands for the focused area (keymap.rs); ⌘Z / ⇧⌘Z undo.
     fn keys(&mut self, ctx: &egui::Context) {
         crate::focus::press(self, ctx);
+        crate::trackimport::keys(self, ctx);
         if ctx.egui_wants_keyboard_input() {
             crate::live::frame(self, ctx);
             return;
@@ -1351,7 +1367,8 @@ impl App {
         }).collect());
         // the area clicked last, not the one under the pointer (focus.rs)
         let focus = crate::focus::keymap_focus(self, ctx);
-        let used = crate::live::frame(self, ctx);
+        let mut used = crate::live::frame(self, ctx);
+        used.extend(crate::playsurface::keys(self, ctx));
         for (key, m, physical) in presses {
             if used.contains(&key) {
                 continue;
@@ -1440,6 +1457,15 @@ impl App {
             return true;
         }
         if crate::envhub::command(self, ctx, name) || crate::convsampler::command(self, ctx, name) {
+            return true;
+        }
+        if crate::trackimport::command(self, name) {
+            return true;
+        }
+        if crate::transportx::command(self, ctx, name) {
+            return true;
+        }
+        if crate::playsurface::command(self, name) {
             return true;
         }
         if crate::tm::command(self, ctx, name) {
@@ -1953,6 +1979,8 @@ impl App {
         crate::varispeed::frame(self, &ctx);
         crate::stepedit::window(self, &ctx);
         crate::live::window(self, &ctx);
+        crate::playsurface::windows(self, &ctx);
+        crate::transportx::frame(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);

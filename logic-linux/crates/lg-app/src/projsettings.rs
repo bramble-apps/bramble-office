@@ -526,18 +526,24 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 return true;
             }
             if let Some(p) = kn_ui::files::FileDialog::new().set_title("Import Project Settings from a project (.logicx)").pick_folder() {
-                let p = lg_core::project::package_of(&p);
-                // (Score Sets, Staff Styles and Text Styles come from its Score data: scorefile.rs)
-                let has_score = crate::scorefile::score_of(&p).is_some();
-                match settings_of(&p).or_else(|| has_score.then(Values::default)) {
-                    Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Movie")).map(|s| s.to_string()).chain(crate::scorefile::IMPORT_PANES.iter().filter(|_| has_score).map(|s| s.to_string())).collect())),
-                    None => app.tell(format!("“{}” has no project settings Studio made (only projects saved in Studio keep them)", p.file_stem().unwrap_or_default().to_string_lossy())),
-                }
+                import_from(app, p);
             }
         }
         _ => return false,
     }
     true
+}
+
+/// The Import Settings dialog for project `p` (File ▸ Project Settings ▸ Import Project
+/// Settings…, Track Import's button).
+pub fn import_from(app: &mut App, p: PathBuf) {
+    let p = lg_core::project::package_of(&p);
+    // (Score Sets, Staff Styles and Text Styles come from its Score data: scorefile.rs)
+    let has_score = crate::scorefile::score_of(&p).is_some();
+    match settings_of(&p).or_else(|| has_score.then(Values::default)) {
+        Some(v) => app.ps_ui.import = Some((p, v, PANES.iter().filter(|p| !matches!(**p, "Movie")).map(|s| s.to_string()).chain(crate::scorefile::IMPORT_PANES.iter().filter(|_| has_score).map(|s| s.to_string())).collect())),
+        None => app.tell(format!("“{}” has no project settings Studio made (only projects saved in Studio keep them)", p.file_stem().unwrap_or_default().to_string_lossy())),
+    }
 }
 
 /// Sub-panes drawn by their own code (the rows still keep the values and defaults).

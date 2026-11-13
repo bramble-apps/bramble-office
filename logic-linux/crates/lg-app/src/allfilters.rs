@@ -522,6 +522,12 @@ pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>)
         app.br.all_filters = false;
         return;
     }
+    // a click outside it (not on the filter button, nor in a pop-up of its own) closes it too
+    let outside = ctx.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| !win.expand(4.0).contains(p) && !anchor.expand(2.0).contains(p)));
+    if outside && !egui::Popup::is_any_open(ctx) {
+        app.br.all_filters = false;
+        return;
+    }
     let first = ctx.data_mut(|d| {
         let was = d.get_temp::<bool>(egui::Id::unique("all-filters-was-open")).unwrap_or(false);
         d.insert_temp(egui::Id::unique("all-filters-was-open"), true);

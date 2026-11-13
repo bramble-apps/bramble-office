@@ -52,6 +52,8 @@ pub struct Filters {
     /// Size in KB: at least, at most (0: any).
     pub min_kb: u64,
     pub max_kb: u64,
+    /// The search's condition rows (afsearch.rs).
+    pub conds: Vec<crate::afsearch::Cond>,
 }
 
 impl Filters {
@@ -77,6 +79,9 @@ impl Filters {
         }
         let kb = meta.as_ref().map_or(0, |m| m.len() / 1024);
         if (self.min_kb > 0 && kb < self.min_kb) || (self.max_kb > 0 && kb > self.max_kb) {
+            return false;
+        }
+        if !self.conds.iter().all(|c| crate::afsearch::matches(c, p, kind)) {
             return false;
         }
         if self.min_len > 0.0 || self.max_len > 0.0 {
@@ -288,6 +293,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             ui.close();
         }
     });
+    // the Bookmark button: the bookmarks in place of the files
+    let bm = btn(x + 36.0, 26.0);
+    if clicked(ui, bm, ph::BOOKMARK_SIMPLE, app.afs.showing_bookmarks, "Bookmarks", true) {
+        crate::afsearch::ensure(app);
+        app.afs.showing_bookmarks = !app.afs.showing_bookmarks;
+    }
     // Play (at the right)
     let play = Rect::from_min_size(pos2(row.max.x - 26.0, row.min.y), vec2(26.0, 24.0));
     let now = app.ctx.input(|i| i.time);
@@ -297,60 +308,39 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             crate::preview::toggle(app, &s.display().to_string(), &s, 0.8, None, false);
         }
     }
-    // ---- the search field and its + (filters)
-    let sr = Rect::from_min_size(pos2(area.min.x + 8.0, row.max.y + 6.0), vec2(area.width() - 46.0, 24.0));
-    ui.put(sr, egui::TextEdit::singleline(&mut app.af.search).hint_text("Search").font(look::regular(12.5)));
-    let plus = Rect::from_min_size(pos2(sr.max.x + 6.0, sr.min.y), vec2(24.0, 24.0));
-    if clicked(ui, plus, ph::PLUS, app.af.show_filters || app.af.filters.active(), "More search filters", true) {
-        app.af.show_filters = !app.af.show_filters;
-    }
+    // ---- the search field (recent searches, Clear, − and +) and the condition rows
+    let sr = Rect::from_min_size(pos2(area.min.x + 8.0, row.max.y + 6.0), vec2(area.width() - 16.0, 24.0));
+    crate::afsearch::search_row(app, ui, sr);
     let mut y = sr.max.y + 4.0;
-    if app.af.show_filters {
-        let fr = Rect::from_min_size(pos2(area.min.x + 8.0, y), vec2(area.width() - 16.0, 78.0));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(fr).layout(egui::Layout::top_down(egui::Align::Min)));
-        let f = &mut app.af.filters;
-        child.horizontal(|ui| {
-            ui.label("Kind");
-            let names = [(None, "Any"), (Some(FileKind::Audio), "Audio"), (Some(FileKind::Midi), "MIDI"), (Some(FileKind::LogicProject), "Logic Project"), (Some(FileKind::GarageBand), "GarageBand"), (Some(FileKind::Movie), "Movie"), (Some(FileKind::Folder), "Folder")];
-            egui::ComboBox::from_id_salt("af-kind").selected_text(names.iter().find(|n| n.0 == f.kind).map_or("Any", |n| n.1)).show_ui(ui, |ui| {
-                for (k, n) in names {
-                    ui.selectable_value(&mut f.kind, k, n);
-                }
-            });
-            ui.label("Format");
-            ui.add(egui::TextEdit::singleline(&mut f.format).desired_width(44.0).hint_text("wav"));
-        });
-        child.horizontal(|ui| {
-            ui.label("Length (s)");
-            ui.add(egui::DragValue::new(&mut f.min_len).range(0.0..=36_000.0).prefix("≥ "));
-            ui.add(egui::DragValue::new(&mut f.max_len).range(0.0..=36_000.0).prefix("≤ "));
-            ui.label("Modified");
-            egui::ComboBox::from_id_salt("af-days").selected_text(match f.days { 0 => "Any time".to_string(), 1 => "Today".into(), d => format!("{d} days") }).show_ui(ui, |ui| {
-                for (d, n) in [(0u32, "Any time"), (1, "Today"), (7, "7 days"), (30, "30 days"), (365, "365 days")] {
-                    ui.selectable_value(&mut f.days, d, n);
-                }
-            });
-        });
-        child.horizontal(|ui| {
-            ui.label("Size (KB)");
-            ui.add(egui::DragValue::new(&mut f.min_kb).prefix("≥ "));
-            ui.add(egui::DragValue::new(&mut f.max_kb).prefix("≤ "));
-            if ui.button("Clear").clicked() {
-                *f = Filters::default();
-            }
-        });
-        y = fr.max.y + 4.0;
-    }
+    y += crate::afsearch::condition_rows(app, ui, pos2(area.min.x + 8.0, y), area.width() - 16.0);
     // the path
     let path_r = Rect::from_min_size(pos2(area.min.x + 8.0, y), vec2(area.width() - 16.0, 18.0));
-    p.with_clip_rect(path_r).text(path_r.left_center(), Align2::LEFT_CENTER, dir.display().to_string(), look::regular(11.0), look::text_dim());
+    // (each folder of the path opens it)
+    if let Some(d) = crate::afsearch::path_bar(ui, path_r, &dir) {
+        go(app, d);
+        app.afs.showing_bookmarks = false;
+    }
     y = path_r.max.y + 2.0;
     p.hline(area.x_range(), y, Stroke::new(1.0, look::line()));
     let list = Rect::from_min_max(pos2(area.min.x, y + 1.0), area.max);
-    let searching = !app.af.search.trim().is_empty() || app.af.filters.active();
+    // (hidden condition rows don't apply)
+    let mut filters = app.af.filters.clone();
+    if !app.af.show_filters {
+        filters.conds.clear();
+    }
+    let searching = !app.af.search.trim().is_empty() || filters.active();
     let mut open: Option<(PathBuf, bool)> = None;
     let mut drag: Option<PathBuf> = None;
-    if app.af.columns && !searching {
+    if crate::trackimport::active(app) {
+        crate::trackimport::view(app, ui, list);
+        return;
+    }
+    if app.afs.showing_bookmarks {
+        if let Some(d) = crate::afsearch::bookmark_list(app, ui, list) {
+            go(app, d);
+            app.afs.showing_bookmarks = false;
+        }
+    } else if app.af.columns && !searching {
         // Column view: the folders from Home (or /) down to this one, side by side
         let root = if dir.starts_with(home()) { home() } else { PathBuf::from("/") };
         let mut chain = vec![root.clone()];
@@ -404,7 +394,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     } else {
         let entries = if searching {
-            let key = (dir.clone(), app.af.search.clone(), app.af.filters.clone());
+            let key = (dir.clone(), app.af.search.clone(), filters.clone());
             match &app.af.cache {
                 Some((d, s, f, v)) if (d, s, f) == (&key.0, &key.1, &key.2) => v.clone(),
                 _ => {
@@ -416,6 +406,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         } else {
             list_dir(&dir)
         };
+        // the columns' header: a click sorts
+        let head = Rect::from_min_size(list.min, vec2(list.width(), 20.0));
+        crate::afsearch::header(app, ui, head);
+        let list = Rect::from_min_max(pos2(list.min.x, head.max.y), list.max);
+        let mut entries = entries;
+        crate::afsearch::sort_entries(&mut entries, app.afs.sort.0, app.afs.sort.1);
+        let cols = crate::afsearch::columns(list.width());
         if entries.is_empty() {
             p.text(list.center(), Align2::CENTER_CENTER, if searching { "No matches" } else { "No projects, audio or MIDI files here" }, look::regular(12.0), look::text_dim());
         }
@@ -433,9 +430,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let kind = kind_of(path, *is_dir);
                 crate::glyphs::paint(pp, Rect::from_min_size(r.min + vec2(8.0, 4.0), vec2(14.0, 14.0)), icon_for(kind), 12.0, look::text_dim());
                 let name = if searching { path.strip_prefix(&dir).map(|x| x.display().to_string()).unwrap_or_default() } else { path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default() };
-                pp.with_clip_rect(r).text(pos2(r.min.x + 28.0, r.center().y), Align2::LEFT_CENTER, name, look::regular(12.0), look::text());
+                let name_r = Rect::from_min_size(r.min, vec2(cols[0].2 - 4.0, r.height()));
+                pp.with_clip_rect(name_r).text(pos2(r.min.x + 28.0, r.center().y), Align2::LEFT_CENTER, name, look::regular(12.0), look::text());
+                let (created, size) = crate::afsearch::created_and_size(path);
+                for (i, t) in [(1usize, crate::afsearch::date_text(created)), (2, if *is_dir { "--".into() } else { crate::afsearch::size_text(size) }), (3, crate::afsearch::kind_name(kind).to_string())] {
+                    let c = Rect::from_min_size(pos2(r.min.x + cols[i].1 + 6.0, r.min.y), vec2(cols[i].2 - 8.0, r.height()));
+                    pp.with_clip_rect(c).text(pos2(c.min.x, r.center().y), Align2::LEFT_CENTER, t, look::regular(11.0), look::text_dim());
+                }
                 if resp.clicked() {
                     app.af.selected = Some(path.clone());
+                }
+                if *is_dir {
+                    let d = path.clone();
+                    resp.context_menu(|ui| crate::afsearch::bookmark_item(app, ui, &d));
                 }
                 if resp.double_clicked() {
                     open = Some((path.clone(), *is_dir));
@@ -445,6 +452,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             }
         });
+    }
+    // a project selected: Import (its tracks: Track Import)
+    if let Some(sel) = app.af.selected.clone().filter(|s| matches!(kind_of(s, true), FileKind::LogicProject | FileKind::GarageBand)) {
+        let b = Rect::from_min_size(pos2(list.max.x - 76.0, list.max.y - 30.0), vec2(68.0, 22.0));
+        let resp = ui.interact(b, ui.scope_id().with("af-import"), Sense::click()).on_hover_text("Import tracks from this project");
+        ui.painter().rect_filled(b, 5.0, if resp.hovered() { look::accent().gamma_multiply(0.85) } else { look::accent() });
+        ui.painter().text(b.center(), Align2::CENTER_CENTER, "Import", look::regular(12.0), Color32::WHITE);
+        if resp.clicked() {
+            crate::trackimport::open_source(app, &sel);
+        }
     }
     if let Some((path, is_dir)) = open {
         open_item(app, &path, is_dir);

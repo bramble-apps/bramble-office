@@ -109,7 +109,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
     // (Logic's default transport: Go to Beginning / Stop, Play, Record, Cycle; Capture as
     // Recording, Replace and Autopunch only once ticked in Customize Control Bar)
     let extras = [app.cb_show.capture, app.cb_show.replace, app.cb_show.autopunch];
-    let tw = if narrow { 4 } else { 4 + extras.iter().filter(|&&on| on).count() };
+    let optional = if narrow { Vec::new() } else { crate::transportx::shown(app) };
+    let tw = if narrow { 4 } else { 4 + extras.iter().filter(|&&on| on).count() + optional.len() };
     let widths = vec![BTN + 6.0; tw];
     let total_t = widths.iter().sum::<f32>() + 2.0 * PAD;
     // (as Logic: the LCD in the middle of the window, the transport to its left; pushed right
@@ -171,6 +172,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             app.autopunch = !app.autopunch;
         }
         slot += usize::from(app.cb_show.autopunch);
+        // the optional transport buttons (transportx.rs)
+        for (name, glyph, cmd) in &optional {
+            let resp = button(ui, b[slot], name, false, true, name, |p, r, c| icon(p, r, glyph, c));
+            let resp = resp.interact(Sense::click_and_drag());
+            crate::transportx::button(app, ui.ctx(), name, cmd, &resp);
+            slot += 1;
+        }
         cyc_i = slot;
     }
     let cycle_on = app.cycle_on();
@@ -370,6 +378,7 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
             }
         }
         ui.separator();
+        crate::transportx::lcd_menu(app, ui);
         if ui.button("Customize Control Bar and Display…").clicked() {
             app.bars.customize_bar = true;
             ui.close();
@@ -380,7 +389,8 @@ fn lcd_show(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
 /// The tempo: drag up or down to change it (Shift: in hundredths), double-click to type it.
 fn tempo_cell(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, c2: Rect) {
     let tempo = app.tempo();
-    let tempo_text = if (tempo - tempo.round()).abs() < 0.005 { format!("{tempo:.0}") } else { format!("{tempo:.2}") };
+    // (Settings ▸ View ▸ Display Tempo As: transportx.rs)
+    let tempo_text = crate::transportx::tempo_text(&app.logic_settings, crate::projsettings::smpte(&app.proj).1, tempo);
     let tr = Rect::from_center_size(pos2(c2.center().x, c2.min.y + 15.0), vec2(c2.width() - 8.0, 22.0));
     if let Some(text) = app.tempo_edit.as_mut() {
         let te = ui.put(tr, egui::TextEdit::singleline(text).align(egui::Align2::CENTER_CENTER).font(look::regular(15.0)));

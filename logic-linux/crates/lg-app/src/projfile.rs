@@ -115,6 +115,8 @@ pub fn after_open(app: &mut App, path: &Path) {
     crate::regionparams::after_open(app);
     crate::scorefile::after_open(app);
     crate::tm::after_open(app);
+    crate::playsurface::after_open(app);
+    crate::transportx::after_open(app);
     crate::envhub::after_open(app);
 }
 
@@ -317,6 +319,7 @@ fn report(app: &mut App, mut left: Vec<String>) {
     crate::regionparams::save_sidecar(app);
     crate::scorefile::save_sidecar(app);
     crate::tm::save_sidecar(app);
+    crate::playsurface::save_sidecar(app);
     left.dedup();
     app.pf.last_left_out = left.clone();
     if left.is_empty() {

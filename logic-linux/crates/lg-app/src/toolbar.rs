@@ -270,6 +270,11 @@ pub fn sheets(app: &mut App, ctx: &egui::Context) {
                 ui.label("");
                 ui.vertical(|ui| crate::lcdcustom::customize(app, ui));
                 ui.end_row();
+                // the optional transport buttons (transportx.rs)
+                ui.label("");
+                ui.vertical(|ui| crate::transportx::customize(app, ui));
+                ui.label("");
+                ui.end_row();
             });
             // Modes and Functions: Sync (syncmidi.rs; hidden by default)
             ui.horizontal(|ui| {
