@@ -1495,7 +1495,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 note_color(&pal, st.colors, &n, voice_of(i), &a)
             };
-<<<<<<< HEAD
             // (a mapped style: a note without a head of its own takes its key's Head)
             let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
             let attr = |i: usize| {
@@ -1508,13 +1507,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 a
             };
-            let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing };
-=======
-            let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             // (Colors pane: rests take the voice's own colour when Rests is on)
             let rest_col = if pal.rests && st.colors == Colors::Normal && seg.vdef.color >= 3 { pal.user[(seg.vdef.color as usize - 3) % 16] } else { INK };
             let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing, parts: [pal.accidentals, pal.dots, pal.ties], rest_col };
->>>>>>> studio-projshare
             let numbers = draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
             // a user tuplet's number: double-click edits it (Tuplet window), the Eraser deletes it
             for (tick, r) in numbers {
