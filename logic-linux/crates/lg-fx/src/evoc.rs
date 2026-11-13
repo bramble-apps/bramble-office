@@ -235,7 +235,7 @@ static TO_P: std::sync::LazyLock<Vec<Param>> = std::sync::LazyLock::new(|| {
         Param::new(B + 19, "High Frequency", 1000.0, 20000.0, 8000.0, Unit::Hz),
         Param::menu(B + 20, "Lowest", &["BP", "HP"], 0.0),
         Param::menu(B + 21, "Highest", &["BP", "LP"], 0.0),
-        Param::new(B + 22, "Formant Stretch", 0.3, 2.0, 1.0, Unit::None),
+        Param::new(B + 22, "Formant Stretch", -1.0, 1.0, 0.0, Unit::Ratio),
         Param::new(B + 23, "Formant Shift", -3.0, 3.0, 0.0, Unit::Octaves),
         Param::new(B + 24, "Resonance", 0.0, 100.0, 50.0, Unit::Percent),
         Param::new(B + 25, "LFO Shift Intensity", 0.0, 3.0, 0.0, Unit::Octaves),
@@ -309,7 +309,7 @@ impl TrackOscillator {
     fn tune(&mut self, shift_extra: f32) {
         let n = self.p.get(B + 3).round() as usize;
         let ca = centres(n, self.p.get(B + 18), self.p.get(B + 19), 0.0, 1.0, self.rate);
-        let cs = centres(n, self.p.get(B + 18), self.p.get(B + 19), self.p.get(B + 23) + shift_extra, self.p.get(B + 22), self.rate);
+        let cs = centres(n, self.p.get(B + 18), self.p.get(B + 19), self.p.get(B + 23) + shift_extra, 2f32.powf(self.p.get(B + 22)), self.rate);
         self.nb = ca.len();
         let q = 2.0 + 18.0 * (self.p.get(B + 24) / 100.0).powi(2) + n as f32 * 0.3;
         self.q = q;

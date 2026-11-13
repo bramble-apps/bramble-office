@@ -145,11 +145,11 @@ static BASE_PARAMS: [Param; 22] = [
     Param::new(FILTER, "Filter", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::menu(F_MODE, "Filter Mode", MODES, 2.0),
     Param::new(F_RES, "Filter Resonance", 0.0, 100.0, 0.0, Unit::Percent),
-    Param::new(SPREAD_LO, "Stereo Spread Low", 0.0, 2.0, 0.38, Unit::None),
+    Param::new(SPREAD_LO, "Stereo Spread Low", 0.0, 1.0, 0.38, Unit::None),
     Param::new(INIT_DENS, "Init Density", 0.0, 100.0, 88.0, Unit::Percent),
     Param::new(END_DENS, "End Density", 0.0, 1.0, 1.0, Unit::None),
     Param::new(SIZE, "Size", 0.1, 2.0, 1.0, Unit::None),
-    Param::new(SPREAD_HI, "Stereo Spread High", 0.0, 2.0, 1.0, Unit::None),
+    Param::new(SPREAD_HI, "Stereo Spread High", 0.0, 1.0, 1.0, Unit::None),
 ];
 
 const EQ_DEFAULTS: [(f32, f32, f32); 6] = [(20.0, 0.0, 0.7), (200.0, 0.0, 0.7), (800.0, 0.0, 1.0), (3000.0, 0.0, 1.0), (8000.0, 0.0, 0.7), (20000.0, 0.0, 0.7)];
@@ -492,7 +492,7 @@ impl SpaceConvolver {
         let res = p.get(F_RES) / 100.0;
         // Density Env off: full density from the start
         let (d0, d1) = if p.on(DENS_ENV_ON) { (p.get(INIT_DENS) / 100.0, p.get(END_DENS).clamp(0.0, 1.0)) } else { (1.0, 1.0) };
-        let (s_lo, s_hi) = (p.get(SPREAD_LO).clamp(0.0, 2.0) / 2.0, p.get(SPREAD_HI).clamp(0.0, 2.0) / 2.0);
+        let (s_lo, s_hi) = (p.get(SPREAD_LO).clamp(0.0, 1.0), p.get(SPREAD_HI).clamp(0.0, 1.0));
         let att_n = (va * 0.5 * secs * rate) as usize;
         // decay: the volume falls by ~60 dB over (decay time x length), ending at End Level
         let dec_n = ((vd.max(0.02)) * n as f32).max(1.0);

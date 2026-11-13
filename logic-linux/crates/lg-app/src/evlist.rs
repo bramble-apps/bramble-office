@@ -15,7 +15,7 @@
 //! events are protected. Display Level lists the regions (click a selected region's name to
 //! rename it). During playback a line marks the event at the playhead and the list follows it
 //! (Catch). The Event Float window (⌥E) shows the selected event as one editable line; Show
-//! Event Position and Length as Time (⌃⌥R) switches both to minutes : seconds.
+//! Event Position and Length as Time (⌃⌥R) switches both to SMPTE time (project frame rate).
 
 use egui::{pos2, vec2, Align2, Color32, Rect, Sense, Stroke};
 use lg_core::events::{Control, Note};
@@ -260,12 +260,14 @@ fn region(app: &App) -> Option<(usize, usize, lg_core::Region)> {
     (rg.audio.is_none()).then_some((t, r, rg))
 }
 
-/// Positions as Logic shows them: bar beat division tick, or (as time) h:mm:ss.ms.
+/// Positions as Logic shows them: bar beat division tick, or (as time) SMPTE hh:mm:ss:ff.
 fn pos_text(app: &App, st: &State, tick: u32) -> String {
     if st.as_time {
         if let Some(p) = &app.project {
+            // SMPTE time from the project's bar 1 SMPTE position and frame rate
+            let (bar1, fps, drop) = crate::projsettings::smpte(&app.proj);
             let s = lg_core::timeline::Map::of(p).secs_at(tick as f64);
-            return time_text(s);
+            return crate::projsettings::smpte_text(bar1 + s, fps, drop);
         }
     }
     crate::rightpane::bbdt(app, tick)
@@ -280,7 +282,8 @@ fn len_text(app: &App, st: &State, from: u32, len: u32) -> String {
     if st.as_time {
         if let Some(p) = &app.project {
             let m = lg_core::timeline::Map::of(p);
-            return time_text(m.secs_at((from + len) as f64) - m.secs_at(from as f64));
+            let (_, fps, drop) = crate::projsettings::smpte(&app.proj);
+            return crate::projsettings::smpte_text(m.secs_at((from + len) as f64) - m.secs_at(from as f64), fps, drop);
         }
     }
     let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
@@ -569,7 +572,7 @@ fn show_linked(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             if ui.checkbox(&mut abs, "Length as Absolute Position").changed() {
                 crate::eventedit::with(ui.ctx(), |s| s.abs_length = abs);
             }
-            ui.checkbox(&mut st.as_time, "Event Position and Length as Time");
+            ui.checkbox(&mut st.as_time, "Show Event Position and Length as Time");
             ui.add_enabled_ui(has_region && !st.regions, |ui| ui.checkbox(&mut st.artic_col, "Articulation"));
             ui.separator();
             ui.checkbox(&mut st.float, "Event Float");

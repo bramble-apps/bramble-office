@@ -628,6 +628,11 @@ pub fn sync_button(app: &mut App, ui: &mut egui::Ui, r: egui::Rect) {
             let _ = app.key_command(&ctx, "Open Tempo List…");
             ui.close();
         }
+        if ui.button("Open Tempo Operations…").clicked() {
+            let ctx = ui.ctx().clone();
+            let _ = app.key_command(&ctx, "Open Tempo Operations…");
+            ui.close();
+        }
     });
 }
 

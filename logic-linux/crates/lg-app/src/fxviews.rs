@@ -1147,7 +1147,7 @@ fn pitch_correction(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &
             fill = look::mix(fill, Color32::from_gray(110), 0.6);
         }
         if byp {
-            fill = look::mix(fill, look::record_red(), 0.5);
+            fill = look::mix(fill, Color32::from_rgb(242, 148, 46), 0.65);
         }
         if input == Some(*pc) {
             fill = look::mix(fill, look::accent(), 0.6);
