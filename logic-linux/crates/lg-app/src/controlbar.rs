@@ -251,7 +251,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
             if i == 0 {
                 count_in_mark(&p, b[i].center(), col);
             } else {
-                icon(&p, b[i], ph::METRONOME, col);
+                // playing with the click on: the arm swings, one swing per beat (cbicons.rs);
+                // repainting only while it does
+                let swing = on && app.playing();
+                let angle = if swing {
+                    ui.ctx().request_repaint();
+                    let den = app.project.as_ref().map_or(4, |pr| pr.signature.1 as u32);
+                    crate::cbicons::metronome_angle(crate::cbicons::beats_at(app.position(), den))
+                } else {
+                    0.0
+                };
+                crate::cbicons::metronome(&p, b[i], 19.0, col, angle);
             }
             if resp.clicked() {
                 if i == 0 {
