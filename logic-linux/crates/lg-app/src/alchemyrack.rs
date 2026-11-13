@@ -52,6 +52,8 @@ pub struct St {
     pub fx_rack: usize,
     pub fx_scroll: f32,
     pub fx_drag: Option<usize>,
+    /// The source edit window (alchemyedit).
+    pub ed: crate::alchemyedit::Ed,
 }
 
 /// Live values read from the running instrument for the displays.

@@ -24,6 +24,17 @@ const W: f32 = 1146.0;
 pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let st_id = egui::Id::unique(("alchemy-st", t));
     let mut st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
+    // checks (headless): LG_ALCH_EDIT=1 opens source A's page and its edit window once
+    // (LG_ALCH_EDIT=page: the source page only)
+    static EDIT_ONCE: std::sync::Once = std::sync::Once::new();
+    if std::env::var("LG_ALCH_EDIT").is_ok() {
+        EDIT_ONCE.call_once(|| {
+            st.view = 0;
+            st.page = 1;
+            st.ed.open = std::env::var("LG_ALCH_EDIT").as_deref() != Ok("page");
+            st.ed.sel = vec![(0, 0)];
+        });
+    }
     let mut live = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| Live { levels: a.mg.levels, perform: a.mg.perform, envf: a.mg.envf, time: 0.0 }).unwrap_or_default();
     live.time = ctx.input(|i| i.time);
     // the effects' own parameters, read from the running instrument
@@ -36,6 +47,11 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     let presets: Vec<String> = crate::pluginwin::saved_settings("Alchemy").into_iter().map(|(n, _)| n).collect();
     let cur = synthui::setting_name(app, t);
     let dropped = std::mem::take(&mut app.inst.dropped);
+    // the source edit window's zones, the newest zone's play position and the notes played
+    let mut zdoc = instwin::track_id(app, t).and_then(|id| app.inst.alch_zones.get(&id).cloned()).unwrap_or_default();
+    let zsrc = st.ed.src;
+    let zpos = instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| a.zone_position(zsrc)).flatten();
+    let notes = crate::alchemyedit::take_notes();
     let size = match st.view {
         1 => vec2(W, 258.0),
         2 => vec2(W, 520.0),
@@ -43,8 +59,13 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
     };
     let mut ext: Vec<u32> = (0..5).map(|k| am::CTRL_CC + k).collect();
     ext.extend([lg_synth::alchemy::MONO_MODE, lg_synth::alchemy::MONO_BEND, lg_synth::alchemy_arp::OVERLAP_LEGACY]);
-    let actions = synthui::window(app, ctx, t, "Alchemy", size, SKIN, &ext, |p| body(p, &mut st, &live, &fx_params, audio_name.as_deref(), &presets, &cur));
+    let actions = synthui::window(app, ctx, t, "Alchemy", size, SKIN, &ext, |p| body(p, &mut st, &live, &fx_params, audio_name.as_deref(), &presets, &cur, &mut zdoc, zpos, &notes));
+    let zdirty = std::mem::take(&mut st.ed.dirty);
     ctx.data_mut(|d| d.insert_temp(st_id, st));
+    if zdirty {
+        instwin::checkpoint_once(app, ctx, t, "Edit Zones");
+        store_zones(app, t, zdoc.clone());
+    }
     let mut file = dropped.first().cloned();
     for a in actions {
         let (verb, arg) = a.split_once(':').unwrap_or((a.as_str(), ""));
@@ -71,6 +92,7 @@ pub fn window(app: &mut App, ctx: &egui::Context, t: usize) {
                 }
             }
             "seq-import" => seq_import(app, t, arg),
+            v if v.starts_with('z') => zone_action(app, ctx, st_id, t, v, arg, &mut zdoc),
             "arp-import" => arp_import(app, t, arg),
             _ => {}
         }
@@ -176,11 +198,19 @@ fn arp_import(app: &mut App, t: usize, arg: &str) {
     instwin::set_params(app, t, &pairs);
 }
 
-fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], audio: Option<&str>, presets: &[String], cur: &str) {
+#[allow(clippy::too_many_arguments)]
+fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>, Vec<f32>)>], audio: Option<&str>, presets: &[String], cur: &str, zdoc: &mut lg_synth::alchemy_zones::ZoneDoc, zpos: Option<(usize, usize, f64)>, notes: &[u8]) {
     let ix = Ix::new(p.params);
     st.levels = live.levels;
     st.perform = live.perform;
     name_bar(p, &ix, st, presets, cur);
+    // the source edit window covers everything below the Name bar (Advanced view)
+    if st.view == 0 && st.ed.open {
+        let mut ed = std::mem::take(&mut st.ed);
+        crate::alchemyedit::body(p, &ix, st, &mut ed, zdoc, zpos, notes);
+        st.ed = ed;
+        return;
+    }
     match st.view {
         1 => perform(p, &ix, st, fx, 46.0),
         2 => {
@@ -197,7 +227,7 @@ fn body(p: &mut Pane, st: &mut St, live: &Live, fx: &[Option<(Vec<lg_dsp::Param>
                 s => {
                     nav(p, st);
                     source_filters(p, &ix, st, (s - 1) as u32);
-                    source_page(p, &ix, st, (s - 1) as u32, audio);
+                    source_page(p, &ix, st, (s - 1) as u32, audio, zdoc, zpos);
                 }
             }
             rack::section(p, &ix, st, live, 5.0, 290.0, W - 10.0, 234.0);
@@ -398,12 +428,12 @@ fn nav(p: &mut Pane, st: &mut St) {
 }
 
 /// The source soloed (1–4) by an Option-click, if any.
-fn soloed(p: &Pane) -> Option<usize> {
+pub(crate) fn soloed(p: &Pane) -> Option<usize> {
     p.ui.data(|d| d.get_temp::<(usize, [f32; 4])>(egui::Id::unique(("alch-solo", p.t)))).map(|x| x.0)
 }
 
 /// Solos source `k` (1–4) — only it on — or, when it's soloed, puts the sources back.
-fn solo(p: &mut Pane, k: usize) {
+pub(crate) fn solo(p: &mut Pane, k: usize) {
     let sid = egui::Id::unique(("alch-solo", p.t));
     let saved: Option<(usize, [f32; 4])> = p.ui.data(|d| d.get_temp(sid));
     match saved {
@@ -423,10 +453,12 @@ fn solo(p: &mut Pane, k: usize) {
     }
 }
 
-const ELEMENTS: [&str; 4] = ["VA", "Additive", "Spectral", "Granular"];
+const ELEMENTS: [&str; 6] = ["VA", "Additive", "Spectral", "Granular", "Formant", "Sampler"];
 
 fn element(p: &Pane, ix: &Ix, s: u32) -> usize {
-    if g(p, ix, 313 + s) >= 0.5 { 3 } else if g(p, ix, 309 + s) >= 0.5 { 2 } else if g(p, ix, 293 + s) >= 0.5 { 1 } else { 0 }
+    if g(p, ix, lg_synth::alchemy_zones::SAMP_ON + s) >= 0.5 {
+        5
+    } else if g(p, ix, 313 + s) >= 0.5 { 3 } else if g(p, ix, 309 + s) >= 0.5 { 2 } else if g(p, ix, 293 + s) >= 0.5 { 1 } else { 0 }
 }
 
 fn global(p: &mut Pane, ix: &Ix, st: &mut St) {
@@ -859,7 +891,8 @@ pub fn apply(a: &lg_synth::wav::Audio, al: &mut lg_synth::alchemy::Alchemy) {
 
 /// A source's subpage: the element buttons (VA, Additive, Spectral, Granular) and Formant,
 /// Import Audio…, and the chosen element's controls.
-fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) {
+fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>, zdoc: &lg_synth::alchemy_zones::ZoneDoc, zpos: Option<(usize, usize, f64)>) {
+    use lg_synth::alchemy_zones as az;
     use lg_synth::alchemy_partials::{self as ap, id};
     let su = s as usize;
     p.text(84.0, 66.0, Align2::LEFT_CENTER, &format!("SOURCE {}", ["A", "B", "C", "D"][su]), 12.5, p.skin.text);
@@ -868,10 +901,10 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
         0 => playing,
         v => (v - 1) as usize,
     };
-    let names = ["VA", "ADDITIVE", "SPECTRAL", "GRANULAR", "FORMANT"];
-    let flags = [297 + s, 293 + s, 309 + s, 313 + s, id(su, ap::FM_ON)];
+    let names = ["VA", "ADDITIVE", "SPECTRAL", "GRANULAR", "FORMANT", "SAMPLER", "PITCH"];
+    let flags = [297 + s, 293 + s, 309 + s, 313 + s, id(su, ap::FM_ON), az::SAMP_ON + s, lg_synth::alchemy_pitch::id(su, lg_synth::alchemy_pitch::ON)];
     for (k, n) in names.iter().enumerate() {
-        let r = p.rect(170.0 + k as f32 * 76.0, 56.0, 74.0, 20.0);
+        let r = p.rect(160.0 + k as f32 * 57.0, 56.0, 55.0, 20.0);
         if rack::flat(p, r, n, view == k, true, ("elem", s, k)) {
             st.elem[su] = k as u8 + 1;
         }
@@ -882,11 +915,43 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
     p.menu(560.0, 88.0, 90.0, 20.0, lg_synth::alchemy::KEYSCALE + s);
     p.text(560.0, 116.0, Align2::LEFT_CENTER, "Keyscale", 10.0, p.skin.dim);
     rack::knob(p, ix, st, 700.0, 82.0, 30.0, lg_synth::alchemy::WAIT + s, "Wait");
+    // Edit opens the source edit window; Stereo: a circle mono, a double circle stereo
+    if rack::flat(p, p.rect(616.0, 118.0, 40.0, 20.0), "Edit", false, true, ("src-edit", s)) {
+        st.ed.open = true;
+        st.ed.src = su;
+        st.ed.sel.clear();
+        st.ed.group = 0;
+        if let Some(gr) = zdoc.src[su].groups.first()
+            && !gr.zones.is_empty()
+        {
+            st.ed.sel = vec![(0, 0)];
+        }
+    }
+    let stereo = g(p, ix, az::STEREO + s) >= 0.5;
+    let sr = p.rect(744.0, 118.0, 30.0, 20.0);
+    let sresp = p.ui.interact(sr, egui::Id::unique(("alch-stereo", p.t, s)), Sense::click()).on_hover_text(if stereo { "Stereo" } else { "Mono" });
+    p.ui.painter().rect_filled(sr, 3.0, rack::BTN);
+    let c = sr.center();
+    if stereo {
+        p.ui.painter().circle_stroke(c - vec2(3.5, 0.0), 5.0, Stroke::new(1.2, p.skin.text));
+        p.ui.painter().circle_stroke(c + vec2(3.5, 0.0), 5.0, Stroke::new(1.2, p.skin.text));
+    } else {
+        p.ui.painter().circle_stroke(c, 5.0, Stroke::new(1.2, p.skin.text));
+    }
+    if sresp.clicked() {
+        p.put(az::STEREO + s, if stereo { 0.0 } else { 1.0 });
+    }
     // the element's own On (the engine plays one element: Granular, else Spectral, else Additive, else VA)
     let on_id = flags[view];
     let on = g(p, ix, on_id) >= 0.5;
     if rack::flat(p, p.rect(84.0, 88.0, 30.0, 20.0), "On", on, true, ("elem-on", s, view)) {
         p.put(on_id, if on { 0.0 } else { 1.0 });
+        // the Sampler and Granular elements are mutually exclusive
+        if !on && view == 5 {
+            p.put(313 + s, 0.0);
+        } else if !on && view == 3 {
+            p.put(az::SAMP_ON + s, 0.0);
+        }
     }
     let k = |p: &mut Pane, st: &mut St, x: f32, y: f32, d: f32, pid: u32, l: &str| rack::knob(p, ix, st, x, y, d, pid, l);
     match view {
@@ -948,8 +1013,48 @@ fn source_page(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>) 
             }
         }
         3 => {
-            for (j, (pid, l)) in [(35 + s, "Position"), (39 + s, "Speed"), (47 + s, "Density")].iter().enumerate() {
-                k(p, st, 150.0 + j as f32 * 70.0, 124.0, 40.0, *pid, l);
+            use lg_synth::alchemy_gran::{self as gr, id as gid};
+            let sync = g(p, ix, gid(su, gr::SYNC)) >= 0.5;
+            if rack::flat(p, p.rect(124.0, 88.0, 50.0, 20.0), "Sync", sync, true, ("gran-sync", s)) {
+                p.put(gid(su, gr::SYNC), if sync { 0.0 } else { 1.0 });
+            }
+            rack::menu_arrows(p, ix, 190.0, 88.0, 100.0, gid(su, gr::SHAPE));
+            p.text(190.0, 114.0, Align2::LEFT_CENTER, "Grain Shape", 10.0, p.skin.dim);
+            // Sync: Formant Shift in place of Size and Density
+            let mut row: Vec<(u32, &str)> = vec![(35 + s, "Position"), (39 + s, "Speed")];
+            if sync {
+                row.push((gid(su, gr::FORMANT), "Formant"));
+            } else {
+                row.extend([(gid(su, gr::SIZE), "Size"), (gid(su, gr::DENSITY), "Density")]);
+            }
+            row.extend([(gid(su, gr::RTIME), "RTime"), (gid(su, gr::RPAN), "RPan"), (gid(su, gr::VOL), "Volume")]);
+            for (j, (pid, l)) in row.iter().enumerate() {
+                k(p, st, 110.0 + j as f32 * 62.0, 124.0, 36.0, *pid, l);
+            }
+            let taps = [(gid(su, gr::TAPS), "Num Taps"), (gid(su, gr::INTERVAL), "Tap Interval"), (gid(su, gr::DELAY), "Tap Delay"), (gid(su, gr::SPACING), "Tap Spacing"), (gid(su, gr::STOFFSET), "StOffset")];
+            for (j, (pid, l)) in taps.iter().enumerate() {
+                k(p, st, 110.0 + j as f32 * 70.0, 196.0, 36.0, *pid, l);
+            }
+            // Num Taps in whole taps; Tap Interval in semitones unless Shift is held
+            let nt = p.get(gid(su, gr::TAPS));
+            if nt.fract() != 0.0 {
+                p.put(gid(su, gr::TAPS), nt.round());
+            }
+            let iv = p.get(gid(su, gr::INTERVAL));
+            if iv.fract() != 0.0 && !p.ui.input(|i| i.modifiers.shift) && p.set.iter().any(|x| x.0 == gid(su, gr::INTERVAL)) {
+                p.put(gid(su, gr::INTERVAL), iv.round());
+            }
+        }
+        5 => sampler_view(p, ix, st, su, zdoc, zpos),
+        6 => {
+            // pitch correction of the additive / spectral partials
+            use lg_synth::alchemy_pitch::{self as pc, id as pid};
+            k(p, st, 150.0, 124.0, 40.0, pid(su, pc::AMOUNT), "Amount");
+            k(p, st, 220.0, 124.0, 40.0, pid(su, pc::SPEED), "Speed");
+            rack::menu_arrows(p, ix, 280.0, 136.0, 120.0, pid(su, pc::RULE));
+            p.text(280.0, 162.0, Align2::LEFT_CENTER, "Pitch", 10.0, p.skin.dim);
+            if !matches!(element(p, ix, s), 1 | 2) {
+                p.text(124.0, 220.0, Align2::LEFT_CENTER, "Pitch correction acts on the Additive and Spectral elements", 10.0, p.skin.dim);
             }
         }
         _ => {
@@ -1857,5 +1962,192 @@ fn source_select(p: &mut Pane, ix: &Ix, st: &mut St, s: u32, audio: Option<&str>
                 p.put(*id, *v);
             }
         }
+    }
+}
+
+/// Stores the source edit window's zones (the running instrument plays them at once).
+fn store_zones(app: &mut App, t: usize, doc: lg_synth::alchemy_zones::ZoneDoc) {
+    let Some(id) = instwin::track_id(app, t) else { return };
+    let arc = std::sync::Arc::new(doc.clone());
+    instwin::with_inst(app, t, |a: &mut lg_synth::alchemy::Alchemy| a.set_zones(arc));
+    app.inst.alch_zones.insert(id, doc);
+    app.dirty = true;
+}
+
+/// Reads audio files for zones: their root key from the filename, else from pitch analysis.
+fn zone_files(paths: &[std::path::PathBuf], app: &mut App) -> Vec<lg_synth::alchemy_zones::ImportFile> {
+    let mut out = Vec::new();
+    for f in paths {
+        match lg_synth::wav::read_audio(f) {
+            Ok(a) => out.push(zone_file(f, &a)),
+            Err(e) => app.tell(format!("Couldn't import {}: {e}", f.display())),
+        }
+    }
+    out
+}
+
+pub fn zone_file(f: &std::path::Path, a: &lg_synth::wav::Audio) -> lg_synth::alchemy_zones::ImportFile {
+    let name = f.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let root = lg_synth::sampler_doc::root_from_name(&name).or_else(|| {
+        let ch = a.channels.len().max(1) as f32;
+        let mono: Vec<f32> = (0..a.frames()).map(|i| a.channels.iter().map(|c| c.get(i).copied().unwrap_or(0.0)).sum::<f32>() / ch).collect();
+        let data = lg_synth::sampler::SampleData { rate: a.rate as f32, ch: vec![lg_synth::sampler::Pcm::F32(mono)] };
+        lg_synth::sampler_doc::detect_pitch(&data).map(|(k, c)| (k as f32 + c / 100.0).round().clamp(0.0, 127.0) as u8)
+    });
+    let audio = std::sync::Arc::new(lg_synth::alchemy_zones::ZAudio { ch: a.channels.clone(), rate: a.rate as f32 });
+    lg_synth::alchemy_zones::ImportFile { name, path: Some(f.to_path_buf()), audio, root }
+}
+
+fn audio_dialog(title: &str) -> kn_ui::files::FileDialog {
+    kn_ui::files::FileDialog::new().set_title(title).add_filter("Audio", &["wav", "aif", "aiff", "WAV", "AIF", "AIFF"])
+}
+
+/// The source edit window's file and audition actions.
+fn zone_action(app: &mut App, ctx: &egui::Context, st_id: egui::Id, t: usize, verb: &str, arg: &str, doc: &mut lg_synth::alchemy_zones::ZoneDoc) {
+    use lg_synth::alchemy_zones as az;
+    let a: Vec<usize> = arg.split(':').filter_map(|x| x.parse().ok()).collect();
+    let s = a.first().copied().unwrap_or(0).min(3);
+    let mut changed = false;
+    match verb {
+        "zgimport" => {
+            let Some(ps) = audio_dialog("Import Audio").pick_files() else { return };
+            let files = zone_files(&ps, app);
+            if files.is_empty() {
+                return;
+            }
+            let g = doc.src[s].import(files, az::Mapping::Pitch, false);
+            // the Sampler element plays the zones (Granular off: the two are exclusive)
+            instwin::checkpoint(app, t, "Import Audio");
+            instwin::set_params(app, t, &[(277 + s as u32, 1.0), (az::SAMP_ON + s as u32, 1.0), (313 + s as u32, 0.0)]);
+            let mut st: St = ctx.data(|d| d.get_temp(st_id)).unwrap_or_default();
+            st.ed.group = g;
+            st.ed.sel = vec![(g, 0)];
+            ctx.data_mut(|d| d.insert_temp(st_id, st));
+            return store_zones(app, t, doc.clone());
+        }
+        "zadd" => {
+            let Some(ps) = audio_dialog("Add Zone").pick_files() else { return };
+            let files = zone_files(&ps, app);
+            let zones = az::map_zones(files, az::Mapping::Pitch);
+            let g = a.get(1).copied().filter(|&g| g < doc.src[s].groups.len());
+            doc.src[s].paste(zones, g);
+            changed = true;
+        }
+        "zexchange" | "zstep" => {
+            let (g, z) = if verb == "zexchange" { (a.get(1).copied().unwrap_or(0), a.get(2).copied().unwrap_or(0)) } else { (0, 0) };
+            let Some(old) = doc.src[s].zone(g, z).cloned() else { return };
+            let path = if verb == "zexchange" {
+                audio_dialog("Exchange Sample").pick_file()
+            } else {
+                // ‹ ›: the previous / next audio file in the sample's folder
+                let d: i64 = arg.split(':').nth(1).and_then(|x| x.parse().ok()).unwrap_or(1);
+                old.file.as_ref().and_then(|f| {
+                    let dir = f.parent()?;
+                    let mut list: Vec<std::path::PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|x| x.extension().is_some_and(|e| ["wav", "aif", "aiff"].contains(&e.to_string_lossy().to_lowercase().as_str()))).collect();
+                    list.sort();
+                    let i = list.iter().position(|x| x == f)? as i64;
+                    list.get((i + d).rem_euclid(list.len() as i64) as usize).cloned()
+                })
+            };
+            let Some(path) = path else { return };
+            let Some(f) = zone_files(&[path], app).pop() else { return };
+            if let Some(zn) = doc.src[s].zone_mut(g, z) {
+                let n = f.audio.frames() as u32;
+                zn.name = f.name;
+                zn.file = f.path;
+                zn.audio = Some(f.audio);
+                if let Some(r) = f.root {
+                    zn.key = r;
+                }
+                zn.start = 0;
+                zn.end = n;
+                zn.set_loop(0, n);
+                zn.xfade = zn.xfade.min(n);
+            }
+            changed = true;
+        }
+        "zclear" => {
+            doc.src[s] = Default::default();
+            changed = true;
+        }
+        "zaud-key" => {
+            let (n, v) = (a.get(1).copied().unwrap_or(60) as u8, a.get(2).copied().unwrap_or(100) as u8);
+            instwin::with_inst(app, t, |al: &mut lg_synth::alchemy::Alchemy| {
+                al.audition_stop();
+                al.audition_key(s, n, v)
+            });
+        }
+        "zaud-zone" => {
+            let (g, z) = (a.get(1).copied().unwrap_or(0), a.get(2).copied().unwrap_or(0));
+            instwin::with_inst(app, t, |al: &mut lg_synth::alchemy::Alchemy| {
+                al.audition_stop();
+                al.audition_zone(s, g, z)
+            });
+        }
+        "zaud-stop" => {
+            instwin::with_inst(app, t, |al: &mut lg_synth::alchemy::Alchemy| al.audition_stop());
+        }
+        _ => {}
+    }
+    if changed {
+        instwin::checkpoint(app, t, "Edit Zones");
+        store_zones(app, t, doc.clone());
+    }
+}
+
+/// The Sampler element: On (with the source page's On), Volume, Reverse, the Loop Mode with
+/// Position / Speed — or Loop Start and Loop End / Length in Start/End and Start/Length — and the
+/// sample's waveform with the newest note's play position.
+fn sampler_view(p: &mut Pane, ix: &Ix, st: &mut St, s: usize, zdoc: &lg_synth::alchemy_zones::ZoneDoc, zpos: Option<(usize, usize, f64)>) {
+    use lg_synth::alchemy_zones as az;
+    let su = s as u32;
+    if zdoc.src[s].zone_count() == 0 {
+        p.text(300.0, 170.0, Align2::CENTER_CENTER, "Import audio in Sampler mode (source pop-up ▸ Import Audio… or Edit ▸ Group +)", 11.0, p.skin.dim);
+    }
+    let rev = g(p, ix, az::SAMP_REV + su) >= 0.5;
+    if rack::flat(p, p.rect(124.0, 88.0, 60.0, 20.0), "Reverse", rev, true, ("samp-rev", s)) {
+        p.put(az::SAMP_REV + su, if rev { 0.0 } else { 1.0 });
+    }
+    rack::menu_arrows(p, ix, 200.0, 88.0, 110.0, az::LOOP_MODE + su);
+    p.text(200.0, 114.0, Align2::LEFT_CENTER, "Loop Mode", 10.0, p.skin.dim);
+    rack::knob(p, ix, st, 110.0, 124.0, 38.0, az::SAMP_VOL + su, "Volume");
+    let mode = g(p, ix, az::LOOP_MODE + su).round() as u8;
+    let pair = match mode {
+        az::L_STARTEND => [(az::LOOP_START + su, "Loop Start"), (az::LOOP_END + su, "Loop End")],
+        az::L_STARTLEN => [(az::LOOP_START + su, "Loop Start"), (az::LOOP_END + su, "Loop Length")],
+        _ => [(35 + su, "Position"), (39 + su, "Speed")],
+    };
+    for (j, (pid, l)) in pair.iter().enumerate() {
+        rack::knob(p, ix, st, 180.0 + j as f32 * 64.0, 124.0, 38.0, *pid, l);
+    }
+    // the waveform of the zone sounding (else the first zone)
+    let r = p.rect(330.0, 124.0, 440.0, 96.0);
+    p.ui.painter().rect_filled(r, 3.0, rgb(0x15181d));
+    let src = &zdoc.src[s];
+    let shown = zpos.and_then(|(g, z, at)| src.zone(g, z).map(|zn| (zn, Some(at)))).or_else(|| src.first_zone().map(|z| (z, None)));
+    if let Some((z, at)) = shown
+        && let Some(a) = z.audio.as_ref()
+    {
+        let d = &a.ch[0];
+        let n = d.len().max(1);
+        let cols = r.width() as usize;
+        let mid = r.center().y;
+        for c in 0..cols {
+            let (i0, i1) = (c * n / cols, ((c + 1) * n / cols).max(c * n / cols + 1).min(n));
+            let (mut mn, mut mx) = (0.0f32, 0.0f32);
+            for &v in d[i0..i1].iter().step_by(((i1 - i0) / 32).max(1)) {
+                mn = mn.min(v);
+                mx = mx.max(v);
+            }
+            p.ui.painter().vline(r.min.x + c as f32 + 0.5, (mid - mx * 44.0)..=(mid - mn * 44.0 + 0.5), Stroke::new(1.0, rgb(0x5f86b3)));
+        }
+        // the progress of the newest note (and the Position when idle)
+        let frac = match at {
+            Some(f) => f as f32 / n as f32,
+            None => g(p, ix, 35 + su),
+        };
+        let x = r.min.x + frac.clamp(0.0, 1.0) * r.width();
+        p.ui.painter().vline(x, r.y_range(), Stroke::new(1.0, Color32::WHITE));
+        p.ui.painter().with_clip_rect(r).text(r.left_top() + vec2(4.0, 3.0), Align2::LEFT_TOP, &z.name, look::regular(10.0), p.skin.dim);
     }
 }

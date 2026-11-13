@@ -274,6 +274,8 @@ struct Pending {
     xfade: f32,
     start_mod: f32,
     times: [f32; 4],
+    /// The LFO Phase targets' offsets at note on.
+    lfo_phase: [f32; LFOS],
     glide_from: Option<f32>,
     random: f32,
     vel: f32,
@@ -493,6 +495,7 @@ impl Voice<SamplerShared> for SamplerVoice {
             let ls = &sh.syn.lfo[k];
             if ls.key_trigger || !self.on {
                 self.lfo[k].restart(ls, (note as u32 + 1) * 7919 + k as u32 * 104729 + (pd.random * 1000.0) as u32);
+                self.lfo[k].phase = (self.lfo[k].phase + pd.lfo_phase[k]).rem_euclid(1.0);
             }
             self.lfo_val[k] = 0.0;
         }
@@ -580,13 +583,14 @@ impl Voice<SamplerShared> for SamplerVoice {
             self.on = false;
             return;
         }
-        let (ls, le) = if z.reverse {
+        let (ls0, le0) = if z.reverse {
             (s0 + e0 - z.loop_end.min(e0), s0 + e0 - z.loop_start.max(s0))
         } else {
             (z.loop_start.max(s0), z.loop_end.min(e0))
         };
-        let looping = looping_mode && le > ls + 1;
-        let llen = (le - ls) as f64;
+        let (mut ls, mut le) = (ls0, le0);
+        let mut looping = looping_mode && le > ls + 1;
+        let mut llen = (le - ls) as f64;
         let phys = |k: usize| if z.reverse { s0 + e0 - 1 - k } else { k };
         let mut peak = 0.0f32;
         let mut i = 0;
@@ -606,6 +610,12 @@ impl Voice<SamplerShared> for SamplerVoice {
                 let via = (rt.via != Source::None).then(|| self.source(rt.via, sh, ctl));
                 md[rt.target] += sampler_synth::route_value(rt, s, via);
             }
+            // the loop targets: Loop Start / End move one point, Loop Position both
+            if syn.has_target[target::LOOP_START] || syn.has_target[target::LOOP_END] || syn.has_target[target::LOOP_POS] {
+                (ls, le) = moved_loop(ls0, le0, s0, e0, md[target::LOOP_START], md[target::LOOP_END], md[target::LOOP_POS]);
+                looping = looping_mode && le > ls + 1;
+                llen = (le - ls) as f64;
+            }
             for k in 0..LFOS {
                 lfo_rate_mod[k] = md[target::LFO_RATE + k];
                 let ls_ = &syn.lfo[k];
@@ -615,6 +625,14 @@ impl Voice<SamplerShared> for SamplerVoice {
                 }
                 if ls_.poly {
                     let hz = ls_.rate(syn.bpm) * 2f32.powf(lfo_rate_mod[k] * 4.0);
+                    // LFO Fade: the fade (ramp) time scaled by the target
+                    let faded;
+                    let ls_ = if syn.has_target[target::LFO_FADE + k] {
+                        faded = sampler_synth::LfoSet { fade: ls_.fade * 2f32.powf(md[target::LFO_FADE + k] * 4.0), ..*ls_ };
+                        &faded
+                    } else {
+                        ls_
+                    };
                     self.lfo_val[k] = self.lfo[k].advance(ls_, hz, dt);
                 } else {
                     self.lfo_val[k] = sh.lfo_mono_val[k];
@@ -1042,6 +1060,7 @@ impl Sampler {
         let start_mod = if syn.has_target[target::SAMPLE_START] { note_on_mod(target::SAMPLE_START, note, vn, random, &self.sh, &ctl).max(0.0) } else { 0.0 };
         let tm = |t: usize, sh: &SamplerShared| if sh.syn.has_target[t] { 2f32.powf(note_on_mod(t, note, vn, random, sh, &ctl) * 4.0) } else { 1.0 };
         let times = [tm(target::ENV1_ATTACK, &self.sh), tm(target::ENV1_DECAY, &self.sh), tm(target::ENV1_RELEASE, &self.sh), tm(target::ENV_ALL, &self.sh)];
+        let lfo_phase: [f32; LFOS] = std::array::from_fn(|k| if syn.has_target[target::LFO_PHASE + k] { note_on_mod(target::LFO_PHASE + k, note, vn, random, &self.sh, &ctl) } else { 0.0 });
         let unison = self.sh.syn.unison.max(1) as usize;
         let detune = self.sh.syn.detune;
         let mut chosen = [0usize; 16];
@@ -1111,7 +1130,7 @@ impl Sampler {
                 } else {
                     (0.0, 0.0)
                 };
-                self.sh.pending = Pending { zone: zi, detune: dt, pan, xfade, start_mod, times, glide_from, random, vel: vn, key_shift };
+                self.sh.pending = Pending { zone: zi, detune: dt, pan, xfade, start_mod, times, lfo_phase, glide_from, random, vel: vn, key_shift };
                 self.sh.npending = 1;
                 self.counter += 1;
                 self.poly.note_on(note, vel, &self.sh, &self.ch.ctl);
@@ -2386,4 +2405,59 @@ pub fn write_test_instrument(dir: &Path) -> std::io::Result<PathBuf> {
     let p = dir.join("test.sfz");
     std::fs::write(&p, sfz)?;
     Ok(p)
+}
+
+/// The loop points (logical frames) moved by the Loop Start, Loop End and Loop Position
+/// modulation values (each −1…1 of the zone's length), kept inside start…end with start < end;
+/// Loop Position keeps the length.
+pub fn moved_loop(ls: usize, le: usize, s0: usize, e0: usize, ms: f32, me: f32, mp: f32) -> (usize, usize) {
+    let len = (e0 - s0) as f32;
+    let shift = mp * len;
+    let lo = (ls as f32 + ms * len + shift).clamp(s0 as f32, e0 as f32 - 2.0);
+    let hi = (le as f32 + me * len + shift).clamp(lo + 2.0, e0 as f32);
+    // Loop Position at the end: slide back so the length stays
+    let (lo, hi) = if mp != 0.0 && hi - lo < (le - ls) as f32 && hi >= e0 as f32 { ((e0 - (le - ls)).max(s0) as f32, e0 as f32) } else { (lo, hi) };
+    (lo as usize, hi as usize)
+}
+
+#[cfg(test)]
+mod loop_target_tests {
+    use super::moved_loop;
+
+    #[test]
+    fn loop_targets_move_the_loop() {
+        // zone 0..1000, loop 400..600
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.1, 0.0, 0.0), (500, 600));
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, -0.1, 0.0), (400, 500));
+        // Loop Position: the whole loop, length kept
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, 0.0, 0.2), (600, 800));
+        assert_eq!(moved_loop(400, 600, 0, 1000, 0.0, 0.0, 0.9), (800, 1000));
+        // start never passes the end
+        let (a, b) = moved_loop(400, 600, 0, 1000, 0.5, 0.0, 0.0);
+        assert!(a < b);
+    }
+}
+
+#[cfg(test)]
+mod lfo_target_tests {
+    use crate::sampler_synth::{Lfo, LfoSet};
+
+    #[test]
+    fn lfo_fade_scaling_and_phase_offset() {
+        let s = LfoSet { on: true, wave: 2, hz: 1.0, fade: 1.0, bipolar: false, poly: true, ..Default::default() };
+        let sq = LfoSet { wave: 3, ..s };
+        let mut a = Lfo::default();
+        a.restart(&sq, 1);
+        // with the fade doubled (target +0.25 → ×2), half the level after 0.5 s
+        let long = LfoSet { fade: sq.fade * 2f32.powf(0.25 * 4.0), ..sq };
+        let mut b = Lfo::default();
+        b.restart(&long, 1);
+        let (x, y) = (a.advance(&sq, 0.0, 0.5), b.advance(&long, 0.0, 0.5));
+        assert!(y < x * 0.6, "{x} {y}");
+        // a phase offset moves the start of the waveform
+        let mut c = Lfo::default();
+        c.restart(&LfoSet { fade: 0.0, ..s }, 1);
+        c.phase = (c.phase + 0.25).rem_euclid(1.0);
+        assert!((c.advance(&LfoSet { fade: 0.0, ..s }, 0.0, 0.0) - 0.25).abs() < 1e-6);
+    }
 }

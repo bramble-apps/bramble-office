@@ -99,6 +99,7 @@ pub struct Snap {
     pub params: Vec<(u32, f32)>,
     pub pads: Option<crate::dmdwin::Pads>,
     pub quick: Option<crate::quickwin::QuickDoc>,
+    pub alch: Option<lg_synth::alchemy_zones::ZoneDoc>,
 }
 
 #[derive(Default)]
@@ -132,6 +133,8 @@ pub struct State {
     pub gesture: bool,
     /// Alchemy's imported audio (granular / additive / spectral sources) by track id.
     pub alch_audio: HashMap<u64, (PathBuf, std::sync::Arc<lg_synth::wav::Audio>)>,
+    /// Alchemy's sample zones and groups (the source edit window) by track id.
+    pub alch_zones: HashMap<u64, lg_synth::alchemy_zones::ZoneDoc>,
     /// What each track's running instrument last got: (the instance, the revision).
     pub applied: HashMap<u64, (usize, u64)>,
     /// The synthesizers' current setting name by track id (synthui's Setting pop-up).
@@ -211,7 +214,7 @@ pub fn bump(app: &mut App, t: usize) {
 
 fn snap(app: &App, id: u64, t: usize) -> Snap {
     let params = values(app, t).map(|(p, v)| p.iter().zip(v).map(|(p, v)| (p.id, v)).collect()).unwrap_or_default();
-    Snap { doc: app.inst.docs.get(&id).cloned(), params, pads: app.inst.pads.get(&id).cloned(), quick: app.inst.quick.get(&id).cloned() }
+    Snap { doc: app.inst.docs.get(&id).cloned(), params, pads: app.inst.pads.get(&id).cloned(), quick: app.inst.quick.get(&id).cloned(), alch: app.inst.alch_zones.get(&id).cloned() }
 }
 
 /// Before an editor change: the state as it is goes on the plug-in undo list.
@@ -249,6 +252,14 @@ fn restore(app: &mut App, id: u64, s: Snap) {
         }
         None => {
             app.inst.quick.remove(&id);
+        }
+    }
+    match s.alch {
+        Some(d) => {
+            app.inst.alch_zones.insert(id, d);
+        }
+        None => {
+            app.inst.alch_zones.remove(&id);
         }
     }
     let p = s.params.clone();
@@ -332,6 +343,7 @@ pub fn sync(app: &mut App) {
                 if let Some((_, au)) = app.inst.alch_audio.get(&id) {
                     crate::alchemywin::apply(au, a);
                 }
+                a.set_zones(std::sync::Arc::new(app.inst.alch_zones.get(&id).cloned().unwrap_or_default()));
             } else if let Some(q) = any.downcast_mut::<lg_synth::quick::QuickSampler>() {
                 if let Some(qd) = app.inst.quick.get(&id) {
                     crate::quickwin::apply(qd, q);
@@ -393,6 +405,16 @@ fn test_hook(app: &mut App) {
         "Quick Sampler" => {
             if let Some(a) = files.first().and_then(|f| lg_synth::wav::read_audio(f).ok()) {
                 app.inst.quick.insert(id, crate::quickwin::QuickDoc { file: files.first().cloned(), audio: Some(std::sync::Arc::new(a)), history: files.first().cloned().into_iter().collect(), ..Default::default() });
+            }
+        }
+        "Alchemy" => {
+            // the files as one group of source A's zones, played by its Sampler element
+            let fs: Vec<_> = files.iter().filter_map(|f| lg_synth::wav::read_audio(f).ok().map(|a| crate::alchemywin::zone_file(f, &a))).collect();
+            if !fs.is_empty() {
+                let mut d = lg_synth::alchemy_zones::ZoneDoc::default();
+                d.src[0].import(fs, lg_synth::alchemy_zones::Mapping::Pitch, false);
+                app.inst.alch_zones.insert(id, d);
+                set_params(app, t, &[(lg_synth::alchemy_zones::SAMP_ON, 1.0), (297, 0.0)]);
             }
         }
         "Drum Machine Designer" => {
@@ -590,4 +612,5 @@ pub fn note_played(app: &mut App, pitch: u8) {
     app.inst.last_played = Some(pitch);
     crate::samplerwin::note_played(app, pitch);
     crate::dmdwin::note_played(app, pitch);
+    crate::alchemyedit::note_played(pitch);
 }

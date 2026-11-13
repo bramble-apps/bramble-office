@@ -216,6 +216,17 @@ pub const TARGETS: &[&str] = &[
     "Env 1 Release",
     "All Env Time Stages",
     "Articulation ID",
+    "Loop Start",
+    "Loop End",
+    "Loop Position",
+    "LFO 1 Fade",
+    "LFO 2 Fade",
+    "LFO 3 Fade",
+    "LFO 4 Fade",
+    "LFO 1 Phase",
+    "LFO 2 Phase",
+    "LFO 3 Phase",
+    "LFO 4 Phase",
 ];
 pub mod target {
     pub const NONE: usize = 0;
@@ -239,7 +250,16 @@ pub mod target {
     pub const ENV1_RELEASE: usize = 21;
     pub const ENV_ALL: usize = 22;
     pub const ARTICULATION: usize = 23;
-    pub const COUNT: usize = 24;
+    /// Loop Start / End move one loop point, Loop Position the whole loop (its length kept);
+    /// full depth = the zone's whole length.
+    pub const LOOP_START: usize = 24;
+    pub const LOOP_END: usize = 25;
+    pub const LOOP_POS: usize = 26;
+    /// LFO n Fade scales its fade (ramp) time ×2^(4·mod); LFO n Phase offsets its start phase
+    /// (by the value at note on).
+    pub const LFO_FADE: usize = 27;
+    pub const LFO_PHASE: usize = 31;
+    pub const COUNT: usize = 35;
 }
 
 /// The synth parameters (ids 21 and up), appended to the Sampler's own.
