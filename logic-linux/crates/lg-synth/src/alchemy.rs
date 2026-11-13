@@ -214,6 +214,10 @@ struct SourceCfg {
     send: u8,
     /// The additive / spectral / formant settings (alchemy_partials).
     part: crate::alchemy_partials::PartCfg,
+    /// The Sampler element (alchemy_zones): on, its Volume, and how the zones play.
+    samp: bool,
+    samp_vol: f32,
+    play: crate::alchemy_zones::PlayCfg,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -268,6 +272,11 @@ pub(crate) struct AlchShared {
     note_pan: f32,
     arp_mod: [f32; 2],
     playhead: f32,
+    /// The zones the next note plays (note on: Attack groups; note off: Release groups) and the
+    /// serial number its players get.
+    zhits: crate::alchemy_zones::Hits,
+    zrel: crate::alchemy_zones::Hits,
+    zserial: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -361,6 +370,11 @@ pub(crate) struct AlchVoice {
     own: Option<AlchShared>,
     ov: crate::alchemy_mod::Overlay,
     lv: [f32; 6],
+    /// The sample zones (alchemy_zones) and the zones this voice plays per source.
+    zdoc: Option<Arc<crate::alchemy_zones::ZoneDoc>>,
+    zp: [[crate::alchemy_zones::Player; crate::alchemy_zones::MAX_HITS]; 4],
+    held: bool,
+    zr: [(f32, f32); CHUNK],
 }
 
 impl AlchVoice {
@@ -398,6 +412,10 @@ impl AlchVoice {
             own: None,
             ov: Default::default(),
             lv: [0.0; 6],
+            zdoc: None,
+            zp: Default::default(),
+            held: false,
+            zr: [(0.0, 0.0); CHUNK],
         }
     }
 }
@@ -406,6 +424,44 @@ fn spec_at(pos: f32) -> (usize, usize, f32) {
     let x = pos.clamp(0.0, 1.0) * (NSPEC - 1) as f32;
     let a = (x as usize).min(NSPEC - 2);
     (a, a + 1, x - a as f32)
+}
+
+impl AlchVoice {
+    /// Starts players for the zones in the shared hits (note on: Attack, note off: Release).
+    fn start_zones(&mut self, sh: &AlchShared, release: bool) {
+        let Some(zd) = self.zdoc.clone() else { return };
+        let hits = if release { &sh.zrel } else { &sh.zhits };
+        for s in 0..4 {
+            if !sh.src[s].samp {
+                continue;
+            }
+            for &(g, z, gain) in hits.of(s) {
+                let Some(gr) = zd.src[s].groups.get(g as usize) else { continue };
+                let Some(zn) = gr.zones.get(z as usize) else { continue };
+                let mut p = crate::alchemy_zones::Player::start(zn, &sh.src[s].play, g, z, gain, sh.zserial);
+                if release {
+                    p.release = true;
+                    if gr.fade > 0.0 {
+                        // a release group with a Fade fades in, crossfading with the others
+                        p.fade = 0.0;
+                        p.fade_step = 1.0 / (crate::alchemy_zones::fade_seconds(gr.fade) * sh.rate).max(1.0);
+                    }
+                }
+                let slot = self.zp[s].iter().position(|q| !q.on).unwrap_or(0);
+                self.zp[s][slot] = p;
+            }
+        }
+    }
+
+    /// Players of a group sounding in this voice: (source, slot, serial).
+    pub(crate) fn group_players(&self, s: usize, g: u8) -> impl Iterator<Item = (usize, u64)> + '_ {
+        self.zp[s].iter().enumerate().filter(move |(_, p)| p.on && p.group == g && p.fade_step >= 0.0).map(|(k, p)| (k, p.serial))
+    }
+
+    /// Fades a player out quickly (group Poly stealing).
+    pub(crate) fn steal(&mut self, s: usize, k: usize, rate: f32) {
+        self.zp[s][k].fade_step = -1.0 / (0.005 * rate);
+    }
 }
 
 impl Voice<AlchShared> for AlchVoice {
@@ -476,6 +532,11 @@ impl Voice<AlchShared> for AlchVoice {
                 s.nf = Svf::new(SvfMode::Band, 1200.0, 0.8, rate);
             }
         }
+        self.held = true;
+        if !self.legato {
+            self.zp = Default::default();
+            self.start_zones(sh, false);
+        }
         let [a, d, su, r] = sh.amp_env;
         self.amp.set(a, d, su, r, rate);
         let [a, d, su, r] = sh.filt_env;
@@ -491,7 +552,21 @@ impl Voice<AlchShared> for AlchVoice {
             }
         }
     }
-    fn release(&mut self, _sh: &AlchShared, _ctl: &Ctl) {
+    fn release(&mut self, sh: &AlchShared, _ctl: &Ctl) {
+        self.held = false;
+        // Attack groups with a Fade fade out from the note off; Release groups start
+        if let Some(zd) = self.zdoc.clone() {
+            for (s, ps) in self.zp.iter_mut().enumerate() {
+                for p in ps.iter_mut().filter(|p| p.on && !p.release) {
+                    if let Some(g) = zd.src[s].groups.get(p.group as usize)
+                        && g.fade > 0.0
+                    {
+                        p.fade_step = -1.0 / (crate::alchemy_zones::fade_seconds(g.fade) * sh.rate).max(1.0);
+                    }
+                }
+            }
+            self.start_zones(sh, true);
+        }
         self.mv.release();
         self.amp.gate_off();
         self.fenv.gate_off();
@@ -543,7 +618,7 @@ impl Voice<AlchShared> for AlchVoice {
         for si in 0..4 {
             let c = sh.src[si];
             // Wait: the source starts a while after the key
-            if c.kind == Kind::Off || c.vol <= 0.0 || self.age < c.wait {
+            if (c.kind == Kind::Off && !c.samp) || c.vol <= 0.0 || self.age < c.wait {
                 continue;
             }
             // Keyscale: Key+PBend follows notes and bend, Key only notes, Off neither (C3)
@@ -719,7 +794,53 @@ impl Voice<AlchShared> for AlchVoice {
                     }
                     st.gpos = (st.gpos + c.speed * n as f32 / rate * 0.2).fract();
                 }
-                Kind::Off => {}
+                Kind::Off => {
+                    bl[..n].fill(0.0);
+                    br[..n].fill(0.0);
+                }
+            }
+            // the Sampler element: the zones the note started (Release groups' zones go past
+            // the amplitude envelope, so they sound after the key is let go)
+            if c.samp
+                && let Some(zd) = self.zdoc.clone()
+            {
+                let src = &zd.src[si];
+                for p in self.zp[si].iter_mut().filter(|p| p.on) {
+                    let Some(z) = src.zone(p.group as usize, p.zone as usize) else {
+                        p.on = false;
+                        continue;
+                    };
+                    let Some(a) = z.audio.as_ref() else {
+                        p.on = false;
+                        continue;
+                    };
+                    let inc = (hz / lg_dsp::midi_hz(z.key as f32) * dsp::semis(z.coarse + z.fine / 100.0) * a.rate / rate) as f64;
+                    let zpan = (c.pan + z.pan).clamp(-1.0, 1.0);
+                    let (gl, gr) = if c.play.stereo && a.ch.len() > 1 {
+                        ((1.0 - zpan).min(1.0), (1.0 + zpan).min(1.0))
+                    } else {
+                        ((1.0 - zpan).sqrt(), (1.0 + zpan).sqrt())
+                    };
+                    let g = vol * c.samp_vol * lg_dsp::db_to_gain(z.vol_db) * p.gain;
+                    for i in 0..n {
+                        if !p.on {
+                            break;
+                        }
+                        let (x, y) = p.next(z, &c.play, self.held, inc);
+                        let f = p.fade;
+                        p.fade = (p.fade + p.fade_step).clamp(0.0, 1.0);
+                        if p.fade_step < 0.0 && p.fade <= 0.0 {
+                            p.on = false;
+                        }
+                        if p.release {
+                            self.zr[i].0 += x * g * f * gl;
+                            self.zr[i].1 += y * g * f * gr;
+                        } else {
+                            bl[i] += x * g * f * gl;
+                            br[i] += y * g * f * gr;
+                        }
+                    }
+                }
             }
             if c.noise && c.noise_vol > 0.0 {
                 // the noise oscillator: white, pink or brown, through its Low Cut and High Cut
@@ -860,8 +981,10 @@ impl Voice<AlchShared> for AlchVoice {
             if self.killing {
                 g *= self.fade.next();
             }
-            let yl = xl * g * pl;
-            let yr = xr * g * pr;
+            let (zl, zr) = std::mem::take(&mut self.zr[i]);
+            let gz = vel_g * 0.65 * sh.vol * if self.killing { self.fade.gain } else { 1.0 };
+            let yl = xl * g * pl + zl * gz * pl;
+            let yr = xr * g * pr + zr * gz * pr;
             self.dry[i] = (dl * g * pl, dr * g * pr);
             for k in 0..4 {
                 if self.rk_used[k] {
@@ -879,7 +1002,8 @@ impl Voice<AlchShared> for AlchVoice {
         self.age += n as f32 / rate;
         self.lv[4] = f1p;
         self.lv[5] = f2p;
-        if self.amp.idle() || (self.killing && self.fade.gain <= 0.0) {
+        let rel = self.zp.iter().flatten().any(|p| p.on && p.release);
+        if (self.amp.idle() && !rel) || (self.killing && self.fade.gain <= 0.0) {
             self.on = false;
         }
     }
@@ -1085,6 +1209,11 @@ pub struct Alchemy {
     nkeys: usize,
     last: f32,
     sounding: Option<u8>,
+    /// The sample zones (alchemy_zones), the rules' state and the zones auditioned from the
+    /// source edit window (straight to the outputs: source, increment, gain, player).
+    zdoc: Option<Arc<crate::alchemy_zones::ZoneDoc>>,
+    pub zst: crate::alchemy_zones::ZState,
+    preview: Vec<(usize, f64, f32, bool, crate::alchemy_zones::Player)>,
 }
 
 /// Every parameter: Logic's Alchemy ids, then the Arpeggiator / MSEG / effects pages'.
@@ -1098,6 +1227,7 @@ pub fn all_params() -> &'static [Param] {
             v.push(Param::new(ROUTE_F2 + k as u32, n, 0.0, 1.0, 0.0, Unit::Ratio));
         }
         v.push(Param::new(LIMITER, "Limiter", 0.0, 1.0, 1.0, Unit::OnOff));
+        v.extend(crate::alchemy_zones::params());
         v.extend(crate::alchemy_partials::params());
         v.extend(crate::alchemy_arp::params());
         v.extend(crate::alchemy_fx::params());
@@ -1209,6 +1339,9 @@ impl Alchemy {
                 note_pan: 0.0,
                 arp_mod: [0.0; 2],
                 playhead: 0.0,
+                zhits: Default::default(),
+                zrel: Default::default(),
+                zserial: 0,
             };
         let mut a = Alchemy {
             params,
@@ -1253,6 +1386,9 @@ impl Alchemy {
             nkeys: 0,
             last: f32::NAN,
             sounding: None,
+            zdoc: None,
+            zst: Default::default(),
+            preview: Vec::new(),
         };
         a.room.feedback = 0.82;
         let params = &a.params;
@@ -1329,13 +1465,17 @@ impl Alchemy {
             note_pan: 0.0,
             arp_mod: [0.0; 2],
             playhead: 0.0,
+            zhits: Default::default(),
+            zrel: Default::default(),
+            zserial: 0,
         };
         let envt = |x: f32, lo: f32, hi: f32| lo * (hi / lo).powf(x.clamp(0.0, 1.0));
         for s in 0..4 {
             let on = p(277 + s as u32) >= 0.5;
+            let samp = on && p(crate::alchemy_zones::SAMP_ON + s as u32) >= 0.5;
             let kind = if !on {
                 Kind::Off
-            } else if p(313 + s as u32) >= 0.5 {
+            } else if p(313 + s as u32) >= 0.5 && !samp {
                 Kind::Granular
             } else if p(309 + s as u32) >= 0.5 {
                 Kind::Spectral
@@ -1402,6 +1542,20 @@ impl Alchemy {
                 wait: p(WAIT + s as u32),
                 part: crate::alchemy_partials::PartCfg::read(p, s),
                 route: p(ROUTE_F2 + s as u32),
+                samp,
+                samp_vol: p(crate::alchemy_zones::SAMP_VOL + s as u32),
+                play: {
+                    use crate::alchemy_zones as z;
+                    let s = s as u32;
+                    z::PlayCfg {
+                        mode: p(z::LOOP_MODE + s).round().clamp(0.0, 6.0) as u8,
+                        reverse: p(z::SAMP_REV + s) >= 0.5,
+                        stereo: p(z::STEREO + s) >= 0.5,
+                        ls: p(z::LOOP_START + s),
+                        le: p(z::LOOP_END + s),
+                        position: p(35 + s),
+                    }
+                },
             };
         }
         morph(&mut sh, p);
@@ -1498,6 +1652,173 @@ impl Alchemy {
         }
     }
 
+    /// The sample zones (alchemy_zones) for every voice; the zones sounding stop.
+    pub fn set_zones(&mut self, doc: Arc<crate::alchemy_zones::ZoneDoc>) {
+        for v in &mut self.poly.voices {
+            v.zdoc = Some(doc.clone());
+            v.zp = Default::default();
+        }
+        self.preview.clear();
+        self.zdoc = Some(doc);
+    }
+
+    fn trig_ctx(&self, note: u8, vel: u8) -> crate::alchemy_zones::TrigCtx<'_> {
+        let mut pf = [0.0; 8];
+        pf.copy_from_slice(&self.pf[..8]);
+        crate::alchemy_zones::TrigCtx {
+            note,
+            vel,
+            snap: nearest_snapshot(self.p(17), self.p(18)) as u8 + 1,
+            // the Keyswitch knob as the modulation section moves it
+            keysw: [0, 1, 2, 3].map(|s| self.mg.ov.apply(crate::alchemy_zones::KEYSW + s, self.p(crate::alchemy_zones::KEYSW + s), 1.0, 10.0)),
+            perform: pf,
+            pads: [self.pf[8], self.pf[9], self.pf[10], self.pf[11]],
+            env: [self.pf[12], self.pf[13], self.pf[14], self.pf[15]],
+            cc: &self.mg.cc,
+            morph: self.p(MORPH).round() >= 3.0,
+        }
+    }
+
+    /// The zones the next note on (or note off) plays, for the voices to pick up.
+    fn zone_hits(&mut self, note: u8, vel: u8, release: bool) {
+        let Some(doc) = self.zdoc.clone() else { return };
+        let mut st = std::mem::take(&mut self.zst);
+        let mut h = crate::alchemy_zones::Hits::default();
+        crate::alchemy_zones::hits(&doc, release, &self.trig_ctx(note, vel), &mut st, &mut h);
+        st.serial += 1;
+        self.sh.zserial = st.serial;
+        self.zst = st;
+        if release {
+            self.sh.zrel = h;
+        } else {
+            self.sh.zhits = h;
+        }
+    }
+
+    /// Group Poly: past a group's limit the oldest of its zones stop.
+    fn group_poly(&mut self) {
+        let Some(doc) = self.zdoc.clone() else { return };
+        for (s, src) in doc.src.iter().enumerate() {
+            for (g, gr) in src.groups.iter().enumerate() {
+                if gr.poly == 0 {
+                    continue;
+                }
+                let mut all: Vec<(u64, usize, usize)> = Vec::new();
+                for (vi, v) in self.poly.voices.iter().enumerate() {
+                    if v.on {
+                        all.extend(v.group_players(s, g as u8).map(|(k, ser)| (ser, vi, k)));
+                    }
+                }
+                if all.len() > gr.poly as usize {
+                    all.sort();
+                    let over = all.len() - gr.poly as usize;
+                    for &(_, vi, k) in &all[..over] {
+                        self.poly.voices[vi].steal(s, k, self.rate);
+                    }
+                }
+            }
+        }
+    }
+
+    /// A key on the keymap keyboard: the source's zones for the note and velocity, straight to
+    /// the outputs (no filters, effects or envelopes).
+    pub fn audition_key(&mut self, s: usize, note: u8, vel: u8) {
+        let Some(doc) = self.zdoc.clone() else { return };
+        let mut st = self.zst.clone();
+        let mut h = crate::alchemy_zones::Hits::default();
+        crate::alchemy_zones::hits(&doc, false, &self.trig_ctx(note, vel), &mut st, &mut h);
+        let play = self.sh.src[s.min(3)].play;
+        for &(g, z, gain) in h.of(s.min(3)) {
+            if let Some(zn) = doc.src[s].zone(g as usize, z as usize)
+                && let Some(a) = zn.audio.as_ref()
+            {
+                let inc = (lg_dsp::midi_hz(note as f32) / lg_dsp::midi_hz(zn.key as f32) * dsp::semis(zn.coarse + zn.fine / 100.0) * a.rate / self.rate) as f64;
+                let p = crate::alchemy_zones::Player::start(zn, &play, g, z, 1.0, 0);
+                self.preview.push((s, inc, gain * lg_dsp::db_to_gain(zn.vol_db), true, p));
+            }
+        }
+    }
+
+    /// The zone preview (the > button): the sample at its own pitch with the loop settings, but
+    /// without its Tune, Volume and Pan.
+    pub fn audition_zone(&mut self, s: usize, g: usize, z: usize) {
+        let Some(doc) = self.zdoc.clone() else { return };
+        if let Some(zn) = doc.src.get(s).and_then(|x| x.zone(g, z))
+            && let Some(a) = zn.audio.as_ref()
+        {
+            let play = self.sh.src[s].play;
+            let p = crate::alchemy_zones::Player::start(zn, &play, g as u8, z as u16, 1.0, 0);
+            self.preview.push((s, (a.rate / self.rate) as f64, 1.0, true, p));
+        }
+    }
+
+    /// Stops auditioning (a quick fade).
+    pub fn audition_stop(&mut self) {
+        for e in &mut self.preview {
+            e.3 = false;
+            e.4.fade_step = -1.0 / (0.01 * self.rate);
+        }
+    }
+
+    /// How many zones of a source are sounding (not fading out).
+    pub fn zones_sounding(&self, s: usize) -> usize {
+        self.poly.voices.iter().filter(|v| v.on).map(|v| v.zp[s.min(3)].iter().filter(|p| p.on && p.fade_step >= 0.0).count()).sum()
+    }
+
+    /// Whether anything is being auditioned.
+    pub fn auditioning(&self) -> bool {
+        self.preview.iter().any(|e| e.4.on)
+    }
+
+    /// The newest zone sounding in a source: (group, zone, position in frames) — the play
+    /// position the Sampler element and the waveform show.
+    pub fn zone_position(&self, s: usize) -> Option<(usize, usize, f64)> {
+        let mut best: Option<(u64, usize, usize, f64)> = None;
+        for v in self.poly.voices.iter().filter(|v| v.on) {
+            for p in v.zp[s.min(3)].iter().filter(|p| p.on) {
+                if best.is_none_or(|b| p.serial >= b.0) {
+                    best = Some((p.serial, p.group as usize, p.zone as usize, p.pos));
+                }
+            }
+        }
+        if best.is_none() {
+            for e in self.preview.iter().filter(|e| e.0 == s && e.4.on) {
+                best = Some((0, e.4.group as usize, e.4.zone as usize, e.4.pos));
+            }
+        }
+        best.map(|b| (b.1, b.2, b.3))
+    }
+
+    fn render_preview(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let Some(doc) = self.zdoc.clone() else {
+            self.preview.clear();
+            return;
+        };
+        for e in &mut self.preview {
+            let (s, inc, gain, held) = (e.0, e.1, e.2, e.3);
+            let play = self.sh.src[s.min(3)].play;
+            let p = &mut e.4;
+            let Some(z) = doc.src[s.min(3)].zone(p.group as usize, p.zone as usize) else {
+                p.on = false;
+                continue;
+            };
+            for i in 0..left.len().min(right.len()) {
+                if !p.on {
+                    break;
+                }
+                let (x, y) = p.next(z, &play, held, inc);
+                let f = p.fade;
+                p.fade = (p.fade + p.fade_step).clamp(0.0, 1.0);
+                if p.fade_step < 0.0 && p.fade <= 0.0 {
+                    p.on = false;
+                }
+                left[i] += x * gain * f * 0.7;
+                right[i] += y * gain * f * 0.7;
+            }
+        }
+        self.preview.retain(|e| e.4.on);
+    }
+
     /// The held key Num 1 plays, by Voice Priority (Newest, Oldest, Lowest, Highest).
     fn choose(&self) -> Option<(u8, u8)> {
         let k = &self.keys[..self.nkeys];
@@ -1534,6 +1855,7 @@ impl Alchemy {
                 }
                 None => {
                     self.sh.from = if trig != 2 { self.last } else { f32::NAN };
+                    self.zone_hits(want, wv, false);
                     self.poly.note_on(want, wv, &self.sh, &self.ch.ctl);
                     self.sounding = Some(want);
                     self.last = want as f32;
@@ -1541,7 +1863,9 @@ impl Alchemy {
             }
         } else {
             self.sh.from = if trig != 2 || held_before { self.last } else { f32::NAN };
+            self.zone_hits(pitch, vel, false);
             self.poly.note_on(pitch, vel, &self.sh, &self.ch.ctl);
+            self.group_poly();
             self.last = pitch as f32;
         }
         self.sh.from = f32::NAN;
@@ -1552,6 +1876,7 @@ impl Alchemy {
     fn move_mono(&mut self, cur: u8, want: u8, vel: u8, retrig: bool) {
         self.sh.retrig = retrig;
         self.sh.from = self.last;
+        self.zone_hits(want, vel, false);
         if !self.poly.legato(cur, want, vel, &self.sh, &self.ch.ctl) {
             self.sh.retrig = true;
             self.poly.note_on(want, vel, &self.sh, &self.ch.ctl);
@@ -1563,6 +1888,8 @@ impl Alchemy {
     }
 
     fn play_off(&mut self, pitch: u8) {
+        let vel = self.keys[..self.nkeys].iter().find(|e| e.0 == pitch).map(|e| e.1).unwrap_or(64);
+        self.zone_hits(pitch, vel, true);
         if let Some(i) = self.keys[..self.nkeys].iter().position(|e| e.0 == pitch) {
             self.keys.copy_within(i + 1..self.nkeys, i);
             self.nkeys -= 1;
@@ -1834,6 +2161,13 @@ impl Instrument for Alchemy {
     fn note_on(&mut self, pitch: u8, velocity: u8) {
         if velocity == 0 {
             return self.note_off(pitch);
+        }
+        // a note keyswitch (a group's Keyswitch rule with a note range) switches, not plays
+        if let Some(doc) = self.zdoc.clone()
+            && crate::alchemy_zones::keyswitch_note(&doc, &mut self.zst, pitch)
+        {
+            self.switch_keys |= 1u128 << pitch;
+            return;
         }
         // the Transform pad's Octave: its first eight notes switch snapshots 1–8 (not played)
         let oct = self.p(SNAP_OCTAVE).round() as i32;
@@ -2162,6 +2496,9 @@ impl Instrument for Alchemy {
                 right[pos + i] += sr[i] * gr * vol;
             }
             pos += m;
+        }
+        if !self.preview.is_empty() {
+            self.render_preview(&mut left[..n], &mut right[..n]);
         }
     }
 }

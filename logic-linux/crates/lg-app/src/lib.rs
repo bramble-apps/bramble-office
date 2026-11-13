@@ -113,6 +113,7 @@ mod quickwin;
 mod drumsynthwin;
 mod legacywin;
 mod dkdwin;
+mod alchemyedit;
 mod alchemyrack;
 mod alchemywin;
 mod keyswin;
