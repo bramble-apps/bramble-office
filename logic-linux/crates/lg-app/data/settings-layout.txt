@@ -295,11 +295,11 @@ row		text	Articulation Switches
 # column title "Set" (13pt regular) sits over the second popup column (x≈233), not at the control column
 row		text	Set		
 row	MIDI Remote:	popup	Off	Off	~Off|On
-row	^	popup	Global	Global	
+row	^	popup	Global	Global	~Global|Per Channel Strip
 row	MIDI Channel:	popup	All	All	~All|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16
-row	^	popup	Global	Global	
-row	Octave Offset:	popup	0 (disabled)	0	~-3|-2|-1|0|1|2|3
-row	^	popup	Per Channel Strip	Per Channel Strip	
+row	^	popup	Global	Global	~Global|Per Channel Strip
+row	Octave Offset:	popup	0 (disabled)	0	~-10|-9|-8|-7|-6|-5|-4|-3|-2|-1|0|1|2|3|4|5|6|7|8|9|10
+row	^	popup	Per Channel Strip	Per Channel Strip	~Global|Per Channel Strip
 
 === MIDI / Reset Messages ===
 # window: 750x596 points
@@ -523,11 +523,16 @@ row	Track Color:	popup	Static	Static	~Static|Auto-assign 24 Colors|Auto-assign 9
 row	Region Color:	popup	Individual	Individual	~Individual|As Track Color
 row	Marker Color:	popup	Static	Static	~Static|Auto-assign 24 Colors|Auto-assign 96 Colors
 row	Background:	popup	Dark	Dark	~Dark|Light|Custom
+row	^	slider	Background Level	30	~0..100
 row		separator			
 # heading
 row		text	Grid Lines		
 row	Placement:	popup	Foreground	Foreground	~Foreground|Background
 row	Color:	check	Automatic	1	
+row	Horizontal:	slider		30	~0..100
+row	^	check	Black	0	
+row	Vertical:	slider		30	~0..100
+row	^	check	Black	0	
 row		separator			
 # heading
 row		text	Regions		

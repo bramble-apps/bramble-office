@@ -520,6 +520,11 @@ pub const SLOT_MENU: &[(&str, &[(&str, &str)])] = &[
     ("Vintage Keys", &[("Vintage B3 Organ", "Vintage B3 Organ"), ("Vintage Clav", "Vintage Clav"), ("Vintage Electric Piano", "Vintage Electric Piano"), ("Vintage Mellotron", "Vintage Mellotron")]),
 ];
 
+/// An instrument's name as the slot menu has it (for the recent list).
+fn static_name(n: &str) -> Option<&'static str> {
+    SLOT_MENU.iter().flat_map(|(_, items)| items.iter().map(|(_, name)| *name)).chain(lg_synth::legacy::VARIANTS.iter().map(|(name, _)| *name)).chain(std::iter::once("Drum Machine Designer")).find(|x| *x == n)
+}
+
 /// The instrument slot's menu; picking an instrument puts it on the track.
 pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
     let mut pick: Option<Option<&str>> = None;
@@ -530,6 +535,7 @@ pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
         resp.ctx.data_mut(|d| d.insert_temp(legacy_id, alt));
     }
     let legacy: bool = resp.ctx.data(|d| d.get_temp(legacy_id)).unwrap_or(false);
+    crate::recentplug::sync(&app.logic_settings);
     resp.context_menu(|ui| {
         ui.set_min_width(200.0);
         if ui.button("No Plug-in").clicked() {
@@ -537,6 +543,10 @@ pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
             ui.close();
         }
         ui.separator();
+        // (Show recent plug-in list in plug-in menu: the last picks first)
+        if let Some(n) = crate::recentplug::menu_items(ui, true) {
+            pick = static_name(&n).map(Some);
+        }
         for (cat, items) in SLOT_MENU {
             ui.menu_button(*cat, |ui| {
                 for (label, name) in *items {
@@ -581,6 +591,7 @@ pub fn slot_menu(app: &mut App, resp: &egui::Response, t: usize) {
     let Some(choice) = pick else { return };
     match choice {
         Some(n) => {
+            crate::recentplug::used(true, n);
             app.instrument_choice.insert(t, n.to_string());
         }
         None => {

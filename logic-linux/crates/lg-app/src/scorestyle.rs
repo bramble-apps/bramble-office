@@ -774,6 +774,9 @@ fn params(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
                 ui.add_space(40.0);
                 ui.label(egui::RichText::new("Assign").strong());
             });
+            // (the Color menu: Black, Pitch, Velocity and the project's User Palette names)
+            let pal_names = crate::scorecolors::Palette::from(&app.proj).names;
+            let color_names: Vec<&str> = COLOR_NAMES[..3].iter().copied().chain(pal_names.iter().map(|s| s.as_str())).collect();
             egui::Grid::new("ssw-voices").striped(true).spacing(vec2(4.0, 4.0)).show(ui, |ui| {
                 let mut cols = vec![];
                 if cur.mapped {
@@ -803,7 +806,7 @@ fn params(app: &mut App, ui: &mut egui::Ui, w: &mut Win, cur: &StaffStyleDef) {
                     set(ui, "t", v.tie, &ss::TIES, 50.0, "Voice Tie", |v, x| v.tie = x);
                     set(ui, "tu", v.tuplet, &ss::TUPLETS, 50.0, "Voice Tuplet", |v, x| v.tuplet = x);
                     set(ui, "b", v.beam, &ss::BEAMS, 54.0, "Voice Beam", |v, x| v.beam = x);
-                    set(ui, "c", v.color, &COLOR_NAMES, 64.0, "Voice Color", |v, x| v.color = x);
+                    set(ui, "c", v.color, &color_names, 64.0, "Voice Color", |v, x| v.color = x);
                     set(ui, "h", v.head, &ss::HEADS, 80.0, "Voice Head", |v, x| v.head = x);
                     if let Some(x) = drag_num(ui, v.split as i32, 0..=127, |n| if n == 0 { "–".into() } else { pitch_name(n as u8) }) {
                         edit(app, &name, "Voice Split", |d| d.voices[k].split = x as u8);

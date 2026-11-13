@@ -36,6 +36,7 @@ const LANE_INSET: f32 = 8.0;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     crate::trackarea::sync(app);
+    let tv = crate::tracksview::apply(&app.logic_settings);
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::ta_lane());
     // ---- the local menu bar
@@ -151,8 +152,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let num_col = |x: f32| if cycle_on && x > crect.min.x && x < crect.max.x { Color32::from_gray(0x20) } else { Color32::from_gray(0xf7) };
     // (the Project End marker sits right of its bar line: that bar's number moves past it)
     let end_x = x_of(crate::projend::end(app) as f32, scroll);
+    // (Use musical grid off: the ruler reads in time, timeruler.rs; the bars keep their ticks)
+    let musical = app.rec.musical_grid;
     let bar_mark = |rp: &egui::Painter, x: f32, n: i32, numbered: bool| {
-        if numbered {
+        if numbered && musical {
             rp.vline(x, upper_r.min.y + 2.0..=upper_r.max.y, Stroke::new(1.0, look::ta_ruler_bar()));
             let nx = if (x - end_x).abs() < 0.5 { x + 11.0 } else { x + 4.0 };
             rp.text(pos2(nx, upper_r.min.y - 0.5), Align2::LEFT_TOP, format!("{n}"), look::regular(13.0), num_col(x + 4.0));
@@ -180,6 +183,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             for k in 1..beats as i32 {
                 rp.vline(x + k as f32 * beat_w, lower_r.max.y - 8.0..=lower_r.max.y, Stroke::new(1.0, look::ta_ruler_tick()));
             }
+        }
+    }
+    if !musical {
+        let (t0, t1) = ((scroll * bar_t) as f64, ((scroll + ruler.width() / bw) * bar_t) as f64);
+        for (t, text) in crate::timeruler::labels(app, t0, t1, px_per_tick as f64) {
+            let x = x_of(t as f32, scroll);
+            rp.vline(x, upper_r.min.y + 2.0..=upper_r.max.y, Stroke::new(1.0, look::ta_ruler_bar()));
+            rp.text(pos2(x + 4.0, upper_r.min.y - 0.5), Align2::LEFT_TOP, text, look::regular(13.0), num_col(x + 4.0));
         }
     }
     // the ruler (Logic, DRAGS.txt): the upper strip (bar numbers) draws a cycle area and turns
@@ -680,6 +691,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 if !app.show_automation {
                     crate::regionops::fades(app, ui, rr, lanes, i, ri, tool, &xo, &to);
                 }
+            }
+        }
+        // Grid Lines Placement Foreground: the bar lines over the regions too
+        if tv.foreground {
+            for &x in &bar_xs {
+                lp.vline(x, lane.min.y..=lane.max.y - 1.0, Stroke::new(1.0, look::ta_bar_line()));
             }
         }
         // a stack's main track: its subtracks' regions (closed), a folder's region

@@ -293,7 +293,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         let mut last_right = ctrl_x;
         for (k, row) in sec.rows.iter().enumerate() {
             // (I/O Assignments: surround_ui draws the Output / Bounce Extensions / Input panes)
-            if crate::surround_ui::skip_setting_row(&sec.tab, &sec.sub, &row.kind) {
+            if crate::surround_ui::skip_setting_row(&sec.tab, &sec.sub, &row.kind) || crate::tracksview::row_hidden(&values, &row.key) {
                 continue;
             }
             let same_line = row.label == "^";

@@ -199,7 +199,11 @@ const ROWS: &[Row] = &[
     Row("Score", "Clefs & Signatures", "Key Signatures:", Kind::Popup(&crate::scoreset::SHOW), "Every Staff"),
     Row("Score", "Clefs & Signatures", "Time Signatures:", Kind::Popup(&crate::scoreset::SHOW), "First Staff on Page 1"),
     Row("Score", "Clefs & Signatures", "Hide bar lines", Kind::Check, "0"),
+<<<<<<< HEAD
     Row("Score", "Clefs & Signatures", "Smaller Clef Changes:", Kind::Popup(&crate::scoreset::SMALLER_CLEFS), "-2"),
+=======
+    Row("Score", "Colors", "Type:", Kind::Popup(&crate::scorecolors::TYPES), "Chromatic"),
+>>>>>>> studio-projshare
     Row("Smart Tempo", "", "Project Tempo Mode:", Kind::Popup(&["Keep Project Tempo", "Adapt Project Tempo", "Automatic Mode"]), "Automatic Mode"),
     Row("Smart Tempo", "", "Set New Recordings To:", Kind::Popup(&crate::stdefaults::CHOICES), "Flex Off"),
     Row("Smart Tempo", "", "Trim start of new regions", Kind::Check, "0"),
