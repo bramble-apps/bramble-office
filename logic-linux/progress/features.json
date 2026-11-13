@@ -482,6 +482,16 @@
  {
   "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
   "status": "Partial",
+  "feature": "Chord track (chordtrk.rs, 2026-11-12, tested): chords with positions and lengths (Project::global), groups, loops; select / Shift / group pick, move, trim, Junction, Loop tool with notches, (+) / Pencil / Create Chord / Tab, Edit Chord (root, type, extensions, bass, preview), Chord Progressions, Cut / Copy / Paste / Delete, Group / Ungroup, Halve / Double Chord Rhythm, Transpose, Analyze Key Signature; the players follow. [ ] Scale pop-up, MIDI Input, group trimming, saving to the .logicx, Session Player Editor chord commands"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Partial",
+  "feature": "Step Editor tools (stepedit.rs): Pointer / Pencil / Eraser / Line, step selection (Shift-click, Shift-drag), Delete, group value drags, Fix Value preset; Delete MIDI Events menu"
+ },
+ {
+  "area": "Bramble extras (beyond Logic: users' requests Logic 13 didn't deliver)",
+  "status": "Partial",
   "feature": "Step Editor Lane inspector (stepedit.rs, tested): Status (Note, Control, C-Press, P-Press, Program, PitchBd lanes on the region's events), rename, Delay, Length, Channel, First Data Byte on / off; edits on all selected lanes; lane names drag to reorder, click selects the lane's notes, double-click opens Convert. [ ] Fader / Meta lanes, Lane Set pop-up in the inspector, Logic's Convert dialog"
  },
  {

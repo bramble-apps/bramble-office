@@ -39,6 +39,9 @@ impl Player {
 /// The chords the players follow: the chord track's (one per bar from bar 1), repeated to cover
 /// `until`.
 pub fn chords(app: &App, until: u32) -> Vec<ChordAt> {
+    if let Some(v) = crate::chordtrk::playing(app) {
+        return v;
+    }
     let bar = app.bar_ticks();
     let text = if app.chord_text.trim().is_empty() { "C Am F G" } else { app.chord_text.as_str() };
     let one = parse_bars(text, 0, bar);

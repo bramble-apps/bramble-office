@@ -303,6 +303,8 @@ pub struct App {
     /// The global tracks shown, their order and heights (globals.rs).
     pub gt: crate::globals::State,
     pub arrm: crate::arrmarks::State,
+    /// The Chord track (chordtrk.rs).
+    pub ct: crate::chordtrk::State,
     pub ti: crate::tempointerp::State,
     pub stm: crate::stmulti::State,
     pub gc: crate::globalclip::State,
@@ -533,6 +535,7 @@ impl App {
             mk: Default::default(),
             gt: Default::default(),
             arrm: Default::default(),
+            ct: Default::default(),
             ti: Default::default(),
             stm: Default::default(),
             gc: Default::default(),
@@ -1429,6 +1432,9 @@ impl App {
 
     /// Runs a Logic key command by its name; false when Studio doesn't have it yet.
     pub fn key_command(&mut self, ctx: &egui::Context, name: &str) -> bool {
+        if crate::chordtrk::command(self, name) || crate::regconvert::command(self, name) {
+            return true;
+        }
         if crate::listwin::command(self, ctx, name) || crate::evlist::command(self, ctx, name) || crate::groovecmd::command(self, name) || crate::joinaudio::command(self, name) || crate::demix::command(self, name) || crate::regsolo::command(self, name) || crate::varispeed::command(self, name) {
             return true;
         }

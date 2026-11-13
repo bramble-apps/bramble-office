@@ -16,6 +16,8 @@ pub mod allfilters;
 pub mod app;
 pub mod arp;
 pub mod arrmarks;
+pub mod chordtrk;
+pub mod regconvert;
 pub mod beatmapping;
 pub mod globalclip;
 pub mod stmulti;

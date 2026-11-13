@@ -412,6 +412,11 @@ pub(crate) fn run_transform(app: &mut App, t: &Transform, how: u8) -> bool {
     }
     let mut rng = app.midi.rng.clone();
     let roll = roll_ctx(app);
+    if t.uses_status() {
+        let ok = transform_events(app, t, how, &mut rng);
+        app.midi.rng = rng;
+        return ok;
+    }
     let ok = edit(app, &t.name, |notes, sel, i| {
         if how == 2 {
             let s = t.select(notes, i.start);
@@ -447,6 +452,56 @@ pub(crate) fn run_transform(app: &mut App, t: &Transform, how: u8) -> bool {
     });
     app.midi.rng = rng;
     ok
+}
+
+/// A Transform set with a Status condition, Status Fix or exchanged values: on every event of
+/// the region(s) (notes and the other events), Select and Operate selecting first.
+fn transform_events(app: &mut App, t: &Transform, how: u8, rng: &mut transform::Rng) -> bool {
+    use transform::Ev;
+    let roll = roll_ctx(app);
+    let regions: Vec<(usize, usize)> = if roll { app.selected_region.into_iter().collect() } else { app.region_selection() };
+    let regions: Vec<(usize, usize)> = regions.into_iter().filter(|&(t, r)| is_midi(app, t, r)).collect();
+    if regions.is_empty() {
+        return false;
+    }
+    app.checkpoint(&t.name);
+    let mut new_sel = None;
+    for (ti, ri) in regions {
+        let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) else { continue };
+        let start = rg.start;
+        // (muted notes stay as they are)
+        let (live, muted): (Vec<Note>, Vec<Note>) = rg.notes.iter().partition(|n| !n.muted);
+        let mut evs: Vec<Ev> = live.iter().map(Ev::of_note).collect();
+        let n_notes = evs.len();
+        evs.extend(rg.ext.events.iter().map(|e| Ev { kind: e.kind, pos: start + e.pos, ch: e.channel, d1: e.number, d2: e.value, len: 0 }));
+        let mut sel: Vec<usize> = if roll { app.selected_notes.iter().copied().filter(|&i| i < n_notes).collect() } else { Vec::new() };
+        if how == 2 || (how == 1 && !roll) || sel.is_empty() {
+            sel = Vec::new();
+        }
+        let done = t.apply_events(&mut evs, &sel, start, rng);
+        rg.notes = muted;
+        rg.ext.events.clear();
+        let mut note_sel = Vec::new();
+        for (k, e) in evs.iter().enumerate() {
+            if e.kind == 0x90 {
+                rg.notes.push(Note { channel: e.ch, pitch: e.d1, velocity: e.d2.max(1), pos: e.pos, len: e.len.max(1), muted: false });
+                if done.contains(&k) {
+                    note_sel.push(rg.notes.len() - 1);
+                }
+            } else {
+                rg.ext.events.push(lg_core::events::Control { kind: e.kind, channel: e.ch, pos: e.pos.saturating_sub(start), number: e.d1, value: e.d2 });
+            }
+        }
+        rg.ext.events.sort_by_key(|e| e.pos);
+        if roll {
+            new_sel = Some(note_sel);
+        }
+    }
+    if let Some(s) = new_sel {
+        app.selected_notes = s;
+    }
+    app.after_edit();
+    true
 }
 
 /// Runs a MIDI command by its Logic name; false when it isn't one (or there's nothing to do it
@@ -542,6 +597,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         "Select Overlapped Regions/Events" | "Overlapped Notes" | "Select Overlapped Notes" if roll => select(app, |notes, _, _| f::select_overlapped(notes)),
         "Select Equal Regions/Events" | "Same Note Pitch" if roll => select(app, |notes, sel, _| f::select_same_pitch(notes, sel)),
         "Select Similar Regions/Events" | "Same Note Name" if roll => select(app, |notes, sel, _| f::select_same_name(notes, sel)),
+        "Select Muted Regions/Cells/Events" | "Muted Notes" if roll => select(app, |notes, _, _| (0..notes.len()).filter(|&i| notes[i].muted).collect()),
         "Select Same Channels" | "Same MIDI Channel" => select(app, |notes, sel, _| f::select_same_channel(notes, sel)),
         "Select Same Subpositions" | "Same Subposition" if roll => select(app, |notes, sel, i| f::select_same_subposition(notes, sel, i.start, i.bar)),
         "Select Same-Colored Regions/Cells/Events" | "Same-Colored Notes" if roll => {

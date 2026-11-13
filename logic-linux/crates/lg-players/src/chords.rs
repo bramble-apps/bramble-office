@@ -29,7 +29,17 @@ pub const SIX: u16 = 0x291;
 pub const MIN6: u16 = 0x289;
 pub const ADD9: u16 = 0x095;
 
-const SUFFIXES: [(&str, u16); 16] = [
+const SUFFIXES: [(&str, u16); 26] = [
+    ("maj9", 0x895),
+    ("m11", 0x4AD),
+    ("m9", 0x48D),
+    ("7b9", 0x493),
+    ("7#9", 0x499),
+    ("7b5", 0x451),
+    ("7#5", 0x511),
+    ("13", 0x695),
+    ("11", 0x4B5),
+    ("9", 0x495),
     ("maj7", MAJ7),
     ("m7b5", HALFDIM7),
     ("dim7", DIM7),
@@ -238,7 +248,7 @@ mod tests {
 
     #[test]
     fn names_round_trip() {
-        for s in ["C", "Am", "F#m7", "Bbmaj7", "G7", "Dm7b5", "Esus4", "C/E", "Abdim"] {
+        for s in ["C", "Am", "F#m7", "Bbmaj7", "G7", "Dm7b5", "Esus4", "C/E", "Abdim", "C9", "Gmaj9", "Dm11", "E7#9", "A13", "Bb7b5"] {
             assert_eq!(Chord::parse(s).unwrap().name(), s);
         }
         assert_eq!(Chord::parse("Am").unwrap().mask, 0x89);

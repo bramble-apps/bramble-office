@@ -123,7 +123,7 @@ impl App {
         v
     }
 
-    fn select_regions(&mut self, v: Vec<(usize, usize)>) {
+    pub fn select_regions(&mut self, v: Vec<(usize, usize)>) {
         self.selected_region = v.last().copied();
         self.selected_regions = v;
         if let Some((t, _)) = self.selected_region {
@@ -396,6 +396,22 @@ impl App {
                     })).collect();
                     self.select_regions(v);
                 }
+            }
+            "Select Empty Regions/Cells" | "Empty Regions" => {
+                // MIDI regions without events (audio regions always have content)
+                let v: Vec<_> = self.all_regions().into_iter().filter(|(t, r)| self.project.as_ref().is_some_and(|p| {
+                    let x = &p.tracks[*t].regions[*r];
+                    x.audio.is_none() && x.notes.is_empty() && x.ext.events.is_empty()
+                })).collect();
+                self.select_regions(v);
+            }
+            "Select Same-Colored Regions/Cells/Events" | "Same-Colored Regions" => {
+                // the colours of the selected regions (a region without its own: its track's)
+                let color = |p: &lg_core::Project, t: usize, r: usize| p.tracks[t].regions[r].props.color.map(|c| c as i32).unwrap_or(-1 - t as i32);
+                let Some(p) = self.project.as_ref() else { return true };
+                let cols: Vec<i32> = self.region_selection().iter().map(|&(t, r)| color(p, t, r)).collect();
+                let v: Vec<_> = self.all_regions().into_iter().filter(|&(t, r)| cols.contains(&color(p, t, r))).collect();
+                self.select_regions(v);
             }
             "Select Overlapped Regions/Events" => {
                 let v: Vec<_> = self.all_regions().into_iter().filter(|(t, r)| self.project.as_ref().is_some_and(|p| {

@@ -520,10 +520,16 @@ pub enum CopyMode {
     MoveMerge,
     MoveReplace,
     MoveInsert,
+    /// The source moves to the destination; what lies between shifts toward the source.
+    Rotate,
+    /// The source and the same length at the destination swap places.
+    DirectSwap,
+    /// The source's events are deleted (the region stays).
+    Remove,
 }
 
 impl CopyMode {
-    pub const ALL: [CopyMode; 6] = [CopyMode::CopyMerge, CopyMode::CopyReplace, CopyMode::CopyInsert, CopyMode::MoveMerge, CopyMode::MoveReplace, CopyMode::MoveInsert];
+    pub const ALL: [CopyMode; 9] = [CopyMode::CopyMerge, CopyMode::CopyReplace, CopyMode::CopyInsert, CopyMode::MoveMerge, CopyMode::MoveReplace, CopyMode::MoveInsert, CopyMode::Rotate, CopyMode::DirectSwap, CopyMode::Remove];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -533,6 +539,9 @@ impl CopyMode {
             CopyMode::MoveMerge => "Move Merge",
             CopyMode::MoveReplace => "Move Replace",
             CopyMode::MoveInsert => "Move Insert",
+            CopyMode::Rotate => "Rotate",
+            CopyMode::DirectSwap => "Direct Swap",
+            CopyMode::Remove => "Remove",
         }
     }
 }
@@ -550,8 +559,38 @@ pub fn copy_events(notes: &mut Vec<Note>, sel: &mut Vec<usize>, a: u32, b: u32, 
     if source.is_empty() {
         return 0;
     }
-    let moving = matches!(mode, CopyMode::MoveMerge | CopyMode::MoveReplace | CopyMode::MoveInsert);
     let mut none = Vec::new();
+    match mode {
+        CopyMode::Remove => {
+            sel.clear();
+            remove_where(notes, &mut none, |_, n| n.pos >= a && n.pos < b);
+            return source.len();
+        }
+        CopyMode::DirectSwap | CopyMode::Rotate => {
+            sel.clear();
+            let d = dest as i64 - a as i64;
+            for (i, n) in notes.iter_mut().enumerate() {
+                let p = n.pos as i64;
+                let src = n.pos >= a && n.pos < b;
+                n.pos = if src {
+                    sel.push(i);
+                    (p + d) as u32
+                } else if mode == CopyMode::DirectSwap && n.pos >= dest && n.pos < dest + len {
+                    (p - d) as u32
+                } else if mode == CopyMode::Rotate && dest < a && n.pos >= dest && n.pos < a {
+                    // what was before the source moves on by its length
+                    n.pos + len
+                } else if mode == CopyMode::Rotate && dest >= b && n.pos >= b && n.pos < dest + len {
+                    n.pos - len
+                } else {
+                    n.pos
+                };
+            }
+            return source.len();
+        }
+        _ => {}
+    }
+    let moving = matches!(mode, CopyMode::MoveMerge | CopyMode::MoveReplace | CopyMode::MoveInsert);
     if moving {
         remove_where(notes, &mut none, |_, n| n.pos >= a && n.pos < b);
     }
@@ -582,6 +621,27 @@ mod tests {
 
     fn n(pos: u32, len: u32, pitch: u8) -> Note {
         Note { channel: 0, pitch, velocity: 80, pos, len, muted: false }
+    }
+
+    #[test]
+    fn copy_rotate_swap_remove() {
+        let bar = 3840;
+        let mk = || vec![n(0, 10, 60), n(bar, 10, 62), n(2 * bar, 10, 64)];
+        let mut v = mk();
+        let mut sel = Vec::new();
+        // bar 1 and bar 3 swap
+        copy_events(&mut v, &mut sel, 0, bar, 2 * bar, 1, CopyMode::DirectSwap);
+        assert_eq!(v.iter().map(|x| (x.pos, x.pitch)).collect::<Vec<_>>(), [(2 * bar, 60), (bar, 62), (0, 64)]);
+        // bar 3 rotated to bar 1: bars 1 and 2 move on a bar
+        let mut v = mk();
+        copy_events(&mut v, &mut sel, 2 * bar, 3 * bar, 0, 1, CopyMode::Rotate);
+        assert_eq!(v.iter().map(|x| (x.pos, x.pitch)).collect::<Vec<_>>(), [(bar, 60), (2 * bar, 62), (0, 64)]);
+        let mut v = mk();
+        copy_events(&mut v, &mut sel, 0, bar, 2 * bar, 1, CopyMode::Rotate);
+        assert_eq!(v.iter().map(|x| (x.pos, x.pitch)).collect::<Vec<_>>(), [(2 * bar, 60), (0, 62), (bar, 64)]);
+        let mut v = mk();
+        copy_events(&mut v, &mut sel, bar, 2 * bar, 0, 1, CopyMode::Remove);
+        assert_eq!(v.len(), 2);
     }
 
     #[test]

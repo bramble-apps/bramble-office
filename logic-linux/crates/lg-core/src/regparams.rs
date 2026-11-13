@@ -48,6 +48,14 @@ pub fn play_notes(props: &RegionProps, notes: &[Note], start: u32, end: u32, shi
 
 /// `play_notes` with the region's groove template (when its Quantize is one).
 pub fn play_notes_groove(props: &RegionProps, notes: &[Note], start: u32, end: u32, shift: &dyn Fn(u32) -> i16, groove: Option<&crate::groove::Points>) -> Vec<Note> {
+    // Smart Quantize: the notes moved in groups first, then the rest without Classic Quantize
+    if props.smart_quantize && groove.is_none() && props.quantize > 0 {
+        let live: Vec<Note> = notes.iter().filter(|n| !n.muted && n.pos < end).copied().collect();
+        let pos = smart_positions(props, &live, start);
+        let moved: Vec<Note> = live.iter().zip(pos).map(|(n, p)| Note { pos: p, ..*n }).collect();
+        let plain = RegionProps { quantize: 0, smart_quantize: false, ..*props };
+        return play_notes_groove(&plain, &moved, start, end.max(moved.iter().map(|n| n.pos + 1).max().unwrap_or(0)), shift, None);
+    }
     let mut out: Vec<Note> = notes.iter().filter(|n| !n.muted && n.pos < end).map(|n| {
         let x = props.apply(n, start);
         match groove {
@@ -89,6 +97,51 @@ pub fn play_notes_groove(props: &RegionProps, notes: &[Note], start: u32, end: u
         for n in &mut out {
             n.len = n.len.min(end.saturating_sub(n.pos)).max(1);
         }
+    }
+    out
+}
+
+/// Smart Quantize: notes are taken in groups (those nearest the same grid point); each group's
+/// reference point (its notes' positions weighted by velocity and nearness to the grid point)
+/// moves toward the grid by Q-Strength, every note of the group by the same amount, so the
+/// group's inner timing (chords, flams, fast runs) and the order of all events stay. Q-Range
+/// picks the groups: 0 all, positive only those whose reference is farther off, negative only
+/// those within. Returns each note's new position (same order as `notes`).
+pub fn smart_positions(props: &RegionProps, notes: &[Note], start: u32) -> Vec<u32> {
+    let Some((q, _)) = crate::groove::grid(props.quantize, props.swing) else { return notes.iter().map(|n| n.pos).collect() };
+    let mut order: Vec<usize> = (0..notes.len()).collect();
+    order.sort_by_key(|&i| notes[i].pos);
+    let point = |p: u32| ((p as f64 - start as f64) / q).round() as i64;
+    let mut out: Vec<u32> = notes.iter().map(|n| n.pos).collect();
+    let mut i = 0;
+    let mut floor = 0i64;
+    while i < order.len() {
+        let k = point(notes[order[i]].pos);
+        let j = (i..order.len()).find(|&j| point(notes[order[j]].pos) != k).unwrap_or(order.len());
+        let target = start as f64 + k as f64 * q;
+        let (mut sw, mut s) = (0.0f64, 0.0f64);
+        for &x in &order[i..j] {
+            let n = &notes[x];
+            let near = 1.0 - ((n.pos as f64 - target).abs() / q).min(1.0) * 0.5;
+            let w = n.velocity.max(1) as f64 * near;
+            sw += w;
+            s += w * n.pos as f64;
+        }
+        let reference = s / sw.max(1e-9);
+        let off = target - reference;
+        let r = props.q_range as f64;
+        let take = r == 0.0 || (r > 0.0 && off.abs() > r) || (r < 0.0 && off.abs() <= -r);
+        let mut d = if take { (off * props.q_strength.min(100) as f64 / 100.0).round() as i64 } else { 0 };
+        // (never before the previous group's last event: the order stays)
+        let first = notes[order[i]].pos as i64;
+        if first + d < floor {
+            d = floor - first;
+        }
+        for &x in &order[i..j] {
+            out[x] = (notes[x].pos as i64 + d).max(0) as u32;
+            floor = floor.max(out[x] as i64);
+        }
+        i = j;
     }
     out
 }
@@ -395,6 +448,24 @@ pub fn sort_regions(p: &mut Project) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn smart_quantize_moves_groups() {
+        use crate::events::Note;
+        let n = |pos, pitch, velocity| Note { channel: 0, pitch, velocity, pos, len: 100, muted: false };
+        // a chord played a little late and spread: it moves as one onto the beat
+        let notes = [n(30, 60, 100), n(40, 64, 100), n(50, 67, 100), n(980, 60, 100)];
+        let p = RegionProps { quantize: 960, smart_quantize: true, ..Default::default() };
+        let v = smart_positions(&p, &notes, 0);
+        assert_eq!(v[1] - v[0], 10);
+        assert_eq!(v[2] - v[1], 10);
+        assert!(v[0] < 30 && v[0] <= 5);
+        assert_eq!(v[3], 960);
+        let half = RegionProps { q_strength: 50, ..p };
+        assert_eq!(smart_positions(&half, &notes, 0)[0], 10);
+        let out = play_notes(&p, &notes, 0, 3840, &|_| 0);
+        assert_eq!(out.len(), 4);
+    }
+
     use super::*;
 
     fn note(pos: u32, pitch: u8, len: u32) -> Note {
