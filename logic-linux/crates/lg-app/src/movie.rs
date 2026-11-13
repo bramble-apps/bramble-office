@@ -672,6 +672,9 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             for (l, f) in [("0.25 Size", 0.25), ("0.5 Size", 0.5), ("Original Size", 1.0), ("2x Size", 2.0), ("3x Size", 3.0)] {
                 if ui.button(l).clicked() {
                     s.scale = f;
+                    if s.full {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                    }
                     s.full = false;
                     ui.ctx().memory_mut(|m| m.reset_areas());
                     ui.close();
@@ -680,6 +683,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             ui.separator();
             if ui.button(if s.full { "Exit Full Screen" } else { "Enter Full Screen" }).clicked() {
                 s.full = !s.full;
+                // the movie fills the whole screen, not just the app window
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(s.full));
                 ui.close();
             }
             ui.checkbox(&mut s.keep_aspect, "Keep Aspect Ratio");
