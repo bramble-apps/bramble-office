@@ -56,7 +56,11 @@ pub struct State {
     next_id: u64,
     pub info_open: bool,
     info_report: Option<String>,
+    /// Tap Tempo's first use: the alert asking to turn it on.
+    pub tap_alert: bool,
 }
+
+pub const TAP_ON: &str = "Studio / Tap Tempo on";
 
 fn path() -> Option<std::path::PathBuf> {
     Some(dirs_config()?.join("bramble-studio").join("transport-buttons.txt"))
@@ -195,6 +199,11 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
             app.tx.shuttle = 0;
             false
         }
+        // the first Tap Tempo asks to turn it on (Manual sync, as Logic's)
+        "Tap Tempo" if app.logic_settings.get(TAP_ON) != "1" && !app.automated => {
+            app.tx.tap_alert = true;
+            true
+        }
         "Send discrete Note Offs (Panic)" => {
             panic(app);
             true
@@ -278,6 +287,35 @@ pub fn frame(app: &mut App, ctx: &egui::Context) {
     }
     giants(app, ctx);
     info_window(app, ctx);
+    tap_alert(app, ctx);
+}
+
+fn tap_alert(app: &mut App, ctx: &egui::Context) {
+    if !app.tx.tap_alert {
+        return;
+    }
+    let mut answer: Option<bool> = None;
+    egui::Window::new("Tap Tempo").collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        ui.label("Tap Tempo sets the project tempo from your taps. Turn on Tap Tempo?");
+        ui.label(egui::RichText::new("(Synchronization goes to Manual, as Logic's.)").color(look::text_dim()));
+        ui.horizontal(|ui| {
+            if ui.button("Cancel").clicked() {
+                answer = Some(false);
+            }
+            if ui.button("Turn On").clicked() {
+                answer = Some(true);
+            }
+        });
+    });
+    if let Some(on) = answer {
+        app.tx.tap_alert = false;
+        if on {
+            app.logic_settings.0.insert(TAP_ON.into(), "1".into());
+            app.logic_settings.save();
+            app.proj.0.insert("Synchronization / General / Sync Mode:".into(), "Manual".into());
+            app.dirty = true;
+        }
+    }
 }
 
 /// The LCD's ⌄ menu items (after the display modes).

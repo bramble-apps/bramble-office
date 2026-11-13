@@ -815,11 +815,20 @@ pub struct Details {
     pub signature: (u8, u8),
     pub sample_rate: u32,
     taps: Vec<f64>,
+    /// Use musical grid; Use Flex Time for imported audio; the frame rate; Spatial Audio (Dolby
+    /// Atmos) and the surround format (None: stereo); the audio devices ("" = unchanged).
+    pub musical_grid: bool,
+    pub flex: bool,
+    pub frame_rate: String,
+    pub atmos: bool,
+    pub surround: Option<lg_dsp::surround::Format>,
+    pub input: String,
+    pub output: String,
 }
 
 impl Default for Details {
     fn default() -> Self {
-        Details { open: false, tempo: 120.0, key: "C major".into(), signature: (4, 4), sample_rate: 44_100, taps: Vec::new() }
+        Details { open: false, tempo: 120.0, key: "C major".into(), signature: (4, 4), sample_rate: 44_100, taps: Vec::new(), musical_grid: true, flex: false, frame_rate: "25".into(), atmos: false, surround: None, input: String::new(), output: String::new() }
     }
 }
 
@@ -836,6 +845,31 @@ pub fn apply_details(p: &mut lg_core::Project, d: &Details) {
     p.key = d.key.clone();
     p.signature = d.signature;
     p.sample_rate = d.sample_rate;
+}
+
+/// The Details beyond the project file: musical grid, Flex for imported audio (Smart Tempo's
+/// Set Imported Files To), frame rate, Spatial Audio / surround format, the audio devices.
+pub fn apply_settings(app: &mut App, d: &Details) {
+    let set = |app: &mut App, k: &str, v: &str| {
+        app.proj.0.insert(k.to_string(), v.to_string());
+    };
+    set(app, "General /  / Use musical grid", if d.musical_grid { "1" } else { "0" });
+    set(app, "Synchronization / General / Frame Rate:", &d.frame_rate);
+    if d.flex {
+        set(app, "Smart Tempo /  / Set Imported Files To:", "Flex On, Smart Tempo On");
+    }
+    if let Some(f) = d.surround {
+        app.sur.format = f;
+    }
+    if d.atmos {
+        crate::surround::set_atmos(app, true);
+    }
+    for (k, v) in [(crate::prefs::INPUT_DEVICE, &d.input), (crate::prefs::OUTPUT_DEVICE, &d.output)] {
+        if !v.is_empty() {
+            app.logic_settings.0.insert(k.to_string(), v.clone());
+            app.logic_settings.save();
+        }
+    }
 }
 
 fn chooser(app: &mut App, ctx: &egui::Context) {
@@ -929,11 +963,57 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
                     }
                 });
                 ui.end_row();
+                ui.label("");
+                ui.vertical(|ui| {
+                    ui.checkbox(&mut d.musical_grid, "Use musical grid");
+                    ui.checkbox(&mut d.flex, "Use Flex Time for imported audio");
+                });
+                ui.end_row();
+                ui.label("Frame Rate");
+                egui::ComboBox::from_id_salt("pf-fps").selected_text(d.frame_rate.clone()).show_ui(ui, |ui| {
+                    for r in ["23.976", "24", "25", "29.97d", "29.97", "30d", "30", "50", "59.94d", "59.94", "60d", "60"] {
+                        ui.selectable_value(&mut d.frame_rate, r.to_string(), r);
+                    }
+                });
+                ui.end_row();
+                ui.label("Spatial Audio");
+                egui::ComboBox::from_id_salt("pf-atmos").selected_text(if d.atmos { "Dolby Atmos" } else { "Off" }).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut d.atmos, false, "Off");
+                    ui.selectable_value(&mut d.atmos, true, "Dolby Atmos");
+                });
+                ui.end_row();
+                ui.label("Surround Format");
+                egui::ComboBox::from_id_salt("pf-sur").selected_text(d.surround.map_or("Stereo", |f| f.name())).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut d.surround, None, "Stereo");
+                    let list: Vec<lg_dsp::surround::Format> = if d.atmos { lg_dsp::surround::Format::ATMOS_BEDS.to_vec() } else { lg_dsp::surround::Format::ALL.to_vec() };
+                    for f in list {
+                        ui.selectable_value(&mut d.surround, Some(f), f.name());
+                    }
+                });
+                ui.end_row();
+                for (label, out) in [("Input Device", false), ("Output Device", true)] {
+                    ui.label(label);
+                    let cur = if out { &mut d.output } else { &mut d.input };
+                    let shown = if cur.is_empty() { "System Default".to_string() } else { cur.clone() };
+                    egui::ComboBox::from_id_salt(("pf-dev", out)).selected_text(shown).width(200.0).show_ui(ui, |ui| {
+                        ui.selectable_value(cur, "System Default".to_string(), "System Default");
+                        for dname in crate::prefs::devices(out).into_iter().filter(|n| n != "System Default") {
+                            ui.selectable_value(cur, dname.clone(), dname);
+                        }
+                    });
+                    ui.end_row();
+                }
             });
         }
         ctx.data_mut(|m| m.insert_temp(egui::Id::new("pf-chooser-details"), d));
         ui.add_space(8.0);
         ui.horizontal(|ui| {
+            // (at the lower left: the Sound Library in the Browser)
+            if ui.button("Get More Sounds").clicked() {
+                app.pf.chooser = false;
+                app.show_browser = true;
+                app.br.view = crate::browser::Cat::SoundLibrary;
+            }
             if ui.button("Open an existing project…").clicked() {
                 app.pf.chooser = false;
                 app.open_dialog();
@@ -953,8 +1033,10 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         if k < LAYOUTS.len() {
             app.stop();
             let mut p = layout_project(k);
-            apply_details(&mut p, &chooser_details(ctx));
+            let det = chooser_details(ctx);
+            apply_details(&mut p, &det);
             app.set_project(p, false);
+            apply_settings(app, &det);
             app.file = None;
             app.pf.band = None;
             app.dirty = false;
