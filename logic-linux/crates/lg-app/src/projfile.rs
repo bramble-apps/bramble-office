@@ -72,6 +72,9 @@ pub enum Ask {
 
 #[derive(Default)]
 pub struct State {
+    /// Save as Template's dialog: the name, the folder ("" = the templates folder) and a new
+    /// folder's name being typed.
+    pub template: Option<(String, String, Option<String>)>,
     /// The template chooser is open; its selected entry.
     pub chooser: bool,
     pub pick: usize,
@@ -410,12 +413,39 @@ fn my_templates() -> Vec<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
     let mut out = Vec::new();
     for d in [templates_dir(), home.join("Music/Audio Music Apps/Project Templates")] {
-        if let Ok(rd) = std::fs::read_dir(&d) {
-            out.extend(rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "logicx")));
+        out.extend(templates_in(&d));
+    }
+    out
+}
+
+/// The templates in a folder and its subfolders (Save as Template's Create Folder), the folder's
+/// own first.
+pub fn templates_in(d: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(d) else { return Vec::new() };
+    let mut own: Vec<PathBuf> = Vec::new();
+    let mut subs: Vec<PathBuf> = Vec::new();
+    for p in rd.flatten().map(|e| e.path()) {
+        if p.extension().is_some_and(|e| e == "logicx") {
+            own.push(p);
+        } else if p.is_dir() {
+            subs.push(p);
         }
     }
-    out.sort();
-    out
+    own.sort();
+    subs.sort();
+    for s in subs {
+        let mut v: Vec<PathBuf> = std::fs::read_dir(&s).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "logicx")).collect()).unwrap_or_default();
+        v.sort();
+        own.extend(v);
+    }
+    own
+}
+
+/// The subfolders of the templates folder.
+fn template_folders() -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(templates_dir()).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir() && p.extension().is_none_or(|e| e != "logicx")).filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string())).collect()).unwrap_or_default();
+    v.sort();
+    v
 }
 
 /// Studio's starting layouts (track kinds and names), after the kinds of layout Logic's New
@@ -476,18 +506,74 @@ fn from_template(app: &mut App, tpl: &Path) {
 
 /// Save as Template…: a copy of the project in Studio's templates folder.
 fn save_as_template(app: &mut App) {
-    let Some(pkg) = package(app) else {
+    if package(app).is_none() {
         app.tell("Only a Logic project (.logicx) can be saved as a template");
         return;
-    };
+    }
     let name = app.project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
-    let dest = templates_dir().join(format!("{name}.logicx"));
-    let _ = std::fs::create_dir_all(templates_dir());
+    app.pf.template = Some((name, String::new(), None));
+}
+
+/// The Save as Template dialog: the name, the folder pop-up and Create Folder.
+fn template_window(app: &mut App, ctx: &egui::Context) {
+    let Some((mut name, mut folder, mut new_folder)) = app.pf.template.clone() else { return };
+    let mut done: Option<bool> = None;
+    egui::Window::new("Save as Template").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Save As:");
+            ui.text_edit_singleline(&mut name);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Where:");
+            egui::ComboBox::from_id_salt("tpl-folder").selected_text(if folder.is_empty() { "Project Templates".to_string() } else { folder.clone() }).show_ui(ui, |ui| {
+                ui.selectable_value(&mut folder, String::new(), "Project Templates");
+                for f in template_folders() {
+                    ui.selectable_value(&mut folder, f.clone(), f);
+                }
+            });
+        });
+        if let Some(mut nf) = new_folder.clone() {
+            let mut made = false;
+            ui.horizontal(|ui| {
+                ui.label("New Folder:");
+                let te = ui.text_edit_singleline(&mut nf);
+                if (ui.button("Create").clicked() || (te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && !nf.trim().is_empty() {
+                    let n = nf.trim().replace('/', "-");
+                    let _ = std::fs::create_dir_all(templates_dir().join(&n));
+                    folder = n;
+                    made = true;
+                }
+            });
+            new_folder = if made { None } else { Some(nf) };
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Create Folder").clicked() && new_folder.is_none() {
+                new_folder = Some("untitled folder".into());
+            }
+            if ui.button("Cancel").clicked() {
+                done = Some(false);
+            }
+            if ui.button("Save").clicked() && !name.trim().is_empty() {
+                done = Some(true);
+            }
+        });
+    });
+    app.pf.template = if done.is_some() { None } else { Some((name.clone(), folder.clone(), new_folder)) };
+    if done == Some(true) {
+        write_template(app, &name, &folder);
+    }
+}
+
+fn write_template(app: &mut App, name: &str, folder: &str) {
+    let Some(pkg) = package(app) else { return };
+    let dir = if folder.is_empty() { templates_dir() } else { templates_dir().join(folder) };
+    let dest = dir.join(format!("{}.logicx", name.trim().replace('/', "-")));
+    let _ = std::fs::create_dir_all(&dir);
     if dest.exists() {
         let _ = std::fs::remove_dir_all(&dest);
     }
     save_package_to(app, &pkg, &dest, true);
-    app.tell(format!("Saved as template “{name}”"));
+    app.tell(format!("Saved as template “{}”", name.trim()));
 }
 
 // --- revert ----------------------------------------------------------------------------------
@@ -803,6 +889,7 @@ pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> boo
 /// The chooser, the asks, Edit Alternatives, Project Settings (App's frame calls this).
 pub fn windows(app: &mut App, ctx: &egui::Context) {
     chooser(app, ctx);
+    template_window(app, ctx);
     ask(app, ctx);
     edit_alternatives(app, ctx);
     project_settings(app, ctx);
@@ -900,8 +987,24 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         if mine.is_empty() {
             ui.label(egui::RichText::new("None yet: File ▸ Save as Template… keeps a Logic project here.").color(crate::look::text_dim()));
         }
+        // (templates in a subfolder under its name, below the others)
+        let group_of = |m: &PathBuf| -> String {
+            let parent = m.parent().map(Path::to_path_buf).unwrap_or_default();
+            if parent == templates_dir() || parent.file_name().is_some_and(|n| n == "Project Templates") { String::new() } else { parent.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default() }
+        };
+        let mut groups: Vec<String> = Vec::new();
+        for m in &mine {
+            let g = group_of(m);
+            if !groups.contains(&g) {
+                groups.push(g);
+            }
+        }
+        for g in groups {
+        if !g.is_empty() {
+            ui.label(egui::RichText::new(&g).color(crate::look::text_dim()));
+        }
         ui.horizontal_wrapped(|ui| {
-            for (j, m) in mine.iter().enumerate() {
+            for (j, m) in mine.iter().enumerate().filter(|(_, m)| group_of(m) == g) {
                 let k = LAYOUTS.len() + j;
                 let r = ui.add(egui::Button::selectable(app.pf.pick == k, m.file_stem().unwrap_or_default().to_string_lossy()).min_size(egui::vec2(110.0, 54.0)));
                 if r.clicked() {
@@ -912,6 +1015,7 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
                 }
             }
         });
+        }
         app.pf.pick = app.pf.pick.min(total.saturating_sub(1));
         ui.add_space(8.0);
         // Details (the disclosure triangle at the lower left): the new project's tempo, key,
