@@ -7,7 +7,7 @@ use lg_core::Region;
 
 use crate::app::App;
 
-pub const COMMANDS: &[&str] = &["Delete and Move", "Convert Loops to Regions", "Convert Repetitions to Loops", "Loops to Regions", "Repetitions to Loops", "To Selected Track"];
+pub const COMMANDS: &[&str] = &["Convert Sustain Pedal to Note Length", "Delete and Move", "Convert Loops to Regions", "Convert Repetitions to Loops", "Loops to Regions", "Repetitions to Loops", "To Selected Track"];
 
 fn shift(rg: &mut Region, d: i64) {
     rg.start = (rg.start as i64 + d).max(0) as u32;
@@ -155,7 +155,41 @@ pub fn rename_all(app: &mut App, sel: &[(usize, usize)], name: &str) {
     }
 }
 
+/// Convert Sustain Pedal to Note Length: each note (of `sel`, or all) still sounding when the
+/// pedal (CC64 at 64 or more) is down at its end is lengthened to the pedal's release; then the
+/// pedal events go.
+pub fn sustain_to_length(rg: &mut Region, sel: &[usize]) {
+    let start = rg.start;
+    let mut pedal: Vec<(u32, bool)> = rg.ext.events.iter().filter(|e| e.kind & 0xF0 == 0xB0 && e.number == 64).map(|e| (start + e.pos, e.value >= 64)).collect();
+    pedal.sort_by_key(|p| p.0);
+    let down_at = |t: u32| pedal.iter().rev().find(|p| p.0 <= t).is_some_and(|p| p.1);
+    let idx: Vec<usize> = if sel.is_empty() { (0..rg.notes.len()).collect() } else { sel.to_vec() };
+    for i in idx {
+        let Some(n) = rg.notes.get_mut(i) else { continue };
+        let end = n.pos + n.len;
+        if down_at(end) {
+            if let Some(off) = pedal.iter().find(|p| p.0 > end && !p.1) {
+                n.len = off.0 - n.pos;
+            }
+        }
+    }
+    rg.ext.events.retain(|e| !(e.kind & 0xF0 == 0xB0 && e.number == 64));
+}
+
 pub fn command(app: &mut App, name: &str) -> bool {
+    if name == "Convert Sustain Pedal to Note Length" {
+        let Some((t, r)) = app.selected_region else { return false };
+        let sel = app.selected_notes.clone();
+        app.checkpoint(name);
+        if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
+            if rg.audio.is_some() {
+                return false;
+            }
+            sustain_to_length(rg, &sel);
+        }
+        app.after_edit();
+        return true;
+    }
     if !COMMANDS.contains(&name) || !crate::focus::tracks(app) && name != "Convert Loops to Regions" && name != "Convert Repetitions to Loops" {
         return false;
     }
@@ -235,6 +269,20 @@ mod tests {
 
     fn reg(start: u32, len: u32, pitch: u8) -> Region {
         Region { name: "R".into(), start, length: len, notes: vec![Note { channel: 0, pitch, velocity: 100, pos: start + 10, len: 100, muted: false }], audio: None, muted: false, source: None, origin: None, props: Default::default(), ext: Default::default() }
+    }
+
+    #[test]
+    fn sustain_pedal() {
+        let mut r = reg(0, 3840, 60);
+        r.notes[0].pos = 0;
+        r.notes[0].len = 100;
+        r.notes.push(Note { channel: 0, pitch: 62, velocity: 90, pos: 2000, len: 100, muted: false });
+        let cc = |pos, value| lg_core::events::Control { kind: 0xB0, channel: 0, pos, number: 64, value };
+        r.ext.events = vec![cc(50, 127), cc(1000, 0), cc(3000, 127)];
+        sustain_to_length(&mut r, &[]);
+        assert_eq!(r.notes[0].len, 1000);
+        assert_eq!(r.notes[1].len, 100);
+        assert!(r.ext.events.is_empty());
     }
 
     #[test]

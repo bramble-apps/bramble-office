@@ -188,6 +188,8 @@ pub struct RegionProps {
     /// (negative: the difference exaggerated).
     pub q_velocity: i16,
     pub q_length: i16,
+    /// Smart Quantize (the Quantize label's pop-up) instead of Classic Quantize.
+    pub smart_quantize: bool,
 }
 
 /// Gate Time "Legato": every note lasts to the next one.
@@ -195,7 +197,7 @@ pub const GATE_LEGATO: u16 = u16::MAX;
 
 impl Default for RegionProps {
     fn default() -> Self {
-        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, q_strength: 100, q_range: 0, q_flam: 0, clip_length: false, pitch_source: 0, locked: false, color: None, delay_ms: false, tag: 0, q_velocity: 0, q_length: 0 }
+        RegionProps { looped: false, quantize: 0, swing: 50, transpose: 0, fine_tune: 0, velocity: 0, dynamics: 100, gate_time: 100, delay: 0, loop_to: 0, fade_in: (0, 0), fade_out: (0, 0), audio_offset: 0, q_strength: 100, q_range: 0, q_flam: 0, clip_length: false, pitch_source: 0, locked: false, color: None, delay_ms: false, tag: 0, q_velocity: 0, q_length: 0, smart_quantize: false }
     }
 }
 

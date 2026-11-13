@@ -284,6 +284,13 @@ pub struct Transform {
     pub hide_unused: bool,
     /// Ticks per bar for Subposition (set by the caller).
     pub bar: u32,
+    /// The Status condition: 0 All, else the event type (`STATUS`) it must be.
+    pub status: u8,
+    /// The Status operation: 0 Thru, else Fix to that event type.
+    pub status_fix: u8,
+    /// Exchanged values: each parameter takes the value of `route[p]` (Channel, Data Byte 1 and
+    /// Data Byte 2 among each other; identity: none).
+    pub route: [u8; 5],
 }
 
 pub const MODES: [&str; 4] = ["Apply operations to selected events", "Apply operations and delete unselected events", "Delete selected events", "Copy selected events, then apply operations"];
@@ -303,7 +310,7 @@ pub fn identity_map() -> Vec<u8> {
 
 impl Transform {
     pub fn new(name: &str) -> Transform {
-        Transform { name: name.to_string(), conds: [Cond::All; 5], ops: [Op::Thru; 5], mode: 0, map: identity_map(), sub: Cond::All, absolute: false, hide_unused: true, bar: 3840 }
+        Transform { name: name.to_string(), conds: [Cond::All; 5], ops: [Op::Thru; 5], mode: 0, map: identity_map(), sub: Cond::All, absolute: false, hide_unused: true, bar: 3840, status: 0, status_fix: 0, route: [0, 1, 2, 3, 4] }
     }
 
     fn with(mut self, param: usize, op: Op) -> Transform {
@@ -371,38 +378,7 @@ impl Transform {
             let mean = chosen.iter().map(|&i| Self::get(&before[i], p, origin)).sum::<i64>() as f64 / chosen.len().max(1) as f64;
             for &i in &chosen {
                 let v = Self::get(&before[i], p, origin);
-                let out = match op {
-                    Op::Thru => v,
-                    Op::Fix(a) => a,
-                    Op::Add(a) => v + a,
-                    Op::Sub(a) => v - a,
-                    Op::Min(a) => v.min(a),
-                    Op::Max(a) => v.max(a),
-                    Op::Flip(a) => 2 * a - v,
-                    Op::Mul(f) => (v as f64 * f).round() as i64,
-                    Op::Div(f) => if f == 0.0 { v } else { (v as f64 / f).round() as i64 },
-                    Op::Scale(f, a) => (v as f64 * f).round() as i64 + a,
-                    Op::Range(a, b) => v.clamp(a.min(b), a.max(b)),
-                    Op::Rand(a, b) => rng.range(a, b),
-                    Op::PlusMinusRand(a) => v + rng.range(-a.abs(), a.abs()),
-                    Op::Quantize(q) => ((v as f64 / q.max(1) as f64).round() as i64) * q.max(1),
-                    Op::QUp(q) => (v + q.max(1) - 1).div_euclid(q.max(1)) * q.max(1),
-                    Op::Expo(f) => {
-                        // a curve over the parameter's MIDI range (velocity, pitch: 0..127)
-                        let top = 127.0;
-                        (top * (v as f64 / top).clamp(0.0, 1.0).powf(f.max(0.01))).round() as i64
-                    }
-                    Op::Crescendo(a, b) => {
-                        let t = if last > first { (before[i].pos as f64 - first) / (last - first) } else { 0.0 };
-                        (a as f64 + (b - a) as f64 * t).round() as i64
-                    }
-                    Op::Reverse => lo + hi - v,
-                    Op::RelCres(a, b) => {
-                        let t = if last > first { ((before[i].pos as f64 - first) / (last - first)).clamp(0.0, 1.0) } else { 0.0 };
-                        (a as f64 + (b - a) as f64 * t + (v as f64 - mean)).round() as i64
-                    }
-                    Op::UseMap => map_value(&self.map, v),
-                };
+                let out = eval(op, v, before[i].pos as f64, (first, last), (lo, hi, mean), &self.map, rng);
                 Self::put(&mut notes[i], p, out, origin);
             }
         }
@@ -461,6 +437,174 @@ impl Transform {
             self.operate(notes, &sel, origin, rng);
         }
         sel
+    }
+}
+
+/// An operation on one value: `pos` the event's position, `span` the first and last position
+/// (Crescendo), `stats` the chosen values' lowest, highest and mean.
+fn eval(op: Op, v: i64, pos: f64, span: (f64, f64), stats: (i64, i64, f64), map: &[u8], rng: &mut Rng) -> i64 {
+    let (first, last) = span;
+    let (lo, hi, mean) = stats;
+    match op {
+        Op::Thru => v,
+        Op::Fix(a) => a,
+        Op::Add(a) => v + a,
+        Op::Sub(a) => v - a,
+        Op::Min(a) => v.min(a),
+        Op::Max(a) => v.max(a),
+        Op::Flip(a) => 2 * a - v,
+        Op::Mul(f) => (v as f64 * f).round() as i64,
+        Op::Div(f) => if f == 0.0 { v } else { (v as f64 / f).round() as i64 },
+        Op::Scale(f, a) => (v as f64 * f).round() as i64 + a,
+        Op::Range(a, b) => v.clamp(a.min(b), a.max(b)),
+        Op::Rand(a, b) => rng.range(a, b),
+        Op::PlusMinusRand(a) => v + rng.range(-a.abs(), a.abs()),
+        Op::Quantize(q) => ((v as f64 / q.max(1) as f64).round() as i64) * q.max(1),
+        Op::QUp(q) => (v + q.max(1) - 1).div_euclid(q.max(1)) * q.max(1),
+        Op::Expo(f) => {
+            // a curve over the parameter's MIDI range (velocity, pitch: 0..127)
+            let top = 127.0;
+            (top * (v as f64 / top).clamp(0.0, 1.0).powf(f.max(0.01))).round() as i64
+        }
+        Op::Crescendo(a, b) => {
+            let t = if last > first { (pos - first) / (last - first) } else { 0.0 };
+            (a as f64 + (b - a) as f64 * t).round() as i64
+        }
+        Op::Reverse => lo + hi - v,
+        Op::RelCres(a, b) => {
+            let t = if last > first { ((pos - first) / (last - first)).clamp(0.0, 1.0) } else { 0.0 };
+            (a as f64 + (b - a) as f64 * t + (v as f64 - mean)).round() as i64
+        }
+        Op::UseMap => map_value(map, v),
+    }
+}
+
+// ---- every event type: the Status column, Fix to another type, exchanged values
+
+/// The Status condition's and Fix operation's event types (Logic's: note, poly aftertouch,
+/// control change, program change, aftertouch, pitch bend, meta, fader); 0xF0 meta and 0xF1
+/// fader are Studio's codes for Logic's own events.
+pub const STATUS: [(&str, u8); 8] = [("Note", 0x90), ("Poly Aftertouch", 0xA0), ("Control", 0xB0), ("Program", 0xC0), ("Aftertouch", 0xD0), ("Pitch Bend", 0xE0), ("Meta", 0xF0), ("Fader", 0xF1)];
+
+/// Any event, as the MIDI Transform window sees it: Status, Position (song ticks), Channel
+/// (0-15), Data Byte 1 (pitch, controller number), Data Byte 2 (velocity, value), Length (notes).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ev {
+    pub kind: u8,
+    pub pos: u32,
+    pub ch: u8,
+    pub d1: u8,
+    pub d2: u8,
+    pub len: u32,
+}
+
+impl Ev {
+    pub fn of_note(n: &Note) -> Ev {
+        Ev { kind: 0x90, pos: n.pos, ch: n.channel, d1: n.pitch, d2: n.velocity, len: n.len }
+    }
+    fn get(&self, p: usize, origin: u32) -> i64 {
+        match p {
+            0 => self.pos as i64 - origin as i64,
+            1 => self.d1 as i64,
+            2 => self.d2 as i64,
+            3 => self.len as i64,
+            _ => self.ch as i64 + 1,
+        }
+    }
+    fn put(&mut self, p: usize, v: i64, origin: u32) {
+        match p {
+            0 => self.pos = (origin as i64 + v).max(0) as u32,
+            1 => self.d1 = v.clamp(0, 127) as u8,
+            2 => self.d2 = v.clamp(if self.kind == 0x90 { 1 } else { 0 }, 127) as u8,
+            3 => self.len = v.max(1) as u32,
+            _ => self.ch = (v.clamp(1, 16) - 1) as u8,
+        }
+    }
+}
+
+impl Transform {
+    /// Whether the set needs every event type (a Status condition or Fix, or exchanged values).
+    pub fn uses_status(&self) -> bool {
+        self.status != 0 || self.status_fix != 0 || self.route != [0, 1, 2, 3, 4]
+    }
+
+    /// An event meets the Status condition and every other one (notes and other events).
+    pub fn matches_ev(&self, e: &Ev, origin: u32) -> bool {
+        let o = if self.absolute { 0 } else { origin };
+        let sub = (e.pos as i64 - o as i64).rem_euclid(self.bar.max(1) as i64);
+        (self.status == 0 || self.status == e.kind) && (0..5).all(|p| (p == 3 && e.kind != 0x90) || self.conds[p].test_mapped(e.get(p, o), &self.map)) && self.sub.test(sub)
+    }
+
+    /// The Mode on all events (`sel`: indices to consider, empty = all): the exchanged values
+    /// first (Channel, Data Byte 1, Data Byte 2 rerouted), then the operations, then Status Fix
+    /// (a note made another type gives two events, its start and its end with value 0).
+    /// Returns the indices of the events operated on (after).
+    pub fn apply_events(&self, evs: &mut Vec<Ev>, sel: &[usize], origin: u32, rng: &mut Rng) -> Vec<usize> {
+        let scope: Vec<usize> = if sel.is_empty() { (0..evs.len()).collect() } else { sel.iter().copied().filter(|&i| i < evs.len()).collect() };
+        let chosen: Vec<usize> = scope.into_iter().filter(|&i| self.matches_ev(&evs[i], origin)).collect();
+        let targets: Vec<usize> = match self.mode {
+            1 => {
+                let keep: Vec<Ev> = chosen.iter().map(|&i| evs[i]).collect();
+                *evs = keep;
+                (0..evs.len()).collect()
+            }
+            2 => {
+                let mut k = 0;
+                evs.retain(|_| {
+                    k += 1;
+                    !chosen.contains(&(k - 1))
+                });
+                return Vec::new();
+            }
+            3 => {
+                let n0 = evs.len();
+                for &i in &chosen {
+                    evs.push(evs[i]);
+                }
+                (n0..evs.len()).collect()
+            }
+            _ => chosen,
+        };
+        if targets.is_empty() {
+            return targets;
+        }
+        let before = evs.clone();
+        let o = if self.absolute { 0 } else { origin };
+        let first = targets.iter().map(|&i| before[i].pos).min().unwrap_or(0) as f64;
+        let last = targets.iter().map(|&i| before[i].pos).max().unwrap_or(0) as f64;
+        for p in 0..5 {
+            let src = self.route[p] as usize;
+            let op = self.ops[p];
+            if op == Op::Thru && src == p {
+                continue;
+            }
+            let vals: Vec<i64> = targets.iter().map(|&i| before[i].get(src, o)).collect();
+            let lo = vals.iter().copied().min().unwrap_or(0);
+            let hi = vals.iter().copied().max().unwrap_or(0);
+            let mean = vals.iter().sum::<i64>() as f64 / vals.len().max(1) as f64;
+            for (k, &i) in targets.iter().enumerate() {
+                let out = eval(op, vals[k], before[i].pos as f64, (first, last), (lo, hi, mean), &self.map, rng);
+                evs[i].put(p, out, o);
+            }
+        }
+        if self.status_fix != 0 {
+            let mut ends = Vec::new();
+            for &i in &targets {
+                let e = evs[i];
+                if e.kind == 0x90 && self.status_fix != 0x90 {
+                    ends.push(Ev { kind: self.status_fix, pos: e.pos + e.len, d2: 0, len: 0, ..e });
+                } else if e.kind != 0x90 && self.status_fix == 0x90 {
+                    evs[i].len = (PPQ / 4).max(1);
+                    evs[i].d2 = e.d2.max(1);
+                }
+                evs[i].kind = self.status_fix;
+                if self.status_fix != 0x90 {
+                    evs[i].len = 0;
+                }
+            }
+            evs.extend(ends);
+        }
+        targets
     }
 }
 
@@ -539,7 +683,8 @@ impl Transform {
         }).collect();
         let (sa, sb) = self.sub.values();
         let map: String = self.map.iter().map(|m| format!("{m:02x}")).collect();
-        format!("{}\t{}\t{}\t{}\t{},{sa},{sb}\t{}\t{}\t{map}", self.name.replace('\t', " "), c.join(";"), o.join(";"), self.mode, self.sub.index(), self.absolute as u8, self.hide_unused as u8)
+        let route: Vec<String> = self.route.iter().map(|r| r.to_string()).collect();
+        format!("{}\t{}\t{}\t{}\t{},{sa},{sb}\t{}\t{}\t{map}\t{},{},{}", self.name.replace('\t', " "), c.join(";"), o.join(";"), self.mode, self.sub.index(), self.absolute as u8, self.hide_unused as u8, self.status, self.status_fix, route.join(":"))
     }
 
     pub fn from_line(line: &str) -> Option<Transform> {
@@ -581,12 +726,64 @@ impl Transform {
                 t.map = identity_map();
             }
         }
+        if let Some(x) = it.next() {
+            let v: Vec<&str> = x.split(',').collect();
+            t.status = v.first().and_then(|s| s.parse().ok()).unwrap_or(0);
+            t.status_fix = v.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let r: Vec<u8> = v.get(2).map_or(Vec::new(), |s| s.split(':').filter_map(|x| x.parse().ok()).collect());
+            if r.len() == 5 && r.iter().all(|&x| x < 5) {
+                t.route.copy_from_slice(&r);
+            }
+        }
         Some(t)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn status_fix_exchange_delete() {
+        let ev = |kind, pos, d1, d2, len| Ev { kind, pos, ch: 0, d1, d2, len };
+        // Copy mode, Position Add 1, Status Fix Control, Pitch (Data Byte 1) Fix 1: a CC1 a tick
+        // after each note, its value the velocity
+        let mut t = Transform::new("t");
+        t.mode = 3;
+        t.status = 0x90;
+        t.status_fix = 0xB0;
+        t.ops[0] = Op::Add(1);
+        t.ops[1] = Op::Fix(1);
+        let mut v = vec![ev(0x90, 0, 60, 90, 480), ev(0xB0, 100, 7, 100, 0)];
+        t.apply_events(&mut v, &[], 0, &mut Rng(1));
+        assert!(v.contains(&ev(0xB0, 1, 1, 90, 0)));
+        assert!(v.contains(&ev(0xB0, 481, 1, 0, 0)));
+        assert_eq!(v[0].kind, 0x90);
+        // Delete mode, Status Control, Data Byte 1 = 7: the volume events go
+        let mut d = Transform::new("d");
+        d.mode = 2;
+        d.status = 0xB0;
+        d.conds[1] = Cond::Equal(7);
+        let mut v = vec![ev(0x90, 0, 7, 90, 480), ev(0xB0, 0, 7, 100, 0), ev(0xB0, 0, 10, 100, 0)];
+        d.apply_events(&mut v, &[], 0, &mut Rng(1));
+        assert_eq!(v.len(), 2);
+        // Data Byte 1 and 2 exchanged (before the operations)
+        let mut x = Transform::new("x");
+        x.route = [0, 2, 1, 3, 4];
+        x.ops[1] = Op::Add(1);
+        let mut v = vec![ev(0xB0, 0, 7, 100, 0)];
+        x.apply_events(&mut v, &[], 0, &mut Rng(1));
+        assert_eq!((v[0].d1, v[0].d2), (101, 7));
+        assert!(x.uses_status());
+        let back = Transform::from_line(&x.to_line()).unwrap();
+        assert_eq!(back.route, x.route);
+        // notes to CC1 (Status Fix)
+        let mut c = Transform::new("c");
+        c.status_fix = 0xB0;
+        c.ops[1] = Op::Fix(1);
+        let mut v = vec![ev(0x90, 0, 60, 90, 480)];
+        c.apply_events(&mut v, &[], 0, &mut Rng(1));
+        assert_eq!(v[0], ev(0xB0, 0, 1, 90, 0));
+    }
+
     use super::*;
 
     fn n(pos: u32, len: u32, pitch: u8, velocity: u8) -> Note {

@@ -726,6 +726,14 @@ pub fn roll_bar(app: &mut App, ui: &mut egui::Ui, local: Rect) {
         bx += widths[i];
         roll_control(app, ui, id, *c, r);
     }
+    // the info display: the note and position under the pointer
+    if local.max.x - 10.0 - MORE_W - bx > 130.0 {
+        if let Some((pitch, tick)) = ui.ctx().data(|d| d.get_temp::<(u8, u32)>(crate::pianoroll::info_id())) {
+            let sig = app.project.as_ref().map_or((4, 4), |p| p.signature);
+            let text = format!("{}   {}", crate::app::note_name(pitch), crate::app::bbdt(tick, sig));
+            ui.painter().text(pos2(bx + 14.0, cy), Align2::LEFT_CENTER, text, look::regular(11.5), look::text_dim());
+        }
+    }
     if any_hidden(&shown) {
         let mr = cell(cy, local.max.x - 10.0 - MORE_W, MORE_W);
         let resp = more_button(ui, mr, id.with("more"));

@@ -219,6 +219,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // (a click or a drag starts where the button went down, not where egui reports it: a few
     // points on for a drag, the release for a click)
     let press = crate::rolltools::press_pos(ui, &bg);
+    // the menu bar's info display: the pitch and position under the pointer (barfit.rs)
+    let hover = ui.input(|i| i.pointer.hover_pos()).filter(|p| grid.contains(*p)).map(|p| (rows.pitch_at(p.y), tick_at(p.x).max(0.0) as u32));
+    ui.ctx().data_mut(|d| match hover {
+        Some(h) => {
+            d.insert_temp(info_id(), h);
+        }
+        None => d.remove::<(u8, u32)>(info_id()),
+    });
     let snap_at = |app: &App, ctx: &egui::Context, x: f32| axis.snap_floor(x, crate::rollsnap::grid(app, ctx, ppt), px);
     if bg.secondary_clicked() {
         if let Some(pp) = bg.interact_pointer_pos() {
@@ -268,6 +276,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
         if resp.clicked() || resp.drag_started() {
             pressed_note = Some((k, resp.drag_started(), resp.interact_pointer_pos(), near_end));
+        }
+        // a double-click: the note in the Event Float (Logic)
+        if resp.double_clicked() && matches!(tool, Tool::Pointer | Tool::Pencil) {
+            app.selected_notes = vec![k];
+            crate::evlist::open_float(ui.ctx());
         }
         if resp.dragged() {
             let pp = resp.interact_pointer_pos();
@@ -319,6 +332,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 let tick = tick_at(pp.x);
                 let pitch = rows.row_at(pp.y);
                 let orig = app.drag_notes.clone();
+                // (the info display shows the dragged note's starting pitch)
+                if let Some(o) = orig.get(k) {
+                    ui.ctx().data_mut(|d| d.insert_temp(info_id(), (o.pitch, tick.max(0.0) as u32)));
+                }
                 // (snapped by the pressed note: rollsnap.rs)
                 let o_pos = orig.get(k).map_or(from_tick, |n| n.pos as f32);
                 let dt = crate::rollsnap::delta(app, ui.ctx(), o_pos, tick - from_tick, ppt);
@@ -775,6 +792,43 @@ pub fn dragged_velocities(orig: &[u8], d: i32, past: bool) -> Vec<u8> {
     orig.iter().map(|&v| (v as i32 + d).clamp(1, 127) as u8).collect()
 }
 
+/// Where the Piano Roll keeps what its info display shows: (pitch, tick).
+pub fn info_id() -> egui::Id {
+    egui::Id::unique("lg-roll-info")
+}
+
+/// The chord name of selected notes that all sound together ("Am7", "C/E"), if they make one.
+pub fn chord_of(notes: &[lg_core::events::Note], sel: &[usize]) -> Option<String> {
+    use lg_players::chords::Chord;
+    let ns: Vec<&lg_core::events::Note> = sel.iter().filter_map(|&i| notes.get(i)).collect();
+    if ns.len() < 2 {
+        return None;
+    }
+    let (a, b) = (ns.iter().map(|n| n.pos).max()?, ns.iter().map(|n| n.pos + n.len).min()?);
+    if a >= b {
+        return None;
+    }
+    let mut pcs: Vec<u8> = ns.iter().map(|n| n.pitch % 12).collect();
+    pcs.sort_unstable();
+    pcs.dedup();
+    if pcs.len() < 2 {
+        return None;
+    }
+    let bass = ns.iter().min_by_key(|n| n.pitch)?.pitch % 12;
+    // the bass as root first, then the others (a slash chord)
+    let mut roots = vec![bass];
+    roots.extend(pcs.iter().copied().filter(|&p| p != bass));
+    for root in roots {
+        let mask = pcs.iter().fold(0u16, |m, &p| m | 1 << ((p + 12 - root) % 12));
+        let c = Chord { root, mask, bass: (root != bass).then_some(bass) };
+        let name = c.name();
+        if Chord::parse(&name) == Some(c) {
+            return Some(name);
+        }
+    }
+    None
+}
+
 /// The notes whose pitch lies between two keys (either order).
 pub fn notes_in_pitch_range(notes: &[lg_core::events::Note], a: u8, b: u8) -> Vec<usize> {
     let (lo, hi) = (a.min(b), a.max(b));
@@ -911,6 +965,8 @@ fn inspector(app: &mut App, ui: &mut egui::Ui, r: Rect, t: usize, rg: usize) {
         1 => "One note selected".to_string(),
         n => format!("{n} notes selected"),
     };
+    // overlapping selected notes: their chord's name (Logic)
+    let what = chord_of(&region.notes, &app.selected_notes).unwrap_or(what);
     let mut y = r.min.y + 10.0;
     p.text(pos2(r.min.x + 12.0, y + 8.0), Align2::LEFT_CENTER, what, look::semibold(13.0), look::text());
     p.text(pos2(r.min.x + 12.0, y + 26.0), Align2::LEFT_CENTER, format!("in {}", region.name), look::regular(11.5), look::text_dim());
@@ -1037,6 +1093,10 @@ mod tests {
         let notes = [n(60), n(62), n(64), n(60)];
         assert_eq!(super::notes_in_pitch_range(&notes, 60, 60), [0, 3]);
         assert_eq!(super::notes_in_pitch_range(&notes, 63, 61), [1]);
+        let chord = [n(57), n(60), n(64), n(52), n(67)];
+        assert_eq!(super::chord_of(&chord, &[0, 1, 2]).as_deref(), Some("Am"));
+        assert_eq!(super::chord_of(&chord, &[1, 2, 3, 4]).as_deref(), Some("C/E"));
+        assert_eq!(super::chord_of(&chord, &[1]), None);
     }
 
     use super::*;

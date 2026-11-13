@@ -75,12 +75,47 @@ pub struct State {
     rename: Option<((usize, usize), String)>,
     scroll_to: Option<usize>,
     region: Option<(usize, usize)>,
+    /// The columns' widths (times Logic's default; empty: the defaults) and their order (the
+    /// column indices left to right; empty: Logic's), as dragged in the column header.
+    pub col_scale: Vec<f32>,
+    pub col_order: Vec<usize>,
 }
 
 impl Default for State {
     fn default() -> Self {
-        State { shown: [true; 7], info: false, as_time: false, regions: false, float: false, catch: true, midi_in: false, midi_out: true, artic_col: false, create: 0, quantize: 0, sel_ev: Vec::new(), anchor: None, drag_from: None, clip: Vec::new(), paste: None, rename: None, scroll_to: None, region: None }
+        State { shown: [true; 7], info: false, as_time: false, regions: false, float: false, catch: true, midi_in: false, midi_out: true, artic_col: false, create: 0, quantize: 0, sel_ev: Vec::new(), anchor: None, drag_from: None, clip: Vec::new(), paste: None, rename: None, scroll_to: None, region: None, col_scale: Vec::new(), col_order: Vec::new() }
     }
+}
+
+/// The columns left to right: the saved order when it is a whole one, else Logic's.
+pub fn column_order(saved: &[usize], n: usize) -> Vec<usize> {
+    let mut s = saved.to_vec();
+    s.sort_unstable();
+    if s == (0..n).collect::<Vec<_>>() {
+        saved.to_vec()
+    } else {
+        (0..n).collect()
+    }
+}
+
+/// Each column's left edge (from the list's left), given the widths and the order.
+pub fn column_offsets(widths: &[f32], order: &[usize]) -> Vec<f32> {
+    let mut out = vec![0.0; widths.len()];
+    let mut x = 0.0;
+    for &i in order {
+        out[i] = x;
+        x += widths[i];
+    }
+    out
+}
+
+/// Column `col` dropped at `at` (points from the list's left): the new order (L and M stay first).
+pub fn move_column(order: &[usize], col: usize, widths: &[f32], at: f32) -> Vec<usize> {
+    let mut rest: Vec<usize> = order.iter().copied().filter(|&c| c != col).collect();
+    let offs = column_offsets(widths, order);
+    let pos = rest.iter().position(|&c| c >= 2 && offs[c] + widths[c] / 2.0 > at).unwrap_or(rest.len()).max(2);
+    rest.insert(pos.min(rest.len()), col);
+    rest
 }
 
 fn id() -> egui::Id {
@@ -636,16 +671,56 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
         let scale = (w - 36.0) / cols.iter().skip(2).map(|c| c.1).sum::<f32>();
         cols.iter_mut().skip(2).for_each(|c| c.1 *= scale);
     }
+    // the user's widths and order (the header's drags; Reset to Defaults in its menu)
+    if st.col_scale.len() != cols.len() {
+        st.col_scale = vec![1.0; cols.len()];
+    }
+    for (c, k) in cols.iter_mut().zip(&st.col_scale) {
+        c.1 *= *k;
+    }
+    let order = column_order(&st.col_order, cols.len());
+    let cxo = column_offsets(&cols.iter().map(|c| c.1).collect::<Vec<_>>(), &order);
     let hr = Rect::from_min_size(list_area.min, vec2(list_area.width(), ROW));
     p.rect_filled(hr, 0.0, look::header_bg());
-    let mut x = hr.min.x + 4.0;
-    for (i, (n, cw)) in cols.iter().enumerate() {
-        let _ = i;
-        let (a, at) = (Align2::CENTER_CENTER, pos2(x + cw / 2.0, hr.center().y));
-        let _ = (a, at);
-        fit_text(&p, Rect::from_min_max(pos2(x + 1.0, hr.min.y), pos2(x + cw - 3.0, hr.max.y)), n, 11.5, look::text_dim());
-        x += cw;
-        p.vline(x - 2.0, hr.y_range().shrink(5.0), Stroke::new(1.0, look::line()));
+    let hresp = ui.interact(hr, egui::Id::unique("evl-colhead"), Sense::click());
+    hresp.context_menu(|ui| {
+        if ui.button("Reset to Defaults").clicked() {
+            st.col_scale.clear();
+            st.col_order.clear();
+            ui.close();
+        }
+    });
+    for &i in &order {
+        let (n, cw) = cols[i];
+        let x = hr.min.x + 4.0 + cxo[i];
+        let cr = Rect::from_min_max(pos2(x + 1.0, hr.min.y), pos2(x + cw - 3.0, hr.max.y));
+        fit_text(&p, cr, n, 11.5, look::text_dim());
+        p.vline(x + cw - 2.0, hr.y_range().shrink(5.0), Stroke::new(1.0, look::line()));
+        // the separator: drag to resize (the Resize pointer)
+        let sep = Rect::from_center_size(pos2(x + cw - 2.0, hr.center().y), vec2(7.0, hr.height()));
+        let sresp = ui.interact(sep, egui::Id::unique("evl-colsep").with(i), Sense::drag());
+        if sresp.hovered() || sresp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+        }
+        if sresp.dragged() {
+            let base = cw / st.col_scale[i].max(0.01);
+            st.col_scale[i] = ((cw + sresp.drag_delta().x) / base.max(1.0)).clamp(0.2, 4.0);
+        }
+        // the name: drag left or right to move the column (L and M stay)
+        if i >= 2 {
+            let nresp = ui.interact(cr.shrink2(vec2(4.0, 0.0)), egui::Id::unique("evl-colname").with(i), Sense::drag());
+            if nresp.dragged() {
+                if let Some(pp) = nresp.interact_pointer_pos() {
+                    p.vline(pp.x, hr.y_range(), Stroke::new(2.0, BLUE));
+                }
+            }
+            if nresp.drag_stopped() {
+                if let Some(pp) = nresp.interact_pointer_pos().or(ui.ctx().pointer_latest_pos()) {
+                    let at = pp.x - hr.min.x - 4.0;
+                    st.col_order = move_column(&order, i, &cols.iter().map(|c| c.1).collect::<Vec<_>>(), at);
+                }
+            }
+        }
     }
     p.hline(hr.x_range(), hr.max.y, Stroke::new(1.0, look::line()));
     let list = Rect::from_min_max(pos2(list_area.min.x, hr.max.y + 1.0), list_area.max);
@@ -711,19 +786,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             }
             let txt = if sel { Color32::WHITE } else { look::text() };
             let f = look::regular(12.0);
-            let mut x = rr.min.x + 4.0;
+            let cx: Vec<f32> = cxo.iter().map(|o| rr.min.x + 4.0 + o).collect();
             let cell = |x: f32, w: f32| Rect::from_min_size(pos2(x, rr.min.y + 1.0), vec2(w - 4.0, ROW - 2.0));
             // L, M
             let locked = is_locked(&rg, row);
-            let lr = cell(x, cols[0].1);
+            let lr = cell(cx[0], cols[0].1);
             if ui.interact(lr, ui.scope_id().with(("evl-L", k)), Sense::click()).on_hover_text("Lock SMPTE Position").clicked() {
                 toggle = Some((row, true));
             }
             if locked {
                 glyphs::paint(&p, lr, glyphs::ph_fill::LOCK_SIMPLE, 11.0, txt);
             }
-            x += cols[0].1;
-            let mr = cell(x, cols[1].1);
+            let mr = cell(cx[1], cols[1].1);
             let muted = matches!(row, Row::N(i) if rg.notes[i].muted);
             if matches!(row, Row::N(_)) && ui.interact(mr, ui.scope_id().with(("evl-M", k)), Sense::click()).on_hover_text("Mute").clicked() {
                 toggle = Some((row, false));
@@ -731,10 +805,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             if muted {
                 p.text(mr.center(), Align2::CENTER_CENTER, "M", look::semibold(11.5), txt);
             }
-            x += cols[1].1;
             // Position: each unit dragged up / down; double-click types it
             let shown_pos = if ev.relative { abs.saturating_sub(rg.start) } else { abs };
-            let pr = cell(x, cols[2].1);
+            let pr = cell(cx[2], cols[2].1);
             let ptxt = pos_text(app, &st, shown_pos);
             // (right-aligned, as Logic's)
             p.text(pos2(pr.max.x - 4.0, pr.center().y), Align2::RIGHT_CENTER, &ptxt, f.clone(), txt);
@@ -766,16 +839,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
                     }
                 }
             }
-            x += cols[2].1;
             // Status
-            let sr = cell(x, cols[3].1);
+            let sr = cell(cx[3], cols[3].1);
             match row {
                 Row::N(_) => glyphs::paint(&p, Rect::from_min_size(sr.min, vec2(16.0, sr.height())), glyphs::ph_fill::MUSIC_NOTE_SIMPLE, 12.0, txt),
                 Row::E(i) => {
-                    p.text(pos2(sr.min.x + 2.0, sr.center().y), Align2::LEFT_CENTER, status_text(rg.ext.events[i].kind), f.clone(), txt);
+                    // (narrowed to its minimum: one letter)
+                    let full = status_text(rg.ext.events[i].kind);
+                    let shown = if sr.width() < 30.0 { full.chars().next().map(|c| c.to_string()).unwrap_or_default() } else { full.to_string() };
+                    p.text(pos2(sr.min.x + 2.0, sr.center().y), Align2::LEFT_CENTER, shown, f.clone(), txt);
                 }
             }
-            x += cols[3].1;
             // Ch, Num, Val
             let slot = |ui: &mut egui::Ui, r: Rect, name: &str, fld: Field, shown: &dyn Fn(f32) -> String, edit: &mut Option<(Row, Field, i32)>| {
                 let Some((v, lo, hi)) = field_of(&rg, row, fld) else { return };
@@ -789,8 +863,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
                     *edit = Some((row, fld, fv as i32));
                 }
             };
-            slot(ui, cell(x, cols[4].1), "evl-ch", Field::Ch, &|v| format!("{}", v as i32 + 1), &mut edit);
-            x += cols[4].1;
+            slot(ui, cell(cx[4], cols[4].1), "evl-ch", Field::Ch, &|v| format!("{}", v as i32 + 1), &mut edit);
             let (num_shown, val_shown): (Box<dyn Fn(f32) -> String>, Box<dyn Fn(f32) -> String>) = match row {
                 Row::N(_) => (Box::new(|v| crate::app::note_name(v as u8)), Box::new(|v| format!("{v:.0}"))),
                 Row::E(i) => match rg.ext.events[i].kind & 0xF0 {
@@ -808,24 +881,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
             };
             if kind == 0xC0 {
                 // Program: no bank select sent (÷) and the program number in Val
-                p.text(pos2(x + 2.0, rr.center().y), Align2::LEFT_CENTER, "÷", f.clone(), txt);
+                p.text(pos2(cx[5] + 2.0, rr.center().y), Align2::LEFT_CENTER, "÷", f.clone(), txt);
             }
-            let num_r = cell(x, cols[5].1);
+            let num_r = cell(cx[5], cols[5].1);
             if kind != 0xC0 && kind != 0xD0 {
                 slot(ui, num_r, "evl-num", Field::Num, &*num_shown, &mut edit);
             } else if kind == 0xD0 {
                 slot(ui, num_r, "evl-num", Field::Num, &*num_shown, &mut edit);
             }
-            x += cols[5].1;
-            let val_r = cell(x, cols[6].1);
+            let val_r = cell(cx[6], cols[6].1);
             if kind == 0xC0 {
                 slot(ui, val_r, "evl-val", Field::Num, &*val_shown, &mut edit);
             } else if kind != 0xD0 {
                 slot(ui, val_r, "evl-val", Field::Val, &*val_shown, &mut edit);
             }
-            x += cols[6].1;
             // Length/Info
-            let lr = cell(x, cols[7].1);
+            let lr = cell(cx[7], cols[7].1);
             match row {
                 Row::N(i) => {
                     let n = rg.notes[i];
@@ -871,11 +942,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
                     }
                 }
             }
-            x += cols[7].1;
             // Articulation
             if st.artic_col {
                 if let Row::N(i) = row {
-                    let ar = cell(x, cols[8].1);
+                    let ar = cell(cx[8], cols[8].1);
                     let cur = crate::artic::note_artic(&rg, &rg.notes[i]);
                     let label = match (cur, &artic_set) {
                         (Some(id), Some(set)) => set.artic(id).map_or(format!("{id}"), |a| a.name.clone()),
@@ -1367,6 +1437,11 @@ pub fn focused(app: &App) -> bool {
     crate::focus::area(app) == crate::focus::Area::EventList && region(app).is_some()
 }
 
+/// Opens the Event Float (a double-click on a note in the Piano Roll).
+pub fn open_float(ctx: &egui::Context) {
+    with(ctx, |s| s.float = true);
+}
+
 /// Commands: the Event Float and time display anywhere; the edit and select commands while
 /// the Event List has the pointer. False lets others run the command.
 pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
@@ -1594,6 +1669,22 @@ pub fn float_window(app: &mut App, ctx: &egui::Context) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn columns_move_and_reset() {
+        let w = [18.0, 18.0, 100.0, 40.0, 30.0, 42.0, 40.0, 110.0];
+        let o = super::column_order(&[], 8);
+        assert_eq!(o, (0..8).collect::<Vec<_>>());
+        // Status dragged to the far right
+        let o2 = super::move_column(&o, 3, &w, 1000.0);
+        assert_eq!(o2, [0, 1, 2, 4, 5, 6, 7, 3]);
+        let off = super::column_offsets(&w, &o2);
+        assert_eq!(off[3], 18.0 + 18.0 + 100.0 + 30.0 + 42.0 + 40.0 + 110.0);
+        // Length/Info dragged before Position
+        assert_eq!(super::move_column(&o, 7, &w, 40.0), [0, 1, 7, 2, 3, 4, 5, 6]);
+        // a stale order (another column count) falls back to Logic's
+        assert_eq!(super::column_order(&o2, 9), (0..9).collect::<Vec<_>>());
+    }
+
     use super::*;
 
     fn region_at(start: u32, length: u32) -> lg_core::Region {

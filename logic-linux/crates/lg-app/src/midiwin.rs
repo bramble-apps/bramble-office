@@ -100,15 +100,34 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
         let (regions, events) = crate::midifunc::transform_count(app, &w.t);
         ui.label(egui::RichText::new(format!("{regions} region{} selected · {events} event{} match", if regions == 1 { "" } else { "s" }, if events == 1 { "" } else { "es" })).small().weak());
         ui.add_space(6.0);
-        egui::Grid::new("tf-grid").num_columns(6).spacing([10.0, 6.0]).show(ui, |ui| {
+        egui::Grid::new("tf-grid").num_columns(7).spacing([10.0, 6.0]).show(ui, |ui| {
             ui.label("");
-            let used = |t: &transform::Transform, p: usize| !t.hide_unused || t.conds[p] != Cond::All || t.ops[p] != Op::Thru;
+            // (the Status picks the columns: notes have Pitch, Velocity and Length; other events
+            // Data Byte 1 and 2, some only one)
+            let st = w.t.status;
+            let used = |t: &transform::Transform, p: usize| {
+                let shown = match (st, p) {
+                    (0x90, _) | (0, _) => true,
+                    (_, 3) => false,
+                    (0xC0 | 0xD0, 2) => false,
+                    _ => true,
+                };
+                shown && (!t.hide_unused || t.conds[p] != Cond::All || t.ops[p] != Op::Thru || t.route[p] as usize != p)
+            };
+            ui.label(egui::RichText::new("Status").strong());
             for (p, name) in transform::PARAMS.iter().enumerate() {
-                ui.label(egui::RichText::new(if used(&w.t, p) { *name } else { "" }).strong());
+                let name = match (st, p) {
+                    (0x90 | 0, _) => *name,
+                    (_, 1) => "Data Byte 1",
+                    (_, 2) => "Data Byte 2",
+                    _ => *name,
+                };
+                ui.label(egui::RichText::new(if used(&w.t, p) { name } else { "" }).strong());
             }
             ui.label(egui::RichText::new("Subposition").strong());
             ui.end_row();
             ui.label("Select Conditions:");
+            status_pick(ui, "tf-st-cond", &mut w.t.status, ["All", "="]);
             for p in 0..5 {
                 if !used(&w.t, p) {
                     ui.label("");
@@ -155,7 +174,26 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
                 w.t.sub.set_values(a, b);
             });
             ui.end_row();
+            ui.end_row();
+            // the exchange dots: Channel, Data Byte 1 and Data Byte 2 can take each other's value
+            ui.label("Exchange:");
+            ui.label("");
+            for p in 0..5 {
+                if ![1usize, 2, 4].contains(&p) || !used(&w.t, p) {
+                    ui.label("");
+                    continue;
+                }
+                let src = w.t.route[p] as usize;
+                let txt = if src == p { "•".to_string() } else { format!("← {}", ["Position", "Data Byte 1", "Data Byte 2", "Length", "Channel"][src]) };
+                if ui.button(txt).on_hover_text("Click to take another column's value (before the operation)").clicked() {
+                    let order = [p, if p == 4 { 1 } else { 4 }, if p == 2 { 1 } else { 2 }];
+                    let at = order.iter().position(|&x| x == src).unwrap_or(0);
+                    w.t.route[p] = order[(at + 1) % 3] as u8;
+                }
+            }
+            ui.end_row();
             ui.label("Operations:");
+            status_pick(ui, "tf-st-op", &mut w.t.status_fix, ["Thru", "Fix"]);
             for p in 0..5 {
                 if !used(&w.t, p) {
                     ui.label("");
@@ -232,6 +270,30 @@ fn transform_window(app: &mut App, ctx: &egui::Context) {
     if open {
         app.midi.transform = Some(w);
     }
+}
+
+/// The Status condition (All / = type) or operation (Thru / Fix type): 0, or the event type.
+fn status_pick(ui: &mut egui::Ui, id: &str, v: &mut u8, names: [&str; 2]) {
+    ui.vertical(|ui| {
+        egui::ComboBox::from_id_salt((id, 0)).selected_text(if *v == 0 { names[0] } else { names[1] }).width(70.0).show_ui(ui, |ui| {
+            if ui.selectable_label(*v == 0, names[0]).clicked() {
+                *v = 0;
+            }
+            if ui.selectable_label(*v != 0, names[1]).clicked() && *v == 0 {
+                *v = 0x90;
+            }
+        });
+        if *v != 0 {
+            let cur = transform::STATUS.iter().find(|s| s.1 == *v).map_or("Note", |s| s.0);
+            egui::ComboBox::from_id_salt((id, 1)).selected_text(cur).width(70.0).show_ui(ui, |ui| {
+                for (n, k) in transform::STATUS {
+                    if ui.selectable_label(*v == k, n).clicked() {
+                        *v = k;
+                    }
+                }
+            });
+        }
+    });
 }
 
 /// The MIDI Transform map: 128 vertical bars (value 0-127 → mapped value), dragged; two fields

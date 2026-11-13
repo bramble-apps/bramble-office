@@ -787,7 +787,22 @@ fn body(app: &mut App, ui: &mut egui::Ui, area: Rect, y0: f32, tg: Tg, id: egui:
         names.push("Make Groove Template".into());
         names.push("Remove Groove Template from List".into());
         let names_ref: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-        if let Some(i) = choice_row(app, ui, inner, y, id.with("q"), tg, false, "Quantize", cur, &names_ref) {
+        // a click on the label: Classic Quantize or Smart Quantize (MIDI regions)
+        let smart = props(app, tg).is_some_and(|p| p.smart_quantize);
+        let lr = Rect::from_min_max(pos2(inner.min.x, y), pos2(inner.max.x - 154.0, y + ROW));
+        let lresp = ui.interact(lr, id.with("q-kind"), Sense::click());
+        if !audio {
+            egui::Popup::menu(&lresp).show(|ui| {
+                for (on, n) in [(!smart, "Classic Quantize"), (smart, "Smart Quantize")] {
+                    if ui.add(egui::Button::selectable(on, n)).clicked() && !on {
+                        let to = n.starts_with("Smart");
+                        set_choice(app, tg, |a, x| with_props(a, x, |p| p.smart_quantize = to));
+                        ui.close();
+                    }
+                }
+            });
+        }
+        if let Some(i) = choice_row(app, ui, inner, y, id.with("q"), tg, false, if smart { "Smart Quantize" } else { "Quantize" }, cur, &names_ref) {
             if i == n_values {
                 crate::groovecmd::command(app, "Make Groove Template");
             } else if i == n_values + 1 {

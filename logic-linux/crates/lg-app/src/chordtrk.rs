@@ -589,6 +589,10 @@ fn select_click(app: &mut App, i: usize, shift: bool) {
         Some(g) => c.in_group(g),
         None => vec![i],
     };
+    // (a chord picked inside its group stays picked, so a double-click on it opens Edit Chord)
+    if !shift && app.ct.sel.len() == 1 && app.ct.sel.contains(&i) {
+        return;
+    }
     if shift {
         if unit.iter().all(|k| app.ct.sel.contains(k)) {
             for k in unit {
@@ -912,6 +916,11 @@ pub fn lane(app: &mut App, ui: &mut egui::Ui, row: Rect, lane: Rect, x_of: &dyn 
         body.context_menu(|ui| chord_menu(app, ui, true));
     }
     bg.context_menu(|ui| chord_menu(app, ui, false));
+    // the groups' frames over their chords
+    for &(a, l) in &c.groups {
+        let r = body_r(a, l);
+        lp.rect_stroke(r, 3.0, Stroke::new(1.0, Color32::from_gray(0x9a)), egui::StrokeKind::Inside);
+    }
     if let Some(cur) = hovered_cursor {
         ui.ctx().set_cursor_icon(cur);
     }
