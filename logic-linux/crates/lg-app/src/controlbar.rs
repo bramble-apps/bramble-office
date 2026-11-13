@@ -249,7 +249,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, bar: Rect) {
                 crate::metroset::menu(app, &resp);
             }
             if i == 0 {
-                p.text(b[i].center(), Align2::CENTER_CENTER, "1234", look::semibold(10.0), col);
+                count_in_mark(&p, b[i].center(), col);
             } else {
                 icon(&p, b[i], ph::METRONOME, col);
             }
@@ -500,4 +500,21 @@ pub struct Shown {
     pub capture: bool,
     pub replace: bool,
     pub autopunch: bool,
+}
+
+/// Count-in's mark as Logic's: "1234" with each digit larger than the one before, on one
+/// baseline, in the regular weight.
+fn count_in_mark(p: &egui::Painter, c: egui::Pos2, col: Color32) {
+    let sizes = [6.5f32, 8.5, 10.5, 12.5];
+    let galleys: Vec<_> = ["1", "2", "3", "4"].iter().zip(sizes).map(|(d, s)| p.layout_no_wrap(d.to_string(), look::regular(s), col)).collect();
+    let width: f32 = galleys.iter().map(|g| g.size().x).sum::<f32>() - 0.3 * 3.0;
+    // the baseline: the largest digit's cap height centred on the button
+    let base = c.y + 12.5 * 0.36;
+    let mut x = c.x - width / 2.0;
+    for (g, s) in galleys.into_iter().zip(sizes) {
+        // (a digit's top sits about 0.95 of its size above the baseline in the UI font)
+        let w = g.size().x;
+        p.galley(egui::pos2(x, base - s * 0.95), g, col);
+        x += w - 0.3;
+    }
 }

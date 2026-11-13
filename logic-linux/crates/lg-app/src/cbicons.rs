@@ -42,14 +42,26 @@ pub fn browser(p: &egui::Painter, r: Rect, c: Color32, fill: Color32) {
 /// The Inspector: two toggle switches, the top one an outline with its knob left, the bottom
 /// one filled with its knob (cut out) at the right, as Logic's.
 pub fn inspector(p: &egui::Painter, r: Rect, c: Color32, cell: Color32) {
+    // (as Logic's at 2x: two 15 pt toggles with a clear gap between them; pill-shaped knobs
+    // inside each toggle with an even margin)
+    let (w, h, gap) = (15.0f32, 6.0f32, 2.6f32);
     for k in [0.0f32, 1.0] {
-        let pill = Rect::from_center_size(pos2(r.center().x, r.center().y - 4.6 + k * 9.2), vec2(18.0, 8.0));
+        let cy = r.center().y + (k - 0.5) * (h + W + gap);
+        let pill = Rect::from_center_size(pos2(r.center().x, cy), vec2(w, h));
         if k == 0.0 {
-            p.rect_stroke(pill, 4.0, Stroke::new(W, c), egui::StrokeKind::Middle);
-            p.circle_filled(pos2(pill.min.x + 4.0, pill.center().y), 2.6, c);
+            // off: an outline, its knob at the left
+            let sw = 1.3;
+            p.rect_stroke(pill, h / 2.0, Stroke::new(sw, c), egui::StrokeKind::Middle);
+            // (a pill-shaped knob: rounded ends, with an even gap to the outline)
+            let kh = h - sw - 1.6;
+            let knob = Rect::from_min_size(pos2(pill.min.x + sw / 2.0 + 0.8, cy - kh / 2.0), vec2(6.6, kh));
+            p.rect_filled(knob, kh / 2.0, c);
         } else {
-            p.rect_filled(pill.expand(W / 2.0), 4.8, c);
-            p.circle_filled(pos2(pill.max.x - 4.0, pill.center().y), 2.6, cell);
+            // on: filled, its knob (cut out) at the right
+            p.rect_filled(pill.expand(W / 2.0), h / 2.0 + W / 2.0, c);
+            let kh = h - 1.4;
+            let knob = Rect::from_min_size(pos2(pill.max.x - 0.7 - 6.6, cy - kh / 2.0), vec2(6.6, kh));
+            p.rect_filled(knob, kh / 2.0, cell);
         }
     }
 }
