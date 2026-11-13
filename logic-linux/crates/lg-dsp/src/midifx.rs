@@ -83,6 +83,8 @@ pub struct Status {
     pub env: f32,
     /// The Arpeggiator runs while the song is stopped (Play clicked then).
     pub free: bool,
+    /// Scripter: its console, parameters and error.
+    pub script: Option<std::sync::Arc<crate::scripter::View>>,
 }
 
 pub trait MidiFx: Send {
@@ -90,6 +92,10 @@ pub trait MidiFx: Send {
     fn process(&mut self, input: &[Ev], ctx: &Ctx, out: &mut Vec<Ev>);
     /// Note offs for everything the unit holds; queued events dropped.
     fn reset(&mut self, out: &mut Vec<Ev>);
+    /// The unit was bypassed (Scripter calls the script's Reset then).
+    fn bypassed(&mut self, out: &mut Vec<Ev>) {
+        self.reset(out);
+    }
     fn status(&self) -> Status {
         Status::default()
     }
@@ -386,7 +392,8 @@ pub fn params(name: &str) -> Vec<Param> {
             p(5, "Output Offset", -127.0, 127.0, 0.0, None),
             Param { id: 6, name: "Seed", min: 0.0, max: 1000.0, default: 0.0, unit: Menu, choices: seed_names(), hidden: false },
         ],
-        "Scripter" => vec![p(0, "Script Parameter 1", 0.0, 127.0, 64.0, None), p(1, "Script Parameter 2", 0.0, 127.0, 64.0, None), p(2, "Script Parameter 3", 0.0, 127.0, 64.0, None), p(3, "Script Parameter 4", 0.0, 127.0, 64.0, None)],
+        // the script declares its own (scripter.rs)
+        "Scripter" => vec![],
         "Transposer" => vec![p(0, "Transpose", -24.0, 24.0, 0.0, Semitones), m(1, "Root", &NOTE_NAMES, 0.0), m(2, "Scale", &SCALE_NAMES_USER, 0.0)],
         "Velocity Processor" => vec![
             m(vel::PROCESS, "Process", &["Note On", "Note Off", "Both"], 0.0),
@@ -439,12 +446,16 @@ pub fn data_at(name: &str) -> usize {
         "Arpeggiator" => arp::DATA,
         "Chord Trigger" => chord::DATA_AT,
         "Transposer" => 3,
+        "Scripter" => crate::scripter::SCRIPT_AT,
         _ => params(name).len(),
     }
 }
 
 /// A new unit's values: the parameters' defaults, then its data.
 pub fn defaults(name: &str) -> Vec<f32> {
+    if name == "Scripter" {
+        return crate::scripter::defaults();
+    }
     let ps = params(name);
     let mut v = vec![0.0; data_at(name) + data_len(name)];
     for p in &ps {
@@ -477,6 +488,10 @@ pub fn defaults(name: &str) -> Vec<f32> {
 }
 
 pub fn build(name: &str, values: &[f32]) -> Option<Box<dyn MidiFx>> {
+    if name == "Scripter" {
+        // the script follows the parameters: keep every float
+        return Some(Box::new(crate::scripter::Scripter::new(values)));
+    }
     let mut v = defaults(name);
     for (i, x) in values.iter().enumerate().take(v.len()) {
         v[i] = *x;
@@ -488,7 +503,6 @@ pub fn build(name: &str, values: &[f32]) -> Option<Box<dyn MidiFx>> {
         "Modulator" => Box::new(modu::Modulator::new(v)),
         "Note Repeater" => Box::new(NoteRepeater { v, queue: Vec::new(), starts: Vec::new() }),
         "Randomizer" => Box::new(Randomizer::new(v)),
-        "Scripter" => Box::new(Scripter { v }),
         "Transposer" => Box::new(Transposer { v, map: [None; 128] }),
         "Velocity Processor" => Box::new(VelocityProcessor { v }),
         _ => return None,
@@ -517,7 +531,7 @@ impl Chain {
             for (u, s) in self.units.iter_mut().zip(slots) {
                 u.1.load(&s.1);
                 if s.2 && !u.2 {
-                    u.1.reset(&mut out);
+                    u.1.bypassed(&mut out);
                 }
                 u.2 = s.2;
             }
@@ -1763,24 +1777,6 @@ impl MidiFx for Randomizer {
             self.rng = Rng::new(seed);
         }
     }
-}
-
-// ---------------------------------------------------------------------------------------
-// Scripter: the slot and its parameters; no script language yet (events pass through)
-
-struct Scripter {
-    v: Vec<f32>,
-}
-
-impl MidiFx for Scripter {
-    fn load(&mut self, values: &[f32]) {
-        let n = self.v.len().min(values.len());
-        self.v[..n].copy_from_slice(&values[..n]);
-    }
-    fn process(&mut self, input: &[Ev], _ctx: &Ctx, out: &mut Vec<Ev>) {
-        out.extend_from_slice(input);
-    }
-    fn reset(&mut self, _out: &mut Vec<Ev>) {}
 }
 
 // ---------------------------------------------------------------------------------------
