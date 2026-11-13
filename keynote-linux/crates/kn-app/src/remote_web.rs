@@ -97,7 +97,9 @@ fn serve(stream: TcpStream) {
         return respond(&stream, "403 Forbidden", text, "This link no longer works: open the one in Keydeck's Settings > Remotes.".as_bytes());
     }
     match (req.method.as_str(), req.path.as_str()) {
-        ("GET", "/") => respond(&stream, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()),
+        // the key goes into the font links here: browsers other than Chrome refuse a page
+        // script rewriting @font-face (and the page's script stopped there: a black page)
+        ("GET", "/") => respond(&stream, "200 OK", "text/html; charset=utf-8", PAGE.replace("font?k=KEY", &format!("font?k={key}")).as_bytes()),
         ("GET", "/events") => events(stream),
         ("GET", "/ping") => respond(&stream, "204 No Content", text, b""),
         ("GET", "/font") => respond(&stream, "200 OK", "font/ttf", FONT),
