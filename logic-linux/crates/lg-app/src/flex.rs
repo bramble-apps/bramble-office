@@ -1867,11 +1867,16 @@ pub fn pitch_inspector(app: &mut App, ui: &mut egui::Ui, area: Rect, t: usize, r
 /// A horizontal value bar: drag sideways (Shift: finer), Option-click resets to the middle.
 fn hslider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32, lo: f32, hi: f32, shown: &dyn Fn(f32) -> String) -> bool {
     let resp = ui.interact(r, id, Sense::click_and_drag());
+    // (Logic's: a thin track with a round thumb, the value to its right)
     let p = ui.painter();
-    p.rect_filled(r, 4.0, look::group_bg());
     let f = ((*v - lo) / (hi - lo)).clamp(0.0, 1.0);
-    p.rect_filled(Rect::from_min_size(r.min, vec2(r.width() * f, r.height())), 4.0, look::accent().gamma_multiply(0.55));
-    p.text(r.center(), Align2::CENTER_CENTER, shown(*v), look::regular(11.0), look::text());
+    let track = Rect::from_min_max(pos2(r.min.x + 6.0, r.center().y - 1.5), pos2(r.max.x - 58.0, r.center().y + 1.5));
+    p.rect_filled(track, 1.5, look::group_bg());
+    let tx = track.min.x + track.width() * f;
+    p.rect_filled(Rect::from_min_max(track.min, pos2(tx, track.max.y)), 1.5, look::accent());
+    p.circle_filled(pos2(tx, r.center().y), 6.0, Color32::from_gray(0xe8));
+    p.circle_stroke(pos2(tx, r.center().y), 6.0, Stroke::new(0.5, Color32::from_black_alpha(90)));
+    p.text(pos2(r.max.x - 2.0, r.center().y), Align2::RIGHT_CENTER, shown(*v), look::regular(11.0), look::text());
     if resp.hovered() || resp.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
