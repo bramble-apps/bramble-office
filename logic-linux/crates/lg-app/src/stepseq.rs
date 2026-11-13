@@ -245,7 +245,12 @@ impl StepPattern {
 
     /// A new pattern for drums: Logic's kit rows.
     pub fn drums() -> StepPattern {
-        let rows = [36u8, 38, 37, 39, 42, 44, 46, 45, 47, 50, 49, 51].iter().map(|&p| Row::new(drum_name(p).unwrap_or_default(), p)).collect();
+        StepPattern::with_rows(kit_rows(&Kit::Gm))
+    }
+
+    /// A new 16-step pattern of these (note, name) rows.
+    pub fn with_rows(rows: Vec<(u8, String)>) -> StepPattern {
+        let rows = rows.into_iter().map(|(p, n)| Row::new(n, p)).collect();
         StepPattern { steps: 16, rate: SIXTEENTH, rows, play: Play::Forward, opts: Default::default() }
     }
 
@@ -596,6 +601,11 @@ struct Store {
     rand: RandOpts,
     /// A row was moved by hand: new rows go at the end until Sort Rows is chosen again.
     manual_order: bool,
+    /// The menu bar's Vertical Zoom slider (0..1; None: Logic's default, 48 pt rows), Vertical
+    /// Auto Zoom, and the minimum Step Width (else the maximum: the steps fill the grid).
+    v_zoom: Option<f32>,
+    v_auto: bool,
+    narrow_steps: bool,
 }
 
 /// The Randomize dialog's settings. On/Off, Tie and Skip use the probability (how likely a step
@@ -884,10 +894,105 @@ pub fn set_global_mode(ctx: &egui::Context, app: &App, mode: Mode) {
 }
 
 fn is_drums(app: &App, t: usize) -> bool {
-    app.project.as_ref().and_then(|p| p.tracks.get(t)).is_some_and(|tr| {
-        let n = tr.name.to_lowercase();
-        tr.kind == lg_core::TrackKind::Drummer || ["drum", "kit", "beat", "perc", "808", "909"].iter().any(|w| n.contains(w))
+    kit_of(app, t).is_some()
+}
+
+/// A drum track's kit, for a new pattern's rows: General MIDI names (Drum Kit Designer, a
+/// Drummer, a drum patch), Drum Machine Designer's default Drum Synth Kit, or its own pads.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Kit {
+    Gm,
+    DmdDefault,
+    DmdPads(Vec<(u8, String)>),
+}
+
+/// The kit a track plays, or None for a melodic instrument (by its kind, its instrument or
+/// patch, and as a last resort its name).
+fn kit_of(app: &App, t: usize) -> Option<Kit> {
+    let tr = app.project.as_ref()?.tracks.get(t)?;
+    if tr.kind == lg_core::TrackKind::Drummer {
+        return Some(Kit::Gm);
+    }
+    let inst = app.instrument_for(t).unwrap_or_default();
+    kit_for(&inst, &tr.name)
+}
+
+/// The kit an instrument choice (or patch) and track name stand for (kit_of; pure for tests).
+pub fn kit_for(inst: &str, track_name: &str) -> Option<Kit> {
+    let plugin = crate::soundlib::plugin_of(inst).trim();
+    if plugin == "Drum Machine Designer" {
+        let pads: Vec<(u8, String)> = crate::soundlib::pads_of(inst).into_iter().map(|(n, f)| (n, f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default())).collect();
+        return Some(if pads.is_empty() { Kit::DmdDefault } else { Kit::DmdPads(pads) });
+    }
+    if plugin == lg_synth::dmd::STYLES[0] {
+        return Some(Kit::DmdDefault);
+    }
+    let drum_patch = |n: &str| {
+        lg_synth::dmd::STYLES.contains(&n)
+            || ["Drum Kit Designer", "Ultrabeat", "Drum Synth"].contains(&n)
+            || crate::brpreview::kit_named(n)
+            || lg_synth::patch(n).is_some_and(|s| matches!(s.category, Some(lg_synth::patches::Cat::AcousticDrums | lg_synth::patches::Cat::ElectronicDrums)))
+    };
+    let low = track_name.to_lowercase();
+    if drum_patch(plugin) || drum_patch(track_name) || ["drum", " kit", "beat", "perc", "808", "909"].iter().any(|w| low.contains(w) || low.starts_with(w.trim())) {
+        return Some(Kit::Gm);
+    }
+    None
+}
+
+/// Drum Machine Designer's default kit (Drum Synth Kit): its pads' sound names.
+fn dmd_default_name(pitch: u8) -> Option<&'static str> {
+    Some(match pitch {
+        36 => "Kick 2",
+        37 => "Rim 1",
+        38 => "Snare 1",
+        39 => "Clap 1",
+        40 => "Snare 2",
+        41 => "Tom Low",
+        42 => "Hi-Hat 1",
+        43 => "Tom Mid",
+        44 => "Hi-Hat 2",
+        45 => "Tom High",
+        46 => "Hi-Hat 3",
+        49 => "Crash",
+        51 => "Ride",
+        _ => return None,
     })
+}
+
+/// A kit's rows for a new pattern, kick first: kick, snare, rim, clap, the hi-hats (closed,
+/// pedal, open), the toms low to high, crash and ride; a DMD of the user's own pads lists its
+/// pads in that order, then the rest by note.
+pub fn kit_rows(kit: &Kit) -> Vec<(u8, String)> {
+    match kit {
+        Kit::Gm => [36u8, 38, 37, 39, 42, 44, 46, 45, 47, 50, 49, 51].iter().map(|&p| (p, drum_name(p).unwrap_or_default().to_string())).collect(),
+        Kit::DmdDefault => [36u8, 38, 37, 39, 42, 44, 46, 41, 43, 45, 49, 51].iter().map(|&p| (p, dmd_default_name(p).unwrap_or_default().to_string())).collect(),
+        Kit::DmdPads(pads) => {
+            const ORDER: [u8; 13] = [36, 35, 38, 40, 37, 39, 42, 44, 46, 41, 43, 45, 49];
+            let mut v: Vec<(u8, String)> = pads.clone();
+            v.sort_by_key(|(n, _)| (ORDER.iter().position(|o| o == n).unwrap_or(ORDER.len()), *n));
+            v.dedup_by_key(|(n, _)| *n);
+            v
+        }
+    }
+}
+
+/// Names a drum pattern's rows after the kit's pieces (a DMD's own pad names).
+fn name_rows(p: &mut StepPattern, kit: &Kit) {
+    let names = kit_rows(kit);
+    for row in p.rows.iter_mut() {
+        if let Some((_, n)) = names.iter().find(|(k, _)| *k == row.pitch).filter(|(_, n)| !n.is_empty()) {
+            row.name = n.clone();
+        }
+    }
+}
+
+/// A new pattern's default for a track: its kit's rows for drums, else Logic's melodic rows.
+fn default_pattern(app: &App, t: usize) -> StepPattern {
+    match kit_of(app, t) {
+        Some(kit) => StepPattern::with_rows(kit_rows(&kit)),
+        None => StepPattern::melodic(),
+    }
 }
 
 /// Keeps patterns on their regions when a region is deleted (later regions on the track move
@@ -919,7 +1024,11 @@ pub fn convert_to_pattern(app: &mut App, ctx: &egui::Context, t: usize, r: usize
         return;
     }
     let rel: Vec<Note> = rg.notes.iter().map(|n| Note { pos: n.pos.saturating_sub(rg.start), ..*n }).collect();
-    let pattern = StepPattern::from_notes(&rel, rg.length, is_drums(app, t));
+    let kit = kit_of(app, t);
+    let mut pattern = if rel.is_empty() { default_pattern(app, t) } else { StepPattern::from_notes(&rel, rg.length, kit.is_some()) };
+    if let Some(kit) = &kit {
+        name_rows(&mut pattern, kit);
+    }
     with_store(ctx, |s| {
         s.patterns.insert((t, r), Entry { pattern, written: Vec::new() });
     });
@@ -932,7 +1041,7 @@ pub fn convert_to_pattern(app: &mut App, ctx: &egui::Context, t: usize, r: usize
 pub fn new_pattern_region(app: &mut App, ctx: &egui::Context, t: usize, at: u32) {
     let bar = app.bar_ticks();
     let at = at / bar * bar;
-    let drums = is_drums(app, t);
+    let fresh = default_pattern(app, t);
     let Some(name) = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()) else { return };
     app.checkpoint("Create Pattern Region");
     let Some(tr) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)) else { return };
@@ -940,7 +1049,7 @@ pub fn new_pattern_region(app: &mut App, ctx: &egui::Context, t: usize, at: u32)
     let r = tr.regions.len() - 1;
     with_store(ctx, |s| {
         // the default pattern template when one is stored (Store as Default Pattern Template)
-        let pattern = load_file(&default_path()).unwrap_or_else(|| if drums { StepPattern::drums() } else { StepPattern::melodic() });
+        let pattern = load_file(&default_path()).unwrap_or(fresh);
         s.patterns.insert((t, r), Entry { pattern, written: Vec::new() });
     });
     app.selected_track = Some(t);
@@ -996,18 +1105,39 @@ const TOOLBAR_H: f32 = 40.0;
 const PATTERN_H: f32 = 40.0;
 const ROW_H: f32 = 48.0;
 /// Logic's row header width (kRowHeaderWidthKey 367), narrower in a narrow editor.
-const HEADER_W: f32 = 367.0;
+const HEADER_W: f32 = 358.0;
 
 fn grid_bg() -> Color32 {
     Color32::from_rgb(0x14, 0x14, 0x14)
-}
-fn cell_off() -> Color32 {
-    Color32::from_rgb(0x20, 0x1b, 0x33)
 }
 /// Row colour (Logic's default purple) and steps on.
 fn row_color() -> Color32 {
     Color32::from_rgb(0x5a, 0x41, 0xce)
 }
+/// A drum row's colour by its kit piece (Logic colours its drum rows: kicks red, snares and
+/// rims orange, claps yellow, hi-hats green, toms teal, cymbals blue, other percussion pink).
+pub fn kit_color(name: &str) -> Color32 {
+    let n = name.to_lowercase();
+    let has = |w: &[&str]| w.iter().any(|x| n.contains(x));
+    if has(&["kick", "bass drum"]) {
+        Color32::from_rgb(0xe0, 0x4a, 0x43)
+    } else if has(&["snare", "rim", "stick"]) {
+        Color32::from_rgb(0xe8, 0x86, 0x2e)
+    } else if has(&["clap", "snap"]) {
+        Color32::from_rgb(0xd9, 0xb3, 0x26)
+    } else if has(&["hat", "hh"]) {
+        Color32::from_rgb(0x3f, 0xb3, 0x5a)
+    } else if has(&["tom"]) {
+        Color32::from_rgb(0x26, 0xa9, 0xb5)
+    } else if has(&["crash", "ride", "china", "splash", "cymbal"]) {
+        Color32::from_rgb(0x3d, 0x7b, 0xe8)
+    } else if n.is_empty() {
+        row_color()
+    } else {
+        Color32::from_rgb(0xc8, 0x4f, 0xb8)
+    }
+}
+
 fn cell_on() -> Color32 {
     Color32::from_rgb(0x8a, 0x70, 0xf2)
 }
@@ -1024,13 +1154,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let Some(region) = app.project.as_ref().and_then(|pr| pr.tracks.get(t)?.regions.get(r)).cloned() else { return };
     // a region the Step Sequencer hasn't seen, or whose notes changed elsewhere: (re)read
     let rel: Vec<Note> = region.notes.iter().map(|n| Note { pos: n.pos.saturating_sub(region.start), ..*n }).collect();
-    let drums = is_drums(app, t);
+    let kit = kit_of(app, t);
+    let drums = kit.is_some();
     with_store(&ctx, |s| {
         let e = s.patterns.entry((t, r)).or_default();
         let mut sorted = rel.clone();
         sorted.sort_by_key(|n| (n.pos, std::cmp::Reverse(n.pitch)));
         if e.written != sorted && !(e.written.is_empty() && sorted.is_empty() && !e.pattern.rows.is_empty()) {
             let mut fresh = StepPattern::from_notes(&rel, region.length, drums);
+            if let Some(kit) = &kit {
+                name_rows(&mut fresh, kit);
+            }
             // keep rows (and their names, mute, solo) the notes don't mention
             for old in &e.pattern.rows {
                 if let Some(nr) = fresh.rows.iter_mut().find(|x| x.pitch == old.pitch) {
@@ -1053,116 +1187,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut pat = with_store(&ctx, |s| s.patterns.get(&(t, r)).map(|e| e.pattern.clone())).unwrap_or_default();
     let before = pat.clone();
 
-    // the tab (a pattern region has only the Step Sequencer)
-    let tab = Rect::from_center_size(pos2(area.center().x, area.min.y + 20.0), vec2(160.0, 26.0));
-    p.rect_filled(tab, 8.0, look::group_bg());
-    p.rect_filled(tab.shrink(2.0), 7.0, look::accent());
-    p.text(tab.center(), Align2::CENTER_CENTER, "Step Sequencer", look::regular(13.0), Color32::WHITE);
-    // the toolbar: local menus, and the modes chooser for the selected row
+    // the tab (a pattern region has only the Step Sequencer), Logic's tab capsule
+    crate::edpane::draw_tabs(ui, Rect::from_min_size(area.min, vec2(area.width(), 40.0)), &["Step Sequencer"], 0);
     let bar = Rect::from_min_size(pos2(area.min.x, area.min.y + 40.0), vec2(area.width(), TOOLBAR_H));
-    p.hline(bar.x_range(), bar.max.y, Stroke::new(1.0, look::line()));
+    p.hline(bar.x_range(), bar.max.y, Stroke::new(1.0, look::mix(look::header_bg(), Color32::BLACK, 0.35)));
     let mut sel_row = with_store(&ctx, |s| s.selected_row).min(pat.rows.len().saturating_sub(1));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(12.0, 6.0))).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-        crate::menus::local_bar(app, ui, &[("Edit", "stepseq-Edit"), ("Functions", "stepseq-Functions"), ("View", "stepseq-View")]);
-        // Pattern Browser | Inspector: one joined pill of two toggles (Logic's)
-        ui.add_space(10.0);
-        let (pill, _) = ui.allocate_exact_size(vec2(60.0, 26.0), Sense::hover());
-        ui.painter().rect_filled(pill, 7.0, look::group_bg());
-        let (b_on, i_on) = with_store(ui.ctx(), |s| (s.browser, s.inspector));
-        for (k, (icon, on, tip)) in [(crate::glyphs::ph::TABLE, b_on, "Pattern Browser"), (crate::glyphs::ph::SLIDERS_HORIZONTAL, i_on, "Show/Hide Local Inspector")].into_iter().enumerate() {
-            let b = Rect::from_min_size(pos2(pill.min.x + k as f32 * 30.0, pill.min.y), vec2(30.0, 26.0));
-            if on {
-                ui.painter().rect_filled(b.shrink(2.0), 6.0, look::button_on());
-            }
-            crate::glyphs::paint(ui.painter(), Rect::from_center_size(b.center(), vec2(16.0, 16.0)), icon, 15.0, if on { look::accent() } else { look::text() });
-            if ui.interact(b, ui.id().with(("ss-tb", k)), Sense::click()).on_hover_text(tip).clicked() {
-                with_store(ui.ctx(), |s| if k == 0 { s.browser = !s.browser } else { s.inspector = !s.inspector });
-            }
-        }
-        ui.painter().vline(pill.center().x, pill.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
-        // MIDI In (step recording) | MIDI Out: one joined pill (Logic's; MIDI Out on by default,
-        // green when on); then Mono Mode on its own
-        ui.add_space(8.0);
-        let (pill2, _) = ui.allocate_exact_size(vec2(60.0, 26.0), Sense::hover());
-        ui.painter().rect_filled(pill2, 7.0, look::group_bg());
-        let (in_on, out_on, mono_on) = with_store(ui.ctx(), |s| (s.step_rec, !s.midi_out_off, s.mono));
-        for (k, (on, tip)) in [(in_on, "MIDI In (Step Recording)"), (out_on, "MIDI Out")].into_iter().enumerate() {
-            let b = Rect::from_min_size(pos2(pill2.min.x + k as f32 * 30.0, pill2.min.y), vec2(30.0, 26.0));
-            if on {
-                ui.painter().rect_filled(b.shrink(1.0), 6.0, Color32::from_rgb(0x2f, 0x9e, 0x44));
-            }
-            let col = if on { Color32::WHITE } else { look::text() };
-            // ›● for In (the arrow into the MIDI socket), ●› for Out
-            let (ax, ix) = if k == 0 { (b.min.x + 8.0, b.center().x + 3.0) } else { (b.max.x - 8.0, b.center().x - 3.0) };
-            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(ix, b.center().y), vec2(15.0, 15.0)), crate::glyphs::ph::GAME_CONTROLLER, 14.0, col);
-            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(ax, b.center().y), vec2(8.0, 10.0)), crate::glyphs::ph::CARET_RIGHT, 8.0, col);
-            if ui.interact(b, ui.id().with(("ss-tb2", k)), Sense::click()).on_hover_text(tip).clicked() {
-                with_store(ui.ctx(), |s| {
-                    if k == 0 {
-                        s.step_rec = !s.step_rec;
-                        s.step_pending = false;
-                    } else {
-                        s.midi_out_off = !s.midi_out_off;
-                    }
-                });
-            }
-        }
-        ui.painter().vline(pill2.center().x, pill2.y_range().shrink(6.0), Stroke::new(1.0, look::line()));
-        ui.add_space(8.0);
-        let (mb, _) = ui.allocate_exact_size(vec2(34.0, 26.0), Sense::hover());
-        let mresp = ui.interact(mb, ui.id().with("ss-mono"), Sense::click()).on_hover_text("Mono Mode");
-        ui.painter().rect_filled(mb, 7.0, if mono_on { Color32::from_rgb(0x2f, 0x9e, 0x44) } else { look::group_bg() });
-        crate::glyphs::paint(ui.painter(), Rect::from_center_size(mb.center(), vec2(15.0, 15.0)), crate::glyphs::ph::DOTS_THREE_VERTICAL, 15.0, if mono_on { Color32::WHITE } else { look::text() });
-        if mresp.clicked() {
-            let ctx = ui.ctx().clone();
-            command(app, &ctx, "Mono Mode");
-        }
-        let (learn, live, mono) = with_store(ui.ctx(), |s| (s.learn, s.live_record, s.mono));
-        let mut flags = Vec::new();
-        if let Some(add) = learn {
-            flags.push(if add { "Learn (Add): play a note" } else { "Learn (Assign): play a note" });
-        }
-        if live {
-            flags.push("Live Record");
-        }
-        if mono {
-            flags.push("Mono");
-        }
-        if !flags.is_empty() {
-            ui.label(egui::RichText::new(flags.join("  ·  ")).size(12.0).color(Color32::from_rgb(0xe8, 0xc3, 0x2e)));
-        }
-    });
-    // at the right of the bar: Live Pattern Recording and Preview (Logic's)
-    {
-        let cy = bar.center().y;
-        let pv = Rect::from_min_size(pos2(bar.max.x - 12.0 - 34.0, cy - 13.0), vec2(34.0, 26.0));
-        let lr = Rect::from_min_size(pos2(pv.min.x - 8.0 - 34.0, cy - 13.0), vec2(34.0, 26.0));
-        let (live_on, previewing) = with_store(&ctx, |s| (s.live_record, s.preview.is_some()));
-        let lresp = ui.interact(lr, ui.id().with("ss-live"), Sense::click()).on_hover_text("Live Pattern Recording");
-        p.rect_filled(lr, 7.0, if live_on { look::record_red() } else { look::group_bg() });
-        let lc = if live_on { Color32::WHITE } else { look::text() };
-        crate::glyphs::paint(&p, Rect::from_center_size(pos2(lr.center().x + 3.0, cy), vec2(15.0, 15.0)), crate::glyphs::ph::CIRCLE, 15.0, lc);
-        p.text(pos2(lr.center().x + 3.0, cy), Align2::CENTER_CENTER, "R", look::semibold(9.0), lc);
-        crate::glyphs::paint(&p, Rect::from_center_size(pos2(lr.min.x + 8.0, cy), vec2(8.0, 10.0)), crate::glyphs::ph::CARET_RIGHT, 8.0, lc);
-        if lresp.clicked() {
-            with_store(&ctx, |s| s.live_record = !s.live_record);
-        }
-        // Preview: plays the pattern while the project is stopped; again stops it
-        let presp = ui.interact(pv, ui.id().with("ss-preview"), Sense::click()).on_hover_text("Preview");
-        p.rect_filled(pv, 7.0, if previewing { look::accent() } else { look::group_bg() });
-        crate::glyphs::paint(&p, Rect::from_center_size(pv.center(), vec2(15.0, 15.0)), crate::glyphs::ph_fill::SPEAKER_SIMPLE_LOW, 15.0, if previewing { Color32::WHITE } else { look::text() });
-        if presp.clicked() {
-            let now = ctx.input(|i| i.time);
-            let stop = with_store(&ctx, |s| match s.preview.take() {
-                Some(pv) => pv.sounding,
-                None => {
-                    s.preview = Some(Preview { start: now, track: t, sent: 0, sounding: Vec::new(), pass: 0 });
-                    Vec::new()
-                }
-            });
-            preview_off(app, t, &stop);
-        }
-    }
+    toolbar(app, ui, bar, t, pat.rows.iter().any(|r| r.steps.iter().any(|s| s.on)));
     // the Pattern Browser on the left
     let area = if with_store(&ctx, |s| s.browser) {
         let br = Rect::from_min_max(pos2(area.min.x, bar.max.y + 1.0), pos2(area.min.x + 200.0, area.max.y));
@@ -1196,90 +1226,122 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let ph = Rect::from_min_size(pos2(area.min.x, bar.max.y), vec2(area.width(), PATTERN_H));
     let head_x = area.min.x;
     let header_w = (area.width() * 0.42).clamp(280.0, HEADER_W);
-    let compact = header_w < 360.0;
-    let tiny = header_w < 320.0;
+    // (narrow: the playback box leaves, then rotate; Logic's full header is 358 pt)
+    let compact = header_w < 355.0;
+    let tiny = header_w < 310.0;
     let mut actions: Vec<Action> = Vec::new();
     {
         let hr = Rect::from_min_max(ph.min, pos2(head_x + header_w, ph.max.y));
         p.rect_filled(hr, 0.0, look::header_bg());
-        let mut x = hr.min.x + 12.0;
         let cy = hr.center().y;
-        // + ⌄: a row for a pitch
-        let add = Rect::from_min_size(pos2(x, cy - 13.0), vec2(42.0, 26.0));
+        let cell = |x: f32, w: f32| Rect::from_min_size(pos2(x, cy - 12.0), vec2(w, 24.0));
+        // + ⌄: the Add Row pop-up; in Learn mode a red (Add) or amber (Assign) Learn button
+        // takes its place, and a click on it ends Learn
+        let add = cell(hr.min.x + 10.5, 41.0);
+        let learn = with_store(&ctx, |s| s.learn);
+        if let Some(adding) = learn {
+            let lr = cell(hr.min.x + 10.5, 56.0);
+            let fill = if adding { look::record_red() } else { Color32::from_rgb(0xe8, 0xa3, 0x2e) };
+            if bar_btn(ui, lr, ui.scope_id().with("ss-learn"), fill, if adding { "Learn (Add): play a note" } else { "Learn (Assign): play a note" }, true).clicked() {
+                with_store(&ctx, |s| s.learn = None);
+            }
+            p.text(lr.center(), Align2::CENTER_CENTER, "Learn", look::semibold(13.0), Color32::WHITE);
+        } else {
         p.rect_filled(add, 6.0, look::group_bg());
         ui.scope_builder(egui::UiBuilder::new().max_rect(add), |ui| {
             plain(ui);
-            crate::glyphs::paint(ui.painter(), Rect::from_center_size(pos2(add.max.x - 12.0, add.center().y + 1.0), vec2(12.0, 12.0)), crate::glyphs::ph::CARET_DOWN, 10.0, look::text());
-            ui.menu_button(egui::RichText::new("+     ").size(17.0).color(look::text()), |ui| {
-                ui.set_min_width(140.0);
+            let pp = ui.painter();
+            // + and ⌄ (Logic's: a thin plus, the chevron smaller)
+            let pc = pos2(add.min.x + 13.0, add.center().y);
+            pp.line_segment([pos2(pc.x - 5.5, pc.y), pos2(pc.x + 5.5, pc.y)], Stroke::new(1.3, look::text()));
+            pp.line_segment([pos2(pc.x, pc.y - 5.5), pos2(pc.x, pc.y + 5.5)], Stroke::new(1.3, look::text()));
+            pp.line(vec![pos2(add.max.x - 14.5, add.center().y - 0.5), pos2(add.max.x - 11.5, add.center().y + 2.5), pos2(add.max.x - 8.5, add.center().y - 0.5)], Stroke::new(1.2, look::text()));
+            ui.menu_button(egui::RichText::new("          ").size(13.0), |ui| {
+                ui.set_min_width(160.0);
                 let used: Vec<u8> = pat.rows.iter().map(|r| r.pitch).collect();
                 let list: Vec<u8> = if drums { (35u8..=59).collect() } else { (36u8..=84).rev().collect() };
-                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                    for p in list.into_iter().filter(|p| !used.contains(p)) {
-                        let name = drums.then(|| drum_name(p)).flatten().map(str::to_string).unwrap_or_else(|| crate::app::note_name(p));
-                        if ui.button(name.clone()).clicked() {
-                            actions.push(Action::AddRow(name, p));
-                            ui.close();
+                ui.menu_button("Notes", |ui| {
+                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                        for p in list.into_iter().filter(|p| !used.contains(p)) {
+                            let name = drums.then(|| drum_name(p)).flatten().map(str::to_string).unwrap_or_else(|| crate::app::note_name(p));
+                            if ui.button(name.clone()).clicked() {
+                                actions.push(Action::AddRow(name, p));
+                                ui.close();
+                            }
                         }
-                    }
+                    });
                 });
+                ui.separator();
+                for (label, adding) in [("Learn (Add)", true), ("Learn (Assign)", false)] {
+                    if ui.button(label).clicked() {
+                        with_store(ui.ctx(), |s| s.learn = Some(adding));
+                        ui.close();
+                    }
+                }
             });
         });
+        }
         // (the pattern's controls line up with the rows' below)
-        x = hr.min.x + 120.0;
-        rate_box(ui, Rect::from_min_size(pos2(x, cy - 13.0), vec2(60.0, 26.0)), ("pat-rate", 0), pat.rate, &mut |v| actions.push(Action::PatternRate(v)));
-        x += 62.0;
+        let mut x = hr.min.x + 105.5;
+        rate_box(ui, cell(x, 55.0), ("pat-rate", 0), pat.rate, look::group_bg(), &mut |v| actions.push(Action::PatternRate(v)));
+        x += 64.0;
         if !compact {
-            play_box(ui, Rect::from_min_size(pos2(x, cy - 13.0), vec2(40.0, 26.0)), ("pat-play", 0), pat.play, &mut |m| actions.push(Action::Play(None, m)));
-            x += 44.0;
+            play_box(ui, cell(x, 38.0), ("pat-play", 0), pat.play, look::group_bg(), &mut |m| actions.push(Action::Play(None, m)));
+            x += 46.5;
         }
         if !tiny {
-        let rot = Rect::from_min_size(pos2(x, cy - 13.0), vec2(40.0, 26.0));
-        p.rect_filled(rot, 6.0, look::group_bg());
+        let rot = cell(x, 39.0);
+        pill_pair(&p, rot, look::group_bg());
         for (k, (s, d)) in [(Glyph::RotLeft, -1i32), (Glyph::RotRight, 1)].iter().enumerate() {
-            let rr = Rect::from_min_size(pos2(rot.min.x + k as f32 * 20.0, rot.min.y), vec2(20.0, 26.0));
+            let rr = Rect::from_min_size(pos2(rot.min.x + k as f32 * rot.width() / 2.0, rot.min.y), vec2(rot.width() / 2.0, rot.height()));
             glyph(&p, rr, *s, look::text());
             if ui.interact(rr, ui.scope_id().with("lg-ss").with(("pat-rot", k)), Sense::click()).on_hover_text(if *d < 0 { "Rotate Pattern Left" } else { "Rotate Pattern Right" }).clicked() {
                 actions.push(Action::Rotate(None, *d));
             }
         }
-        x += 44.0;
+        x += 47.0;
         }
-        let tr = Rect::from_min_size(pos2(x, cy - 13.0), vec2(40.0, 26.0));
-        p.rect_filled(tr, 6.0, look::group_bg());
+        let tr = cell(x, 39.0);
+        pill_pair(&p, tr, look::group_bg());
         for (k, (s, d)) in [(Glyph::Down, -1i32), (Glyph::Up, 1)].iter().enumerate() {
-            let rr = Rect::from_min_size(pos2(tr.min.x + k as f32 * 20.0, tr.min.y), vec2(20.0, 26.0));
+            let rr = Rect::from_min_size(pos2(tr.min.x + k as f32 * tr.width() / 2.0, tr.min.y), vec2(tr.width() / 2.0, tr.height()));
             glyph(&p, rr, *s, look::text());
             let resp = ui.interact(rr, ui.scope_id().with("lg-ss").with(("pat-tr", k)), Sense::click_and_drag()).on_hover_text(if *d < 0 { "Decrement Value" } else { "Increment Value" });
             if let Some(n) = nudge_clicks(&ui.ctx().clone(), &resp, ("pat-tr", 0), *d) {
                 actions.push(Action::Nudge(None, n));
             }
         }
-        x += 44.0;
-        let rb = Rect::from_min_size(pos2(x, cy - 13.0), vec2(22.0, 26.0));
-        let rr = small_button_resp(ui, &p, rb, Glyph::Dice, ("pat-rand", 0), "Randomize Current Edit Mode for Pattern…");
+        x += 47.5;
+        let rb = cell(x, 18.0);
+        let rr = small_button_resp(ui, &p, rb, Glyph::Dice, ("pat-rand", 0), "Randomize Current Edit Mode for Pattern…", look::group_bg());
         if rr.secondary_clicked() || rr.clicked() && ui.input(|i| i.modifiers.ctrl) {
             with_store(&ctx, |s| s.rand_dlg = Some((None, rb.left_bottom())));
         } else if rr.clicked() {
             actions.push(Action::Randomize(None));
         }
         x += 26.0;
-        if small_button(ui, &p, Rect::from_min_size(pos2(x, cy - 13.0), vec2(22.0, 26.0)), Glyph::Clear, ("pat-clear", 0), "Clear Pattern") {
+        let any_on = pat.rows.iter().any(|r| r.steps.iter().any(|s| s.on));
+        if clear_button(ui, &p, cell(x, 18.0), ("pat-clear", 0), "Clear Pattern", any_on) {
             actions.push(Action::Clear(None));
         }
         // right: key, Q, steps
         let right = Rect::from_min_max(pos2(hr.max.x, ph.min.y), ph.max);
         p.rect_filled(right, 0.0, look::header_bg());
+        // (the headers' edge runs up through the pattern row, as Logic's)
+        p.vline(hr.max.x, ph.y_range(), Stroke::new(1.0, Color32::from_gray(0x10)));
         let key = app.project.as_ref().map(|p| p.key.clone()).unwrap_or_else(|| "C major".into());
         let mut kx = right.max.x - 12.0;
         let pages_w = if pat.steps > 16 { (pat.steps as usize).div_ceil(16) as f32 * 18.0 + 24.0 } else { 0.0 };
         let left_edge = right.min.x + 10.0 + pages_w;
-        let steps_r = Rect::from_min_max(pos2((kx - 130.0).max(left_edge), cy - 14.0), pos2(kx.max(left_edge + 100.0), cy + 14.0));
+        let steps_r = Rect::from_min_max(pos2((kx - 121.0).max(left_edge), cy - 12.0), pos2(kx, cy + 12.0));
+        // (a narrow editor: "16" alone, and no box at all rather than one cut off)
+        let steps_label = if steps_r.width() < 100.0 { format!("{}   ", pat.steps) } else { format!("{} Steps    ", pat.steps) };
+        if steps_r.width() >= 44.0 {
         ui.scope_builder(egui::UiBuilder::new().max_rect(steps_r), |ui| {
             plain(ui);
             ui.painter().rect_filled(steps_r, 7.0, look::group_bg());
-            glyph(ui.painter(), Rect::from_min_max(pos2(steps_r.max.x - 22.0, steps_r.min.y), steps_r.max), Glyph::UpDown, look::text());
-            ui.menu_button(egui::RichText::new(format!("{} Steps    ", pat.steps)).size(15.0).strong().color(look::text()), |ui| {
+            crate::glyphs::paint(ui.painter(), Rect::from_min_max(pos2(steps_r.max.x - 22.0, steps_r.min.y), steps_r.max), crate::glyphs::ph::CARET_UP_DOWN, 15.0, look::text());
+            ui.menu_button(egui::RichText::new(steps_label).font(look::semibold(13.0)).color(look::text()), |ui| {
                 egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
                     for (k, (title, lens)) in LENGTH_SECTIONS.iter().enumerate() {
                         if k > 0 {
@@ -1296,17 +1358,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 });
             });
         });
-        kx = steps_r.min.x - 10.0;
-        let q = Rect::from_min_max(pos2(kx - 34.0, cy - 14.0), pos2(kx, cy + 14.0));
+        }
+        kx = steps_r.min.x - 12.0;
+        let q = Rect::from_min_max(pos2(kx - 30.0, cy - 12.0), pos2(kx, cy + 12.0));
         if q.min.x > left_edge {
             p.rect_filled(q, 7.0, look::group_bg());
             p.text(q.center(), Align2::CENTER_CENTER, "Q", look::regular(13.0), look::text_dim());
         }
-        kx = q.min.x - 10.0;
-        let kr = Rect::from_min_max(pos2((kx - 200.0).max(left_edge), cy - 14.0), pos2(kx, cy + 14.0));
+        kx = q.min.x - 12.0;
+        let kr = Rect::from_min_max(pos2((kx - 176.0).max(left_edge), cy - 12.0), pos2(kx, cy + 12.0));
         if kr.width() > 150.0 {
             p.rect_filled(kr, 7.0, look::group_bg());
-            p.text(kr.center(), Align2::CENTER_CENTER, scale_label(&key), look::semibold(14.0), look::text());
+            p.text(kr.center(), Align2::CENTER_CENTER, scale_label(&key), look::semibold(13.0), look::text());
         }
         // pages (patterns longer than 16 steps)
         let pages = (pat.steps as usize).div_ceil(16);
@@ -1345,12 +1408,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     p.rect_filled(headers, 0.0, look::pane_bg());
     p.rect_filled(grid, 0.0, grid_bg());
     p.vline(headers.max.x, body.y_range(), Stroke::new(1.0, Color32::from_gray(0x10)));
+    // the rows' height: the Vertical Zoom slider's, or with Vertical Auto Zoom what fills the
+    // editor (the slider follows)
+    let rh = if with_store(&ctx, |s| s.v_auto) {
+        let extra: f32 = pat.rows.iter().map(|r| row_h(r, 0.0)).sum();
+        let h = auto_row_h(pat.rows.len(), extra, body.height() - 4.0);
+        with_store(&ctx, |s| s.v_zoom = Some(zoom_of_row_h(h)));
+        h
+    } else {
+        row_h_of_zoom(with_store(&ctx, |s| s.v_zoom.unwrap_or(DEFAULT_VZ)))
+    };
     // scroll the rows with the wheel
     let scroll_id = egui::Id::unique(("lg-stepseq-scroll", t, r));
     let mut scroll: f32 = ctx.data(|d| d.get_temp(scroll_id)).unwrap_or(0.0);
     if ui.input(|i| i.pointer.hover_pos()).is_some_and(|h| body.contains(h)) {
         let dy = ui.input(|i| i.smooth_scroll_delta.y);
-        let total: f32 = pat.rows.iter().map(row_h).sum();
+        let total: f32 = pat.rows.iter().map(|r| row_h(r, rh)).sum();
         let max = (total - body.height() + 10.0).max(0.0);
         scroll = (scroll - dy).clamp(0.0, max);
     }
@@ -1358,11 +1431,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let hp = ui.painter_at(headers);
     let gp = ui.painter_at(grid);
     let visible = (pat.steps as usize - page * 16).min(16);
-    let gap_s = 3.0;
-    let gap_g = 7.0;
-    let gx0 = grid.min.x + 18.0;
-    let gw = (grid.max.x - 16.0 - gx0).max(100.0);
-    let cell_w = ((gw - gap_g * 3.0 - gap_s * 12.0) / 16.0).max(8.0);
+    // (Logic's: 2 pt between steps, 6.5 between groups of four, each step outlined in black)
+    let gap_s = 2.0;
+    let gap_g = 6.5;
+    let gx0 = grid.min.x + 11.0;
+    let gw = (grid.max.x - 9.5 - gx0).max(100.0);
+    let fill_w = ((gw - gap_g * 3.0 - gap_s * 12.0) / 16.0).max(8.0);
+    // Step Width: the minimum, or the maximum (the steps fill the grid)
+    let cell_w = if with_store(&ctx, |s| s.narrow_steps) { fill_w.min(NARROW_STEP_W) } else { fill_w };
     let cell_x = |k: usize| gx0 + k as f32 * (cell_w + gap_s) + (k / 4) as f32 * (gap_g - gap_s);
     // the playing step
     let playing_tick = app.position() as i64 - region.start as i64;
@@ -1382,14 +1458,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut acc = rows_top - scroll;
     for row in &pat.rows {
         ys.push(acc);
-        acc += row_h(row);
+        acc += row_h(row, rh);
     }
     for (ri, row) in pat.rows.clone().iter().enumerate() {
         let y = ys[ri];
-        if y + row_h(row) < body.min.y || y > body.max.y {
+        // the row's colour (Logic's: purple for notes; drums by kit piece), its steps on in a
+        // lighter shade and off in a dark tint of it
+        let rc = if drums { kit_color(&row.name) } else { row_color() };
+        let on_c = look::mix(rc, Color32::WHITE, 0.25);
+        let off_c = look::mix(Color32::from_gray(0x12), rc, 0.19);
+        if y + row_h(row, rh) < body.min.y || y > body.max.y {
             continue;
         }
-        let hr = Rect::from_min_size(pos2(headers.min.x, y), vec2(header_w, ROW_H));
+        let hr = Rect::from_min_size(pos2(headers.min.x, y), vec2(header_w, rh));
         let mode = with_store(&ctx, |s| s.modes.get(&(t, r, ri)).copied().unwrap_or_default());
         // header
         if ri == sel_row {
@@ -1401,7 +1482,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         if sel_resp.dragged() {
             if let Some(pp) = sel_resp.interact_pointer_pos() {
                 let to = ys.iter().rposition(|&yy| yy <= pp.y).unwrap_or(0);
-                let ly = if to > ri { ys[to] + row_h(&pat.rows[to]) } else { ys[to] };
+                let ly = if to > ri { ys[to] + row_h(&pat.rows[to], rh) } else { ys[to] };
                 hp.hline(hr.x_range(), ly, Stroke::new(2.0, look::accent()));
             }
         }
@@ -1420,25 +1501,32 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             with_store(&ctx, |s| s.typing = Some((Typing::Rename(ri), row.name.clone())));
         }
         crate::menus::context_menu(app, &sel_resp, "stepseq-row-header");
-        hp.text(pos2(hr.min.x + 12.0, hr.center().y), Align2::CENTER_CENTER, "›", look::regular(18.0), look::text_dim());
-        let ic = pos2(hr.min.x + 42.0, hr.center().y);
-        hp.circle_filled(ic, 14.0, row_color());
-        hp.text(ic, Align2::CENTER_CENTER, "♩", look::regular(15.0), Color32::from_gray(0x16));
-        let name_pos = pos2(hr.min.x + 66.0, hr.min.y + 13.0);
+        // (Logic's: the disclosure › at 8 pt, the round 22 pt icon a little above the middle)
+        let ic = pos2(hr.min.x + 31.75, hr.min.y + (rh / 2.0 - 2.25).max(12.0));
+        hp.text(pos2(hr.min.x + 8.0, ic.y), Align2::CENTER_CENTER, "›", look::regular(18.0), look::text_dim());
+        hp.circle_filled(ic, 11.0, rc);
+        // a drum row: its kit piece (Logic's); a note row: ♩
+        if drums {
+            crate::stepicons::kit_piece(&hp, ic, &row.name, Color32::from_gray(0x16));
+        } else {
+            hp.text(ic, Align2::CENTER_CENTER, "♩", look::regular(15.0), Color32::from_gray(0x16));
+        }
+        let name_pos = pos2(hr.min.x + 55.0, hr.min.y + 10.0);
         let name_r = hp.text(name_pos, Align2::LEFT_CENTER, &row.name, look::semibold(14.0), look::text());
         // ⌃⌄: the row's note
         let ar = Rect::from_min_size(pos2(name_r.max.x + 4.0, name_r.min.y - 2.0), vec2(14.0, 20.0));
-        glyph(&hp, ar, Glyph::UpDown, look::text_dim());
+        glyph(&hp, ar, Glyph::UpDown, look::text());
         let ar_resp = ui.interact(ar, ui.scope_id().with("lg-ss").with(("rownote", ri)), Sense::click());
         if ar_resp.clicked() {
             let up = ar_resp.interact_pointer_pos().is_some_and(|q| q.y < ar.center().y);
             actions.push(Action::RowPitch(ri, if up { 1 } else { -1 }));
         }
         // the row's edit mode
-        let mr = Rect::from_min_max(pos2(hr.max.x - 130.0, hr.min.y + 3.0), pos2(hr.max.x - 10.0, hr.min.y + 23.0));
+        let mr = Rect::from_min_max(pos2(hr.max.x - 130.0, hr.min.y + 1.0), pos2(hr.max.x - 1.5, hr.min.y + 21.0));
         ui.scope_builder(egui::UiBuilder::new().max_rect(mr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
             plain(ui);
-            ui.menu_button(egui::RichText::new(mode.name()).size(12.5).color(look::text()), |ui| {
+            ui.spacing_mut().button_padding = vec2(0.0, 0.0);
+            ui.menu_button(egui::RichText::new(mode.name()).size(12.0).color(look::text()), |ui| {
                 for m in Mode::ALL {
                     if ui.selectable_label(m == mode, m.name()).clicked() {
                         actions.push(Action::Mode(ri, m));
@@ -1447,13 +1535,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
             });
         });
-        // second line: M S, rate, playback, rotate, octave, random, clear
-        let ly = hr.min.y + 34.0;
-        let mut x = hr.min.x + 62.0;
-        let ms = Rect::from_min_size(pos2(x, ly - 11.0), vec2(54.0, 22.0));
+        // second line (rows at least Logic's 48 pt): M S, rate, playback, rotate, octave,
+        // random, clear
+        if rh >= ROW_H - 2.0 {
+        let ly = hr.min.y + 32.0;
+        let mut x = hr.min.x + 57.0;
+        let ms = Rect::from_min_size(pos2(x, ly - 10.0), vec2(41.0, 20.0));
         hp.rect_filled(ms, 5.0, Color32::from_gray(0x4f));
         for (k, (lbl, on)) in [("M", row.mute), ("S", row.solo)].iter().enumerate() {
-            let rr = Rect::from_min_size(pos2(ms.min.x + k as f32 * 27.0, ms.min.y), vec2(27.0, 22.0));
+            let rr = Rect::from_min_size(pos2(ms.min.x + k as f32 * 20.5, ms.min.y), vec2(20.5, 20.0));
             if *on {
                 hp.rect_filled(rr.shrink(1.0), 4.0, if k == 0 { Color32::from_rgb(0x2e, 0x8b, 0xe8) } else { Color32::from_rgb(0xe8, 0xc3, 0x2e) });
             }
@@ -1463,68 +1553,70 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
         hp.vline(ms.center().x, ms.y_range().shrink(5.0), Stroke::new(1.0, Color32::from_gray(0x3a)));
-        x += 58.0;
-        let rate_r = Rect::from_min_size(pos2(x, ly - 11.0), vec2(60.0, 22.0));
+        x += 46.0;
+        let rate_r = Rect::from_min_size(pos2(x, ly - 10.0), vec2(60.0, 20.0));
         let rate = row.rate.unwrap_or(pat.rate);
-        rate_box(ui, rate_r, ("row-rate", ri), rate, &mut |v| actions.push(Action::RowRate(ri, v)));
-        x += 62.0;
+        rate_box(ui, rate_r, ("row-rate", ri), rate, Color32::from_gray(0x5f), &mut |v| actions.push(Action::RowRate(ri, v)));
+        x += 64.0;
         if !compact {
-            play_box(ui, Rect::from_min_size(pos2(x, ly - 11.0), vec2(40.0, 22.0)), ("row-play", ri), row.play.unwrap_or(pat.play), &mut |m| actions.push(Action::Play(Some(ri), m)));
-            x += 44.0;
+            play_box(ui, Rect::from_min_size(pos2(x, ly - 10.0), vec2(43.0, 20.0)), ("row-play", ri), row.play.unwrap_or(pat.play), Color32::from_gray(0x5f), &mut |m| actions.push(Action::Play(Some(ri), m)));
+            x += 48.0;
         }
         if !tiny {
-        let rot = Rect::from_min_size(pos2(x, ly - 11.0), vec2(40.0, 22.0));
-        hp.rect_filled(rot, 5.0, look::group_bg());
+        let rot = Rect::from_min_size(pos2(x, ly - 10.0), vec2(41.0, 20.0));
+        pill_pair(&hp, rot, Color32::from_gray(0x4f));
         for (k, (s, d)) in [(Glyph::RotLeft, -1i32), (Glyph::RotRight, 1)].iter().enumerate() {
-            let rr = Rect::from_min_size(pos2(rot.min.x + k as f32 * 20.0, rot.min.y), vec2(20.0, 22.0));
+            let rr = Rect::from_min_size(pos2(rot.min.x + k as f32 * 20.5, rot.min.y), vec2(20.5, 20.0));
             glyph(&hp, rr, *s, look::text());
             if ui.interact(rr, ui.scope_id().with("lg-ss").with(("rot", ri, k)), Sense::click()).on_hover_text(if *d < 0 { "Rotate Row Left" } else { "Rotate Row Right" }).clicked() {
                 actions.push(Action::Rotate(Some(ri), *d));
             }
         }
-        x += 44.0;
+        x += 47.0;
         }
-        let oc = Rect::from_min_size(pos2(x, ly - 11.0), vec2(40.0, 22.0));
-        hp.rect_filled(oc, 5.0, look::group_bg());
+        let oc = Rect::from_min_size(pos2(x, ly - 10.0), vec2(41.0, 20.0));
+        pill_pair(&hp, oc, Color32::from_gray(0x4f));
         for (k, (s, d)) in [(Glyph::Down, -1i32), (Glyph::Up, 1)].iter().enumerate() {
-            let rr = Rect::from_min_size(pos2(oc.min.x + k as f32 * 20.0, oc.min.y), vec2(20.0, 22.0));
+            let rr = Rect::from_min_size(pos2(oc.min.x + k as f32 * 20.5, oc.min.y), vec2(20.5, 20.0));
             glyph(&hp, rr, *s, look::text());
             let resp = ui.interact(rr, ui.scope_id().with("lg-ss").with(("oct", ri, k)), Sense::click_and_drag()).on_hover_text(if *d < 0 { "Decrement Value" } else { "Increment Value" });
             if let Some(n) = nudge_clicks(&ui.ctx().clone(), &resp, ("oct", ri), *d) {
                 actions.push(Action::Nudge(Some(ri), n));
             }
         }
-        x += 44.0;
-        let rb = Rect::from_min_size(pos2(x, ly - 11.0), vec2(22.0, 22.0));
-        let rr = small_button_resp(ui, &hp, rb, Glyph::Dice, ("rand", ri), "Randomize Current Edit Mode for Selected Rows…");
+        x += 46.0;
+        let rb = Rect::from_min_size(pos2(x, ly - 10.0), vec2(22.0, 20.0));
+        let rr = small_button_resp(ui, &hp, rb, Glyph::Dice, ("rand", ri), "Randomize Current Edit Mode for Selected Rows…", Color32::from_gray(0x5f));
         if rr.secondary_clicked() || rr.clicked() && ui.input(|i| i.modifiers.ctrl) {
             with_store(&ctx, |s| s.rand_dlg = Some((Some(ri), rb.left_bottom())));
         } else if rr.clicked() {
             actions.push(Action::Randomize(Some(ri)));
         }
         x += 26.0;
-        if small_button(ui, &hp, Rect::from_min_size(pos2(x, ly - 11.0), vec2(22.0, 22.0)), Glyph::Clear, ("clr", ri), "Clear Row") {
+        if clear_button(ui, &hp, Rect::from_min_size(pos2(x, ly - 10.0), vec2(22.0, 20.0)), ("clr", ri), "Clear Row", row.steps.iter().any(|s| s.on)) {
             actions.push(Action::Clear(Some(ri)));
+        }
         }
         // the row's steps
         let n = pat.row_len(row);
-        let gy = Rect::from_min_size(pos2(grid.min.x, y), vec2(grid.width(), ROW_H));
+        let gy = Rect::from_min_size(pos2(grid.min.x, y), vec2(grid.width(), rh));
         let muted = row.mute || (pat.rows.iter().any(|x| x.solo) && !row.solo);
         for k in 0..visible {
             let si = page * 16 + k;
-            let cr = Rect::from_min_size(pos2(cell_x(k), y + 5.0), vec2(cell_w, ROW_H - 10.0));
+            let cr = Rect::from_min_size(pos2(cell_x(k), y + 3.0), vec2(cell_w, rh - 10.0));
             if !cr.intersects(grid) {
                 continue;
             }
             let s = row.steps[si];
             let beyond = si >= n || si < row.start as usize;
-            let mut bg = cell_off();
+            let mut bg = off_c;
             if beyond {
                 bg = Color32::from_rgb(0x1a, 0x18, 0x22);
             }
-            gp.rect_filled(cr, 3.0, bg);
-            let base_on = if by_region { region_col } else { cell_on() };
-            let on_col = if muted { look::mix(base_on, cell_off(), 0.55) } else { base_on };
+            gp.rect_filled(cr, 2.0, bg);
+            gp.rect_stroke(cr, 2.0, Stroke::new(1.0, Color32::BLACK), egui::StrokeKind::Outside);
+            let base_on = if by_region { region_col } else { on_c };
+            let on_col = if muted { look::mix(base_on, off_c, 0.55) } else { base_on };
             match mode {
                 Mode::OnOff | Mode::Loop => {
                     if s.on {
@@ -1533,7 +1625,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 Mode::Tie => {
                     if s.on {
-                        gp.rect_filled(cr, 3.0, look::mix(on_col, cell_off(), 0.5));
+                        gp.rect_filled(cr, 3.0, look::mix(on_col, off_c, 0.5));
                     }
                     if s.tie {
                         gp.rect_filled(Rect::from_min_max(pos2(cr.min.x - gap_g, cr.center().y - 4.0), pos2(cr.max.x - 4.0, cr.center().y + 4.0)), 2.0, on_col);
@@ -1541,7 +1633,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 Mode::Skip => {
                     if s.on {
-                        gp.rect_filled(cr, 3.0, look::mix(on_col, cell_off(), 0.5));
+                        gp.rect_filled(cr, 3.0, look::mix(on_col, off_c, 0.5));
                     }
                     if s.skip {
                         let st = Stroke::new(2.0, Color32::from_gray(0xd0));
@@ -1552,7 +1644,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 Mode::Gate | Mode::Offset => {
                     if s.on {
-                        gp.rect_filled(cr, 3.0, look::mix(on_col, cell_off(), 0.6));
+                        gp.rect_filled(cr, 3.0, look::mix(on_col, off_c, 0.6));
                         let f = mode.get(&s);
                         if mode == Mode::Gate {
                             gp.rect_filled(Rect::from_min_size(cr.min, vec2(cr.width() * f, cr.height())), 3.0, on_col);
@@ -1573,7 +1665,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 Mode::Velocity | Mode::Chance | Mode::Octave | Mode::Note | Mode::Rate => {
                     if s.on {
-                        gp.rect_filled(cr, 3.0, look::mix(on_col, cell_off(), 0.6));
+                        gp.rect_filled(cr, 3.0, look::mix(on_col, off_c, 0.6));
                         let f = mode.get(&s);
                         if mode == Mode::Octave || mode == Mode::Note {
                             let mid = cr.center().y;
@@ -1720,17 +1812,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         // the row's end (loop end) and start
         if n < pat.steps as usize && n >= page * 16 && n < page * 16 + visible {
             let x = cell_x(n - page * 16) - gap_s / 2.0 - 1.0;
-            gp.vline(x, y + 3.0..=y + ROW_H - 3.0, Stroke::new(2.0, Color32::from_rgb(0xe8, 0xc3, 0x2e)));
+            gp.vline(x, y + 3.0..=y + rh - 3.0, Stroke::new(2.0, Color32::from_rgb(0xe8, 0xc3, 0x2e)));
         }
         let st0 = row.start as usize;
         if st0 > 0 && st0 >= page * 16 && st0 < page * 16 + visible {
             let x = cell_x(st0 - page * 16) - gap_s / 2.0 - 1.0;
-            gp.vline(x, y + 3.0..=y + ROW_H - 3.0, Stroke::new(2.0, Color32::from_rgb(0x2e, 0xc3, 0xe8)));
+            gp.vline(x, y + 3.0..=y + rh - 3.0, Stroke::new(2.0, Color32::from_rgb(0x2e, 0xc3, 0xe8)));
         }
         // subrows: velocity, gate and chance lanes, drawn and edited under the row
         if row.sub {
             for (li, m) in SUB_MODES.iter().enumerate() {
-                let ly0 = y + ROW_H + li as f32 * SUB_H;
+                let ly0 = y + rh + li as f32 * SUB_H;
                 let lr = Rect::from_min_size(pos2(headers.min.x, ly0), vec2(header_w, SUB_H));
                 hp.text(pos2(lr.max.x - 14.0, lr.center().y), Align2::RIGHT_CENTER, m.name(), look::regular(11.5), look::text_dim());
                 hp.hline(lr.x_range(), lr.max.y - 0.5, Stroke::new(1.0, Color32::from_gray(0x1a)));
@@ -1741,7 +1833,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     gp.rect_filled(cr, 2.0, Color32::from_rgb(0x1a, 0x18, 0x22));
                     if st.on {
                         let f = m.get(&st);
-                        gp.rect_filled(Rect::from_min_max(pos2(cr.min.x, cr.max.y - cr.height() * f), cr.max), 2.0, look::mix(on_col_of(by_region, region_col), cell_off(), 0.25));
+                        gp.rect_filled(Rect::from_min_max(pos2(cr.min.x, cr.max.y - cr.height() * f), cr.max), 2.0, look::mix((if by_region { region_col } else { on_c }), off_c, 0.25));
                     }
                     let resp = ui.interact(cr, ui.scope_id().with("lg-ss").with(("sub", ri, li, si)), Sense::click_and_drag());
                     if resp.drag_started() || resp.clicked() {
@@ -1918,21 +2010,295 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
 const SUB_H: f32 = 30.0;
 const SUB_MODES: [Mode; 3] = [Mode::Velocity, Mode::Gate, Mode::Chance];
 
-fn row_h(row: &Row) -> f32 {
-    ROW_H + if row.sub { SUB_H * SUB_MODES.len() as f32 } else { 0.0 }
+/// The Vertical Zoom slider's default (Logic's: 48 pt rows) and the row heights it spans.
+const DEFAULT_VZ: f32 = 0.6;
+const ROW_MIN: f32 = 30.0;
+const ROW_MAX: f32 = 96.0;
+/// The minimum Step Width (the maximum: the steps fill the grid).
+const NARROW_STEP_W: f32 = 24.0;
+
+/// A row's height at the Vertical Zoom slider's value `v` (0..1): 30 pt rows (name only) up
+/// to Logic's 48 at the default, then up to 96.
+pub fn row_h_of_zoom(v: f32) -> f32 {
+    let v = v.clamp(0.0, 1.0);
+    if v <= DEFAULT_VZ {
+        ROW_MIN + (ROW_H - ROW_MIN) * v / DEFAULT_VZ
+    } else {
+        ROW_H + (ROW_MAX - ROW_H) * (v - DEFAULT_VZ) / (1.0 - DEFAULT_VZ)
+    }
 }
 
-fn on_col_of(by_region: bool, region: Color32) -> Color32 {
-    if by_region { region } else { cell_on() }
+/// The slider value that gives rows `h` points tall (the inverse of row_h_of_zoom).
+pub fn zoom_of_row_h(h: f32) -> f32 {
+    let h = h.clamp(ROW_MIN, ROW_MAX);
+    if h <= ROW_H {
+        (h - ROW_MIN) / (ROW_H - ROW_MIN) * DEFAULT_VZ
+    } else {
+        DEFAULT_VZ + (h - ROW_H) / (ROW_MAX - ROW_H) * (1.0 - DEFAULT_VZ)
+    }
 }
+
+/// Vertical Auto Zoom: the row height that fits `n` rows (and `extra` points of open subrows)
+/// into `height`, within the slider's range.
+pub fn auto_row_h(n: usize, extra: f32, height: f32) -> f32 {
+    if n == 0 {
+        return ROW_H;
+    }
+    ((height - extra) / n as f32).clamp(ROW_MIN, ROW_MAX)
+}
+
+/// The Vertical Zoom slider as Logic's Step Sequencer draws it: a darker pill with ↕, a 4 pt
+/// groove (blue up to the knob) and a 16 × 13 pt capsule knob.
+fn vzoom_slider(ui: &mut egui::Ui, r: Rect, id: egui::Id, v: &mut f32) -> bool {
+    let p = ui.painter().clone();
+    let y = r.center().y;
+    p.rect_filled(r, 6.0, look::mix(look::header_bg(), Color32::BLACK, 0.2));
+    let groove = Rect::from_min_max(pos2(r.min.x + 20.5, y - 2.0), pos2(r.max.x - 4.0, y + 2.0));
+    let resp = ui.interact(groove.expand2(vec2(6.0, 8.0)), id, Sense::click_and_drag()).on_hover_text("Vertical Zoom");
+    let mut changed = false;
+    if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
+        *v = ((pp.x - groove.min.x) / groove.width().max(1.0)).clamp(0.0, 1.0);
+        changed = true;
+    }
+    // (the knob stays inside the groove's ends)
+    let travel = groove.width() - 16.0;
+    let kx = groove.min.x + 8.0 + travel * v.clamp(0.0, 1.0);
+    p.rect_filled(groove, 2.0, Color32::from_gray(0x32));
+    p.rect_filled(Rect::from_min_max(groove.min, pos2(kx, groove.max.y)), 2.0, Color32::from_rgb(0x06, 0x65, 0xae));
+    let knob = Rect::from_center_size(pos2(kx, y), vec2(16.0, 13.0));
+    p.rect_filled(knob, 6.5, Color32::from_gray(0xde));
+    p.rect_stroke(knob, 6.5, Stroke::new(0.5, Color32::from_black_alpha(60)), egui::StrokeKind::Outside);
+    changed
+}
+
+/// A menu-bar button (Logic's 24 pt capsule, 6 pt corners): `fill`, lighter on hover when plain.
+fn bar_btn(ui: &mut egui::Ui, r: Rect, id: egui::Id, fill: Color32, tip: &str, enabled: bool) -> egui::Response {
+    let resp = ui.interact(r, id, if enabled { Sense::click() } else { Sense::hover() }).on_hover_text(tip);
+    let fill = if enabled && resp.hovered() && fill == look::group_bg() { look::button_on() } else { fill };
+    ui.painter().rect_filled(r, 6.0, fill);
+    resp
+}
+
+/// Logic 13's Step Sequencer menu bar (measured on ui-step-sequencer.png, @2x, in points):
+/// Edit / Functions / View; Pattern Browser | Inspector in one 60 pt pill; MIDI In and MIDI Out
+/// (33 pt, 2.5 apart, green when on); Mono Mode (× over a square); then at the right Live
+/// Pattern Recording and Preview (dimmed while off), Vertical Auto Zoom, the Vertical Zoom
+/// slider and ↔ with the two Step Width buttons, 12 pt apart. As the bar narrows, controls
+/// leave from the right end into its "…" menu (barfit), as the other bars' do.
+fn toolbar(app: &mut App, ui: &mut egui::Ui, bar: Rect, t: usize, any_on: bool) {
+    use crate::barfit::{any_hidden, fit, more_button, Slot, GAP, MORE_W};
+    use crate::stepicons as si;
+    let ctx = ui.ctx().clone();
+    let id = ui.scope_id().with("ss-bar");
+    let cy = bar.center().y;
+    let x0 = bar.min.x + 10.0;
+    let mut end = x0 + 230.0;
+    let menus = Rect::from_min_max(pos2(x0 + 4.0, bar.min.y + 3.0), pos2(bar.max.x - 10.0, bar.max.y - 3.0));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(menus).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+        crate::menus::local_bar(app, ui, &[("Edit", "stepseq-Edit"), ("Functions", "stepseq-Functions"), ("View", "stepseq-View")]);
+        end = ui.min_rect().max.x - 8.0;
+    });
+    const B: f32 = 33.0;
+    // each control's width with the gap before it
+    let widths = [10.0 + 60.0, 10.0 + 2.0 * B + 2.5, 10.0 + B, 12.0 + B, 12.0 + B, 12.0 + B, 12.0 + 72.0, 30.5 + 60.0];
+    let slots: Vec<Slot> = widths.iter().map(|&w| Slot { w, drop: 1 }).collect();
+    let shown = fit(&slots, bar.max.x - 10.0 - end - 16.0, MORE_W + GAP);
+    let (b_on, i_on, in_on, out_on, mono_on, live_on, previewing, v_auto, vz, narrow) = with_store(&ctx, |s| (s.browser, s.inspector, s.step_rec, !s.midi_out_off, s.mono, s.live_record, s.preview.is_some(), s.v_auto, s.v_zoom.unwrap_or(DEFAULT_VZ), s.narrow_steps));
+    let green = Color32::from_rgb(0x22, 0x7c, 0x38);
+    let dim_bg = look::mix(look::header_bg(), look::group_bg(), 0.5);
+    // (Logic's dimmed icons: grey, about halfway to the button)
+    let off_ink = look::mix(look::text_dim(), dim_bg, 0.3);
+    let cell = |x: f32, w: f32| Rect::from_min_size(pos2(x, cy - 12.0), vec2(w, 24.0));
+    let ink = |on: bool| if on { Color32::WHITE } else { look::text() };
+    let mut hits: Vec<&'static str> = Vec::new();
+    let mut new_vz: Option<f32> = None;
+    let divider = |ui: &egui::Ui, pill: Rect| ui.painter().vline(pill.center().x, pill.y_range().shrink(6.0), Stroke::new(1.0, look::text_dim().gamma_multiply(0.55)));
+    // a pill of two halves: (name, on, tip, icon painter)
+    let mut lx = end;
+    if shown[0] {
+        let pill = cell(lx + 10.0, 60.0);
+        lx = pill.max.x;
+        ui.painter().rect_filled(pill, 6.0, look::group_bg());
+        for (k, (name, on, tip)) in [("browser", b_on, "Pattern Browser"), ("inspector", i_on, "Show/Hide Local Inspector")].into_iter().enumerate() {
+            let h = Rect::from_min_size(pos2(pill.min.x + k as f32 * 30.0, pill.min.y), vec2(30.0, 24.0));
+            let resp = ui.interact(h, id.with(name), Sense::click()).on_hover_text(tip);
+            let cr = if k == 0 { egui::CornerRadius { nw: 6, sw: 6, ne: 0, se: 0 } } else { egui::CornerRadius { nw: 0, sw: 0, ne: 6, se: 6 } };
+            let fill = if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() };
+            ui.painter().rect_filled(h, cr, fill);
+            if k == 0 {
+                si::browser(ui.painter(), h.center(), ink(on), fill);
+            } else {
+                si::inspector(ui.painter(), h.center(), ink(on), fill);
+            }
+            if resp.clicked() {
+                hits.push(name);
+            }
+        }
+        if !b_on && !i_on {
+            divider(ui, pill);
+        }
+    }
+    if shown[1] {
+        for (k, (name, on, tip)) in [("in", in_on, "MIDI In (Step Recording)"), ("out", out_on, "MIDI Out")].into_iter().enumerate() {
+            let r = cell(lx + if k == 0 { 10.0 } else { 2.5 }, B);
+            lx = r.max.x;
+            let resp = bar_btn(ui, r, id.with(name), if on { green } else { look::group_bg() }, tip, true);
+            si::midi(ui.painter(), r.center(), k == 1, ink(on));
+            if resp.clicked() {
+                hits.push(name);
+            }
+        }
+    }
+    if shown[2] {
+        let r = cell(lx + 10.0, B);
+        if bar_btn(ui, r, id.with("mono"), if mono_on { look::accent() } else { look::group_bg() }, "Mono Mode", true).clicked() {
+            hits.push("mono");
+        }
+        si::mono(ui.painter(), r.center(), ink(mono_on));
+    }
+    // the right-hand group, flush right (before the "…" when something left the bar)
+    let hidden = any_hidden(&shown);
+    let right_end = if hidden { bar.max.x - 10.0 - MORE_W - GAP } else { bar.max.x - 10.0 };
+    let mut rx = right_end - (3..8).filter(|&i| shown[i]).map(|i| widths[i]).sum::<f32>();
+    if shown[3] {
+        let r = cell(rx + 12.0, B);
+        rx = r.max.x;
+        if bar_btn(ui, r, id.with("live"), if live_on { look::record_red() } else { dim_bg }, "Live Pattern Recording", true).clicked() {
+            hits.push("live");
+        }
+        si::live(ui.painter(), r.center(), if live_on { Color32::WHITE } else { off_ink });
+    }
+    if shown[4] {
+        let r = cell(rx + 12.0, B);
+        rx = r.max.x;
+        let enabled = any_on || previewing;
+        if bar_btn(ui, r, id.with("preview"), if previewing { green } else { dim_bg }, "Preview", enabled).clicked() {
+            hits.push("preview");
+        }
+        si::preview(ui.painter(), r.center(), if previewing { Color32::WHITE } else if enabled { look::text() } else { off_ink });
+    }
+    if shown[5] {
+        let r = cell(rx + 12.0, B);
+        rx = r.max.x;
+        if bar_btn(ui, r, id.with("auto"), if v_auto { look::accent() } else { look::group_bg() }, "Vertical Auto Zoom", true).clicked() {
+            hits.push("auto");
+        }
+        si::auto_zoom(ui.painter(), r.center(), ink(v_auto));
+    }
+    if shown[6] {
+        let r = cell(rx + 12.0, 72.0);
+        rx = r.max.x;
+        let mut v = vz;
+        if vzoom_slider(ui, r, id.with("vzoom"), &mut v) {
+            new_vz = Some(v);
+        }
+        si::double_arrow(ui.painter(), pos2(r.min.x + 10.0, cy), true, look::text());
+    }
+    if shown[7] {
+        si::double_arrow(ui.painter(), pos2(rx + 19.0, cy), false, look::text());
+        let pill = cell(rx + 30.5, 60.0);
+        ui.painter().rect_filled(pill, 6.0, look::group_bg());
+        for (k, (name, tip)) in [("narrow", "Minimum Step Width"), ("wide", "Maximum Step Width")].into_iter().enumerate() {
+            let h = Rect::from_min_size(pos2(pill.min.x + k as f32 * 30.0, pill.min.y), vec2(30.0, 24.0));
+            let resp = ui.interact(h, id.with(name), Sense::click()).on_hover_text(tip);
+            // (Logic draws both dimmed; the one not in use lights on hover)
+            let lit = resp.hovered() && narrow != (k == 0);
+            si::step_width(ui.painter(), h.center(), k == 1, if lit { look::text() } else { off_ink });
+            if resp.clicked() {
+                hits.push(name);
+            }
+        }
+        divider(ui, pill);
+    }
+    if hidden {
+        let resp = more_button(ui, cell(bar.max.x - 10.0 - MORE_W, MORE_W), id.with("more"));
+        egui::Popup::menu(&resp).show(|ui| {
+            ui.set_min_width(220.0);
+            let items: [&[(&'static str, &str, bool)]; 8] = [
+                &[("browser", "Pattern Browser", b_on), ("inspector", "Local Inspector", i_on)],
+                &[("in", "MIDI In", in_on), ("out", "MIDI Out", out_on)],
+                &[("mono", "Mono Mode", mono_on)],
+                &[("live", "Live Pattern Recording", live_on)],
+                &[("preview", "Preview", previewing)],
+                &[("auto", "Vertical Auto Zoom", v_auto)],
+                &[],
+                &[("narrow", "Minimum Step Width", narrow), ("wide", "Maximum Step Width", !narrow)],
+            ];
+            for (i, list) in items.iter().enumerate() {
+                if shown[i] {
+                    continue;
+                }
+                if i == 6 {
+                    let mut v = vz;
+                    ui.horizontal(|ui| {
+                        ui.label("Vertical Zoom");
+                        if ui.add(egui::Slider::new(&mut v, 0.0..=1.0).show_value(false)).changed() {
+                            new_vz = Some(v);
+                        }
+                    });
+                }
+                for &(name, label, on) in list.iter() {
+                    if ui.add(egui::Button::selectable(on, label)).clicked() {
+                        hits.push(name);
+                        ui.close();
+                    }
+                }
+            }
+        });
+    }
+    if let Some(v) = new_vz {
+        with_store(&ctx, |s| {
+            s.v_zoom = Some(v);
+            s.v_auto = false;
+        });
+    }
+    for h in hits {
+        match h {
+            "browser" => with_store(&ctx, |s| s.browser = !s.browser),
+            "inspector" => with_store(&ctx, |s| s.inspector = !s.inspector),
+            "in" => with_store(&ctx, |s| {
+                s.step_rec = !s.step_rec;
+                s.step_pending = false;
+            }),
+            "out" => with_store(&ctx, |s| s.midi_out_off = !s.midi_out_off),
+            "mono" => {
+                command(app, &ctx, "Mono Mode");
+            }
+            "live" => with_store(&ctx, |s| s.live_record = !s.live_record),
+            "auto" => with_store(&ctx, |s| s.v_auto = !s.v_auto),
+            "narrow" | "wide" => with_store(&ctx, |s| s.narrow_steps = h == "narrow"),
+            "preview" => {
+                // plays the pattern while the project is stopped; again stops it
+                let now = ctx.input(|i| i.time);
+                let stop = with_store(&ctx, |s| match s.preview.take() {
+                    Some(pv) => pv.sounding,
+                    None => {
+                        s.preview = Some(Preview { start: now, track: t, sent: 0, sounding: Vec::new(), pass: 0 });
+                        Vec::new()
+                    }
+                });
+                preview_off(app, t, &stop);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn row_h(row: &Row, rh: f32) -> f32 {
+    rh + if row.sub { SUB_H * SUB_MODES.len() as f32 } else { 0.0 }
+}
+
 
 /// The playback mode pop-up (the arrow box beside the rate).
-fn play_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), cur: Play, set: &mut dyn FnMut(Play)) {
-    ui.painter().rect_filled(r, 6.0, look::group_bg());
-    glyph(ui.painter(), Rect::from_min_max(pos2(r.max.x - 16.0, r.min.y), r.max), Glyph::UpDown, look::text_dim());
+fn play_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), cur: Play, fill: Color32, set: &mut dyn FnMut(Play)) {
+    ui.painter().rect_filled(r, 6.0, fill);
+    let big = r.height() > 22.0;
+    crate::glyphs::paint(ui.painter(), Rect::from_min_max(pos2(r.max.x - 16.0, r.min.y), r.max), crate::glyphs::ph::CARET_UP_DOWN, if big { 15.0 } else { 12.0 }, if big { look::text() } else { look::text_dim() });
     ui.scope_builder(egui::UiBuilder::new().max_rect(r).id_salt(id), |ui| {
         plain(ui);
-        ui.menu_button(egui::RichText::new(format!("{}   ", cur.arrow())).size(14.0).color(look::text()), |ui| {
+        ui.painter().text(pos2(r.min.x + if big { 9.5 } else { 15.5 }, r.center().y), Align2::CENTER_CENTER, cur.arrow(), look::regular(if big { 16.0 } else { 14.0 }), look::text());
+        ui.spacing_mut().button_padding = vec2(0.0, 0.0);
+        ui.menu_button(egui::RichText::new(" ".repeat(if big { 12 } else { 13 })).size(14.0), |ui| {
             for m in Play::ALL {
                 if ui.selectable_label(m == cur, m.name()).clicked() {
                     set(m);
@@ -2220,41 +2586,51 @@ enum Glyph {
 }
 
 fn glyph(p: &egui::Painter, r: Rect, g: Glyph, col: Color32) {
-    use crate::glyphs::ph;
-    let (icon, size) = match g {
-        Glyph::Up => (ph::CARET_UP, 12.0),
-        Glyph::Down => (ph::CARET_DOWN, 12.0),
-        Glyph::UpDown => (ph::CARET_UP_DOWN, 12.0),
-        Glyph::RotLeft => (ph::ARROW_ARC_LEFT, 15.0),
-        Glyph::RotRight => (ph::ARROW_ARC_RIGHT, 15.0),
-        Glyph::Dice => (ph::DICE_FIVE, 15.0),
-        Glyph::Clear => (ph::X_SQUARE, 15.0),
-    };
-    crate::glyphs::paint(p, r, icon, size, col);
+    use crate::stepicons as si;
+    let c = r.center();
+    match g {
+        Glyph::Up => si::caret(p, c, true, col),
+        Glyph::Down => si::caret(p, c, false, col),
+        Glyph::UpDown => crate::glyphs::paint(p, r, crate::glyphs::ph::CARET_UP_DOWN, 12.0, col),
+        Glyph::RotLeft => si::rotate(p, c, false, col),
+        Glyph::RotRight => si::rotate(p, c, true, col),
+        Glyph::Dice => si::dice(p, c, col),
+        Glyph::Clear => si::clear(p, c, col),
+    }
 }
 
-fn small_button_resp(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str) -> egui::Response {
+fn small_button_resp(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str, fill: Color32) -> egui::Response {
     let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), Sense::click()).on_hover_text(tip);
-    p.rect_filled(r, 5.0, if resp.hovered() { look::button_on() } else { look::group_bg() });
+    p.rect_filled(r, 5.0, if resp.hovered() { look::button_on() } else { fill });
     glyph(p, r, g, look::text());
     resp
 }
 
-fn small_button(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, g: Glyph, id: (&str, usize), tip: &str) -> bool {
-    let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), Sense::click()).on_hover_text(tip);
-    p.rect_filled(r, 5.0, if resp.hovered() { look::button_on() } else { look::group_bg() });
-    glyph(p, r, g, look::text());
-    resp.clicked()
+
+
+/// A Reset (clear) button: dimmed, and not clickable, while there is nothing to clear (Logic's).
+fn clear_button(ui: &mut egui::Ui, p: &egui::Painter, r: Rect, id: (&str, usize), tip: &str, enabled: bool) -> bool {
+    let resp = ui.interact(r, ui.scope_id().with("lg-ss").with(id), if enabled { Sense::click() } else { Sense::hover() }).on_hover_text(tip);
+    let fill = if !enabled { look::mix(look::header_bg(), look::group_bg(), 0.5) } else if resp.hovered() { look::button_on() } else { look::group_bg() };
+    p.rect_filled(r, 5.0, fill);
+    glyph(p, r, Glyph::Clear, if enabled { look::text() } else { look::text_dim() });
+    enabled && resp.clicked()
 }
 
+/// A pill of two buttons (rotate, increment / decrement): one capsule, Logic's thin divider.
+fn pill_pair(p: &egui::Painter, r: Rect, fill: Color32) {
+    p.rect_filled(r, 5.0, fill);
+    p.vline(r.center().x, r.y_range().shrink(3.0), Stroke::new(1.0, look::header_bg()));
+}
 
 /// "/16 ⌃⌄": a step rate pop-up.
-fn rate_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), rate: u32, set: &mut dyn FnMut(u32)) {
-    ui.painter().rect_filled(r, 6.0, Color32::from_gray(0x4f));
-    glyph(ui.painter(), Rect::from_min_max(pos2(r.max.x - 18.0, r.min.y), r.max), Glyph::UpDown, look::text_dim());
+fn rate_box(ui: &mut egui::Ui, r: Rect, id: (&str, usize), rate: u32, fill: Color32, set: &mut dyn FnMut(u32)) {
+    ui.painter().rect_filled(r, 6.0, fill);
+    let big = r.height() > 22.0;
+    crate::glyphs::paint(ui.painter(), Rect::from_min_max(pos2(r.max.x - 18.0, r.min.y), r.max), crate::glyphs::ph::CARET_UP_DOWN, if big { 15.0 } else { 12.0 }, if big { look::text() } else { look::text_dim() });
     ui.scope_builder(egui::UiBuilder::new().max_rect(r).id_salt(id), |ui| {
         plain(ui);
-        ui.menu_button(egui::RichText::new(format!("{}    ", rate_name(rate))).size(13.0).color(look::text()), |ui| {
+        ui.menu_button(egui::RichText::new(format!("{}    ", rate_name(rate))).font(if big { look::semibold(13.5) } else { look::regular(12.0) }).color(look::text()), |ui| {
             for (k, (name, v)) in RATES.into_iter().enumerate() {
                 if RATE_GROUPS.contains(&k) {
                     ui.separator();
@@ -3750,5 +4126,46 @@ mod tests {
         p.rows[1].mute = true;
         assert_eq!(from_text(&to_text(&p)), Some(p));
         assert_eq!(from_text("nonsense"), None);
+    }
+
+    #[test]
+    fn vertical_zoom_default_is_logics_48pt_rows_and_inverts() {
+        assert_eq!(row_h_of_zoom(DEFAULT_VZ), 48.0);
+        assert_eq!(row_h_of_zoom(0.0), ROW_MIN);
+        assert_eq!(row_h_of_zoom(1.0), ROW_MAX);
+        for v in [0.0f32, 0.2, 0.6, 0.8, 1.0] {
+            assert!((zoom_of_row_h(row_h_of_zoom(v)) - v).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn vertical_auto_zoom_fills_the_height() {
+        assert_eq!(auto_row_h(8, 0.0, 480.0), 60.0);
+        // too many rows: the smallest; too few: the largest
+        assert_eq!(auto_row_h(40, 0.0, 480.0), ROW_MIN);
+        assert_eq!(auto_row_h(1, 0.0, 480.0), ROW_MAX);
+        // open subrows take their room first
+        assert_eq!(auto_row_h(4, 90.0, 290.0), 50.0);
+    }
+
+    #[test]
+    fn drum_instruments_get_kit_rows() {
+        assert_eq!(kit_for("Drum Machine Designer", "Beat"), Some(Kit::DmdDefault));
+        assert_eq!(kit_for("Drum Synth Kit", "Track 3"), Some(Kit::DmdDefault));
+        assert_eq!(kit_for("Drum Kit Designer", "SoCal"), Some(Kit::Gm));
+        assert_eq!(kit_for("Retro Synth", "Lead"), None);
+        assert_eq!(kit_for("Deluxe Classic", "Deluxe Classic"), None);
+        // a DMD of the user's own samples: rows named after its pads, kick first
+        let c = crate::soundlib::sampler_choice("Drum Machine Designer", &[(42, "/k/Closed Hat.wav".into()), (36, "/k/Big Kick.wav".into()), (38, "/k/Snare.wav".into())]);
+        let Some(kit @ Kit::DmdPads(_)) = kit_for(&c, "Drum Machine Designer") else { panic!("pads") };
+        let rows = kit_rows(&kit);
+        assert_eq!(rows.iter().map(|r| r.1.as_str()).collect::<Vec<_>>(), ["Big Kick", "Snare", "Closed Hat"]);
+        // the default kit: kick, snare, rim, clap, hi-hats, toms, crash, ride
+        let rows = kit_rows(&Kit::DmdDefault);
+        assert_eq!(rows[0], (36, "Kick 2".to_string()));
+        assert_eq!(rows[1].1, "Snare 1");
+        assert_eq!(rows.len(), 12);
+        assert!(rows.iter().all(|r| !r.1.is_empty()));
+        assert!(kit_rows(&Kit::Gm).iter().all(|r| !r.1.is_empty()));
     }
 }

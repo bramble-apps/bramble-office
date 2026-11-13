@@ -368,14 +368,19 @@ pub fn local_bar(app: &mut App, ui: &mut egui::Ui, menus: &[(&str, &str)]) {
             if i > 0 {
                 seps.push(ui.cursor().min.x);
             }
-            ui.menu_button(format!("{title} ⌄"), |ui| {
+            let resp = ui.menu_button(format!("{title}    "), |ui| {
                 app.midi.menu_roll = name.starts_with("pianoroll");
                 show_items(app, ui, local(name));
                 if *name == "pianoroll-View" {
                     crate::rollextras::view_items(app, ui);
                 }
                 app.midi.menu_roll = false;
-            });
+            }).response;
+            // Logic's chevron: thin and wide (8 × 4 pt), 5 pt after the title
+            let tw = ui.fonts_mut(|f| f.layout_no_wrap(title.to_string(), egui::TextStyle::Button.resolve(ui.style()), egui::Color32::WHITE).size().x);
+            let c = egui::pos2(resp.rect.min.x + ui.spacing().button_padding.x + tw + 9.0, resp.rect.center().y + 0.5);
+            let col = crate::look::text();
+            ui.painter().line(vec![egui::pos2(c.x - 4.0, c.y - 2.0), egui::pos2(c.x, c.y + 2.0), egui::pos2(c.x + 4.0, c.y - 2.0)], egui::Stroke::new(1.2, col));
         }
     });
     let end = ui.min_rect().max.x;

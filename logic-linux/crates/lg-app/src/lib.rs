@@ -169,6 +169,7 @@ mod scoreattr;
 mod scoreglobal;
 mod scoregrid;
 mod stepseq;
+mod stepicons;
 mod noterepeat;
 pub mod sthints;
 mod stepinsp;
