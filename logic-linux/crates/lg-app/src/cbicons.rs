@@ -42,28 +42,18 @@ pub fn browser(p: &egui::Painter, r: Rect, c: Color32, fill: Color32) {
 /// The Inspector: two toggle switches, the top one an outline with its knob left, the bottom
 /// one filled with its knob (cut out) at the right, as Logic's.
 pub fn inspector(p: &egui::Painter, r: Rect, c: Color32, cell: Color32) {
-    // (as Logic's at 2x: two 15 pt toggles with a clear gap between them; pill-shaped knobs
-    // inside each toggle with an even margin)
-    let (w, h, gap) = (15.0f32, 6.0f32, 2.6f32);
-    for k in [0.0f32, 1.0] {
-        let cy = r.center().y + (k - 0.5) * (h + W + gap);
-        let pill = Rect::from_center_size(pos2(r.center().x, cy), vec2(w, h));
-        if k == 0.0 {
-            // off: an outline, its knob at the left
-            let sw = 1.3;
-            p.rect_stroke(pill, h / 2.0, Stroke::new(sw, c), egui::StrokeKind::Middle);
-            // (a pill-shaped knob: rounded ends, with an even gap to the outline)
-            let kh = h - sw - 1.6;
-            let knob = Rect::from_min_size(pos2(pill.min.x + sw / 2.0 + 0.8, cy - kh / 2.0), vec2(6.6, kh));
-            p.rect_filled(knob, kh / 2.0, c);
-        } else {
-            // on: filled, its knob (cut out) at the right
-            p.rect_filled(pill.expand(W / 2.0), h / 2.0 + W / 2.0, c);
-            let kh = h - 1.4;
-            let knob = Rect::from_min_size(pos2(pill.max.x - 0.7 - 6.6, cy - kh / 2.0), vec2(6.6, kh));
-            p.rect_filled(knob, kh / 2.0, cell);
-        }
-    }
+    // Traced from Logic 13's icon at 2x, in points: the top (off) toggle is a 15 x 7 pill
+    // outline in a 1 pt stroke with a 6 x 3.5 pill knob 2 pt in from its left end; 1 pt below
+    // it the bottom (on) toggle is a solid 15 x 6.5 pill with a 6 x 4.5 pill cut out 1 pt in
+    // from its right end.
+    let top = Rect::from_min_size(pos2(r.center().x - 7.5, r.center().y - 7.25), vec2(15.0, 7.0));
+    p.rect_stroke(top, 3.5, Stroke::new(1.0, c), egui::StrokeKind::Inside);
+    let knob = Rect::from_min_size(pos2(top.min.x + 2.0, top.center().y - 1.75), vec2(6.0, 3.5));
+    p.rect_filled(knob, 1.75, c);
+    let bottom = Rect::from_min_size(pos2(top.min.x, top.max.y + 1.0), vec2(15.0, 6.5));
+    p.rect_filled(bottom, 3.25, c);
+    let cut = Rect::from_min_size(pos2(bottom.max.x - 1.0 - 6.0, bottom.center().y - 2.25), vec2(6.0, 4.5));
+    p.rect_filled(cut, 2.25, cell);
 }
 
 /// Low Latency: a shield with an × in it.
