@@ -233,7 +233,19 @@ function time() {
 }
 function setImg(img, src) {
   const u = src ? "data:image/jpeg;base64," + src : "";
-  if (img.dataset.u !== u) { img.dataset.u = u; if (u) img.src = u; else img.removeAttribute("src"); }
+  if (img.dataset.u !== u) {
+    // the slide being shown changes with a short dissolve (the old picture fades over the new)
+    const box = img.parentNode, old = img.dataset.u;
+    if (old && u && box.id !== "nxt" && img.offsetWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (getComputedStyle(box).position === "static") box.style.position = "relative";
+      const o = img.cloneNode();
+      Object.assign(o.style, { position: "absolute", left: img.offsetLeft + "px", top: img.offsetTop + "px", width: img.offsetWidth + "px", height: img.offsetHeight + "px", transition: "opacity .3s ease", pointerEvents: "none" });
+      box.appendChild(o);
+      requestAnimationFrame(() => requestAnimationFrame(() => { o.style.opacity = "0"; }));
+      setTimeout(() => o.remove(), 400);
+    }
+    img.dataset.u = u; if (u) img.src = u; else img.removeAttribute("src");
+  }
   img.hidden = !u;
 }
 function size(el, x, y, w, h) { Object.assign(el.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" }); }
@@ -315,7 +327,8 @@ function renderLayout() {
   const fit = (w, h) => Math.min(w, h / a);
   const c = $("cur"), nl = $("nlbl"), nx = $("nxt"), no = $("notes");
   setImg(c.firstChild, cur); setImg(nx.firstChild, next);
-  nx.lastChild.hidden = !!next;
+  // (just after a tap the next picture is on its way: blank, not "End of slideshow")
+  nx.lastChild.hidden = !!next || !!st.optimistic;
   const text = (st.notes || "").trim();
   no.textContent = text || "No presenter notes";
   Object.assign(no.style, { background: invert ? "#fff" : "#000", color: text ? (invert ? "#000" : "#fff") : (invert ? "#0006" : "#fff6"), fontSize: (text ? notesSize : 15) + "px" });

@@ -508,24 +508,106 @@ pub fn draw_overlay(painter: &Painter, rect: Rect) {
 
 /// Settings > Remotes: Enable; the remotes looking for this computer (Link, then the code and
 /// Confirm); the remotes linked (Unlink).
+// ---- Settings > Remotes, laid out as System Settings: a title, a rounded group of rows (the
+// label at the left, its control at the right, hairlines between), a small note under it.
+
+/// A group's fill: a step lighter than the window (white in light mode).
+fn group_fill(ui: &egui::Ui) -> Color32 {
+    if ui.visuals().dark_mode { Color32::from_rgb(0x2e, 0x2e, 0x30) } else { Color32::WHITE }
+}
+
+/// A section's title above its group.
+pub(super) fn title(ui: &mut egui::Ui, t: &str) {
+    ui.add_space(14.0);
+    ui.label(egui::RichText::new(t).size(13.0).strong().color(crate::theme::TEXT()));
+    ui.add_space(4.0);
+}
+
+/// The small grey note under a group.
+pub(super) fn note(ui: &mut egui::Ui, t: &str) {
+    ui.add_space(4.0);
+    ui.add(egui::Label::new(egui::RichText::new(t).size(11.5).color(crate::theme::TEXT_DIM())).wrap());
+}
+
+/// A rounded group; `rows` adds its rows (with `hairline` between them).
+pub(super) fn group(ui: &mut egui::Ui, rows: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new().fill(group_fill(ui)).corner_radius(10.0).inner_margin(egui::Margin::symmetric(12, 2)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.spacing_mut().item_spacing.y = 0.0;
+        rows(ui);
+    });
+}
+
+/// The line between two rows.
+pub(super) fn hairline(ui: &mut egui::Ui) {
+    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, crate::theme::SEPARATOR()));
+}
+
+/// A row: `left` from the left edge, `right` from the right edge, centred in 40 pt.
+pub(super) fn row(ui: &mut egui::Ui, left: impl FnOnce(&mut egui::Ui), right: impl FnOnce(&mut egui::Ui)) {
+    let w = ui.available_width();
+    ui.allocate_ui_with_layout(egui::vec2(w, 40.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_size(egui::vec2(w, 40.0));
+        left(ui);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
+    });
+}
+
+/// A device's status dot and name, with "Connected" or "Not connected" under it.
+fn device(ui: &mut egui::Ui, name: &str, status: &str, on: bool) {
+    let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+    ui.painter().circle_filled(r.center(), 4.0, if on { Color32::from_rgb(0x34, 0xc7, 0x59) } else { crate::theme::TEXT_DIM() });
+    ui.add_space(4.0);
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        ui.add(egui::Label::new(egui::RichText::new(name).size(13.0)).truncate());
+        ui.label(egui::RichText::new(status).size(11.0).color(crate::theme::TEXT_DIM()));
+    });
+}
+
 pub fn settings_tab(ui: &mut egui::Ui) {
+    // scrolls when the screen is too short for it all (small laptops, phones)
+    let max_h = (ui.ctx().content_rect().height() - 200.0).max(160.0);
+    egui::ScrollArea::vertical().max_height(max_h).min_scrolled_height(max_h.min(640.0)).auto_shrink([false, true]).show(ui, |ui| {
+        ui.set_width(ui.available_width() - 6.0);
+        tab_body(ui);
+    });
+    ui.ctx().request_repaint_after(Duration::from_millis(500));
+}
+
+fn tab_body(ui: &mut egui::Ui) {
     let (mut enabled, name) = {
         let s = shared();
         (s.enabled, s.name.clone())
     };
-    if ui.checkbox(&mut enabled, "Enable").changed() {
-        let mut s = shared();
-        s.enabled = enabled;
-        if !enabled {
-            for c in s.conns.values() {
-                send(c, json!({ "type": "disabled" }));
-            }
-            s.conns.retain(|_, c| !c.id.starts_with("web:"));
-        }
-        save(&s);
-    }
-    ui.label(egui::RichText::new(format!("Use a phone or tablet running Keydeck to control slideshows on \u{201c}{name}\u{201d}: open Keydeck there, choose Play > Keydeck Remote, then click Link next to it below.")).size(12.0).color(crate::theme::TEXT_DIM()));
-    ui.add_space(8.0);
+    ui.add_space(4.0);
+    group(ui, |ui| {
+        row(
+            ui,
+            |ui| {
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 1.0;
+                    ui.label(egui::RichText::new("Keydeck Remote").size(13.0));
+                    ui.label(egui::RichText::new("Control slideshows from a phone or tablet").size(11.0).color(crate::theme::TEXT_DIM()));
+                });
+            },
+            |ui| {
+                if crate::theme::toggle(ui, &mut enabled).changed() {
+                    let mut s = shared();
+                    s.enabled = enabled;
+                    if !enabled {
+                        for c in s.conns.values() {
+                            send(c, json!({ "type": "disabled" }));
+                        }
+                        s.conns.retain(|_, c| !c.id.starts_with("web:"));
+                    }
+                    save(&s);
+                }
+            },
+        );
+    });
+    note(ui, &format!("On a phone or tablet with Keydeck, choose Play > Keydeck Remote, then link it to \u{201c}{name}\u{201d} here. Or use the web remote below in any browser."));
     if !enabled {
         return;
     }
@@ -533,46 +615,62 @@ pub fn settings_tab(ui: &mut egui::Ui) {
     {
         let s = shared();
         let looking: Vec<(u64, String)> = s.conns.iter().filter(|(_, c)| !c.linked).map(|(k, c)| (*k, c.name.clone())).collect();
-        ui.label(egui::RichText::new("Remotes nearby").strong());
-        if looking.is_empty() {
-            ui.label(egui::RichText::new("No remotes are looking for this computer.").color(crate::theme::TEXT_DIM()));
-        }
-        for (k, n) in looking {
-            ui.horizontal(|ui| {
-                ui.label(&n);
-                match &s.pending {
-                    Some((pk, code)) if *pk == k => {
-                        ui.label(egui::RichText::new(code).size(20.0).strong());
-                        if ui.button("Confirm").clicked() {
-                            act = Some(("confirm", k, String::new()));
-                        }
-                        if ui.button("Cancel").clicked() {
-                            act = Some(("cancel", k, String::new()));
-                        }
-                    }
-                    _ => {
-                        if ui.button("Link").clicked() {
-                            act = Some(("link", k, String::new()));
-                        }
-                    }
+        title(ui, "Nearby");
+        group(ui, |ui| {
+            if looking.is_empty() {
+                row(ui, |ui| { ui.label(egui::RichText::new("No remotes are looking for this computer").size(12.5).color(crate::theme::TEXT_DIM())); }, |_| {});
+            }
+            for (i, (k, n)) in looking.into_iter().enumerate() {
+                if i > 0 {
+                    hairline(ui);
                 }
-            });
-        }
-        ui.add_space(8.0);
-        ui.label(egui::RichText::new("Linked remotes").strong());
-        if s.linked.is_empty() {
-            ui.label(egui::RichText::new("None yet.").color(crate::theme::TEXT_DIM()));
-        }
-        for l in &s.linked {
-            let on = s.conns.values().any(|c| c.linked && c.id == l.id);
-            ui.horizontal(|ui| {
-                ui.colored_label(if on { Color32::from_rgb(0x34, 0xc7, 0x59) } else { crate::theme::TEXT_DIM() }, "\u{25cf}");
-                ui.label(&l.name);
-                if ui.button("Unlink").clicked() {
-                    act = Some(("unlink", 0, l.id.clone()));
+                let code = match &s.pending {
+                    Some((pk, code)) if *pk == k => Some(code.clone()),
+                    _ => None,
+                };
+                row(
+                    ui,
+                    |ui| device(ui, &n, if code.is_some() { "Check that this code shows on the device" } else { "Wants to link" }, false),
+                    |ui| match &code {
+                        Some(code) => {
+                            if ui.button("Confirm").clicked() {
+                                act = Some(("confirm", k, String::new()));
+                            }
+                            if ui.button("Cancel").clicked() {
+                                act = Some(("cancel", k, String::new()));
+                            }
+                            ui.label(egui::RichText::new(code).size(20.0).strong().monospace());
+                        }
+                        None => {
+                            if ui.button("Link").clicked() {
+                                act = Some(("link", k, String::new()));
+                            }
+                        }
+                    },
+                );
+            }
+        });
+        title(ui, "Linked");
+        group(ui, |ui| {
+            if s.linked.is_empty() {
+                row(ui, |ui| { ui.label(egui::RichText::new("No linked remotes yet").size(12.5).color(crate::theme::TEXT_DIM())); }, |_| {});
+            }
+            for (i, l) in s.linked.iter().enumerate() {
+                if i > 0 {
+                    hairline(ui);
                 }
-            });
-        }
+                let on = s.conns.values().any(|c| c.linked && c.id == l.id);
+                row(
+                    ui,
+                    |ui| device(ui, &l.name, if on { "Connected" } else { "Not connected" }, on),
+                    |ui| {
+                        if ui.button("Unlink").clicked() {
+                            act = Some(("unlink", 0, l.id.clone()));
+                        }
+                    },
+                );
+            }
+        });
     }
     match act {
         Some(("link", k, _)) => link(k),
@@ -596,5 +694,4 @@ pub fn settings_tab(ui: &mut egui::Ui) {
         _ => {}
     }
     web::settings(ui);
-    ui.ctx().request_repaint_after(Duration::from_millis(500));
 }

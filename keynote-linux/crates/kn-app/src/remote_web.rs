@@ -167,35 +167,66 @@ fn lan_ip() -> String {
         .unwrap_or_else(|| "127.0.0.1".into())
 }
 
-/// Settings > Remotes > Web Remote: the link (selectable, Copy, its QR code) and New Link.
+/// Settings > Remotes > Web Remote: the QR code on a white tile and, beside it (under it when
+/// the window is narrow), the address, Copy Link, New Link and the browsers connected.
 pub(super) fn settings(ui: &mut egui::Ui) {
     let (key, port, browsers) = {
         let s = shared();
         (s.web_key.clone(), s.web_port, s.conns.values().filter(|c| c.id.starts_with("web:")).count())
     };
-    ui.add_space(8.0);
-    ui.label(egui::RichText::new("Web Remote").strong());
-    let dim = |t: &str| egui::RichText::new(t).size(12.0).color(crate::theme::TEXT_DIM());
+    super::title(ui, "Web Remote");
     if port == 0 {
-        ui.label(dim("The web remote couldn't start: its network ports are in use."));
+        super::group(ui, |ui| super::row(ui, |ui| { ui.label(egui::RichText::new("The web remote couldn\u{2019}t start: its network ports are in use.").size(12.5)); }, |_| {}));
         return;
     }
-    ui.label(dim("Or open this link in a browser on a phone or tablet on the same network (or scan the code). Anyone with the link can control the slideshow; New Link stops the old one from working."));
-    let url = format!("http://{}:{port}/?k={key}", lan_ip());
-    let mut shown = url.clone();
-    ui.add(egui::TextEdit::singleline(&mut shown).desired_width(420.0));
-    ui.horizontal(|ui| {
-        if ui.button("Copy").clicked() {
-            ui.ctx().copy_text(url.clone());
+    let ip = lan_ip();
+    let url = format!("http://{ip}:{port}/?k={key}");
+    let mut new_link = false;
+    super::group(ui, |ui| {
+        let wide = ui.available_width() >= 360.0;
+        let side = if wide { 148.0 } else { ui.available_width().min(200.0) };
+        let info = |ui: &mut egui::Ui, new_link: &mut bool| {
+            ui.spacing_mut().item_spacing.y = 6.0;
+            ui.label(egui::RichText::new("Scan with a phone or tablet").size(13.0));
+            ui.label(egui::RichText::new("Or open this address in a browser on the same network:").size(11.5).color(crate::theme::TEXT_DIM()));
+            ui.add(egui::Label::new(egui::RichText::new(format!("{ip}:{port}")).size(12.5).monospace()).selectable(true));
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Copy Link").clicked() {
+                    ui.ctx().copy_text(url.clone());
+                }
+                if ui.add(egui::Button::new(egui::RichText::new("New Link").color(Color32::from_rgb(0xff, 0x45, 0x3a)))).on_hover_text("Make a new link; pages opened with the old one stop working").clicked() {
+                    *new_link = true;
+                }
+            });
+            let (dot, t) = if browsers > 0 {
+                (Color32::from_rgb(0x34, 0xc7, 0x59), format!("{browsers} browser{} connected", if browsers == 1 { "" } else { "s" }))
+            } else {
+                (crate::theme::TEXT_DIM(), "No browsers connected".to_string())
+            };
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(Vec2::new(8.0, 8.0), egui::Sense::hover());
+                ui.painter().circle_filled(r.center(), 3.5, dot);
+                ui.label(egui::RichText::new(t).size(11.5).color(crate::theme::TEXT_DIM()));
+            });
+        };
+        ui.add_space(10.0);
+        if wide {
+            ui.horizontal_top(|ui| {
+                qr(ui, &url, side);
+                ui.add_space(14.0);
+                ui.vertical(|ui| info(ui, &mut new_link));
+            });
+        } else {
+            ui.vertical_centered(|ui| qr(ui, &url, side));
+            ui.add_space(10.0);
+            info(ui, &mut new_link);
         }
-        if ui.button("New Link").clicked() {
-            new_key();
-        }
-        if browsers > 0 {
-            ui.label(dim(&format!("{browsers} browser{} connected", if browsers == 1 { "" } else { "s" })));
-        }
+        ui.add_space(10.0);
     });
-    qr(ui, &url);
+    super::note(ui, "Anyone with the link can control the slideshow.");
+    if new_link {
+        new_key();
+    }
 }
 
 /// New Link: a new key; the pages open with the old one are dropped.
@@ -209,16 +240,19 @@ fn new_key() {
     save(&s);
 }
 
-/// The link's QR code, black modules on white with the quiet zone.
-fn qr(ui: &mut egui::Ui, text: &str) {
+/// The link's QR code, `side` points square: black modules on a white rounded tile (with the
+/// quiet zone), whole pixels per module so it stays sharp.
+fn qr(ui: &mut egui::Ui, text: &str, side: f32) {
     let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else { return };
     let n = code.width();
     let colors = code.to_colors();
-    let cell = 4.0;
+    let ppp = ui.ctx().pixels_per_point();
+    let cell = ((side / (n + 8) as f32 * ppp).floor().max(1.0)) / ppp;
     let side = (n + 8) as f32 * cell;
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(side), egui::Sense::hover());
+    let rect = Rect::from_min_size(egui::pos2((rect.min.x * ppp).round() / ppp, (rect.min.y * ppp).round() / ppp), rect.size());
     let p = ui.painter_at(rect);
-    p.rect_filled(rect, 4.0, Color32::WHITE);
+    p.rect_filled(rect, 10.0, Color32::WHITE);
     for (i, c) in colors.iter().enumerate() {
         if *c == qrcode::Color::Dark {
             let min = rect.min + Vec2::new((i % n + 4) as f32 * cell, (i / n + 4) as f32 * cell);
