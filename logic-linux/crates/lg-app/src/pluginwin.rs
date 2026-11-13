@@ -31,6 +31,22 @@ pub(crate) fn fmt(p: &lg_dsp::Param, v: f32) -> String {
     }
 }
 
+/// A value typed into a Controls row ("22 kHz", "-3 dB", "+12"), in the parameter's own
+/// units and clamped to its range; None when it holds no number.
+pub(crate) fn typed_value(p: &lg_dsp::Param, text: &str) -> Option<f32> {
+    let t = text.trim();
+    let end = t.char_indices().find(|(i, c)| !(c.is_ascii_digit() || *c == '.' || ((*c == '-' || *c == '+') && *i == 0))).map_or(t.len(), |(i, _)| i);
+    let mut v: f32 = t[..end].parse().ok()?;
+    let rest = t[end..].trim_start();
+    if rest.starts_with('k') || rest.starts_with('K') {
+        v *= 1000.0;
+    }
+    if matches!(p.unit, lg_dsp::Unit::Pan) {
+        v /= 64.0;
+    }
+    Some(v.clamp(p.min, p.max))
+}
+
 /// The Controls view: a row per parameter (the hidden ones, a custom view's stored state,
 /// left out); returns the parameters changed (id, value).
 /// `texts`: the plug-in's own text for a value when it has one (hosted plug-ins).
@@ -90,6 +106,30 @@ pub(crate) fn control_rows(ui: &mut egui::Ui, params: &[lg_dsp::Param], values: 
                 continue;
             }
             let shown = texts.get(n).cloned().flatten().unwrap_or_else(|| fmt(prm, v));
+            // double-click the value to type one (it may go beyond what the slider's drag reaches)
+            let vr = Rect::from_min_max(pos2(ctl.max.x + 4.0, row.min.y + 2.0), pos2(row.max.x, row.max.y - 2.0));
+            let type_id = id.with("type-in");
+            let editing = ui.ctx().data(|d| d.get_temp::<String>(type_id));
+            if let Some(mut text) = editing {
+                let te = ui.put(vr, egui::TextEdit::singleline(&mut text).font(look::regular(12.0)));
+                if !te.has_focus() && !te.lost_focus() {
+                    te.request_focus();
+                }
+                if te.lost_focus() {
+                    if !ui.input(|i| i.key_pressed(egui::Key::Escape))
+                        && let Some(nv) = typed_value(prm, &text)
+                    {
+                        set.push((prm.id, nv));
+                    }
+                    ui.ctx().data_mut(|d| d.remove::<String>(type_id));
+                } else {
+                    ui.ctx().data_mut(|d| d.insert_temp(type_id, text));
+                }
+                continue;
+            }
+            if !matches!(prm.unit, lg_dsp::Unit::Menu | lg_dsp::Unit::OnOff) && ui.interact(vr, id.with("value"), Sense::click()).double_clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(type_id, shown.clone()));
+            }
             p.text(pos2(row.max.x - 4.0, row.center().y), Align2::RIGHT_CENTER, shown, look::regular(12.0), look::text());
         }
     }
@@ -429,6 +469,7 @@ pub fn extended(name: &str) -> &'static [&'static str] {
         "GoldVerb" => &["Diffusion"],
         "PlatinumVerb" => &["ER Scale"],
         "Match EQ" => &["Phase"],
+        "Distortion II" => &["Output", "Mix", "Level Compensation"],
         _ => &[],
     }
 }
@@ -847,6 +888,20 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use lg_dsp::{Param, Unit};
+
+    #[test]
+    fn typed_values_parse_units_and_clamp() {
+        let f = Param::new(0, "Frequency", 1.0, 22000.0, 1000.0, Unit::Hz);
+        assert_eq!(super::typed_value(&f, "1"), Some(1.0));
+        assert_eq!(super::typed_value(&f, "22 kHz"), Some(22000.0));
+        assert_eq!(super::typed_value(&f, "1.5k"), Some(1500.0));
+        assert_eq!(super::typed_value(&f, "99999"), Some(22000.0));
+        assert_eq!(super::typed_value(&f, "abc"), None);
+        let g = Param::new(1, "Gain", -24.0, 24.0, 0.0, Unit::Db);
+        assert_eq!(super::typed_value(&g, "-3 dB"), Some(-3.0));
+        let pan = Param::new(2, "Pan", -1.0, 1.0, 0.0, Unit::Pan);
+        assert_eq!(super::typed_value(&pan, "+32"), Some(0.5));
+    }
 
     #[test]
     fn values_read_as_logic_writes_them() {

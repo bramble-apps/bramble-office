@@ -147,7 +147,9 @@ pub fn sources() -> &'static [&'static str] {
         }
         v.extend(["Key", "Velocity", "Release Velocity", "Pitch Bend", "Aftertouch", "Mod Wheel"]);
         for cc in 2..=119 {
-            v.push(Box::leak(format!("MIDI CC {cc}").into_boxed_str()));
+            // Logic labels controller 11 Expression (7 and 10 drive the channel strip volume / pan)
+            let name = if cc == 11 { "MIDI CC 11 (Expression)".to_string() } else { format!("MIDI CC {cc}") };
+            v.push(Box::leak(name.into_boxed_str()));
         }
         v
     })
@@ -871,6 +873,7 @@ mod tests {
             assert_eq!(source_index(source_of(i)), i, "{}", sources()[i]);
         }
         assert_eq!(sources()[source_index(Source::Cc(119))], "MIDI CC 119");
+        assert_eq!(sources()[source_index(Source::Cc(11))], "MIDI CC 11 (Expression)");
     }
 
     #[test]

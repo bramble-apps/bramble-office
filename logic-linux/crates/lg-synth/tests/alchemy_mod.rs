@@ -362,3 +362,11 @@ fn f1_f2_routing_and_limiter() {
     let (l, _) = render(&mut a, 0.3);
     assert!(a.get(LIMITER) >= 0.5 && l.iter().all(|x| x.abs() <= 1.0 + 1e-3), "the limiter keeps it under full scale");
 }
+
+#[test]
+fn mseg_file_preset_ramp_up_rises() {
+    let list = am::presets(K_MSEG);
+    let (_, pts) = list.iter().find(|(n, _)| *n == "Ramp Up").expect("Ramp Up preset");
+    let level = |k: u32| pts.iter().find(|(id, _)| *id == MS_PT + k * 3 + 1).unwrap().1;
+    assert_eq!((level(0), level(1)), (0.0, 1.0));
+}

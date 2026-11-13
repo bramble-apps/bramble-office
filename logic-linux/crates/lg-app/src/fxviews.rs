@@ -60,7 +60,7 @@ pub enum Action {
     PlayKey(u8, u8),
 }
 
-const EDITORS: &[&str] = &["Compressor", "Noise Gate", "Limiter", "Quantec Room Simulator", "Auto Sampler", "Phat FX", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
+const EDITORS: &[&str] = &["Compressor", "Noise Gate", "Limiter", "Quantec Room Simulator", "Auto Sampler", "Phat FX", "Channel EQ", "Linear Phase EQ", "Remix FX", "Beat Breaker", "Step FX", "Delay Designer", "Pedalboard", "Mastering Assistant", "Space Designer", "Match EQ", "Pitch Correction", "DeEsser 2", "Level Meter", "Loudness Meter", "Correlation Meter", "MultiMeter", "BPM Counter", "Tuner"];
 
 pub fn has_editor(name: &str) -> bool {
     EDITORS.contains(&name)
@@ -83,6 +83,7 @@ pub fn default_size(name: &str) -> egui::Vec2 {
         "Delay Designer" => vec2(780.0, 760.0),
         "Remix FX" | "Beat Breaker" | "Step FX" | "Pedalboard" | "Mastering Assistant" => vec2(760.0, 560.0),
         "Space Designer" => vec2(680.0, 520.0),
+        "DeEsser 2" => vec2(520.0, 520.0),
         "Match EQ" => vec2(720.0, 620.0),
         // (Logic's Channel EQ window at 100 %: 1028 × 552 points with its header and footer)
         "Channel EQ" | "Linear Phase EQ" => vec2(1014.0, 540.0),
@@ -180,6 +181,7 @@ pub fn editor(ui: &mut egui::Ui, name: &str, params: &[Param], values: &[f32], l
         "Space Designer" => space(ui, params, values, live, &mut set, &mut act),
         "Match EQ" => crate::meqview::view(ui, params, values, live, slot, &mut set, &mut act),
         "Pitch Correction" => pitch_correction(ui, params, values, live, &mut set),
+        "DeEsser 2" => deesser(ui, params, values, live, &mut set),
         _ => crate::meterview::view(ui, name, params, values, live, slot, &mut set),
     });
     (set, act)
@@ -816,7 +818,12 @@ fn pedalboard(ui: &mut egui::Ui, params: &[Param], values: &[f32], set: &mut Vec
             let ids: Vec<u32> = params.iter().map(|p| p.id).filter(|id| *id > BASE + STRIDE * s as u32 + 1 && *id < BASE + STRIDE * (s as u32 + 1)).collect();
             ui.label(egui::RichText::new(choices[kinds[s]]).strong());
             set.extend(rows(ui, params, values, &ids, "pb-pedal"));
-            if ui.button("Remove Pedal").clicked() {
+            // Remove Pedal, or Delete / Backspace while this window is in front and under the pointer
+            let ctx = ui.ctx().clone();
+            let front = ctx.memory(|m| m.areas().top_layer_id(egui::Order::Middle)) == Some(ui.layer_id())
+                && ctx.pointer_hover_pos().and_then(|q| ctx.layer_id_at(q)) == Some(ui.layer_id());
+            let del_key = front && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace));
+            if ui.button("Remove Pedal").clicked() || del_key {
                 set.push((BASE + STRIDE * s as u32, 0.0));
                 crate::pbrouter::after_remove(params, values, s, set);
             }
@@ -963,29 +970,69 @@ fn space(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: 
         if ui.add(egui::Button::selectable(sampled, "Sampled IR")).clicked() {
             set.push((IR_MODE, 1.0));
         }
-        let irs = user_irs();
-        let cur = g(SAMPLED_IR).round() as usize;
-        let shown = if cur == 0 { "No impulse response".to_string() } else { irs.get(cur - 1).and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "(missing)".into()) };
-        egui::ComboBox::from_id_salt("sd-ir").selected_text(shown).width(220.0).show_ui(ui, |ui| {
-            for (k, p) in irs.iter().enumerate() {
-                let n = p.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-                if ui.selectable_label(cur == k + 1, n).clicked() {
-                    set.push((SAMPLED_IR, (k + 1) as f32));
-                    set.push((IR_MODE, 1.0));
-                }
-            }
-        });
         if ui.button("Load IR…").clicked() {
             *act = Some(Action::LoadIr);
         }
     });
+    // the display mode bar: Volume Env, Filter Env, Density Env (Synthesized IR) or the IR
+    // Sample pop-up (Sampled IR), Output EQ; each with its On/Off switch, the clicked one in front
+    let view_key = ui.scope_id().with("sd-view");
+    let sampled = g(IR_MODE) >= 0.5;
+    let mut view = ui.data(|d| d.get_temp::<usize>(view_key)).unwrap_or(0);
+    if sampled && view == 2 {
+        view = 0;
+    }
+    ui.horizontal(|ui| {
+        for k in 0..4 {
+            if k == 2 && sampled {
+                ui.label(egui::RichText::new("IR Sample").color(look::text_dim()));
+                let irs = user_irs();
+                let cur = g(SAMPLED_IR).round() as usize;
+                let shown = if cur == 0 { "No impulse response".to_string() } else { irs.get(cur - 1).and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "(missing)".into()) };
+                egui::ComboBox::from_id_salt("sd-ir").selected_text(shown).width(220.0).show_ui(ui, |ui| {
+                    for (k, p) in irs.iter().enumerate() {
+                        let n = p.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                        if ui.selectable_label(cur == k + 1, n).clicked() {
+                            set.push((SAMPLED_IR, (k + 1) as f32));
+                            set.push((IR_MODE, 1.0));
+                        }
+                    }
+                });
+                ui.add_space(6.0);
+                continue;
+            }
+            let sw = view_switch(k);
+            let mut on = g(sw) >= 0.5;
+            if ui.checkbox(&mut on, "").on_hover_text(format!("{} On/Off", VIEWS[k])).changed() {
+                set.push((sw, if on { 1.0 } else { 0.0 }));
+            }
+            if ui.add(egui::Button::selectable(view == k, VIEWS[k])).clicked() {
+                view = k;
+            }
+            ui.add_space(6.0);
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(view_key, view));
     let (r, p) = panel(ui, 140.0);
     let ir = live.curve("ir");
     let peak = ir.iter().fold(1e-9f32, |m, v| m.max(*v));
     let pts: Vec<f32> = ir.iter().map(|v| v / peak).collect();
-    curve_line(&p, r, &pts, 0.0, 1.0, look::accent(), 1.5);
+    curve_line(&p, r, &pts, 0.0, 1.0, look::text_dim(), 1.0);
+    // the active envelopes: the selected one in front, the others transparent behind it
+    if view < 3 {
+        let gg = |id: u32| g(id);
+        let mut order: Vec<usize> = (0..3).filter(|k| *k != view && !(sampled && *k == 2) && g(view_switch(*k)) >= 0.5).collect();
+        if g(view_switch(view)) >= 0.5 {
+            order.push(view);
+        }
+        for k in order {
+            let c = envelope_curve(&gg, k, 120);
+            let col = if k == view { look::accent() } else { look::accent().gamma_multiply(0.35) };
+            curve_line(&p, r, &c, 0.0, 1.0, col, if k == view { 2.0 } else { 1.2 });
+        }
+    }
     p.text(r.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, format!("{:.2} s", live.get("IR Length").unwrap_or(0.0)), look::regular(11.0), look::text());
-    let ids: Vec<u32> = params.iter().map(|p| p.id).filter(|id| *id != IR_MODE && *id != SAMPLED_IR).collect();
+    let ids: Vec<u32> = params.iter().map(|p| p.id).filter(|id| *id != IR_MODE && *id != SAMPLED_IR && view_of(*id).is_none_or(|v| v == view)).collect();
     set.extend(rows(ui, params, values, &ids, "sd-rows"));
 }
 
@@ -994,6 +1041,65 @@ fn space(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: 
 
 // ---------------------------------------------------------------------------------------------
 // Pitch Correction
+
+/// DeEsser 2: the Detection meter (with the Threshold handle and the Detection max field) and
+/// the Reduction meter (with the Max Reduction handle and the Reduction max field); blue while
+/// nothing is processed, yellow while it is. Click a max field to reset it.
+fn deesser(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: &mut Vec<(u32, f32)>) {
+    const MAX_RED: u32 = 0;
+    const THRESH: u32 = 1;
+    let g = |id| v(params, values, id);
+    let det = live.get("Detection").unwrap_or(-96.0);
+    let red = live.get("Reduction").unwrap_or(0.0);
+    let processing = live.get("Processing").unwrap_or(0.0) >= 0.5;
+    let col = if processing { Color32::from_rgb(0xf2, 0xc4, 0x2c) } else { Color32::from_rgb(0x3d, 0x8b, 0xf0) };
+    let max_id = ui.scope_id().with("de-max");
+    let (mut det_max, mut red_max) = ui.data(|d| d.get_temp::<(f32, f32)>(max_id)).unwrap_or((-96.0, 0.0));
+    det_max = det_max.max(det);
+    red_max = red_max.max(red);
+    let (area, _) = ui.allocate_exact_size(vec2(ui.available_width(), 200.0), Sense::hover());
+    let p = ui.painter().clone();
+    p.rect_filled(area, 6.0, look::lcd_bg());
+    // (meter, label, value, max, range lo..hi, the handle's parameter and its value)
+    let meters = [("Detection", det, det_max, -60.0f32, 0.0f32, THRESH, g(THRESH)), ("Reduction", red, red_max, 0.0, 40.0, MAX_RED, g(MAX_RED))];
+    for (k, (label, val, mx, lo, hi, pid, pv)) in meters.into_iter().enumerate() {
+        let cx = area.center().x + if k == 0 { -70.0 } else { 70.0 };
+        let field = Rect::from_center_size(pos2(cx, area.min.y + 20.0), vec2(64.0, 18.0));
+        p.rect_filled(field, 3.0, look::group_bg());
+        let shown = if k == 0 && mx <= -95.0 { "-inf".to_string() } else { format!("{mx:.1}") };
+        p.text(field.center(), Align2::CENTER_CENTER, shown, look::regular(11.0), look::text());
+        if ui.interact(field, ui.scope_id().with(("de-maxf", k)), Sense::click()).clicked() {
+            if k == 0 {
+                det_max = -96.0;
+            } else {
+                red_max = 0.0;
+            }
+        }
+        let bar = Rect::from_min_max(pos2(cx - 9.0, area.min.y + 36.0), pos2(cx + 9.0, area.max.y - 26.0));
+        p.rect_filled(bar, 2.0, Color32::from_gray(24));
+        let frac = |x: f32| ((x - lo) / (hi - lo)).clamp(0.0, 1.0);
+        // Detection fills up from the bottom; Reduction hangs down from the top
+        let f = frac(val);
+        let fill = if k == 0 { Rect::from_min_max(pos2(bar.min.x, bar.max.y - bar.height() * f), bar.max) } else { Rect::from_min_max(bar.min, pos2(bar.max.x, bar.min.y + bar.height() * f)) };
+        p.rect_filled(fill, 2.0, col);
+        // the slider beside the meter: Threshold / Max Reduction
+        let hy = if k == 0 { bar.max.y - bar.height() * frac(pv) } else { bar.min.y + bar.height() * frac(pv) };
+        let tri = vec![pos2(bar.max.x + 2.0, hy), pos2(bar.max.x + 12.0, hy - 6.0), pos2(bar.max.x + 12.0, hy + 6.0)];
+        p.add(egui::Shape::convex_polygon(tri, look::text(), egui::Stroke::NONE));
+        let grab = Rect::from_min_max(pos2(bar.min.x, bar.min.y - 6.0), pos2(bar.max.x + 16.0, bar.max.y + 6.0));
+        let resp = ui.interact(grab, ui.scope_id().with(("de-slider", k)), Sense::click_and_drag());
+        if let (true, Some(q)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
+            let t = ((bar.max.y - q.y) / bar.height()).clamp(0.0, 1.0);
+            let nv = if k == 0 { lo + t * (hi - lo) } else { lo + (1.0 - t) * (hi - lo) };
+            set.push((pid, nv));
+        }
+        p.text(pos2(cx, area.max.y - 12.0), Align2::CENTER_CENTER, label, look::regular(11.0), look::text_dim());
+    }
+    ui.data_mut(|d| d.insert_temp(max_id, (det_max, red_max)));
+    let ids: Vec<u32> = params.iter().map(|p| p.id).collect();
+    set.extend(rows(ui, params, values, &ids, "de-rows"));
+    ui.ctx().request_repaint_after(std::time::Duration::from_millis(40));
+}
 
 fn pitch_correction(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, set: &mut Vec<(u32, f32)>) {
     use lg_fx::pitchfx::{PC_BYPASS, PC_EDIT};
@@ -1009,11 +1115,24 @@ fn pitch_correction(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &
         }
     });
     ui.data_mut(|d| d.insert_temp(kb_id, bypass_mode));
+    // Show Pitch: light the input's pitch, or the corrected (output) pitch, on the keyboard
+    let show_id = ui.scope_id().with("pc-show");
+    let mut show_out = ui.data(|d| d.get_temp::<bool>(show_id)).unwrap_or(false);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Show Pitch").color(look::text_dim()));
+        if ui.add(egui::Button::selectable(!show_out, "Input")).clicked() {
+            show_out = false;
+        }
+        if ui.add(egui::Button::selectable(show_out, "Output")).clicked() {
+            show_out = true;
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(show_id, show_out));
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width().min(420.0), 70.0), Sense::hover());
     let p = ui.painter().clone();
     let white = [0usize, 2, 4, 5, 7, 9, 11];
     let ww = r.width() / 7.0;
-    let input = live.get("Input Pitch").map(|n| (n.round() as i32).rem_euclid(12) as usize);
+    let input = live.get("Input Pitch").map(|n| if show_out { n + live.get("Correction").unwrap_or(0.0) / 100.0 } else { n }).map(|n| (n.round() as i32).rem_euclid(12) as usize);
     let mut keys: Vec<(usize, Rect)> = white.iter().enumerate().map(|(i, pc)| (*pc, Rect::from_min_size(pos2(r.min.x + i as f32 * ww, r.min.y), vec2(ww - 1.0, r.height())))).collect();
     for (i, pc) in [1usize, 3, 6, 8, 10].iter().enumerate() {
         let at = [1.0, 2.0, 4.0, 5.0, 6.0][i];

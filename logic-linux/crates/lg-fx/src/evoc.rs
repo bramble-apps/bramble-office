@@ -21,22 +21,40 @@ use lg_dsp::{Effect, Param, Unit};
 
 const B: u32 = 1000;
 const MAXB: usize = 20;
-const WAVES: &[&str] = &["Triangle", "Saw Down", "Saw Up", "Square", "Sample & Hold", "Smooth Random"];
+const WAVES: &[&str] = &["Triangle", "Saw Down", "Saw Up", "Square", "Square (Unipolar)", "Sample & Hold", "Smooth Random"];
 
-fn lfo_wave(w: usize, p: f32, hold: &mut (f32, f32), noise: &mut Noise) -> f32 {
+/// One LFO sample. `hold` = (current random value, last phase, next random value).
+fn lfo_wave(w: usize, p: f32, hold: &mut (f32, f32, f32), noise: &mut Noise) -> f32 {
     match w {
         0 => tri(p),
         1 => 1.0 - 2.0 * p,
         2 => 2.0 * p - 1.0,
         3 => if p < 0.5 { 1.0 } else { -1.0 },
+        4 => if p < 0.5 { 1.0 } else { 0.0 },
         _ => {
             if p < hold.1 {
-                hold.0 = noise.next();
+                hold.0 = hold.2;
+                hold.2 = noise.next();
             }
             hold.1 = p;
-            hold.0
+            if w == 5 {
+                hold.2
+            } else {
+                // Smooth Random glides from the last value to the next over one cycle
+                let t = p * p * (3.0 - 2.0 * p);
+                hold.0 + (hold.2 - hold.0) * t
+            }
         }
     }
+}
+
+/// TrackOscillator Stereo Width: band k's (left, right) gains. 0 centres every band, the
+/// middle spreads them left to right in ascending order, Full alternates left and right.
+fn band_lr(k: usize, nb: usize, width: f32) -> (f32, f32) {
+    let asc = if nb > 1 { -1.0 + 2.0 * k as f32 / (nb - 1) as f32 } else { 0.0 };
+    let alt = if k % 2 == 0 { -1.0 } else { 1.0 };
+    let pan = if width <= 0.5 { asc * width * 2.0 } else { asc + (alt - asc) * (width - 0.5) * 2.0 };
+    ((1.0 - pan).min(1.0), (1.0 + pan).min(1.0))
 }
 
 /// Band centre frequencies between lo and hi, shifted by `shift` octaves and stretched.
@@ -93,14 +111,14 @@ pub struct Filterbank {
     cs: Vec<f32>,
     q: f32,
     lfo: [Phase; 2],
-    hold: [(f32, f32); 2],
+    hold: [(f32, f32, f32); 2],
     noise: Noise,
     n: u32,
 }
 
 impl Filterbank {
     pub fn new(rate: f32) -> Filterbank {
-        let mut f = Filterbank { p: Values::new(FB_P.as_slice()), rate, f: [[[Svf::default(); 2]; MAXB]; 2], cs: Vec::new(), q: 1.0, lfo: [Phase::default(); 2], hold: [(0.0, 0.0); 2], noise: Noise(4242), n: 0 };
+        let mut f = Filterbank { p: Values::new(FB_P.as_slice()), rate, f: [[[Svf::default(); 2]; MAXB]; 2], cs: Vec::new(), q: 1.0, lfo: [Phase::default(); 2], hold: [(0.0, 0.0, 0.0); 2], noise: Noise(4242), n: 0 };
         f.update();
         f
     }
@@ -252,7 +270,7 @@ pub struct TrackOscillator {
     noise: Noise,
     hp: Svf,
     lfo: Phase,
-    hold: (f32, f32),
+    hold: (f32, f32, f32),
     voiced: f32,
     /// The side chain's block (Analysis In / Synthesis In: SideChain).
     side: Option<(Vec<f32>, Vec<f32>)>,
@@ -281,7 +299,7 @@ impl TrackOscillator {
             noise: Noise(777),
             hp: Svf::new(rate, 4000.0, 0.7),
             lfo: Phase::default(),
-            hold: (0.0, 0.0),
+            hold: (0.0, 0.0, 0.0),
             voiced: 1.0,
             side: None,
         };
@@ -411,13 +429,9 @@ impl Effect for TrackOscillator {
                 band = o;
                 let b = if k == 0 && lowhp { band.high } else if k == self.nb - 1 && highlp { band.low } else { band.band };
                 let y = b / (self.q * self.q) * e * 120.0;
-                if k % 2 == 0 {
-                    out[0] += y;
-                    out[1] += y * (1.0 - width);
-                } else {
-                    out[1] += y;
-                    out[0] += y * (1.0 - width);
-                }
+                let (gl, gr) = band_lr(k, self.nb, width);
+                out[0] += y * gl;
+                out[1] += y * gr;
             }
             let (l, r) = match signal {
                 1 => (carrier, carrier),
@@ -489,5 +503,42 @@ mod tests {
         let mut t2 = TrackOscillator::new(48000.0);
         t2.process(&mut l, &mut r);
         assert!(l.iter().all(|v| v.abs() < 1e-3));
+    }
+
+    #[test]
+    fn lfo_waves_include_unipolar_square_and_smooth_random() {
+        assert_eq!(WAVES[4], "Square (Unipolar)");
+        let mut h = (0.0, 0.0, 0.0);
+        let mut n = Noise(7);
+        assert_eq!(lfo_wave(4, 0.25, &mut h, &mut n), 1.0);
+        assert_eq!(lfo_wave(4, 0.75, &mut h, &mut n), 0.0);
+        // smooth random moves continuously within a cycle; S&H holds a step
+        let mut h = (0.0, 0.0, 0.0);
+        let mut prev = lfo_wave(6, 0.0, &mut h, &mut n);
+        for c in 0..4 {
+            for i in 1..=100 {
+                let p = i as f32 / 101.0;
+                let v = lfo_wave(6, if c > 0 && i == 1 { 0.0 } else { p }, &mut h, &mut n);
+                assert!((v - prev).abs() < 0.2, "jump {prev} -> {v}");
+                prev = v;
+            }
+        }
+        let mut h = (0.0, 0.0, 0.0);
+        let a = lfo_wave(5, 0.1, &mut h, &mut n);
+        assert_eq!(lfo_wave(5, 0.9, &mut h, &mut n), a);
+    }
+
+    #[test]
+    fn stereo_width_centres_ascends_then_alternates() {
+        for k in 0..5 {
+            assert_eq!(band_lr(k, 5, 0.0), (1.0, 1.0));
+        }
+        // middle: lowest band left, highest right, in order
+        let pans: Vec<f32> = (0..5).map(|k| { let (l, r) = band_lr(k, 5, 0.5); r - l }).collect();
+        assert!(pans.windows(2).all(|w| w[1] > w[0]), "{pans:?}");
+        assert_eq!(band_lr(0, 5, 0.5), (1.0, 0.0));
+        // full: alternating
+        assert_eq!(band_lr(2, 5, 1.0), (1.0, 0.0));
+        assert_eq!(band_lr(3, 5, 1.0), (0.0, 1.0));
     }
 }
