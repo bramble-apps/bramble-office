@@ -194,6 +194,8 @@ pub struct State {
     pub norm: crate::cellgain::Dialog,
     /// Rename Take: (cell, take, text).
     pub take_rename: Option<((usize, usize), usize, String)>,
+    /// Cell defaults by type: [MIDI, Audio] (celldefaults.rs).
+    pub defaults: [crate::celldefaults::Defaults; 2],
     pub grid_rect: Option<Rect>,
     /// A cell being dragged (from), copy with ⌥.
     pub drag: Option<(usize, usize)>,
@@ -1181,7 +1183,7 @@ pub fn record_into_cell(app: &mut App, t: usize, scene: usize) {
     };
     app.played.retain(|n| (n.pos as f64) < start as f64);
     // Rec-Length Cell Length: the recording is as long as the cell (a new cell: the default length)
-    let end = (app.live_loops.rec_length == "Cell Length").then(|| start + app.live_loops.cells.get(&(t, scene)).map_or(Cell::default().length, |c| c.length).max(1));
+    let end = (app.live_loops.rec_length == "Cell Length").then(|| start + app.live_loops.cells.get(&(t, scene)).map_or_else(|| crate::celldefaults::new_cell(app, t, String::new()).length, |c| c.length).max(1));
     app.live_loops.rec_continue = app.live_loops.rec_end == "Continue Recording";
     app.live_loops.rec = Some(Rec { track: t, scene, start, end });
     stop_track(app, t);
@@ -1197,8 +1199,9 @@ fn finish_cell_recording(app: &mut App, end: u32) {
     let (notes, len) = cell_from_notes(&played, r.start, end, b);
     let name = app.project.as_ref().and_then(|p| p.tracks.get(r.track)).map(|t| t.name.clone()).unwrap_or_default();
     let mode = app.live_loops.rec_mode.clone();
+    let fresh = Cell { length: len, ..crate::celldefaults::new_cell(app, r.track, name) };
     let s = &mut app.live_loops;
-    let cell = s.cells.entry((r.track, r.scene)).or_insert_with(|| Cell { name, length: len, ..Default::default() });
+    let cell = s.cells.entry((r.track, r.scene)).or_insert(fresh);
     if mode == "Takes" {
         // each recording a new take
         crate::celltakes::add_take(cell, notes, len);
@@ -1798,9 +1801,9 @@ fn command_at(app: &mut App, name: &str, cell: Option<(usize, usize)>, scene: Op
         "Create MIDI Cell" | "Create Cell" => {
             let Some(k) = cell.or_else(|| app.live_loops.selected.iter().next().copied()) else { return true };
             let name = app.project.as_ref().and_then(|p| p.tracks.get(k.0)).map(|t| t.name.clone()).unwrap_or_default();
-            let len = bar(app);
+            let new = crate::celldefaults::new_cell(app, k.0, name);
             let s = &mut app.live_loops;
-            s.cells.entry(k).or_insert(Cell { name, length: len, ..Default::default() });
+            s.cells.entry(k).or_insert(new);
             s.scenes = s.scenes.max(k.1 + 1);
             s.selected = [k].into();
             app.dirty = true;
@@ -2787,7 +2790,10 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
             }
         }
     }
-    region_drop(app, ui, drop_target);
+    // under the last track: a region dropped there makes a new track (below_scene)
+    let last_bottom = (0..n_tracks).rev().find_map(|t| crate::trackarea::row_span(app, t, rows_top)).map_or(cells_r.min.y, |(y, h)| y + h);
+    let below = pointer.filter(|pp| cells_r.contains(*pp) && pp.y > last_bottom).map(|pp| ((pp.x - cells_r.min.x + sx) / pitch).floor().max(0.0) as usize);
+    region_drop(app, ui, drop_target, below);
     // ---- the scene triggers
     let trig = Rect::from_min_max(pos2(area.min.x, area.max.y - TRIGGER_H), pos2(stop_col.min.x, area.max.y));
     let tp = ui.painter_at(trig);
@@ -2955,7 +2961,7 @@ pub fn swap_cells(s: &mut State, a: (usize, usize), b: (usize, usize)) {
 }
 
 /// A region dragged from the tracks onto a cell: the cell gets a copy, the region goes back.
-fn region_drop(app: &mut App, ui: &egui::Ui, target: Option<(usize, usize)>) {
+fn region_drop(app: &mut App, ui: &egui::Ui, target: Option<(usize, usize)>, below: Option<usize>) {
     match app.drag {
         Some(Drag::Region { track, region, start, .. }) => {
             if app.live_loops.region_drag.is_none() {
@@ -2971,13 +2977,35 @@ fn region_drop(app: &mut App, ui: &egui::Ui, target: Option<(usize, usize)>) {
     }
     if ui.input(|i| i.pointer.any_released()) {
         if let Some((track, region, start)) = app.live_loops.region_drag.take() {
-            if let Some(to) = target {
+            if let Some(to) = target.filter(|to| fits(app, track, region, to.0)) {
                 put_back(app, track, region, start);
                 region_to_cell(app, track, region, to);
+                app.load_engine();
+            } else if let Some(sc) = below.filter(|_| target.is_none()) {
+                put_back(app, track, region, start);
+                region_below_grid(app, track, region, sc);
                 app.load_engine();
             }
         }
     }
+}
+
+/// A region goes only into cells of its type: audio regions on audio tracks, MIDI regions on
+/// software instrument tracks.
+pub fn fits(app: &App, track: usize, region: usize, to: usize) -> bool {
+    let Some(p) = app.project.as_ref() else { return false };
+    let audio = p.tracks.get(track).and_then(|t| t.regions.get(region)).is_some_and(|r| r.audio.is_some());
+    p.tracks.get(to).is_some_and(|t| (t.kind == lg_core::TrackKind::Audio) == audio)
+}
+
+/// A region dropped under the grid's last track: a new track of its type (the original's channel
+/// strip settings) with the region in a cell of scene `sc`. One undo step.
+pub fn region_below_grid(app: &mut App, track: usize, region: usize, sc: usize) -> bool {
+    crate::cellinsp::checkpoint(app, "Copy to Cell");
+    let Some(n) = crate::recording::new_track_like(app, track) else { return false };
+    region_to_cell(app, track, region, (n, sc));
+    app.after_edit();
+    true
 }
 
 fn put_back(app: &mut App, track: usize, region: usize, start: u32) {
@@ -3261,6 +3289,25 @@ mod tests {
         let c = &app.live_loops.cells[&(0, 2)];
         assert_eq!((c.name.as_str(), c.length, c.audio.as_ref()), ("Beat", 1920, Some(&f)));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn regions_into_cells_by_type_and_below_the_grid() {
+        let mut app = crate::tm::test_app();
+        sync(&mut app);
+        let p = app.project.as_ref().unwrap();
+        let (mt, mr) = p.tracks.iter().enumerate().find_map(|(t, tr)| (tr.kind != lg_core::TrackKind::Audio && !tr.regions.is_empty() && tr.regions[0].audio.is_none()).then_some((t, 0))).unwrap();
+        let audio_t = p.tracks.iter().position(|tr| tr.kind == lg_core::TrackKind::Audio);
+        let n = p.tracks.len();
+        assert!(fits(&app, mt, mr, mt));
+        if let Some(a) = audio_t {
+            assert!(!fits(&app, mt, mr, a));
+        }
+        assert!(region_below_grid(&mut app, mt, mr, 2));
+        let p = app.project.as_ref().unwrap();
+        assert_eq!(p.tracks.len(), n + 1);
+        assert_eq!(p.tracks[n].kind, p.tracks[mt].kind);
+        assert!(app.live_loops.cells.contains_key(&(n, 2)));
     }
 
     #[test]

@@ -50,6 +50,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // (Live Loops cells selected: the Cell inspector in the Region inspector's place)
     if crate::cellinsp::active(app) {
         y = crate::cellinsp::show(app, ui, area, y);
+    } else if crate::celldefaults::active(app) {
+        y = crate::celldefaults::show(app, ui, area, y);
     } else {
         // the Region part (Logic 13's groups, every selected region, the defaults): regionparams.rs
         y = crate::regionparams::inspector(app, ui, area, y);
