@@ -175,6 +175,8 @@ pub struct Opts {
     pub m4a_lossless: bool,
     pub m4a_rate: u32,
     pub m4a_vbr: bool,
+    /// Burn: CD/DVD (cdburn.rs).
+    pub burn: crate::cdburn::Burn,
 }
 
 impl Default for Opts {
@@ -211,6 +213,7 @@ impl Default for Opts {
             m4a_lossless: false,
             m4a_rate: 256,
             m4a_vbr: false,
+            burn: Default::default(),
         }
     }
 }
@@ -976,6 +979,7 @@ fn finish(app: &mut App, then: After, res: Result<Vec<PathBuf>, String>) {
                 }
             }
             app.tell(format!("Bounced {names}"));
+            crate::cdburn::after_bounce(app, &files);
         }
         After::Mail => mail(app, &files),
     }
@@ -1211,25 +1215,29 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
                                 Dest::Pcm => o.pcm,
                                 Dest::Mp3 => o.mp3,
                                 Dest::M4a => o.m4a,
-                                Dest::Burn => false,
+                                Dest::Burn => o.burn.on,
                             };
-                            let c = ui.add_enabled(d != Dest::Burn, egui::Checkbox::without_text(&mut on));
+                            let c = ui.add(egui::Checkbox::without_text(&mut on));
                             if c.changed() {
                                 match d {
                                     Dest::Pcm => o.pcm = on,
                                     Dest::Mp3 => o.mp3 = on,
                                     Dest::M4a => o.m4a = on,
-                                    Dest::Burn => {}
+                                    // (burning takes the uncompressed bounce, interleaved)
+                                    Dest::Burn => {
+                                        o.burn.on = on;
+                                        if on {
+                                            o.pcm = true;
+                                            o.split = false;
+                                        }
+                                    }
                                 }
                                 o.shown = d;
                             }
-                            let t = egui::RichText::new(label).color(if sel { egui::Color32::WHITE } else if d == Dest::Burn { look::text_dim() } else { look::text() });
+                            let t = egui::RichText::new(label).color(if sel { egui::Color32::WHITE } else { look::text() });
                             let l = ui.add(egui::Label::new(t).sense(egui::Sense::click()));
                             if l.clicked() {
                                 o.shown = d;
-                            }
-                            if d == Dest::Burn {
-                                l.on_hover_text("Studio doesn't burn discs: bounce to a file and burn it with your disc tool");
                             }
                         });
                         if sel {
@@ -1245,12 +1253,16 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
             ui.vertical(|ui| {
                 ui.set_min_width(330.0);
                 match o.shown {
-                    Dest::Pcm => pcm_options(ui, &mut o),
+                    Dest::Pcm => {
+                        pcm_options(ui, &mut o);
+                        // (Split turns Burn off)
+                        if o.split {
+                            o.burn.on = false;
+                        }
+                    }
                     Dest::Mp3 => mp3_options(ui, &mut o),
                     Dest::M4a => m4a_options(ui, &mut o),
-                    Dest::Burn => {
-                        ui.label(egui::RichText::new("Burning a CD or DVD-A isn't in Studio: bounce to a file, then burn it with your disc tool.").color(look::text_dim()));
-                    }
+                    Dest::Burn => crate::cdburn::options(ui, &mut o.burn, o.bits),
                 }
             });
         });
@@ -1283,7 +1295,7 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(o.pcm || o.mp3 || o.m4a, |ui| {
-                    if primary(ui, "OK") {
+                    if primary(ui, if o.burn.on { "Bounce and Burn" } else { "OK" }) {
                         go = true;
                     }
                 });
@@ -1310,6 +1322,7 @@ fn bounce_window(app: &mut App, ctx: &egui::Context) {
             app.logic_settings.0.insert("Bounce / Folder".into(), d.to_string_lossy().to_string());
             app.logic_settings.save();
         }
+        crate::cdburn::arm(&o.burn, "Output 1-2");
         let p = plan(app, &o, chosen.with_extension(""));
         start_job(app, p, After::Bounce { add_to_project: o.add_to_project, add_to_library: o.add_to_library });
     }

@@ -69,6 +69,7 @@ mod transportx;
 mod afsearch;
 mod trackimport;
 mod brfocus;
+mod cdburn;
 pub mod midifunc;
 pub mod midifx;
 mod midiwin;
