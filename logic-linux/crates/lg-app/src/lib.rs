@@ -170,6 +170,7 @@ mod spdrum;
 mod rightpane;
 mod screensets;
 mod score;
+mod scoredrums;
 mod scoreset;
 mod scorefile;
 mod scoreinsp;

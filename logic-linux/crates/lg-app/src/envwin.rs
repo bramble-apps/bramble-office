@@ -2956,19 +2956,20 @@ fn mapped_window(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, id: Id) 
             }
             if ui.button("Score Parameters").clicked() {
                 for n in &targets {
+                    // (back to the General MIDI drum notation)
                     let mut r = o.map_row(*n);
-                    r.head = 0;
-                    r.relpos = 0;
-                    r.group.clear();
+                    let d = envm::MapRow::default_for(*n);
+                    (r.head, r.relpos, r.group) = (d.head, d.relpos, d.group);
                     o.set_map_row(*n, &r);
                 }
             }
         });
         ui.label(egui::RichText::new("Click a key to play it; Shift-click to add notes to the selection").small().color(look::text_dim()));
     });
+    let mut renamed: Option<(String, String)> = None;
     egui::ScrollArea::vertical().max_height(ui.available_height() - 4.0).show(ui, |ui| {
         egui::Grid::new(("map-grid", id)).striped(true).num_columns(9).show(ui, |ui| {
-            for h in ["Input", "Name", "Output Note", "Velocity", "Channel", "Cable", "Head", "Rel. Pos.", "Group"] {
+            for h in ["Input", "Name", "Output Note", "Velocity", "Channel", "Cable", "Head", "Group", "Rel. Pos."] {
                 ui.strong(h);
             }
             ui.end_row();
@@ -3003,17 +3004,19 @@ fn mapped_window(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, id: Id) 
                 let mut cable = r.cable as i32;
                 ui.add(egui::DragValue::new(&mut cable).range(1..=16));
                 r.cable = cable as u8;
-                let mut head = r.head as i32;
-                ui.add(egui::DragValue::new(&mut head).range(0..=12));
-                r.head = head as u8;
-                let mut rp = r.relpos as i32;
-                ui.add(egui::DragValue::new(&mut rp).range(-24..=24));
-                r.relpos = rp as i8;
-                egui::ComboBox::from_id_salt(("map-grp", id, n)).selected_text(if r.group.is_empty() { "—".to_string() } else { r.group.clone() }).width(70.0).show_ui(ui, |ui| {
-                    for g in ["", "Kick", "Snare", "Toms", "Hi-Hat", "Cymbals", "Percussion"] {
-                        ui.selectable_value(&mut r.group, g.to_string(), if g.is_empty() { "—" } else { g });
+                // notation (mapped staff styles): Head, Group, Rel. Pos.
+                let heads = lg_core::score::NOTE_HEADS;
+                egui::ComboBox::from_id_salt(("map-head", id, n)).selected_text(heads[(r.head as usize).min(heads.len() - 1)]).width(80.0).show_ui(ui, |ui| {
+                    for (k, h) in heads.iter().enumerate() {
+                        ui.selectable_value(&mut r.head, k as u8, *h);
                     }
                 });
+                if let Some(rn) = group_cell(app, ui, id, n, &mut r.group) {
+                    renamed = Some(rn);
+                }
+                let mut rp = r.relpos as f32 / 2.0;
+                ui.add(egui::DragValue::new(&mut rp).range(-12.0..=12.0).speed(0.1).fixed_decimals(1)).on_hover_text("Lines from the staff's top line: whole numbers on lines, halves in spaces");
+                r.relpos = (rp * 2.0).round() as i8;
                 if r != o.map_row(n) {
                     // (edits apply to every selected note)
                     let targets: Vec<u8> = if sel.contains(&n) { sel.clone() } else { vec![n] };
@@ -3052,10 +3055,62 @@ fn mapped_window(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, id: Id) 
         });
     });
     ui.data_mut(|d| d.insert_temp(sel_key, sel));
+    // (a renamed group: this window's copy too)
+    if let Some((old, new)) = renamed {
+        for k in 0..128u8 {
+            let mut r = o.map_row(k);
+            if r.group == old {
+                r.group = new.clone();
+                o.set_map_row(k, &r);
+            }
+        }
+    }
     if o != before {
         checkpoint(app);
         *app.hub.env.env.obj_mut(id).unwrap() = o;
     }
+}
+
+/// A Mapped Instrument row's Group: a pop-up of the project's drum groups and New Group;
+/// double-click to rename the group (everywhere it's used).
+fn group_cell(app: &mut App, ui: &mut egui::Ui, id: Id, n: u8, group: &mut String) -> Option<(String, String)> {
+    let edit_key = egui::Id::unique(("map-grp-edit", id));
+    let editing: Option<(u8, String)> = ui.data(|d| d.get_temp(edit_key));
+    if let Some((k, mut text)) = editing.filter(|e| e.0 == n) {
+        let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(80.0));
+        r.request_focus();
+        if r.lost_focus() {
+            ui.data_mut(|d| d.remove_temp::<(u8, String)>(edit_key));
+            if ui.input(|i| !i.key_pressed(egui::Key::Escape)) && crate::scoredrums::rename_group(app, group, &text) {
+                let old = std::mem::replace(group, text.trim().to_string());
+                return Some((old, group.clone()));
+            }
+        } else {
+            ui.data_mut(|d| d.insert_temp(edit_key, (k, text)));
+        }
+        return None;
+    }
+    let shown = if group.is_empty() { "—".to_string() } else { group.clone() };
+    let resp = ui.add(egui::Button::new(format!("{shown} ⌄")).min_size(egui::vec2(80.0, 0.0)));
+    if resp.double_clicked() && !group.is_empty() {
+        ui.data_mut(|d| d.insert_temp(edit_key, (n, group.clone())));
+        return None;
+    }
+    egui::Popup::menu(&resp).show(|ui| {
+        if ui.selectable_label(group.is_empty(), "—").clicked() {
+            group.clear();
+        }
+        for g in crate::scoredrums::groups(app) {
+            if ui.selectable_label(*group == g, &g).clicked() {
+                *group = g;
+            }
+        }
+        ui.separator();
+        if ui.button("New Group").clicked() {
+            *group = crate::scoredrums::new_group(app);
+        }
+    });
+    None
 }
 
 /// The Multi-Instrument window: device names, the bank's 128 program names (double-click to

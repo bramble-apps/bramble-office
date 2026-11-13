@@ -476,11 +476,14 @@ pub struct Options {
     pub no_overlap: bool,
     /// User rests in the span.
     pub rests: Vec<UserRest>,
+    /// A mapped staff style's drum map: each key's place (half spaces up from the bottom
+    /// line); None: Logic's General MIDI default (`drum_position`).
+    pub drum_map: Option<std::sync::Arc<Vec<i32>>>,
 }
 
 impl Options {
     pub fn new(sig: (u8, u8), key: Key, quant: Quant, from: u32, to: u32) -> Options {
-        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1, tuplets: Vec::new(), no_overlap: true, rests: Vec::new() }
+        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1, tuplets: Vec::new(), no_overlap: true, rests: Vec::new(), drum_map: None }
     }
 }
 
@@ -734,9 +737,13 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
             segs.push((a, e, None, None));
         }
     }
+    let drum_of = |pitch: u8| match &o.drum_map {
+        Some(m) => (m.get(pitch as usize).copied().unwrap_or(4), false),
+        None => drum_position(pitch),
+    };
     let spell_head = |n: NoteIn, tie: bool| -> Head {
         let sp = o.key.spell_pref(n.pitch, n.spell);
-        let (pos, cross) = if clef == Clef::Percussion { drum_position(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
+        let (pos, cross) = if clef == Clef::Percussion { drum_of(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
         Head { note: n.index, pitch: n.pitch, spelled: sp, pos, acc: None, tie, shifted: false, tie_dir: if n.tie == 1 || n.tie == -1 { n.tie } else { 0 }, tie_hidden: n.tie == 2, guide: false, cross }
     };
     // the tuplets' items: notes on the tuplet grid, rests in the empty units
@@ -806,7 +813,7 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
                         let mut hs: Vec<Head> = chords[ci].members.iter().map(|&i| {
                             let n = notes[i];
                             let sp = o.key.spell_pref(n.pitch, n.spell);
-                            let (pos, cross) = if clef == Clef::Percussion { drum_position(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
+                            let (pos, cross) = if clef == Clef::Percussion { drum_of(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
                             Head { note: n.index, pitch: n.pitch, spelled: sp, pos, acc: None, tie, shifted: false, tie_dir: if n.tie == 1 || n.tie == -1 { n.tie } else { 0 }, tie_hidden: n.tie == 2, guide: false, cross }
                         }).collect();
                         hs.sort_by_key(|h| h.pos);
@@ -1642,6 +1649,17 @@ mod tests {
         assert_eq!(first.heads.iter().map(|h| (h.pos, h.cross)).collect::<Vec<_>>(), [(1, false), (9, true)]);
         assert!(first.stem_up);
         assert!(v.items.iter().all(|it| it.heads.iter().all(|h| h.acc.is_none())));
+    }
+
+    #[test]
+    fn drum_map_places() {
+        let mut o = opts(1);
+        let mut m = vec![4; 128];
+        m[36] = 12;
+        o.drum_map = Some(std::sync::Arc::new(m));
+        let v = engrave(&[n(0, 36, 0, 960), n(1, 38, 960, 960)], Clef::Percussion, &o);
+        let heads: Vec<(i32, bool)> = v.items.iter().filter(|i| !i.is_rest()).map(|i| (i.heads[0].pos, i.heads[0].cross)).collect();
+        assert_eq!(heads, vec![(12, false), (4, false)]);
     }
 
     #[test]

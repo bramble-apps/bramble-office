@@ -636,11 +636,14 @@ fn rows_for(app: &App, st: &State, tracks: &[usize], sp: f32) -> Vec<Row> {
 fn row_notes(app: &App, row: &Row, region: &lg_core::Region) -> Vec<(nt::NoteIn, u8)> {
     let score = app.project.as_ref().map(|p| &p.score);
     let hide_muted = crate::scoreset::fmt(&app.proj).hide_muted_notes;
+    // (a mapped style: only keys in a drum group show)
+    let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
     let mine: Vec<nt::NoteIn> = region
         .notes
         .iter()
         .enumerate()
         .filter(|(_, n)| !(hide_muted && n.muted) && row.def.in_range(n.pitch) && row.def.takes(n.channel))
+        .filter(|(_, n)| drums.as_ref().is_none_or(|d| crate::scoredrums::shown(d, n.pitch)))
         .filter(|(_, n)| {
             let a = score.map(|s| s.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
             let staff = match a.staff {
@@ -721,6 +724,9 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.max_dots = max_dots_of(app, row.id);
                 opts.tuplets = crate::scoretuplet::specs(app, row.id);
                 opts.rests = user_rests(app, row.id, row.staff);
+                if row.def.mapped {
+                    opts.drum_map = Some(crate::scoredrums::places(&crate::scoredrums::rows_for(app, row.t)));
+                }
                 opts.no_overlap = p.score.track(row.id).map_or_else(|| crate::scoreattr::defaults().no_overlap, |x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
@@ -1452,7 +1458,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 }
                 note_color(st.colors, &n, voice_of(i), &a)
             };
-            let attr = |i: usize| region.notes.get(i).map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+            // (a mapped style: a note without a head of its own takes its key's Head)
+            let drums = row.def.mapped.then(|| crate::scoredrums::rows_for(app, row.t));
+            let attr = |i: usize| {
+                let n = region.notes.get(i);
+                let mut a = n.map(|n| score.attr(row.id, n.pos, n.pitch)).unwrap_or_default();
+                if let (Some(d), Some(n)) = (&drums, n) {
+                    if a.head == 0 {
+                        a.head = d.get(n.pitch as usize).map_or(0, |r| r.head.min(lg_core::score::NOTE_HEADS.len() as u8 - 1));
+                    }
+                }
+                a
+            };
             let opts = DrawOpts { color: &color, attr: &attr, hide_rests: seg.hide_rests, in_line: &in_line, vdef: &seg.vdef, beat: nt::Metre::new(sig).beat, show_hidden: !st.printing };
             let numbers = draw_voice(&mp, &seg.voice, &staff, sp, &x_of, &opts);
             // a user tuplet's number: double-click edits it (Tuplet window), the Eraser deletes it
@@ -2276,7 +2293,7 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
         Part::Note(v) => {
             let (clef, _) = clef_at(app, row, tick_q);
             let pitch = if clef == nt::Clef::Percussion {
-                drum_at(pos)
+                crate::scoredrums::pitch_at(&crate::scoredrums::rows_for(app, row.t), pos).unwrap_or_else(|| drum_at(pos))
             } else {
                 let wk = row.style.written_key(key);
                 (nt::pitch_at(clef, pos, wk) as i32 - row.style.transpose as i32).clamp(0, 127) as u8
