@@ -196,6 +196,8 @@ pub struct State {
     pub take_rename: Option<((usize, usize), usize, String)>,
     /// Cell defaults by type: [MIDI, Audio] (celldefaults.rs).
     pub defaults: [crate::celldefaults::Defaults; 2],
+    /// The grid's Zoom slider (click-hold the Grid Zoom button): 0 or 1 = no zoom.
+    pub h_zoom: f32,
     pub grid_rect: Option<Rect>,
     /// A cell being dragged (from), copy with ⌥.
     pub drag: Option<(usize, usize)>,
@@ -2183,9 +2185,14 @@ pub fn grid_width(app: &mut App, avail: f32) -> f32 {
     }
 }
 
+/// The Zoom slider's horizontal zoom (1: the cells' own width).
+pub fn zoom_of(s: &State) -> f32 {
+    if s.h_zoom > 0.0 { s.h_zoom.clamp(0.5, 4.0) } else { 1.0 }
+}
+
 fn col_w(s: &State) -> f32 {
     // (Try to Keep Cells Squared When Zooming: as wide as the tracks are tall)
-    let w = if s.not_square { CELL_W } else { s.square_w.max(CELL_W) };
+    let w = if s.not_square { CELL_W } else { s.square_w.max(CELL_W) } * zoom_of(s);
     if s.wide { w * 2.0 + CELL_GAP } else { w }
 }
 
@@ -2466,8 +2473,36 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                 }
                 _ => {
                     crate::glyphs::paint(&hp, Rect::from_center_size(c, vec2(20.0, 20.0)), crate::glyphs::ph::ARROWS_HORIZONTAL, 17.0, col);
-                    if resp.on_hover_text("Toggle Grid Horizontal Zoom (⌃⌥Z)").clicked() {
+                    // click: Toggle Grid Horizontal Zoom; click-hold: the Zoom slider
+                    let hold = id.with("hold");
+                    if resp.is_pointer_button_down_on() {
+                        ui.ctx().request_repaint();
+                        if ui.input(|i| i.pointer.press_start_time().is_some_and(|t0| i.time - t0 > 0.45)) {
+                            ui.data_mut(|d| d.insert_temp(hold, true));
+                        }
+                    }
+                    let opened: bool = ui.data(|d| d.get_temp(hold)).unwrap_or(false);
+                    if resp.on_hover_text("Toggle Grid Horizontal Zoom (⌃⌥Z); hold for the Zoom slider").clicked() && !opened {
                         command(app, "Toggle Grid Horizontal Zoom");
+                    }
+                    if opened {
+                        let area_id = id.with("zoom-slider");
+                        let inner = egui::Area::new(area_id).order(egui::Order::Foreground).fixed_pos(pos2(r.min.x, r.max.y + 4.0)).show(ui.ctx(), |ui| {
+                            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                                let mut z = zoom_of(&app.live_loops);
+                                ui.horizontal(|ui| {
+                                    ui.label("Zoom");
+                                    if ui.add(egui::Slider::new(&mut z, 0.5..=4.0).logarithmic(true).show_value(false)).changed() {
+                                        app.live_loops.h_zoom = z;
+                                    }
+                                });
+                            });
+                        });
+                        // a press elsewhere closes it
+                        let press = ui.input(|i| if i.pointer.any_pressed() { i.pointer.interact_pos() } else { None });
+                        if press.is_some_and(|pp| !inner.response.rect.contains(pp) && !r.contains(pp)) {
+                            ui.data_mut(|d| d.remove::<bool>(hold));
+                        }
                     }
                 }
             }
@@ -3308,6 +3343,16 @@ mod tests {
         assert_eq!(p.tracks.len(), n + 1);
         assert_eq!(p.tracks[n].kind, p.tracks[mt].kind);
         assert!(app.live_loops.cells.contains_key(&(n, 2)));
+    }
+
+    #[test]
+    fn zoom_slider_widens_the_cells() {
+        let mut s = State { not_square: true, ..Default::default() };
+        let w = col_w(&s);
+        s.h_zoom = 2.0;
+        assert_eq!(col_w(&s), w * 2.0);
+        s.h_zoom = 9.0;
+        assert_eq!(col_w(&s), w * 4.0);
     }
 
     #[test]
