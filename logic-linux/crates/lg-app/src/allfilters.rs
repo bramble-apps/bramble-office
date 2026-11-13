@@ -25,8 +25,6 @@ const PILL_PAD: f32 = 5.0;
 const GAP_X: f32 = 5.0;
 const GAP_Y: f32 = 6.0;
 const FONT: f32 = 10.0;
-/// Tags shown before Show More.
-const FIRST: usize = 12;
 
 /// A category's colour: the tag text and a selected tag's fill.
 #[derive(Clone, Copy)]
@@ -50,6 +48,12 @@ fn orange() -> Tint {
 }
 fn cyan() -> Tint {
     tint(0x36bee5, 0x4299bd, 0x1d8fb3)
+}
+fn blue() -> Tint {
+    tint(0x6d7cff, 0x6670cd, 0x4a55e0)
+}
+fn green() -> Tint {
+    tint(0x63c75a, 0x4f8f48, 0x3a8f33)
 }
 fn yellow() -> Tint {
     tint(0xd9b532, 0x9c8530, 0x9a7a08)
@@ -80,6 +84,7 @@ fn dim_text() -> Color32 {
 #[derive(Clone, PartialEq, Debug)]
 enum Act {
     Tag(String),
+    Type(String),
     Pack(String),
     YourSounds,
     Favorites,
@@ -219,6 +224,10 @@ fn draw_pills(ui: &mut egui::Ui, id: &str, at: egui::Pos2, avail: f32, pills: &[
 /// pills. Returns (folded toggled, show more toggled).
 #[allow(clippy::too_many_arguments)]
 fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[Pill], t: Tint, out: &mut Option<Act>, group: &mut Option<(String, String)>) -> (bool, bool) {
+    // (an open card with nothing to show is left out, as Logic leaves out empty categories)
+    if open && pills.is_empty() {
+        return (false, false);
+    }
     let w = ui.available_width();
     let top = ui.cursor().min;
     let inner_w = w - 2.0 * PAD;
@@ -263,157 +272,190 @@ fn card(ui: &mut egui::Ui, name: &str, open: bool, more: Option<bool>, pills: &[
     (fold, more_t)
 }
 
+/// Cards that start folded (a chevron at the right), as Logic's.
+const FOLDED: &[&str] = &["Sound Packs", "Effects"];
+
 fn is_open(app: &App, name: &str) -> bool {
-    // (Sound Packs starts folded, as Logic's)
-    if name == "Sound Packs" { app.br.expanded.contains(&format!("open:{name}")) } else { !app.br.expanded.contains(&format!("closed:{name}")) }
+    if FOLDED.contains(&name) { app.br.expanded.contains(&format!("open:{name}")) } else { !app.br.expanded.contains(&format!("closed:{name}")) }
 }
 
 fn set_open(app: &mut App, name: &str, open: bool) {
-    let (on, off) = if name == "Sound Packs" { (format!("open:{name}"), String::new()) } else { (String::new(), format!("closed:{name}")) };
-    app.br.expanded.remove(&on);
-    app.br.expanded.remove(&off);
-    if open && !on.is_empty() {
-        app.br.expanded.insert(on);
-    } else if !open && !off.is_empty() {
-        app.br.expanded.insert(off);
+    for k in [format!("open:{name}"), format!("closed:{name}")] {
+        app.br.expanded.remove(&k);
+    }
+    let folded = FOLDED.contains(&name);
+    if open && folded {
+        app.br.expanded.insert(format!("open:{name}"));
+    } else if !open && !folded {
+        app.br.expanded.insert(format!("closed:{name}"));
     }
 }
 
-/// The All Filters view in the Browser's results area `list`; returns the number of matches.
-pub fn show(app: &mut App, ui: &mut egui::Ui, list: Rect, base: Vec<Item>) -> usize {
+/// Notes a card's header clicks: (folded toggled, Show More toggled).
+fn note(fold: &mut Option<String>, more: &mut Option<String>, title: &str, (f, m): (bool, bool)) {
+    if f {
+        *fold = Some(title.to_string());
+    }
+    if m {
+        *more = Some(title.to_string());
+    }
+}
+
+/// Show More's key for a card.
+fn more_key(name: &str) -> String {
+    format!("more:{name}")
+}
+
+/// An effect plug-in's category in Logic's Audio FX menu ("Dynamics", "Reverb"…).
+pub(crate) fn fx_category(name: &str) -> Option<&'static str> {
+    fn has(items: &[crate::menus::Item], name: &str) -> bool {
+        items.iter().any(|i| i.label == name || has(&i.children, name))
+    }
+    crate::menus::context("mixer-audiofx-slot").iter().filter(|c| !c.children.is_empty() && c.label != "Audio Units").find(|c| has(&c.children, name)).map(|c| c.label.as_str())
+}
+
+/// The effect categories, in the Audio FX menu's order.
+fn fx_categories() -> Vec<&'static str> {
+    crate::menus::context("mixer-audiofx-slot").iter().filter(|c| !c.children.is_empty() && c.label != "Audio Units").map(|c| c.label.as_str()).collect()
+}
+
+/// The cards: Favorites / Your Sounds, Type, Instruments, Properties, Genre, Descriptors, Sound
+/// Packs and Effects (Logic's order).
+fn content(app: &mut App, ui: &mut egui::Ui, base: &[Item]) {
     let counts = sl::tag_counts(base.iter());
-    let n = base.len();
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list.shrink2(vec2(8.0, 8.0))).layout(egui::Layout::top_down(egui::Align::Min)));
     let mut act: Option<Act> = None;
     let mut group: Option<(String, String)> = None;
     let mut fold: Option<String> = None;
     let mut more: Option<String> = None;
     let s = app.br.search.clone();
     let count = |k: &str| counts.get(k).copied().unwrap_or(0);
-    egui::ScrollArea::vertical().id_salt("all-filters").auto_shrink([false, false]).show(&mut child, |ui| {
-        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-        // Favorites (once there are some) and Your Sounds
+    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+    // Favorites (once there are some) and Your Sounds
+    {
+        let mut pills = Vec::new();
+        if !app.br.saved.favorites.is_empty() {
+            pills.push(Pill::Tag { text: "Favorites".into(), sel: s.favorites, sub: false, icon: Some(ph::HEART), act: Act::Favorites });
+        }
+        pills.push(Pill::Tag { text: "Your Sounds".into(), sel: s.your_sounds, sub: false, icon: Some(ph::USER), act: Act::YourSounds });
+        let w = ui.available_width();
+        let widths: Vec<f32> = pills.iter().map(|p| pill_width(ui, p, w - 2.0 * PAD)).collect();
+        let rows = flow(&widths, w - 2.0 * PAD, GAP_X).last().map_or(1, |p| p.1 + 1);
+        let h = 2.0 * PAD + rows as f32 * PILL_H + (rows - 1) as f32 * GAP_Y;
+        let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+        ui.painter().rect_filled(rect, CARD_R, card_fill());
+        draw_pills(ui, "mine", rect.min + vec2(PAD, PAD), w - 2.0 * PAD, &pills, plain(), &mut act, &mut group);
+        ui.add_space(CARD_GAP);
+    }
+    // a card of plain tags: selected first, the rest those with matches, `first` of them before
+    // Show More (which also shows the subtags)
+    let tag_card = |ui: &mut egui::Ui, title: &str, tags: Vec<(String, Vec<String>)>, first: usize, t: Tint, mk: &dyn Fn(&str) -> Act, sel_of: &dyn Fn(&str) -> bool, act: &mut Option<Act>, group: &mut Option<(String, String)>| -> (bool, bool) {
+        let open = is_open(app, title);
+        let all = app.br.expanded.contains(&more_key(title));
+        let mut tags = tags;
+        tags.sort_by_key(|(t, _)| !sel_of(t));
+        let mut pills = Vec::new();
+        let mut shown = 0;
+        for (tag, subs) in tags {
+            let sel = sel_of(&tag);
+            if !sel && count(&tag) == 0 {
+                continue;
+            }
+            shown += 1;
+            if !all && shown > first && !sel {
+                continue;
+            }
+            pills.push(Pill::Tag { text: tag.clone(), sel, sub: false, icon: None, act: mk(&tag) });
+            // subtags: after their main tag when it is selected, or after Show More
+            if sel || all {
+                for st in subs.iter().filter(|st| s.has_tag(st) || count(st) > 0) {
+                    pills.push(Pill::Tag { text: st.clone(), sel: s.has_tag(st), sub: true, icon: None, act: Act::Tag(st.clone()) });
+                }
+            }
+        }
+        card(ui, title, open, Some(all), &pills, t, act, group)
+    };
+    let owned = |tags: &[(&str, &[&str])]| tags.iter().map(|(t, subs)| (t.to_string(), subs.iter().map(|x| x.to_string()).collect())).collect::<Vec<(String, Vec<String>)>>();
+    let has = |t: &str| s.has_tag(t);
+    // Type: by what each sound is (soundlib::Item::type_tag); counted as "type␟Audio Loop"
+    {
+        let types: Vec<(String, Vec<String>)> = sl::TYPES.iter().map(|t| (t.to_string(), Vec::new())).collect();
+        let type_counts: std::collections::HashMap<String, usize> = sl::TYPES.iter().map(|t| (t.to_string(), count(&format!("type\u{1f}{t}")))).collect();
+        // (counted under their own key: draw with a count closure of their own)
+        let open = is_open(app, "Type");
+        let all = app.br.expanded.contains(&more_key("Type"));
+        let pills: Vec<Pill> = types
+            .into_iter()
+            .filter(|(t, _)| s.types.contains(t) || type_counts.get(t).copied().unwrap_or(0) > 0)
+            .map(|(t, _)| Pill::Tag { sel: s.types.contains(&t), act: Act::Type(t.clone()), text: t, sub: false, icon: None })
+            .collect();
+        note(&mut fold, &mut more, "Type", card(ui, "Type", open, Some(all), &pills, blue(), &mut act, &mut group));
+    }
+    let cats = sl::categories();
+    if let Some(c) = cats.iter().find(|c| c.name == "Instrument") {
+        note(&mut fold, &mut more, "Instruments", tag_card(ui, "Instruments", owned(c.tags), 17, magenta(), &|t| Act::Tag(t.to_string()), &has, &mut act, &mut group));
+    }
+    // Properties: the group tags, each with its value menu
+    {
+        let pills: Vec<Pill> = sl::GROUPS
+            .iter()
+            .filter_map(|(g, vals)| {
+                let cur = s.groups.iter().find(|x| x.0 == *g).map(|x| x.1.clone());
+                let vals: Vec<(String, usize)> = vals.iter().map(|v| (v.to_string(), count(&format!("{g}\u{1f}{v}")))).collect();
+                (cur.is_some() || vals.iter().any(|v| v.1 > 0)).then(|| Pill::Group { name: g.to_string(), cur, vals })
+            })
+            .collect();
+        let all = app.br.expanded.contains(&more_key("Properties"));
         {
-            let mut pills = Vec::new();
-            if !app.br.saved.favorites.is_empty() {
-                pills.push(Pill::Tag { text: "Favorites".into(), sel: s.favorites, sub: false, icon: Some(ph::HEART), act: Act::Favorites });
-            }
-            pills.push(Pill::Tag { text: "Your Sounds".into(), sel: s.your_sounds, sub: false, icon: Some(ph::USER), act: Act::YourSounds });
-            let w = ui.available_width();
-            let widths: Vec<f32> = pills.iter().map(|p| pill_width(ui, p, w - 2.0 * PAD)).collect();
-            let rows = flow(&widths, w - 2.0 * PAD, GAP_X).last().map_or(1, |p| p.1 + 1);
-            let h = 2.0 * PAD + rows as f32 * PILL_H + (rows - 1) as f32 * GAP_Y;
-            let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
-            ui.painter().rect_filled(rect, CARD_R, card_fill());
-            draw_pills(ui, "mine", rect.min + vec2(PAD, PAD), w - 2.0 * PAD, &pills, plain(), &mut act, &mut group);
-            ui.add_space(CARD_GAP);
+        note(&mut fold, &mut more, "Properties", card(ui, "Properties", is_open(app, "Properties"), Some(all), &pills, magenta(), &mut act, &mut group));
         }
-        // Instruments, Properties, Genre, Descriptors, Sound Packs (Logic's order)
-        let cats = sl::categories();
-        let inst = cats.iter().find(|c| c.name == "Instrument");
-        let genre = cats.iter().find(|c| c.name == "Genre");
-        let tag_card = |ui: &mut egui::Ui, title: &str, cat: &sl::Category, t: Tint, act: &mut Option<Act>, group: &mut Option<(String, String)>| -> (bool, bool) {
-            let open = is_open(app, title);
-            let all = app.br.expanded.contains(cat.name);
-            let mut tags: Vec<(&str, &[&str])> = cat.tags.to_vec();
-            // (selected tags first; the rest only those with matches)
-            tags.sort_by_key(|(t, _)| !s.has_tag(t));
-            let mut pills = Vec::new();
-            let mut shown = 0;
-            let mut hidden = false;
-            for (tag, subs) in tags {
-                let sel = s.has_tag(tag);
-                if !sel && count(tag) == 0 {
-                    continue;
-                }
-                shown += 1;
-                if !all && shown > FIRST && !sel {
-                    hidden = true;
-                    continue;
-                }
-                pills.push(Pill::Tag { text: tag.to_string(), sel, sub: false, icon: None, act: Act::Tag(tag.to_string()) });
-                // subtags: after their main tag when it is selected, or after Show More
-                if sel || all {
-                    for st in subs.iter().filter(|st| s.has_tag(st) || count(st) > 0) {
-                        pills.push(Pill::Tag { text: st.to_string(), sel: s.has_tag(st), sub: true, icon: None, act: Act::Tag(st.to_string()) });
-                    }
-                }
-            }
-            let has_subs = cat.tags.iter().any(|(_, subs)| subs.iter().any(|st| count(st) > 0));
-            let more = (all || hidden || has_subs).then_some(all);
-            card(ui, title, open, more, &pills, t, act, group)
-        };
-        if let Some(c) = inst {
-            let (f, m) = tag_card(ui, "Instruments", c, magenta(), &mut act, &mut group);
-            if f {
-                fold = Some("Instruments".into());
-            }
-            if m {
-                more = Some(c.name.into());
-            }
-        }
-        // Properties: the group tags, each with its value menu
-        {
-            let pills: Vec<Pill> = sl::GROUPS
-                .iter()
-                .filter_map(|(g, vals)| {
-                    let cur = s.groups.iter().find(|x| x.0 == *g).map(|x| x.1.clone());
-                    let vals: Vec<(String, usize)> = vals.iter().map(|v| (v.to_string(), count(&format!("{g}\u{1f}{v}")))).collect();
-                    (cur.is_some() || vals.iter().any(|v| v.1 > 0)).then(|| Pill::Group { name: g.to_string(), cur, vals })
-                })
-                .collect();
-            if !pills.is_empty() {
-                let (f, _) = card(ui, "Properties", is_open(app, "Properties"), None, &pills, magenta(), &mut act, &mut group);
-                if f {
-                    fold = Some("Properties".into());
-                }
-            }
-        }
-        if let Some(c) = genre {
-            let (f, m) = tag_card(ui, "Genre", c, orange(), &mut act, &mut group);
-            if f {
-                fold = Some("Genre".into());
-            }
-            if m {
-                more = Some(c.name.into());
-            }
-        }
-        {
-            let pills: Vec<Pill> = sl::PAIRS
-                .iter()
-                .filter(|(a, b)| count(a) + count(b) > 0 || s.has_tag(a) || s.has_tag(b))
-                .map(|(a, b)| Pill::Pair { a: a.to_string(), b: b.to_string(), sa: s.has_tag(a), sb: s.has_tag(b) })
-                .collect();
-            if !pills.is_empty() {
-                let (f, _) = card(ui, "Descriptors", is_open(app, "Descriptors"), None, &pills, cyan(), &mut act, &mut group);
-                if f {
-                    fold = Some("Descriptors".into());
-                }
-            }
-        }
-        {
-            let mut packs: Vec<String> = counts.keys().filter_map(|k| k.strip_prefix("pack\u{1f}").map(str::to_string)).collect();
-            packs.sort();
-            let pills: Vec<Pill> = packs.into_iter().map(|p| Pill::Tag { text: p.clone(), sel: s.packs.contains(&p), sub: false, icon: None, act: Act::Pack(p) }).collect();
-            if !pills.is_empty() {
-                let (f, _) = card(ui, "Sound Packs", is_open(app, "Sound Packs"), None, &pills, yellow(), &mut act, &mut group);
-                if f {
-                    fold = Some("Sound Packs".into());
-                }
-            }
-        }
-    });
+    }
+    if let Some(c) = cats.iter().find(|c| c.name == "Genre") {
+        note(&mut fold, &mut more, "Genre", tag_card(ui, "Genre", owned(c.tags), 12, orange(), &|t| Act::Tag(t.to_string()), &has, &mut act, &mut group));
+    }
+    // Descriptors: the pairs (four before Show More, as Logic's)
+    {
+        let all = app.br.expanded.contains(&more_key("Descriptors"));
+        let pills: Vec<Pill> = sl::PAIRS
+            .iter()
+            .filter(|(a, b)| count(a) + count(b) > 0 || s.has_tag(a) || s.has_tag(b))
+            .enumerate()
+            .filter(|(i, (a, b))| all || *i < 4 || s.has_tag(a) || s.has_tag(b))
+            .map(|(_, (a, b))| Pill::Pair { a: a.to_string(), b: b.to_string(), sa: s.has_tag(a), sb: s.has_tag(b) })
+            .collect();
+        note(&mut fold, &mut more, "Descriptors", card(ui, "Descriptors", is_open(app, "Descriptors"), Some(all), &pills, cyan(), &mut act, &mut group));
+    }
+    // Sound Packs (folded at first)
+    {
+        let mut packs: Vec<String> = counts.keys().filter_map(|k| k.strip_prefix("pack\u{1f}").map(str::to_string)).collect();
+        packs.sort();
+        let pills: Vec<Pill> = packs.into_iter().map(|p| Pill::Tag { text: p.clone(), sel: s.packs.contains(&p), sub: false, icon: None, act: Act::Pack(p) }).collect();
+        let all = app.br.expanded.contains(&more_key("Sound Packs"));
+        note(&mut fold, &mut more, "Sound Packs", card(ui, "Sound Packs", is_open(app, "Sound Packs"), Some(all), &pills, yellow(), &mut act, &mut group));
+    }
+    // Effects: the Audio FX menu's categories (folded at first)
+    {
+        let tags: Vec<(String, Vec<String>)> = fx_categories().into_iter().map(|c| (c.to_string(), Vec::new())).collect();
+        note(&mut fold, &mut more, "Effects", tag_card(ui, "Effects", tags, usize::MAX, green(), &|t| Act::Tag(t.to_string()), &has, &mut act, &mut group));
+    }
     if let Some(name) = fold {
         let open = is_open(app, &name);
         set_open(app, &name, !open);
     }
     if let Some(c) = more {
-        if !app.br.expanded.remove(&c) {
-            app.br.expanded.insert(c);
+        let k = more_key(&c);
+        if !app.br.expanded.remove(&k) {
+            app.br.expanded.insert(k);
         }
     }
     match act {
         Some(Act::Tag(t)) => app.br.search.toggle_tag(&t),
+        Some(Act::Type(t)) => {
+            if let Some(i) = app.br.search.types.iter().position(|x| *x == t) {
+                app.br.search.types.remove(i);
+            } else {
+                app.br.search.types.push(t);
+            }
+        }
         Some(Act::Pack(p)) => {
             if let Some(i) = app.br.search.packs.iter().position(|x| *x == p) {
                 app.br.search.packs.remove(i);
@@ -428,12 +470,111 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, list: Rect, base: Vec<Item>) -> us
     if let Some((g, v)) = group {
         app.br.search.set_group(&g, &v);
     }
-    n
+}
+
+// ---- the window (sizes in points from the guide's figure at 2x)
+const WIN_W: f32 = 397.0;
+const WIN_R: f32 = 13.0;
+/// The arrow's tip sits this far right of the filter button, the window this far.
+const TIP_GAP: f32 = 2.0;
+const ARROW_W: f32 = 9.0;
+const ARROW_H: f32 = 16.0;
+/// The arrow's middle below the window's top.
+const ARROW_Y: f32 = 107.5;
+const TITLE_CY: f32 = 16.0;
+const BODY_TOP: f32 = 32.0;
+const INSET: f32 = 7.0;
+
+fn win_fill() -> Color32 {
+    if dark() { Color32::from_rgba_unmultiplied(0x2f, 0x30, 0x31, 246) } else { Color32::from_rgba_unmultiplied(0xf2, 0xf2, 0xf4, 246) }
+}
+
+/// The glass's blue glow (the figure's backdrop: strongest left of the middle, fading out).
+fn glow(p: &egui::Painter, win: Rect) {
+    let c = pos2(win.min.x + 57.0, win.min.y + 270.0);
+    let (rx, ry) = (220.0, 170.0);
+    let inner = if dark() { Color32::from_rgba_unmultiplied(0x12, 0x40, 0x5e, 235) } else { Color32::from_rgba_unmultiplied(0x9c, 0xc4, 0xe6, 90) };
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(c, inner);
+    let n = 48;
+    for i in 0..=n {
+        let a = i as f32 / n as f32 * std::f32::consts::TAU;
+        mesh.colored_vertex(c + vec2(a.cos() * rx, a.sin() * ry), Color32::TRANSPARENT);
+    }
+    for i in 0..n as u32 {
+        mesh.add_triangle(0, i + 1, i + 2);
+    }
+    p.with_clip_rect(win.shrink2(vec2(0.0, WIN_R))).add(egui::Shape::mesh(mesh));
+}
+
+/// The All Filters window floating beside the Browser's filter button `anchor`, over the
+/// Browser and the Tracks area. The ×, Escape or the filter button again close it.
+pub fn window(app: &mut App, ctx: &egui::Context, anchor: Rect, base: Vec<Item>) {
+    let screen = ctx.content_rect();
+    let left = anchor.max.x + TIP_GAP + ARROW_W;
+    let top = (anchor.center().y - ARROW_Y).max(screen.min.y + 4.0);
+    let h = (screen.max.y - 10.0 - top).clamp(200.0, 640.0);
+    let x = left.min(screen.max.x - WIN_W - 4.0);
+    let win = Rect::from_min_size(pos2(x, top), vec2(WIN_W, h));
+    let close_id = egui::Id::unique("all-filters-close");
+    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        app.br.all_filters = false;
+        return;
+    }
+    let first = ctx.data_mut(|d| {
+        let was = d.get_temp::<bool>(egui::Id::unique("all-filters-was-open")).unwrap_or(false);
+        d.insert_temp(egui::Id::unique("all-filters-was-open"), true);
+        !was
+    });
+    egui::Area::new(egui::Id::unique("all-filters-window")).order(egui::Order::Foreground).fixed_pos(win.min).show(ctx, |ui| {
+        let p = ui.painter().clone();
+        // shadow, glass, arrow
+        p.add(egui::Shadow { offset: [0, 10], blur: 34, spread: 0, color: Color32::from_black_alpha(if dark() { 120 } else { 50 }) }.as_shape(win, WIN_R));
+        p.rect_filled(win, WIN_R, win_fill());
+        let ay = anchor.center().y.clamp(win.min.y + WIN_R + ARROW_H / 2.0, win.max.y - WIN_R - ARROW_H / 2.0);
+        p.add(egui::Shape::convex_polygon(vec![pos2(win.min.x + 0.5, ay - ARROW_H / 2.0), pos2(win.min.x - ARROW_W, ay), pos2(win.min.x + 0.5, ay + ARROW_H / 2.0)], win_fill(), Stroke::NONE));
+        glow(&p, win);
+        ui.allocate_rect(win, Sense::click_and_drag());
+        // the title and the round close button (Logic's blue focus ring while it has the focus)
+        let g = text(ui, "All Filters", head_text(), WIN_W - 80.0, look::semibold(10.5));
+        p.galley(pos2(win.center().x - g.size().x / 2.0, win.min.y + TITLE_CY - g.size().y / 2.0), g, head_text());
+        let cc = pos2(win.max.x - 16.75, win.min.y + 15.75);
+        let cr = Rect::from_center_size(cc, vec2(20.0, 20.0));
+        let resp = ui.interact(cr, close_id, Sense::click());
+        if first {
+            resp.request_focus();
+        }
+        p.circle_filled(cc, 10.0, if resp.hovered() { kn_ui::theme::rgb(if dark() { 0x5a5a5c } else { 0xc6c6ca }) } else { kn_ui::theme::rgb(if dark() { 0x4c4c4c } else { 0xd8d8dc }) });
+        let d = 3.6;
+        let xs = Stroke::new(1.3, head_text());
+        p.line_segment([cc + vec2(-d, -d), cc + vec2(d, d)], xs);
+        p.line_segment([cc + vec2(-d, d), cc + vec2(d, -d)], xs);
+        // (the close button is the window's focused control from the start, as Logic's: Space or
+        // Return closes)
+        if resp.has_focus() || !ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) {
+            p.circle_stroke(cc, 14.25, Stroke::new(2.75, Color32::from_rgb(0x41, 0x6d, 0x95)));
+        }
+        let close = resp.clicked() || (!ui.memory(|m| m.focused().is_some_and(|f| f != close_id)) && ui.input(|i| i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::Enter)));
+        // the cards, scrolling under the title
+        let body = Rect::from_min_max(pos2(win.min.x + INSET, win.min.y + BODY_TOP), pos2(win.max.x - INSET, win.max.y - INSET));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
+        child.set_clip_rect(body);
+        egui::ScrollArea::vertical().id_salt("all-filters").auto_shrink([false, false]).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded).show(&mut child, |ui| content(app, ui, &base));
+        if close {
+            app.br.all_filters = false;
+        }
+    });
+}
+
+/// Forgets that the window was open (so it takes the focus again next time).
+pub fn closed(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<bool>(egui::Id::unique("all-filters-was-open")));
 }
 
 #[cfg(test)]
 mod tests {
     use super::flow;
+    use crate::soundlib::{self as sl, Item, Kind, LoopType, Search};
 
     #[test]
     fn pills_wrap_to_the_width() {
@@ -444,5 +585,49 @@ mod tests {
         // a pill wider than the row gets one of its own, and the next starts a new row
         assert_eq!(flow(&[30.0, 150.0, 20.0], 100.0, 5.0), vec![(0.0, 0), (0.0, 1), (0.0, 2)]);
         assert!(flow(&[], 100.0, 5.0).is_empty());
+    }
+
+    fn item(kind: Kind, lt: LoopType, category: &str) -> Item {
+        Item { id: format!("{kind:?}{lt:?}{category}"), name: "x".into(), kind, loop_type: lt, category: category.into(), path: None, tags: Vec::new(), groups: Vec::new(), pack: String::new(), user: false, bpm: None, key: None, minor: false, bars: None, seconds: None, location: None }
+    }
+
+    #[test]
+    fn every_sound_has_a_type_and_the_type_pills_filter() {
+        assert_eq!(item(Kind::Loop, LoopType::Audio, "").type_tag(), "Audio Loop");
+        assert_eq!(item(Kind::Loop, LoopType::Midi, "").type_tag(), "MIDI Loop");
+        assert_eq!(item(Kind::Loop, LoopType::Pattern, "").type_tag(), "Pattern Loop");
+        assert_eq!(item(Kind::Loop, LoopType::SessionPlayer, "").type_tag(), "Session Player Loop");
+        assert_eq!(item(Kind::OneShot, LoopType::Audio, "").type_tag(), "One-Shot");
+        assert_eq!(item(Kind::Patch, LoopType::Midi, "Keyboard").type_tag(), "Instrument Patch");
+        assert_eq!(item(Kind::Patch, LoopType::Audio, "Audio Effects").type_tag(), "Audio Patch");
+        assert_eq!(item(Kind::Patch, LoopType::Audio, "Aux").type_tag(), "Aux Patch");
+        for t in sl::TYPES {
+            assert!(sl::TYPES.contains(t));
+        }
+        let fav = std::collections::HashSet::new();
+        let mut s = Search::default();
+        let (lp, os, pa) = (item(Kind::Loop, LoopType::Audio, ""), item(Kind::OneShot, LoopType::Audio, ""), item(Kind::Patch, LoopType::Midi, "Bass"));
+        assert!(s.matches(&lp, &fav) && s.matches(&os, &fav) && s.matches(&pa, &fav));
+        s.types.push("One-Shot".into());
+        assert!(!s.matches(&lp, &fav) && s.matches(&os, &fav) && !s.matches(&pa, &fav));
+        // two types: either matches
+        s.types.push("Instrument Patch".into());
+        assert!(!s.matches(&lp, &fav) && s.matches(&os, &fav) && s.matches(&pa, &fav));
+        // a chip each, removable; kept in Smart Searches
+        assert!(s.chips().contains(&sl::Chip::Type("One-Shot".into())));
+        assert_eq!(sl::search_from_text(&sl::search_to_text(&s)).types, s.types);
+        s.remove(&sl::Chip::Type("One-Shot".into()));
+        assert_eq!(s.types, vec!["Instrument Patch".to_string()]);
+        // counted for the Type card
+        let c = sl::tag_counts([&lp, &os, &os].into_iter());
+        assert_eq!(c.get("type\u{1f}One-Shot"), Some(&2));
+    }
+
+    #[test]
+    fn effects_have_their_audio_fx_menu_category() {
+        assert_eq!(super::fx_category("Compressor"), Some("Dynamics"));
+        assert_eq!(super::fx_category("ChromaVerb"), Some("Reverb"));
+        assert_eq!(super::fx_category("No Such Plug-in"), None);
+        assert_eq!(super::fx_categories().first(), Some(&"Amps and Pedals"));
     }
 }

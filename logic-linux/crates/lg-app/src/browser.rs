@@ -171,7 +171,7 @@ impl Default for State {
 // ---- content
 
 fn effect_items() -> Vec<Item> {
-    crate::units::effect_names().into_iter().map(|n| Item { id: format!("fx:{n}"), name: n.to_string(), kind: Kind::Patch, loop_type: LoopType::Audio, category: "Audio Effects".into(), path: None, tags: sl::infer_tags(n), groups: Vec::new(), pack: "Bramble Effects".into(), user: false, bpm: None, key: None, minor: false, bars: None, seconds: None, location: None }).collect()
+    crate::units::effect_names().into_iter().map(|n| Item { id: format!("fx:{n}"), name: n.to_string(), kind: Kind::Patch, loop_type: LoopType::Audio, category: "Audio Effects".into(), path: None, tags: { let mut t = sl::infer_tags(n); t.extend(crate::allfilters::fx_category(n).map(str::to_string)); t }, groups: Vec::new(), pack: "Bramble Effects".into(), user: false, bpm: None, key: None, minor: false, bars: None, seconds: None, location: None }).collect()
 }
 
 /// The user's saved patches (Save Patch for Selected Track).
@@ -1254,8 +1254,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     let fb = Rect::from_min_size(pos2(sr.max.x + 9.5, sr.min.y), vec2(33.0, 24.0));
     let active = !app.br.search.is_empty();
-    if icon_button(ui, fb, "filters", ph::FUNNEL, app.br.all_filters || active, "All Filters: every tag for building a search").clicked() {
+    let fon = app.br.all_filters || active;
+    if icon_button(ui, fb, "filters", "", fon, "All Filters: every tag for building a search").clicked() {
         app.br.all_filters = !app.br.all_filters;
+    }
+    // (Logic 13's filter symbol: three lines, each shorter than the one above)
+    for (i, w) in [9.0f32, 6.5, 3.5].into_iter().enumerate() {
+        let y = fb.center().y + (i as f32 - 1.0) * 2.9;
+        let c = if fon { Color32::WHITE } else { look::text() };
+        p.line_segment([pos2(fb.center().x - w / 2.0, y), pos2(fb.center().x + w / 2.0, y)], Stroke::new(1.3, c));
     }
     let mut top = sr.max.y + 6.0;
     // ---- the chips (the search's criteria)
@@ -1335,9 +1342,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let player_h = crate::prevplayer::height(app);
     let list = Rect::from_min_max(pos2(body_left, body_top), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h));
     p.rect_filled(list, 0.0, look::lane_bg());
-    let count = if app.br.all_filters {
-        all_filters(app, ui, list)
-    } else {
+    let count = {
         match app.br.view {
             Cat::SoundFonts => soundfont_list(app, ui, list),
             Cat::Presets => presets_view(app, ui, list),
@@ -1363,6 +1368,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let dropped: Vec<PathBuf> = ui.ctx().input(|i| if i.pointer.hover_pos().is_some_and(|p| area.contains(p)) { i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| p.is_dir()).collect() } else { Vec::new() });
     for d in dropped {
         add_location(app, d);
+    }
+    // the All Filters window, floating beside the filter button
+    if app.br.all_filters {
+        all_filters(app, ui, fb);
+    } else {
+        crate::allfilters::closed(ui.ctx());
     }
     dialogs(app, ui.ctx());
 }
@@ -2064,14 +2075,15 @@ fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     items.len()
 }
 
-/// All Filters: every tag by category in Logic's coloured cards (allfilters.rs).
-fn all_filters(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
+/// All Filters: every tag by category in Logic's coloured cards, in its own window beside the
+/// filter button `fb` (allfilters.rs).
+fn all_filters(app: &mut App, ui: &mut egui::Ui, fb: Rect) {
     let base: Vec<Item> = {
         let s = app.br.search.clone();
         let any_view = matches!(app.br.view, Cat::Presets | Cat::SoundLibrary | Cat::SoundFonts);
         app.br.items.iter().filter(|it| any_view || in_view(app, it)).filter(|it| s.matches(it, &app.br.saved.favorites)).cloned().collect()
     };
-    crate::allfilters::show(app, ui, list, base)
+    crate::allfilters::window(app, ui.ctx(), fb, base);
 }
 
 /// Sound Library: the sound packs (installed or not) and what they hold.
