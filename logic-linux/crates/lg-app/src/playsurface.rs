@@ -28,7 +28,7 @@ use crate::look;
 /// The commands this file runs (build.rs and tool/checklist.py read the list).
 pub const COMMANDS: &[&str] = &["Show Play Surface", "Show/Hide Play Surface"];
 
-const NAMES: [&str; 12] = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+const NAMES: [&str; 12] = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const IS_BLACK: [bool; 12] = [false, true, false, true, false, false, true, false, true, false, true, false];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -282,10 +282,10 @@ pub fn suffix(iv: &[i8]) -> String {
         [0, 5, 7, 11] => "maj7sus4",
         [0, 2, 7, 11] => "maj7sus2",
         [0, 3, 6] => "dim",
-        [0, 3, 6, 10] => "m7♭5",
+        [0, 3, 6, 10] => "m7b5",
         [0, 3, 6, 9] => "dim7",
         [0, 3, 6, 14] => "dim(add9)",
-        [0, 3, 6, 10, 14] => "m9♭5",
+        [0, 3, 6, 10, 14] => "m9b5",
         [0, 4, 8] => "aug",
         [0, 4, 7, 14] => "add9",
         [0, 3, 7, 14] => "m(add9)",
@@ -1059,7 +1059,7 @@ fn header(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, r: Rect, w: usize
     if arp_k.is_some() {
         p.rect_filled(arp_main.shrink(1.5), 5.0, BLUE);
     }
-    crate::glyphs::paint(p, arp_main, crate::glyphs::ph_fill::CHART_SCATTER, 14.0, Color32::WHITE);
+    crate::glyphs::paint(p, arp_main, crate::glyphs::ph::DOTS_SIX, 14.0, Color32::WHITE);
     p.vline(arp_main.max.x, (arp.min.y + 5.0)..=(arp.max.y - 5.0), Stroke::new(1.0, SEP));
     crate::glyphs::paint(p, arp_menu, crate::glyphs::ph::CARET_DOWN, 11.0, Color32::from_gray(0xd0));
     if ui.interact(arp_main, id.with("arp"), Sense::click()).on_hover_text("Arpeggiator").clicked() {
@@ -1487,7 +1487,7 @@ fn strips(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, area: Rect, w: us
                     p.text(sr.center(), Align2::CENTER_CENTER, "+", look::regular(16.0), Color32::from_gray(0x80));
                 }
             } else {
-                let line = if playing { Color32::from_rgb(0x5a, 0x9a, 0xf0) } else if dark { Color32::from_gray(0x96) } else { Color32::from_gray(0xc6) };
+                let line = if playing { Color32::from_rgb(0x5a, 0x9a, 0xf0) } else if dark { Color32::from_gray(0x8c) } else { Color32::from_gray(0xb4) };
                 if vertical {
                     for k in [1.0, 2.0] {
                         let yy = sr.min.y + sr.height() * k / 3.0;
@@ -1778,7 +1778,7 @@ mod tests {
         assert_eq!(suffix(&intervals(Base::Minor, [false, true, false, true])), "sus2");
         // Dim: third and fifth flattened
         assert_eq!(intervals(Base::Major, [false, false, true, false]), vec![0, 3, 6]);
-        assert_eq!(suffix(&intervals(Base::Minor, [true, false, true, false])), "m7♭5");
+        assert_eq!(suffix(&intervals(Base::Minor, [true, false, true, false])), "m7b5");
         // Alt: augmented or extended
         assert_eq!(suffix(&intervals(Base::Major, [false, false, false, true])), "aug");
         assert_eq!(suffix(&intervals(Base::Minor, [false, false, false, true])), "m(add9)");

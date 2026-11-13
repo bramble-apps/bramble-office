@@ -30,6 +30,9 @@ pub enum Sort {
     Name,
     Size,
     Length,
+    Drive,
+    BitDepth,
+    FileType,
 }
 
 /// Grouping (View ▸ Group Files By).
@@ -270,6 +273,16 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
             idx.sort_by_key(|&i| std::cmp::Reverse(sizes[i]));
             fs = idx.into_iter().map(|i| fs[i].clone()).collect();
         }
+        // Drive: by the volume the file is on (its mount's top folders), then name
+        Sort::Drive => fs.sort_by_key(|f| (f.0.components().take(3).map(|c| c.as_os_str().to_string_lossy().to_string()).collect::<Vec<_>>().join("/"), f.0.file_name().map(|n| n.to_string_lossy().to_lowercase()))),
+        // Bit Depth: decreasing
+        Sort::BitDepth => {
+            let bits: Vec<u16> = fs.iter().map(|f| info(app, &f.0).map_or(0, |i| i.bits)).collect();
+            let mut idx: Vec<usize> = (0..fs.len()).collect();
+            idx.sort_by_key(|&i| std::cmp::Reverse(bits[i]));
+            fs = idx.into_iter().map(|i| fs[i].clone()).collect();
+        }
+        Sort::FileType => fs.sort_by_key(|f| (f.0.extension().map(|e| e.to_string_lossy().to_lowercase()), f.0.file_name().map(|n| n.to_string_lossy().to_lowercase()))),
         Sort::Length => {
             let lens: Vec<f64> = fs.iter().map(|f| info(app, &f.0).map_or(0.0, |i| i.seconds)).collect();
             let mut idx: Vec<usize> = (0..fs.len()).collect();
@@ -280,8 +293,9 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
     let key = |app: &mut App, f: &Path| -> String {
         match app.pa.group {
             Group::None => String::new(),
-            Group::Location => f.parent().map(|d| d.display().to_string()).unwrap_or_default(),
-            Group::Attributes => info(app, f).map(|i| format!("{} Hz {} Bit {}", i.rate, i.bits, if i.channels == 1 { "Mono" } else { "Stereo" })).unwrap_or_else(|| "Missing".into()),
+            // (named after the parent folder)
+            Group::Location => f.parent().and_then(|d| d.file_name()).map(|d| d.to_string_lossy().to_string()).unwrap_or_default(),
+            Group::Attributes => info(app, f).map(|i| attributes_name(i.bits, i.channels, &i.format)).unwrap_or_else(|| "Missing".into()),
             Group::Selection => app.pa.groups.iter().find(|g| g.1.contains(f)).map(|g| g.0.clone()).unwrap_or_else(|| "Not in a group".into()),
         }
     };
@@ -293,7 +307,30 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
             None => out.push((k, vec![f])),
         }
     }
+    // Location groups alphabetically; files of deleted groups at the top
+    if app.pa.group == Group::Location {
+        out.sort_by_key(|g| g.0.to_lowercase());
+    }
+    if let Some(i) = out.iter().position(|g| g.0 == "Not in a group") {
+        let g = out.remove(i);
+        out.insert(0, g);
+    }
     out
+}
+
+/// A File Attributes group's name, as Logic's: "16 bit Mono AIFF".
+pub fn attributes_name(bits: u16, channels: u16, format: &str) -> String {
+    let f = match format.to_uppercase().as_str() {
+        "WAV" | "WAVE" => "WAVE".to_string(),
+        "AIF" | "AIFF" => "AIFF".to_string(),
+        o => o.to_string(),
+    };
+    format!("{bits} bit {} {f}", if channels == 1 { "Mono" } else { "Stereo" })
+}
+
+/// Add Region's name: the file's name, then .1, .2 … after the regions it already has.
+pub fn next_region_name(stem: &str, existing: usize) -> String {
+    if existing == 0 { stem.to_string() } else { format!("{stem}.{existing}") }
 }
 
 /// A region's name, its start and length in the file (seconds).
@@ -385,7 +422,7 @@ pub fn command(app: &mut App, name: &str) -> bool {
             let secs = file_info(&f).map_or(0.0, |i| i.seconds);
             let n = app.pa.pool.iter().filter(|p| p.file == f).count() + files(app).iter().find(|x| x.0 == f).map_or(0, |x| x.1.len());
             let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            app.pa.pool.push(PoolRegion { file: f.clone(), name: format!("{stem}.{}", n + 1), start: 0.0, len: secs });
+            app.pa.pool.push(PoolRegion { file: f.clone(), name: next_region_name(&stem, n), start: 0.0, len: secs });
             app.pa.open.insert(f);
             app.pa.sel_region = Some(RegionRef::Pool(app.pa.pool.len() - 1));
             app.dirty = true;
@@ -959,8 +996,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                     if let Some((name, s, l)) = region_span(app, *rr) {
                         let placed = matches!(rr, RegionRef::Placed(..));
-                        pp.rect_filled(Rect::from_center_size(pos2(name_x + 4.0, r.center().y), vec2(8.0, 8.0)), 2.0, if placed { look::region_color(TrackKind::Audio) } else { look::text_dim() });
-                        pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x + 14.0, r.center().y), Align2::LEFT_CENTER, &name, look::regular(11.5), look::text());
+                        // (regions not used in the Tracks area: red)
+                        let unused = Color32::from_rgb(0xe0, 0x4a, 0x3c);
+                        pp.rect_filled(Rect::from_center_size(pos2(name_x + 4.0, r.center().y), vec2(8.0, 8.0)), 2.0, if placed { look::region_color(TrackKind::Audio) } else { unused });
+                        pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x + 14.0, r.center().y), Align2::LEFT_CENTER, &name, look::regular(11.5), if placed { look::text() } else { unused });
                         let secs = info(app, f).map_or(1.0, |i| i.seconds.max(0.001));
                         let bar_r = Rect::from_min_max(pos2(info_x, r.min.y + 6.0), pos2(bpm_x - 8.0, r.max.y - 6.0));
                         pp.rect_stroke(bar_r, 1.0, Stroke::new(1.0, look::line()), egui::StrokeKind::Inside);
@@ -1012,10 +1051,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_region = Some((t, r));
                 app.selected_regions = vec![(t, r)];
             }
+            // a file's name: rename it
             Row::File(f, _) => {
-                if !app.pa.open.remove(&f) {
-                    app.pa.open.insert(f);
-                }
+                app.pa.selected = [f].into_iter().collect();
+                app.pa.sel_region = None;
+                command(app, "Rename…");
             }
             _ => {}
         }
@@ -1136,7 +1176,7 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
             }
         });
         ui.menu_button("Sort Files By", |ui| {
-            for (s, n) in [(Sort::None, "None"), (Sort::Name, "Name"), (Sort::Size, "Size"), (Sort::Length, "Length")] {
+            for (s, n) in [(Sort::None, "None"), (Sort::Name, "Name"), (Sort::Size, "Size"), (Sort::Drive, "Drive"), (Sort::BitDepth, "Bit Depth"), (Sort::FileType, "File Type"), (Sort::Length, "Length")] {
                 if ui.add(egui::Button::selectable(app.pa.sort == s, n)).clicked() {
                     app.pa.sort = s;
                     ui.close();
@@ -1288,6 +1328,15 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn region_names_and_attribute_groups() {
+        assert_eq!(next_region_name("Organ", 0), "Organ");
+        assert_eq!(next_region_name("Organ", 1), "Organ.1");
+        assert_eq!(next_region_name("Organ", 2), "Organ.2");
+        assert_eq!(attributes_name(16, 1, "AIFF"), "16 bit Mono AIFF");
+        assert_eq!(attributes_name(24, 2, "wav"), "24 bit Stereo WAVE");
+    }
+
     use super::*;
 
     #[test]
