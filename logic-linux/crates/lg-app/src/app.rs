@@ -365,6 +365,8 @@ pub struct App {
     pub brf: crate::brfocus::State,
     /// Final Cut Pro XML export and import (fcpxml.rs).
     pub fcp: crate::fcpxml::State,
+    /// Autosave (autosave.rs).
+    pub autosave: crate::autosave::State,
     pub pf_tab: usize,
     pub preview: crate::preview::Preview,
     /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
@@ -580,6 +582,7 @@ impl App {
             tim: Default::default(),
             brf: Default::default(),
             fcp: Default::default(),
+            autosave: Default::default(),
             pf_tab: 0,
             preview: Default::default(),
             nav: Default::default(),
@@ -1988,6 +1991,7 @@ impl App {
         crate::playsurface::windows(self, &ctx);
         crate::transportx::frame(self, &ctx);
         crate::fcpxml::window(self, &ctx);
+        crate::autosave::frame(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);

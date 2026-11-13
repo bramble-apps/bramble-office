@@ -117,6 +117,7 @@ pub fn after_open(app: &mut App, path: &Path) {
     crate::tm::after_open(app);
     crate::playsurface::after_open(app);
     crate::transportx::after_open(app);
+    crate::autosave::after_open(app);
     crate::envhub::after_open(app);
 }
 
@@ -292,6 +293,7 @@ pub fn save(app: &mut App) {
             }
             match std::fs::write(&target, &saved.data) {
                 Ok(()) => {
+                    crate::autosave::clear(app);
                     if let Some(p) = app.project.as_ref() {
                         lg_core::save::update_metadata(&alt, p);
                     }
@@ -492,7 +494,7 @@ fn save_as_template(app: &mut App) {
 
 /// Reopens the alternative from `data` (the saved file, or a backup); the project's files stay
 /// as they are until the next Save.
-fn revert_to(app: &mut App, data: Vec<u8>, what: &str) {
+pub(crate) fn revert_to(app: &mut App, data: Vec<u8>, what: &str) {
     let Some((alt, _)) = app.file.clone() else { return };
     let Some(path) = app.project.as_ref().map(|p| p.path.clone()) else { return };
     if app.pf.band.is_some() {
