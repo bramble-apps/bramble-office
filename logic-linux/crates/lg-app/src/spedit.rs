@@ -129,7 +129,7 @@ impl Cx {
         self.label(c, label);
         let val = options.get(*cur).copied().unwrap_or("");
         let w = ui.fonts_mut(|f| f.layout_no_wrap(val.into(), look::regular(13.0), Color32::WHITE).size().x);
-        self.popup_value(ui, Rect::from_center_size(c + vec2(0.0, 17.0), vec2(w + 18.0, 18.0)), key, options, cur)
+        self.popup_value(ui, Rect::from_center_size(c + vec2(0.0, 17.0), vec2(w + 18.0, 18.0)), key, options.get(*cur).copied().unwrap_or(""), options, cur)
     }
 
     /// A pop-up as a row (wide Keyboard Player): the label at `l` (left), the value ending at
@@ -138,16 +138,31 @@ impl Cx {
     pub(crate) fn popup_row(&self, ui: &mut egui::Ui, l: Pos2, right: f32, key: &str, label: &str, options: &[&str], cur: &mut usize) -> bool {
         self.p.text(l, Align2::LEFT_CENTER, label, look::regular(13.0), label_col());
         let val = options.get(*cur).copied().unwrap_or("");
-        let w = ui.fonts_mut(|f| f.layout_no_wrap(val.into(), look::regular(13.0), Color32::WHITE).size().x);
-        self.popup_value(ui, Rect::from_min_max(pos2(right - w - 18.0, l.y - 9.0), pos2(right, l.y + 9.0)), key, options, cur)
+        let width = |s: &str| ui.fonts_mut(|f| f.layout_no_wrap(s.into(), look::regular(13.0), Color32::WHITE).size().x);
+        // a long value is cut with "…" so it never runs into the label
+        let room = right - 18.0 - (l.x + width(label) + 12.0);
+        let mut shown = val.to_string();
+        if width(&shown) > room {
+            let chars: Vec<char> = val.chars().collect();
+            let mut n = chars.len();
+            while n > 1 && width(&format!("{}…", chars[..n].iter().collect::<String>().trim_end())) > room {
+                n -= 1;
+            }
+            shown = format!("{}…", chars[..n].iter().collect::<String>().trim_end());
+        }
+        let w = width(&shown);
+        self.popup_value(ui, Rect::from_min_max(pos2(right - w - 18.0, l.y - 9.0), pos2(right, l.y + 9.0)), key, &shown, options, cur)
     }
 
     /// A pop-up's value (yellow, the up-down chevrons) in `vr` and its menu.
-    fn popup_value(&self, ui: &mut egui::Ui, vr: Rect, key: &str, options: &[&str], cur: &mut usize) -> bool {
+    fn popup_value(&self, ui: &mut egui::Ui, vr: Rect, key: &str, shown: &str, options: &[&str], cur: &mut usize) -> bool {
         let val = options.get(*cur).copied().unwrap_or("");
-        self.p.text(pos2(vr.min.x, vr.center().y), Align2::LEFT_CENTER, val, look::regular(13.0), yellow());
+        self.p.text(pos2(vr.min.x, vr.center().y), Align2::LEFT_CENTER, shown, look::regular(13.0), yellow());
         glyphs::paint(&self.p, Rect::from_center_size(pos2(vr.max.x - 6.0, vr.center().y), vec2(12.0, 12.0)), glyphs::ph::CARET_UP_DOWN, 11.0, yellow());
-        let resp = ui.interact(vr.expand(2.0), self.id(key), Sense::click());
+        let mut resp = ui.interact(vr.expand(2.0), self.id(key), Sense::click());
+        if shown != val {
+            resp = resp.on_hover_text(val);
+        }
         let mut changed = false;
         egui::Popup::menu(&resp).show(|ui| {
             ui.set_min_width(180.0);
