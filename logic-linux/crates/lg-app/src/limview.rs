@@ -79,8 +79,22 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, sl
         ("REDUCTION", 317.0, 271.0, 285.0, &RED_MARKS, red, false),
         ("OUTPUT", 483.0, 408.0, 421.0, &OUT_MARKS, output, true),
     ];
-    for (title, tx, lx, x0, marks, v, falling) in cols {
+    // the Margin fields: the highest level (most reduction) since the last click on them
+    let mid = egui::Id::unique(("limiter-margins", slot));
+    let mut margins: [f32; 3] = ui.data(|d| d.get_temp(mid)).unwrap_or([-120.0, 0.0, -120.0]);
+    for (k, (title, tx, lx, x0, marks, v, falling)) in cols.into_iter().enumerate() {
         let x1 = x0 + if title == "INPUT" { 124.0 } else { 128.0 };
+        margins[k] = margins[k].max(v);
+        let mr = g.rect(x0 + 14.0, 244.0, x1 - 14.0, 264.0);
+        let resp = ui.interact(mr, id.with(("margin", k)), Sense::click()).on_hover_text("Margin: click to reset");
+        if resp.clicked() {
+            margins[k] = if falling { -120.0 } else { 0.0 };
+        }
+        // (blank until there's a level to hold, as Logic's)
+        let idle = if falling { margins[k] <= -119.0 } else { margins[k] < 0.05 };
+        let shown = if idle { String::new() } else { one(margins[k]) };
+        let hot = falling && margins[k] > 0.0;
+        pt.text(mr.center(), Align2::CENTER_CENTER, shown, look::regular(g.pt(16.0)), if hot { Color32::from_rgb(0xff, 0x5a, 0x4f) } else { Color32::from_rgb(0xd8, 0xde, 0xe6) });
         pt.text(g.at(tx, 231.0), Align2::CENTER_CENTER, title, look::regular(g.pt(21.0)), Color32::from_rgb(0x9a, 0xa5, 0xb4));
         pt.text(g.at(lx, 283.0), Align2::RIGHT_CENTER, "dB", look::regular(g.pt(16.0)), SCALE.gamma_multiply(0.7));
         for (k, (_, t)) in marks.iter().enumerate() {
@@ -99,6 +113,9 @@ pub fn view(ui: &mut egui::Ui, params: &[Param], values: &[f32], live: &Live, sl
             pt.rect_filled(g.rect(x0 + 34.0, ya, x1 - 34.0, yb), 0.0, c);
         }
     }
+
+    ui.data_mut(|d| d.insert_temp(mid, margins));
+    ui.ctx().request_repaint_after(std::time::Duration::from_millis(60));
 
     // the knobs: Gain, Release, Output Level, Lookahead
     let knobs: [(u32, &str, (f32, f32), f32, f32); 4] = [

@@ -22,7 +22,7 @@ use lg_dsp::{Param, Unit};
 const MAX_DELAY_S: f32 = 10.0;
 const INPUTS: &[&str] = &["Off", "Left", "Right", "Left + Right", "Left - Right"];
 
-static STEREO_PARAMS: [Param; 29] = [
+static STEREO_PARAMS: [Param; 30] = [
     Param::new(0, "Left Mix", 0.0, 100.0, 30.0, Unit::Percent),
     Param::new(1, "Right Mix", 0.0, 100.0, 30.0, Unit::Percent),
     Param::new(2, "Left Delay Time", 0.0, 10000.0, 500.0, Unit::Ms),
@@ -53,7 +53,65 @@ static STEREO_PARAMS: [Param; 29] = [
     Param::new(1001, "Left x2", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(1002, "Right :2", 0.0, 1.0, 0.0, Unit::OnOff),
     Param::new(1003, "Right x2", 0.0, 1.0, 0.0, Unit::OnOff),
+    // (our own id) the Routing pop-up: a preset of inputs, feedback and crossfeed
+    Param::menu(ROUTING_ID, "Routing", ROUTINGS, 1.0),
 ];
+
+pub const ROUTING_ID: u32 = 1004;
+pub const ROUTINGS: &[&str] = &["Customized", "Straight", "Crossfeed", "90/10", "10/90", "Ping Pong L/R", "Pan L/R", "Rotate L/R"];
+
+/// Stereo Delay's routings: (Left Input, Right Input, Left / Right Feedback, Crossfeed L→R,
+/// R→L); None keeps that value. Inputs index INPUTS.
+fn routing(k: usize) -> Option<(f32, f32, Option<f32>, f32, f32)> {
+    Some(match ROUTINGS.get(k)? {
+        &"Straight" => (1.0, 2.0, None, 0.0, 0.0),
+        &"Crossfeed" => (1.0, 2.0, None, 50.0, 50.0),
+        &"90/10" => (1.0, 2.0, None, 10.0, 10.0),
+        &"10/90" => (1.0, 2.0, Some(10.0), 90.0, 90.0),
+        // one input, bouncing between the sides
+        &"Ping Pong L/R" => (3.0, 0.0, Some(0.0), 100.0, 50.0),
+        // one echo on each side, left then right
+        &"Pan L/R" => (3.0, 0.0, Some(0.0), 100.0, 0.0),
+        // the sides swap on every repeat
+        &"Rotate L/R" => (1.0, 2.0, Some(0.0), 100.0, 100.0),
+        _ => return None,
+    })
+}
+
+/// A routing pick sets its parameters and turns Stereo Link off; changing one of those
+/// parameters by hand makes the routing Customized.
+pub fn stereo_delay_links(set: &[(u32, f32)]) -> Vec<(u32, f32)> {
+    let mut out = set.to_vec();
+    if let Some(&(_, v)) = set.iter().find(|x| x.0 == ROUTING_ID) {
+        if let Some((li, ri, fb, xl, xr)) = routing(v.round().max(0.0) as usize) {
+            out.extend([(15, li), (16, ri), (6, xl), (7, xr), (26, 0.0)]);
+            if let Some(f) = fb {
+                out.extend([(4, f), (5, f)]);
+            }
+        }
+    } else if set.iter().any(|x| matches!(x.0, 4..=7 | 15 | 16)) {
+        out.push((ROUTING_ID, 0.0));
+    }
+    out
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn routing_menu_sets_paths_and_customized() {
+        assert_eq!(ROUTINGS.len(), 8);
+        let set = stereo_delay_links(&[(ROUTING_ID, 5.0)]);
+        // Ping Pong: both inputs into the left line, no own feedback, crossfeed both ways, link off
+        for want in [(15, 3.0), (16, 0.0), (4, 0.0), (5, 0.0), (6, 100.0), (7, 50.0), (26, 0.0)] {
+            assert!(set.contains(&want), "{want:?}");
+        }
+        // a hand edit of a routed parameter: Customized
+        assert_eq!(stereo_delay_links(&[(6, 20.0)]).last(), Some(&(ROUTING_ID, 0.0)));
+        assert_eq!(stereo_delay_links(&[(0, 20.0)]).len(), 1);
+    }
+}
 
 pub struct StereoDelay {
     p: Values,

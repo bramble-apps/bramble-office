@@ -198,3 +198,12 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
     v.extend(verbs::NAMES.iter().chain(pitchfx::NAMES).chain(evoc::NAMES).chain(&["Match EQ"]).map(|n| (*n, *n)));
     v
 }
+
+/// Parameter edits with the ones they bring along (Amp Designer's Model sets Amp, EQ, Speaker).
+pub fn linked(name: &str, set: &[(u32, f32)]) -> Vec<(u32, f32)> {
+    match name {
+        "Amp Designer" => amp::amp_links(set),
+        "Stereo Delay" => delays::stereo_delay_links(set),
+        _ => set.to_vec(),
+    }
+}

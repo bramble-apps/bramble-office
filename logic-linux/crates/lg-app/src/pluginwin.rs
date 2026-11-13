@@ -677,6 +677,8 @@ fn fx_window(app: &mut App, ctx: &egui::Context) {
     if let Some(a) = fx_action.take() {
         set.extend(crate::fxviews::run_action(app, (s, k), &name, a));
     }
+    // a model pop-up brings its parts along (Amp Designer: Amp, EQ, Speaker)
+    let set = lg_fx::linked(&name, &set);
     if toggle_bypass {
         crate::mixstate::checkpoint(app, "Bypass Plug-in");
         crate::mixstate::edit_inserts(app, s, |v| {

@@ -29,6 +29,8 @@ pub struct Ui {
     clipboard: Option<(String, Vec<f32>)>,
     save_name: Option<String>,
     drag_from: Option<(usize, usize)>,
+    /// Scripter's window controls and Script Editor.
+    pub script: crate::scripter_ui::Editor,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -102,6 +104,8 @@ pub fn render(e: &mut crate::audio::Engine, span: Option<(f64, f64)>, tps_block:
         }
     };
     e.fx.clock = if playing { to } else { e.fx.clock + tps_block };
+    // Scripter's GetTimingInfo: the meter and the cycle
+    lg_dsp::scripter::set_transport(lg_dsp::scripter::Transport { meter: (e.beats_per_bar.clamp(1, 64) as u8, 4), cycling: e.cycle_on && e.cycle.is_some_and(|(a, b)| b > a), cycle: e.cycle.map(|(a, b)| (a as f64, b as f64)).unwrap_or((0.0, 0.0)) });
     for t in 0..n {
         let active = e.fx.active(t);
         let mut input: Vec<Ev> = Vec::new();
@@ -409,10 +413,15 @@ fn save_setting(name: &str, file: &str, values: &[f32]) -> bool {
 
 fn load_setting(name: &str, path: &std::path::Path) -> Option<Vec<f32>> {
     let t = std::fs::read_to_string(path).ok()?;
-    let mut v = midifx::defaults(name);
+    // Scripter's script follows its parameters: the setting's own length
+    let grows = name == "Scripter";
+    let mut v = if grows { vec![0.0; midifx::data_at(name)] } else { midifx::defaults(name) };
     for l in t.lines() {
         let mut w = l.split_whitespace();
         let (Some(i), Some(x)) = (w.next().and_then(|x| x.parse::<usize>().ok()), w.next().and_then(|x| x.parse::<f32>().ok())) else { continue };
+        if grows && i >= v.len() && i < 1 << 20 {
+            v.resize(i + 1, 0.0);
+        }
         if i < v.len() {
             v[i] = x;
         }
@@ -483,11 +492,23 @@ fn env_hook(app: &mut App) {
         if !slots(app, 0).is_empty() {
             app.mfx.window = Some((0, 0));
         }
+        // LG_SCRIPTER_PRESET="Tutorial Script 7…" loads a bundled script; LG_SCRIPT_EDITOR=1 opens the editor
+        if slots(app, 0).first().is_some_and(|s| s.name == "Scripter") {
+            if let Ok(n) = std::env::var("LG_SCRIPTER_PRESET") {
+                if let Some((_, src)) = lg_dsp::scripter::TUTORIALS.iter().chain(lg_dsp::scripter::FACTORY.iter()).find(|x| x.0.starts_with(n.as_str())) {
+                    edit(app, 0, "", |v| v[0].values = lg_dsp::scripter::load_script(src));
+                }
+            }
+            if std::env::var_os("LG_SCRIPT_EDITOR").is_some() {
+                app.mfx.script.open = Some((0, 0));
+            }
+        }
     });
 }
 
 pub fn window(app: &mut App, ctx: &egui::Context) {
     env_hook(app);
+    script_editor(app, ctx);
     let Some((t, k)) = app.mfx.window else { return };
     let Some(slot) = slots(app, t).get(k).cloned() else {
         app.mfx.window = None;
@@ -497,7 +518,11 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     let (status, playing) = app.engine.lock().ok().map(|e| (e.fx.status.get(t).and_then(|s| s.get(k).cloned()).unwrap_or_default(), e.playing)).unwrap_or_default();
     let params = midifx::params(&slot.name);
     let mut values = slot.values.clone();
-    values.resize(midifx::data_at(&slot.name) + midifx::data_len(&slot.name), 0.0);
+    let need = midifx::data_at(&slot.name) + midifx::data_len(&slot.name);
+    if values.len() < need {
+        values.resize(need, 0.0);
+    }
+    let mut script_out = crate::scripter_ui::Out::default();
     let mut open = true;
     let mut changed: Option<(&'static str, bool)> = None;
     let mut new_values: Option<Vec<f32>> = None;
@@ -518,6 +543,13 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 if ui.button("Save Setting As…").clicked() {
                     app.mfx.save_name = Some(String::new());
                     ui.close();
+                }
+                if slot.name == "Scripter" {
+                    ui.separator();
+                    if let Some(v) = crate::scripter_ui::preset_menu(ui) {
+                        new_values = Some(v);
+                        ui.close();
+                    }
                 }
                 let files = settings_files(&slot.name);
                 if !files.is_empty() {
@@ -574,7 +606,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 ctx.request_repaint();
             }
             "Scripter" => {
-                ui.label("Scripter's JavaScript editor isn't available in Studio: the slot passes events through and keeps its four parameters.");
+                script_out = crate::scripter_ui::body(&mut app.mfx.script, ui, t, k, &mut values, status.script.as_deref());
+                if let Some(c) = script_out.changed.take() {
+                    changed = Some(c);
+                }
             }
             _ => {}
         }
@@ -596,6 +631,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     if bypass_toggle {
         edit(app, t, "Bypass MIDI Plug-in", |v| v[k].bypass = !v[k].bypass);
     }
+    apply_script(app, t, k, std::mem::take(&mut script_out));
     if let Some(v) = new_values {
         edit(app, t, "Load MIDI Plug-in Setting", |s| s[k].values = v);
     } else if let Some((what, step)) = changed {
@@ -613,6 +649,38 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     }
     if status.step.is_some() || !status.output.is_empty() {
         ctx.request_repaint();
+    }
+}
+
+/// Scripter's Script Editor (scripter_ui.rs), open beside its window or alone.
+fn script_editor(app: &mut App, ctx: &egui::Context) {
+    let Some((t, k)) = app.mfx.script.open else { return };
+    let Some(slot) = slots(app, t).get(k).cloned().filter(|s| s.name == "Scripter") else {
+        app.mfx.script.open = None;
+        return;
+    };
+    let track = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
+    let view = app.engine.lock().ok().and_then(|e| e.fx.status.get(t).and_then(|s| s.get(k)).and_then(|s| s.script.clone()));
+    let out = crate::scripter_ui::editor(&mut app.mfx.script, ctx, &track, t, k, &slot.values, view.as_deref());
+    apply_script(app, t, k, out);
+    if view.is_some() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    }
+}
+
+fn apply_script(app: &mut App, t: usize, k: usize, out: crate::scripter_ui::Out) {
+    if let Some((what, v)) = out.new_values {
+        edit(app, t, what, |s| {
+            if let Some(x) = s.get_mut(k) {
+                x.values = v;
+            }
+        });
+    }
+    if !out.commands.is_empty() {
+        let mut e = app.engine.lock().unwrap_or_else(|e| e.into_inner());
+        for c in out.commands {
+            e.fx.commands.push((t, k, c));
+        }
     }
 }
 

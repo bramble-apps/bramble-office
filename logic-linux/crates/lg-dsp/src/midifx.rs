@@ -83,6 +83,8 @@ pub struct Status {
     pub env: f32,
     /// The Arpeggiator runs while the song is stopped (Play clicked then).
     pub free: bool,
+    /// Scripter: its console, parameters and error.
+    pub script: Option<std::sync::Arc<crate::scripter::View>>,
 }
 
 pub trait MidiFx: Send {
@@ -90,6 +92,10 @@ pub trait MidiFx: Send {
     fn process(&mut self, input: &[Ev], ctx: &Ctx, out: &mut Vec<Ev>);
     /// Note offs for everything the unit holds; queued events dropped.
     fn reset(&mut self, out: &mut Vec<Ev>);
+    /// The unit was bypassed (Scripter calls the script's Reset then).
+    fn bypassed(&mut self, out: &mut Vec<Ev>) {
+        self.reset(out);
+    }
     fn status(&self) -> Status {
         Status::default()
     }
@@ -386,7 +392,8 @@ pub fn params(name: &str) -> Vec<Param> {
             p(5, "Output Offset", -127.0, 127.0, 0.0, None),
             Param { id: 6, name: "Seed", min: 0.0, max: 1000.0, default: 0.0, unit: Menu, choices: seed_names(), hidden: false },
         ],
-        "Scripter" => vec![p(0, "Script Parameter 1", 0.0, 127.0, 64.0, None), p(1, "Script Parameter 2", 0.0, 127.0, 64.0, None), p(2, "Script Parameter 3", 0.0, 127.0, 64.0, None), p(3, "Script Parameter 4", 0.0, 127.0, 64.0, None)],
+        // the script declares its own (scripter.rs)
+        "Scripter" => vec![],
         "Transposer" => vec![p(0, "Transpose", -24.0, 24.0, 0.0, Semitones), m(1, "Root", &NOTE_NAMES, 0.0), m(2, "Scale", &SCALE_NAMES_USER, 0.0)],
         "Velocity Processor" => vec![
             m(vel::PROCESS, "Process", &["Note On", "Note Off", "Both"], 0.0),
@@ -439,12 +446,16 @@ pub fn data_at(name: &str) -> usize {
         "Arpeggiator" => arp::DATA,
         "Chord Trigger" => chord::DATA_AT,
         "Transposer" => 3,
+        "Scripter" => crate::scripter::SCRIPT_AT,
         _ => params(name).len(),
     }
 }
 
 /// A new unit's values: the parameters' defaults, then its data.
 pub fn defaults(name: &str) -> Vec<f32> {
+    if name == "Scripter" {
+        return crate::scripter::defaults();
+    }
     let ps = params(name);
     let mut v = vec![0.0; data_at(name) + data_len(name)];
     for p in &ps {
@@ -477,6 +488,10 @@ pub fn defaults(name: &str) -> Vec<f32> {
 }
 
 pub fn build(name: &str, values: &[f32]) -> Option<Box<dyn MidiFx>> {
+    if name == "Scripter" {
+        // the script follows the parameters: keep every float
+        return Some(Box::new(crate::scripter::Scripter::new(values)));
+    }
     let mut v = defaults(name);
     for (i, x) in values.iter().enumerate().take(v.len()) {
         v[i] = *x;
@@ -488,7 +503,6 @@ pub fn build(name: &str, values: &[f32]) -> Option<Box<dyn MidiFx>> {
         "Modulator" => Box::new(modu::Modulator::new(v)),
         "Note Repeater" => Box::new(NoteRepeater { v, queue: Vec::new(), starts: Vec::new() }),
         "Randomizer" => Box::new(Randomizer::new(v)),
-        "Scripter" => Box::new(Scripter { v }),
         "Transposer" => Box::new(Transposer { v, map: [None; 128] }),
         "Velocity Processor" => Box::new(VelocityProcessor { v }),
         _ => return None,
@@ -517,7 +531,7 @@ impl Chain {
             for (u, s) in self.units.iter_mut().zip(slots) {
                 u.1.load(&s.1);
                 if s.2 && !u.2 {
-                    u.1.reset(&mut out);
+                    u.1.bypassed(&mut out);
                 }
                 u.2 = s.2;
             }
@@ -649,6 +663,22 @@ pub mod arp {
         AsPlayed,
     }
 
+    /// The inversions played pass after pass (0 = original position) for each note order and
+    /// Inversions switch position 1…4 (Logic's user guide, "Note order inversions").
+    pub fn inversion_table(o: Order, pattern: usize) -> &'static [usize] {
+        const UP: [&[usize]; 4] = [&[0, 1, 2, 3], &[1, 0, 2, 3], &[2, 0, 1, 3], &[0, 2, 1, 3]];
+        const DOWN: [&[usize]; 4] = [&[3, 2, 1, 0], &[2, 3, 1, 0], &[1, 3, 2, 0], &[3, 1, 2, 0]];
+        const UP_DOWN: [&[usize]; 4] = [&[0, 1, 2, 3, 3, 2, 1, 0], &[1, 0, 3, 2, 2, 3, 0, 1], &[0, 2, 1, 3, 3, 1, 2, 0], &[0, 1, 2, 3, 2, 1]];
+        const OUTSIDE_IN: [&[usize]; 4] = [&[3, 0, 2, 1], &[0, 3, 1, 2], &[1, 2, 0, 3], &[2, 1, 3, 0]];
+        let p = pattern.min(3);
+        match o {
+            Order::Down => DOWN[p],
+            Order::UpDown => UP_DOWN[p],
+            Order::OutsideIn => OUTSIDE_IN[p],
+            _ => UP[p],
+        }
+    }
+
     impl Order {
         fn of(k: usize) -> Order {
             [Order::Up, Order::Down, Order::UpDown, Order::OutsideIn, Order::Random, Order::AsPlayed][k.min(5)]
@@ -776,6 +806,10 @@ pub mod arp {
         rng: Rng,
         /// No-repeat random: the indices left in this pass.
         bag: Vec<usize>,
+        /// Inversions: the pass the inversion was picked for, the inversion, and the
+        /// not-yet-played inversions (Random 2).
+        inv_at: Option<(usize, usize)>,
+        inv_bag: Vec<usize>,
         last_tie: Option<(u8, u8)>,
         /// Started with Play while the song was stopped.
         free: bool,
@@ -785,7 +819,7 @@ pub mod arp {
 
     impl Arpeggiator {
         pub fn new(v: Vec<f32>) -> Arpeggiator {
-            Arpeggiator { v, keys: Vec::new(), notes: Vec::new(), temp: Vec::new(), transpose: 0, next: None, step: 0, played: 0, sounding: Vec::new(), thru: Vec::new(), rng: Rng::new(time_seed()), bag: Vec::new(), last_tie: None, free: false, was_playing: false, status: Status::default() }
+            Arpeggiator { v, keys: Vec::new(), notes: Vec::new(), temp: Vec::new(), transpose: 0, next: None, step: 0, played: 0, sounding: Vec::new(), thru: Vec::new(), rng: Rng::new(time_seed()), bag: Vec::new(), inv_at: None, inv_bag: Vec::new(), last_tie: None, free: false, was_playing: false, status: Status::default() }
         }
 
         fn p(&self, id: u32) -> f32 {
@@ -853,7 +887,7 @@ pub mod arp {
             let pass = k / seq.len().max(1);
             // octave range: each pass one octave higher, then back; inversions: the chord
             // inverted once more each pass
-            let (oct, inv) = if inversions { (0, pass % range) } else { (pass % range, 0) };
+            let (oct, inv) = if inversions { (0, self.inversion(o, range - 1, pass)) } else { (pass % range, 0) };
             let mut chordv = pool.clone();
             for _ in 0..inv {
                 if let Some(first) = chordv.first().copied() {
@@ -883,6 +917,40 @@ pub mod arp {
             let oct = if o == Order::Down && !inversions { range - 1 - oct } else { oct };
             let h = chordv[idx.min(n - 1)];
             vec![Held { pitch: (h.pitch as i32 + 12 * oct as i32).clamp(0, 127) as u8, ..h }]
+        }
+
+        /// Inversions mode: the inversion (0 = original) for a pass through the notes, from
+        /// the switch's pattern (0…3) for the note order, as Logic's tables list them.
+        fn inversion(&mut self, o: Order, pattern: usize, pass: usize) -> usize {
+            if let Some((p, inv)) = self.inv_at {
+                if p == pass {
+                    return inv;
+                }
+            }
+            let inv = match o {
+                Order::Random => match pattern {
+                    // duplicates allowed
+                    0 => self.rng.below(4),
+                    // each inversion once before any repeats
+                    1 => {
+                        if self.inv_bag.is_empty() {
+                            self.inv_bag = (0..4).collect();
+                        }
+                        let j = self.rng.below(self.inv_bag.len());
+                        self.inv_bag.remove(j)
+                    }
+                    // favouring low inversions / high inversions
+                    2 => ((self.rng.f() * self.rng.f()) * 4.0) as usize,
+                    _ => 3 - ((self.rng.f() * self.rng.f()) * 4.0) as usize,
+                },
+                _ => {
+                    let t = inversion_table(o, pattern);
+                    t[pass % t.len()]
+                }
+            };
+            let inv = inv.min(3);
+            self.inv_at = Some((pass, inv));
+            inv
         }
 
         fn velocity(&mut self, played: u8, cycle: usize) -> u8 {
@@ -978,6 +1046,7 @@ pub mod arp {
             if !self.has_notes() {
                 self.next = None;
                 self.played = 0;
+                self.inv_at = None;
                 self.step = 0;
                 self.bag.clear();
             }
@@ -994,6 +1063,7 @@ pub mod arp {
             self.next = Some(t.max(at));
             self.step = 0;
             self.played = 0;
+            self.inv_at = None;
         }
 
         fn play_step(&mut self, t: f64, out: &mut Vec<Ev>) {
@@ -1187,12 +1257,14 @@ pub mod arp {
                     self.next = None;
                     self.step = 0;
                     self.played = 0;
+                    self.inv_at = None;
                 }
                 // Play clicked while the song is stopped: run from the first step
                 "Play" => {
                     self.free = true;
                     self.step = 0;
                     self.played = 0;
+                    self.inv_at = None;
                 }
                 "Delete Last" => {
                     self.notes.pop();
@@ -1766,24 +1838,6 @@ impl MidiFx for Randomizer {
 }
 
 // ---------------------------------------------------------------------------------------
-// Scripter: the slot and its parameters; no script language yet (events pass through)
-
-struct Scripter {
-    v: Vec<f32>,
-}
-
-impl MidiFx for Scripter {
-    fn load(&mut self, values: &[f32]) {
-        let n = self.v.len().min(values.len());
-        self.v[..n].copy_from_slice(&values[..n]);
-    }
-    fn process(&mut self, input: &[Ev], _ctx: &Ctx, out: &mut Vec<Ev>) {
-        out.extend_from_slice(input);
-    }
-    fn reset(&mut self, _out: &mut Vec<Ev>) {}
-}
-
-// ---------------------------------------------------------------------------------------
 // Transposer
 
 struct Transposer {
@@ -1992,6 +2046,25 @@ mod tests {
         let mut out = Vec::new();
         a.process(&[Ev::new(1000.0, Msg::Off { ch: 0, pitch: 60 }), Ev::new(1000.0, Msg::Off { ch: 0, pitch: 64 }), Ev::new(1000.0, Msg::Off { ch: 0, pitch: 67 })], &ctx(960.0, 1920.0), &mut out);
         assert!(ons(&out).len() <= 1);
+    }
+
+    #[test]
+    fn arpeggiator_inversion_patterns() {
+        use arp::{inversion_table, Order};
+        assert_eq!(inversion_table(Order::Up, 0), &[0, 1, 2, 3]);
+        assert_eq!(inversion_table(Order::Up, 2), &[2, 0, 1, 3]);
+        assert_eq!(inversion_table(Order::Down, 3), &[3, 1, 2, 0]);
+        assert_eq!(inversion_table(Order::UpDown, 3), &[0, 1, 2, 3, 2, 1]);
+        assert_eq!(inversion_table(Order::OutsideIn, 0), &[3, 0, 2, 1]);
+        // Up, Inversions switch at 2: passes play inversion 1, original, 2, 3
+        let mut v = defaults("Arpeggiator");
+        v[arp::OCT_MODE as usize] = 1.0;
+        v[arp::RANGE as usize] = 1.0;
+        let mut a = build("Arpeggiator", &v).unwrap();
+        let mut out = Vec::new();
+        a.process(&[on_ev(0.0, 60, 100), on_ev(0.0, 64, 100), on_ev(0.0, 67, 100)], &ctx(0.0, 240.0 * 12.0), &mut out);
+        let p: Vec<u8> = ons(&out).into_iter().map(|x| x.1).collect();
+        assert_eq!(p, vec![64, 67, 72, 60, 64, 67, 67, 72, 76, 72, 76, 79]);
     }
 
     #[test]
