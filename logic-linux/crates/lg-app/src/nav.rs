@@ -485,7 +485,7 @@ pub const COMMANDS: &[&str] = &[
     "Open General Settings…", "Open Audio Settings…", "Open MIDI Settings…", "Open View Settings…", "Open Score Settings…", "Open Movie Settings…", "Open Automation Settings…", "Open Control Surfaces Settings…", "Open My Info Settings…",
     // help
     "Quick Help", "Inspector Pane", "Floating Window", "Bubbles at Pointer Location", "Switch Quick Help Appearance between Bubbles and Inspector Pane/Float Window", "Show/Hide Help Tags",
-    "Bramble Studio Help", "Show Detailed Help", "Bramble Studio Instruments", "Bramble Studio Effects", "What’s New in Bramble Studio", "Release Notes", "Bramble Studio Support", "Bramble Studio on the Web", "Bramble Studio Discussions",
+    "Bramble Studio Help", "Show Detailed Help", "Bramble Studio Instruments", "Bramble Studio Effects", "Bramble Studio Control Surfaces Support", "What’s New in Bramble Studio", "Release Notes", "Bramble Studio Support", "Bramble Studio on the Web", "Bramble Studio Discussions",
 ];
 
 const WEB: &str = "https://bramble-apps.github.io";
@@ -891,6 +891,7 @@ pub fn command(app: &mut App, ctx: &egui::Context, name: &str) -> bool {
         }
         "Bramble Studio Help" | "Show Detailed Help" => kn_ui::open_url(&format!("{REPO}/tree/main/logic-linux#readme")),
         "Bramble Studio Instruments" | "Bramble Studio Effects" => kn_ui::open_url(&format!("{REPO}/blob/main/logic-linux/CHECKLIST.md")),
+        "Bramble Studio Control Surfaces Support" => kn_ui::open_url(&format!("{REPO}/blob/main/logic-linux/CHECKLIST.md#control-surfaces")),
         "What’s New in Bramble Studio" | "Release Notes" => kn_ui::open_url(&format!("{REPO}/releases")),
         "Bramble Studio Support" => kn_ui::open_url(&format!("{REPO}/issues")),
         "Bramble Studio Discussions" => kn_ui::open_url(&format!("{REPO}/discussions")),

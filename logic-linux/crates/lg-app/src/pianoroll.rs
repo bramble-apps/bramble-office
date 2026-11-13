@@ -22,6 +22,13 @@ const ROLL_INSPECTOR_W: f32 = 220.0;
 const ROW: f32 = 13.0;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    // (View ▸ Link off: the Piano Roll keeps its region; rolllink.rs)
+    let real = crate::rolllink::enter(app, false);
+    show_linked(app, ui, area);
+    crate::rolllink::leave(app, false, real);
+}
+
+fn show_linked(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // (the key focus, the area clicked last: focus.rs)
     let p = ui.painter_at(area);
     p.rect_filled(area, 0.0, look::pane_bg());

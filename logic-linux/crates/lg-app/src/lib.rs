@@ -178,6 +178,7 @@ mod stepinsp;
 mod cellinsp;
 mod cellgain;
 mod celltakes;
+mod rolllink;
 mod celledit;
 mod cellbounce;
 mod scorecmd;

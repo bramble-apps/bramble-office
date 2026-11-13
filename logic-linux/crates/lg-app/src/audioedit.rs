@@ -96,7 +96,7 @@ pub struct Loaded {
 #[derive(Clone, Copy, Debug)]
 enum TDrag {
     TrimStart { start: u32, length: u32, offset: usize },
-    TrimEnd,
+    TrimEnd { length: u32 },
     FadeIn,
     FadeOut,
     Curve { out: bool, orig: i8, y0: f32 },
@@ -1162,7 +1162,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 match tool {
                 crate::edit::Tool::Pointer => match z {
                     "start" => Some(TDrag::TrimStart { start: rg.start, length: rg.length, offset: x.offset }),
-                    "end" => Some(TDrag::TrimEnd),
+                    "end" => Some(TDrag::TrimEnd { length: rg.length }),
                     "fadein" => Some(TDrag::FadeIn),
                     "fadeout" => Some(TDrag::FadeOut),
                     "curvein" => Some(TDrag::Curve { out: false, orig: x.fades.in_curve, y0: pp.y }),
@@ -1187,7 +1187,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
             if let Some(d) = d {
                 if !matches!(d, TDrag::Marquee { .. } | TDrag::Zoom { .. }) {
                     checkpoint(app, match d {
-                        TDrag::TrimStart { .. } | TDrag::TrimEnd => "Resize Region",
+                        TDrag::TrimStart { .. } | TDrag::TrimEnd { .. } => "Resize Region",
                         TDrag::FadeIn | TDrag::FadeOut => "Region Fade Length",
                         TDrag::Curve { .. } => "Region Fade Curve",
                         TDrag::Gain { .. } => "Region Gain",
@@ -1218,9 +1218,9 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                     g.length = (end - nt).round().max(1.0) as u32;
                 }
                 set_extras(app, t, r, nx);
-                app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(nt as u32, sig)), ("Length:".into(), crate::app::bbdt_len((end - nt) as u32, sig))]);
+                app.help_tag = Some(vec![("Position:".into(), crate::app::bbdt(nt as u32, sig)), ("Length:".into(), crate::app::bbdt_len((end - nt) as u32, sig)), ("Trim:".into(), trim_amount((end - nt).round() as i64 - length as i64, sig))]);
             }
-            TDrag::TrimEnd => {
+            TDrag::TrimEnd { length } => {
                 let start = rg.start as f64;
                 // up to the file's end
                 let max_sec = start_sec + (file_frames.saturating_sub(x.offset)) as f64 / rate as f64;
@@ -1229,7 +1229,7 @@ fn track_editor(app: &mut App, ui: &mut egui::Ui, body: Rect, t: usize, r: usize
                 if let Some(g) = app.project.as_mut().and_then(|p| p.tracks.get_mut(t)?.regions.get_mut(r)) {
                     g.length = (ne - start).round().max(1.0) as u32;
                 }
-                app.help_tag = Some(vec![("Length:".into(), crate::app::bbdt_len((ne - start) as u32, sig))]);
+                app.help_tag = Some(vec![("Length:".into(), crate::app::bbdt_len((ne - start) as u32, sig)), ("Trim:".into(), trim_amount((ne - start).round() as i64 - length as i64, sig))]);
             }
             TDrag::FadeIn => {
                 let s = (app.seconds_at(tick_of(pp.x)) - start_sec).clamp(0.0, region_secs);
@@ -1469,6 +1469,11 @@ fn split(app: &mut App, t: usize, r: usize, tick: f64) {
 
 // ---------------------------------------------------------------------------------------------
 // Audio File Editor
+
+/// A trim's change of length for the help tag: "+ 0 1 0 0" / "− 0 0 2 0".
+pub fn trim_amount(d: i64, sig: (u8, u8)) -> String {
+    format!("{} {}", if d < 0 { "−" } else { "+" }, crate::app::bbdt_len(d.unsigned_abs() as u32, sig))
+}
 
 fn fmt_thousands(n: u64) -> String {
     let s = n.to_string();
@@ -3133,6 +3138,12 @@ pub fn toggle_click(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trim_help_tag_amount() {
+        assert_eq!(trim_amount(3840 + 960, (4, 4)), "+ 1 1 0 0");
+        assert_eq!(trim_amount(-240, (4, 4)), "− 0 0 1 0");
+    }
 
     #[test]
     fn flex_maps_both_ways() {

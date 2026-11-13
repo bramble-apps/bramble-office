@@ -1283,7 +1283,7 @@ impl App {
     }
 
     pub fn command(&mut self, ctx: &egui::Context, cmd: &str) {
-        if crate::audioedit::command(self, cmd) || crate::barfit::command(self, cmd) || crate::listwin::command(self, ctx, cmd) {
+        if crate::audioedit::command(self, cmd) || crate::rolllink::command(self, cmd) || crate::barfit::command(self, cmd) || crate::listwin::command(self, ctx, cmd) {
             return;
         }
         match cmd {

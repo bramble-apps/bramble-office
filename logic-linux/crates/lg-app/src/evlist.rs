@@ -487,6 +487,17 @@ const BLUE: Color32 = Color32::from_rgb(0x0b, 0x63, 0xb8);
 const GREEN: Color32 = Color32::from_rgb(0x22, 0x8b, 0x3a);
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, body: Rect) {
+    // (View ▸ Link: Off keeps the region, Same Level lists the regions; rolllink.rs)
+    let real = crate::rolllink::enter(app, true);
+    if crate::rolllink::links().events == 1 {
+        let has = app.selected_region.is_some();
+        with(ui.ctx(), |st| st.regions |= has);
+    }
+    show_linked(app, ui, body);
+    crate::rolllink::leave(app, true, real);
+}
+
+fn show_linked(app: &mut App, ui: &mut egui::Ui, body: Rect) {
     let ctx = ui.ctx().clone();
     let mut st = state(&ctx);
     crate::eventedit::with(&ctx, |s| s.rect = Some(body));
