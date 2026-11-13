@@ -1048,7 +1048,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     crate::glyphs::paint(&pp, icon_r, glyph, 12.0, col);
                     ui.interact(icon_r, ui.scope_id().with(("pa-icon", k)), Sense::hover()).on_hover_text(tip);
                     let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                    pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &name, look::regular(12.0), look::text());
+                    let nr = pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &name, look::regular(12.0), look::text());
+                    // (a Broadcast Wave timestamp: a clock after the name)
+                    if crate::bwf::timestamp(f).is_some() && nr.max.x + 16.0 < info_x {
+                        crate::glyphs::paint(&pp, Rect::from_center_size(pos2(nr.max.x + 9.0, r.center().y), vec2(12.0, 12.0)), crate::glyphs::ph::CLOCK, 10.0, look::text_dim());
+                    }
                     let fi = info(app, f);
                     let info_r = Rect::from_min_max(pos2(info_x, r.min.y + 2.0), pos2(bpm_x - 8.0, r.max.y - 2.0));
                     match &fi {

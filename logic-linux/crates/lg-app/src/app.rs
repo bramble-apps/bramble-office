@@ -1480,6 +1480,9 @@ impl App {
         if crate::envhub::command(self, ctx, name) || crate::convsampler::command(self, ctx, name) {
             return true;
         }
+        if crate::bwf::command(self, name) {
+            return true;
+        }
         if crate::fcpxml::command(self, name) {
             return true;
         }
