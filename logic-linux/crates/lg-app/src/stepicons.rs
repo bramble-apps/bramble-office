@@ -160,47 +160,89 @@ pub fn clear(p: &Painter, c: Pos2, col: Color32) {
 /// A drum row's kit piece, by the drum's name: kick, snare, tom, hi-hat, cymbal, clap, bell,
 /// shaker; else a note (♩). Drawn in `col` inside the row's round icon (radius about 14).
 pub fn kit_piece(p: &Painter, c: Pos2, name: &str, col: Color32) {
+    // Logic's kit-piece icons: about 20 pt wide, drawn in the row's colour with no backing
+    // circle; drums and closed hi-hats filled, the bass drum and pedal hi-hat in outline.
     let n = name.to_lowercase();
     let st = Stroke::new(1.3, col);
+    let dark = Color32::from_rgba_unmultiplied(0, 0, 0, 120);
     let has = |w: &[&str]| w.iter().any(|x| n.contains(x));
+    let ellipse = |cx: f32, cy: f32, rx: f32, ry: f32, from: f32, to: f32| -> Vec<Pos2> {
+        (0..=24).map(|k| {
+            let a = from + (to - from) * k as f32 / 24.0;
+            pos2(cx + rx * a.cos(), cy + ry * a.sin())
+        }).collect()
+    };
+    use std::f32::consts::{PI, TAU};
     if has(&["kick", "bass drum", "bd"]) {
-        // the front skin: two rings
-        p.circle_stroke(c, 6.5, st);
-        p.circle_stroke(c, 2.2, st);
+        // the bass drum's front skin, its beater and pedal
+        p.circle_stroke(pos2(c.x, c.y - 1.5), 8.0, st);
+        p.line_segment([pos2(c.x, c.y - 3.5), pos2(c.x, c.y + 3.0)], st);
+        p.circle_filled(pos2(c.x, c.y - 4.0), 1.6, col);
+        p.add(egui::Shape::convex_polygon(vec![pos2(c.x - 2.2, c.y + 3.0), pos2(c.x + 2.2, c.y + 3.0), pos2(c.x + 2.8, c.y + 8.5), pos2(c.x - 2.8, c.y + 8.5)], col, Stroke::NONE));
+        p.line_segment([pos2(c.x - 7.0, c.y + 4.0), pos2(c.x - 8.5, c.y + 8.5)], st);
+        p.line_segment([pos2(c.x + 7.0, c.y + 4.0), pos2(c.x + 8.5, c.y + 8.5)], st);
     } else if has(&["hat", "hh"]) {
-        // two cymbals on a stand
-        for dy in [-3.6, -1.2] {
-            p.add(egui::Shape::convex_polygon(vec![pos2(c.x - 7.0, c.y + dy + 1.0), pos2(c.x, c.y + dy - 1.0), pos2(c.x + 7.0, c.y + dy + 1.0)], col, Stroke::NONE));
+        // a hi-hat from the side: the top cymbal's dome and rod over the bottom cymbal; open:
+        // apart; pedal: in outline
+        let outline = has(&["pedal", "foot"]);
+        let gap = if has(&["open"]) { 2.5 } else { 1.0 };
+        let top = c.y - 1.0;
+        // (the top cymbal: a flat upper half-ellipse with a bell on it)
+        let dome = ellipse(c.x, top, 9.0, 1.6, PI, TAU);
+        let bell = vec![pos2(c.x - 3.5, top - 1.0), pos2(c.x, top - 4.0), pos2(c.x + 3.5, top - 1.0)];
+        let under = ellipse(c.x, top, 9.0, 1.2, 0.0, PI);
+        let low = ellipse(c.x, top + gap + 1.8, 9.0, 1.8, 0.0, TAU);
+        if outline {
+            let mut rim = dome.clone();
+            rim.extend(under.iter().skip(1));
+            p.add(egui::Shape::closed_line(rim, st));
+            p.add(egui::Shape::line(bell, st));
+            p.add(egui::Shape::closed_line(low, st));
+        } else {
+            p.add(egui::Shape::convex_polygon(low, col, Stroke::NONE));
+            let mut rim = dome;
+            rim.extend(under.iter().skip(1));
+            p.add(egui::Shape::convex_polygon(rim, col, Stroke::NONE));
+            p.add(egui::Shape::convex_polygon(bell, col, Stroke::NONE));
+            p.add(egui::Shape::line(under, Stroke::new(1.0, dark)));
         }
-        p.line_segment([pos2(c.x, c.y - 4.0), pos2(c.x, c.y + 7.0)], st);
+        p.line_segment([pos2(c.x, top - 7.0), pos2(c.x, top - 3.0)], st);
     } else if has(&["crash", "ride", "china", "splash", "cymbal", "metal"]) {
-        p.add(egui::Shape::convex_polygon(vec![pos2(c.x - 7.5, c.y - 1.0), pos2(c.x, c.y - 3.6), pos2(c.x + 7.5, c.y - 1.0)], col, Stroke::NONE));
-        p.line_segment([pos2(c.x, c.y - 3.0), pos2(c.x, c.y + 7.0)], st);
+        // a cymbal on its stand, tilted
+        let rim = ellipse(c.x, c.y - 2.0, 9.0, 2.6, 0.0, TAU);
+        p.add(egui::Shape::convex_polygon(rim, col, Stroke::NONE));
+        p.circle_filled(pos2(c.x, c.y - 3.2), 2.0, col);
+        p.line_segment([pos2(c.x, c.y), pos2(c.x, c.y + 8.0)], st);
+        p.line_segment([pos2(c.x, c.y + 8.0), pos2(c.x - 4.0, c.y + 9.5)], st);
+        p.line_segment([pos2(c.x, c.y + 8.0), pos2(c.x + 4.0, c.y + 9.5)], st);
     } else if has(&["snare", "rim", "stick", "tom", "perc", "conga", "bongo", "timbale"]) {
-        // a drum from the side: top ellipse and the shell; toms deeper than a snare
-        let h = if has(&["tom", "conga", "bongo"]) { 8.0 } else { 5.0 };
+        // a drum from the side, filled: the shell with its lugs, the top skin; toms deeper
+        let deep = has(&["tom", "conga", "bongo"]);
+        let (rx, h) = if deep { (7.5, 10.0) } else { (8.5, 7.0) };
         let top = c.y - h / 2.0;
-        let rx = if has(&["bongo"]) { 5.0 } else { 7.0 };
-        let ell: Vec<Pos2> = (0..=24).map(|k| {
-            let a = std::f32::consts::TAU * k as f32 / 24.0;
-            pos2(c.x + rx * a.cos(), top + 2.0 * a.sin())
-        }).collect();
-        p.add(egui::Shape::closed_line(ell, st));
-        let bottom: Vec<Pos2> = (0..=12).map(|k| {
-            let a = std::f32::consts::PI * k as f32 / 12.0;
-            pos2(c.x + rx * a.cos(), top + h + 2.0 * a.sin())
-        }).collect();
-        p.add(egui::Shape::line(bottom, st));
-        p.line_segment([pos2(c.x - rx, top), pos2(c.x - rx, top + h)], st);
-        p.line_segment([pos2(c.x + rx, top), pos2(c.x + rx, top + h)], st);
+        let mut shell = ellipse(c.x, top, rx, 2.4, PI, TAU);
+        shell.extend(ellipse(c.x, top + h, rx, 2.4, 0.0, PI));
+        p.add(egui::Shape::convex_polygon(shell, col, Stroke::NONE));
+        p.add(egui::Shape::closed_line(ellipse(c.x, top, rx - 0.6, 1.8, 0.0, TAU), Stroke::new(1.0, dark)));
+        p.add(egui::Shape::line(ellipse(c.x, top + h - 1.2, rx, 2.2, 0.1, PI - 0.1), Stroke::new(1.0, dark)));
+        let lugs: &[f32] = if deep { &[0.0] } else { &[-4.5, -1.5, 1.5, 4.5] };
+        for dx in lugs {
+            p.line_segment([pos2(c.x + dx, top + 2.8), pos2(c.x + dx, top + h + 0.5)], Stroke::new(1.0, dark));
+        }
+        if deep {
+            p.line_segment([pos2(c.x - rx + 1.5, top + h * 0.55), pos2(c.x + rx - 1.5, top + h * 0.55)], Stroke::new(1.0, dark));
+        }
+        if has(&["rim", "stick"]) {
+            p.line_segment([pos2(c.x - 9.0, top - 6.0), pos2(c.x + 3.0, top + 0.5)], Stroke::new(1.6, col));
+        }
     } else if has(&["clap"]) {
-        crate::glyphs::paint(p, Rect::from_center_size(c, vec2(16.0, 16.0)), crate::glyphs::ph_fill::HANDS_CLAPPING, 15.0, col);
+        crate::glyphs::paint(p, Rect::from_center_size(c, vec2(18.0, 18.0)), crate::glyphs::ph_fill::HANDS_CLAPPING, 17.0, col);
     } else if has(&["bell", "agogo", "triangle", "chime"]) {
-        crate::glyphs::paint(p, Rect::from_center_size(c, vec2(16.0, 16.0)), crate::glyphs::ph_fill::BELL_SIMPLE, 14.0, col);
+        crate::glyphs::paint(p, Rect::from_center_size(c, vec2(18.0, 18.0)), crate::glyphs::ph_fill::BELL_SIMPLE, 16.0, col);
     } else if has(&["shak", "maraca", "cabasa", "tamb", "clave", "block", "guiro"]) {
-        p.circle_filled(pos2(c.x - 1.5, c.y - 2.5), 4.0, col);
-        p.line_segment([pos2(c.x + 0.5, c.y), pos2(c.x + 4.5, c.y + 6.0)], Stroke::new(2.0, col));
+        p.circle_filled(pos2(c.x - 1.5, c.y - 2.5), 4.5, col);
+        p.line_segment([pos2(c.x + 0.5, c.y), pos2(c.x + 5.0, c.y + 7.0)], Stroke::new(2.2, col));
     } else {
-        p.text(c, egui::Align2::CENTER_CENTER, "♩", crate::look::regular(15.0), col);
+        p.text(c, egui::Align2::CENTER_CENTER, "♩", crate::look::regular(17.0), col);
     }
 }
