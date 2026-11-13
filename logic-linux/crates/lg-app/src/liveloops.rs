@@ -77,6 +77,9 @@ pub struct Cell {
     pub q_loop: u8,
     /// Audio cells: gain in dB (Normalize Cell Gain, cellgain.rs).
     pub gain_db: f32,
+    /// Takes (Recording Mode Takes, celltakes.rs) and the active one (its notes are `notes`).
+    pub takes: Vec<crate::celltakes::Take>,
+    pub take: usize,
 }
 
 impl Cell {
@@ -93,7 +96,7 @@ impl Cell {
 
 impl Default for Cell {
     fn default() -> Self {
-        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1, start: None, loop_start: 0, loop_len: None, q_loop: 0, gain_db: 0.0 }
+        Cell { name: String::new(), notes: Vec::new(), length: 3840, audio: None, muted: false, looped: true, reversed: false, speed: 1.0, transpose: 0, quantize: "Off".into(), quantize_start: "Global".into(), trigger: "Start/Stop".into(), play_from: "Start".into(), origin: None, follow: Default::default(), follow_count: 1, start: None, loop_start: 0, loop_len: None, q_loop: 0, gain_db: 0.0, takes: Vec::new(), take: 0 }
     }
 }
 
@@ -189,6 +192,8 @@ pub struct State {
     pub resuming: BTreeSet<usize>,
     /// The Normalize Gain dialog (cellgain.rs).
     pub norm: crate::cellgain::Dialog,
+    /// Rename Take: (cell, take, text).
+    pub take_rename: Option<((usize, usize), usize, String)>,
     pub grid_rect: Option<Rect>,
     /// A cell being dragged (from), copy with ⌥.
     pub drag: Option<(usize, usize)>,
@@ -1178,7 +1183,10 @@ fn finish_cell_recording(app: &mut App, end: u32) {
     let mode = app.live_loops.rec_mode.clone();
     let s = &mut app.live_loops;
     let cell = s.cells.entry((r.track, r.scene)).or_insert_with(|| Cell { name, length: len, ..Default::default() });
-    if mode == "Replace" || cell.notes.is_empty() {
+    if mode == "Takes" {
+        // each recording a new take
+        crate::celltakes::add_take(cell, notes, len);
+    } else if mode == "Replace" || cell.notes.is_empty() {
         cell.notes = notes;
         cell.length = len;
     } else {
@@ -1960,7 +1968,7 @@ fn submenu(app: &mut App, path: &str, item: &str, cell: Option<(usize, usize)>, 
 
 /// What the menus can run (others are greyed, as in the rest of Studio).
 fn handled(_path: &str, item: &str) -> bool {
-    let unbuilt = ["Create Pattern Cell", "Create Session Player Cell", "Takes", "Join Regions and Fill Cell", "Convert to Pattern Cell", "Replace with Session Player Cell", "Stem Splitter…", "Add to Browser…", "Export as Audio File…", "Color Cell by Track"];
+    let unbuilt = ["Create Pattern Cell", "Create Session Player Cell", "Join Regions and Fill Cell", "Convert to Pattern Cell", "Replace with Session Player Cell", "Stem Splitter…", "Add to Browser…", "Export as Audio File…", "Color Cell by Track"];
     if unbuilt.contains(&item) {
         return false;
     }
@@ -2488,7 +2496,8 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                     let fill = if active { base } else { look::mix(base, grid_bg(), 0.45) };
                     cp.rect_filled(r, 4.0, if hovered && !active { look::mix(fill, Color32::WHITE, 0.08) } else { fill });
                     // the name, then the notes (or waveform)
-                    let name_r = Rect::from_min_size(r.min + vec2(4.0, 2.0), vec2(r.width() - 8.0, 13.0));
+                    let tk = if c.takes.len() > 1 { 16.0 } else { 0.0 };
+                    let name_r = Rect::from_min_size(r.min + vec2(4.0 + tk, 2.0), vec2(r.width() - 8.0 - tk, 13.0));
                     cp.with_clip_rect(name_r).text(name_r.left_center(), Align2::LEFT_CENTER, &c.name, look::semibold(10.0), Color32::WHITE);
                     let inner = Rect::from_min_max(pos2(r.min.x + 3.0, name_r.max.y + 1.0), pos2(r.max.x - 3.0, r.max.y - 3.0));
                     let ink = if active { look::mix(base, Color32::BLACK, 0.5) } else { look::mix(base, Color32::WHITE, 0.45) };
@@ -2499,6 +2508,16 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
                         }
                     }
                     draw_preview(&cp, inner, c, ink, samples.as_ref());
+                    if c.takes.len() > 1 {
+                        // a take folder: the active take (upper left, opens the Take Folder
+                        // pop-up) and the take count (lower left)
+                        let badge = Rect::from_min_size(r.min + vec2(3.0, 2.5), vec2(14.0, 12.0));
+                        let bresp = ui.interact(badge, id.with("take"), Sense::click()).on_hover_text("Take Folder");
+                        cp.rect_filled(badge, 3.0, if bresp.hovered() { Color32::from_black_alpha(140) } else { Color32::from_black_alpha(90) });
+                        cp.text(badge.center(), Align2::CENTER_CENTER, format!("{}", c.take + 1), look::semibold(9.0), Color32::WHITE);
+                        cp.text(pos2(r.min.x + 5.0, r.max.y - 4.0), Align2::LEFT_BOTTOM, format!("{}", c.takes.len()), look::semibold(9.0), Color32::WHITE);
+                        egui::Popup::menu(&bresp).show(|ui| crate::celltakes::menu(app, ui, key));
+                    }
                     // the ring
                     let queued = play.next.is_some_and(|n| n.0 == sc) || app.live_loops.pending.contains(&key);
                     let stopping = active && play.current.is_some_and(|x| x.2.is_some());
@@ -2836,6 +2855,7 @@ pub fn show_grid(app: &mut App, ui: &mut egui::Ui, area: Rect, rows_top: f32) {
         ui.painter().rect_stroke(area.shrink(0.5), 2.0, Stroke::new(1.5, focus_blue()), egui::StrokeKind::Inside);
     }
     crate::cellgain::dialog(app, ui.ctx());
+    crate::celltakes::dialog(app, ui.ctx());
     // ---- the divider to the timeline (grid and tracks): drag to resize
     if app.live_loops.view == View::Both {
         let edge = Rect::from_min_max(pos2(area.max.x - 3.0, area.min.y), pos2(area.max.x + 3.0, area.max.y));

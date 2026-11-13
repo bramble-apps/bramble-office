@@ -177,6 +177,7 @@ pub mod sthints;
 mod stepinsp;
 mod cellinsp;
 mod cellgain;
+mod celltakes;
 mod celledit;
 mod cellbounce;
 mod scorecmd;
