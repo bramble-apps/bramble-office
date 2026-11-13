@@ -70,6 +70,7 @@ mod afsearch;
 mod trackimport;
 mod brfocus;
 mod cdburn;
+mod fcpxml;
 pub mod midifunc;
 pub mod midifx;
 mod midiwin;

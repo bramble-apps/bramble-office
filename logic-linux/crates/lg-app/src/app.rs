@@ -363,6 +363,8 @@ pub struct App {
     pub tim: crate::trackimport::State,
     /// The Browser Focus triangle (brfocus.rs).
     pub brf: crate::brfocus::State,
+    /// Final Cut Pro XML export and import (fcpxml.rs).
+    pub fcp: crate::fcpxml::State,
     pub pf_tab: usize,
     pub preview: crate::preview::Preview,
     /// Navigation, windows, screensets, the toolbar (nav.rs, screensets.rs, toolbar.rs).
@@ -577,6 +579,7 @@ impl App {
             afs: Default::default(),
             tim: Default::default(),
             brf: Default::default(),
+            fcp: Default::default(),
             pf_tab: 0,
             preview: Default::default(),
             nav: Default::default(),
@@ -1459,6 +1462,9 @@ impl App {
         if crate::envhub::command(self, ctx, name) || crate::convsampler::command(self, ctx, name) {
             return true;
         }
+        if crate::fcpxml::command(self, name) {
+            return true;
+        }
         if crate::trackimport::command(self, name) {
             return true;
         }
@@ -1981,6 +1987,7 @@ impl App {
         crate::live::window(self, &ctx);
         crate::playsurface::windows(self, &ctx);
         crate::transportx::frame(self, &ctx);
+        crate::fcpxml::window(self, &ctx);
         crate::pluginwin::window(self, &ctx);
         crate::midifx::window(self, &ctx);
         crate::artic::window(self, &ctx);
