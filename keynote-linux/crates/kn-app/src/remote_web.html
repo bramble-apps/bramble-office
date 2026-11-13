@@ -192,6 +192,35 @@ function sendMove(m) {
 }
 function sendNow(m) { queued = null; send(m); }
 
+// Next and Previous show at once on this device (the next picture is already here; the one
+// before comes from what was shown), and Keydeck's own state confirms or corrects it a moment
+// later. `back`: what was shown before each step forward. A state from before the tap that's
+// still on its way is skipped for a moment, so the picture doesn't flick back.
+let back = [], stale = null;
+const at = m => m.slide + ":" + m.step + ":" + m.playing;
+function go(dir) {
+  cmd(dir > 0 ? "next" : "prev");
+  if (!st.count) return;
+  if (dir > 0 && next) {
+    back.push({ st, cur, next });
+    if (back.length > 50) back.shift();
+    stale = { key: at(st), until: Date.now() + 1500 };
+    st = Object.assign({}, st, { optimistic: true });
+    cur = next; next = null;
+    render();
+  } else if (dir < 0 && back.length) {
+    const b = back.pop();
+    stale = { key: at(st), until: Date.now() + 1500 };
+    st = Object.assign({}, b.st, { optimistic: true }); cur = b.cur; next = b.next;
+    render();
+  }
+}
+addEventListener("keydown", e => {
+  if (intro || devices || drawing || !$("scrim").hidden) return;
+  if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); go(1); }
+  else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); go(-1); }
+});
+
 const aspect = () => st.aspect || 9 / 16;
 const pad = n => String(n).padStart(2, "0");
 function time() {
@@ -291,7 +320,7 @@ function renderLayout() {
   no.textContent = text || "No presenter notes";
   Object.assign(no.style, { background: invert ? "#fff" : "#000", color: text ? (invert ? "#000" : "#fff") : (invert ? "#0006" : "#fff6"), fontSize: (text ? notesSize : 15) + "px" });
   for (const e of [c, nl, nx, no]) e.hidden = true;
-  lay.classList.remove("gest"); no.classList.remove("gest"); c.classList.remove("gest");
+  lay.classList.remove("gest"); no.classList.remove("gest"); c.classList.remove("gest"); nx.classList.remove("gest");
   gestTarget = null;
   const show = (e, x, y, w, h) => { e.hidden = false; size(e, x, y, w, h); };
   if (layout === 1) {
@@ -323,6 +352,7 @@ function renderLayout() {
     gestTarget = c;
   }
   if (gestTarget) gestTarget.classList.add("gest");
+  if (!nx.hidden) nx.classList.add("gest");
 }
 
 // the slide area: a tap or a swipe to the left advances, a swipe to the right goes back, two
@@ -330,7 +360,8 @@ function renderLayout() {
 let gestTarget = null, g = null;
 const lay = $("lay");
 lay.addEventListener("pointerdown", e => {
-  if (!gestTarget || !gestTarget.contains(e.target)) return;
+  const nx = $("nxt");
+  if (!gestTarget || !(gestTarget.contains(e.target) || (!nx.hidden && nx.contains(e.target)))) return;
   if (!g) g = { ptrs: new Map(), fingers: 0, travel: [0, 0], twoDown: 0, moved: 0, hist: [] };
   g.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
   g.fingers = Math.max(g.fingers, g.ptrs.size);
@@ -352,11 +383,11 @@ function gestEnd(e, cancel) {
   const d = g; g = null;
   if (cancel) return;
   if (d.fingers >= 2) { if (d.twoDown > 120) cmd("stop"); return; }
-  if (d.moved < 18) { cmd("next"); return; }
+  if (d.moved < 18) { go(1); return; }
   const now = performance.now(), h = d.hist.filter(x => now - x[0] < 100);
   const v = h.length > 1 ? (h[h.length - 1][1] - h[0][1]) / Math.max(1, h[h.length - 1][0] - h[0][0]) * 1000 : 0;
-  if (d.travel[0] < -60 || v < -300) cmd("next");
-  if (d.travel[0] > 60 || v > 300) cmd("prev");
+  if (d.travel[0] < -60 || v < -300) go(1);
+  if (d.travel[0] > 60 || v > 300) go(-1);
 }
 lay.addEventListener("pointerup", e => gestEnd(e, false));
 lay.addEventListener("pointercancel", e => gestEnd(e, true));
@@ -442,8 +473,8 @@ function panEnd(e) {
 }
 ds.addEventListener("pointerup", panEnd);
 ds.addEventListener("pointercancel", panEnd);
-$("dprev").onclick = () => cmd("prev");
-$("dnext").onclick = () => cmd("next");
+$("dprev").onclick = () => go(-1);
+$("dnext").onclick = () => go(1);
 
 // ---- the bottom sheets
 function sheet(build) {
@@ -538,7 +569,14 @@ function connect() {
       case "disabled": conn = "disabled"; break;
       case "expired": conn = "expired"; es.close(); break;
       case "state": {
+        if (stale && Date.now() < stale.until && at(m) === stale.key) break;
+        stale = null;
         const was = st.playing === true;
+        if (!st.optimistic && back.length && at(m) !== at(st) && st.count) {
+          // moved from the computer (not this device): what was shown no longer leads back
+          const last = back[back.length - 1];
+          if (!last || at(last.st) !== at(m)) back = [];
+        }
         st = m; cur = m.current || null; next = m.next || null;
         if (m.playing === true && !was) showStarted = Date.now();
         if (m.playing !== true) showStarted = null;
