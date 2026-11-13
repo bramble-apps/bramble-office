@@ -533,7 +533,7 @@ pub fn style_of(app: &App, t: usize) -> nt::StaffStyle {
     let pitches: Vec<u8> = tr.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.pitch)).collect();
     let lname = tr.name.to_lowercase();
     if tr.kind == lg_core::TrackKind::Drummer || ["drum", "kit", "beat", "perc"].iter().any(|w| lname.contains(w)) {
-        return nt::StaffStyle::by_name("Drums").unwrap_or(nt::StaffStyle::ALL[0]);
+        return nt::StaffStyle::by_name("# Drums").unwrap_or(nt::StaffStyle::ALL[0]);
     }
     let piano = ["piano", "keys", "grand", "steinway", "rhodes", "clav", "organ", "harpsichord"].iter().any(|w| lname.contains(w));
     nt::StaffStyle::auto(&pitches, piano)
@@ -556,6 +556,20 @@ pub(crate) fn quant_of(app: &App, id: u64) -> (usize, bool, bool) {
 
 /// The tracks the Score shows: the score set, every MIDI track (Explode Folders), or the
 /// selected region's track.
+/// A track's user rests on a staff (Part box rests, kept as score symbols).
+pub fn user_rests(app: &App, id: u64, staff: usize) -> Vec<nt::UserRest> {
+    let Some(ts) = app.project.as_ref().and_then(|p| p.score.track(id)) else { return Vec::new() };
+    ts.symbols.iter().filter(|s| s.kind == SymbolKind::Rest && s.staff as usize == staff).filter_map(|s| Some(nt::UserRest { pos: s.tick, value: rest_value(&s.text)? })).collect()
+}
+
+/// A user rest symbol's value ("8 1": a dotted eighth).
+pub fn rest_value(text: &str) -> Option<nt::Value> {
+    let mut w = text.split_whitespace();
+    let base: u8 = w.next()?.parse().ok().filter(|b: &u8| b.is_power_of_two() && *b <= 128)?;
+    let dots: u8 = w.next().and_then(|d| d.parse().ok()).unwrap_or(0).min(2);
+    Some(nt::Value { base, dots })
+}
+
 /// The region's Max. Dots (Score inspector), 1 by default.
 pub fn max_dots_of(app: &App, id: u64) -> u8 {
     app.project.as_ref().and_then(|p| p.score.track(id)).map_or_else(|| crate::scoreattr::defaults().max_dots, |t| if t.max_dots == 0 { 1 } else { t.max_dots - 1 })
@@ -706,6 +720,7 @@ fn engrave_rows(app: &App, rows: &[Row]) -> Vec<Seg> {
                 opts.syncopation = synco;
                 opts.max_dots = max_dots_of(app, row.id);
                 opts.tuplets = crate::scoretuplet::specs(app, row.id);
+                opts.rests = user_rests(app, row.id, row.staff);
                 opts.no_overlap = p.score.track(row.id).map_or_else(|| crate::scoreattr::defaults().no_overlap, |x| !x.overlap);
                 let voices: Vec<u8> = match row.voice {
                     Some(v) => vec![v],
@@ -1567,7 +1582,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                 };
                 let ext = || score.styles().into_iter().find(|x| x.name == "Chord Extension").unwrap_or_else(|| score.style_for(s));
-                let text = SymText { style: score.style_for(s), auto: &auto, ext: &ext };
+                let text = SymText { style: score.style_for(s), auto: &auto, ext: &ext, clef_scale: fmt.clef_change };
                 if let Some(r) = draw_symbol(&mp, s, x, x2, bottom, sp, st.chord_size, &text) {
                     if st.sel_symbol == Some((row.id, si)) {
                         mp.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.2, sel_color), egui::StrokeKind::Outside);
@@ -2272,7 +2287,10 @@ fn insert_at(app: &mut App, st: &mut State, row: &Row, tick: f32, pos: i32, at: 
             }
             insert_note(app, row.t, tick_q, pitch, len, 80);
         }
-        Part::Rest(_) => app.tell("Rests are drawn by the Score itself (user rests aren't available yet)"),
+        Part::Rest(v) => {
+            // a user rest at the place (its value from the Part box, the dot button)
+            add_symbol(app, row.t, Symbol { tick: tick_q, kind: SymbolKind::Rest, text: format!("{} {}", VALUES[v].1, st.dotted as u8), len: 0, staff: row.staff as u8, ..Default::default() }, "Insert Rest");
+        }
         Part::NTuplet => {
             // on the note nearest the place (its start), else the place; Option: the last settings
             let at = nearest_note(app, row.t, tick_q).and_then(|(rix, i)| app.project.as_ref()?.tracks.get(row.t)?.regions.get(rix)?.notes.get(i).map(|n| n.pos)).filter(|&p| p.abs_diff(tick_q) < bar_t / 2).unwrap_or(tick_q);
@@ -2634,6 +2652,8 @@ pub(crate) struct SymText<'a> {
     pub auto: &'a dyn Fn(&str) -> String,
     /// The Chord Extension style.
     pub ext: &'a dyn Fn() -> lg_core::score::TextStyle,
+    /// Smaller Clef Changes (Clefs & Signatures): a clef change's size.
+    pub clef_scale: f32,
 }
 
 /// A chord symbol's lower line (root, letters before the first number), its raised extension
@@ -2685,6 +2705,8 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
         SymbolKind::AutoText => return Some(styled_text(p, s, pos2(x, top - 2.6 * sp), &(t.auto)(&s.text), t, sp, INK)),
         // (drawn with the notes it holds)
         SymbolKind::Tuplet => {}
+        // (the engraver writes a user rest; its place, for selecting and the Eraser)
+        SymbolKind::Rest => return Some(Rect::from_center_size(pos2(x + 0.6 * sp, bottom - 2.0 * sp), vec2(1.6 * sp, 3.0 * sp))),
         SymbolKind::ChordGrid => return crate::scoregrid::draw_symbol(p, s, x, top, sp, INK, REGION_PAPER),
         SymbolKind::Chord => {
             // root (and letters before the first number) on the line, the rest raised in the
@@ -2730,8 +2752,8 @@ fn draw_symbol(p: &egui::Painter, s: &Symbol, x: f32, x2: f32, bottom: f32, sp: 
                 nt::Clef::Tenor => (CCLEF, 3.0),
                 nt::Clef::Percussion => (PERC_CLEF, 2.0),
             };
-            // a clef change is drawn smaller, before the bar's first note
-            smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * 0.75, INK, false);
+            // a clef change is drawn smaller (Smaller Clef Changes), before the bar's first note
+            smufl(p, ch, pos2(x - 2.4 * sp, bottom - line * sp), sp * t.clef_scale, INK, false);
         }
     }
     None

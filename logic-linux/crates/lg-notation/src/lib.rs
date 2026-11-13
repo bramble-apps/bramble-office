@@ -445,6 +445,15 @@ impl Metre {
     }
 }
 
+/// A user rest (a Part box rest): written as its own value at its place, the automatic rests
+/// around it fitted to what's left; under a sounding note it stays invisible and splits the
+/// note's ties there (Logic's way to change how ties and dotted values are shown).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UserRest {
+    pub pos: u32,
+    pub value: Value,
+}
+
 /// What to engrave.
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -465,11 +474,13 @@ pub struct Options {
     /// No Overlap (region parameter, on by default): a chord shows the length of its shortest
     /// note, up to the next chord; off, its longest.
     pub no_overlap: bool,
+    /// User rests in the span.
+    pub rests: Vec<UserRest>,
 }
 
 impl Options {
     pub fn new(sig: (u8, u8), key: Key, quant: Quant, from: u32, to: u32) -> Options {
-        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1, tuplets: Vec::new(), no_overlap: true }
+        Options { sig, key, quant, from, to, interpretation: false, syncopation: false, max_dots: 1, tuplets: Vec::new(), no_overlap: true, rests: Vec::new() }
     }
 }
 
@@ -698,7 +709,31 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
             cut.push((a, e, None));
         }
     }
-    let segs = cut;
+    // user rests: their own segment in a gap; under a note only a split point
+    let mut ur: Vec<UserRest> = o.rests.iter().copied().filter(|r| r.pos >= o.from && r.pos < o.to).collect();
+    ur.sort_by_key(|r| r.pos);
+    let mut segs: Vec<(u32, u32, Option<usize>, Option<Value>)> = Vec::new();
+    for (s, e, c) in cut {
+        if c.is_some() {
+            segs.push((s, e, c, None));
+            continue;
+        }
+        let mut a = s;
+        for r in ur.iter().filter(|r| r.pos >= s && r.pos < e) {
+            if r.pos < a {
+                continue;
+            }
+            if r.pos > a {
+                segs.push((a, r.pos, None, None));
+            }
+            let b = (r.pos + r.value.ticks()).min(e);
+            segs.push((r.pos, b, None, Some(r.value)));
+            a = b;
+        }
+        if a < e {
+            segs.push((a, e, None, None));
+        }
+    }
     let spell_head = |n: NoteIn, tie: bool| -> Head {
         let sp = o.key.spell_pref(n.pitch, n.spell);
         let (pos, cross) = if clef == Clef::Percussion { drum_position(n.pitch) } else { (sp.step - clef.bottom_line(), false) };
@@ -737,13 +772,20 @@ pub fn engrave(notes: &[NoteIn], clef: Clef, o: &Options) -> Voice {
         }
         tuplet_items.push((ti, items));
     }
-    for (s, e, chord) in segs {
+    for (s, e, chord, user) in segs {
+        if let Some(value) = user {
+            let bar = (s - o.from) / m.bar;
+            v.items.push(Item { tick: s, dur: e - s, value, heads: vec![], stem_up: true, beam: None, triplet: false, full_bar: false, bar, stem_hidden: false });
+            continue;
+        }
         let mut p = s;
         while p < e {
             let bar = (p - o.from) / m.bar;
             let bar0 = o.from + bar * m.bar;
             let bar_end = bar0 + m.bar;
-            let end = e.min(bar_end);
+            // (a user rest under the note splits it there)
+            let split = if chord.is_some() { ur.iter().map(|r| r.pos).filter(|&x| x > p && x < e).min() } else { None };
+            let end = e.min(bar_end).min(split.unwrap_or(u32::MAX));
             if chord.is_none() && p == bar0 && end == bar_end {
                 v.items.push(Item { tick: p, dur: m.bar, value: Value { base: 1, dots: 0 }, heads: vec![], stem_up: true, beam: None, triplet: false, full_bar: true, bar, stem_hidden: false });
                 p = end;
@@ -1039,27 +1081,63 @@ pub struct StaffStyle {
 }
 
 impl StaffStyle {
-    pub const ALL: [StaffStyle; 16] = [
+    pub const ALL: [StaffStyle; 34] = [
         StaffStyle { name: "Treble", clefs: &[Clef::Treble], split: 0, transpose: 0, octave: 0 },
-        StaffStyle { name: "Treble 8va", clefs: &[Clef::Treble], split: 0, transpose: -12, octave: 1 },
-        StaffStyle { name: "Treble 8vb", clefs: &[Clef::Treble], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "Treble +8", clefs: &[Clef::Treble], split: 0, transpose: -12, octave: 1 },
+        StaffStyle { name: "Treble -8", clefs: &[Clef::Treble], split: 0, transpose: 12, octave: -1 },
         StaffStyle { name: "Bass", clefs: &[Clef::Bass], split: 0, transpose: 0, octave: 0 },
         StaffStyle { name: "Bass 8vb", clefs: &[Clef::Bass], split: 0, transpose: 12, octave: -1 },
         StaffStyle { name: "Piano", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
         StaffStyle { name: "Alto Clef", clefs: &[Clef::Alto], split: 0, transpose: 0, octave: 0 },
         StaffStyle { name: "Tenor Clef", clefs: &[Clef::Tenor], split: 0, transpose: 0, octave: 0 },
-        StaffStyle { name: "Drums", clefs: &[Clef::Percussion], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "# Drums", clefs: &[Clef::Percussion], split: 0, transpose: 0, octave: 0 },
         StaffStyle { name: "Guitar", clefs: &[Clef::Treble], split: 0, transpose: 12, octave: -1 },
         StaffStyle { name: "Bass Guitar", clefs: &[Clef::Bass], split: 0, transpose: 12, octave: -1 },
-        StaffStyle { name: "B♭ Trumpet", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
+        StaffStyle { name: "Trumpet in B♭", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
         StaffStyle { name: "B♭ Clarinet", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
-        StaffStyle { name: "E♭ Alto Sax", clefs: &[Clef::Treble], split: 0, transpose: 9, octave: 0 },
-        StaffStyle { name: "B♭ Tenor Sax", clefs: &[Clef::Treble], split: 0, transpose: 14, octave: 0 },
-        StaffStyle { name: "F Horn", clefs: &[Clef::Treble], split: 0, transpose: 7, octave: 0 },
+        StaffStyle { name: "Alto Sax", clefs: &[Clef::Treble], split: 0, transpose: 9, octave: 0 },
+        StaffStyle { name: "Tenor Sax", clefs: &[Clef::Treble], split: 0, transpose: 14, octave: 0 },
+        StaffStyle { name: "Horn in F", clefs: &[Clef::Treble], split: 0, transpose: 7, octave: 0 },
+        // (Logic's other predefined styles)
+        StaffStyle { name: "Lead Sheet", clefs: &[Clef::Treble], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Baritone Sax", clefs: &[Clef::Bass], split: 0, transpose: 21, octave: 0 },
+        StaffStyle { name: "Soprano Sax", clefs: &[Clef::Treble], split: 0, transpose: 2, octave: 0 },
+        StaffStyle { name: "Contrabass", clefs: &[Clef::Bass], split: 0, transpose: 12, octave: -1 },
+        StaffStyle { name: "Horn in E♭", clefs: &[Clef::Treble], split: 0, transpose: -3, octave: 0 },
+        StaffStyle { name: "Piccolo", clefs: &[Clef::Treble], split: 0, transpose: -12, octave: 0 },
+        StaffStyle { name: "Trumpet in A", clefs: &[Clef::Treble], split: 0, transpose: 3, octave: 0 },
+        StaffStyle { name: "Viola", clefs: &[Clef::Alto], split: 0, transpose: 0, octave: 0 },
+        StaffStyle { name: "Violoncello", clefs: &[Clef::Bass], split: 0, transpose: 0, octave: 0 },
+        // polyphonic styles: staffs split by "/", each staff's voices by "+", the numbers are
+        // the voices' MIDI channels (StaffStyle::channel_layout)
+        StaffStyle { name: "Piano 1/3", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Piano 1/3+4", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Piano 1+2/3", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Piano 1+2/3+4", clefs: &[Clef::Treble, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Organ 1/1/5", clefs: &[Clef::Treble, Clef::Bass, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Organ 1/3/5", clefs: &[Clef::Treble, Clef::Bass, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Organ 1/3+4/5", clefs: &[Clef::Treble, Clef::Bass, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Organ 1+2/3/5", clefs: &[Clef::Treble, Clef::Bass, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+        StaffStyle { name: "Organ 1+2/3+4/5", clefs: &[Clef::Treble, Clef::Bass, Clef::Bass], split: 60, transpose: 0, octave: 0 },
+    ];
+
+    /// Names earlier Studio versions saved, and the predefined style each became.
+    const RENAMED: [(&'static str, &'static str); 7] = [
+        ("Treble 8va", "Treble +8"), ("Treble 8vb", "Treble -8"), ("Drums", "# Drums"), ("B♭ Trumpet", "Trumpet in B♭"),
+        ("E♭ Alto Sax", "Alto Sax"), ("B♭ Tenor Sax", "Tenor Sax"), ("F Horn", "Horn in F"),
     ];
 
     pub fn by_name(name: &str) -> Option<StaffStyle> {
+        let name = StaffStyle::RENAMED.iter().find(|r| r.0 == name).map_or(name, |r| r.1);
         StaffStyle::ALL.iter().copied().find(|s| s.name == name)
+    }
+
+    /// A polyphonic style's voices from its name ("Piano 1+2/3": staff 1 takes channels 1 and
+    /// 2, staff 2 channel 3): per staff, the MIDI channels (1–16) of its voices. None for others.
+    pub fn channel_layout(self) -> Option<Vec<Vec<u8>>> {
+        let rest = self.name.strip_prefix("Piano ").or_else(|| self.name.strip_prefix("Organ "))?;
+        let staffs: Option<Vec<Vec<u8>>> = rest.split('/').map(|st| st.split('+').map(|c| c.parse::<u8>().ok().filter(|c| (1..=16).contains(c))).collect()).collect();
+        staffs.filter(|s| s.len() == self.clefs.len())
     }
 
     /// Logic's automatic choice (by the notes' range, a piano part on the grand staff).
@@ -1567,8 +1645,35 @@ mod tests {
     }
 
     #[test]
+    fn user_rests() {
+        let o = opts(1);
+        // an eighth user rest on beat 2 of an empty bar: quarter rest, the eighth, then the rest
+        let mut o2 = o.clone();
+        o2.rests = vec![UserRest { pos: 960, value: Value { base: 8, dots: 0 } }];
+        let v = engrave(&[], Clef::Treble, &o2);
+        let r: Vec<(u32, u8)> = v.items.iter().map(|i| (i.tick, i.value.base)).collect();
+        assert_eq!(&r[..2], &[(0, 4), (960, 8)]);
+        assert!(v.items.iter().all(|i| i.is_rest() && !i.full_bar));
+        assert_eq!(v.items.iter().map(|i| i.dur).sum::<u32>(), 3840);
+        // a dotted quarter: one dotted value; a short user rest at its dot splits it into a
+        // quarter tied to an eighth (the rest stays invisible)
+        let note = [n(0, 60, 0, 1440)];
+        let plain = engrave(&note, Clef::Treble, &o);
+        assert_eq!((plain.items[0].value.base, plain.items[0].value.dots), (4, 1));
+        let mut o3 = o.clone();
+        o3.rests = vec![UserRest { pos: 960, value: Value { base: 32, dots: 0 } }];
+        let v = engrave(&note, Clef::Treble, &o3);
+        let notes: Vec<&Item> = v.items.iter().filter(|i| !i.is_rest()).collect();
+        assert_eq!(notes.len(), 2);
+        assert_eq!((notes[0].value.base, notes[0].value.dots, notes[0].heads[0].tie), (4, 0, true));
+        assert_eq!((notes[1].tick, notes[1].value.base, notes[1].heads[0].tie), (960, 8, false));
+        assert!(!v.items.iter().any(|i| i.is_rest() && i.value.base == 32));
+    }
+
+    #[test]
     fn staff_styles() {
         let t = StaffStyle::by_name("B♭ Trumpet").unwrap();
+        assert_eq!(t.name, "Trumpet in B♭");
         assert_eq!(t.written(60), 62);
         // concert E♭ major is written F major for a B♭ instrument
         assert_eq!(t.written_key(Key::parse("Eb major")).fifths, -1);
@@ -1576,6 +1681,17 @@ mod tests {
         assert_eq!(sax.written_key(Key::default()).fifths, 3);
         let p = StaffStyle::by_name("Piano").unwrap();
         assert_eq!((p.staff_of(60), p.staff_of(59)), (0, 1));
+        assert_eq!(p.channel_layout(), None);
+        assert_eq!(StaffStyle::by_name("Piano 1+2/3+4").unwrap().channel_layout(), Some(vec![vec![1, 2], vec![3, 4]]));
+        let organ = StaffStyle::by_name("Organ 1/3+4/5").unwrap();
+        assert_eq!(organ.clefs, &[Clef::Treble, Clef::Bass, Clef::Bass]);
+        assert_eq!(organ.channel_layout(), Some(vec![vec![1], vec![3, 4], vec![5]]));
+        for (n, t) in [("Baritone Sax", 21), ("Soprano Sax", 2), ("Horn in E♭", -3), ("Horn in F", 7), ("Trumpet in A", 3), ("Piccolo", -12), ("Tenor Sax", 14), ("Alto Sax", 9)] {
+            assert_eq!(StaffStyle::by_name(n).unwrap().transpose, t, "{n}");
+        }
+        assert_eq!(StaffStyle::by_name("Viola").unwrap().clefs, &[Clef::Alto]);
+        assert_eq!(StaffStyle::by_name("Violoncello").unwrap().clefs, &[Clef::Bass]);
+        assert_eq!(StaffStyle::by_name("Drums").unwrap().name, "# Drums");
         assert_eq!(StaffStyle::auto(&[36, 40], false).name, "Bass");
         // the alto clef's middle line is middle C
         assert_eq!(pitch_at(Clef::Alto, 4, Key::default()), 60);

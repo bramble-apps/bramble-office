@@ -158,7 +158,7 @@ pub fn import_doc(app: &mut App, doc: lg_notation::musicxml_in::Imported, file: 
             [nt::Clef::Bass] => "Bass",
             [nt::Clef::Alto] => "Alto Clef",
             [nt::Clef::Tenor] => "Tenor Clef",
-            [nt::Clef::Percussion] => "Drums",
+            [nt::Clef::Percussion] => "# Drums",
             _ => "",
         };
         let ts = p.score.track_mut(id);

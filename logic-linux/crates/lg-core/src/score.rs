@@ -95,6 +95,8 @@ pub enum SymbolKind {
     /// A chord grid: `text` is the grid (chordgrid::Grid::encode); `style` its scale
     /// ("reduced", "", "enlarged"), `align` 1 hides the chord name, dx / dy its offset.
     ChordGrid,
+    /// A user rest (Part box rest): `text` is its value, "base dots" ("8 1" a dotted eighth).
+    Rest,
 }
 
 /// A tuplet symbol's settings, kept in its text: `n` notes of 1/`base` in the time of `of`;
@@ -498,8 +500,9 @@ fn unesc(s: &str) -> String {
     out
 }
 
-const KINDS: [(SymbolKind, &str); 14] = [
+const KINDS: [(SymbolKind, &str); 15] = [
     (SymbolKind::Tuplet, "tuplet"),
+    (SymbolKind::Rest, "rest"),
     (SymbolKind::ChordGrid, "grid"),
     (SymbolKind::Dynamic, "dyn"), (SymbolKind::Text, "text"), (SymbolKind::Lyric, "lyric"), (SymbolKind::Chord, "chord"), (SymbolKind::Crescendo, "cresc"), (SymbolKind::Decrescendo, "decresc"), (SymbolKind::SlurUp, "slurup"), (SymbolKind::SlurDown, "slurdown"), (SymbolKind::Clef, "clef"), (SymbolKind::Ornament, "orn"), (SymbolKind::AutoText, "auto"), (SymbolKind::Text, "text"),
 ];

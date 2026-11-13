@@ -96,7 +96,12 @@ pub struct Fmt {
     pub keys: Show,
     pub times: Show,
     pub hide_bar_lines: bool,
+    /// Smaller Clef Changes: the size of every clef but a staff's first (1.0 = full size).
+    pub clef_change: f32,
 }
+
+/// Smaller Clef Changes' steps: each one an eighth smaller than the staff's first clef.
+pub const SMALLER_CLEFS: [&str; 5] = ["0", "-1", "-2", "-3", "-4"];
 
 fn g(v: &Values, sub: &str, l: &str) -> String {
     v.get(&format!("Score / {sub} / {l}"))
@@ -155,6 +160,7 @@ pub fn fmt(v: &Values) -> Fmt {
         keys: Show::parse(&g(v, cs, "Key Signatures:")),
         times: Show::parse(&g(v, cs, "Time Signatures:")),
         hide_bar_lines: on(cs, "Hide bar lines"),
+        clef_change: 1.0 - 0.125 * SMALLER_CLEFS.iter().position(|x| *x == g(v, cs, "Smaller Clef Changes:")).unwrap_or(2) as f32,
     }
 }
 
@@ -362,6 +368,8 @@ pub fn pane(ui: &mut egui::Ui, v: &mut Values, sub: &str) {
                 ui.end_row();
                 popup(ui, v, cs, "Time Signatures:", &SHOW, true);
                 ui.end_row();
+                popup(ui, v, cs, "Smaller Clef Changes:", &SMALLER_CLEFS, true);
+                ui.end_row();
             });
             check(ui, v, cs, "Hide bar lines", true);
             ui.label(egui::RichText::new("Hide bar lines hides the automatic bar lines; the final double bar line stays.").small().color(crate::look::text_dim()));
@@ -424,5 +432,11 @@ mod tests {
         assert!(Show::FirstEveryPage.on(true, false) && !Show::FirstEveryPage.on(false, false));
         assert!(Show::FirstPage1.on(true, true) && !Show::FirstPage1.on(true, false) && !Show::Hide.on(true, true));
         assert!(today().len() == 10);
+        // Smaller Clef Changes: -2 by default (three quarters), 0 full size
+        assert_eq!(f.clef_change, 0.75);
+        set(&mut v, "Score / Clefs & Signatures / Smaller Clef Changes:", "0");
+        assert_eq!(fmt(&v).clef_change, 1.0);
+        set(&mut v, "Score / Clefs & Signatures / Smaller Clef Changes:", "-4");
+        assert_eq!(fmt(&v).clef_change, 0.5);
     }
 }
