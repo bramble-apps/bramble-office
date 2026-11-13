@@ -59,7 +59,9 @@ impl Tool {
     }
 
     pub const TRACKS: [Tool; 14] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Text, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Zoom, Tool::Fade, Tool::Automation, Tool::Marquee, Tool::Flex, Tool::Gain];
-    pub const PIANO_ROLL: [Tool; 14] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Zoom, Tool::Quantize, Tool::Velocity, Tool::Automation, Tool::Marquee, Tool::Brush, Tool::Finger];
+    /// (in the order of Logic's Piano Roll Tool menu; Studio's Solo and Marquee where the
+    /// Tracks area's menu has them)
+    pub const PIANO_ROLL: [Tool; 14] = [Tool::Pointer, Tool::Pencil, Tool::Eraser, Tool::Finger, Tool::Scissors, Tool::Glue, Tool::Solo, Tool::Mute, Tool::Quantize, Tool::Velocity, Tool::Zoom, Tool::Automation, Tool::Marquee, Tool::Brush];
 
     pub fn key(self) -> &'static str {
         match self {

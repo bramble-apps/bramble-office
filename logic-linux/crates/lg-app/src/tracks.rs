@@ -1077,16 +1077,13 @@ fn tool_menu(app: &mut App, ui: &mut egui::Ui) {
     // (the Pointer tool, first, under the pointer)
     let area = egui::Area::new(egui::Id::unique("tool-menu")).fixed_pos(at - vec2(24.0, 14.0)).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
-            ui.set_min_width(200.0);
-            for t in tools {
-                if ui.add(egui::Button::selectable(cur == *t, format!("{}  {}", crate::glyphs::tool(*t), t.name())).shortcut_text(t.key())).clicked() {
-                    if roll {
-                        app.roll_tool = *t;
-                    } else {
-                        app.tool = *t;
-                    }
-                    app.tool_menu_open = false;
+            if let Some(t) = crate::rolltools::menu_rows(ui, tools, cur) {
+                if roll {
+                    app.roll_tool = t;
+                } else {
+                    app.tool = t;
                 }
+                app.tool_menu_open = false;
             }
         });
     });

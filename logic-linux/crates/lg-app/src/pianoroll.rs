@@ -13,6 +13,9 @@ use crate::look;
 const TABS_H: f32 = 40.0;
 const RULER_H: f32 = 34.0;
 const KEYS_W: f32 = 56.0;
+/// The division lines show (and Smart snap uses them) once they're this far apart (points;
+/// lg_core::regions::snap_grid's min_px as rollsnap.rs passes it).
+const DIVISION_MIN_PX: f32 = 8.0;
 /// Logic's Piano Roll bar: 40 pt (ui-tracks-with-pianoroll.png).
 const LOCAL_H: f32 = 40.0;
 const ROLL_INSPECTOR_W: f32 = 220.0;
@@ -100,9 +103,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     }
     let rows = Rows { top: if app.midi.collapse { rows.top } else { app.roll_top }, ..rows };
     let (sx, bw) = (app.roll_scroll_x, app.roll_bar_w);
-    let x_of = move |tick: f32| grid.min.x + (tick / bar_t - sx) * bw;
-    let tick_at = move |x: f32| (x - grid.min.x) / bw * bar_t + sx * bar_t;
+    // (one time axis for drawing and clicks: rolltools.rs)
+    let axis = crate::rolltools::Axis { left: grid.min.x, scroll: sx, bar_w: bw, bar_t };
+    let x_of = move |tick: f32| axis.x_of(tick);
+    let tick_at = move |x: f32| axis.tick_at(x);
     let ppt = bw / bar_t;
+    // (a physical pixel, in points; lines and note starts are drawn in the pixel their
+    // position falls in, so a click in that pixel is on them)
+    let px = 1.0 / ui.ctx().pixels_per_point();
+    let px_floor = move |x: f32| (x / px).floor() * px;
     let gp = ui.painter_at(grid);
     let kp = ui.painter_at(keys);
     // the keyboard's white keys under everything
@@ -156,11 +165,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     rp.rect_filled(ruler, 0.0, look::header_bg());
     let beats = app.project.as_ref().map_or(4, |p| p.signature.0) as i32;
     let first = app.roll_scroll_x.floor() as i32;
+    let division = (lg_core::events::PPQ / 4) as f32;
+    let division_w = division * ppt;
     for b in first..first + (grid.width() / app.roll_bar_w).ceil() as i32 + 1 {
         for k in 0..beats {
             let x = x_of(b as f32 * bar_t + k as f32 * bar_t / beats as f32);
             let strong = k == 0;
             gp.vline(x, grid.y_range(), Stroke::new(1.0, if strong { look::line() } else { look::grid_line() }));
+            // the divisions between the beats, where Smart snap puts notes (as Logic: shown
+            // once they're far enough apart to snap to)
+            if division_w >= DIVISION_MIN_PX {
+                let n = (bar_t / beats as f32 / division).round() as i32;
+                for d in 1..n {
+                    let xd = x_of(b as f32 * bar_t + k as f32 * bar_t / beats as f32 + d as f32 * division);
+                    gp.vline(xd, grid.y_range(), Stroke::new(1.0, look::grid_line().gamma_multiply(0.5)));
+                }
+            }
             if strong {
                 rp.text(pos2(x + 3.0, ruler.min.y + 7.0), Align2::LEFT_CENTER, format!("{}", b + 1), look::semibold(11.0), look::text());
             } else if app.roll_bar_w > 160.0 {
@@ -181,6 +201,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // the selection; the other tools as Logic's (Pencil, Eraser, Scissors, Join, Quantize,
     // Velocity, Brush)
     let bg = ui.interact(grid, ui.scope_id().with("roll-bg"), Sense::click_and_drag());
+    // (a click or a drag starts where the button went down, not where egui reports it: a few
+    // points on for a drag, the release for a click)
+    let press = crate::rolltools::press_pos(ui, &bg);
+    let snap_at = |app: &App, ctx: &egui::Context, x: f32| axis.snap_floor(x, crate::rollsnap::grid(app, ctx, ppt), px);
     if bg.secondary_clicked() {
         if let Some(pp) = bg.interact_pointer_pos() {
             app.midi.grid_click = Some((tick_at(pp.x).max(0.0) as u32, rows.pitch_at(pp.y)));
@@ -196,7 +220,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     let mut note_rects: Vec<(usize, Rect)> = Vec::new();
     for (k, n) in region.notes.iter().enumerate() {
         let Some(y) = rows.note_y(n.pitch) else { continue };
-        let r = Rect::from_min_max(pos2(x_of(n.pos as f32), y - ROW + 1.5), pos2(x_of((n.pos + n.len) as f32).max(x_of(n.pos as f32) + 3.0), y - 1.5));
+        // (its start in the same pixel as the grid line it's on)
+        let (x0, x1) = (px_floor(x_of(n.pos as f32)), px_floor(x_of((n.pos + n.len) as f32)));
+        let r = Rect::from_min_max(pos2(x0, y - ROW + 1.5), pos2(x1.max(x0 + 3.0), y - 1.5));
         if !r.intersects(grid) {
             continue;
         }
@@ -403,13 +429,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     } else if bg.drag_started() && matches!(tool, Tool::Brush | Tool::Pencil) {
         // Brush (and Pencil with Shift): paint notes (or the brush pattern) along the drag at
         // the Time Quantize steps; Pencil: a new note whose length follows the drag
-        if let Some(pp) = bg.interact_pointer_pos() {
+        if let Some(pp) = press {
             let brush = tool == Tool::Brush || shift_down;
             app.checkpoint(if brush { "Brush Notes" } else { "Create Note" });
             let pitch = rows.pitch_at(pp.y);
             let step = if app.roll_quantize > 0 { app.roll_quantize } else { sixteenth as u32 };
             if !brush {
-                let at = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32;
+                let at = snap_at(app, ui.ctx(), pp.x) as u32;
                 let (len, vel) = app.midi.default_note;
                 if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)?.regions.get_mut(ri)) {
                     rg.notes.push(lg_core::events::Note { channel: 0, pitch, velocity: vel, pos: at, len, muted: false });
@@ -457,7 +483,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     // the pitch follows the pointer (Shift, or the Pencil: the first pitch)
                     let fixed = fixed || shift_down;
                     let row = if fixed { rows.row_of(pitch).map_or(rows.row_at(pp.y), |r| r + 0.5) } else { rows.row_at(pp.y) };
-                    let steps = crate::rolltools::brush_steps(last, tick_at(pp.x).max(0.0) as u32, row, step);
+                    // (the first step where the button went down)
+                    let (pp, row) = match (last, press) {
+                        (None, Some(o)) => (o, if fixed { row } else { rows.row_at(o.y) }),
+                        _ => (pp, row),
+                    };
+                    let steps = crate::rolltools::brush_steps(last, axis.snap_floor(pp.x, Some(step as f32), px) as u32, row, step);
                     let mut last = last;
                     for (at, row) in steps {
                         last = Some((at, row));
@@ -498,8 +529,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         app.load_engine();
     }
     if pressed_note.is_none() && bg.double_clicked() {
-        if let Some(pp) = bg.interact_pointer_pos() {
-            let tick = crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt);
+        if let Some(pp) = press {
+            let tick = snap_at(app, ui.ctx(), pp.x);
             let pitch = rows.pitch_at(pp.y);
             app.checkpoint("Create Note");
             if let Some(rg) = app.project.as_mut().and_then(|p| p.tracks.get_mut(ti)).and_then(|t| t.regions.get_mut(ri)) {
@@ -511,10 +542,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         }
     } else if pressed_note.is_none() && bg.clicked() {
         if tool == Tool::Pencil {
-            if let Some(pp) = bg.interact_pointer_pos() {
-                // (Control-Shift: exactly where clicked, Snap ignored)
+            if let Some(pp) = press {
+                // (Control-Shift: exactly where clicked, Snap ignored; else the grid line at or
+                // before the Pencil's tip)
                 let exact = ui.input(|i| i.modifiers.ctrl && i.modifiers.shift);
-                let at = if exact { tick_at(pp.x).max(0.0) as u32 } else { crate::rollsnap::floor(app, ui.ctx(), tick_at(pp.x), ppt) as u32 };
+                let at = if exact { tick_at(pp.x).max(0.0) as u32 } else { snap_at(app, ui.ctx(), pp.x) as u32 };
                 let pitch = rows.pitch_at(pp.y);
                 let (len, vel) = app.midi.default_note;
                 crate::midifunc::edit(app, "Create Note", |notes, sel, _| {
