@@ -1,6 +1,6 @@
-//! Logic's New Tracks dialog (⌥⌘N, the + over the track headers): the Audio / MIDI / Pattern /
-//! Session Player buttons at the top with their choices (Mic or Line, Guitar or Bass; Software
-//! Instrument, External MIDI; Drummer, Bass Player, Keyboard Player), the Details area behind
+//! Logic 13's Create New Track dialog (⌥⌘N, the + over the track headers): the MIDI / Pattern /
+//! Session Player / Audio cards with their own choices (Software Instrument, External MIDI;
+//! Drummer, Bass Player, Keyboard Player; Mic or Line, Guitar or Bass), the Details area behind
 //! its disclosure arrow (searchable Audio Input and Output with Ascending, the devices with an
 //! arrow to the Audio settings, Load Default Patch, Open Browser, Input Monitoring, Record
 //! Enable; Instrument, Multi-timbral; Use External Instrument plug-in, MIDI Destination with
@@ -76,12 +76,17 @@ pub struct Details {
     pub style: usize,
     pub default_chords: bool,
     pub open_editor: bool,
+    /// Each card's own choice, kept while another card is chosen (MIDI, Pattern, Session Player,
+    /// Audio; Logic shows it lightly filled on the cards not chosen).
+    pub remembered: [usize; 4],
     search: String,
+    /// The Number of tracks to create field's text while typing.
+    count_text: Option<String>,
 }
 
 impl Default for Details {
     fn default() -> Self {
-        Details { open: false, main: Main::Midi, sub: 0, input: Input::Mono0, input_ascending: false, output: Out::Stereo, output_ascending: false, load_default_patch: true, open_browser: false, monitoring: false, record_enable: false, instrument: Inst::DefaultPatch, multi_timbral: false, parts: 2, external_plugin: false, midi_port: String::new(), midi_channel: 1, midi_ascending: true, style: 0, default_chords: true, open_editor: true, search: String::new() }
+        Details { open: false, main: Main::Midi, sub: 0, input: Input::Mono0, input_ascending: false, output: Out::Stereo, output_ascending: false, load_default_patch: true, open_browser: false, monitoring: false, record_enable: false, instrument: Inst::DefaultPatch, multi_timbral: false, parts: 2, external_plugin: false, midi_port: String::new(), midi_channel: 1, midi_ascending: true, style: 0, default_chords: true, open_editor: true, remembered: [0; 4], search: String::new(), count_text: None }
     }
 }
 
@@ -108,10 +113,45 @@ impl Details {
             Kind::Keys => (Main::Player, 2),
         };
     }
+    /// Chooses a card, with the choice it had last.
+    pub fn choose_card(&mut self, m: Main) {
+        if self.main != m {
+            self.main = m;
+            self.sub = self.remembered[card(m)].min(subs(m).len() - 1);
+            self.style = 0;
+        }
+    }
+    /// Chooses a card's option.
+    pub fn choose(&mut self, m: Main, k: usize) {
+        if self.main != m || self.sub != k {
+            self.style = 0;
+        }
+        self.main = m;
+        self.sub = k.min(subs(m).len() - 1);
+        self.remembered[card(m)] = self.sub;
+    }
+    /// The arrow keys: left/right go to the next card, up/down to the next option on the card.
+    pub fn arrow(&mut self, dx: i32, dy: i32) {
+        if dx != 0 {
+            let i = (card(self.main) as i32 + dx).clamp(0, 3) as usize;
+            self.choose_card(CARDS[i].0);
+        }
+        if dy != 0 {
+            let n = subs(self.main).len() as i32;
+            self.choose(self.main, (self.sub as i32 + dy).clamp(0, n - 1) as usize);
+        }
+    }
     /// External MIDI chosen (MIDI or Pattern).
     pub fn external(&self) -> bool {
         matches!(self.main, Main::Midi | Main::Pattern) && self.sub == 1
     }
+}
+
+/// The cards in Logic's order: (type, name).
+const CARDS: [(Main, &str); 4] = [(Main::Midi, "MIDI"), (Main::Pattern, "Pattern"), (Main::Player, "Session Player"), (Main::Audio, "Audio")];
+
+fn card(m: Main) -> usize {
+    CARDS.iter().position(|c| c.0 == m).unwrap_or(0)
 }
 
 fn subs(m: Main) -> &'static [&'static str] {
@@ -197,6 +237,46 @@ fn instruments() -> Vec<(Inst, String)> {
     v
 }
 
+// Logic 13's Create New Track dialog, measured on its screenshot (points): 930 wide, the title
+// 13.75 from the top, four 212×228 cards (radius 16, 13 apart, 21.5 in) from 45, each with a 56
+// circle 16 in, the name centred at 90.75 and 175×28 options (radius 6) every 34 from 112; the
+// Details row at 311.5, the bottom row (? · Number of tracks to create · Cancel Create) at 353.
+const W: f32 = 930.0;
+const CARD_W: f32 = 212.0;
+const CARD_H: f32 = 228.0;
+const CARD_GAP: f32 = 13.0;
+const CARD_TOP: f32 = 45.0;
+const OPT_W: f32 = 175.0;
+const OPT_H: f32 = 28.0;
+
+fn rgb(dark: u32, light: u32) -> Color32 {
+    kn_ui::theme::rgb(if kn_ui::theme::is_light() { light } else { dark })
+}
+fn dialog_bg() -> Color32 {
+    rgb(0x262523, 0xececec)
+}
+fn card_bg() -> Color32 {
+    rgb(0x3b3a38, 0xf6f6f6)
+}
+fn option_line() -> Color32 {
+    rgb(0x464543, 0xd4d4d4)
+}
+fn option_kept() -> Color32 {
+    rgb(0x43423f, 0xe4e4e4)
+}
+fn strong_text() -> Color32 {
+    rgb(0xffffff, 0x1d1d1f)
+}
+/// The card's circle colour and its selection colour (the border and the chosen option).
+fn card_colors(m: Main) -> (Color32, Color32) {
+    match m {
+        Main::Midi => (Color32::from_rgb(35, 153, 65), Color32::from_rgb(75, 151, 76)),
+        Main::Pattern => (Color32::from_rgb(73, 71, 179), Color32::from_rgb(98, 96, 196)),
+        Main::Player => (Color32::from_rgb(179, 149, 0), Color32::from_rgb(170, 144, 32)),
+        Main::Audio => (Color32::from_rgb(8, 106, 204), Color32::from_rgb(44, 118, 210)),
+    }
+}
+
 pub fn sheet(app: &mut App, ctx: &egui::Context) {
     if !app.new_track_open {
         return;
@@ -205,98 +285,177 @@ pub fn sheet(app: &mut App, ctx: &egui::Context) {
     if app.tm.nt.kind() != app.new_track_kind {
         let k = app.new_track_kind;
         app.tm.nt.set_kind(k);
+        app.tm.nt.remembered[card(app.tm.nt.main)] = app.tm.nt.sub;
     }
     let mut d = app.tm.nt.clone();
     let mut create = false;
     let mut cancel = false;
+    let mut help = false;
     let mut open_audio_settings = false;
-    let screen = ctx.content_rect();
-    egui::Window::new("New Track").id(egui::Id::unique("new-track")).title_bar(false).resizable(false).collapsible(false).default_pos(pos2(screen.center().x - 330.0, screen.min.y + 80.0)).show(ctx, |ui| {
-        ui.set_width(640.0);
-        let (r, _) = ui.allocate_exact_size(vec2(640.0, 176.0), Sense::hover());
-        let p = ui.painter().clone();
-        p.text(pos2(r.center().x, r.min.y + 16.0), Align2::CENTER_CENTER, "Choose a track type", look::semibold(14.0), look::text());
-        // the four type buttons
-        let bw = 148.0;
-        for (k, (m, name)) in [(Main::Audio, "Audio"), (Main::Midi, "MIDI"), (Main::Pattern, "Pattern"), (Main::Player, "Session Player")].into_iter().enumerate() {
-            let br = Rect::from_min_size(pos2(r.min.x + 16.0 + k as f32 * (bw + 6.0), r.min.y + 36.0), vec2(bw, 78.0));
-            let on = d.main == m;
-            let resp = ui.interact(br, ui.scope_id().with(("nt-main", k)), Sense::click());
-            p.rect_filled(br, 10.0, if on { look::accent().gamma_multiply(0.35) } else if resp.hovered() { look::button_on() } else { look::group_bg() });
-            if on {
-                p.rect_stroke(br, 10.0, Stroke::new(2.0, look::accent()), egui::StrokeKind::Inside);
-            }
-            main_icon(&p, Rect::from_center_size(br.center() - vec2(0.0, 10.0), vec2(34.0, 34.0)), m);
-            p.text(pos2(br.center().x, br.max.y - 14.0), Align2::CENTER_CENTER, name, look::regular(12.0), look::text());
-            if resp.clicked() && !on {
-                d.main = m;
-                d.sub = 0;
-                d.style = 0;
-            }
-            if resp.double_clicked() {
-                create = true;
-            }
-        }
-        // the choices under the chosen type
-        let list = subs(d.main);
-        let sw = 150.0;
-        let x0 = r.center().x - list.len() as f32 * (sw + 6.0) / 2.0;
-        for (k, name) in list.iter().enumerate() {
-            let sr = Rect::from_min_size(pos2(x0 + k as f32 * (sw + 6.0), r.min.y + 126.0), vec2(sw, 26.0));
-            let on = d.sub == k;
-            let resp = ui.interact(sr, ui.scope_id().with(("nt-sub", k)), Sense::click());
-            p.rect_filled(sr, 7.0, if on { look::accent() } else if resp.hovered() { look::button_on() } else { look::group_bg() });
-            p.text(sr.center(), Align2::CENTER_CENTER, *name, look::regular(12.0), if on { Color32::WHITE } else { look::text() });
-            if resp.clicked() {
-                d.sub = k;
-                d.style = 0;
-            }
-        }
-        p.hline(r.min.x + 12.0..=r.max.x - 12.0, r.max.y - 6.0, Stroke::new(1.0, look::line()));
-        // Details: the disclosure arrow
-        ui.horizontal(|ui| {
-            ui.add_space(12.0);
-            if ui.add(egui::Button::new(if d.open { "▾  Details" } else { "▸  Details" }).frame(false)).clicked() {
-                d.open = !d.open;
-            }
-            if !d.open {
-                ui.label(egui::RichText::new(summary(&d)).color(look::text_dim()));
-            }
+    // an empty project needs a track: Cancel is dimmed (Logic's forced first track)
+    let can_cancel = app.project.as_ref().is_some_and(|p| !p.tracks.is_empty());
+    let popup = egui::Popup::is_any_open(ctx);
+    // the arrow keys move between the cards and their options (the count field keeps the rest)
+    if !popup {
+        let (dx, dy) = ctx.input_mut(|i| {
+            let mut k = |key| i.consume_key(egui::Modifiers::NONE, key);
+            (k(egui::Key::ArrowRight) as i32 - k(egui::Key::ArrowLeft) as i32, k(egui::Key::ArrowDown) as i32 - k(egui::Key::ArrowUp) as i32)
         });
-        if d.open {
-            ui.indent("nt-details", |ui| details_ui(app, ui, &mut d, &mut open_audio_settings));
-        }
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.add_space(12.0);
-            ui.label("Number of tracks:");
-            let mut n = app.new_track_count.max(1);
-            if ui.add(egui::DragValue::new(&mut n).range(1..=64)).changed() {
-                app.new_track_count = n;
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(12.0);
-                if ui.add(egui::Button::new(egui::RichText::new("Create").color(Color32::WHITE)).fill(look::accent()).min_size(vec2(88.0, 26.0))).clicked() {
+        d.arrow(dx, dy);
+    }
+    let radius = 16.0;
+    egui::Window::new("Create New Track")
+        .id(egui::Id::unique("new-track"))
+        .title_bar(false)
+        .resizable(false)
+        .collapsible(false)
+        // centred with Details closed; opening Details grows it downwards
+        // (less the frame's 1-point outline)
+        .fixed_pos(pos2(ctx.content_rect().center().x - W / 2.0 - 1.0, ctx.content_rect().center().y - 383.0 / 2.0 - 1.0))
+        .frame(egui::Frame::NONE.fill(dialog_bg()).corner_radius(radius).stroke(Stroke::new(1.0, rgb(0x0d0d0d, 0xb8b8b8))).shadow(egui::Shadow { offset: [0, 10], blur: 40, spread: 0, color: Color32::from_black_alpha(110) }))
+        .show(ctx, |ui| {
+            ui.set_width(W);
+            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+            let (r, _) = ui.allocate_exact_size(vec2(W, 321.5), Sense::hover());
+            let p = ui.painter().clone();
+            // the 1-point light edge along the top
+            p.hline(r.min.x + radius..=r.max.x - radius, r.min.y + 0.5, Stroke::new(1.0, rgb(0x353432, 0xf8f8f8)));
+            p.text(pos2(r.center().x, r.min.y + 13.75), Align2::CENTER_CENTER, "Create New Track", look::bold(13.0), rgb(0xdededd, 0x1d1d1f));
+            for (i, (m, name)) in CARDS.into_iter().enumerate() {
+                let cr = Rect::from_min_size(pos2(r.min.x + 21.5 + i as f32 * (CARD_W + CARD_GAP), r.min.y + CARD_TOP), vec2(CARD_W, CARD_H));
+                let on = d.main == m;
+                let (circle, sel) = card_colors(m);
+                let resp = ui.interact(cr, ui.scope_id().with(("nt-card", i)), Sense::click());
+                // the card: a dark hairline outside, a light one along its top, the colour border when chosen
+                // (Apple's continuous 16-point corners reach as far as a 20-point circle's)
+                let cr_r = 20.0;
+                p.rect_filled(cr, cr_r, card_bg());
+                if on {
+                    p.rect_stroke(cr, cr_r, Stroke::new(2.0, sel), egui::StrokeKind::Inside);
+                } else {
+                    // a dark hairline outside, a light rim inside, brightest along the top and bottom
+                    p.rect_stroke(cr, cr_r, Stroke::new(1.0, rgb(0x1c1b1a, 0xc6c6c6)), egui::StrokeKind::Outside);
+                    p.rect_stroke(cr, cr_r, Stroke::new(1.0, rgb(0x42413f, 0xffffff)), egui::StrokeKind::Inside);
+                    p.hline(cr.min.x + cr_r..=cr.max.x - cr_r, cr.min.y + 0.5, Stroke::new(1.0, rgb(0x625f5d, 0xffffff)));
+                    p.hline(cr.min.x + cr_r..=cr.max.x - cr_r, cr.max.y - 0.5, Stroke::new(1.0, rgb(0x52514e, 0xffffff)));
+                }
+                let cc = pos2(cr.center().x, cr.min.y + 16.0 + 28.0);
+                p.circle_filled(cc, 28.0, circle);
+                card_icon(&p, Rect::from_center_size(cc, vec2(56.0, 56.0)), m);
+                p.text(pos2(cr.center().x, cr.min.y + 90.75), Align2::CENTER_CENTER, name, look::bold(16.0), strong_text());
+                if resp.clicked() {
+                    d.choose_card(m);
+                }
+                if resp.double_clicked() {
                     create = true;
                 }
-                if ui.add(egui::Button::new("Cancel").min_size(vec2(88.0, 26.0))).clicked() {
-                    cancel = true;
+                for (k, opt) in subs(m).iter().enumerate() {
+                    let orr = Rect::from_min_size(pos2(cr.center().x - OPT_W / 2.0, cr.min.y + 112.0 + k as f32 * 34.0), vec2(OPT_W, OPT_H));
+                    let o = ui.interact(orr, ui.scope_id().with(("nt-opt", i, k)), Sense::click());
+                    let kept = d.remembered[i].min(subs(m).len() - 1) == k;
+                    if on && d.sub == k {
+                        p.rect_filled(orr, 6.0, sel);
+                        p.text(orr.center() - vec2(0.0, 1.0), Align2::CENTER_CENTER, *opt, look::regular(13.0), Color32::WHITE);
+                    } else {
+                        if kept {
+                            p.rect_filled(orr, 6.0, option_kept());
+                        }
+                        p.rect_stroke(orr, 6.0, Stroke::new(1.0, option_line()), egui::StrokeKind::Inside);
+                        p.text(orr.center() - vec2(0.0, 1.0), Align2::CENTER_CENTER, *opt, look::regular(13.0), strong_text());
+                    }
+                    if o.clicked() {
+                        d.choose(m, k);
+                    }
+                    if o.double_clicked() {
+                        create = true;
+                    }
                 }
-            });
+            }
+            // › Details (the disclosure)
+            let dr = Rect::from_min_max(pos2(r.min.x + 18.0, r.min.y + 301.5), pos2(r.min.x + 100.0, r.min.y + 321.5));
+            let dresp = ui.interact(dr, ui.scope_id().with("nt-details"), Sense::click());
+            let chev = Rect::from_center_size(pos2(r.min.x + 26.75, r.min.y + 311.5), vec2(12.0, 12.0));
+            crate::glyphs::paint(&p, chev, if d.open { crate::glyphs::tb::CHEVRON_DOWN } else { crate::glyphs::tb::CHEVRON_RIGHT }, 15.0, strong_text());
+            p.text(pos2(r.min.x + 39.0, r.min.y + 311.5), Align2::LEFT_CENTER, "Details", look::regular(13.0), strong_text());
+            if dresp.clicked() {
+                d.open = !d.open;
+            }
+            if d.open {
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(39.0);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+                        details_ui(app, ui, &mut d, &mut open_audio_settings);
+                    });
+                });
+                ui.add_space(4.0);
+            }
+            // the bottom row
+            let (b, _) = ui.allocate_exact_size(vec2(W, 61.5), Sense::hover());
+            let cy = b.min.y + 31.5;
+            let q = Rect::from_center_size(pos2(b.min.x + 32.0, cy), vec2(24.0, 24.0));
+            let qr = ui.interact(q, ui.scope_id().with("nt-help"), Sense::click()).on_hover_text("Help");
+            p.circle_filled(q.center(), 12.0, rgb(0x363533, 0xffffff));
+            p.circle_stroke(q.center(), 12.0, Stroke::new(0.5, rgb(0x41403e, 0xc8c8c8)));
+            p.text(q.center(), Align2::CENTER_CENTER, "?", look::regular(15.0), strong_text());
+            help = qr.clicked();
+            // Number of tracks to create: [ n ] (centred on the dialog, focused like Logic's)
+            let field = Rect::from_center_size(pos2(b.center().x, cy), vec2(42.0, 22.0));
+            p.text(pos2(field.min.x - 5.5, cy), Align2::RIGHT_CENTER, "Number of tracks to create:", look::regular(13.0), strong_text());
+            p.rect_filled(field, 4.0, rgb(0x181818, 0xffffff));
+            let text = d.count_text.get_or_insert_with(|| app.new_track_count.max(1).to_string());
+            let fid = ui.scope_id().with("nt-count");
+            // focused while nothing else is (selecting its text, as Logic opens it)
+            if ui.memory(|m| m.focused().is_none()) && !popup {
+                ui.memory_mut(|m| m.request_focus(fid));
+                let n = text.chars().count();
+                let mut st = egui::TextEdit::load_state(ui.ctx(), fid).unwrap_or_default();
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(n))));
+                st.store(ui.ctx(), fid);
+            }
+            // (Logic's selected text in the field: a muted blue)
+            ui.visuals_mut().selection.bg_fill = rgb(0x476288, 0xb3d1f7);
+            let te = ui.put(field.shrink2(vec2(4.0, 2.0)).translate(vec2(0.0, -3.0)), egui::TextEdit::singleline(text).id(fid).frame(egui::Frame::NONE).font(look::regular(13.0)).text_color(strong_text()).align(egui::Align2::CENTER_CENTER).char_limit(2));
+            if ui.memory(|m| m.has_focus(fid)) {
+                p.rect_stroke(field.expand(0.5), 4.5, Stroke::new(3.5, rgb(0x3b6b98, 0x7fb1f0)), egui::StrokeKind::Outside);
+            }
+            if te.changed() {
+                text.retain(|c| c.is_ascii_digit());
+                if let Ok(n) = text.parse::<u32>() {
+                    app.new_track_count = n.clamp(1, 64);
+                }
+            }
+            // Cancel  Create
+            let create_r = Rect::from_min_size(pos2(b.max.x - 20.0 - 72.0, cy - 12.0), vec2(72.0, 24.0));
+            let cancel_r = create_r.translate(vec2(-82.0, 0.0));
+            let cr = ui.interact(create_r, ui.scope_id().with("nt-create"), Sense::click());
+            p.rect_filled(create_r, 6.0, if cr.is_pointer_button_down_on() { Color32::from_rgb(40, 100, 220) } else { Color32::from_rgb(52, 120, 246) });
+            p.text(create_r.center(), Align2::CENTER_CENTER, "Create", look::regular(13.0), Color32::WHITE);
+            let xr = ui.interact(cancel_r, ui.scope_id().with("nt-cancel"), if can_cancel { Sense::click() } else { Sense::hover() });
+            p.rect_filled(cancel_r, 6.0, rgb(0x2e2d2b, 0xffffff));
+            p.text(cancel_r.center(), Align2::CENTER_CENTER, "Cancel", look::regular(13.0), if can_cancel { strong_text() } else { rgb(0x62615f, 0xa8a8a8) });
+            create |= cr.clicked();
+            cancel |= xr.clicked();
+            if !popup && ui.input(|i| i.key_pressed(egui::Key::Escape)) && can_cancel {
+                cancel = true;
+            }
+            if !popup && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                create = true;
+            }
         });
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) && !egui::Popup::is_any_open(ui.ctx()) {
-            cancel = true;
-        }
-        if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !egui::Popup::is_any_open(ui.ctx()) {
-            create = true;
-        }
-    });
     app.new_track_kind = d.kind();
+    if create || cancel {
+        d.count_text = None;
+    }
     app.tm.nt = d.clone();
     if open_audio_settings {
         app.settings_tab = "Audio".into();
         app.settings_sub = "Devices".into();
         app.show_settings = true;
+    }
+    if help {
+        app.key_command(ctx, "Bramble Studio Help");
     }
     if create {
         app.new_track_open = false;
@@ -307,28 +466,28 @@ pub fn sheet(app: &mut App, ctx: &egui::Context) {
     }
 }
 
-fn summary(d: &Details) -> String {
-    match (d.main, d.sub) {
-        (Main::Audio, _) => format!("Input: {}, Output: {}", crate::mixstate::in_label(d.input), crate::mixstate::out_label(d.output)),
-        (Main::Player, _) => format!("Style: {}", styles(d.sub).get(d.style).cloned().unwrap_or_default()),
-        (_, 1) => format!("MIDI Destination: {} channel {}", if d.midi_port.is_empty() { crate::midiout::VIRTUAL } else { &d.midi_port }, d.midi_channel),
-        _ => format!("Instrument: {}", match &d.instrument { Inst::DefaultPatch => "Default Patch", Inst::Empty => "Empty Channel Strip", Inst::Plugin(n) => n }),
-    }
+/// A Details row the Mac way: the label right-aligned in the first column, its controls after.
+fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if !label.is_empty() {
+            ui.label(egui::RichText::new(label).font(look::regular(13.0)));
+        }
+    });
+    ui.horizontal(add);
+    ui.end_row();
 }
 
 fn details_ui(app: &mut App, ui: &mut egui::Ui, d: &mut Details, open_audio_settings: &mut bool) {
     let mut search = std::mem::take(&mut d.search);
-    match d.main {
+    egui::Grid::new("nt-details-grid").num_columns(2).spacing(vec2(8.0, 8.0)).show(ui, |ui| match d.main {
         Main::Audio => {
-            ui.horizontal(|ui| {
-                ui.label("Audio Input:");
+            row(ui, "Audio Input:", |ui| {
                 if let Some(v) = searchable(ui, &d.input, &inputs(app), &mut search) {
                     d.input = v;
                 }
                 ui.checkbox(&mut d.input_ascending, "Ascending");
             });
-            ui.horizontal(|ui| {
-                ui.label("Audio Output:");
+            row(ui, "Audio Output:", |ui| {
                 if let Some(v) = searchable(ui, &d.output, &outputs(app), &mut search) {
                     d.output = v;
                 }
@@ -339,42 +498,39 @@ fn details_ui(app: &mut App, ui: &mut egui::Ui, d: &mut Details, open_audio_sett
                 let v = app.logic_settings.get(key);
                 if v.is_empty() { "System Default".to_string() } else { v }
             };
-            for (label, key) in [("Input Device", "Audio / Devices / Input Device:"), ("Output Device", "Audio / Devices / Output Device:")] {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{label}: {}", dev(key))).color(look::text_dim()));
+            for (label, key) in [("Input Device:", "Audio / Devices / Input Device:"), ("Output Device:", "Audio / Devices / Output Device:")] {
+                let name = dev(key);
+                row(ui, label, |ui| {
+                    ui.label(egui::RichText::new(name).color(look::text_dim()));
                     if ui.add(egui::Button::new("→").frame(false)).on_hover_text("Open Settings ▸ Audio ▸ Devices").clicked() {
                         *open_audio_settings = true;
                     }
                 });
             }
-            ui.horizontal(|ui| {
+            row(ui, "", |ui| {
                 ui.checkbox(&mut d.load_default_patch, "Load Default Patch").on_hover_text("Off: an empty track with no plug-ins");
                 ui.checkbox(&mut d.open_browser, "Open Browser");
             });
-            ui.horizontal(|ui| {
+            row(ui, "", |ui| {
                 ui.checkbox(&mut d.monitoring, "Input Monitoring");
                 ui.checkbox(&mut d.record_enable, "Record Enable");
             });
         }
         Main::Midi | Main::Pattern if d.sub == 0 => {
-            ui.horizontal(|ui| {
-                ui.label("Instrument:");
+            row(ui, "Instrument:", |ui| {
                 if let Some(v) = searchable(ui, &d.instrument, &instruments(), &mut search) {
                     d.instrument = v;
                 }
-            });
-            ui.horizontal(|ui| {
                 ui.checkbox(&mut d.multi_timbral, "Multi-timbral");
                 ui.add_enabled(d.multi_timbral, egui::DragValue::new(&mut d.parts).range(2..=16).suffix(" parts"));
             });
-            ui.horizontal(|ui| {
-                ui.label("Audio Output:");
+            row(ui, "Audio Output:", |ui| {
                 if let Some(v) = searchable(ui, &d.output, &outputs(app), &mut search) {
                     d.output = v;
                 }
                 ui.checkbox(&mut d.output_ascending, "Ascending");
             });
-            ui.horizontal(|ui| {
+            row(ui, "", |ui| {
                 ui.checkbox(&mut d.open_browser, "Open Browser");
                 if d.main == Main::Pattern {
                     ui.checkbox(&mut d.open_editor, "Open Editor");
@@ -383,42 +539,45 @@ fn details_ui(app: &mut App, ui: &mut egui::Ui, d: &mut Details, open_audio_sett
         }
         Main::Midi | Main::Pattern => {
             // External MIDI (a Pattern track always plays through the External Instrument plug-in)
-            let mut always = true;
-            if d.main == Main::Pattern {
-                ui.add_enabled(false, egui::Checkbox::new(&mut always, "Use External Instrument plug-in"));
-            } else {
-                ui.checkbox(&mut d.external_plugin, "Use External Instrument plug-in");
-            }
-            ui.horizontal(|ui| {
-                ui.label("MIDI Destination:");
+            row(ui, "", |ui| {
+                let mut always = true;
+                if d.main == Main::Pattern {
+                    ui.add_enabled(false, egui::Checkbox::new(&mut always, "Use External Instrument plug-in"));
+                } else {
+                    ui.checkbox(&mut d.external_plugin, "Use External Instrument plug-in");
+                }
+            });
+            row(ui, "MIDI Destination:", |ui| {
                 if let Some(v) = searchable(ui, &d.midi_port, &midi_destinations(app), &mut search) {
                     d.midi_port = v;
                 }
                 ui.label("Channel:");
                 ui.add(egui::DragValue::new(&mut d.midi_channel).range(1..=16));
+                ui.checkbox(&mut d.midi_ascending, "Ascending").on_hover_text("Each new track takes the next MIDI channel");
             });
-            ui.checkbox(&mut d.midi_ascending, "Ascending").on_hover_text("Each new track takes the next MIDI channel");
             if d.main == Main::Pattern {
-                ui.checkbox(&mut d.open_editor, "Open Editor");
+                row(ui, "", |ui| {
+                    ui.checkbox(&mut d.open_editor, "Open Editor");
+                });
             }
         }
         Main::Player => {
             let list = styles(d.sub);
-            ui.horizontal(|ui| {
-                ui.label("Style:");
-                egui::ComboBox::from_id_salt("nt-style").width(240.0).selected_text(list.get(d.style).cloned().unwrap_or_default()).show_ui(ui, |ui| {
-                    for (k, s) in list.iter().enumerate() {
-                        ui.selectable_value(&mut d.style, k, s);
-                    }
-                });
+            row(ui, "Style:", |ui| {
+                let items: Vec<(usize, String)> = list.into_iter().enumerate().collect();
+                if let Some(v) = searchable(ui, &d.style, &items, &mut search) {
+                    d.style = v;
+                }
             });
-            ui.checkbox(&mut d.default_chords, "Use Default Chord Progression for New Regions");
-            ui.horizontal(|ui| {
+            row(ui, "", |ui| {
+                ui.checkbox(&mut d.default_chords, "Use Default Chord Progression for New Regions");
+            });
+            row(ui, "", |ui| {
                 ui.checkbox(&mut d.open_editor, "Open Editor");
                 ui.checkbox(&mut d.open_browser, "Open Browser");
             });
         }
-    }
+    });
     d.search = search;
 }
 
@@ -661,21 +820,51 @@ pub fn with_default_patch(app: &mut App, ctx: &egui::Context, opposite: bool) ->
     made
 }
 
-fn main_icon(p: &egui::Painter, r: Rect, m: Main) {
-    use crate::glyphs::{br, ph};
-    let (green, yellow, blue) = (Color32::from_rgb(0x52, 0xc0, 0x3c), Color32::from_rgb(0xe3, 0xb3, 0x2b), Color32::from_rgb(0x3d, 0x8f, 0xe0));
-    let (icon, col) = match m {
-        Main::Audio => (ph::MICROPHONE, blue),
-        Main::Midi => (ph::PIANO_KEYS, green),
-        Main::Pattern => (ph::SQUARES_FOUR, green),
-        Main::Player => (br::DRUM, yellow),
-    };
-    crate::glyphs::paint(p, r, icon, 32.0, col);
+/// The card's white icon on its colour circle.
+fn card_icon(p: &egui::Painter, r: Rect, m: Main) {
+    use crate::glyphs::{br, ph, ph_fill, tb};
+    let white = Color32::WHITE;
+    match m {
+        Main::Midi => crate::glyphs::paint(p, r, ph_fill::MUSIC_NOTES, 35.0, white),
+        // a rounded square holding a 3×3 grid of steps
+        Main::Pattern => {
+            crate::glyphs::paint(p, r, tb::SQUARE, 34.5, white);
+            crate::glyphs::paint(p, r, ph_fill::GRID_NINE, 26.0, white);
+        }
+        Main::Player => crate::glyphs::paint(p, r, br::DRUM, 40.0, white),
+        Main::Audio => crate::glyphs::paint(p, r, ph::WAVEFORM, 37.0, white),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cards_keep_their_choice_and_arrows_move() {
+        let mut d = Details::default();
+        assert_eq!((d.main, d.sub), (Main::Midi, 0));
+        d.choose(Main::Player, 2);
+        assert_eq!(d.kind(), Kind::Keys);
+        d.choose_card(Main::Audio);
+        assert_eq!((d.main, d.sub), (Main::Audio, 0));
+        d.choose_card(Main::Player);
+        assert_eq!(d.kind(), Kind::Keys, "the card keeps its choice");
+        // left/right: the cards in Logic's order (MIDI, Pattern, Session Player, Audio)
+        d.arrow(1, 0);
+        assert_eq!(d.main, Main::Audio);
+        d.arrow(1, 0);
+        assert_eq!(d.main, Main::Audio, "stops at the last card");
+        d.arrow(-3, 0);
+        assert_eq!(d.main, Main::Midi);
+        // up/down: the options
+        d.arrow(0, 1);
+        assert!(d.external());
+        d.arrow(0, 1);
+        assert_eq!(d.sub, 1, "stops at the last option");
+        d.arrow(0, -1);
+        assert_eq!(d.kind(), Kind::Instrument);
+    }
 
     #[test]
     fn kinds_and_choices() {
