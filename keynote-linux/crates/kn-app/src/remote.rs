@@ -8,6 +8,9 @@
 //! The wire: remotes find Keydeck by a UDP broadcast to port 51737 ("KDRM?" and their id and
 //! name as JSON), answered with {keydeck, id, name, port}; then one TCP connection, JSON lines
 //! both ways (hello / welcome, code, linked, state, thumbs; cmd, laser, draw, undo, clear).
+//!
+//! A browser can be a remote too (remote_web.rs): a small web page served over HTTP, with a
+//! secret key in its link instead of the code.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -21,6 +24,9 @@ use egui::{Color32, Painter, Pos2, Rect, Stroke};
 use serde_json::{Value, json};
 
 use crate::app::App;
+
+#[path = "remote_web.rs"]
+mod web;
 
 pub const DISCOVERY_PORT: u16 = 51737;
 pub const PORT: u16 = 51738;
@@ -78,6 +84,9 @@ struct Shared {
     resend: bool,
     thumbs_asked: bool,
     ctx: Option<egui::Context>,
+    /// The web remote's secret (in its link) and its port (0: not started).
+    web_key: String,
+    web_port: u16,
 }
 
 fn shared() -> MutexGuard<'static, Shared> {
@@ -115,13 +124,19 @@ fn load() -> Shared {
         .as_array()
         .map(|a| a.iter().map(|l| Linked { id: l["id"].as_str().unwrap_or_default().into(), name: l["name"].as_str().unwrap_or_default().into(), token: l["token"].as_str().unwrap_or_default().into() }).collect())
         .unwrap_or_default();
-    Shared {
+    let web_key = v["web_key"].as_str().filter(|k| k.len() >= 16).map(str::to_string);
+    let s = Shared {
+        web_key: web_key.clone().unwrap_or_else(|| random(32)),
         enabled: v["enabled"].as_bool().unwrap_or(false) || std::env::var_os("KN_REMOTE_LINK").is_some(),
         id: v["id"].as_str().map(str::to_string).unwrap_or_else(|| random(16)),
         name: host_name(),
         linked,
         ..Default::default()
+    };
+    if web_key.is_none() {
+        save(&s);
     }
+    s
 }
 
 fn save(s: &Shared) {
@@ -129,6 +144,7 @@ fn save(s: &Shared) {
     let v = json!({
         "enabled": s.enabled,
         "id": s.id,
+        "web_key": s.web_key,
         "linked": s.linked.iter().map(|l| json!({ "id": l.id, "name": l.name, "token": l.token })).collect::<Vec<_>>(),
     });
     let _ = std::fs::create_dir_all(f.parent().unwrap_or(std::path::Path::new(".")));
@@ -179,6 +195,7 @@ fn start(ctx: &egui::Context) {
                 let _ = sock.send_to(reply.as_bytes(), from);
             }
         });
+        web::start();
     });
 }
 
@@ -229,41 +246,7 @@ fn serve(stream: TcpStream) {
         if !s.enabled || !s.conns.get(&key).is_some_and(|c| c.linked) {
             continue;
         }
-        let f = |k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
-        match v["type"].as_str().unwrap_or_default() {
-            "cmd" => {
-                let c = match v["cmd"].as_str().unwrap_or_default() {
-                    "next" => Some(Cmd::Next),
-                    "prev" => Some(Cmd::Prev),
-                    "stop" => Some(Cmd::Stop),
-                    "play" => Some(Cmd::Play),
-                    "goto" => v["slide"].as_u64().map(|i| Cmd::Goto(i as usize)),
-                    _ => None,
-                };
-                s.cmds.extend(c);
-            }
-            "laser" => s.laser = v["x"].is_number().then(|| ([f("x"), f("y")], Instant::now())),
-            "draw" => {
-                let id = v["id"].as_u64().unwrap_or(0);
-                let color = parse_color(v["color"].as_str().unwrap_or("#ff3b30"));
-                let points: Vec<[f32; 2]> = v["points"].as_array().map(|a| a.iter().map(|p| [p[0].as_f64().unwrap_or(0.0) as f32, p[1].as_f64().unwrap_or(0.0) as f32]).collect()).unwrap_or_default();
-                match s.marks.iter_mut().find(|m| m.id == id) {
-                    Some(m) => m.points = points,
-                    None => s.marks.push(Mark { id, color, points }),
-                }
-            }
-            "undo" => {
-                s.marks.pop();
-            }
-            "clear" => s.marks.clear(),
-            "thumbs" => s.thumbs_asked = true,
-            "state" => s.resend = true,
-            _ => {}
-        }
-        if matches!(v["type"].as_str(), Some("draw" | "undo" | "clear")) {
-            s.marked = Some(Instant::now());
-        }
-        wake(&s);
+        handle(&mut s, &v);
     }
     let mut s = shared();
     s.conns.remove(&key);
@@ -271,6 +254,45 @@ fn serve(stream: TcpStream) {
         s.pending = None;
     }
     wake(&s);
+}
+
+/// What a linked remote (or the web remote) asked.
+fn handle(s: &mut Shared, v: &Value) {
+    let f = |k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
+    match v["type"].as_str().unwrap_or_default() {
+        "cmd" => {
+            let c = match v["cmd"].as_str().unwrap_or_default() {
+                "next" => Some(Cmd::Next),
+                "prev" => Some(Cmd::Prev),
+                "stop" => Some(Cmd::Stop),
+                "play" => Some(Cmd::Play),
+                "goto" => v["slide"].as_u64().map(|i| Cmd::Goto(i as usize)),
+                _ => None,
+            };
+            s.cmds.extend(c);
+        }
+        "laser" => s.laser = v["x"].is_number().then(|| ([f("x"), f("y")], Instant::now())),
+        "draw" => {
+            let id = v["id"].as_u64().unwrap_or(0);
+            let color = parse_color(v["color"].as_str().unwrap_or("#ff3b30"));
+            let points: Vec<[f32; 2]> = v["points"].as_array().map(|a| a.iter().map(|p| [p[0].as_f64().unwrap_or(0.0) as f32, p[1].as_f64().unwrap_or(0.0) as f32]).collect()).unwrap_or_default();
+            match s.marks.iter_mut().find(|m| m.id == id) {
+                Some(m) => m.points = points,
+                None => s.marks.push(Mark { id, color, points }),
+            }
+        }
+        "undo" => {
+            s.marks.pop();
+        }
+        "clear" => s.marks.clear(),
+        "thumbs" => s.thumbs_asked = true,
+        "state" => s.resend = true,
+        _ => {}
+    }
+    if matches!(v["type"].as_str(), Some("draw" | "undo" | "clear")) {
+        s.marked = Some(Instant::now());
+    }
+    wake(s);
 }
 
 fn parse_color(c: &str) -> Color32 {
@@ -472,6 +494,7 @@ pub fn settings_tab(ui: &mut egui::Ui) {
             for c in s.conns.values() {
                 send(c, json!({ "type": "disabled" }));
             }
+            s.conns.retain(|_, c| !c.id.starts_with("web:"));
         }
         save(&s);
     }
@@ -546,5 +569,6 @@ pub fn settings_tab(ui: &mut egui::Ui) {
         }
         _ => {}
     }
+    web::settings(ui);
     ui.ctx().request_repaint_after(Duration::from_millis(500));
 }

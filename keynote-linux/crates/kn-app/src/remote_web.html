@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#000000">
+<title>Keydeck Remote</title>
+<!-- The Android Keydeck remote (keydeck_mobile lib/remote/remote.dart) in a browser: the same
+     screens, sizes (Flutter logical px = CSS px), colours, font (Carlito) and Material icons. -->
+<style>
+@font-face{font-family:Carlito;font-weight:400;src:url("font?k=KEY") format("truetype")}
+@font-face{font-family:Carlito;font-weight:700;src:url("font-bold?k=KEY") format("truetype")}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0}
+html,body{height:100%;background:#000;color:#fff;overflow:hidden;overscroll-behavior:none}
+body{font:400 16px/1 Carlito,"DejaVu Sans",sans-serif;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#app{position:fixed;inset:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);display:flex;flex-direction:column}
+.screen{flex:1;min-height:0;display:flex;flex-direction:column}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+svg{width:24px;height:24px;fill:currentColor;flex:none}
+.b{font-weight:700}
+.dim{color:#98989f}
+/* Material 3 IconButton: 40 px round, 48 px to tap */
+.ib{width:48px;height:48px;flex:none;color:#fff;position:relative}
+.ib::before{content:"";position:absolute;inset:4px;border-radius:20px}
+.ib:active::before{background:#ffffff1f}
+/* Material 3 TextButton */
+.tb{min-width:64px;height:40px;padding:0 12px;border-radius:20px;flex:none;white-space:nowrap}
+.tb:active{background:#0a84ff1f}
+.fill{background:#0a84ff;color:#fff;font-weight:700}
+.fill:disabled{background:#1f1f1f;color:#ffffff61;cursor:default}
+/* intro */
+#intro{align-items:center;justify-content:center}
+#intro>div{max-width:440px;padding:28px;display:flex;flex-direction:column;align-items:center;text-align:center}
+/* devices */
+#devices{align-items:center}
+#devices>div{width:100%;max-width:520px;padding:20px;display:flex;flex-direction:column}
+.panel{background:#1c1c1e;border-radius:14px;overflow:hidden}
+.tile{display:flex;align-items:center;min-height:56px;padding:8px 24px 8px 16px;gap:16px;width:100%;text-align:left;font-size:17px}
+.tile:active{background:#ffffff14}
+.dot{width:12px;height:12px;border-radius:6px;margin:0 6px;flex:none}
+.spin{border:2px solid #98989f;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#status{text-align:center;font-size:15px;white-space:pre-line;display:flex;flex-direction:column;align-items:center}
+/* controls */
+#top{padding:4px 4px 8px;display:flex;flex-direction:column}
+#row{display:flex;align-items:center}
+#num{font-size:16px;font-weight:700;color:#fff}
+.timer{font-size:18px;white-space:nowrap;text-align:center;cursor:pointer;font-variant-numeric:tabular-nums}
+#tmid{flex:1;display:flex;justify-content:center;min-width:0}
+#trow{height:28px;display:flex;align-items:center;justify-content:center}
+#body{flex:1;min-height:0;padding:0 16px 12px;display:flex;flex-direction:column}
+#idle{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center}
+#ipicbox{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+#play{width:220px;height:54px;border-radius:27px;font-size:18px;gap:8px;flex:none}
+#play svg{width:18px;height:18px}
+#lay{flex:1;min-height:0;position:relative}
+#lay>*{position:absolute}
+.pic{background:#1c1c1e;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pic img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;-webkit-user-drag:none}
+.pic span{font-size:15px;color:#98989f}
+.lbl{font-size:13px;color:#98989f;height:22px}
+.notes{overflow:auto;padding:4px 0;white-space:pre-wrap;overflow-wrap:anywhere;touch-action:pan-y}
+.gest{touch-action:none}
+#notes.gest{touch-action:pan-y}
+/* drawing */
+#draw{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center}
+#dbox{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+#dslide{position:relative;touch-action:none}
+#dslide img,#dslide canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+#dslide img{object-fit:fill}
+.round{position:absolute;top:50%;margin-top:-20px;width:40px;height:40px;border-radius:20px;background:#00000088;color:#fff}
+#tools{margin-top:12px;margin-bottom:10px;padding:8px 10px;background:#2c2c2e;border-radius:30px;display:flex;align-items:center;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.sw{width:34px;height:34px;margin:0 5px;border-radius:17px;border:2.5px solid transparent;padding:3px;flex:none}
+.sw.on{border-color:#fff}
+.sw i{display:flex;width:100%;height:100%;border-radius:50%;align-items:center;justify-content:center}
+.sw i b{width:9px;height:9px;border-radius:5px;background:#fff}
+/* Material 3 modal bottom sheets */
+#scrim{position:fixed;inset:0;background:#0000008a;display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.sheet{width:100%;max-width:640px;background:#1c1c1e;border-radius:28px 28px 0 0;padding-bottom:env(safe-area-inset-bottom);overflow:hidden}
+#thumbs{height:75vh;overflow:auto;padding:16px;display:grid;gap:14px;align-content:start}
+.th{display:flex;flex-direction:column;align-items:center;cursor:pointer;min-height:0}
+.th div{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+.th img{max-width:100%;max-height:100%;display:block}
+.th span{font-size:13px;margin-top:4px;height:13px}
+.mt{display:flex;align-items:center;min-height:56px;padding:0 24px 0 16px;width:100%;font-size:17px;color:#fff;justify-content:space-between}
+.mt:active{background:#ffffff14}
+.hr{height:16px;display:flex;align-items:center}
+.hr::after{content:"";height:1px;background:#38383a;flex:1}
+/* Material 3 Switch (the default theme's colours) */
+.switch{width:52px;height:32px;border-radius:16px;border:2px solid #79747e;background:#e6e0e9;position:relative;flex:none}
+.switch::after{content:"";position:absolute;left:6px;top:6px;width:16px;height:16px;border-radius:8px;background:#79747e;transition:all .15s}
+.switch.on{background:#6750a4;border-color:#6750a4}
+.switch.on::after{left:22px;top:2px;width:24px;height:24px;border-radius:12px;background:#fff}
+</style>
+</head>
+<body>
+<svg hidden><defs>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="m14.06 9.02.92.92L5.92 19H5v-.92l9.06-9.06M17.66 3c-.25 0-.51.1-.7.29l-1.83 1.83 3.75 3.75 1.83-1.83a.996.996 0 0 0 0-1.41l-2.34-2.34c-.2-.2-.45-.29-.71-.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z"/></symbol>
+<symbol id="i-devices" viewBox="0 0 24 24"><path d="M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z"/></symbol>
+<symbol id="i-quilt" viewBox="0 0 24 24"><path d="M3 5v14h18V5H3zm5.33 12H5V7h3.33v10zm5.34 0h-3.33v-4h3.33v4zM19 17h-3.33v-4H19v4zm0-6h-8.67V7H19v4z"/></symbol>
+<symbol id="i-tdec" viewBox="0 0 24 24"><path d="M.99 19h2.42l1.27-3.58h5.65L11.59 19h2.42L8.75 5h-2.5L.99 19zm4.42-5.61L7.44 7.6h.12l2.03 5.79H5.41zM23 11v2h-8v-2h8z"/></symbol>
+<symbol id="i-tinc" viewBox="0 0 24 24"><path d="M.99 19h2.42l1.27-3.58h5.65L11.59 19h2.42L8.75 5h-2.5L.99 19zm4.42-5.61L7.44 7.6h.12l2.03 5.79H5.41zM20 11h3v2h-3v3h-2v-3h-3v-2h3V8h2v3z"/></symbol>
+<symbol id="i-remote" viewBox="0 0 24 24"><path d="M15 9H9c-.55 0-1 .45-1 1v12c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V10c0-.55-.45-1-1-1zm-1 12h-4V11h4v10z"/><circle cx="12" cy="13" r="1"/><path d="M7.05 6.05 8.46 7.46C9.37 6.56 10.62 6 12 6s2.63.56 3.54 1.46l1.41-1.41C15.68 4.78 13.93 4 12 4s-3.68.78-4.95 2.05zM12 0C8.96 0 6.21 1.23 4.22 3.22l1.41 1.41C7.26 3.01 9.51 2 12 2s4.74 1.01 6.36 2.64l1.41-1.41C17.79 1.23 15.04 0 12 0z"/></symbol>
+</defs></svg>
+<div id="app">
+  <div class="screen" id="intro" hidden><div>
+    <svg style="width:84px;height:84px;color:#0a84ff"><use href="#i-remote"/></svg>
+    <div class="b" style="font-size:28px;margin-top:22px">Keydeck Remote</div>
+    <div class="dim" style="margin-top:14px">Use this device to control a slideshow playing in Keydeck on a computer on the same network: move through the slides, see the next slide and your presenter notes, and point or draw on the slide.</div>
+    <button class="fill" id="cont" style="margin-top:28px;width:260px;height:50px;border-radius:25px;font-size:17px">Continue</button>
+  </div></div>
+
+  <div class="screen" id="devices" hidden><div>
+    <div style="display:flex;align-items:center">
+      <span style="width:48px"></span>
+      <div class="b" style="flex:1;text-align:center;font-size:18px">Keydeck Remote</div>
+      <span style="width:48px"></span>
+    </div>
+    <div class="panel" id="found" style="margin-top:16px"></div>
+    <div id="status" style="margin-top:28px"></div>
+  </div></div>
+
+  <div class="screen" id="controls" hidden>
+    <div id="top">
+      <div id="row">
+        <button class="ib" id="close"><svg><use href="#i-close"/></svg></button>
+        <button class="tb" id="num"></button>
+        <div id="tmid"><span class="timer" id="t1"></span></div>
+        <button class="ib" id="dev" title="Devices"><svg><use href="#i-devices"/></svg></button>
+        <button class="ib" id="laybtn" title="Layout"><svg><use href="#i-quilt"/></svg></button>
+        <button class="ib" id="pen" title="Highlighter"><svg><use href="#i-edit"/></svg></button>
+      </div>
+      <div id="trow"><span class="timer" id="t2"></span></div>
+    </div>
+    <div id="body">
+      <div id="idle">
+        <div class="dim" id="title" style="font-size:17px;min-height:17px"></div>
+        <div id="ipicbox" style="margin-top:14px"><div class="pic" id="ipic"><img alt=""></div></div>
+        <button class="fill" id="play" style="margin-top:26px"><svg><use href="#i-play"/></svg>Play</button>
+      </div>
+      <div id="lay">
+        <div class="pic" id="cur"><img alt=""></div>
+        <div class="lbl" id="nlbl">Next</div>
+        <div class="pic" id="nxt"><img alt=""><span>End of slideshow</span></div>
+        <div class="notes" id="notes"></div>
+      </div>
+      <div id="draw">
+        <div id="dbox"><div id="dslide">
+          <div class="pic" style="position:absolute;inset:0"></div><img alt=""><canvas></canvas>
+          <button class="round" id="dprev" style="left:4px"><svg><use href="#i-left"/></svg></button>
+          <button class="round" id="dnext" style="right:4px"><svg><use href="#i-right"/></svg></button>
+        </div></div>
+        <div id="tools"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="scrim" hidden></div>
+<script>
+"use strict";
+const K = new URLSearchParams(location.search).get("k") || "";
+const $ = id => document.getElementById(id);
+const ACCENT = "#0a84ff", DIM = "#98989f";
+const LAYOUTS = ["Current and Next", "Current", "Current and Notes", "Next and Notes", "Notes Only"];
+const COLORS = ["#ff3b30", "#ff9500", "#ffcc00", "#007aff", "#34c759", "#af52de", "#ffffff", "#000000"];
+// (the fonts come from this server, with the key)
+for (const r of document.styleSheets[0].cssRules) if (r.style && r.style.src) r.style.src = r.style.src.replace("KEY", K);
+
+// what the computer sent; the link's state
+let st = {}, cur = null, next = null, thumbs = [], name = "", showStarted = null;
+let conn = "connecting"; // connecting, connected, disabled, expired
+// the screens' own state (as the Android remote's)
+let intro = true, devices = false;
+try { intro = localStorage.getItem("kdr-intro") !== "1"; } catch (e) {}
+let layout = 0, clock = false, drawing = false, invert = false, laser = true, notesSize = 20, color = COLORS[0];
+let markId = 0, points = [], marks = [], shownAt = "", laserAt = null;
+
+function send(m) { return fetch("cmd?k=" + K, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(m) }).catch(() => {}); }
+function cmd(c, slide) { send(slide == null ? { type: "cmd", cmd: c } : { type: "cmd", cmd: c, slide }); }
+// moves (laser, strokes): one request at a time, the latest wins
+let busy = false, queued = null;
+function sendMove(m) {
+  if (busy) { queued = m; return; }
+  busy = true;
+  send(m).then(() => { busy = false; if (queued) { const q = queued; queued = null; sendMove(q); } });
+}
+function sendNow(m) { queued = null; send(m); }
+
+const aspect = () => st.aspect || 9 / 16;
+const pad = n => String(n).padStart(2, "0");
+function time() {
+  if (clock || !showStarted) {
+    const d = new Date(), h = d.getHours() % 12;
+    return (h === 0 ? 12 : h) + ":" + pad(d.getMinutes()) + " " + (d.getHours() < 12 ? "AM" : "PM");
+  }
+  const s = Math.floor((Date.now() - showStarted) / 1000);
+  return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60);
+}
+function setImg(img, src) {
+  const u = src ? "data:image/jpeg;base64," + src : "";
+  if (img.dataset.u !== u) { img.dataset.u = u; if (u) img.src = u; else img.removeAttribute("src"); }
+  img.hidden = !u;
+}
+function size(el, x, y, w, h) { Object.assign(el.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" }); }
+
+// ---- the screens
+function render() {
+  const showDevices = !intro && (devices || conn !== "connected");
+  $("intro").hidden = !intro;
+  $("devices").hidden = !showDevices;
+  $("controls").hidden = intro || showDevices;
+  if (showDevices) renderDevices();
+  else if (!intro) renderControls();
+}
+
+function renderDevices() {
+  const f = $("found");
+  if (!name) f.innerHTML = '<div style="padding:22px;display:flex;justify-content:center"><div class="spin" style="width:22px;height:22px"></div></div>';
+  else {
+    f.innerHTML = "";
+    const t = document.createElement("button");
+    t.className = "tile";
+    t.innerHTML = '<span class="dot"></span><span style="flex:1"></span><svg style="color:#0a84ff"><use href="#i-check"/></svg>';
+    t.querySelector(".dot").style.background = conn === "connected" ? "#34c759" : "#48484a";
+    t.children[1].textContent = name;
+    t.onclick = () => { if (conn !== "connected") connect(); };
+    f.appendChild(t);
+  }
+  const s = $("status"), n = "“" + name + "”";
+  s.innerHTML = "";
+  const text = t => { const d = document.createElement("div"); d.className = "dim"; d.textContent = t; s.appendChild(d); };
+  if (conn === "disabled") text("Remotes are turned off on " + (name ? n : "the computer") + ". In Keydeck there, choose Settings > Remotes, then select Enable.");
+  else if (conn === "expired") text("This link no longer works. On " + (name ? n : "the computer") + ", in Keydeck choose Settings > Remotes, then open the link shown under Web Remote.");
+  else if (conn !== "connected") text(name ? "Connecting to " + n + "…" : "Looking for Keydeck on this network…\nOn the computer, open Keydeck, choose Keydeck > Settings, click Remotes, then select Enable.");
+  else {
+    const b = document.createElement("button");
+    b.className = "fill"; b.textContent = "Done";
+    Object.assign(b.style, { width: "260px", height: "50px", borderRadius: "25px", fontSize: "17px" });
+    b.onclick = () => { devices = false; render(); };
+    s.appendChild(b);
+  }
+}
+
+function renderControls() {
+  const playing = st.playing === true;
+  const at = st.slide + ":" + st.step;
+  if (at !== shownAt) { shownAt = at; marks = []; }
+  if (!playing) drawing = false;
+  const narrow = innerWidth < 460;
+  $("num").hidden = !st.type;
+  $("num").textContent = st.number + " of " + st.visible;
+  $("close").title = playing ? "End Slideshow" : "Close";
+  $("close").style.visibility = playing ? "" : "hidden";
+  $("laybtn").hidden = $("pen").hidden = !playing;
+  $("pen").style.color = drawing ? ACCENT : "#fff";
+  $("t1").hidden = narrow; $("trow").hidden = !narrow;
+  tick();
+  $("idle").hidden = playing; $("lay").hidden = !playing || drawing; $("draw").hidden = !playing || !drawing;
+  if (!playing) {
+    $("title").textContent = st.title || name;
+    setImg($("ipic").firstChild, cur);
+    const box = $("ipicbox"), w = Math.min(box.clientWidth, box.clientHeight / aspect());
+    $("ipic").style.width = w + "px"; $("ipic").style.height = w * aspect() + "px";
+    $("play").disabled = !st.type;
+  } else if (drawing) renderDrawing();
+  else renderLayout();
+}
+
+function tick() {
+  const playing = st.playing === true, t = time();
+  for (const id of ["t1", "t2"]) { $(id).textContent = t; $(id).style.color = playing && !clock ? "#ff9f0a" : "#fff"; }
+}
+setInterval(() => { if (!$("controls").hidden) tick(); }, 1000);
+
+// the layouts, laid out from the top (remote.dart _layoutBody)
+function renderLayout() {
+  const lay = $("lay"), W = lay.clientWidth, H = lay.clientHeight, a = aspect();
+  const wide = W > H * 1.25, gap = 16, label = 22;
+  const fit = (w, h) => Math.min(w, h / a);
+  const c = $("cur"), nl = $("nlbl"), nx = $("nxt"), no = $("notes");
+  setImg(c.firstChild, cur); setImg(nx.firstChild, next);
+  nx.lastChild.hidden = !!next;
+  const text = (st.notes || "").trim();
+  no.textContent = text || "No presenter notes";
+  Object.assign(no.style, { background: invert ? "#fff" : "#000", color: text ? (invert ? "#000" : "#fff") : (invert ? "#0006" : "#fff6"), fontSize: (text ? notesSize : 15) + "px" });
+  for (const e of [c, nl, nx, no]) e.hidden = true;
+  lay.classList.remove("gest"); no.classList.remove("gest"); c.classList.remove("gest");
+  gestTarget = null;
+  const show = (e, x, y, w, h) => { e.hidden = false; size(e, x, y, w, h); };
+  if (layout === 1) {
+    const w = fit(W, H); show(c, (W - w) / 2, 0, w, w * a); gestTarget = lay;
+  } else if (layout === 4) {
+    show(no, 0, 0, W, H); gestTarget = no;
+  } else if (layout === 2 || layout === 3) {
+    const isCur = layout === 2, pic = isCur ? c : nx;
+    const lab = isCur ? 0 : label;
+    if (wide) {
+      const w = fit(W * 0.55, H - lab);
+      if (!isCur) show(nl, 0, 0, w, label);
+      show(pic, 0, lab, w, w * a);
+      show(no, w + gap, 0, W - w - gap, H);
+    } else {
+      const w = fit(W, H * 0.45), y = lab + w * a + gap;
+      if (!isCur) show(nl, 0, 0, w, label);
+      show(pic, 0, lab, w, w * a);
+      show(no, 0, y, W, Math.max(0, H - y));
+    }
+    if (isCur) gestTarget = c;
+  } else if (wide) {
+    const w1 = fit(W * 0.6 - gap / 2, H), w2 = fit(W * 0.4 - gap / 2, H - label);
+    show(c, 0, 0, w1, w1 * a); show(nl, w1 + gap, 0, w2, label); show(nx, w1 + gap, label, w2, w2 * a);
+    gestTarget = c;
+  } else {
+    const w1 = fit(W, (H - gap - label) * 0.58), w2 = fit(W, H - w1 * a - gap - label);
+    show(c, 0, 0, w1, w1 * a); show(nl, 0, w1 * a + gap, w2, label); show(nx, 0, w1 * a + gap + label, w2, w2 * a);
+    gestTarget = c;
+  }
+  if (gestTarget) gestTarget.classList.add("gest");
+}
+
+// the slide area: a tap or a swipe to the left advances, a swipe to the right goes back, two
+// fingers swiped down end the show
+let gestTarget = null, g = null;
+const lay = $("lay");
+lay.addEventListener("pointerdown", e => {
+  if (!gestTarget || !gestTarget.contains(e.target)) return;
+  if (!g) g = { ptrs: new Map(), fingers: 0, travel: [0, 0], twoDown: 0, moved: 0, hist: [] };
+  g.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  g.fingers = Math.max(g.fingers, g.ptrs.size);
+});
+lay.addEventListener("pointermove", e => {
+  if (!g || !g.ptrs.has(e.pointerId)) return;
+  const p = g.ptrs.get(e.pointerId), dx = (e.clientX - p[0]) / g.ptrs.size, dy = (e.clientY - p[1]) / g.ptrs.size;
+  g.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (g.ptrs.size >= 2) g.twoDown += dy;
+  g.travel[0] += dx; g.travel[1] += dy;
+  g.moved = Math.max(g.moved, Math.hypot(g.travel[0], g.travel[1]));
+  g.hist.push([performance.now(), g.travel[0]]);
+  if (g.hist.length > 8) g.hist.shift();
+});
+function gestEnd(e, cancel) {
+  if (!g || !g.ptrs.has(e.pointerId)) return;
+  g.ptrs.delete(e.pointerId);
+  if (g.ptrs.size) return;
+  const d = g; g = null;
+  if (cancel) return;
+  if (d.fingers >= 2) { if (d.twoDown > 120) cmd("stop"); return; }
+  if (d.moved < 18) { cmd("next"); return; }
+  const now = performance.now(), h = d.hist.filter(x => now - x[0] < 100);
+  const v = h.length > 1 ? (h[h.length - 1][1] - h[0][1]) / Math.max(1, h[h.length - 1][0] - h[0][0]) * 1000 : 0;
+  if (d.travel[0] < -60 || v < -300) cmd("next");
+  if (d.travel[0] > 60 || v > 300) cmd("prev");
+}
+lay.addEventListener("pointerup", e => gestEnd(e, false));
+lay.addEventListener("pointercancel", e => gestEnd(e, true));
+
+// drawing mode: the slide large, the laser or a colour under the finger, arrows at its sides
+function renderDrawing() {
+  const box = $("dbox"), a = aspect(), w = Math.min(box.clientWidth, box.clientHeight / a);
+  const ds = $("dslide");
+  ds.style.width = w + "px"; ds.style.height = w * a + "px";
+  setImg(ds.querySelector("img"), cur);
+  const t = $("tools");
+  if (!t.childElementCount || t.dataset.s !== laser + color) {
+    t.dataset.s = laser + color;
+    t.innerHTML = "";
+    const swatch = (c, on, tap, isLaser) => {
+      const b = document.createElement("button");
+      b.className = "sw" + (on ? " on" : "");
+      b.innerHTML = "<i>" + (isLaser ? "<b></b>" : "") + "</i>";
+      b.firstChild.style.background = c;
+      if (c === "#000000") b.firstChild.style.border = "1px solid #636366";
+      b.onclick = tap;
+      t.appendChild(b);
+    };
+    swatch("#ff3b30", laser, () => { laser = true; render(); }, true);
+    for (const c of COLORS) swatch(c, !laser && color === c, () => { laser = false; color = c; render(); });
+    const u = document.createElement("button");
+    u.className = "ib"; u.innerHTML = '<svg><use href="#i-undo"/></svg>';
+    u.onclick = () => { send({ type: "undo" }); marks.pop(); paint(); };
+    t.appendChild(u);
+    const d = document.createElement("button");
+    d.className = "tb b"; d.style.cssText = "font-size:17px;color:#0a84ff"; d.textContent = "Done";
+    d.onclick = () => { sendNow({ type: "laser" }); drawing = false; render(); };
+    t.appendChild(d);
+  }
+  paint();
+}
+function paint() {
+  const cv = $("dslide").querySelector("canvas"), r = cv.getBoundingClientRect(), k = devicePixelRatio || 1;
+  if (cv.width !== Math.round(r.width * k) || cv.height !== Math.round(r.height * k)) { cv.width = Math.round(r.width * k); cv.height = Math.round(r.height * k); }
+  const x = cv.getContext("2d");
+  x.setTransform(k, 0, 0, k, 0, 0);
+  x.clearRect(0, 0, r.width, r.height);
+  x.lineWidth = 4; x.lineCap = x.lineJoin = "round";
+  for (const [c, pts] of marks) {
+    x.strokeStyle = x.fillStyle = c;
+    if (pts.length === 1) { x.beginPath(); x.arc(pts[0][0] * r.width, pts[0][1] * r.height, 2.5, 0, 7); x.fill(); continue; }
+    x.beginPath();
+    pts.forEach((p, i) => i ? x.lineTo(p[0] * r.width, p[1] * r.height) : x.moveTo(p[0] * r.width, p[1] * r.height));
+    x.stroke();
+  }
+  if (laser && laserAt) {
+    const [lx, ly] = [laserAt[0] * r.width, laserAt[1] * r.height];
+    x.fillStyle = "#ff3b3055"; x.beginPath(); x.arc(lx, ly, 16, 0, 7); x.fill();
+    x.fillStyle = "#ff3b30"; x.beginPath(); x.arc(lx, ly, 8, 0, 7); x.fill();
+  }
+}
+const ds = $("dslide");
+let pan = null;
+function norm(e) { const r = ds.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
+const strokeMsg = () => ({ type: "draw", id: markId, color, points });
+ds.addEventListener("pointerdown", e => {
+  if (e.target.closest(".round") || pan != null) return;
+  pan = { id: e.pointerId, start: norm(e), started: false };
+  ds.setPointerCapture(e.pointerId);
+});
+ds.addEventListener("pointermove", e => {
+  if (!pan || pan.id !== e.pointerId) return;
+  const p = norm(e), r = ds.getBoundingClientRect();
+  if (!pan.started) {
+    if (Math.hypot((p[0] - pan.start[0]) * r.width, (p[1] - pan.start[1]) * r.height) < 18) return;
+    pan.started = true;
+    if (!laser) { markId++; points = [pan.start]; marks.push([color, points]); sendMove(strokeMsg()); }
+  }
+  if (laser) { laserAt = p; sendMove({ type: "laser", x: p[0], y: p[1] }); }
+  else { points.push(p); sendMove(strokeMsg()); }
+  paint();
+});
+function panEnd(e) {
+  if (!pan || pan.id !== e.pointerId) return;
+  const started = pan.started; pan = null;
+  if (started && laser) { laserAt = null; sendNow({ type: "laser" }); paint(); }
+  else if (started) { const m = strokeMsg(); setTimeout(() => sendNow(m), 60); }
+}
+ds.addEventListener("pointerup", panEnd);
+ds.addEventListener("pointercancel", panEnd);
+$("dprev").onclick = () => cmd("prev");
+$("dnext").onclick = () => cmd("next");
+
+// ---- the bottom sheets
+function sheet(build) {
+  const s = $("scrim");
+  s.innerHTML = "";
+  const d = document.createElement("div");
+  d.className = "sheet";
+  s.appendChild(d);
+  s.hidden = false;
+  s.onclick = e => { if (e.target === s) closeSheet(); };
+  build(d);
+  return d;
+}
+function closeSheet() { $("scrim").hidden = true; $("scrim").innerHTML = ""; sheetThumbs = null; }
+let sheetThumbs = null;
+function pickSlide() {
+  send({ type: "thumbs" });
+  sheet(d => { sheetThumbs = d; fillThumbs(); });
+}
+function fillThumbs() {
+  const d = sheetThumbs;
+  if (!d) return;
+  d.innerHTML = "";
+  const g = document.createElement("div");
+  g.id = "thumbs";
+  d.appendChild(g);
+  if (!thumbs.length) {
+    g.style.cssText = "display:flex;align-items:center;justify-content:center";
+    g.innerHTML = '<div class="spin" style="width:36px;height:36px;border-width:4px"></div>';
+    return;
+  }
+  // GridView.extent: columns at most 200 wide, 14 apart; cells (1 / aspect) * 0.85 wide for their height
+  const inner = Math.min(innerWidth, 640) - 32, cols = Math.max(1, Math.ceil((inner + 14) / (200 + 14)));
+  const cw = (inner - 14 * (cols - 1)) / cols;
+  g.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+  g.style.gridAutoRows = cw / ((1 / aspect()) * 0.85) + "px";
+  let n = 0;
+  for (const t of thumbs) {
+    if (t.skipped === true) continue;
+    const c = document.createElement("div");
+    c.className = "th";
+    c.innerHTML = "<div>" + (t.image ? '<img alt="">' : "") + "</div><span></span>";
+    if (t.image) c.querySelector("img").src = "data:image/jpeg;base64," + t.image;
+    const sp = c.querySelector("span");
+    sp.textContent = ++n;
+    sp.style.color = t.index === st.slide ? ACCENT : DIM;
+    c.onclick = () => { cmd("goto", t.index); closeSheet(); };
+    g.appendChild(c);
+  }
+}
+function layoutMenu() {
+  sheet(d => {
+    const build = () => {
+      d.innerHTML = "";
+      LAYOUTS.forEach((n, i) => {
+        const b = document.createElement("button");
+        b.className = "mt";
+        b.innerHTML = "<span></span>" + (i === layout ? '<svg style="color:#0a84ff"><use href="#i-check"/></svg>' : "");
+        b.firstChild.textContent = n;
+        b.onclick = () => { layout = i; closeSheet(); render(); };
+        d.appendChild(b);
+      });
+      d.insertAdjacentHTML("beforeend", '<div class="hr"></div><div class="mt" style="padding-right:8px"><span>Presenter Notes</span><span style="display:flex"><button class="ib" id="ndec"><svg><use href="#i-tdec"/></svg></button><button class="ib" id="ninc"><svg><use href="#i-tinc"/></svg></button></span></div><button class="mt" id="inv"><span>Invert Colors</span><span class="switch' + (invert ? " on" : "") + '"></span></button><div style="height:8px"></div>');
+      d.querySelector("#ndec").onclick = () => { notesSize = Math.max(12, notesSize - 2); render(); };
+      d.querySelector("#ninc").onclick = () => { notesSize = Math.min(48, notesSize + 2); render(); };
+      d.querySelector("#inv").onclick = () => { invert = !invert; render(); build(); };
+    };
+    build();
+  });
+}
+
+// ---- the controls
+$("cont").onclick = () => { intro = false; try { localStorage.setItem("kdr-intro", "1"); } catch (e) {} render(); };
+$("close").onclick = () => { if (st.playing) cmd("stop"); };
+$("num").onclick = pickSlide;
+$("dev").onclick = () => { devices = true; render(); };
+$("laybtn").onclick = layoutMenu;
+$("pen").onclick = () => { drawing = true; render(); };
+$("play").onclick = () => cmd("play");
+for (const id of ["t1", "t2"]) $(id).onclick = () => { clock = !clock; tick(); };
+addEventListener("resize", () => { render(); if (sheetThumbs) fillThumbs(); });
+
+// ---- the link: Server-Sent Events from Keydeck
+let es = null;
+function connect() {
+  if (es) es.close();
+  es = new EventSource("events?k=" + K);
+  es.onmessage = e => {
+    const m = JSON.parse(e.data);
+    switch (m.type) {
+      case "welcome": conn = "connected"; name = m.name || ""; break;
+      case "disabled": conn = "disabled"; break;
+      case "expired": conn = "expired"; es.close(); break;
+      case "state": {
+        const was = st.playing === true;
+        st = m; cur = m.current || null; next = m.next || null;
+        if (m.playing === true && !was) showStarted = Date.now();
+        if (m.playing !== true) showStarted = null;
+        break;
+      }
+      case "thumbs": thumbs = m.slides || []; fillThumbs(); break;
+    }
+    render();
+  };
+  es.onerror = () => {
+    if (conn === "expired") return;
+    if (conn === "connected") { conn = "connecting"; render(); }
+    if (es.readyState === 2) {
+      // refused: turned off, or the link replaced; else try again
+      fetch("ping?k=" + K).then(r => {
+        conn = r.status === 403 ? "expired" : r.status === 503 ? "disabled" : "connecting";
+        render();
+        if (conn !== "expired") setTimeout(connect, 3000);
+      }, () => setTimeout(connect, 3000));
+    }
+  };
+}
+render();
+connect();
+</script>
+</body>
+</html>

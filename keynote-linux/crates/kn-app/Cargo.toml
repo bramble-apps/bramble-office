@@ -24,6 +24,8 @@ kn-ui = { path = "../kn-ui" }
 zip = "9.0.5"
 # the document library for other front ends (ffi.rs): its answers as JSON
 serde_json = "1.0.154"
+# Settings > Remotes > Web Remote: the link as a QR code (drawn with egui rects)
+qrcode = { version = "0.14", default-features = false }
 roxmltree = "0.20"
 # GNOME-style (Adwaita) title bar for Settings > Title bar: System (Wayland has no server-side ones on GNOME)
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
