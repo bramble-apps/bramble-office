@@ -18,11 +18,17 @@ pub struct Cols {
     pub tempo: bool,
     pub sig_division: bool,
     pub key_end: bool,
+    /// Locators: the left locator and the cycle's length (else both locators); Punch Locators.
+    pub loc_length: bool,
+    pub punch: bool,
+    /// Sample Rate/Buffer Size; MIDI Activity (In/Out).
+    pub rate: bool,
+    pub midi: bool,
 }
 
 impl Default for Cols {
     fn default() -> Self {
-        Cols { positions: true, locators: true, tempo: true, sig_division: true, key_end: true }
+        Cols { positions: true, locators: true, tempo: true, sig_division: true, key_end: true, loc_length: false, punch: false, rate: false, midi: false }
     }
 }
 
@@ -33,11 +39,56 @@ pub struct State {
     pub end_edit: Option<String>,
     pub div_edit: Option<String>,
     drag_from: Option<(f32, u32)>,
+    /// MIDI Activity: the last message received and the last sent.
+    pub midi_in: String,
+    pub midi_out: String,
+}
+
+/// A MIDI message as the MIDI Activity display shows it: channel, note or kind, value.
+pub fn describe(bytes: &[u8]) -> String {
+    let Some(&st) = bytes.first() else { return String::new() };
+    let (a, b) = (bytes.get(1).copied().unwrap_or(0), bytes.get(2).copied().unwrap_or(0));
+    let ch = (st & 0x0F) + 1;
+    match st & 0xF0 {
+        0x90 | 0x80 => format!("{ch} {} {}", crate::playsurface::note_name(a), if st & 0xF0 == 0x80 { 0 } else { b }),
+        0xB0 => format!("{ch} CC{a} {b}"),
+        0xC0 => format!("{ch} Prg {a}"),
+        0xD0 => format!("{ch} AT {a}"),
+        0xE0 => format!("{ch} PB {}", ((b as i32) << 7 | a as i32) - 8192),
+        _ => "SysEx".into(),
+    }
 }
 
 const POS_W: f32 = 112.0;
 const LOC_W: f32 = 84.0;
 const TEMPO_W: f32 = 62.0;
+const RATE_W: f32 = 64.0;
+const MIDI_W: f32 = 96.0;
+
+fn rate_text(r: u32) -> String {
+    if r % 1000 == 0 { format!("{} kHz", r / 1000) } else { format!("{:.1} kHz", r as f64 / 1000.0) }
+}
+
+/// A length as bars, beats, divisions and ticks from 0 ("4 0 0 0").
+pub fn length_text(t: f64, sig: (u8, u8), div: u32) -> String {
+    let (bar, beat, d, tk) = split(t, sig, div);
+    format!("{} {} {} {}", bar - 1, beat - 1, d - 1, tk - 1)
+}
+
+/// Notes played together: the chord's name when they make one, else the note names.
+pub fn notes_text(held: &[u8]) -> String {
+    if held.len() >= 3 {
+        let root = held[0];
+        let mut iv: Vec<i8> = held.iter().map(|n| ((n - root) % 12) as i8).collect();
+        iv.sort();
+        iv.dedup();
+        let suf = crate::playsurface::suffix(&iv);
+        if suf != "?" {
+            return format!("{}{}", crate::playsurface::note_name(root).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-'), suf);
+        }
+    }
+    held.iter().map(|n| crate::playsurface::note_name(*n)).collect::<Vec<_>>().join(" ")
+}
 const SIG_W: f32 = 46.0;
 const KEY_W: f32 = 78.0;
 const MENU_W: f32 = 22.0;
@@ -49,12 +100,19 @@ pub fn width(app: &App) -> f32 {
         return 310.0;
     }
     let c = app.lcdc.cols;
-    let w: f32 = [(c.positions, POS_W), (c.locators, LOC_W), (c.tempo, TEMPO_W), (c.sig_division, SIG_W), (c.key_end, KEY_W)].iter().filter(|x| x.0).map(|x| x.1).sum();
+    let w: f32 = [(c.positions, POS_W), (c.locators, LOC_W), (c.punch, LOC_W), (c.tempo, TEMPO_W), (c.sig_division, SIG_W), (c.rate, RATE_W), (c.midi, MIDI_W), (c.key_end, KEY_W)].iter().filter(|x| x.0).map(|x| x.1).sum();
     (w + 2.0 * PAD + MENU_W).max(120.0)
 }
 
 /// A position as Logic's LCD writes it: bar, beat, division, tick ("129 1 1 1").
 pub fn bars_text(tick: f64, sig: (u8, u8), div: u32) -> String {
+    // (a division as long as the beat or longer: no third value)
+    let beat_t = lg_core::events::PPQ * 4 / sig.1.max(1) as u32;
+    if div >= beat_t {
+        let (bar, beat, _, _) = split(tick, sig, div);
+        let t = (tick.floor() as i64).rem_euclid(beat_t as i64) + 1;
+        return format!("{bar} {beat} {t}");
+    }
     let (bar, beat, d, t) = split(tick, sig, div);
     format!("{bar} {beat} {d} {t}")
 }
@@ -128,8 +186,19 @@ pub fn custom(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
     if c.locators {
         let r = col(LOC_W);
         let (a, b) = app.cycle;
-        p.text(pos2(r.center().x, top), Align2::CENTER_CENTER, bars_text(a as f64, sig, div), look::regular(12.0), look::lcd_dim());
-        p.text(pos2(r.center().x, bottom), Align2::CENTER_CENTER, bars_text(b as f64, sig, div), look::regular(12.0), look::lcd_dim());
+        // (Use musical grid off: the locators in time)
+        let grid = app.proj.on("General /  / Use musical grid");
+        let fmt = |t: f64| if grid { bars_text(t, sig, div) } else { crate::prefs::time_text(&app.logic_settings, &app.proj, app.seconds_at(t)) };
+        p.text(pos2(r.center().x, top), Align2::CENTER_CENTER, fmt(a as f64), look::regular(12.0), look::lcd_dim());
+        // (the right locator, or the cycle's length)
+        let second = if c.loc_length { length_text(b.saturating_sub(a) as f64, sig, div) } else { fmt(b as f64) };
+        p.text(pos2(r.center().x, bottom), Align2::CENTER_CENTER, second, look::regular(12.0), look::lcd_dim());
+    }
+    if c.punch {
+        let r = col(LOC_W);
+        let (a, b) = app.rec.punch;
+        p.text(pos2(r.center().x, top), Align2::CENTER_CENTER, bars_text(a as f64, sig, div), look::regular(12.0), look::record_red());
+        p.text(pos2(r.center().x, bottom), Align2::CENTER_CENTER, bars_text(b as f64, sig, div), look::regular(12.0), look::record_red());
     }
     if c.tempo {
         let r = col(TEMPO_W);
@@ -141,6 +210,43 @@ pub fn custom(app: &mut App, ui: &mut egui::Ui, p: &egui::Painter, lcd: Rect) {
         let r = col(SIG_W);
         p.text(pos2(r.center().x, top), Align2::CENTER_CENTER, format!("{}/{}", sig.0, sig.1), look::regular(15.0), look::lcd_text());
         division_field(app, ui, p, Rect::from_center_size(pos2(r.center().x, bottom), vec2(r.width(), 18.0)));
+    }
+    if c.rate {
+        let r = col(RATE_W);
+        let rate = app.project.as_ref().map_or(44_100, |pr| pr.sample_rate);
+        let tr = Rect::from_center_size(pos2(r.center().x, top), vec2(r.width(), 18.0));
+        p.text(tr.center(), Align2::CENTER_CENTER, rate_text(rate), look::regular(13.0), look::lcd_text());
+        let buf = app.logic_settings.get("Audio / Devices / I/O Buffer Size:");
+        p.text(pos2(r.center().x, bottom), Align2::CENTER_CENTER, if buf.is_empty() { "256".to_string() } else { buf }, look::regular(12.0), look::lcd_dim());
+        // a click on the rate: the rates to choose from
+        let resp = ui.interact(tr, ui.scope_id().with("lcd-rate"), Sense::click()).on_hover_text("Sample Rate");
+        egui::Popup::menu(&resp).show(|ui| {
+            for r in [44_100u32, 48_000, 88_200, 96_000, 176_400, 192_000] {
+                if ui.add(egui::Button::selectable(rate == r, rate_text(r))).clicked() {
+                    app.checkpoint("Sample Rate");
+                    if let Some(pr) = app.project.as_mut() {
+                        pr.sample_rate = r;
+                    }
+                    ui.close();
+                }
+            }
+        });
+    }
+    if c.midi {
+        let r = col(MIDI_W);
+        let held: Vec<u8> = { let mut v: Vec<u8> = app.live.held.keys().copied().collect(); v.sort(); v };
+        let inp = if held.is_empty() { app.lcdc.midi_in.clone() } else { notes_text(&held) };
+        p.text(pos2(r.center().x, top), Align2::CENTER_CENTER, inp, look::regular(12.0), look::lcd_text());
+        p.text(pos2(r.center().x, bottom), Align2::CENTER_CENTER, app.lcdc.midi_out.clone(), look::regular(12.0), look::lcd_dim());
+        // the lower half: stuck notes off; a double-click: Panic
+        let low = Rect::from_min_max(pos2(r.min.x, lcd.center().y), r.max);
+        let resp = ui.interact(low, ui.scope_id().with("lcd-midi"), Sense::click()).on_hover_text("MIDI Out: click to turn off stuck notes, double-click for Panic");
+        if resp.double_clicked() {
+            let ctx = ui.ctx().clone();
+            let _ = app.key_command(&ctx, "Send discrete Note Offs (Panic)");
+        } else if resp.clicked() {
+            crate::prefs::send_reset(app);
+        }
     }
     if c.key_end {
         let r = col(KEY_W);
@@ -245,9 +351,22 @@ pub fn customize(app: &mut App, ui: &mut egui::Ui) {
     ui.add_enabled_ui(on, |ui| {
         ui.checkbox(&mut c.positions, "Positions (SMPTE/Bars)");
         ui.checkbox(&mut c.locators, "Locators/Cycle");
+        ui.add_enabled_ui(c.locators, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(16.0);
+                ui.radio_value(&mut c.loc_length, false, "Left and Right Locators");
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(16.0);
+                ui.radio_value(&mut c.loc_length, true, "Left Locator and Cycle Length");
+            });
+        });
+        ui.checkbox(&mut c.punch, "Punch Locators");
         ui.checkbox(&mut c.tempo, "Tempo");
         ui.checkbox(&mut c.sig_division, "Time Signature/Division");
         ui.checkbox(&mut c.key_end, "Key Signature/Project End");
+        ui.checkbox(&mut c.rate, "Sample Rate/Buffer Size");
+        ui.checkbox(&mut c.midi, "MIDI Activity (In/Out)");
     });
 }
 
@@ -258,6 +377,14 @@ mod tests {
     #[test]
     fn positions_as_logic_writes_them() {
         assert_eq!(bars_text(0.0, (4, 4), 240), "1 1 1 1");
+        assert_eq!(length_text(3840.0 * 4.0, (4, 4), 240), "4 0 0 0");
+        // a 1/4 division in 4/4: three values
+        assert_eq!(bars_text(960.0 + 5.0, (4, 4), 960), "1 2 6");
+        assert_eq!(describe(&[0x90, 60, 100]), "1 C3 100");
+        assert_eq!(describe(&[0xB1, 1, 64]), "2 CC1 64");
+        assert_eq!(notes_text(&[60, 64, 67]), "C");
+        assert_eq!(notes_text(&[57, 60, 64]), "Am");
+        assert_eq!(notes_text(&[60, 62]), "C3 D3");
         assert_eq!(bars_text(128.0 * 3840.0, (4, 4), 240), "129 1 1 1");
         assert_eq!(bars_text(3840.0 + 960.0 + 240.0 + 5.0, (4, 4), 240), "2 2 2 6");
         // before bar 1: bar 0

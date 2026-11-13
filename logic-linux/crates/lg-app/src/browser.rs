@@ -35,7 +35,7 @@ use crate::soundlib::{self as sl, Item, Kind, LoopType, Search};
 
 /// The Browser key commands and menu items this file runs.
 pub const COMMANDS: &[&str] = &[
-    "View Info", "Play/Stop Preview", "Clear Applied Tags", "Toggle All Filters", "Save Patch for Selected Track…", "Enable Patch Merging", "Add Location", "Add Smart Search", "New Track with Selected Item", "Replace Patch", "Find Similar", "Add to Favorites", "Rename", "Delete", "Show in Finder", "Toggle Columns View",
+    "View Info", "Play/Stop Preview", "Clear Applied Tags", "Toggle All Filters", "Save Patch for Selected Track…", "Save as Patch", "Enable Patch Merging", "Add Location", "Add Smart Search", "New Track with Selected Item", "Replace Patch", "Find Similar", "Add to Favorites", "Rename", "Delete", "Show in Finder", "Toggle Columns View",
     "Search in Browser", "Show Loops & One-Shots in Browser", "Show Instruments in Browser", "Show Effects in Browser",
     // the loop shortcut menu
     "New Track with Loop", "Place Loop at Playhead", "Create Track with Loop", "Quick Sampler", "Sample Alchemy", "Drum Machine Designer",
@@ -257,6 +257,8 @@ fn apply_sidecar(it: &mut Item, p: &Path) {
             "key" => it.key = (!v.is_empty()).then(|| v.to_string()),
             "minor" => it.minor = v == "1",
             "bars" => it.bars = v.parse().ok(),
+            // (tags edited in the Info window replace the others)
+            "settags" => it.tags = v.split(',').filter(|s| !s.is_empty()).map(str::to_string).collect(),
             "tags" => {
                 for tag in v.split(',').filter(|s| !s.is_empty()) {
                     if !it.tags.iter().any(|x| x == tag) {
@@ -319,8 +321,12 @@ pub fn results(app: &App) -> Vec<Item> {
             return scored.into_iter().map(|x| x.1).collect();
         }
     }
-    if app.browser_sort_name {
-        v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.name.cmp(&b.name)).then_with(|| a.id.cmp(&b.id)));
+    let order = sort_order(app);
+    if order != "Relevance" {
+        sort_items(&mut v, &order, fav);
+        if app.br.saved.flag("sort_desc", false) {
+            v.reverse();
+        }
     } else {
         // Relevance: Logic's order for patches (its first 30 as listed, then by category);
         // Link to Selection with no search: the track's patch first, then similar ones
@@ -348,6 +354,46 @@ pub fn results(app: &App) -> Vec<Item> {
         }
     }
     v
+}
+
+/// More ▸ Sort By: the criteria (Logic's), the loop-only ones last.
+pub const SORTS: [&str; 6] = ["Relevance", "Name", "Type", "User Content", "Favorites", "Date Added"];
+pub const LOOP_SORTS: [&str; 3] = ["Tempo", "Bars", "Key"];
+
+/// The results' sort order: More ▸ Sort By (or a column header); "Relevance" by default.
+pub fn sort_order(app: &App) -> String {
+    match app.br.saved.settings.get("sort") {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ if app.browser_sort_name => "Name".into(),
+        _ => "Relevance".into(),
+    }
+}
+
+fn set_sort(app: &mut App, order: &str, desc: bool) {
+    app.br.saved.settings.insert("sort".into(), order.into());
+    app.br.saved.set_flag("sort_desc", desc && order != "Relevance");
+    app.browser_sort_name = order == "Name";
+    save_state(app);
+}
+
+/// Sorts results by a Sort By criterion, ascending (ties by name).
+pub fn sort_items(v: &mut [Item], order: &str, fav: &HashSet<String>) {
+    let key_pos = |it: &Item| it.key.as_deref().and_then(lg_core::timeline::root_of).map_or(99, |r| r as i32 * 2 + it.minor as i32);
+    let added = |it: &Item| it.path.as_ref().and_then(|p| std::fs::metadata(p).ok()).and_then(|m| m.created().or_else(|_| m.modified()).ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+    v.sort_by_cached_key(|it| {
+        let k: (i64, i64) = match order {
+            "Type" => (it.kind as i64, it.loop_type as i64),
+            "User Content" => (!it.user as i64, 0),
+            "Favorites" => (!fav.contains(&it.id) as i64, 0),
+            "Date Added" => (added(it) as i64, 0),
+            // (sounds without the attribute after the others)
+            "Tempo" => (it.bpm.map_or(i64::MAX, |b| (b * 100.0) as i64), 0),
+            "Bars" => (it.bars.map_or(i64::MAX, |b| b as i64), 0),
+            "Key" => (key_pos(it) as i64, 0),
+            _ => (0, 0),
+        };
+        (k, it.name.to_lowercase(), it.id.clone())
+    });
 }
 
 /// A region dragged to the search field: a reference made from it.
@@ -435,21 +481,81 @@ fn write_user_patch(app: &App, t: usize, path: &Path) -> std::io::Result<()> {
     std::fs::write(path, s)
 }
 
+/// Patch Merging's categories: MIDI Effects, Instruments, Audio Effects, Sends.
+pub const MERGE: [&str; 4] = ["MIDI Effects", "Instruments", "Audio Effects", "Sends"];
+
+/// The categories a loaded patch replaces (all four unless Patch Merging's panel says other).
+pub fn merge_cats(app: &App) -> [bool; 4] {
+    if !app.br.saved.flag("patch_merging", false) {
+        return [true; 4];
+    }
+    let v = app.br.saved.settings.get("merge_cats").cloned().unwrap_or_else(|| "1111".into());
+    let mut out = [true; 4];
+    for (i, c) in v.chars().take(4).enumerate() {
+        out[i] = c == '1';
+    }
+    out
+}
+
+fn merge_panel_shown(app: &App) -> bool {
+    app.br.saved.flag("patch_merging", false) && matches!(app.br.view, Cat::Instruments | Cat::Effects | Cat::All | Cat::YourPatches)
+}
+
+/// The Patch Merging panel: the four category buttons (selected: the patch replaces it) and
+/// Close. Effect patches have no instrument or MIDI effects (greyed); a summing stack's main
+/// track can't merge.
+fn merge_panel(app: &mut App, ui: &mut egui::Ui, r: Rect) {
+    let p = ui.painter().clone();
+    p.rect_filled(r, 0.0, look::pane_bg());
+    p.hline(r.x_range(), r.min.y, Stroke::new(1.0, look::line()));
+    p.text(pos2(r.min.x + 10.0, r.min.y + 12.0), Align2::LEFT_CENTER, "Patch Merging", look::semibold(11.0), look::text());
+    let close = Rect::from_min_size(pos2(r.max.x - 24.0, r.min.y + 3.0), vec2(18.0, 18.0));
+    crate::glyphs::paint(&p, close, ph::X, 11.0, look::text_dim());
+    if ui.interact(close, ui.scope_id().with("merge-close"), Sense::click()).on_hover_text("Close").clicked() {
+        app.br.saved.set_flag("patch_merging", false);
+        save_state(app);
+        return;
+    }
+    let summing = track_kind(app).is_some_and(|(t, _, _)| app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.extra.stack).is_some_and(|s| s.kind == lg_core::arrange::StackKind::Summing));
+    let effects = app.br.view == Cat::Effects || track_kind(app).is_some_and(|k| k.1 == TrackKind::Audio);
+    let cats = merge_cats(app);
+    let bw = (r.width() - 20.0 - 3.0 * 4.0) / 4.0;
+    for (i, name) in MERGE.iter().enumerate() {
+        let b = Rect::from_min_size(pos2(r.min.x + 10.0 + i as f32 * (bw + 4.0), r.min.y + 26.0), vec2(bw, 22.0));
+        let enabled = !summing && !(effects && i < 2);
+        let on = cats[i] && enabled;
+        p.rect_filled(b, 5.0, if on { look::accent() } else { look::group_bg() });
+        p.with_clip_rect(b).text(b.center(), Align2::CENTER_CENTER, *name, look::regular(10.5), if !enabled { look::text_dim().gamma_multiply(0.5) } else if on { Color32::WHITE } else { look::text() });
+        if enabled && ui.interact(b, ui.scope_id().with(("merge", i)), Sense::click()).clicked() {
+            let mut c = cats;
+            c[i] = !c[i];
+            app.br.saved.settings.insert("merge_cats".into(), c.iter().map(|x| if *x { '1' } else { '0' }).collect());
+            save_state(app);
+        }
+    }
+    if summing {
+        p.text(pos2(r.max.x - 30.0, r.min.y + 12.0), Align2::RIGHT_CENTER, "Not for a summing stack's main track", look::regular(10.0), look::text_dim());
+    }
+}
+
 fn load_user_patch(app: &mut App, t: usize, path: &Path) {
     let Ok(text) = std::fs::read_to_string(path) else {
         app.tell("That patch couldn't be read");
         return;
     };
     app.checkpoint("Change Patch");
-    let merge = app.br.saved.flag("patch_merging", false);
+    // Patch Merging: only the selected categories are replaced; all four (or no panel): the
+    // whole patch, its volume and pan too
+    let cats = merge_cats(app);
+    let merge = cats != [true; 4];
     let mut inserts = Vec::new();
     for l in text.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         match f.as_slice() {
-            ["instrument", i] => {
+            ["instrument", i] if cats[1] => {
                 app.instrument_choice.insert(t, i.to_string());
             }
-            ["program", n] => {
+            ["program", n] if cats[1] => {
                 if let (Some(p), Ok(n)) = (app.programs.get_mut(t), n.parse()) {
                     *p = n;
                 }
@@ -477,17 +583,9 @@ fn load_user_patch(app: &mut App, t: usize, path: &Path) {
             tr.name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         }
     }
-    // Patch Merging off: the patch's Audio FX replace the track's; on: the track's stay
-    if !merge {
+    // the patch's Audio FX replace the track's unless Audio Effects is deselected
+    if cats[2] {
         crate::mixstate::edit_inserts(app, t, |v| *v = inserts);
-    } else if !inserts.is_empty() {
-        crate::mixstate::edit_inserts(app, t, |v| {
-            for u in inserts {
-                if !v.iter().any(|x| x.name == u.name) {
-                    v.push(u);
-                }
-            }
-        });
     }
     app.after_edit();
 }
@@ -892,10 +990,13 @@ pub fn run(app: &mut App, name: &str, focused: bool) -> bool {
             app.br.typed.clear();
         }
         "Toggle All Filters" => app.br.all_filters = !app.br.all_filters,
-        "Save Patch for Selected Track…" => {
+        // (the track header's shortcut menu ▸ Save as Patch too)
+        "Save Patch for Selected Track…" | "Save as Patch" => {
             if let Some(t) = app.selected_track.filter(|_| !track_kind(app).is_some_and(|k| k.2)) {
                 let n = app.project.as_ref().and_then(|p| p.tracks.get(t)).map(|tr| tr.name.clone()).unwrap_or_default();
                 app.br.patch_name = Some(n);
+                // (its name sheet is the Browser's)
+                app.show_browser = true;
             }
         }
         "Enable Patch Merging" => {
@@ -1222,6 +1323,7 @@ fn icon_button(ui: &mut egui::Ui, r: Rect, id: &str, icon: &str, on: bool, tip: 
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
+    crate::brfocus::follow_view(app);
     ensure_loaded(app);
     app.br.rect = area;
     link_to_selection(app);
@@ -1354,6 +1456,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // ---- the results and the footer
     // (the Preview Player, when shown, sits between the results and the footer: prevplayer.rs)
     let player_h = crate::prevplayer::height(app);
+    // the Patch Merging panel (More ▸ Enable Patch Merging) below the results
+    let merge_h = if merge_panel_shown(app) { 58.0 } else { 0.0 };
+    if merge_h > 0.0 {
+        merge_panel(app, ui, Rect::from_min_max(pos2(body_left, area.max.y - 42.0 - player_h - merge_h), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h)));
+    }
+    let player_h = player_h + merge_h;
     let list = Rect::from_min_max(pos2(body_left, body_top), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h));
     p.rect_filled(list, 0.0, look::lane_bg());
     let count = {
@@ -1374,8 +1482,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     };
-    if player_h > 0.0 {
-        crate::prevplayer::show(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y), pos2(list.max.x, list.max.y + player_h)));
+    if player_h - merge_h > 0.0 {
+        crate::prevplayer::show(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y + merge_h), pos2(list.max.x, list.max.y + player_h)));
     }
     footer(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y + player_h), pos2(list.max.x, area.max.y)), count);
     // folders dropped from the desktop onto the Browser: new locations
@@ -1756,7 +1864,10 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
         ui.painter_at(list).text(pos2(list.center().x, list.min.y + 30.0), Align2::CENTER_CENTER, msg, look::regular(12.0), look::text_dim());
         return 0;
     }
-    let wide = list.width() > 330.0;
+    let _wide = list.width() > 330.0;
+    // More ▸ Show Attributes: a table with column headers (All, Loops & One-Shots, locations,
+    // Smart Searches; not Instruments / Effects)
+    let (list, cols) = if attributes_shown(app) { attr_header(app, ui, list) } else { (list, Vec::new()) };
     let current = current_patch(app);
     let now = app.ctx.input(|i| i.time);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(list));
@@ -1813,14 +1924,13 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
             if pointer.is_some_and(|pp| pp.y >= r.min.y && pp.y < r.max.y && (pp.x - m.center().x).abs() <= m.width() / 2.0 + 2.0) && ((app.br.sweeping && down) || alt_held) {
                 swept = Some(it.clone());
             }
-            let name_r = Rect::from_min_max(pos2(r.min.x + 40.0, r.min.y), pos2(r.max.x - if wide { 150.0 } else { 28.0 }, r.max.y));
+            let name_end = cols.first().map_or(r.max.x - 28.0, |c| c.1 - 4.0);
+            let name_r = Rect::from_min_max(pos2(r.min.x + 40.0, r.min.y), pos2(name_end, r.max.y));
             p.with_clip_rect(name_r).text(pos2(name_r.min.x, r.center().y), Align2::LEFT_CENTER, &it.name, look::regular(13.0), look::text());
-            if wide && it.kind != Kind::Patch {
-                let bars = it.bars.map(|b| b.to_string()).unwrap_or_else(|| it.seconds.map(|s| format!("{s:.1}s")).unwrap_or_default());
-                let cols = [it.bpm.map(|b| format!("{b:.0}")).unwrap_or_default(), it.key_text(), bars];
-                for (c, txt) in cols.iter().enumerate() {
-                    p.text(pos2(r.max.x - 140.0 + c as f32 * 38.0, r.center().y), Align2::LEFT_CENTER, txt, look::regular(11.5), look::text_dim());
-                }
+            for (c, x0, w) in &cols {
+                let txt = attr_text(it, c);
+                let cr = Rect::from_min_max(pos2(*x0 + 4.0, r.min.y), pos2(x0 + w - 2.0, r.max.y));
+                p.with_clip_rect(cr).text(pos2(cr.min.x, r.center().y), Align2::LEFT_CENTER, txt, look::regular(11.5), look::text_dim());
             }
             // the favourite star: dim on hover, lit for a favourite
             let is_fav = app.br.saved.favorites.contains(&it.id);
@@ -1900,6 +2010,123 @@ fn result_list(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     n
 }
 
+/// The attribute columns Show Attributes can show, and those shown by default.
+pub const ATTR_COLS: [&str; 5] = ["Key", "Bars", "Tempo", "Length", "Sound Pack"];
+const ATTR_DEFAULT: &str = "Key,Bars,Tempo";
+
+/// Show Attributes is on and the view has it (not Instruments or Effects).
+pub fn attributes_shown(app: &App) -> bool {
+    matches!(app.br.view, Cat::Loops | Cat::All | Cat::Location(_) | Cat::YourLoops | Cat::Smart(_)) && app.br.saved.flag("show_attributes", true)
+}
+
+fn attr_cols(app: &App) -> Vec<String> {
+    let v = app.br.saved.settings.get("attr_cols").cloned().unwrap_or_else(|| ATTR_DEFAULT.into());
+    ATTR_COLS.iter().filter(|c| v.split(',').any(|x| x == **c)).map(|c| c.to_string()).collect()
+}
+
+fn attr_width(app: &App, c: &str) -> f32 {
+    app.br.saved.settings.get(&format!("colw_{c}")).and_then(|v| v.parse().ok()).unwrap_or(if c == "Sound Pack" { 110.0 } else { 46.0 })
+}
+
+/// A result's value in an attribute column.
+pub fn attr_text(it: &Item, c: &str) -> String {
+    match c {
+        "Key" => it.key_text(),
+        "Bars" => it.bars.map(|b| b.to_string()).unwrap_or_default(),
+        "Tempo" => it.bpm.map(|b| format!("{b:.0}")).unwrap_or_default(),
+        "Length" => it.seconds.map(|s| format!("{s:.1} s")).unwrap_or_default(),
+        "Sound Pack" => it.pack.clone(),
+        _ => String::new(),
+    }
+}
+
+/// A header click: ascending, then descending, then back to relevance.
+pub fn next_sort(cur: &str, desc: bool, col: &str) -> (String, bool) {
+    if cur != col {
+        (col.to_string(), false)
+    } else if !desc {
+        (col.to_string(), true)
+    } else {
+        ("Relevance".into(), false)
+    }
+}
+
+/// The table header: the type column (sorts by type), Name and the attribute columns (click
+/// sorts; Control-click shows or hides columns; drag a column's left border to resize it).
+/// Returns the list below it and the columns' (name, left x, width).
+fn attr_header(app: &mut App, ui: &mut egui::Ui, list: Rect) -> (Rect, Vec<(String, f32, f32)>) {
+    let h = 20.0;
+    let head = Rect::from_min_max(list.min, pos2(list.max.x, list.min.y + h));
+    let p = ui.painter().clone();
+    p.rect_filled(head, 0.0, look::header_bg());
+    p.hline(head.x_range(), head.max.y - 0.5, Stroke::new(1.0, look::line()));
+    let mut cols: Vec<(String, f32, f32)> = Vec::new();
+    let mut x = list.max.x - 28.0;
+    for c in attr_cols(app).iter().rev() {
+        let w = attr_width(app, c);
+        x -= w;
+        cols.push((c.clone(), x, w));
+    }
+    cols.reverse();
+    let order = sort_order(app);
+    let desc = app.br.saved.flag("sort_desc", false);
+    let name_end = cols.first().map_or(list.max.x - 28.0, |c| c.1);
+    let mut heads: Vec<(String, String, Rect)> = vec![("Type".into(), String::new(), Rect::from_min_max(pos2(list.min.x + 12.0, head.min.y), pos2(list.min.x + 36.0, head.max.y))), ("Name".into(), "Name".into(), Rect::from_min_max(pos2(list.min.x + 36.0, head.min.y), pos2(name_end, head.max.y)))];
+    for (c, x0, w) in &cols {
+        let sort = match c.as_str() {
+            "Length" => "Bars",
+            "Sound Pack" => "Type",
+            o => o,
+        };
+        heads.push((sort.to_string(), c.clone(), Rect::from_min_size(pos2(*x0, head.min.y), vec2(*w, h))));
+    }
+    let mut click: Option<String> = None;
+    for (k, (sort, label, r)) in heads.iter().enumerate() {
+        if k >= 2 {
+            p.vline(r.min.x, (r.min.y + 4.0)..=(r.max.y - 4.0), Stroke::new(1.0, look::line()));
+        }
+        let on = order == *sort && (k != 0 || label.is_empty());
+        p.with_clip_rect(*r).text(pos2(r.min.x + 4.0, r.center().y), Align2::LEFT_CENTER, label, if on { look::semibold(11.0) } else { look::regular(11.0) }, if on { look::text() } else { look::text_dim() });
+        if on && r.width() > 30.0 {
+            crate::glyphs::paint(&p, Rect::from_center_size(pos2(r.max.x - 9.0, r.center().y), vec2(10.0, 10.0)), if desc { ph::CARET_DOWN } else { ph::CARET_UP }, 9.0, look::text_dim());
+        }
+        let resp = ui.interact(*r, ui.scope_id().with(("attr-head", k)), Sense::click());
+        if resp.clicked() {
+            click = Some(sort.clone());
+        }
+        // Control-click: the columns
+        egui::Popup::context_menu(&resp).show(|ui| {
+            let shown = attr_cols(app);
+            for c in ATTR_COLS {
+                let on = shown.iter().any(|x| x == c);
+                if ui.add(egui::Button::selectable(on, c)).clicked() {
+                    let next: Vec<&str> = ATTR_COLS.iter().copied().filter(|x| if *x == c { !on } else { shown.iter().any(|y| y == x) }).collect();
+                    app.br.saved.settings.insert("attr_cols".into(), next.join(","));
+                    save_state(app);
+                    ui.close();
+                }
+            }
+        });
+        // a column's left border: drag to resize
+        if k >= 2 {
+            let edge = Rect::from_center_size(pos2(r.min.x, r.center().y), vec2(6.0, h));
+            let er = ui.interact(edge, ui.scope_id().with(("attr-edge", k)), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeColumn);
+            if er.dragged() {
+                let w = (r.width() - er.drag_delta().x).clamp(28.0, 240.0);
+                app.br.saved.settings.insert(format!("colw_{label}"), format!("{w:.0}"));
+            }
+            if er.drag_stopped() {
+                save_state(app);
+            }
+        }
+    }
+    if let Some(c) = click {
+        let (o, d) = next_sort(&order, desc, &c);
+        set_sort(app, &o, d);
+    }
+    (Rect::from_min_max(pos2(list.min.x, head.max.y), list.max), cols)
+}
+
 /// The shortcut menu of a result (Logic's loop menu; patches: theirs).
 fn item_menu(app: &mut App, ui: &mut egui::Ui, it: &Item) -> Option<String> {
     let mut cmd: Option<String> = None;
@@ -1970,11 +2197,20 @@ fn item_menu(app: &mut App, ui: &mut egui::Ui, it: &Item) -> Option<String> {
 /// Columns view: patches by category, then subcategory, then name.
 /// The columns view's columns for the open path: categories, then the chosen category's
 /// subcategories, then the chosen subcategory's patches.
+pub const USER_PATCHES: &str = "User Patches";
+
 pub(crate) fn column_lists(items: &[Item], path: &[String]) -> Vec<Vec<String>> {
-    let cat_of = |i: &Item| -> (String, String) { patches().iter().find(|p| p.2 == i.name).map(|p| (p.0.clone(), p.1.clone())).unwrap_or((i.category.clone(), String::new())) };
+    // (saved patches in a User Patches folder at the top; the rest by category, alphabetically
+    // whatever the sort order, as Logic's column layout)
+    let cat_of = |i: &Item| -> (String, String) {
+        if i.user && i.kind == Kind::Patch {
+            return (USER_PATCHES.to_string(), String::new());
+        }
+        patches().iter().find(|p| p.2 == i.name).map(|p| (p.0.clone(), p.1.clone())).unwrap_or((i.category.clone(), String::new()))
+    };
     let mut cols: Vec<Vec<String>> = Vec::new();
     let mut cats: Vec<String> = items.iter().map(|i| cat_of(i).0).collect();
-    cats.sort_by_key(|c| (relevance(c), c.clone()));
+    cats.sort_by_key(|c| (c != USER_PATCHES, c.to_lowercase()));
     cats.dedup();
     cols.push(cats);
     if let Some(c) = path.first().cloned() {
@@ -1983,7 +2219,9 @@ pub(crate) fn column_lists(items: &[Item], path: &[String]) -> Vec<Vec<String>> 
         subs.dedup();
         cols.push(subs);
         if let Some(s) = path.get(1).cloned() {
-            cols.push(items.iter().filter(|i| cat_of(i) == (c.clone(), s.clone())).map(|i| i.name.clone()).collect());
+            let mut names: Vec<String> = items.iter().filter(|i| cat_of(i) == (c.clone(), s.clone())).map(|i| i.name.clone()).collect();
+            names.sort_by_key(|n| n.to_lowercase());
+            cols.push(names);
         }
     }
     cols
@@ -2051,6 +2289,31 @@ fn columns_view(app: &mut App, ui: &mut egui::Ui, list: Rect) -> usize {
     let items: Vec<Item> = results(app);
     let col_w = (list.width() / 3.0).max(120.0);
     let p = ui.painter().clone();
+    // the path bar below the columns: a click on a folder opens it
+    let bar = Rect::from_min_max(pos2(list.min.x, list.max.y - 20.0), list.max);
+    let list = Rect::from_min_max(list.min, pos2(list.max.x, bar.min.y));
+    p.rect_filled(bar, 0.0, look::header_bg());
+    p.hline(bar.x_range(), bar.min.y, Stroke::new(1.0, look::line()));
+    let root = if app.br.view == Cat::Effects { "Effects" } else { "Instruments" };
+    let mut x = bar.min.x + 8.0;
+    let mut go_to: Option<usize> = None;
+    for (k, part) in std::iter::once(root.to_string()).chain(app.br.column_path.iter().cloned()).enumerate() {
+        if k > 0 {
+            p.text(pos2(x, bar.center().y), Align2::LEFT_CENTER, "›", look::regular(11.0), look::text_dim());
+            x += 10.0;
+        }
+        let g = p.layout_no_wrap(part.clone(), look::regular(11.0), look::text_dim());
+        let seg = Rect::from_min_size(pos2(x, bar.min.y), vec2(g.size().x + 2.0, bar.height()));
+        let resp = ui.interact(seg, ui.scope_id().with(("bpath", k)), Sense::click());
+        p.galley_with_override_text_color(pos2(x, bar.center().y - g.size().y / 2.0), g, if resp.hovered() { look::text() } else { look::text_dim() });
+        if resp.clicked() {
+            go_to = Some(k);
+        }
+        x = seg.max.x + 4.0;
+    }
+    if let Some(k) = go_to {
+        app.br.column_path.truncate(k);
+    }
     let cols = column_lists(&items, &app.br.column_path);
     let current = current_patch(app);
     let chosen_name = app.br.selected.first().and_then(|s| items.iter().find(|i| &i.id == s)).map(|i| i.name.clone());
@@ -2439,7 +2702,8 @@ fn flag_item(ui: &mut egui::Ui, app: &mut App, k: &str, label: &str, default: bo
 fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
     let p = ui.painter().clone();
     p.hline(foot.x_range(), foot.min.y, Stroke::new(1.0, look::line()));
-    let sorted = if app.br.search.similar.is_some() { "Similarity" } else if app.browser_sort_name { "Name" } else { "Relevance" };
+    let order = sort_order(app);
+    let sorted = if app.br.search.similar.is_some() { "Similarity" } else { order.as_str() };
     p.text(pos2(foot.min.x + 10.0, foot.min.y + 13.0), Align2::LEFT_CENTER, "Sorted by:", look::regular(11.0), look::text_dim());
     let sw = p.layout_no_wrap("Sorted by: ".into(), look::regular(11.0), look::text_dim()).size().x;
     p.text(pos2(foot.min.x + 10.0 + sw, foot.min.y + 13.0), Align2::LEFT_CENTER, sorted, look::semibold(11.0), look::text());
@@ -2456,14 +2720,32 @@ fn footer(app: &mut App, ui: &mut egui::Ui, foot: Rect, count: usize) {
     crate::glyphs::paint(&p, more, ph::DOTS_THREE, 14.0, look::text());
     egui::Popup::menu(&mresp).show(|ui| {
         ui.set_min_width(240.0);
-        ui.label(egui::RichText::new("Sort by").color(look::text_dim()));
-        if ui.add(egui::Button::selectable(!app.browser_sort_name, "Relevance")).clicked() {
-            app.browser_sort_name = false;
-            ui.close();
-        }
-        if ui.add(egui::Button::selectable(app.browser_sort_name, "Name")).clicked() {
-            app.browser_sort_name = true;
-            ui.close();
+        let loops = matches!(app.br.view, Cat::Loops | Cat::All | Cat::Location(_) | Cat::YourLoops | Cat::Smart(_));
+        ui.menu_button("Sort By", |ui| {
+            ui.set_min_width(160.0);
+            let cur = sort_order(app);
+            let desc = app.br.saved.flag("sort_desc", false);
+            let extra: &[&str] = if loops { &LOOP_SORTS } else { &[] };
+            for o in SORTS.iter().chain(extra.iter()) {
+                if ui.add(egui::Button::selectable(cur == *o, *o)).clicked() {
+                    set_sort(app, o, desc);
+                    ui.close();
+                }
+            }
+            ui.separator();
+            // (every criterion but Relevance can go either way)
+            let rel = cur == "Relevance";
+            if ui.add_enabled(!rel, egui::Button::selectable(!rel && !desc, "Ascending")).clicked() {
+                set_sort(app, &cur, false);
+                ui.close();
+            }
+            if ui.add_enabled(!rel, egui::Button::selectable(!rel && desc, "Descending")).clicked() {
+                set_sort(app, &cur, true);
+                ui.close();
+            }
+        });
+        if loops {
+            flag_item(ui, app, "show_attributes", "Show Attributes", true);
         }
         ui.separator();
         if matches!(app.br.view, Cat::Loops | Cat::All | Cat::Location(_) | Cat::YourLoops) {
@@ -2522,39 +2804,156 @@ fn name_sheet(ctx: &egui::Context, title: &str, text: &mut String, ok: &str) -> 
     out
 }
 
-fn dialogs(app: &mut App, ctx: &egui::Context) {
-    if let Some(id) = app.br.info.clone() {
-        let mut open = true;
-        if let Some(it) = item(app, &id) {
-            egui::Window::new("Info").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
-                egui::Grid::new("binfo").num_columns(2).show(ui, |ui| {
-                    let kind = match it.kind {
-                        Kind::Patch => if it.loop_type == LoopType::Audio { "Audio Patch" } else { "Instrument Patch" },
-                        Kind::Loop => match it.loop_type {
-                            LoopType::Audio => "Audio Loop",
-                            LoopType::Midi => "MIDI Loop",
-                            LoopType::SessionPlayer => "Session Player Loop",
-                            LoopType::Pattern => "Pattern Loop",
-                        },
-                        Kind::OneShot => "One-Shot",
-                    };
-                    let rows = [("Name", it.name.clone()), ("Type", kind.into()), ("Sound Pack", it.pack.clone()), ("Tags", it.tags.join(", ")), ("Tempo", it.bpm.map(|b| format!("{b:.1} bpm")).unwrap_or_default()), ("Key", it.key_text()), ("Bars", it.bars.map(|b| b.to_string()).unwrap_or_default()), ("Length", it.seconds.map(|s| format!("{s:.2} s")).unwrap_or_default()), ("File", it.path.as_ref().map(|p| p.display().to_string()).unwrap_or_default())];
-                    for (k, v) in rows {
-                        if !v.is_empty() {
-                            ui.label(egui::RichText::new(k).color(look::text_dim()));
-                            ui.label(v);
-                            ui.end_row();
-                        }
+/// A sound's type as the Info window names it.
+pub fn type_name(it: &Item) -> &'static str {
+    match it.kind {
+        Kind::Patch => if it.loop_type == LoopType::Audio { "Audio Patch" } else { "Instrument Patch" },
+        Kind::Loop => match it.loop_type {
+            LoopType::Audio => "Audio Loop",
+            LoopType::Midi => "MIDI Loop",
+            LoopType::SessionPlayer => "Session Player Loop",
+            LoopType::Pattern => "Pattern Loop",
+        },
+        Kind::OneShot => "One-Shot",
+    }
+}
+
+/// The Info window's details for the selected sounds: (label, value), "*" where they differ.
+pub fn info_rows(items: &[Item]) -> Vec<(&'static str, String)> {
+    let same = |f: &dyn Fn(&Item) -> String| -> String {
+        let v: Vec<String> = items.iter().map(f).collect();
+        if v.iter().all(|x| *x == v[0]) { v[0].clone() } else { "*".into() }
+    };
+    let mut rows = vec![
+        ("Name", same(&|i| i.name.clone())),
+        ("Type", same(&|i| type_name(i).to_string())),
+        ("File Format", same(&|i| i.path.as_ref().and_then(|p| p.extension()).map(|e| match e.to_string_lossy().to_lowercase().as_str() { "wav" | "wave" => "WAVE".to_string(), "aif" | "aiff" => "AIFF".to_string(), "mid" | "midi" => "MIDI".to_string(), o => o.to_uppercase() }).unwrap_or_else(|| if i.kind == Kind::Patch { "Patch".into() } else { String::new() }))),
+    ];
+    if items.iter().all(|i| i.kind == Kind::Loop) {
+        rows.push(("Tempo", same(&|i| i.bpm.map(|b| format!("{b:.0} bpm")).unwrap_or_default())));
+        rows.push(("Length", same(&|i| i.bars.map(|b| format!("{b} bar{}", if b == 1 { "" } else { "s" })).unwrap_or_default())));
+        rows.push(("Time Signature", same(&|i| i.groups.iter().find(|g| g.0 == "Time Signature").map_or("4/4".into(), |g| g.1.clone()))));
+        rows.push(("Key", same(&|i| i.key.as_ref().map(|k| format!("{k} {}", if i.minor { "minor" } else { "major" })).unwrap_or_default())));
+    } else if items.iter().all(|i| i.kind == Kind::OneShot) {
+        rows.push(("Length", same(&|i| i.seconds.map(|s| format!("{s:.2} s")).unwrap_or_default())));
+    }
+    rows
+}
+
+/// A tag on all the sounds (Some(true)), some of them (Some(false)) or none.
+pub fn tag_state(items: &[Item], tag: &str) -> Option<bool> {
+    let n = items.iter().filter(|i| i.tags.iter().any(|t| t == tag)).count();
+    if n == 0 { None } else { Some(n == items.len()) }
+}
+
+/// Edits a user sound's tags (the Info window's Edit mode): saved beside its file.
+fn set_user_tags(app: &mut App, id: &str, tags: Vec<String>) {
+    let Some(it) = app.br.items.iter_mut().find(|i| i.id == id && i.user) else { return };
+    it.tags = tags.clone();
+    let Some(path) = it.path.clone() else { return };
+    let side = sidecar(&path);
+    let old = std::fs::read_to_string(&side).unwrap_or_default();
+    let mut lines: Vec<String> = old.lines().filter(|l| !l.starts_with("settags=")).map(str::to_string).collect();
+    lines.push(format!("settags={}", tags.join(",")));
+    let _ = std::fs::write(side, lines.join("\n") + "\n");
+}
+
+/// The Info window, beside the Browser: the selected sounds' details and tags (follows the
+/// selection); Edit (top left) shows every tag to assign or unassign on user sounds; Close at
+/// the top right.
+fn info_window(app: &mut App, ctx: &egui::Context) {
+    let Some(first) = app.br.info.clone() else { return };
+    let ids: Vec<String> = if app.br.selected.is_empty() { vec![first] } else { app.br.selected.clone() };
+    let items: Vec<Item> = ids.iter().filter_map(|id| item(app, id)).collect();
+    if items.is_empty() {
+        app.br.info = None;
+        return;
+    }
+    let edit_id = egui::Id::unique("lg-br-info-edit");
+    let mut edit: bool = ctx.data(|d| d.get_temp(edit_id)).unwrap_or(false);
+    let mut close = false;
+    let at = pos2(app.br.rect.max.x + 6.0, app.br.rect.min.y + 40.0);
+    let mut toggles: Vec<String> = Vec::new();
+    let editable = items.iter().all(|i| i.user && i.path.is_some());
+    egui::Area::new(egui::Id::unique("lg-br-info")).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).show(ui, |ui| {
+            ui.set_width(270.0);
+            // Edit · Info · Close
+            ui.horizontal(|ui| {
+                if ui.add(egui::Button::selectable(edit, "Edit")).on_hover_text("Edit the tags").clicked() {
+                    edit = !edit;
+                }
+                ui.add_space(60.0);
+                ui.label(egui::RichText::new("Info").font(look::semibold(13.0)));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(egui::RichText::new(ph::X).font(egui::FontId::new(12.0, crate::glyphs::family())))).on_hover_text("Close").clicked() {
+                        close = true;
                     }
                 });
             });
-        } else {
-            open = false;
-        }
-        if !open {
-            app.br.info = None;
+            ui.separator();
+            egui::Grid::new("binfo").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
+                for (k, v) in info_rows(&items) {
+                    if !v.is_empty() {
+                        ui.label(egui::RichText::new(k).color(look::text_dim()));
+                        ui.label(v);
+                        ui.end_row();
+                    }
+                }
+            });
+            ui.separator();
+            // the tags, by category (Type, Key, Tonality and Time Signature are set by Studio and
+            // shown above; Sound Packs only belong to factory sounds)
+            let mut cats: Vec<(&str, Vec<&str>)> = sl::categories().iter().map(|c| (c.name, c.tags.iter().flat_map(|(t, subs)| std::iter::once(*t).chain(subs.iter().copied())).collect())).collect();
+            cats.push(("Descriptors", sl::PAIRS.iter().flat_map(|(a, b)| [*a, *b]).collect()));
+            egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                for (cat, tags) in cats {
+                    let shown: Vec<&str> = if edit { tags } else { tags.into_iter().filter(|t| tag_state(&items, t).is_some()).collect() };
+                    if shown.is_empty() {
+                        continue;
+                    }
+                    ui.label(egui::RichText::new(cat).color(look::text_dim()).font(look::semibold(11.0)));
+                    ui.horizontal_wrapped(|ui| {
+                        for t in shown {
+                            let st = tag_state(&items, t);
+                            // (a dot: on some of the selected sounds only)
+                            let text = if st == Some(false) { format!("• {t}") } else { t.to_string() };
+                            if edit {
+                                let b = ui.add_enabled(editable, egui::Button::selectable(st.is_some(), text));
+                                if b.clicked() {
+                                    toggles.push(t.to_string());
+                                }
+                            } else {
+                                ui.label(egui::RichText::new(text).background_color(look::group_bg()));
+                            }
+                        }
+                    });
+                }
+            });
+            if edit && !editable {
+                ui.label(egui::RichText::new("Tags can be edited on your own sounds").color(look::text_dim()).font(look::regular(11.0)));
+            }
+        });
+    });
+    for t in toggles {
+        let all = tag_state(&items, &t) == Some(true);
+        for it in &items {
+            let mut tags = it.tags.clone();
+            tags.retain(|x| *x != t);
+            if !all {
+                tags.push(t.clone());
+            }
+            set_user_tags(app, &it.id, tags);
         }
     }
+    ctx.data_mut(|d| d.insert_temp(edit_id, edit));
+    if close {
+        app.br.info = None;
+    }
+}
+
+fn dialogs(app: &mut App, ctx: &egui::Context) {
+    info_window(app, ctx);
     if let Some((id, mut name)) = app.br.renaming.take() {
         match name_sheet(ctx, "Rename", &mut name, "Rename") {
             Some(Some(n)) if !n.is_empty() => rename_item(app, &id, &n),
@@ -2739,6 +3138,56 @@ fn delete_item(app: &mut App, id: &str) {
 
 #[cfg(test)]
 mod tests {
+    fn it(name: &str, bpm: Option<f64>, key: Option<&str>, user: bool) -> Item {
+        Item { id: name.into(), name: name.into(), kind: if bpm.is_some() { Kind::Loop } else { Kind::Patch }, loop_type: LoopType::Audio, category: String::new(), path: None, tags: Vec::new(), groups: Vec::new(), pack: String::new(), user, bpm, key: key.map(str::to_string), minor: false, bars: Some(4), seconds: None, location: None }
+    }
+
+    #[test]
+    fn info_rows_mark_differences_and_partial_tags() {
+        let mut a = it("Groove A", Some(120.0), Some("C"), true);
+        a.path = Some(PathBuf::from("/x/Groove A.wav"));
+        a.tags = vec!["Drums".into(), "Funk".into()];
+        let mut b = it("Groove B", Some(100.0), Some("C"), true);
+        b.path = Some(PathBuf::from("/x/Groove B.aif"));
+        b.tags = vec!["Drums".into()];
+        let one = info_rows(std::slice::from_ref(&a));
+        assert!(one.contains(&("Type", "Audio Loop".to_string())));
+        assert!(one.contains(&("File Format", "WAVE".to_string())));
+        assert!(one.contains(&("Tempo", "120 bpm".to_string())));
+        assert!(one.contains(&("Length", "4 bars".to_string())));
+        assert!(one.contains(&("Time Signature", "4/4".to_string())));
+        let both = info_rows(&[a.clone(), b.clone()]);
+        assert!(both.contains(&("Name", "*".to_string())));
+        assert!(both.contains(&("Tempo", "*".to_string())));
+        assert!(both.contains(&("Key", "C major".to_string())));
+        assert_eq!(tag_state(&[a.clone(), b.clone()], "Drums"), Some(true));
+        assert_eq!(tag_state(&[a.clone(), b.clone()], "Funk"), Some(false));
+        assert_eq!(tag_state(&[a, b], "Jazz"), None);
+    }
+
+    #[test]
+    fn sort_by_criteria_and_header_cycle() {
+        let fav: HashSet<String> = ["b".to_string()].into_iter().collect();
+        let mut v = vec![it("c", Some(90.0), Some("D"), false), it("a", Some(120.0), Some("C"), true), it("b", None, None, false)];
+        sort_items(&mut v, "Name", &fav);
+        assert_eq!(v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
+        sort_items(&mut v, "Tempo", &fav);
+        assert_eq!(v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["c", "a", "b"]);
+        sort_items(&mut v, "Key", &fav);
+        assert_eq!(v[0].name, "a");
+        sort_items(&mut v, "Favorites", &fav);
+        assert_eq!(v[0].name, "b");
+        sort_items(&mut v, "User Content", &fav);
+        assert_eq!(v[0].name, "a");
+        sort_items(&mut v, "Type", &fav);
+        assert_eq!(v[0].name, "b");
+        // a header: ascending, descending, then relevance
+        assert_eq!(next_sort("Relevance", false, "Tempo"), ("Tempo".to_string(), false));
+        assert_eq!(next_sort("Tempo", false, "Tempo"), ("Tempo".to_string(), true));
+        assert_eq!(next_sort("Tempo", true, "Tempo"), ("Relevance".to_string(), false));
+        assert_eq!(attr_text(&v[1], "Bars"), "4");
+    }
+
     #[test]
     fn column_arrows_move_through_the_folders() {
         use egui::Key::*;

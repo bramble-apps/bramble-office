@@ -18,7 +18,7 @@ use crate::look;
 
 /// The key commands and menu items this file runs (Project Audio group, its local menus).
 pub const COMMANDS: &[&str] = &[
-    "Select Previous Audio File", "Select Next Audio File", "Show Audio File Details", "Hide Audio File Details", "Rename…", "Add Audio File…", "Add Region", "Delete Files", "Optimize Files…", "Backup Files", "Copy/Convert Files…", "Move Files out of Project", "Select Used", "Select Unused", "Show All Regions", "Hide All Regions", "Import Region Information", "Export Region Information", "Create Group…", "Delete Selected Audio File Groups",
+    "Select Previous Audio File", "Select Next Audio File", "Show Audio File Details", "Hide Audio File Details", "Rename…", "Add Audio File…", "Add Region", "Delete Files", "Optimize Files…", "Backup Files", "Copy/Convert Files…", "Move Files out of Project", "Select Used", "Select Unused", "Show All Regions", "Hide All Regions", "Import Region Information", "Export Region Information", "Save Region(s) As…", "Create Group…", "Delete Selected Audio File Groups",
     "Open Project Audio", "Open Project Audio…", "Show/Hide Project Audio", "Show/Hide All Files Browser",
 ];
 
@@ -30,6 +30,9 @@ pub enum Sort {
     Name,
     Size,
     Length,
+    Drive,
+    BitDepth,
+    FileType,
 }
 
 /// Grouping (View ▸ Group Files By).
@@ -75,6 +78,10 @@ pub struct State {
     pub group_name: Option<String>,
     pub confirm_delete: bool,
     pub convert: Option<Convert>,
+    /// ⌘C on a file (⌘V makes a region of it).
+    pub copied: Option<PathBuf>,
+    /// The Optimize sheet: its Additional Preservation (ms).
+    pub optimize_ms: Option<f32>,
     /// The pane's rect (keys go to it under the pointer).
     pub rect: Option<Rect>,
     info_cache: HashMap<PathBuf, Option<FileInfo>>,
@@ -99,6 +106,8 @@ pub struct Convert {
     pub rate: u32,
     pub bits: u16,
     pub move_refs: bool,
+    /// One file copied: its new name (several keep theirs).
+    pub name: String,
 }
 
 /// What a file's header says.
@@ -270,6 +279,16 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
             idx.sort_by_key(|&i| std::cmp::Reverse(sizes[i]));
             fs = idx.into_iter().map(|i| fs[i].clone()).collect();
         }
+        // Drive: by the volume the file is on (its mount's top folders), then name
+        Sort::Drive => fs.sort_by_key(|f| (f.0.components().take(3).map(|c| c.as_os_str().to_string_lossy().to_string()).collect::<Vec<_>>().join("/"), f.0.file_name().map(|n| n.to_string_lossy().to_lowercase()))),
+        // Bit Depth: decreasing
+        Sort::BitDepth => {
+            let bits: Vec<u16> = fs.iter().map(|f| info(app, &f.0).map_or(0, |i| i.bits)).collect();
+            let mut idx: Vec<usize> = (0..fs.len()).collect();
+            idx.sort_by_key(|&i| std::cmp::Reverse(bits[i]));
+            fs = idx.into_iter().map(|i| fs[i].clone()).collect();
+        }
+        Sort::FileType => fs.sort_by_key(|f| (f.0.extension().map(|e| e.to_string_lossy().to_lowercase()), f.0.file_name().map(|n| n.to_string_lossy().to_lowercase()))),
         Sort::Length => {
             let lens: Vec<f64> = fs.iter().map(|f| info(app, &f.0).map_or(0.0, |i| i.seconds)).collect();
             let mut idx: Vec<usize> = (0..fs.len()).collect();
@@ -280,8 +299,9 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
     let key = |app: &mut App, f: &Path| -> String {
         match app.pa.group {
             Group::None => String::new(),
-            Group::Location => f.parent().map(|d| d.display().to_string()).unwrap_or_default(),
-            Group::Attributes => info(app, f).map(|i| format!("{} Hz {} Bit {}", i.rate, i.bits, if i.channels == 1 { "Mono" } else { "Stereo" })).unwrap_or_else(|| "Missing".into()),
+            // (named after the parent folder)
+            Group::Location => f.parent().and_then(|d| d.file_name()).map(|d| d.to_string_lossy().to_string()).unwrap_or_default(),
+            Group::Attributes => info(app, f).map(|i| attributes_name(i.bits, i.channels, &i.format)).unwrap_or_else(|| "Missing".into()),
             Group::Selection => app.pa.groups.iter().find(|g| g.1.contains(f)).map(|g| g.0.clone()).unwrap_or_else(|| "Not in a group".into()),
         }
     };
@@ -293,7 +313,30 @@ fn arranged(app: &mut App) -> Vec<(String, Vec<(PathBuf, Vec<RegionRef>)>)> {
             None => out.push((k, vec![f])),
         }
     }
+    // Location groups alphabetically; files of deleted groups at the top
+    if app.pa.group == Group::Location {
+        out.sort_by_key(|g| g.0.to_lowercase());
+    }
+    if let Some(i) = out.iter().position(|g| g.0 == "Not in a group") {
+        let g = out.remove(i);
+        out.insert(0, g);
+    }
     out
+}
+
+/// A File Attributes group's name, as Logic's: "16 bit Mono AIFF".
+pub fn attributes_name(bits: u16, channels: u16, format: &str) -> String {
+    let f = match format.to_uppercase().as_str() {
+        "WAV" | "WAVE" => "WAVE".to_string(),
+        "AIF" | "AIFF" => "AIFF".to_string(),
+        o => o.to_string(),
+    };
+    format!("{bits} bit {} {f}", if channels == 1 { "Mono" } else { "Stereo" })
+}
+
+/// Add Region's name: the file's name, then .1, .2 … after the regions it already has.
+pub fn next_region_name(stem: &str, existing: usize) -> String {
+    if existing == 0 { stem.to_string() } else { format!("{stem}.{existing}") }
 }
 
 /// A region's name, its start and length in the file (seconds).
@@ -376,16 +419,14 @@ pub fn command(app: &mut App, name: &str) -> bool {
             if app.automated {
                 return true;
             }
-            if let Some(fs) = kn_ui::files::FileDialog::new().set_title("Add Audio File").add_filter("Audio", crate::soundlib::AUDIO_EXT).pick_files() {
-                add_files(app, fs);
-            }
+            crate::paadd::open(app);
         }
         "Add Region" => {
             let Some(f) = app.pa.selected.iter().next().cloned() else { return true };
             let secs = file_info(&f).map_or(0.0, |i| i.seconds);
             let n = app.pa.pool.iter().filter(|p| p.file == f).count() + files(app).iter().find(|x| x.0 == f).map_or(0, |x| x.1.len());
             let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            app.pa.pool.push(PoolRegion { file: f.clone(), name: format!("{stem}.{}", n + 1), start: 0.0, len: secs });
+            app.pa.pool.push(PoolRegion { file: f.clone(), name: next_region_name(&stem, n), start: 0.0, len: secs });
             app.pa.open.insert(f);
             app.pa.sel_region = Some(RegionRef::Pool(app.pa.pool.len() - 1));
             app.dirty = true;
@@ -397,7 +438,11 @@ pub fn command(app: &mut App, name: &str) -> bool {
                 app.pa.confirm_delete = true;
             }
         }
-        "Optimize Files…" => optimize(app),
+        "Optimize Files…" => {
+            if !app.pa.selected.is_empty() {
+                app.pa.optimize_ms = Some(1000.0);
+            }
+        }
         "Backup Files" => {
             let mut n = 0;
             for f in app.pa.selected.clone() {
@@ -411,10 +456,12 @@ pub fn command(app: &mut App, name: &str) -> bool {
         }
         "Copy/Convert Files…" => {
             if !app.pa.selected.is_empty() {
-                app.pa.convert = Some(Convert { rate: crate::audio::RATE, bits: 24, move_refs: true });
+                let name = if app.pa.selected.len() == 1 { app.pa.selected.iter().next().and_then(|f| f.file_stem()).map(|n| n.to_string_lossy().to_string()).unwrap_or_default() } else { String::new() };
+                app.pa.convert = Some(Convert { rate: crate::audio::RATE, bits: 24, move_refs: true, name });
             }
         }
         "Move Files out of Project" => move_out(app),
+        "Save Region(s) As…" => save_regions(app),
         "Export Region Information" => export_regions(app),
         "Import Region Information" => import_regions(app),
         "Create Group…" => {
@@ -646,6 +693,7 @@ fn convert(app: &mut App, c: Convert) {
     for f in app.pa.selected.clone() {
         let Ok(a) = lg_synth::wav::read_audio(&f) else { continue };
         let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let stem = if c.name.trim().is_empty() { stem } else { c.name.trim().replace('/', "-") };
         let to = dir.join(format!("{stem}.wav"));
         if to == f {
             continue;
@@ -667,6 +715,54 @@ fn convert(app: &mut App, c: Convert) {
     }
     app.load_engine();
     app.tell(format!("Converted {n} file{}", if n == 1 { "" } else { "s" }));
+}
+
+/// The regions chosen (the selected region, else every region of the selected files) as
+/// (file, name, start, length) in seconds.
+fn chosen_regions(app: &mut App) -> Vec<(PathBuf, String, f64, f64)> {
+    if let Some(r) = app.pa.sel_region {
+        let file = files(app).into_iter().find(|f| f.1.contains(&r)).map(|f| f.0);
+        return file.into_iter().filter_map(|f| region_span(app, r).map(|(n, s, l)| (f, n, s, l))).collect();
+    }
+    let mut out = Vec::new();
+    for (f, regs) in files(app) {
+        if app.pa.selected.contains(&f) {
+            for r in regs {
+                if let Some((n, s, l)) = region_span(app, r) {
+                    out.push((f.clone(), n, s, l));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Audio File ▸ Save Region(s) As…: each region as an audio file of its own.
+fn save_regions(app: &mut App) {
+    let regs = chosen_regions(app);
+    if regs.is_empty() {
+        app.tell("Select a region or a file with regions first");
+        return;
+    }
+    let dir = if app.automated { std::env::var_os("LG_SAVE_REGIONS").map(PathBuf::from) } else { kn_ui::files::FileDialog::new().set_title("Save Region(s) As").pick_folder() };
+    let Some(dir) = dir else { return };
+    let mut n = 0;
+    for (f, name, start, len) in regs {
+        let Ok(a) = lg_synth::wav::read_audio(&f) else { continue };
+        let (from, to) = slice_frames(a.rate, start, len, a.channels.first().map_or(0, |c| c.len()));
+        let chans: Vec<Vec<f32>> = a.channels.iter().map(|c| c[from..to.min(c.len())].to_vec()).collect();
+        if write_wav(&dir.join(format!("{}.wav", name.replace('/', "-"))), &chans, a.rate, a.rate, 24).is_ok() {
+            n += 1;
+        }
+    }
+    app.tell(format!("Saved {n} region{} as audio files", if n == 1 { "" } else { "s" }));
+}
+
+/// A region's frames in its file.
+pub fn slice_frames(rate: u32, start: f64, len: f64, total: usize) -> (usize, usize) {
+    let a = ((start * rate as f64) as usize).min(total);
+    let b = (((start + len) * rate as f64) as usize).clamp(a, total);
+    (a, b)
 }
 
 fn move_out(app: &mut App) {
@@ -694,7 +790,10 @@ fn move_out(app: &mut App) {
 
 /// Optimize Files: each selected file keeps only the parts its regions use (with a second's
 /// margin), written as a new file next to it; the regions follow.
-fn optimize(app: &mut App) {
+/// Optimize: each file cut to the part its regions use plus `keep_ms` either side, written over
+/// the file (destructive: no undo; the name stays, the file shrinks).
+fn optimize(app: &mut App, keep_ms: f32) {
+    let margin = keep_ms as f64 / 1000.0;
     let sel = app.pa.selected.clone();
     let all = files(app);
     let mut n = 0;
@@ -707,14 +806,23 @@ fn optimize(app: &mut App) {
         let spans: Vec<(f64, f64)> = regions.iter().filter_map(|r| region_span(app, *r).map(|x| (x.1, x.1 + x.2))).collect();
         let lo = spans.iter().map(|s| s.0).fold(f64::MAX, f64::min).max(0.0);
         let hi = spans.iter().map(|s| s.1).fold(0.0, f64::max);
-        let (lo_f, hi_f) = ((((lo - 1.0).max(0.0)) * rate) as usize, (((hi + 1.0) * rate) as usize).min(a.frames()));
+        let (lo_f, hi_f) = ((((lo - margin).max(0.0)) * rate) as usize, (((hi + margin) * rate) as usize).min(a.frames()));
+        if lo_f == 0 && hi_f >= a.frames() {
+            continue;
+        }
+        // (placed regions without an offset start at the file's start: keep them so: the file's start stays)
+        let placed_no_offset: Vec<(usize, usize)> = regions.iter().filter_map(|r| if let RegionRef::Placed(t, k) = r { (!app.audio_edit.regions.contains_key(&(*t, *k))).then_some((*t, *k)) } else { None }).collect();
+        let lo_f = if placed_no_offset.is_empty() { lo_f } else { 0 };
         if lo_f == 0 && hi_f >= a.frames() {
             continue;
         }
         let chans: Vec<Vec<f32>> = a.channels.iter().map(|c| c[lo_f.min(c.len())..hi_f.min(c.len())].to_vec()).collect();
-        let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let to = f.with_file_name(format!("{stem} (optimized).wav"));
-        if write_wav(&to, &chans, a.rate, a.rate, 24).is_err() {
+        // (a WAV file is rewritten in place; another format becomes a WAV of the same name)
+        let wav = f.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+        let to = if wav { f.clone() } else { f.with_extension("wav") };
+        let tmp = f.with_file_name(format!(".{}.optimizing", f.file_name().unwrap_or_default().to_string_lossy()));
+        if write_wav(&tmp, &chans, a.rate, a.rate, 24).is_err() || std::fs::rename(&tmp, &to).is_err() {
+            let _ = std::fs::remove_file(&tmp);
             continue;
         }
         for r in app.audio_edit.regions.values_mut() {
@@ -727,12 +835,9 @@ fn optimize(app: &mut App) {
                 p.start = (p.start - lo_f as f64 / rate).max(0.0);
             }
         }
-        // (placed regions without an offset start at the file's start: keep them so)
-        let placed_no_offset: Vec<(usize, usize)> = regions.iter().filter_map(|r| if let RegionRef::Placed(t, k) = r { (!app.audio_edit.regions.contains_key(&(*t, *k))).then_some((*t, *k)) } else { None }).collect();
-        if !placed_no_offset.is_empty() && lo_f > 0 {
-            continue;
+        if to != f {
+            repoint(app, &f, &to);
         }
-        repoint(app, &f, &to);
         n += 1;
     }
     app.load_engine();
@@ -785,6 +890,28 @@ pub fn key_press(app: &mut App, key: egui::Key, m: egui::Modifiers) -> bool {
     if app.pa.rename.is_some() {
         return false;
     }
+    // Space: plays or stops the selected file or region (the browser has key focus)
+    if key == egui::Key::Space && !m.command && !m.shift && !m.alt {
+        if let Some((id, path, seg)) = selection_id(app) {
+            let (vol, cyc) = (app.pa.volume, app.pa.cycle);
+            crate::preview::toggle(app, &id, &path, vol, seg, cyc);
+            return true;
+        }
+    }
+    // ⌘C then ⌘V on a file: a new region of it
+    if m.command && !m.shift && !m.alt {
+        if key == egui::Key::C && !app.pa.selected.is_empty() {
+            app.pa.copied = app.pa.selected.iter().next().cloned();
+            return true;
+        }
+        if key == egui::Key::V {
+            if let Some(f) = app.pa.copied.clone() {
+                app.pa.selected = [f].into_iter().collect();
+                app.pa.sel_region = None;
+                return command(app, "Add Region");
+            }
+        }
+    }
     for b in crate::keymap::bindings().iter().filter(|b| b.area == "Project Audio") {
         if b.key == key && b.cmd == m.command && b.alt == m.alt && b.shift == m.shift {
             let c = b.command.clone();
@@ -828,7 +955,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     if cr.clicked() {
         app.pa.cycle = !app.pa.cycle;
     }
-    let vol_r = Rect::from_min_max(pos2(cyc.max.x + 12.0, tools.min.y + 5.0), pos2((cyc.max.x + 140.0).min(tools.max.x - 8.0), tools.max.y - 5.0));
+    // Import Audio (at the right): the Add Audio File dialog
+    let imp = Rect::from_min_size(pos2(tools.max.x - 34.0, play.min.y), vec2(26.0, 24.0));
+    let ir = ui.interact(imp, ui.scope_id().with("pa-import"), Sense::click()).on_hover_text("Import Audio");
+    p.rect_filled(imp, 5.0, if ir.hovered() { look::button_on() } else { look::group_bg() });
+    crate::glyphs::paint(&p, imp, crate::glyphs::ph::FILE_PLUS, 13.0, look::text());
+    if ir.clicked() {
+        crate::paadd::open(app);
+    }
+    let vol_r = Rect::from_min_max(pos2(cyc.max.x + 12.0, tools.min.y + 5.0), pos2((cyc.max.x + 140.0).min(tools.max.x - 44.0), tools.max.y - 5.0));
     crate::glyphs::paint(&p, Rect::from_min_size(vol_r.min - vec2(2.0, 0.0), vec2(14.0, vol_r.height())), crate::glyphs::ph::SPEAKER_HIGH, 11.0, look::text_dim());
     let mut v = app.pa.volume;
     if ui.put(Rect::from_min_max(vol_r.min + vec2(14.0, 0.0), vol_r.max), egui::Slider::new(&mut v, 0.0..=1.5).show_value(false)).on_hover_text("Preview volume").changed() {
@@ -913,7 +1048,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     crate::glyphs::paint(&pp, icon_r, glyph, 12.0, col);
                     ui.interact(icon_r, ui.scope_id().with(("pa-icon", k)), Sense::hover()).on_hover_text(tip);
                     let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                    pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &name, look::regular(12.0), look::text());
+                    let nr = pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &name, look::regular(12.0), look::text());
+                    // (a Broadcast Wave timestamp: a clock after the name)
+                    if crate::bwf::timestamp(f).is_some() && nr.max.x + 16.0 < info_x {
+                        crate::glyphs::paint(&pp, Rect::from_center_size(pos2(nr.max.x + 9.0, r.center().y), vec2(12.0, 12.0)), crate::glyphs::ph::CLOCK, 10.0, look::text_dim());
+                    }
                     let fi = info(app, f);
                     let info_r = Rect::from_min_max(pos2(info_x, r.min.y + 2.0), pos2(bpm_x - 8.0, r.max.y - 2.0));
                     match &fi {
@@ -959,8 +1098,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     }
                     if let Some((name, s, l)) = region_span(app, *rr) {
                         let placed = matches!(rr, RegionRef::Placed(..));
-                        pp.rect_filled(Rect::from_center_size(pos2(name_x + 4.0, r.center().y), vec2(8.0, 8.0)), 2.0, if placed { look::region_color(TrackKind::Audio) } else { look::text_dim() });
-                        pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x + 14.0, r.center().y), Align2::LEFT_CENTER, &name, look::regular(11.5), look::text());
+                        // (regions not used in the Tracks area: red)
+                        let unused = Color32::from_rgb(0xe0, 0x4a, 0x3c);
+                        pp.rect_filled(Rect::from_center_size(pos2(name_x + 4.0, r.center().y), vec2(8.0, 8.0)), 2.0, if placed { look::region_color(TrackKind::Audio) } else { unused });
+                        pp.with_clip_rect(Rect::from_min_max(r.min, pos2(info_x - 6.0, r.max.y))).text(pos2(name_x + 14.0, r.center().y), Align2::LEFT_CENTER, &name, look::regular(11.5), if placed { look::text() } else { unused });
                         let secs = info(app, f).map_or(1.0, |i| i.seconds.max(0.001));
                         let bar_r = Rect::from_min_max(pos2(info_x, r.min.y + 6.0), pos2(bpm_x - 8.0, r.max.y - 6.0));
                         pp.rect_stroke(bar_r, 1.0, Stroke::new(1.0, look::line()), egui::StrokeKind::Inside);
@@ -985,7 +1126,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                     if !matches!(row, Row::Heading(_)) && clicked.is_none() {
                         select_row(app, &row, false, false);
                     }
-                    for c in ["Add Region", "Rename…", "Delete Files", "Backup Files", "Export Region Information", "Import Region Information"] {
+                    for c in ["Add Region", "Rename…", "Delete Files", "Backup Files", "Copy/Convert Files…", "Save Region(s) As…", "Export Region Information", "Import Region Information"] {
                         if ui.button(c).clicked() {
                             command(app, c);
                             ui.close();
@@ -1012,10 +1153,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
                 app.selected_region = Some((t, r));
                 app.selected_regions = vec![(t, r)];
             }
+            // a file's name: rename it
             Row::File(f, _) => {
-                if !app.pa.open.remove(&f) {
-                    app.pa.open.insert(f);
-                }
+                app.pa.selected = [f].into_iter().collect();
+                app.pa.sel_region = None;
+                command(app, "Rename…");
             }
             _ => {}
         }
@@ -1136,7 +1278,7 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
             }
         });
         ui.menu_button("Sort Files By", |ui| {
-            for (s, n) in [(Sort::None, "None"), (Sort::Name, "Name"), (Sort::Size, "Size"), (Sort::Length, "Length")] {
+            for (s, n) in [(Sort::None, "None"), (Sort::Name, "Name"), (Sort::Size, "Size"), (Sort::Drive, "Drive"), (Sort::BitDepth, "Bit Depth"), (Sort::FileType, "File Type"), (Sort::Length, "Length")] {
                 if ui.add(egui::Button::selectable(app.pa.sort == s, n)).clicked() {
                     app.pa.sort = s;
                     ui.close();
@@ -1146,7 +1288,7 @@ fn local_menus(app: &mut App, ui: &mut egui::Ui) {
     });
     ui.menu_button("Audio File", |ui| {
         ui.set_min_width(240.0);
-        for (c, k) in [("Add Audio File…", "⌃F"), ("Add Region", "⌃R"), ("", ""), ("Delete Files", "⌘⌫"), ("Optimize Files…", "⌃O"), ("Backup Files", "⌃B"), ("Copy/Convert Files…", "⌃K"), ("Move Files out of Project", ""), ("", ""), ("Import Region Information", "⌃I"), ("Export Region Information", "⌃E")] {
+        for (c, k) in [("Add Audio File…", "⌃F"), ("Add Region", "⌃R"), ("", ""), ("Delete Files", "⌘⌫"), ("Optimize Files…", "⌃O"), ("Backup Files", "⌃B"), ("Copy/Convert Files…", "⌃K"), ("Move Files out of Project", ""), ("", ""), ("Import Region Information", "⌃I"), ("Export Region Information", "⌃E"), ("Save Region(s) As…", "")] {
             if c.is_empty() {
                 ui.separator();
                 continue;
@@ -1241,6 +1383,25 @@ fn dialogs(app: &mut App, ctx: &egui::Context) {
             });
         });
     }
+    if let Some(mut ms) = app.pa.optimize_ms.take() {
+        let mut keep = true;
+        let mut go = false;
+        egui::Window::new("Optimize Files").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+            ui.label("Removes the parts of the files no region uses. This can't be undone.");
+            ui.add(egui::Slider::new(&mut ms, 0.0..=10_000.0).text("Additional Preservation (ms)"));
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    keep = false;
+                }
+                go = ui.button("OK").clicked();
+            });
+        });
+        if go {
+            optimize(app, ms);
+        } else if keep {
+            app.pa.optimize_ms = Some(ms);
+        }
+    }
     if let Some(mut c) = app.pa.convert.take() {
         let mut keep = true;
         let mut go = false;
@@ -1255,6 +1416,13 @@ fn dialogs(app: &mut App, ctx: &egui::Context) {
                     ui.selectable_value(&mut c.bits, b, format!("{b} Bit"));
                 }
             });
+            // (one file: a new name for the copy)
+            if app.pa.selected.len() == 1 {
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut c.name);
+                });
+            }
             ui.checkbox(&mut c.move_refs, "Change file references in regions");
             ui.horizontal(|ui| {
                 if ui.button("Cancel").clicked() {
@@ -1288,6 +1456,17 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn region_names_and_attribute_groups() {
+        assert_eq!(next_region_name("Organ", 0), "Organ");
+        assert_eq!(next_region_name("Organ", 1), "Organ.1");
+        assert_eq!(next_region_name("Organ", 2), "Organ.2");
+        assert_eq!(attributes_name(16, 1, "AIFF"), "16 bit Mono AIFF");
+        assert_eq!(attributes_name(24, 2, "wav"), "24 bit Stereo WAVE");
+        assert_eq!(slice_frames(1000, 0.5, 0.25, 2000), (500, 750));
+        assert_eq!(slice_frames(1000, 1.9, 1.0, 2000), (1900, 2000));
+    }
+
     use super::*;
 
     #[test]

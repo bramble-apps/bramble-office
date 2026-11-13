@@ -72,6 +72,9 @@ pub enum Ask {
 
 #[derive(Default)]
 pub struct State {
+    /// Save as Template's dialog: the name, the folder ("" = the templates folder) and a new
+    /// folder's name being typed.
+    pub template: Option<(String, String, Option<String>)>,
     /// The template chooser is open; its selected entry.
     pub chooser: bool,
     pub pick: usize,
@@ -115,6 +118,9 @@ pub fn after_open(app: &mut App, path: &Path) {
     crate::regionparams::after_open(app);
     crate::scorefile::after_open(app);
     crate::tm::after_open(app);
+    crate::playsurface::after_open(app);
+    crate::transportx::after_open(app);
+    crate::autosave::after_open(app);
     crate::envhub::after_open(app);
 }
 
@@ -290,6 +296,7 @@ pub fn save(app: &mut App) {
             }
             match std::fs::write(&target, &saved.data) {
                 Ok(()) => {
+                    crate::autosave::clear(app);
                     if let Some(p) = app.project.as_ref() {
                         lg_core::save::update_metadata(&alt, p);
                     }
@@ -317,6 +324,7 @@ fn report(app: &mut App, mut left: Vec<String>) {
     crate::regionparams::save_sidecar(app);
     crate::scorefile::save_sidecar(app);
     crate::tm::save_sidecar(app);
+    crate::playsurface::save_sidecar(app);
     left.dedup();
     app.pf.last_left_out = left.clone();
     if left.is_empty() {
@@ -405,12 +413,39 @@ fn my_templates() -> Vec<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
     let mut out = Vec::new();
     for d in [templates_dir(), home.join("Music/Audio Music Apps/Project Templates")] {
-        if let Ok(rd) = std::fs::read_dir(&d) {
-            out.extend(rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "logicx")));
+        out.extend(templates_in(&d));
+    }
+    out
+}
+
+/// The templates in a folder and its subfolders (Save as Template's Create Folder), the folder's
+/// own first.
+pub fn templates_in(d: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(d) else { return Vec::new() };
+    let mut own: Vec<PathBuf> = Vec::new();
+    let mut subs: Vec<PathBuf> = Vec::new();
+    for p in rd.flatten().map(|e| e.path()) {
+        if p.extension().is_some_and(|e| e == "logicx") {
+            own.push(p);
+        } else if p.is_dir() {
+            subs.push(p);
         }
     }
-    out.sort();
-    out
+    own.sort();
+    subs.sort();
+    for s in subs {
+        let mut v: Vec<PathBuf> = std::fs::read_dir(&s).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "logicx")).collect()).unwrap_or_default();
+        v.sort();
+        own.extend(v);
+    }
+    own
+}
+
+/// The subfolders of the templates folder.
+fn template_folders() -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(templates_dir()).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir() && p.extension().is_none_or(|e| e != "logicx")).filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string())).collect()).unwrap_or_default();
+    v.sort();
+    v
 }
 
 /// Studio's starting layouts (track kinds and names), after the kinds of layout Logic's New
@@ -471,25 +506,81 @@ fn from_template(app: &mut App, tpl: &Path) {
 
 /// Save as Template…: a copy of the project in Studio's templates folder.
 fn save_as_template(app: &mut App) {
-    let Some(pkg) = package(app) else {
+    if package(app).is_none() {
         app.tell("Only a Logic project (.logicx) can be saved as a template");
         return;
-    };
+    }
     let name = app.project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
-    let dest = templates_dir().join(format!("{name}.logicx"));
-    let _ = std::fs::create_dir_all(templates_dir());
+    app.pf.template = Some((name, String::new(), None));
+}
+
+/// The Save as Template dialog: the name, the folder pop-up and Create Folder.
+fn template_window(app: &mut App, ctx: &egui::Context) {
+    let Some((mut name, mut folder, mut new_folder)) = app.pf.template.clone() else { return };
+    let mut done: Option<bool> = None;
+    egui::Window::new("Save as Template").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Save As:");
+            ui.text_edit_singleline(&mut name);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Where:");
+            egui::ComboBox::from_id_salt("tpl-folder").selected_text(if folder.is_empty() { "Project Templates".to_string() } else { folder.clone() }).show_ui(ui, |ui| {
+                ui.selectable_value(&mut folder, String::new(), "Project Templates");
+                for f in template_folders() {
+                    ui.selectable_value(&mut folder, f.clone(), f);
+                }
+            });
+        });
+        if let Some(mut nf) = new_folder.clone() {
+            let mut made = false;
+            ui.horizontal(|ui| {
+                ui.label("New Folder:");
+                let te = ui.text_edit_singleline(&mut nf);
+                if (ui.button("Create").clicked() || (te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && !nf.trim().is_empty() {
+                    let n = nf.trim().replace('/', "-");
+                    let _ = std::fs::create_dir_all(templates_dir().join(&n));
+                    folder = n;
+                    made = true;
+                }
+            });
+            new_folder = if made { None } else { Some(nf) };
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Create Folder").clicked() && new_folder.is_none() {
+                new_folder = Some("untitled folder".into());
+            }
+            if ui.button("Cancel").clicked() {
+                done = Some(false);
+            }
+            if ui.button("Save").clicked() && !name.trim().is_empty() {
+                done = Some(true);
+            }
+        });
+    });
+    app.pf.template = if done.is_some() { None } else { Some((name.clone(), folder.clone(), new_folder)) };
+    if done == Some(true) {
+        write_template(app, &name, &folder);
+    }
+}
+
+fn write_template(app: &mut App, name: &str, folder: &str) {
+    let Some(pkg) = package(app) else { return };
+    let dir = if folder.is_empty() { templates_dir() } else { templates_dir().join(folder) };
+    let dest = dir.join(format!("{}.logicx", name.trim().replace('/', "-")));
+    let _ = std::fs::create_dir_all(&dir);
     if dest.exists() {
         let _ = std::fs::remove_dir_all(&dest);
     }
     save_package_to(app, &pkg, &dest, true);
-    app.tell(format!("Saved as template “{name}”"));
+    app.tell(format!("Saved as template “{}”", name.trim()));
 }
 
 // --- revert ----------------------------------------------------------------------------------
 
 /// Reopens the alternative from `data` (the saved file, or a backup); the project's files stay
 /// as they are until the next Save.
-fn revert_to(app: &mut App, data: Vec<u8>, what: &str) {
+pub(crate) fn revert_to(app: &mut App, data: Vec<u8>, what: &str) {
     let Some((alt, _)) = app.file.clone() else { return };
     let Some(path) = app.project.as_ref().map(|p| p.path.clone()) else { return };
     if app.pf.band.is_some() {
@@ -605,6 +696,19 @@ fn clean_up_candidates(app: &App) -> Vec<PathBuf> {
     let Some(p) = app.project.as_ref() else { return Vec::new() };
     let using: Vec<String> = p.tracks.iter().flat_map(|t| t.regions.iter()).filter_map(|r| r.audio.as_ref()?.file.file_name().map(|n| n.to_string_lossy().into_owned())).collect();
     package::unused_audio(&p.path, &using)
+}
+
+/// The Clean Up dialog's choices: files unticked (kept) and Delete Backups.
+#[derive(Clone, Debug, Default)]
+struct CleanUpChoice {
+    kept: Vec<PathBuf>,
+    backups: bool,
+}
+
+/// Every alternative's backup slots.
+fn app_backups(app: &App) -> Vec<PathBuf> {
+    let Some(pkg) = package(app) else { return Vec::new() };
+    package::list(&pkg).into_iter().flat_map(|a| package::backups(&a.dir).into_iter().map(|b| b.0)).collect()
 }
 
 /// Moves files to the desktop's Trash (freedesktop: files + a .trashinfo), so Clean Up can be
@@ -798,6 +902,7 @@ pub fn menu_ui(app: &mut App, ui: &mut egui::Ui, it: &crate::menus::Item) -> boo
 /// The chooser, the asks, Edit Alternatives, Project Settings (App's frame calls this).
 pub fn windows(app: &mut App, ctx: &egui::Context) {
     chooser(app, ctx);
+    template_window(app, ctx);
     ask(app, ctx);
     edit_alternatives(app, ctx);
     project_settings(app, ctx);
@@ -812,11 +917,20 @@ pub struct Details {
     pub signature: (u8, u8),
     pub sample_rate: u32,
     taps: Vec<f64>,
+    /// Use musical grid; Use Flex Time for imported audio; the frame rate; Spatial Audio (Dolby
+    /// Atmos) and the surround format (None: stereo); the audio devices ("" = unchanged).
+    pub musical_grid: bool,
+    pub flex: bool,
+    pub frame_rate: String,
+    pub atmos: bool,
+    pub surround: Option<lg_dsp::surround::Format>,
+    pub input: String,
+    pub output: String,
 }
 
 impl Default for Details {
     fn default() -> Self {
-        Details { open: false, tempo: 120.0, key: "C major".into(), signature: (4, 4), sample_rate: 44_100, taps: Vec::new() }
+        Details { open: false, tempo: 120.0, key: "C major".into(), signature: (4, 4), sample_rate: 44_100, taps: Vec::new(), musical_grid: true, flex: false, frame_rate: "25".into(), atmos: false, surround: None, input: String::new(), output: String::new() }
     }
 }
 
@@ -833,6 +947,31 @@ pub fn apply_details(p: &mut lg_core::Project, d: &Details) {
     p.key = d.key.clone();
     p.signature = d.signature;
     p.sample_rate = d.sample_rate;
+}
+
+/// The Details beyond the project file: musical grid, Flex for imported audio (Smart Tempo's
+/// Set Imported Files To), frame rate, Spatial Audio / surround format, the audio devices.
+pub fn apply_settings(app: &mut App, d: &Details) {
+    let set = |app: &mut App, k: &str, v: &str| {
+        app.proj.0.insert(k.to_string(), v.to_string());
+    };
+    set(app, "General /  / Use musical grid", if d.musical_grid { "1" } else { "0" });
+    set(app, "Synchronization / General / Frame Rate:", &d.frame_rate);
+    if d.flex {
+        set(app, "Smart Tempo /  / Set Imported Files To:", "Flex On, Smart Tempo On");
+    }
+    if let Some(f) = d.surround {
+        app.sur.format = f;
+    }
+    if d.atmos {
+        crate::surround::set_atmos(app, true);
+    }
+    for (k, v) in [(crate::prefs::INPUT_DEVICE, &d.input), (crate::prefs::OUTPUT_DEVICE, &d.output)] {
+        if !v.is_empty() {
+            app.logic_settings.0.insert(k.to_string(), v.clone());
+            app.logic_settings.save();
+        }
+    }
 }
 
 fn chooser(app: &mut App, ctx: &egui::Context) {
@@ -861,8 +1000,24 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         if mine.is_empty() {
             ui.label(egui::RichText::new("None yet: File ▸ Save as Template… keeps a Logic project here.").color(crate::look::text_dim()));
         }
+        // (templates in a subfolder under its name, below the others)
+        let group_of = |m: &PathBuf| -> String {
+            let parent = m.parent().map(Path::to_path_buf).unwrap_or_default();
+            if parent == templates_dir() || parent.file_name().is_some_and(|n| n == "Project Templates") { String::new() } else { parent.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default() }
+        };
+        let mut groups: Vec<String> = Vec::new();
+        for m in &mine {
+            let g = group_of(m);
+            if !groups.contains(&g) {
+                groups.push(g);
+            }
+        }
+        for g in groups {
+        if !g.is_empty() {
+            ui.label(egui::RichText::new(&g).color(crate::look::text_dim()));
+        }
         ui.horizontal_wrapped(|ui| {
-            for (j, m) in mine.iter().enumerate() {
+            for (j, m) in mine.iter().enumerate().filter(|(_, m)| group_of(m) == g) {
                 let k = LAYOUTS.len() + j;
                 let r = ui.add(egui::Button::selectable(app.pf.pick == k, m.file_stem().unwrap_or_default().to_string_lossy()).min_size(egui::vec2(110.0, 54.0)));
                 if r.clicked() {
@@ -873,6 +1028,7 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
                 }
             }
         });
+        }
         app.pf.pick = app.pf.pick.min(total.saturating_sub(1));
         ui.add_space(8.0);
         // Details (the disclosure triangle at the lower left): the new project's tempo, key,
@@ -926,11 +1082,57 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
                     }
                 });
                 ui.end_row();
+                ui.label("");
+                ui.vertical(|ui| {
+                    ui.checkbox(&mut d.musical_grid, "Use musical grid");
+                    ui.checkbox(&mut d.flex, "Use Flex Time for imported audio");
+                });
+                ui.end_row();
+                ui.label("Frame Rate");
+                egui::ComboBox::from_id_salt("pf-fps").selected_text(d.frame_rate.clone()).show_ui(ui, |ui| {
+                    for r in ["23.976", "24", "25", "29.97d", "29.97", "30d", "30", "50", "59.94d", "59.94", "60d", "60"] {
+                        ui.selectable_value(&mut d.frame_rate, r.to_string(), r);
+                    }
+                });
+                ui.end_row();
+                ui.label("Spatial Audio");
+                egui::ComboBox::from_id_salt("pf-atmos").selected_text(if d.atmos { "Dolby Atmos" } else { "Off" }).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut d.atmos, false, "Off");
+                    ui.selectable_value(&mut d.atmos, true, "Dolby Atmos");
+                });
+                ui.end_row();
+                ui.label("Surround Format");
+                egui::ComboBox::from_id_salt("pf-sur").selected_text(d.surround.map_or("Stereo", |f| f.name())).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut d.surround, None, "Stereo");
+                    let list: Vec<lg_dsp::surround::Format> = if d.atmos { lg_dsp::surround::Format::ATMOS_BEDS.to_vec() } else { lg_dsp::surround::Format::ALL.to_vec() };
+                    for f in list {
+                        ui.selectable_value(&mut d.surround, Some(f), f.name());
+                    }
+                });
+                ui.end_row();
+                for (label, out) in [("Input Device", false), ("Output Device", true)] {
+                    ui.label(label);
+                    let cur = if out { &mut d.output } else { &mut d.input };
+                    let shown = if cur.is_empty() { "System Default".to_string() } else { cur.clone() };
+                    egui::ComboBox::from_id_salt(("pf-dev", out)).selected_text(shown).width(200.0).show_ui(ui, |ui| {
+                        ui.selectable_value(cur, "System Default".to_string(), "System Default");
+                        for dname in crate::prefs::devices(out).into_iter().filter(|n| n != "System Default") {
+                            ui.selectable_value(cur, dname.clone(), dname);
+                        }
+                    });
+                    ui.end_row();
+                }
             });
         }
         ctx.data_mut(|m| m.insert_temp(egui::Id::new("pf-chooser-details"), d));
         ui.add_space(8.0);
         ui.horizontal(|ui| {
+            // (at the lower left: the Sound Library in the Browser)
+            if ui.button("Get More Sounds").clicked() {
+                app.pf.chooser = false;
+                app.show_browser = true;
+                app.br.view = crate::browser::Cat::SoundLibrary;
+            }
             if ui.button("Open an existing project…").clicked() {
                 app.pf.chooser = false;
                 app.open_dialog();
@@ -950,8 +1152,10 @@ fn chooser(app: &mut App, ctx: &egui::Context) {
         if k < LAYOUTS.len() {
             app.stop();
             let mut p = layout_project(k);
-            apply_details(&mut p, &chooser_details(ctx));
+            let det = chooser_details(ctx);
+            apply_details(&mut p, &det);
             app.set_project(p, false);
+            apply_settings(app, &det);
             app.file = None;
             app.pf.band = None;
             app.dirty = false;
@@ -988,12 +1192,24 @@ fn ask(app: &mut App, ctx: &egui::Context) {
                 ui.label(format!("Delete the alternative “{n}”? Its folder is removed from the project; this can't be undone."));
             }
             Ask::CleanUp(files) => {
-                ui.label(format!("{} audio file(s) in the project aren't used by any alternative. Move them to the Trash?", files.len()));
+                // (each file with its Delete box: untick to keep it; and the backups)
+                let mut cu: CleanUpChoice = ctx.data(|d| d.get_temp(egui::Id::new("pf-cleanup"))).unwrap_or_default();
+                ui.label(format!("{} audio file(s) aren't used or referenced by any alternative. Move the ticked ones to the Trash?", files.len()));
                 egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
                     for f in files.iter() {
-                        ui.label(f.file_name().unwrap_or_default().to_string_lossy());
+                        let mut del = !cu.kept.contains(f);
+                        if ui.checkbox(&mut del, f.file_name().unwrap_or_default().to_string_lossy()).changed() {
+                            if del {
+                                cu.kept.retain(|k| k != f);
+                            } else {
+                                cu.kept.push(f.clone());
+                            }
+                        }
                     }
                 });
+                let n_backups = app_backups(app).len();
+                ui.add_enabled(n_backups > 0, egui::Checkbox::new(&mut cu.backups, format!("Delete Backups ({n_backups}, all alternatives)")));
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("pf-cleanup"), cu));
             }
             Ask::Switch(_) => {
                 ui.label("Save the changes to this alternative before opening the other one?");
@@ -1051,8 +1267,11 @@ fn ask(app: &mut App, ctx: &egui::Context) {
             }
         }
         Ask::CleanUp(files) => {
-            let n = to_trash(&files);
-            app.tell(format!("Clean Up: {n} unused file(s) moved to the Trash"));
+            let cu: CleanUpChoice = app.ctx.data_mut(|d| d.remove_temp(egui::Id::new("pf-cleanup"))).unwrap_or_default();
+            let chosen: Vec<PathBuf> = files.into_iter().filter(|f| !cu.kept.contains(f)).collect();
+            let n = to_trash(&chosen);
+            let b = if cu.backups { to_trash(&app_backups(app)) } else { 0 };
+            app.tell(format!("Clean Up: {n} unused file(s){} moved to the Trash", if b > 0 { format!(" and {b} backup(s)") } else { String::new() }));
         }
         Ask::Switch(k) => {
             if yes {

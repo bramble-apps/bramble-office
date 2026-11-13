@@ -476,6 +476,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     // Setting: the channel strip setting menu
     if shown(app, "Setting Menu") {
         slot(&p, y, "Setting", None);
+        if is_track {
+            crate::brfocus::triangle(app, ui, slot_rect(y), i, crate::brfocus::Target::Setting);
+        }
         let resp = ui.interact(slot_rect(y), id.with("setting"), Sense::click());
         egui::Popup::menu(&resp).show(|ui| {
             ui.set_min_width(220.0);
@@ -552,6 +555,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
                 crate::glyphs::paint(&p, ir, crate::glyphs::ph::INTERSECT, 14.0, look::text_dim());
             }
         }
+        if inst_track {
+            crate::brfocus::triangle(app, ui, ir, i, crate::brfocus::Target::Instrument);
+        }
         let resp = ui.interact(ir, id.with("input"), Sense::click());
         if inst_track {
             crate::instwin::slot_menu(app, &resp, i);
@@ -625,6 +631,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
         for (k, u) in chain.iter().enumerate().take(max_slots) {
             let sr = slot_rect(y);
             app.mix.slot_rects.push((sr, i, k));
+            if is_track {
+                crate::brfocus::triangle(app, ui, sr, i, crate::brfocus::Target::Fx(k));
+            }
             // (Low Latency Monitoring's bypass: grey with orange text; it shows once the engine runs)
             let ll = !u.bypass && app.engine.lock().ok().is_some_and(|e| e.ext.ll_bypassed.get(i).and_then(|v| v.get(k).copied()).unwrap_or(false));
             let fill = if u.bypass || ll { Color32::from_gray(0x55) } else { Color32::from_rgb(0x1f, 0x5f, 0xc8) };

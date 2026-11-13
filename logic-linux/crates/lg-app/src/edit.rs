@@ -976,7 +976,7 @@ impl App {
             "Show/Hide All Files Browser" | "Show/Hide Browsers" => self.right_pane = if self.right_pane == Some(RightPane::Files) { None } else { Some(RightPane::Files) },
             "Show/Hide Quick Help" => self.quick_help = !self.quick_help,
             "Show/Hide Toolbar" => self.show_toolbar = !self.show_toolbar,
-            "Show/Hide Play Surface" => return self.key_command(ctx, "Show/Hide Musical Typing"),
+            "Show/Hide Play Surface" => return crate::playsurface::command(self, "Show/Hide Play Surface"),
             "Open Event List…" => self.right_pane = Some(RightPane::Lists),
             "Open Tempo List…" => {
                 self.right_pane = Some(RightPane::Lists);

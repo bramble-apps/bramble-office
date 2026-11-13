@@ -73,7 +73,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         ui.scope_builder(egui::UiBuilder::new().id_salt("inspector-strips").max_rect(strips), |ui| {
             if let Some(t) = app.selected_track.filter(|t| app.project.as_ref().is_some_and(|p| *t < p.tracks.len())) {
                 let left = Rect::from_min_size(strips.min + vec2(4.0, 0.0), vec2(w - 8.0, strips.height()));
+                app.brf.in_inspector = true;
                 crate::mixer::track_strip(app, ui, left, t);
+                app.brf.in_inspector = false;
             }
             let right = Rect::from_min_size(strips.min + vec2(w + 4.0, 0.0), vec2(w - 8.0, strips.height()));
             crate::mixer::output_strip(app, ui, right);
