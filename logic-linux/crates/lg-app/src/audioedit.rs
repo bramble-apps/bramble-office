@@ -1995,6 +1995,23 @@ fn prelisten(app: &mut App, file: &Path) {
     }
 }
 
+pub const FE_UNDO_STEPS: &str = "Audio / File Editor / Number of Undo Steps:";
+pub const FE_NORMALIZE_UNDO: &str = "Audio / File Editor / Record Normalize operations in Undo History";
+pub const FE_CLEAR_UNDO: &str = "Audio / File Editor / Clear Undo History when closing project";
+
+/// The File Editor's undo steps kept (Settings value; Logic's default 5, at least 1).
+pub fn undo_steps(v: &str) -> usize {
+    v.trim().parse::<usize>().unwrap_or(5).max(1)
+}
+
+/// A project closed: with Clear Undo History when closing project, the File Editor's history goes.
+pub fn project_closed(app: &mut App) {
+    if app.logic_settings.on(FE_CLEAR_UNDO) {
+        app.audio_edit.file_undo.clear();
+        app.audio_edit.file_redo.clear();
+    }
+}
+
 /// A destructive Function on the selection (else the region): the backup made once, an undo
 /// step, the file written, the engine reloaded.
 fn destructive(app: &mut App, file: &Path, what: &str, f: impl FnOnce(&mut AudioFile, Range<usize>)) -> bool {
@@ -2017,9 +2034,12 @@ fn destructive(app: &mut App, file: &Path, what: &str, f: impl FnOnce(&mut Audio
         app.tell(format!("Couldn't write {}: {e}", file.display()));
         return true;
     }
-    app.audio_edit.file_undo.push((file.to_path_buf(), before, what.to_string()));
-    if app.audio_edit.file_undo.len() > 10 {
-        app.audio_edit.file_undo.remove(0);
+    // (Settings ▸ Audio ▸ File Editor: Record Normalize operations in Undo History, Number of Undo Steps)
+    if what != "Normalize" || app.logic_settings.get(FE_NORMALIZE_UNDO) != "0" {
+        app.audio_edit.file_undo.push((file.to_path_buf(), before, what.to_string()));
+        let keep = undo_steps(&app.logic_settings.get(FE_UNDO_STEPS));
+        let n = app.audio_edit.file_undo.len();
+        app.audio_edit.file_undo.drain(..n.saturating_sub(keep));
     }
     app.audio_edit.file_redo.clear();
     // Trim: the regions on this file now start earlier in it
@@ -3138,6 +3158,21 @@ pub fn toggle_click(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_editor_undo_settings() {
+        assert_eq!(undo_steps(""), 5);
+        assert_eq!(undo_steps("12"), 12);
+        assert_eq!(undo_steps("0"), 1);
+        let mut app = crate::tm::test_app();
+        app.audio_edit.file_undo.push((PathBuf::from("a.wav"), AudioFile::new(48_000, 1, vec![0.0]), "Silence".into()));
+        app.logic_settings.0.insert(FE_CLEAR_UNDO.into(), "0".into());
+        project_closed(&mut app);
+        assert_eq!(app.audio_edit.file_undo.len(), 1);
+        app.logic_settings.0.insert(FE_CLEAR_UNDO.into(), "1".into());
+        project_closed(&mut app);
+        assert!(app.audio_edit.file_undo.is_empty());
+    }
 
     #[test]
     fn trim_help_tag_amount() {

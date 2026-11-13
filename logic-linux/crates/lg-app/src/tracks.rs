@@ -1037,6 +1037,15 @@ pub fn frac_to_db(f: f32) -> f32 {
 
 /// A click on a region with a tool other than the Pointer (Logic's Tracks-area tools). Returns
 /// true when the tool used the click.
+/// The Scissors on a region: a click on one of several selected regions cuts them all at that
+/// position; on another region, that one alone.
+pub fn scissors_select(app: &mut App, t: usize, r: usize) {
+    if !app.region_selection().contains(&(t, r)) {
+        app.selected_regions = vec![(t, r)];
+    }
+    app.selected_region = Some((t, r));
+}
+
 fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tick: Option<u32>, pp: Option<egui::Pos2>) -> bool {
     let bar = app.bar_ticks();
     let beat = bar / app.project.as_ref().map_or(4, |p| p.signature.0.max(1) as u32);
@@ -1051,8 +1060,7 @@ fn region_tool(app: &mut App, ui: &egui::Ui, tool: Tool, t: usize, r: usize, tic
             let Some(tick) = tick else { return true };
             // (snapped to the division; Option: cuts it into equal pieces of that length)
             let cut = if ui.input(|i| i.modifiers.shift) { tick } else { ((tick as f64 / div as f64).round() as u32) * div };
-            app.selected_region = Some((t, r));
-            app.selected_regions = vec![(t, r)];
+            scissors_select(app, t, r);
             if ui.input(|i| i.modifiers.alt) {
                 if let Some(rg) = app.project.as_ref().and_then(|p| p.tracks.get(t)?.regions.get(r)) {
                     let step = cut.saturating_sub(rg.start).max(div);
@@ -1258,4 +1266,19 @@ fn global_tracks(app: &mut App, ui: &mut egui::Ui, area: Rect, lanes_x: f32) {
         }
     }
     crate::globals::after_rows(app, ui, &placed, lanes_x);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scissors_keep_a_selection_they_click_in() {
+        let mut app = crate::tm::test_app();
+        app.selected_regions = vec![(0, 0), (1, 0)];
+        scissors_select(&mut app, 1, 0);
+        assert_eq!(app.selected_regions, vec![(0, 0), (1, 0)]);
+        scissors_select(&mut app, 2, 0);
+        assert_eq!(app.selected_regions, vec![(2, 0)]);
+    }
 }

@@ -849,7 +849,9 @@ pub(crate) fn strip(app: &mut App, ui: &mut egui::Ui, r: Rect, i: usize, name: &
     }
     // the output
     if shown(app, "Output") && !is_vca {
-        if is_master {
+        // (Settings ▸ View ▸ Mixer: Show “Mastering Assistant” Button in Stereo Output)
+        if is_master && app.logic_settings.get(crate::mixext::MA_BUTTON) == "0" {
+        } else if is_master {
             slot(&p, y, "Mastering", None);
             let resp = ui.interact(slot_rect(y), id.with("mastering"), Sense::click()).on_hover_text("Mastering Assistant");
             if resp.clicked() {

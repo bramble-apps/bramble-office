@@ -24,6 +24,7 @@ use crate::settings::Values;
 pub const COMMANDS: &[&str] = &["Send Reset Controllers", "Clear Menu", "Reset All Settings Except Key Command Assignments…"];
 
 // ---- keys (Tab / Sub / row) ------------------------------------------------------------------
+pub const EXTERNAL_EDITOR: &str = "Audio / File Editor / External Sample Editor:";
 pub const STARTUP: &str = "General / Project Handling / Startup Action:";
 pub const DEFAULT_TEMPLATE: &str = "General / Project Handling / Default Template:";
 pub const AUTO_BACKUP: &str = "General / Project Handling / Auto Backup:";
@@ -193,6 +194,8 @@ pub fn startup(app: &mut App) {
             let k = default_template(&app.logic_settings);
             app.set_project(crate::projfile::layout_project(k), true);
             app.file = None;
+            // (Logic then asks where to save it)
+            app.save_as();
         }
         "Select a Template" | "Ask" => app.pf.chooser = true,
         // Do Nothing: an empty project, no dialog
@@ -617,6 +620,22 @@ pub fn button(app: &mut App, key: &str) -> bool {
             app.tell(format!("MIDI drivers reset: {} input{}", app.live.input_names.len(), if app.live.input_names.len() == 1 { "" } else { "s" }));
         }
         "Audio / Devices / Apply" => open_output(app),
+        // Score: Reset puts the Selection Color back to Logic's
+        "Score /  / Reset" => {
+            app.logic_settings.0.remove(crate::score::SELECTION_COLOR);
+            app.logic_settings.save();
+        }
+        // Audio ▸ File Editor: the External Sample Editor chosen or cleared
+        "Audio / File Editor / Remove" => {
+            app.logic_settings.0.insert(EXTERNAL_EDITOR.into(), String::new());
+            app.logic_settings.save();
+        }
+        "Audio / File Editor / Choose..." => {
+            if let Some(f) = (if app.automated { None } else { kn_ui::files::FileDialog::new().set_title("Choose External Sample Editor").pick_file() }) {
+                app.logic_settings.0.insert(EXTERNAL_EDITOR.into(), f.display().to_string());
+                app.logic_settings.save();
+            }
+        }
         k if crate::autoext::button(app, k) => {}
         k if k.ends_with("Controller Assignments…") || k.ends_with("/ Setup…") => {
             let ctx = app.ctx.clone();

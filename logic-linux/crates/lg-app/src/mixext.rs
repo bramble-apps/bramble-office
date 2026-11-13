@@ -774,19 +774,24 @@ pub fn plugin_search(ui: &mut egui::Ui) -> Option<String> {
 // ---------------------------------------------------------------------------------------------
 // the Gain Reduction meter, the EQ display, the plug-in slots, sends and outputs of a selection
 
+pub const MA_BUTTON: &str = "View / Mixer / Show “Mastering Assistant” Button in Stereo Output";
+
+/// The plug-ins the Gain Reduction meter belongs to (Logic: Compressor, Limiter, Adaptive Limiter).
+pub const GR_PLUGINS: &[&str] = &["Compressor", "Limiter", "Adaptive Limiter"];
+
 fn topmost(app: &App, s: usize, names: &[&str]) -> Option<usize> {
     mixstate::inserts(app, s).iter().position(|u| names.contains(&u.name.as_str()))
 }
 
 /// A click on the Gain Reduction meter: a Compressor goes into the first free slot (with
-/// Option: into the first slot, the others moving down), or the topmost Compressor's window
-/// opens or closes; Command-click removes the topmost Compressor.
+/// Option: into the first slot, the others moving down), or the topmost Compressor, Limiter or
+/// Adaptive Limiter's window opens or closes; Command-click removes that plug-in.
 pub fn gr_clicked(app: &mut App, ui: &egui::Ui, resp: &egui::Response, s: usize) {
     if !resp.clicked() {
         return;
     }
     let (alt, cmd) = ui.input(|i| (i.modifiers.alt, i.modifiers.command));
-    let at = topmost(app, s, &["Compressor"]);
+    let at = topmost(app, s, GR_PLUGINS);
     if cmd {
         if let Some(k) = at {
             remove_insert(app, s, k);
@@ -1018,6 +1023,8 @@ pub fn auto_mode_menu(app: &mut App, resp: &egui::Response, s: usize) {
             }
             ui.close();
         }
+        ui.separator();
+        crate::autoext::region_rec_item(app, ui, s);
     });
 }
 
@@ -1735,6 +1742,16 @@ pub fn apply_sidecar_line(app: &mut App, kind: &str, a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gain_reduction_meter_finds_limiters() {
+        let mut a = crate::tm::test_app();
+        a.set_project(crate::demo::song(), true);
+        mixstate::edit_inserts(&mut a, 0, |v| *v = vec![mixstate::new_plugin("Adaptive Limiter")]);
+        let k = topmost(&a, 0, GR_PLUGINS).unwrap();
+        assert_eq!(mixstate::inserts(&a, 0)[k].name, "Adaptive Limiter");
+        assert_eq!(topmost(&a, 0, &["Compressor"]), None);
+    }
 
     #[test]
     fn components_default_on_and_off() {

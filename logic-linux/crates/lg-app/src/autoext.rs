@@ -309,6 +309,12 @@ pub fn mode_menu_extras(app: &mut App, ui: &mut egui::Ui, t: usize) {
         }
     }
     ui.separator();
+    region_rec_item(app, ui, t);
+}
+
+/// The menu's "Record Automation with Audio/MIDI Regions" (Option: every track of that kind);
+/// in the track header's and the channel strip's Automation Mode menus.
+pub fn region_rec_item(app: &mut App, ui: &mut egui::Ui, t: usize) {
     let label = if is_audio(app, t) { "Record Automation with Audio Regions" } else { "Record Automation with MIDI Regions" };
     let on = region_rec(app, t);
     if ui.add(egui::Button::selectable(on, label)).clicked() {

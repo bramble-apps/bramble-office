@@ -240,6 +240,7 @@ mod hosting;
 pub mod units;
 pub mod wavecache;
 mod widgets;
+mod helptags;
 mod viewprefs;
 mod windows;
 

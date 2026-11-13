@@ -628,6 +628,7 @@ impl App {
         crate::prefs::note_opened(p);
         match lg_core::open(p) {
             Ok(proj) => {
+                crate::audioedit::project_closed(self);
                 let n = proj.tracks.len();
                 // the ProjectData Save will write back into (.logicx; GarageBand's next)
                 let pkg = lg_core::project::package_of(p);
@@ -1343,6 +1344,7 @@ impl App {
             "Open…" => self.open_dialog(),
             "Close Project" => {
                 self.stop();
+                crate::audioedit::project_closed(self);
                 self.set_project(crate::demo::song(), true);
             }
             "Hide Browser" => self.show_browser = !self.show_browser,
@@ -2007,6 +2009,7 @@ impl App {
         MIDDLE_C4.store(self.logic_settings.get("View / General / Display Middle C As:").starts_with("C4"), std::sync::atomic::Ordering::Relaxed);
         let tags_on = self.logic_settings.get("View / General / Show help tags") != "0";
         if let Some(tag) = self.help_tag.take().filter(|_| tags_on) {
+            let tag = crate::helptags::decorate(self, tag);
             help_tag(&ctx, &tag);
         }
         crate::dialogs::show(self, &ctx);
