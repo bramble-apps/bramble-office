@@ -481,21 +481,81 @@ fn write_user_patch(app: &App, t: usize, path: &Path) -> std::io::Result<()> {
     std::fs::write(path, s)
 }
 
+/// Patch Merging's categories: MIDI Effects, Instruments, Audio Effects, Sends.
+pub const MERGE: [&str; 4] = ["MIDI Effects", "Instruments", "Audio Effects", "Sends"];
+
+/// The categories a loaded patch replaces (all four unless Patch Merging's panel says other).
+pub fn merge_cats(app: &App) -> [bool; 4] {
+    if !app.br.saved.flag("patch_merging", false) {
+        return [true; 4];
+    }
+    let v = app.br.saved.settings.get("merge_cats").cloned().unwrap_or_else(|| "1111".into());
+    let mut out = [true; 4];
+    for (i, c) in v.chars().take(4).enumerate() {
+        out[i] = c == '1';
+    }
+    out
+}
+
+fn merge_panel_shown(app: &App) -> bool {
+    app.br.saved.flag("patch_merging", false) && matches!(app.br.view, Cat::Instruments | Cat::Effects | Cat::All | Cat::YourPatches)
+}
+
+/// The Patch Merging panel: the four category buttons (selected: the patch replaces it) and
+/// Close. Effect patches have no instrument or MIDI effects (greyed); a summing stack's main
+/// track can't merge.
+fn merge_panel(app: &mut App, ui: &mut egui::Ui, r: Rect) {
+    let p = ui.painter().clone();
+    p.rect_filled(r, 0.0, look::pane_bg());
+    p.hline(r.x_range(), r.min.y, Stroke::new(1.0, look::line()));
+    p.text(pos2(r.min.x + 10.0, r.min.y + 12.0), Align2::LEFT_CENTER, "Patch Merging", look::semibold(11.0), look::text());
+    let close = Rect::from_min_size(pos2(r.max.x - 24.0, r.min.y + 3.0), vec2(18.0, 18.0));
+    crate::glyphs::paint(&p, close, ph::X, 11.0, look::text_dim());
+    if ui.interact(close, ui.scope_id().with("merge-close"), Sense::click()).on_hover_text("Close").clicked() {
+        app.br.saved.set_flag("patch_merging", false);
+        save_state(app);
+        return;
+    }
+    let summing = track_kind(app).is_some_and(|(t, _, _)| app.project.as_ref().and_then(|p| p.tracks.get(t)).and_then(|tr| tr.extra.stack).is_some_and(|s| s.kind == lg_core::arrange::StackKind::Summing));
+    let effects = app.br.view == Cat::Effects || track_kind(app).is_some_and(|k| k.1 == TrackKind::Audio);
+    let cats = merge_cats(app);
+    let bw = (r.width() - 20.0 - 3.0 * 4.0) / 4.0;
+    for (i, name) in MERGE.iter().enumerate() {
+        let b = Rect::from_min_size(pos2(r.min.x + 10.0 + i as f32 * (bw + 4.0), r.min.y + 26.0), vec2(bw, 22.0));
+        let enabled = !summing && !(effects && i < 2);
+        let on = cats[i] && enabled;
+        p.rect_filled(b, 5.0, if on { look::accent() } else { look::group_bg() });
+        p.with_clip_rect(b).text(b.center(), Align2::CENTER_CENTER, *name, look::regular(10.5), if !enabled { look::text_dim().gamma_multiply(0.5) } else if on { Color32::WHITE } else { look::text() });
+        if enabled && ui.interact(b, ui.scope_id().with(("merge", i)), Sense::click()).clicked() {
+            let mut c = cats;
+            c[i] = !c[i];
+            app.br.saved.settings.insert("merge_cats".into(), c.iter().map(|x| if *x { '1' } else { '0' }).collect());
+            save_state(app);
+        }
+    }
+    if summing {
+        p.text(pos2(r.max.x - 30.0, r.min.y + 12.0), Align2::RIGHT_CENTER, "Not for a summing stack's main track", look::regular(10.0), look::text_dim());
+    }
+}
+
 fn load_user_patch(app: &mut App, t: usize, path: &Path) {
     let Ok(text) = std::fs::read_to_string(path) else {
         app.tell("That patch couldn't be read");
         return;
     };
     app.checkpoint("Change Patch");
-    let merge = app.br.saved.flag("patch_merging", false);
+    // Patch Merging: only the selected categories are replaced; all four (or no panel): the
+    // whole patch, its volume and pan too
+    let cats = merge_cats(app);
+    let merge = cats != [true; 4];
     let mut inserts = Vec::new();
     for l in text.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         match f.as_slice() {
-            ["instrument", i] => {
+            ["instrument", i] if cats[1] => {
                 app.instrument_choice.insert(t, i.to_string());
             }
-            ["program", n] => {
+            ["program", n] if cats[1] => {
                 if let (Some(p), Ok(n)) = (app.programs.get_mut(t), n.parse()) {
                     *p = n;
                 }
@@ -523,17 +583,9 @@ fn load_user_patch(app: &mut App, t: usize, path: &Path) {
             tr.name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         }
     }
-    // Patch Merging off: the patch's Audio FX replace the track's; on: the track's stay
-    if !merge {
+    // the patch's Audio FX replace the track's unless Audio Effects is deselected
+    if cats[2] {
         crate::mixstate::edit_inserts(app, t, |v| *v = inserts);
-    } else if !inserts.is_empty() {
-        crate::mixstate::edit_inserts(app, t, |v| {
-            for u in inserts {
-                if !v.iter().any(|x| x.name == u.name) {
-                    v.push(u);
-                }
-            }
-        });
     }
     app.after_edit();
 }
@@ -1401,6 +1453,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
     // ---- the results and the footer
     // (the Preview Player, when shown, sits between the results and the footer: prevplayer.rs)
     let player_h = crate::prevplayer::height(app);
+    // the Patch Merging panel (More ▸ Enable Patch Merging) below the results
+    let merge_h = if merge_panel_shown(app) { 58.0 } else { 0.0 };
+    if merge_h > 0.0 {
+        merge_panel(app, ui, Rect::from_min_max(pos2(body_left, area.max.y - 42.0 - player_h - merge_h), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h)));
+    }
+    let player_h = player_h + merge_h;
     let list = Rect::from_min_max(pos2(body_left, body_top), pos2(area.max.x - 1.0, area.max.y - 42.0 - player_h));
     p.rect_filled(list, 0.0, look::lane_bg());
     let count = {
@@ -1421,8 +1479,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
             }
         }
     };
-    if player_h > 0.0 {
-        crate::prevplayer::show(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y), pos2(list.max.x, list.max.y + player_h)));
+    if player_h - merge_h > 0.0 {
+        crate::prevplayer::show(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y + merge_h), pos2(list.max.x, list.max.y + player_h)));
     }
     footer(app, ui, Rect::from_min_max(pos2(list.min.x, list.max.y + player_h), pos2(list.max.x, area.max.y)), count);
     // folders dropped from the desktop onto the Browser: new locations
