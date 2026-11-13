@@ -97,6 +97,33 @@ pub enum SymbolKind {
     ChordGrid,
     /// A user rest (Part box rest): `text` is its value, "base dots" ("8 1" a dotted eighth).
     Rest,
+    /// A multiple bar rest at a bar's start: `text` is "bars type", bars "A" for Auto Length
+    /// (the empty bars up to the next note), type 0 modern (an H-bar), 1 church style.
+    MultiRest,
+}
+
+/// A multiple bar rest's settings (its symbol's text).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MultiRestText {
+    /// None: Auto Length.
+    pub bars: Option<u32>,
+    pub church: bool,
+}
+
+impl MultiRestText {
+    pub fn parse(t: &str) -> MultiRestText {
+        let mut w = t.split_whitespace();
+        let bars = w.next().and_then(|b| b.parse::<u32>().ok()).filter(|&b| b > 0);
+        MultiRestText { bars, church: w.next() == Some("1") }
+    }
+    pub fn text(self) -> String {
+        format!("{} {}", self.bars.map_or("A".to_string(), |b| b.to_string()), self.church as u8)
+    }
+    /// The bars it covers from bar `start`: its count, or (Auto Length) up to the bar of the
+    /// next note at or after it (`next_note_bar`), else to `end_bar`; at least one.
+    pub fn span(self, start: u32, next_note_bar: Option<u32>, end_bar: u32) -> u32 {
+        self.bars.unwrap_or_else(|| next_note_bar.unwrap_or(end_bar).saturating_sub(start)).max(1)
+    }
 }
 
 /// A tuplet symbol's settings, kept in its text: `n` notes of 1/`base` in the time of `of`;
@@ -401,6 +428,7 @@ impl Score {
         let dflt = match s.kind {
             SymbolKind::Lyric => "Lyric",
             SymbolKind::Chord => "Chord Root",
+            SymbolKind::MultiRest => "Multiple Rests",
             _ => "Plain Text",
         };
         let want = if s.style.is_empty() { dflt } else { s.style.as_str() };
@@ -500,8 +528,9 @@ fn unesc(s: &str) -> String {
     out
 }
 
-const KINDS: [(SymbolKind, &str); 15] = [
+const KINDS: [(SymbolKind, &str); 16] = [
     (SymbolKind::Tuplet, "tuplet"),
+    (SymbolKind::MultiRest, "mrest"),
     (SymbolKind::Rest, "rest"),
     (SymbolKind::ChordGrid, "grid"),
     (SymbolKind::Dynamic, "dyn"), (SymbolKind::Text, "text"), (SymbolKind::Lyric, "lyric"), (SymbolKind::Chord, "chord"), (SymbolKind::Crescendo, "cresc"), (SymbolKind::Decrescendo, "decresc"), (SymbolKind::SlurUp, "slurup"), (SymbolKind::SlurDown, "slurdown"), (SymbolKind::Clef, "clef"), (SymbolKind::Ornament, "orn"), (SymbolKind::AutoText, "auto"), (SymbolKind::Text, "text"),
@@ -649,6 +678,21 @@ impl Score {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multiple_rest_text_and_span() {
+        let auto = MultiRestText::parse("A 0");
+        assert_eq!(auto, MultiRestText { bars: None, church: false });
+        // Auto Length: the empty bars up to the next note (bar 9 from bar 4: five bars)
+        assert_eq!(auto.span(4, Some(9), 20), 5);
+        assert_eq!(auto.span(4, None, 12), 8);
+        let fixed = MultiRestText::parse("3 1");
+        assert_eq!((fixed.bars, fixed.church, fixed.text()), (Some(3), true, "3 1".to_string()));
+        assert_eq!(fixed.span(4, Some(5), 20), 3);
+        let mut sc = Score::default();
+        sc.track_mut(1).symbols.push(Symbol { tick: 0, kind: SymbolKind::MultiRest, text: fixed.text(), ..Default::default() });
+        assert_eq!(sc.style_for(&sc.track(1).unwrap().symbols[0]).name, "Multiple Rests");
+    }
 
     #[test]
     fn attributes_follow_moves_and_drop_when_default() {

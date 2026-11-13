@@ -784,6 +784,14 @@ fn symbol_icon(p: &egui::Painter, r: Rect, part: Part, dotted: bool, triplet: bo
                 p.text(pos2(c.x + 1.0, r.min.y), Align2::CENTER_TOP, "3", look::regular(9.0), col);
             }
         }
+        Part::Rest(score::MULTI_REST) => {
+            // the multiple rest: an H-bar with its count
+            p.rect_filled(Rect::from_center_size(c + vec2(0.0, 3.0), vec2(14.0, 3.6)), 0.0, col);
+            for dx in [-7.0, 7.0] {
+                p.vline(c.x + dx, c.y - 1.0..=c.y + 7.0, Stroke::new(1.0, col));
+            }
+            p.text(c + vec2(0.0, -5.0), Align2::CENTER_CENTER, "4", look::bold(9.0), col);
+        }
         Part::Rest(i) => score::rest(p, c.x - 2.0, c.y + 8.0, 4.0, nt::Value { base: score::VALUES[i].1, dots: 0 }, false, col),
         Part::Artic(i) => score::artic_glyph(p, score::PART_ARTICS[i], c + vec2(0.0, 2.0), 4.4, true, col),
         Part::Dynamic(i) => score::smufl_text(p, &score::dynamic_glyphs(score::DYNAMICS[i]), c + vec2(0.0, 4.0), 3.4, col),
