@@ -576,15 +576,13 @@ pub(crate) fn tools_pill(app: &mut App, ui: &mut egui::Ui, id: egui::Id, r: Rect
 
 fn tool_items(app: &mut App, ui: &mut egui::Ui, cmd: bool) {
     let cur = if cmd { app.cmd_tool } else { app.tool };
-    for t in crate::edit::Tool::TRACKS {
-        if ui.add(egui::Button::selectable(cur == t, t.name()).shortcut_text(t.key())).clicked() {
-            if cmd {
-                app.cmd_tool = t;
-            } else {
-                app.tool = t;
-            }
-            ui.close();
+    if let Some(t) = crate::rolltools::menu_rows(ui, &crate::edit::Tool::TRACKS, cur) {
+        if cmd {
+            app.cmd_tool = t;
+        } else {
+            app.tool = t;
         }
+        ui.close();
     }
 }
 
@@ -776,11 +774,9 @@ fn roll_name(c: RollCtl) -> &'static str {
 }
 
 fn roll_tools(app: &mut App, ui: &mut egui::Ui) {
-    for t in crate::edit::Tool::PIANO_ROLL {
-        if ui.add(egui::Button::selectable(app.roll_tool == t, t.name()).shortcut_text(t.key())).clicked() {
-            app.roll_tool = t;
-            ui.close();
-        }
+    if let Some(t) = crate::rolltools::menu_rows(ui, &crate::edit::Tool::PIANO_ROLL, app.roll_tool) {
+        app.roll_tool = t;
+        ui.close();
     }
 }
 

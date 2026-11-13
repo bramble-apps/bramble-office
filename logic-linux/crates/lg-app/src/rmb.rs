@@ -46,15 +46,13 @@ pub fn tools_section(app: &mut App, ui: &mut egui::Ui, roll: bool) {
     use crate::edit::Tool;
     let tools: &[Tool] = if roll { &Tool::PIANO_ROLL } else { &Tool::TRACKS };
     let cur = if roll { app.roll_tool } else { app.tool };
-    for t in tools {
-        if ui.add(egui::Button::selectable(cur == *t, format!("{}  {}", crate::glyphs::tool(*t), t.name())).shortcut_text(t.key())).clicked() {
-            if roll {
-                app.roll_tool = *t;
-            } else {
-                app.tool = *t;
-            }
-            ui.close();
+    if let Some(t) = crate::rolltools::menu_rows(ui, tools, cur) {
+        if roll {
+            app.roll_tool = t;
+        } else {
+            app.tool = t;
         }
+        ui.close();
     }
 }
 
