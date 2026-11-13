@@ -44,15 +44,17 @@ pub fn browser(p: &egui::Painter, r: Rect, c: Color32, fill: Color32) {
 pub fn inspector(p: &egui::Painter, r: Rect, c: Color32, cell: Color32) {
     // Traced from Logic 13's icon at 2x, in points: the top (off) toggle is a 15 x 7 pill
     // outline in a 1 pt stroke with a 6 x 3.5 pill knob 2 pt in from its left end; 1 pt below
-    // it the bottom (on) toggle is a solid 15 x 6.5 pill with a 6 x 4.5 pill cut out 1 pt in
-    // from its right end.
-    let top = Rect::from_min_size(pos2(r.center().x - 7.5, r.center().y - 7.25), vec2(15.0, 7.0));
+    // it the bottom (on) toggle is a solid 15 x 6.5 pill with a 6 x 4.5 pill cut out 1.5 pt in
+    // from its right end, 1 pt from top and bottom.
+    // (snapped to the 2x pixel grid so the strokes and knobs land on whole pixels as Logic's do)
+    let snap = |v: f32| (v * 2.0).round() / 2.0;
+    let top = Rect::from_min_size(pos2(snap(r.center().x - 7.5), snap(r.center().y - 7.25)), vec2(15.0, 7.0));
     p.rect_stroke(top, 3.5, Stroke::new(1.0, c), egui::StrokeKind::Inside);
-    let knob = Rect::from_min_size(pos2(top.min.x + 2.0, top.center().y - 1.75), vec2(6.0, 3.5));
-    p.rect_filled(knob, 1.75, c);
+    let knob = Rect::from_min_size(pos2(top.min.x + 2.0, top.min.y + 1.5), vec2(6.0, 4.0));
+    p.rect_filled(knob, 2.0, c);
     let bottom = Rect::from_min_size(pos2(top.min.x, top.max.y + 1.0), vec2(15.0, 6.5));
     p.rect_filled(bottom, 3.25, c);
-    let cut = Rect::from_min_size(pos2(bottom.max.x - 1.0 - 6.0, bottom.center().y - 2.25), vec2(6.0, 4.5));
+    let cut = Rect::from_min_size(pos2(bottom.max.x - 1.5 - 6.0, bottom.min.y + 1.0), vec2(6.0, 4.5));
     p.rect_filled(cut, 2.25, cell);
 }
 
