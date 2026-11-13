@@ -648,6 +648,15 @@ mod tests {
     }
 
     #[test]
+    fn auto_name_follows_the_windows() {
+        let mut s = Set { slot: 2, name: String::new(), locked: false, layout: l(0.0) };
+        assert_eq!(title(&s), "Screenset 2 (Tracks/Browser)");
+        s.layout.bottom = Bottom::Mixer;
+        s.layout.browser = false;
+        assert_eq!(title(&s), "Screenset 2 (Tracks/Mixer)");
+    }
+
+    #[test]
     fn recall_keeps_changes_unless_locked() {
         let mut sets = vec![Set { slot: 1, name: String::new(), locked: false, layout: l(0.0) }];
         // 2 doesn't exist: made from the window as it is
