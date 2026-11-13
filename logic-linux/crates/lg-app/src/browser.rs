@@ -1365,7 +1365,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, area: Rect) {
         sounds_like(app, &typed);
         app.br.typed.clear();
     }
-    if te.has_focus() && !typed.is_empty() && app.br.view != Cat::Presets && app.br.view != Cat::SoundFonts {
+    // (the list stays while the pointer is on it: pressing on a suggestion takes the focus
+    // from the field before the click lands)
+    let on_list = {
+        let r = ui.ctx().data(|d| d.get_temp::<Rect>(egui::Id::unique("browser-suggest-rect")));
+        let p = ui.ctx().pointer_latest_pos();
+        matches!((r, p), (Some(r), Some(p)) if r.contains(p))
+    };
+    if (te.has_focus() || on_list) && !typed.is_empty() && app.br.view != Cat::Presets && app.br.view != Cat::SoundFonts {
         suggestions(app, ui, &te, &typed);
     }
     let fb = Rect::from_min_size(pos2(sr.max.x + 9.5, sr.min.y), vec2(33.0, 24.0));
@@ -1551,7 +1558,7 @@ fn suggestions(app: &mut App, ui: &mut egui::Ui, te: &egui::Response, typed: &st
     let sug = sl::suggest(typed, &tags);
     let at = te.rect.left_bottom() + vec2(-24.0, 6.0);
     let mut pick: Option<usize> = None;
-    egui::Area::new(egui::Id::unique("browser-suggest")).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
+    let area = egui::Area::new(egui::Id::unique("browser-suggest")).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_min_width(te.rect.width() + 20.0);
             if ui.add(egui::Button::new(format!("Name Contains “{typed}”")).frame(false)).clicked() {
@@ -1571,6 +1578,8 @@ fn suggestions(app: &mut App, ui: &mut egui::Ui, te: &egui::Response, typed: &st
             }
         });
     });
+    let rect = area.response.rect;
+    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("browser-suggest-rect"), rect));
     match pick {
         Some(0) => {
             if !app.br.search.names.iter().any(|n| n == typed) {
