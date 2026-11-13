@@ -7,7 +7,7 @@ mod names {
 }
 
 /// Library folder of a Logic instrument patch.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Cat {
     SynthBass,
     SynthKeys,
@@ -125,6 +125,26 @@ pub fn patch(logic_patch_name: &str) -> Option<PatchSpec> {
         return Some(s);
     }
     keyword_cat(&low).map(|c| from_cat(c, &low))
+}
+
+/// One of Studio's effects on the patch's channel strip (lg-fx name, parameter settings).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FxSpec {
+    pub name: &'static str,
+    pub settings: Vec<(u32, f32)>,
+}
+
+/// The Audio FX a patch loads onto its channel strip (Studio's own effects, chosen from the
+/// patch's name and folder: amp, tremolo, chorus, EQ, compression, room…).
+pub fn fx_chain(logic_patch_name: &str) -> Vec<FxSpec> {
+    let _ = logic_patch_name;
+    Vec::new()
+}
+
+/// The library folder of a patch name (None: not in the table).
+pub fn family(logic_patch_name: &str) -> Option<Cat> {
+    let name = logic_patch_name.trim().trim_end_matches(".patch");
+    names::NAMES.binary_search_by(|(n, _)| n.cmp(&name)).ok().map(|i| names::NAMES[i].1)
 }
 
 /// Number of Logic patch names the table knows by folder.

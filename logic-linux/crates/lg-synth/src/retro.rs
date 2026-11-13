@@ -395,7 +395,7 @@ impl Tables {
 }
 
 /// In-place radix-2 FFT (length a power of two); `inverse` also divides by the length.
-fn fft(re: &mut [f32], im: &mut [f32], inverse: bool) {
+pub(crate) fn fft(re: &mut [f32], im: &mut [f32], inverse: bool) {
     let n = re.len();
     let mut j = 0usize;
     for i in 1..n {
