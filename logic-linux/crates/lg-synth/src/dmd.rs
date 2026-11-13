@@ -17,7 +17,30 @@ pub const STYLES: &[&str] = &[
     "Analog 909",
     "Acoustic",
     "Electronic Pop",
+    "Empty Kit",
 ];
+/// The style with no sounds on any pad (Logic's "Empty Kit").
+pub const EMPTY_STYLE: u8 = 5;
+/// A pad's kit choices: the drum kits, then None (an empty pad: silent until a sample is put on it).
+pub const PAD_KITS: &[&str] = &[
+    "Studio Kit",
+    "Vintage Kit",
+    "Heavy Kit",
+    "Brush Kit",
+    "Analog 808",
+    "Analog 909",
+    "Electronic Pop",
+    "None",
+];
+/// The pad kit value of an empty pad.
+pub const NO_KIT: u8 = 7;
+/// The kit-wide voicing knobs (the drum kit's Punch, Hi-Hat Tone, Snare Wires, Stereo Width).
+pub const PUNCH: u32 = 3;
+pub const HAT_TONE: u32 = 4;
+pub const WIRES: u32 = 5;
+pub const WIDTH: u32 = 6;
+/// DMD knob → the drum kit's parameter id.
+const FORWARD: [(u32, u32); 4] = [(PUNCH, 23), (HAT_TONE, 13), (WIRES, 8), (WIDTH, 21)];
 const FIELDS: [&str; 7] = [
     "Kit",
     "Source Note",
@@ -40,6 +63,10 @@ fn params() -> &'static [Param] {
             Param::new(0, "Volume", -40.0, 12.0, 0.0, Unit::Db),
             Param::new(1, "Room", 0.0, 1.0, 0.15, Unit::Ratio),
             Param::menu(2, "Kit Style", STYLES, 0.0),
+            Param::new(PUNCH, "Punch", 0.0, 1.0, 0.3, Unit::Ratio),
+            Param::new(HAT_TONE, "Hi-Hat Tone", -1.0, 1.0, 0.0, Unit::Ratio),
+            Param::new(WIRES, "Snare Wires", 0.0, 2.0, 1.0, Unit::Ratio),
+            Param::new(WIDTH, "Stereo Width", 0.0, 1.0, 0.6, Unit::Ratio),
         ];
         let layout = default_layout(0);
         for k in 0..PADS {
@@ -50,7 +77,7 @@ fn params() -> &'static [Param] {
                     Box::leak(format!("Pad {} {}", note_name(note as u8), name).into_boxed_str());
                 let id = pad_param(k, f);
                 v.push(match f {
-                    0 => Param::menu(id, label, crate::drums::KITS, p.kit as f32),
+                    0 => Param::menu(id, label, PAD_KITS, p.kit as f32),
                     1 => Param::new(
                         id,
                         label,
@@ -97,6 +124,7 @@ pub fn default_layout(style: u8) -> [Pad; 128] {
         1 => 4,
         2 => 5,
         3 => 0,
+        EMPTY_STYLE => NO_KIT,
         _ => 6,
     };
     for (n, pad) in p.iter_mut().enumerate() {
@@ -161,6 +189,8 @@ pub struct DrumMachineDesigner {
     rate: f32,
     /// The editor's revision the pads came from.
     pub doc_rev: u64,
+    /// Each note's kit (NO_KIT: an empty pad).
+    pad_kits: [u8; 128],
 }
 
 impl DrumMachineDesigner {
@@ -173,6 +203,7 @@ impl DrumMachineDesigner {
             soloed: [false; 128],
             rate,
             doc_rev: 0,
+            pad_kits: [0; 128],
         };
         d.apply();
         d
@@ -204,10 +235,21 @@ impl DrumMachineDesigner {
                 pads[n] = style[n];
             }
         }
+        for n in 0..128 {
+            self.pad_kits[n] = pads[n].kit;
+            if pads[n].kit >= NO_KIT {
+                // (an empty pad: nothing to build; the drum kit never sees it)
+                pads[n].kit = 0;
+                pads[n].gain = 0.0;
+            }
+        }
         self.drums.set_pads(&pads);
         self.drums.set(1, self.params.get(0));
         self.drums.set(18, self.params.get(1));
         self.drums.set(20, 0.4);
+        for (k, d) in FORWARD {
+            self.drums.set(d, self.params.get(k));
+        }
     }
     /// Puts a sample on a pad: its own Quick Sampler, One Shot, at the pad's key.
     pub fn set_pad_sample(&mut self, note: u8, audio: &crate::wav::Audio) {
@@ -230,6 +272,10 @@ impl DrumMachineDesigner {
     }
     pub fn clear_pad_sample(&mut self, note: u8) {
         self.quick[note as usize & 127] = None;
+    }
+    /// Is the pad empty (no sound and no sample: Logic's empty pad)?
+    pub fn pad_empty(&self, note: u8) -> bool {
+        self.pad_kits[note as usize & 127] >= NO_KIT && self.pad_quick(note).is_none()
     }
     /// The pad's choke (exclusive) group.
     pub fn pad_choke(&self, note: u8) -> u8 {
@@ -330,7 +376,7 @@ impl Instrument for DrumMachineDesigner {
         if v == 0 {
             return self.note_off(p);
         }
-        if !self.audible(p) {
+        if !self.audible(p) || self.pad_empty(p) {
             return;
         }
         // an exclusive group: this pad stops the others in it (samples and drums alike)
@@ -347,6 +393,7 @@ impl Instrument for DrumMachineDesigner {
         }
         match self.quick[p as usize & 127].as_mut() {
             Some(q) => q.note_on(p, v),
+            None if self.pad_kits[p as usize & 127] >= NO_KIT => {}
             None => self.drums.note_on(p, v),
         }
     }

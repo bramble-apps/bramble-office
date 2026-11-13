@@ -88,6 +88,7 @@ pub mod tm;
 pub mod trackhdr;
 pub mod trackops;
 pub mod freeze;
+pub mod patchfx;
 pub mod surround;
 pub mod surround_ui;
 mod pianoroll;

@@ -20,6 +20,7 @@ pub mod alchemy_mod;
 pub mod alchemy_partials;
 pub mod arp;
 pub mod bass;
+pub mod character;
 pub mod clav;
 pub mod dmd;
 pub mod drums;
@@ -50,6 +51,7 @@ pub mod sculpture_tutorials;
 pub mod sculpture_fx;
 pub mod sculpture_string;
 pub mod string;
+pub mod soundcheck;
 pub mod studio;
 pub mod studio_bass;
 pub mod studio_piano;
@@ -365,4 +367,33 @@ pub fn for_patch(patch: &str, rate: f32) -> Option<Box<dyn Instrument>> {
 /// The synthesized instrument for a Logic library patch (never the sampled one).
 pub fn synthesized_for_patch(patch: &str, rate: f32) -> Option<Box<dyn Instrument>> {
     patches::patch(patch).map(|s| build(&s, rate))
+}
+
+/// A mono-set instrument made polyphonic (three voices at least) for a chord preview:
+/// Polyphony / Voices raised, Keyboard / Voice / MIDI Mono Mode set to Poly.
+pub fn poly_for_preview(ins: &mut dyn Instrument) {
+    let ps: Vec<(u32, &'static str, f32, &'static [&'static str])> = ins.params().iter().map(|p| (p.id, p.name, p.max, p.choices)).collect();
+    for (id, name, max, choices) in ps {
+        let v = ins.get(id);
+        match name {
+            "Polyphony" | "Voices" if choices.is_empty() => {
+                if v < 3.0 {
+                    ins.set(id, 3f32.min(max));
+                }
+            }
+            "Voices" => {
+                if let Some(k) = choices.iter().position(|c| *c == "3") {
+                    if (v as usize) < k {
+                        ins.set(id, k as f32);
+                    }
+                }
+            }
+            n if (n.contains("Mono Mode") || n == "Keyboard Mode" || n == "Voice Mode") && !n.contains("Bend") => {
+                if let Some(k) = choices.iter().position(|c| *c == "Poly") {
+                    ins.set(id, k as f32);
+                }
+            }
+            _ => {}
+        }
+    }
 }

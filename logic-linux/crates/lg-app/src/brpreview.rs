@@ -223,7 +223,7 @@ pub fn render_preview_with(soundfont: Option<&std::path::Path>, data: Option<std
         eq: None,
         instrument: Some(instrument.to_string()),
         instrument_floats: Vec::new(),
-        inserts: Vec::new(),
+        inserts: crate::patchfx::inserts(instrument),
         sends: Vec::new(),
         auto_volume: Vec::new(),
         auto_pan: Vec::new(),

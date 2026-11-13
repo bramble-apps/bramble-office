@@ -1019,6 +1019,8 @@ impl App {
     pub fn choose_patch(&mut self, track: usize, category: &str, name: &str) {
         self.checkpoint("Change Patch");
         self.instrument_choice.insert(track, name.to_string());
+        // (the patch's own Audio FX come with it)
+        crate::patchfx::apply(self, track, name);
         let guess = patch_program(category, name);
         self.set_program(track, guess, name);
         self.load_engine();

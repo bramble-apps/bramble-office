@@ -337,7 +337,7 @@
  {
   "area": "Audio",
   "status": "Partial",
-  "feature": "Matched sounds: Logic's plug-ins and patches play our stand-ins on load. [ ] kits per Logic kit, loops"
+  "feature": "Matched sounds: Logic's plug-ins and patches play our stand-ins on load. studio-soundchar (2026-11-12, lg-synth character.rs / soundcheck.rs, lg-app patchfx.rs): every patch name has its own deterministic character (descriptor words + Session Player genre hints + a stable name hash): electronic kits voice each DMD pad's kit, tuning and decay per piece plus punch, hi-hat tone, snare wires, width and room; acoustic kits and percussion their tuning, decays, wires, room; other engines their voicing knobs; sampled stand-ins their tuning, filter and envelope; and each patch loads Studio's own matching Audio FX onto its channel strip (Bitcrusher for lo-fi, Overdrive / Amp Designer for driven, Phaser, Chorus, Tremolo, AutoFilter, Tape Delay, ChromaVerb, Compressor, a tone EQ), which the Browser preview plays too. Empty Kit / Empty Pad: silent, every DMD pad empty (pad kit None). Offline check (examples/patch_distance, tests/patch_character.rs): closest pair of differently named patches per folder went from 0.000 dB (91,938 of 117,508 pairs near-identical) to \u2265 1.06 dB (0 near-identical). [ ] Logic's real per-patch values (only names are known), separate DMD sub-track channel strips per pad, Patch Merging categories, loops"
  },
  {
   "area": "Session Players",
