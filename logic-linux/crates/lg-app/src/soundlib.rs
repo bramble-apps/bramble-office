@@ -72,7 +72,36 @@ pub struct Item {
     pub location: Option<usize>,
 }
 
+/// Logic's Type tags (All Filters ▸ Type), in Logic's order.
+pub const TYPES: &[&str] = &["Audio Loop", "One-Shot", "MIDI Loop", "Pattern Loop", "Session Player Loop", "Instrument Patch", "Audio Patch", "Aux Patch", "Output Patch"];
+
 impl Item {
+    /// The item's Type tag (one of [`TYPES`]): a loop by its file's kind, a one-shot, or a
+    /// patch by what it goes on (instrument, audio, aux or output channel strips).
+    pub fn type_tag(&self) -> &'static str {
+        match self.kind {
+            Kind::OneShot => "One-Shot",
+            Kind::Loop => match self.loop_type {
+                LoopType::Audio => "Audio Loop",
+                LoopType::Midi => "MIDI Loop",
+                LoopType::Pattern => "Pattern Loop",
+                LoopType::SessionPlayer => "Session Player Loop",
+            },
+            Kind::Patch => {
+                let c = self.category.to_ascii_lowercase();
+                if c.starts_with("aux") {
+                    "Aux Patch"
+                } else if c.starts_with("output") {
+                    "Output Patch"
+                } else if self.loop_type == LoopType::Audio {
+                    "Audio Patch"
+                } else {
+                    "Instrument Patch"
+                }
+            }
+        }
+    }
+
     pub fn is_file(&self) -> bool {
         self.path.is_some() && self.kind != Kind::Patch
     }
@@ -562,6 +591,8 @@ pub struct Search {
     pub groups: Vec<(String, String)>,
     pub your_sounds: bool,
     pub favorites: bool,
+    /// Type tags (All Filters ▸ Type; any of them matches).
+    pub types: Vec<String>,
     /// Loops & One-Shots view: only loops (true) or only one-shots (false).
     pub loops_only: Option<bool>,
     /// A sound to find similar ones to (its id and name).
@@ -583,6 +614,7 @@ pub enum Chip {
     Group(String, String),
     YourSounds,
     Favorites,
+    Type(String),
     Similar(String),
     Pack(String),
     Bpm(f64),
@@ -594,7 +626,7 @@ impl Chip {
     pub fn label(&self) -> String {
         match self {
             Chip::Name(s) => format!("Name: {s}"),
-            Chip::Tag(t) => t.clone(),
+            Chip::Tag(t) | Chip::Type(t) => t.clone(),
             Chip::Group(g, v) => format!("{g}: {v}"),
             Chip::YourSounds => "Your Sounds".into(),
             Chip::Favorites => "Favorites".into(),
@@ -618,6 +650,7 @@ impl Search {
 
     pub fn chips(&self) -> Vec<Chip> {
         let mut v: Vec<Chip> = self.names.iter().cloned().map(Chip::Name).collect();
+        v.extend(self.types.iter().cloned().map(Chip::Type));
         v.extend(self.tags.iter().cloned().map(Chip::Tag));
         v.extend(self.groups.iter().cloned().map(|(g, x)| Chip::Group(g, x)));
         v.extend(self.packs.iter().cloned().map(Chip::Pack));
@@ -649,6 +682,7 @@ impl Search {
             Chip::Group(g, x) => self.groups.retain(|y| !(y.0 == *g && y.1 == *x)),
             Chip::YourSounds => self.your_sounds = false,
             Chip::Favorites => self.favorites = false,
+            Chip::Type(t) => self.types.retain(|x| x != t),
             Chip::Similar(_) => self.similar = None,
             Chip::Pack(p) => self.packs.retain(|x| x != p),
             Chip::Bpm(_) => self.bpm = None,
@@ -721,6 +755,9 @@ impl Search {
             return false;
         }
         if self.favorites && !fav.contains(&it.id) {
+            return false;
+        }
+        if !self.types.is_empty() && !self.types.iter().any(|t| t == it.type_tag()) {
             return false;
         }
         if let Some(k) = self.kind {
@@ -856,6 +893,7 @@ pub fn tag_counts<'a>(items: impl Iterator<Item = &'a Item>) -> HashMap<String, 
             *m.entry(format!("{g}\u{1f}{v}")).or_default() += 1;
         }
         *m.entry(format!("pack\u{1f}{}", it.pack)).or_default() += 1;
+        *m.entry(format!("type\u{1f}{}", it.type_tag())).or_default() += 1;
     }
     m
 }
@@ -919,6 +957,9 @@ pub fn search_to_text(s: &Search) -> String {
     if s.favorites {
         f.push("f=1".into());
     }
+    for t in &s.types {
+        f.push(format!("T={t}"));
+    }
     if let Some(l) = s.loops_only {
         f.push(format!("l={}", l as u8));
     }
@@ -949,6 +990,7 @@ pub fn search_from_text(t: &str) -> Search {
             "p" => s.packs.push(v.into()),
             "y" => s.your_sounds = true,
             "f" => s.favorites = true,
+            "T" => s.types.push(v.into()),
             "l" => s.loops_only = Some(v == "1"),
             "b" => s.bpm = v.parse().ok(),
             "k" => s.key = two().map(|(a, b)| (a, b == "1")),
