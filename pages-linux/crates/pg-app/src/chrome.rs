@@ -49,8 +49,11 @@ pub(crate) fn title_item(app: &mut App, ui: &mut egui::Ui, name_r: Rect, cy: f32
                     continue;
                 }
                 if ui.button(format!("{}{n}", if k == 0 { "" } else { "📁 " })).clicked() {
-                    let open = if k == 0 { a.parent().unwrap_or(a) } else { a };
-                    let _ = kn_ui::open_command(open).stdin(std::process::Stdio::null()).spawn();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let open = if k == 0 { a.parent().unwrap_or(a) } else { a };
+                        let _ = kn_ui::open_command(open).stdin(std::process::Stdio::null()).spawn();
+                    }
                     ui.close();
                 }
             }

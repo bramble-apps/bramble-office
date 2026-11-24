@@ -42,9 +42,18 @@ impl Look {
     /// Keydeck's (but Pages' toolbar background, Letters' default).
     pub fn load() -> Look {
         let mut l = Look::default();
-        let own = path().and_then(|p| std::fs::read_to_string(p).ok());
+        #[cfg(target_arch = "wasm32")]
+        let (own, fallback) = (
+            kn_ui::web::storage::get("bramble.letters.look"),
+            kn_ui::web::storage::get("bramble.keydeck.settings"),
+        );
+        #[cfg(not(target_arch = "wasm32"))]
+        let (own, fallback) = (
+            path().and_then(|p| std::fs::read_to_string(p).ok()),
+            config("keydeck", "settings.txt").and_then(|p| std::fs::read_to_string(p).ok()),
+        );
         let seeded = own.is_none();
-        let Some(text) = own.or_else(|| config("keydeck", "settings.txt").and_then(|p| std::fs::read_to_string(p).ok())) else { return l };
+        let Some(text) = own.or(fallback) else { return l };
         for line in text.lines() {
             let Some((k, v)) = line.split_once('=') else { continue };
             let (k, v) = (k.trim(), v.trim());

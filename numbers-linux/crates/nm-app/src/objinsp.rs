@@ -1649,11 +1649,11 @@ fn movie_panel(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
     let mut change: Option<MovieProp> = None;
     // the length (ffprobe once per movie; asked again until known while the file is cached)
     let key = egui::Id::unique(("movie-len", id));
-    let len = match ui.data(|x| x.get_temp::<(f32, std::time::Instant)>(key)) {
+    let len = match ui.data(|x| x.get_temp::<(f32, web_time::Instant)>(key)) {
         Some((l, at)) if l > 0.0 || at.elapsed().as_secs_f32() < 2.0 => l,
         _ => {
             let l = m.movie_data.and_then(|data| app.doc().and_then(|doc| kn_ui::media::cache_file(doc, data))).and_then(|(p, _)| kn_ui::media::duration(&p)).unwrap_or(0.0) as f32;
-            ui.data_mut(|x| x.insert_temp(key, (l, std::time::Instant::now())));
+            ui.data_mut(|x| x.insert_temp(key, (l, web_time::Instant::now())));
             l
         }
     };

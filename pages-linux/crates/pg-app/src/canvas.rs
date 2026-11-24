@@ -135,7 +135,7 @@ pub struct Canvas {
     pub(crate) size: Vec2,
     rect: Rect,
     /// A zoom step on its way: from, to, the doc point to keep under `anchor` (screen), seconds, start.
-    zoom_anim: Option<(f32, f32, Pos2, Pos2, f32, std::time::Instant)>,
+    zoom_anim: Option<(f32, f32, Pos2, Pos2, f32, web_time::Instant)>,
     pub page_in_view: usize,
     /// Scroll to this page / rect next frame.
     reveal: Option<(usize, Option<Rect>)>,
@@ -231,7 +231,7 @@ impl Canvas {
         self.fit = Fit::None;
         let anchor = pos2(self.rect.center().x, self.rect.min.y);
         let doc = self.scroll.to_pos2() + (anchor - self.rect.min) / self.zoom;
-        self.zoom_anim = Some((self.zoom, z, doc, anchor, 0.285, std::time::Instant::now()));
+        self.zoom_anim = Some((self.zoom, z, doc, anchor, 0.285, web_time::Instant::now()));
     }
 
     /// The canvas on screen.
@@ -860,7 +860,7 @@ fn paint_pages(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, rect: Rect
     let zoom = app.canvas.zoom;
     let scale = zoom * ppp;
     let zooming = app.canvas.zoom_anim.is_some() || ui.input(|i| (i.zoom_delta() - 1.0).abs() > 1e-4);
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let mut done = true;
     let skip: Vec<ObjId> = match &app.canvas.drag {
         Some(Drag::Move { frames, moved: true, .. }) => frames.iter().map(|f| f.0).collect(),
@@ -1718,18 +1718,21 @@ fn interact(app: &mut App, ui: &egui::Ui, resp: &egui::Response) {
     resp.context_menu(|ui| crate::menus::context_menu(app, ui));
     let Some(l) = app.layout.take() else { return };
     // files dropped on the canvas: pictures go in where they're dropped
-    let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
-    for p in dropped {
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-        use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
-        if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
-            app.layout = Some(l);
-            crate::media::insert_path(app, &p);
-            return;
-        } else if matches!(ext.as_str(), "pages" | "docx" | "rtf" | "txt" | "md") {
-            app.layout = Some(l);
-            crate::tabs::open_later(app, &p);
-            return;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
+        for p in dropped {
+            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
+            if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
+                app.layout = Some(l);
+                crate::media::insert_path(app, &p);
+                return;
+            } else if matches!(ext.as_str(), "pages" | "docx" | "rtf" | "txt" | "md") {
+                app.layout = Some(l);
+                crate::tabs::open_later(app, &p);
+                return;
+            }
         }
     }
     app.layout = Some(l);

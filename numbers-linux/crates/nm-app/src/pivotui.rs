@@ -19,7 +19,7 @@ pub struct PivotOf {
     pub source: ObjId,
     pub spec: PivotSpec,
     /// When it was last refreshed (Pivot Options: "Last refreshed").
-    pub refreshed: Option<std::time::SystemTime>,
+    pub refreshed: Option<web_time::SystemTime>,
     /// Made by Numbers: its totals live in its summary model, so Values shows its own
     /// computation over the stored cells and doesn't rewrite them.
     pub native: bool,
@@ -151,7 +151,7 @@ pub fn run(app: &mut App, name: &str) {
                 let b = sel.block();
                 (app.mrow(t, b.0).unwrap_or(b.0), app.mrow(t, b.2).unwrap_or(b.2))
             });
-            let p = PivotOf { source: t, spec: default_spec(&src, only), refreshed: Some(std::time::SystemTime::now()), native: false };
+            let p = PivotOf { source: t, spec: default_spec(&src, only), refreshed: Some(web_time::SystemTime::now()), native: false };
             if n.ends_with("New Sheet") {
                 app.add_sheet_empty("Pivot Table");
             }
@@ -169,7 +169,7 @@ pub fn run(app: &mut App, name: &str) {
 
 pub fn refresh(app: &mut App, t: ObjId) {
     if let Some(p) = app.pivots.get_mut(&t) {
-        p.refreshed = Some(std::time::SystemTime::now());
+        p.refreshed = Some(web_time::SystemTime::now());
     }
     let Some(p) = app.pivots.get(&t).cloned() else { return };
     if p.native {
@@ -182,9 +182,9 @@ pub fn refresh(app: &mut App, t: ObjId) {
 }
 
 /// "Last refreshed" as Numbers words it: today's time, else the date.
-pub(crate) fn when(t: std::time::SystemTime) -> String {
-    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+pub(crate) fn when(t: web_time::SystemTime) -> String {
+    let secs = t.duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     let ago = now - secs;
     match ago {
         i64::MIN..=59 => "Just now".into(),

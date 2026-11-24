@@ -175,7 +175,14 @@ pub fn workbook_from_rows(rows: &[Vec<String>], name: &str) -> Result<Workbook, 
 /// Open a .csv / .tsv (.txt = tab-separated if it has tabs) as a new workbook.
 pub fn import_delimited(path: &std::path::Path) -> Result<Workbook, kn_format::Error> {
     let bytes = std::fs::read(path)?;
-    let text = String::from_utf8_lossy(&bytes);
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("Table 1.csv");
+    import_delimited_bytes(name, &bytes)
+}
+
+/// Open delimited bytes (`.csv`, `.tsv`, `.txt`) as a new workbook.
+pub fn import_delimited_bytes(name: &str, bytes: &[u8]) -> Result<Workbook, kn_format::Error> {
+    let text = String::from_utf8_lossy(bytes);
+    let path = std::path::Path::new(name);
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let first = text.lines().next().unwrap_or("");
     let sep = if ext == "tsv" || (ext != "csv" && first.contains('\t')) {
@@ -186,8 +193,8 @@ pub fn import_delimited(path: &std::path::Path) -> Result<Workbook, kn_format::E
         ','
     };
     let rows = parse_delimited(&text, sep);
-    let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Table 1");
-    workbook_from_rows(&rows, name)
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Table 1");
+    workbook_from_rows(&rows, stem)
 }
 
 #[cfg(test)]
@@ -214,5 +221,28 @@ mod tests {
         let td = back.table_data(t.info).unwrap();
         assert_eq!((td.rows, td.cols, td.header_rows, td.header_cols), (4, 2, 1, 0));
         assert_eq!(td.cells, ["Item", "Amount", "Pen", "3", "Desk", "120", "Lamp", "123"]);
+    }
+
+    #[test]
+    fn delimited_and_xlsx_bytes_roundtrip() {
+        let csv = b"Item,Amount\nPen,3\nDesk,120\nLamp,=B2+B3\n";
+        let mut wb = import_delimited_bytes("Stock.csv", csv).unwrap();
+        let numbers_bytes = wb.doc.to_bytes().unwrap();
+        let reopened = Workbook::open_bytes("Stock.numbers", &numbers_bytes).unwrap();
+        let s = reopened.sheets().remove(0);
+        let t = reopened.tables(&s).remove(0);
+        assert_eq!(t.name, "Stock");
+        let td = reopened.table_data(t.info).unwrap();
+        assert_eq!(td.cells, ["Item", "Amount", "Pen", "3", "Desk", "120", "Lamp", "123"]);
+
+        let (count, xlsx_bytes) = crate::xlsx::write_xlsx_full_bytes(&reopened, true, &Default::default()).unwrap();
+        assert_eq!(count, 1);
+        let opened = crate::xlsx::open_xlsx_bytes(&xlsx_bytes).unwrap();
+        assert!(opened.compat);
+        assert!(!opened.changed_elsewhere);
+        let s2 = opened.workbook.sheets().remove(0);
+        let t2 = opened.workbook.tables(&s2).remove(0);
+        let td2 = opened.workbook.table_data(t2.info).unwrap();
+        assert_eq!(td2.cells, ["Item", "Amount", "Pen", "3", "Desk", "120", "Lamp", "123"]);
     }
 }

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// The show's clock: real time, or while exporting a movie a frame clock that only moves on
 /// when a frame has been captured (so builds and transitions come out smooth at any speed).
@@ -62,14 +62,14 @@ enum Anim {
 #[derive(Default)]
 struct Cache {
     width: u32,
-    states: HashMap<(usize, usize), TextureHandle>,
+    states: HashMap<(usize, u64), TextureHandle>,
     groups: HashMap<(usize, usize), Rc<Group>>,
     objs: HashMap<(usize, usize), Rc<ObjSet>>,
-    order: Vec<(u8, usize, usize)>,
+    order: Vec<(u8, usize, u64)>,
 }
 
 impl Cache {
-    fn touch(&mut self, kind: u8, i: usize, s: usize) {
+    fn touch(&mut self, kind: u8, i: usize, s: u64) {
         self.order.retain(|k| *k != (kind, i, s));
         self.order.push((kind, i, s));
         // keep memory bounded: drop the least recently used entries
@@ -81,10 +81,10 @@ impl Cache {
                     self.states.remove(&(i, s));
                 }
                 1 => {
-                    self.groups.remove(&(i, s));
+                    self.groups.remove(&(i, s as usize));
                 }
                 _ => {
-                    self.objs.remove(&(i, s));
+                    self.objs.remove(&(i, s as usize));
                 }
             }
         }
@@ -173,49 +173,57 @@ impl PrepWorker {
         let jobs: Arc<(Mutex<Vec<PrepJob>>, Condvar)> = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
         let done: Arc<Mutex<Vec<PrepDone>>> = Default::default();
         let stop = Arc::new(AtomicBool::new(false));
-        let (j2, d2, s2, ctx) = (jobs.clone(), done.clone(), stop.clone(), ctx.clone());
-        std::thread::spawn(move || {
-            let doc = kn_model::Document::from_file(file);
-            let mut r = kn_render::Renderer::new();
-            let mut scenes: HashMap<usize, SlideScene> = HashMap::new();
-            loop {
-                let job = {
-                    let (m, cv) = &*j2;
-                    let mut g = m.lock().unwrap();
-                    while g.is_empty() && !s2.load(Ordering::Relaxed) {
-                        g = cv.wait_timeout(g, Duration::from_millis(200)).unwrap().0;
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (ctx, file, slides, width, Ordering::Relaxed);
+            return PrepWorker { jobs, done, asked: Default::default(), stop };
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (j2, d2, s2, ctx) = (jobs.clone(), done.clone(), stop.clone(), ctx.clone());
+            std::thread::spawn(move || {
+                let doc = kn_model::Document::from_file(file);
+                let mut r = kn_render::Renderer::new();
+                let mut scenes: HashMap<usize, SlideScene> = HashMap::new();
+                loop {
+                    let job = {
+                        let (m, cv) = &*j2;
+                        let mut g = m.lock().unwrap();
+                        while g.is_empty() && !s2.load(Ordering::Relaxed) {
+                            g = cv.wait_timeout(g, Duration::from_millis(200)).unwrap().0;
+                        }
+                        if s2.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        g.remove(0)
+                    };
+                    let (PrepJob::State(i, _, _) | PrepJob::Group(i, _)) = job;
+                    if !scenes.contains_key(&i) {
+                        if let Some(sc) = doc.scene(&slides, i) {
+                            scenes.insert(i, sc);
+                        }
                     }
-                    if s2.load(Ordering::Relaxed) {
-                        return;
+                    let Some(sc) = scenes.get(&i) else { continue };
+                    let t0 = Instant::now();
+                    let out = crate::textures::guarded("prepare", || match job {
+                        PrepJob::State(i, s, bg) => {
+                            let st = builds::state_at(sc, s);
+                            let key = if bg { s as u64 } else { (s as u64) | (1u64 << 40) };
+                            PrepDone::State(i, s, bg, builds::state_texture(&ctx, &mut r, &doc, sc, &st, width, &|_| true, bg, &format!("play-{i}-{key}")))
+                        }
+                        PrepJob::Group(i, s) => PrepDone::Group(i, s, Group::prepare(&ctx, &mut r, &doc, sc, s, width)),
+                    });
+                    if std::env::var_os("KN_DEBUG").is_some() {
+                        eprintln!("worker {job:?}: {:?}", t0.elapsed());
                     }
-                    g.remove(0)
-                };
-                let (PrepJob::State(i, _, _) | PrepJob::Group(i, _)) = job;
-                if !scenes.contains_key(&i) {
-                    if let Some(sc) = doc.scene(&slides, i) {
-                        scenes.insert(i, sc);
+                    if let Some(o) = out {
+                        d2.lock().unwrap().push(o);
+                        ctx.request_repaint();
                     }
                 }
-                let Some(sc) = scenes.get(&i) else { continue };
-                let t0 = Instant::now();
-                let out = crate::textures::guarded("prepare", || match job {
-                    PrepJob::State(i, s, bg) => {
-                        let st = builds::state_at(sc, s);
-                        let key = if bg { s } else { s | (1 << 40) };
-                        PrepDone::State(i, s, bg, builds::state_texture(&ctx, &mut r, &doc, sc, &st, width, &|_| true, bg, &format!("play-{i}-{key}")))
-                    }
-                    PrepJob::Group(i, s) => PrepDone::Group(i, s, Group::prepare(&ctx, &mut r, &doc, sc, s, width)),
-                });
-                if std::env::var_os("KN_DEBUG").is_some() {
-                    eprintln!("worker {job:?}: {:?}", t0.elapsed());
-                }
-                if let Some(o) = out {
-                    d2.lock().unwrap().push(o);
-                    ctx.request_repaint();
-                }
-            }
-        });
-        PrepWorker { jobs, done, asked: Default::default(), stop }
+            });
+            PrepWorker { jobs, done, asked: Default::default(), stop }
+        }
     }
 
     /// Ask for a job (once).
@@ -445,7 +453,7 @@ fn state_tex(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, 
 
 /// `with_bg` false: without the slide background (a dynamic background is drawn live under it).
 fn state_tex_bg(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, step: usize, with_bg: bool) -> Option<TextureHandle> {
-    let key = if with_bg { step } else { step | (1 << 40) };
+    let key = if with_bg { step as u64 } else { (step as u64) | (1u64 << 40) };
     if let Some(t) = play.cache.states.get(&(index, key)) {
         let t = t.clone();
         play.cache.touch(0, index, key);
@@ -454,7 +462,7 @@ fn state_tex_bg(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usiz
     let sc = scene_rc(app, play, index)?;
     let st = builds::state_at(&sc, step);
     let doc = app.doc.as_ref()?;
-    let t0 = std::time::Instant::now();
+    let t0 = Instant::now();
     let t = builds::state_texture(ctx, &mut app.renderer, doc, &sc, &st, play.cache.width, &|_| true, with_bg, &format!("play-{index}-{key}"));
     if std::env::var_os("KN_DEBUG").is_some() {
         eprintln!("state texture {index}/{step}: {:?}", t0.elapsed());
@@ -467,7 +475,7 @@ fn state_tex_bg(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usiz
 /// The objects above z-index `z` at a build step, without the background (drawn over a playing
 /// movie).
 fn state_tex_above(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, step: usize, z: usize) -> Option<TextureHandle> {
-    let key = step | (1 << 41) | (z << 42);
+    let key = (step as u64) | (1u64 << 41) | ((z as u64) << 42);
     if let Some(t) = play.cache.states.get(&(index, key)) {
         let t = t.clone();
         play.cache.touch(0, index, key);
@@ -477,7 +485,7 @@ fn state_tex_above(app: &mut App, play: &mut Play, ctx: &egui::Context, index: u
     let above: std::collections::HashSet<ObjId> = sc.drawables.iter().skip(z + 1).map(|d| d.id).collect();
     let st = builds::state_at(&sc, step);
     let doc = app.doc.as_ref()?;
-    let t0 = std::time::Instant::now();
+    let t0 = Instant::now();
     let t = builds::state_texture(ctx, &mut app.renderer, doc, &sc, &st, play.cache.width, &|d| above.contains(&d.id), false, &format!("play-{index}-{key}"));
     if std::env::var_os("KN_DEBUG").is_some() {
         eprintln!("above texture {index}/{step}: {:?}", t0.elapsed());
@@ -490,25 +498,25 @@ fn state_tex_above(app: &mut App, play: &mut Play, ctx: &egui::Context, index: u
 fn group(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, step: usize) -> Option<Rc<Group>> {
     if let Some(g) = play.cache.groups.get(&(index, step)) {
         let g = g.clone();
-        play.cache.touch(1, index, step);
+        play.cache.touch(1, index, step as u64);
         return Some(g);
     }
     let sc = scene_rc(app, play, index)?;
     let doc = app.doc.as_ref()?;
-    let t0 = std::time::Instant::now();
+    let t0 = Instant::now();
     let g = Rc::new(Group::prepare(ctx, &mut app.renderer, doc, &sc, step, play.cache.width));
     if std::env::var_os("KN_DEBUG").is_some() {
         eprintln!("prepare group {index}/{step}: {:?}", t0.elapsed());
     }
     play.cache.groups.insert((index, step), g.clone());
-    play.cache.touch(1, index, step);
+    play.cache.touch(1, index, step as u64);
     Some(g)
 }
 
 fn objset(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, step: usize) -> Option<Rc<ObjSet>> {
     if let Some(o) = play.cache.objs.get(&(index, step)) {
         let o = o.clone();
-        play.cache.touch(2, index, step);
+        play.cache.touch(2, index, step as u64);
         return Some(o);
     }
     let sc = scene_rc(app, play, index)?;
@@ -516,7 +524,7 @@ fn objset(app: &mut App, play: &mut Play, ctx: &egui::Context, index: usize, ste
     let doc = app.doc.as_ref()?;
     let o = Rc::new(ObjSet::prepare(ctx, &mut app.renderer, doc, &sc, &st, play.cache.width));
     play.cache.objs.insert((index, step), o.clone());
-    play.cache.touch(2, index, step);
+    play.cache.touch(2, index, step as u64);
     Some(o)
 }
 
@@ -530,7 +538,7 @@ fn prepare_steps(app: &mut App, play: &mut Play, ctx: &egui::Context, i: usize, 
         let bg = !scene_rc(app, play, i).is_some_and(|sc| sc.motion.is_some());
         let mut k = s;
         loop {
-            let key = if bg { k } else { k | (1 << 40) };
+            let key = if bg { k as u64 } else { (k as u64) | (1u64 << 40) };
             if !play.cache.states.contains_key(&(i, key)) {
                 play.prep.as_mut().unwrap().ask(PrepJob::State(i, k, bg));
             }
@@ -548,7 +556,7 @@ fn prepare_steps(app: &mut App, play: &mut Play, ctx: &egui::Context, i: usize, 
     }
     let mut k = s;
     loop {
-        if !play.cache.states.contains_key(&(i, k)) {
+        if !play.cache.states.contains_key(&(i, k as u64)) {
             return state_tex(app, play, ctx, i, k).is_some();
         }
         if k >= n_steps {
@@ -980,28 +988,37 @@ impl Presenter {
         };
         let swapped = rehearse || mode.as_deref() == Some("swap");
         let window = window && !rehearse;
-        let utc_offset = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let o = utc_offset.clone();
-        std::thread::spawn(move || {
-            let out = std::process::Command::new("date").arg("+%z").stdin(std::process::Stdio::null()).output();
-            if let Ok(out) = out {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if s.len() == 5 {
-                    let sign = if s.starts_with('-') { -1 } else { 1 };
-                    let h: i64 = s[1..3].parse().unwrap_or(0);
-                    let m: i64 = s[3..5].parse().unwrap_or(0);
-                    if let Ok(mut g) = o.lock() {
-                        *g = Some(sign * (h * 3600 + m * 60));
+        #[cfg(target_arch = "wasm32")]
+        let utc_offset = {
+            let off_secs = -(js_sys::Date::new_0().get_timezone_offset() as i64) * 60;
+            std::sync::Arc::new(std::sync::Mutex::new(Some(off_secs)))
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let utc_offset = {
+            let utc_offset = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let o = utc_offset.clone();
+            std::thread::spawn(move || {
+                let out = std::process::Command::new("date").arg("+%z").stdin(std::process::Stdio::null()).output();
+                if let Ok(out) = out {
+                    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if s.len() == 5 {
+                        let sign = if s.starts_with('-') { -1 } else { 1 };
+                        let h: i64 = s[1..3].parse().unwrap_or(0);
+                        let m: i64 = s[3..5].parse().unwrap_or(0);
+                        if let Ok(mut g) = o.lock() {
+                            *g = Some(sign * (h * 3600 + m * 60));
+                        }
                     }
                 }
-            }
-        });
+            });
+            utc_offset
+        };
         Presenter { window, swapped, notes_size: 22.0, timer: now(), utc_offset }
     }
 
     fn clock(&self) -> String {
         let off = self.utc_offset.lock().ok().and_then(|g| *g).unwrap_or(0);
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) + off;
+        let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) + off;
         let s = now.rem_euclid(86400);
         format!("{:02}:{:02}", s / 3600, (s / 60) % 60)
     }
@@ -1045,7 +1062,7 @@ fn presenter_view(app: &App, play: &Play, scene: &SlideScene, frames: &HashMap<O
     let has_next_build = play.step < steps(scene);
     let next = if has_next_build {
         let to = play.cache.groups.get(&(play.index, play.step)).map(|g| g.to).unwrap_or(play.step + 1);
-        play.cache.states.get(&(play.index, to)).cloned()
+        play.cache.states.get(&(play.index, to as u64)).cloned()
     } else {
         next_visible(app, play.index).and_then(|i| play.cache.states.get(&(i, 0)).cloned())
     };
@@ -1069,7 +1086,7 @@ fn presenter_view(app: &App, play: &Play, scene: &SlideScene, frames: &HashMap<O
         end_of_show: !has_next_build && next_visible(app, play.index).is_none(),
         rehearse: play.rehearse,
         next,
-        cur: play.cache.states.get(&(play.index, play.step)).cloned(),
+        cur: play.cache.states.get(&(play.index, play.step as u64)).cloned(),
         movies,
         slide_w: scene.size.w,
         show: {
@@ -1373,13 +1390,13 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
         for d in done {
             match d {
                 PrepDone::State(i, s, bg, tex) => {
-                    let key = if bg { s } else { s | (1 << 40) };
+                    let key = if bg { s as u64 } else { (s as u64) | (1u64 << 40) };
                     play.cache.states.entry((i, key)).or_insert(tex);
                     play.cache.touch(0, i, key);
                 }
                 PrepDone::Group(i, s, g) => {
                     play.cache.groups.entry((i, s)).or_insert_with(|| Rc::new(g));
-                    play.cache.touch(1, i, s);
+                    play.cache.touch(1, i, s as u64);
                 }
             }
         }
@@ -1863,28 +1880,41 @@ pub fn narration_done(app: &mut App, audio: Option<std::path::PathBuf>) {
 /// Start Play > Record Slideshow from slide `from`: the microphone is recorded (PipeWire's
 /// pw-record, else ALSA's arecord) while the show runs.
 pub fn start_narration(app: &mut App, from: usize) {
-    let dir = std::env::temp_dir().join(format!("kn-narration-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
-    let wav = dir.join("narration.wav");
-    let _ = std::fs::remove_file(&wav);
-    let null = || std::process::Stdio::null();
-    // KN_NO_MIC (automated checks): timing only, silent narration
-    // (Android: the front end records the sound itself)
-    let mic = if std::env::var_os("KN_NO_MIC").is_some() || cfg!(target_os = "android") { None } else { std::process::Command::new("pw-record")
-        .args(["--rate", "48000", "--channels", "2"])
-        .arg(&wav)
-        .stdin(null())
-        .stdout(null())
-        .stderr(null())
-        .spawn()
-        .or_else(|_| std::process::Command::new("arecord").args(["-f", "dat"]).arg(&wav).stdin(null()).stdout(null()).stderr(null()).spawn())
-        .ok() };
-    if mic.is_none() && std::env::var_os("KN_NO_MIC").is_none() && !cfg!(target_os = "android") {
-        app.notify("No microphone recorder found (pw-record or arecord): recording the timing only");
+    #[cfg(target_arch = "wasm32")]
+    {
+        let wav = std::path::PathBuf::from("narration.wav");
+        app.notify("Recording slide timing only (microphone recording requires the desktop app).");
+        app.start_play(from, false);
+        if let Some(p) = app.play.as_mut() {
+            p.narration = Some(Narration { mic: None, wav, started: Instant::now(), events: Vec::new(), last: None, anim_since: None, was_anim: false, pending_end: None });
+        }
+        return;
     }
-    app.start_play(from, false);
-    if let Some(p) = app.play.as_mut() {
-        p.narration = Some(Narration { mic, wav, started: Instant::now(), events: Vec::new(), last: None, anim_since: None, was_anim: false, pending_end: None });
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::env::temp_dir().join(format!("kn-narration-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let wav = dir.join("narration.wav");
+        let _ = std::fs::remove_file(&wav);
+        let null = || std::process::Stdio::null();
+        // KN_NO_MIC (automated checks): timing only, silent narration
+        // (Android: the front end records the sound itself)
+        let mic = if std::env::var_os("KN_NO_MIC").is_some() || cfg!(target_os = "android") { None } else { std::process::Command::new("pw-record")
+            .args(["--rate", "48000", "--channels", "2"])
+            .arg(&wav)
+            .stdin(null())
+            .stdout(null())
+            .stderr(null())
+            .spawn()
+            .or_else(|_| std::process::Command::new("arecord").args(["-f", "dat"]).arg(&wav).stdin(null()).stdout(null()).stderr(null()).spawn())
+            .ok() };
+        if mic.is_none() && std::env::var_os("KN_NO_MIC").is_none() && !cfg!(target_os = "android") {
+            app.notify("No microphone recorder found (pw-record or arecord): recording the timing only");
+        }
+        app.start_play(from, false);
+        if let Some(p) = app.play.as_mut() {
+            p.narration = Some(Narration { mic, wav, started: Instant::now(), events: Vec::new(), last: None, anim_since: None, was_anim: false, pending_end: None });
+        }
     }
 }
 

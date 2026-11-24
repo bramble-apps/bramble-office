@@ -98,10 +98,19 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
         if add {
             add_to_chooser(app, &name);
         } else if save_as {
-            let file = kn_ui::files::FileDialog::new().set_file_name(format!("{}.nmbtemplate", name.trim())).add_filter("Numbers Template", &["nmbtemplate"]).save_file();
-            if let (Some(f), Some(b)) = (file, template_bytes(app)) {
-                if let Err(e) = std::fs::write(&f, b) {
+            #[cfg(target_arch = "wasm32")]
+            if let Some(b) = template_bytes(app) {
+                if let Err(e) = kn_ui::web::files::download_file(&format!("{}.nmbtemplate", name.trim()), &b) {
                     app.notify(format!("Couldn't save the template: {e}"));
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let file = kn_ui::files::FileDialog::new().set_file_name(format!("{}.nmbtemplate", name.trim())).add_filter("Numbers Template", &["nmbtemplate"]).save_file();
+                if let (Some(f), Some(b)) = (file, template_bytes(app)) {
+                    if let Err(e) = std::fs::write(&f, b) {
+                        app.notify(format!("Couldn't save the template: {e}"));
+                    }
                 }
             }
         } else if open {

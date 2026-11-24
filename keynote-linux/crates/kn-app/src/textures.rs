@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use kn_format::ObjId;
@@ -96,11 +96,13 @@ struct ZoomJob {
 
 type ZoomOut = (CanvasKey, egui::Rect, bool, ColorImage);
 
+#[cfg(not(target_arch = "wasm32"))]
 struct ZoomWorker {
     req: std::sync::Arc<(std::sync::Mutex<Option<ZoomJob>>, std::sync::Condvar)>,
     out: std::sync::Arc<std::sync::Mutex<Vec<ZoomOut>>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ZoomWorker {
     fn new(ctx: &egui::Context) -> ZoomWorker {
         let req: std::sync::Arc<(std::sync::Mutex<Option<ZoomJob>>, std::sync::Condvar)> = Default::default();
@@ -147,6 +149,44 @@ impl ZoomWorker {
             *g = Some(job);
             cv.notify_one();
         }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+struct ZoomWorker {
+    renderer: std::sync::Mutex<Renderer>,
+    out: std::sync::Arc<std::sync::Mutex<Vec<ZoomOut>>>,
+    ctx: egui::Context,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ZoomWorker {
+    fn new(ctx: &egui::Context) -> ZoomWorker {
+        let mut r = Renderer::new();
+        r.review_marks = true;
+        ZoomWorker {
+            renderer: std::sync::Mutex::new(r),
+            out: Default::default(),
+            ctx: ctx.clone(),
+        }
+    }
+
+    fn ask(&self, job: ZoomJob) {
+        let (w, h) = ((job.area.width() * job.scale).round().max(1.0) as u32, (job.area.height() * job.scale).round().max(1.0) as u32);
+        let img = self.renderer.lock().ok().and_then(|mut r| {
+            r.absorb_fetched_fonts();
+            guarded("zoom", || {
+                let mut pm = sk::Pixmap::new(w, h)?;
+                let t = sk::Transform::from_scale(job.scale, job.scale).post_translate(-job.area.min.x * job.scale, -job.area.min.y * job.scale);
+                r.draw_scene(&job.doc, &job.scene, &mut pm, t, Filter::Except(&job.key.exclude), job.scene.motion.is_none());
+                Some(color_image(&pm))
+            })
+            .flatten()
+        });
+        if let (Some(img), Ok(mut o)) = (img, self.out.lock()) {
+            o.push((job.key, job.area, job.detail, img));
+        }
+        self.ctx.request_repaint();
     }
 }
 
@@ -560,11 +600,13 @@ pub struct MotionTex {
 
 type MotionReq = (kn_model::motionbg::MotionBg, f32, u32, u32);
 
+#[cfg(not(target_arch = "wasm32"))]
 struct MotionWorker {
     req: std::sync::Arc<(std::sync::Mutex<Option<MotionReq>>, std::sync::Condvar)>,
     out: std::sync::Arc<std::sync::Mutex<Option<(MotionReq, Vec<u8>)>>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl MotionWorker {
     fn new(ctx: &egui::Context) -> MotionWorker {
         let req: std::sync::Arc<(std::sync::Mutex<Option<MotionReq>>, std::sync::Condvar)> = Default::default();
@@ -587,33 +629,57 @@ impl MotionWorker {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+struct MotionWorker;
+
+#[cfg(target_arch = "wasm32")]
+impl MotionWorker {
+    fn new(_ctx: &egui::Context) -> MotionWorker {
+        MotionWorker
+    }
+}
+
 impl MotionTex {
     /// Texture of `bg` at about time `t`, `w` x `h` pixels (scaled up smoothly when drawn).
     pub fn get(&mut self, ctx: &egui::Context, bg: &kn_model::motionbg::MotionBg, t: f32, w: u32, h: u32) -> TextureHandle {
         let frame = (t * 60.0) as u32;
-        let worker = self.worker.get_or_insert_with(|| MotionWorker::new(ctx));
-        // ask for this frame (replacing an older request still waiting)
-        if !self.key.as_ref().is_some_and(|k| k.0.looks_same(bg) && (k.1, k.2, k.3) == (frame, w, h)) {
-            let (m, cv) = &*worker.req;
-            *m.lock().unwrap() = Some((bg.clone(), frame as f32 / 60.0, w, h));
-            cv.notify_one();
-        }
-        // the newest finished frame of this background (or one rendered ahead for another)
-        let done = worker.out.lock().unwrap().take();
-        if let Some(((obg, ot, ow, oh), px)) = done {
-            if obg.looks_same(bg) {
-                self.upload(ctx, &px, ow, oh);
-                self.key = Some((obg, (ot * 60.0) as u32, ow, oh));
-            } else {
-                self.priming = None;
-                self.primed.retain(|p| !p.0.looks_same(&obg));
-                self.primed.push((obg, ow, oh, egui::ColorImage::from_rgba_unmultiplied([ow as usize, oh as usize], &px)));
-                self.primed.truncate(4);
+        #[cfg(target_arch = "wasm32")]
+        {
+            if !self.key.as_ref().is_some_and(|k| k.0.looks_same(bg) && (k.1, k.2, k.3) == (frame, w, h)) {
+                let px = kn_render::motion::render(bg, frame as f32 / 60.0, w, h);
+                self.upload(ctx, &px, w, h);
+                self.key = Some((bg.clone(), frame, w, h));
+            }
+            if let Some(tex) = &self.tex {
+                return tex.clone();
             }
         }
-        if let (Some(tex), Some(k)) = (&self.tex, &self.key) {
-            if k.0.looks_same(bg) {
-                return tex.clone();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let worker = self.worker.get_or_insert_with(|| MotionWorker::new(ctx));
+            // ask for this frame (replacing an older request still waiting)
+            if !self.key.as_ref().is_some_and(|k| k.0.looks_same(bg) && (k.1, k.2, k.3) == (frame, w, h)) {
+                let (m, cv) = &*worker.req;
+                *m.lock().unwrap() = Some((bg.clone(), frame as f32 / 60.0, w, h));
+                cv.notify_one();
+            }
+            // the newest finished frame of this background (or one rendered ahead for another)
+            let done = worker.out.lock().unwrap().take();
+            if let Some(((obg, ot, ow, oh), px)) = done {
+                if obg.looks_same(bg) {
+                    self.upload(ctx, &px, ow, oh);
+                    self.key = Some((obg, (ot * 60.0) as u32, ow, oh));
+                } else {
+                    self.priming = None;
+                    self.primed.retain(|p| !p.0.looks_same(&obg));
+                    self.primed.push((obg, ow, oh, egui::ColorImage::from_rgba_unmultiplied([ow as usize, oh as usize], &px)));
+                    self.primed.truncate(4);
+                }
+            }
+            if let (Some(tex), Some(k)) = (&self.tex, &self.key) {
+                if k.0.looks_same(bg) {
+                    return tex.clone();
+                }
             }
         }
         // a new background: its frame rendered ahead, else a full one now (a small stand-in
@@ -633,15 +699,23 @@ impl MotionTex {
     /// Render `bg`'s frame at `t` ahead (on the worker), at the size last asked for, for a slide
     /// about to be shown.
     pub fn prime(&mut self, ctx: &egui::Context, bg: &kn_model::motionbg::MotionBg, t: f32) {
-        let Some((cur, _, w, h)) = &self.key else { return };
-        if cur.looks_same(bg) || self.primed.iter().any(|p| p.0.looks_same(bg)) || self.priming.as_ref().is_some_and(|p| p.looks_same(bg)) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (ctx, bg, t);
             return;
         }
-        self.priming = Some(bg.clone());
-        let worker = self.worker.get_or_insert_with(|| MotionWorker::new(ctx));
-        let (m, cv) = &*worker.req;
-        *m.lock().unwrap() = Some((bg.clone(), t, *w, *h));
-        cv.notify_one();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some((cur, _, w, h)) = &self.key else { return };
+            if cur.looks_same(bg) || self.primed.iter().any(|p| p.0.looks_same(bg)) || self.priming.as_ref().is_some_and(|p| p.looks_same(bg)) {
+                return;
+            }
+            self.priming = Some(bg.clone());
+            let worker = self.worker.get_or_insert_with(|| MotionWorker::new(ctx));
+            let (m, cv) = &*worker.req;
+            *m.lock().unwrap() = Some((bg.clone(), t, *w, *h));
+            cv.notify_one();
+        }
     }
 
     fn upload(&mut self, ctx: &egui::Context, px: &[u8], w: u32, h: u32) {
@@ -696,39 +770,52 @@ pub struct ThumbWorker {
 impl ThumbWorker {
     pub fn start(ctx: &egui::Context, file: kn_format::KeyFile, slides: Vec<kn_model::SlideInfo>, revs: HashMap<ObjId, u64>) -> ThumbWorker {
         use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Mutex};
-        let doc = Arc::new(Document::from_file(file));
-        let slides = Arc::new(slides);
-        let jobs: Arc<Mutex<Vec<(ObjId, usize)>>> = Arc::new(Mutex::new(slides.iter().enumerate().map(|(i, s)| (s.slide, i)).collect()));
-        let results: Arc<Mutex<Vec<(ObjId, ColorImage)>>> = Default::default();
-        let stop = Arc::new(AtomicBool::new(false));
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 8) / 2;
-        for _ in 0..threads.max(1) {
-            let (doc, slides, jobs, results, stop, ctx) = (doc.clone(), slides.clone(), jobs.clone(), results.clone(), stop.clone(), ctx.clone());
-            std::thread::spawn(move || {
-                let t0 = Instant::now();
-                let mut r = Renderer::new();
-                loop {
-                    if stop.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    let job = jobs.lock().ok().and_then(|mut j| if j.is_empty() { None } else { Some(j.remove(0)) });
-                    let Some((slide, i)) = job else {
-                        if std::env::var_os("KN_DEBUG").is_some() {
-                            eprintln!("thumbnail worker done in {:?}", t0.elapsed());
-                        }
-                        return;
-                    };
-                    let pm = guarded("thumbnail", || doc.scene(&slides, i).and_then(|sc| r.render_scene(&doc, &sc, THUMB_W))).flatten();
-                    if let Some(pm) = pm {
-                        if let Ok(mut out) = results.lock() {
-                            out.push((slide, color_image(&pm)));
-                        }
-                        ctx.request_repaint();
-                    }
-                }
-            });
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (ctx, file, slides);
+            return ThumbWorker {
+                jobs: Default::default(),
+                results: Default::default(),
+                stop: Arc::new(AtomicBool::new(true)),
+                revs,
+            };
         }
-        ThumbWorker { jobs, results, stop, revs }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let doc = Arc::new(Document::from_file(file));
+            let slides = Arc::new(slides);
+            let jobs: Arc<Mutex<Vec<(ObjId, usize)>>> = Arc::new(Mutex::new(slides.iter().enumerate().map(|(i, s)| (s.slide, i)).collect()));
+            let results: Arc<Mutex<Vec<(ObjId, ColorImage)>>> = Default::default();
+            let stop = Arc::new(AtomicBool::new(false));
+            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 8) / 2;
+            for _ in 0..threads.max(1) {
+                let (doc, slides, jobs, results, stop, ctx) = (doc.clone(), slides.clone(), jobs.clone(), results.clone(), stop.clone(), ctx.clone());
+                std::thread::spawn(move || {
+                    let t0 = Instant::now();
+                    let mut r = Renderer::new();
+                    loop {
+                        if stop.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        let job = jobs.lock().ok().and_then(|mut j| if j.is_empty() { None } else { Some(j.remove(0)) });
+                        let Some((slide, i)) = job else {
+                            if std::env::var_os("KN_DEBUG").is_some() {
+                                eprintln!("thumbnail worker done in {:?}", t0.elapsed());
+                            }
+                            return;
+                        };
+                        let pm = guarded("thumbnail", || doc.scene(&slides, i).and_then(|sc| r.render_scene(&doc, &sc, THUMB_W))).flatten();
+                        if let Some(pm) = pm {
+                            if let Ok(mut out) = results.lock() {
+                                out.push((slide, color_image(&pm)));
+                            }
+                            ctx.request_repaint();
+                        }
+                    }
+                });
+            }
+            ThumbWorker { jobs, results, stop, revs }
+        }
     }
 
     /// Whether the slide is still waiting to be rendered here.

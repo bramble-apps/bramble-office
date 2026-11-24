@@ -2,7 +2,7 @@
 //! formatting) and every keystroke edits the document through `Document::replace_text`, which
 //! keeps run and paragraph formatting. One editing session is one undo step.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use egui::{Color32, Event, Key, Pos2, Stroke};
 use kn_format::ObjId;

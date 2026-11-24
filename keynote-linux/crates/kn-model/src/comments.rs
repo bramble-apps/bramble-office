@@ -93,7 +93,7 @@ impl Document {
         let (cid, hid) = (ids[0], ids[1]);
         let mut c = Msg::new("TSD.CommentStorageArchive");
         c.set_str("text", "");
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+        let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
         let mut date = Msg::new("TSP.Date");
         date.set_f64("seconds", now - 978_307_200.0);
         c.push_msg("creation_date", date);
@@ -151,7 +151,7 @@ impl Document {
         let id = self.file.alloc_ids(1)[0];
         let mut c = Msg::new("TSD.CommentStorageArchive");
         c.set_str("text", text);
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+        let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
         let mut date = Msg::new("TSP.Date");
         date.set_f64("seconds", now - 978_307_200.0);
         c.push_msg("creation_date", date);

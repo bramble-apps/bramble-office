@@ -197,7 +197,12 @@ pub fn read_xlsx_full(bytes: &[u8]) -> Result<(Vec<XSheet>, Vec<crate::xlstyle::
 /// Open an .xlsx as a new workbook (one sheet per worksheet, tables named "Table 1").
 pub fn import_xlsx(path: &std::path::Path) -> Result<crate::Workbook, kn_format::Error> {
     let bytes = std::fs::read(path)?;
-    let (sheets, styles) = read_xlsx_full(&bytes)?;
+    import_xlsx_bytes(&bytes)
+}
+
+/// Open .xlsx bytes as a new workbook (one sheet per worksheet, tables named "Table 1").
+pub fn import_xlsx_bytes(bytes: &[u8]) -> Result<crate::Workbook, kn_format::Error> {
+    let (sheets, styles) = read_xlsx_full(bytes)?;
     let named: Vec<(String, String, Vec<Vec<Field>>)> = sheets.iter().map(|s| (s.name.clone(), "Table 1".to_string(), s.rows.clone())).collect();
     let mut wb = crate::import::workbook_from_sheets(&named)?;
     // the look: sizes, merges, headers and cell styles, as Numbers opens a workbook
@@ -221,7 +226,7 @@ fn apply_look(doc: &mut kn_model::Document, h: &mut kn_model::edit::History, t: 
     use kn_model::tablelook::Gridline;
     use kn_model::tablerows::HeaderKind;
     let (nr, nc) = size;
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let timing = std::env::var_os("NM_XLSX_TIMING").is_some();
     let lap = |what: &str| if timing { eprintln!("{what}: {:?}", t0.elapsed()) };
     // header rows and columns: the frozen ones (Numbers exports its headers as frozen panes),
@@ -677,7 +682,13 @@ pub struct XlsxOpened {
 /// from the Excel parts with their look.
 pub fn open_xlsx(path: &std::path::Path) -> Result<XlsxOpened, kn_format::Error> {
     let bytes = std::fs::read(path)?;
-    let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes[..]))?;
+    open_xlsx_bytes(&bytes)
+}
+
+/// Open .xlsx bytes: from its Values copy when it has one the Excel parts still match, else
+/// from the Excel parts with their look.
+pub fn open_xlsx_bytes(bytes: &[u8]) -> Result<XlsxOpened, kn_format::Error> {
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
     let mut parts = Vec::new();
     let mut copy: Option<Vec<u8>> = None;
     let mut print: Option<String> = None;
@@ -700,12 +711,12 @@ pub fn open_xlsx(path: &std::path::Path) -> Result<XlsxOpened, kn_format::Error>
             let mut doc = kn_model::Document::from_file(k);
             doc.path = None;
             doc.dirty = false;
-            return Ok(XlsxOpened { workbook: crate::Workbook { doc }, extras: read_extras(&bytes), compat: true, changed_elsewhere: false });
+            return Ok(XlsxOpened { workbook: crate::Workbook { doc }, extras: read_extras(bytes), compat: true, changed_elsewhere: false });
         }
     }
-    let mut workbook = import_xlsx(path)?;
+    let mut workbook = import_xlsx_bytes(bytes)?;
     workbook.doc.dirty = false;
-    Ok(XlsxOpened { workbook, extras: read_extras(&bytes), compat: had, changed_elsewhere: had })
+    Ok(XlsxOpened { workbook, extras: read_extras(bytes), compat: had, changed_elsewhere: had })
 }
 
 /// [`write_xlsx`]; with `keep_values` the whole Values document goes in a hidden part too
@@ -714,9 +725,25 @@ pub fn write_xlsx_with(wb: &crate::Workbook, out: &std::path::Path, keep_values:
     write_xlsx_full(wb, out, keep_values, &Extras::new())
 }
 
+/// Serialize `wb` as `.xlsx` bytes in memory; returns `(worksheet_count, bytes)`.
+pub fn write_xlsx_full_bytes(wb: &crate::Workbook, keep_values: bool, extras: &Extras) -> Result<(usize, Vec<u8>), kn_format::Error> {
+    let mut cur = std::io::Cursor::new(Vec::new());
+    let n = write_xlsx_full_to(wb, &mut cur, keep_values, extras)?;
+    Ok((n, cur.into_inner()))
+}
+
 /// [`write_xlsx_with`], with the cells' extras (by sheet name) written back: rotation, diagonal
 /// lines, links.
 pub fn write_xlsx_full(wb: &crate::Workbook, out: &std::path::Path, keep_values: bool, extras: &Extras) -> Result<usize, kn_format::Error> {
+    // written next to the file, then moved over it (a failed save leaves the old file)
+    let tmp = out.with_extension("xlsx.partial");
+    let f = std::fs::File::create(&tmp)?;
+    let n = write_xlsx_full_to(wb, f, keep_values, extras)?;
+    std::fs::rename(&tmp, out)?;
+    Ok(n)
+}
+
+fn write_xlsx_full_to<W: std::io::Write + std::io::Seek>(wb: &crate::Workbook, writer: W, keep_values: bool, extras: &Extras) -> Result<usize, kn_format::Error> {
     use crate::xlstyle::CellLookOut;
     use kn_model::table::CellValue;
     use std::io::Write;
@@ -893,12 +920,9 @@ pub fn write_xlsx_full(wb: &crate::Workbook, out: &std::path::Path, keep_values:
     let styles = book.styles_xml();
     let root_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#;
-    // written next to the file, then moved over it (a failed save leaves the old file)
-    let tmp = out.with_extension("xlsx.partial");
-    let f = std::fs::File::create(&tmp)?;
-    let mut z = zip::ZipWriter::new(f);
+    let mut z = zip::ZipWriter::new(writer);
     let opt = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    let put = |z: &mut zip::ZipWriter<std::fs::File>, name: &str, body: &str| -> Result<(), kn_format::Error> {
+    let put = |z: &mut zip::ZipWriter<W>, name: &str, body: &str| -> Result<(), kn_format::Error> {
         z.start_file(name, opt).map_err(|e| bad(e.to_string()))?;
         z.write_all(body.as_bytes())?;
         Ok(())
@@ -931,7 +955,6 @@ pub fn write_xlsx_full(wb: &crate::Workbook, out: &std::path::Path, keep_values:
         put(&mut z, VALUES_PRINT, &print)?;
     }
     z.finish().map_err(|e| bad(e.to_string()))?;
-    std::fs::rename(&tmp, out)?;
     Ok(n)
 }
 

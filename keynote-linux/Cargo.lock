@@ -1644,6 +1644,7 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "js-sys",
  "kn-format",
  "kn-model",
  "kn-render",
@@ -1651,6 +1652,7 @@ dependencies = [
  "qrcode",
  "roxmltree",
  "serde_json",
+ "web-time",
  "window-vibrancy",
  "winit",
  "winresource",
@@ -1681,6 +1683,7 @@ dependencies = [
  "kn-format",
  "serde_json",
  "uuid",
+ "web-time",
  "zip",
 ]
 
@@ -1708,6 +1711,7 @@ dependencies = [
  "epaint",
  "image",
  "jni 0.21.1",
+ "js-sys",
  "kn-format",
  "kn-model",
  "log",
@@ -1719,9 +1723,20 @@ dependencies = [
  "spellbook",
  "tiny-skia 0.12.0",
  "ureq",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "window-vibrancy",
  "winit",
  "zip",
+]
+
+[[package]]
+name = "kn-web"
+version = "0.5.2"
+dependencies = [
+ "kn-app",
 ]
 
 [[package]]

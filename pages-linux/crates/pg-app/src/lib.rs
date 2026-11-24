@@ -7,7 +7,14 @@
 //! Headless conversion: `letters --pdf|--docx|--rtf|--txt|--epub|--html|--png in out`.
 
 mod app;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
+#[cfg(target_arch = "wasm32")]
+pub mod ffi {
+    pub fn open_url(url: &str) {
+        kn_ui::open_url(url);
+    }
+}
 mod canvas;
 mod chartedit;
 mod chooserapi;
@@ -26,7 +33,9 @@ mod media;
 mod mediainsp;
 mod insert;
 mod inspector;
+#[cfg(not(target_arch = "wasm32"))]
 mod dlgapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod inspapi;
 mod look;
 mod mask;
@@ -46,7 +55,36 @@ mod text;
 mod textinsp;
 mod toolbar;
 
+/// Starts the app on WebAssembly (called from `pg-web`'s `main`).
+#[cfg(target_arch = "wasm32")]
+pub fn start_web() {
+    pg_core::init();
+    kn_render::fonts::set_font_fetcher(|file| {
+        let base = kn_ui::web::fonts_base_url();
+        let url = format!("{base}/{file}");
+        kn_ui::web::fetch::fetch_bytes(url, move |res| {
+            if let Ok(bytes) = res {
+                kn_render::fonts::push_fetched_font(file, bytes);
+                kn_ui::web::request_repaint();
+            }
+        });
+    });
+    let _ = kn_ui::winframe::SYSTEM_TITLE_BAR.set(true);
+    kn_ui::web::start(
+        kn_ui::web::WebConfig {
+            canvas_id: "bramble_canvas",
+            loading_id: "bramble_loading",
+            prefix: "letters",
+            default_name: "Document.pages",
+            title: "Letters",
+            version: env!("CARGO_PKG_VERSION"),
+        },
+        |cc| app::App::new(cc, Vec::new()),
+    );
+}
+
 /// Starts the app: the desktop program's main, and android_main on Android.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
     kn_ui::update::init(kn_ui::update::AppInfo { name: "Letters", version: env!("CARGO_PKG_VERSION"), bin: "letters", appimage: "Letters-x86_64.AppImage", mac_bundle: "Letters.app" });
@@ -106,12 +144,14 @@ pub fn run() -> eframe::Result {
 }
 
 /// The window icon (X11 and others; Wayland takes it from letters.desktop).
+#[cfg(not(target_arch = "wasm32"))]
 fn app_icon() -> egui::IconData {
     let img = image::load_from_memory(include_bytes!("../data/icons/letters-256.png")).map(|i| i.into_rgba8()).ok();
     img.map(|i| egui::IconData { width: i.width(), height: i.height(), rgba: i.into_raw() }).unwrap_or_default()
 }
 
 /// The desktop's own cursor theme and size (Keydeck's: Wayland windows otherwise get another).
+#[cfg(not(target_arch = "wasm32"))]
 fn use_desktop_cursor_theme() {
     let get = |key: &str| {
         std::process::Command::new("gsettings")
@@ -138,6 +178,7 @@ fn use_desktop_cursor_theme() {
 
 /// Letters was called Cardstock: its settings, recent files, versions and words move over to
 /// the new name the first time (each folder only if there's no Letters one yet).
+#[cfg(not(target_arch = "wasm32"))]
 fn move_cardstock_folders() {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let bases = [

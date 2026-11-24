@@ -14,21 +14,28 @@ name = "keydeck"
 path = "src/main.rs"
 
 [dependencies]
-eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts"] }
 egui = "0.37"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 kn-format = { path = "../kn-format" }
 kn-model = { path = "../kn-model" }
 kn-render = { path = "../kn-render" }
 kn-ui = { path = "../kn-ui" }
-zip = "9.0.5"
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 # the document library for other front ends (ffi.rs): its answers as JSON
 serde_json = "1.0.154"
 # Settings > Remotes > Web Remote: the link as a QR code (drawn with egui rects)
 qrcode = { version = "0.14", default-features = false }
 roxmltree = "0.20"
+web-time = "1.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["wayland", "x11", "clipboard"] }
 # GNOME-style (Adwaita) title bar for Settings > Title bar: System (Wayland has no server-side ones on GNOME)
 winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
 
 # Settings > Translucent sidebars: the system's own blur behind the window (vibrancy on macOS,
 # mica / acrylic on Windows); Linux desktops get the frosted wallpaper drawn by the app

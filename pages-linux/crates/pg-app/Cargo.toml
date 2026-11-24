@@ -14,7 +14,7 @@ name = "letters"
 path = "src/main.rs"
 
 [dependencies]
-eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts"] }
 egui = "0.37"
 # the widgets as data, for the Flutter front end (ffi.rs)
 serde_json = "1.0.154"
@@ -23,8 +23,12 @@ pg-core = { path = "../pg-core" }
 kn-render = { path = "../../../keynote-linux/crates/kn-render" }
 # the suite's look (colours and colour themes, controls, liquid glass, icons, window frame)
 kn-ui = { path = "../../../keynote-linux/crates/kn-ui" }
-winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 tiny-skia = "0.12.0"
+web-time = "1.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "clipboard"] }
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
 
 [build-dependencies]
 winresource = "0.1.34"

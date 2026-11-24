@@ -4,6 +4,7 @@
 pub mod motion;
 pub mod chart;
 pub mod fonts;
+#[cfg(not(target_arch = "wasm32"))]
 mod fonts_matched;
 pub mod paint;
 pub mod table;
@@ -48,14 +49,17 @@ enum ImageSlot {
     Failed,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 type DecodeJob = (u64, Vec<u8>);
 
 /// Two worker threads decoding images; results are collected by `images_arrived`.
+#[cfg(not(target_arch = "wasm32"))]
 struct AsyncDecoder {
     tx: std::sync::mpsc::Sender<DecodeJob>,
     done: Arc<std::sync::Mutex<Vec<(u64, Option<Arc<sk::Pixmap>>)>>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AsyncDecoder {
     fn new() -> AsyncDecoder {
         let (tx, rx) = std::sync::mpsc::channel::<DecodeJob>();
@@ -77,6 +81,14 @@ impl AsyncDecoder {
     fn submit(&self, id: u64, bytes: Vec<u8>) {
         let _ = self.tx.send((id, bytes));
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+struct AsyncDecoder;
+
+#[cfg(target_arch = "wasm32")]
+impl AsyncDecoder {
+    fn submit(&self, _id: u64, _bytes: Vec<u8>) {}
 }
 
 pub struct Renderer {
@@ -151,9 +163,20 @@ impl Renderer {
         self.layouts.clear();
     }
 
+    /// Load any lazily fetched Apple-matched fonts that have arrived (WebAssembly) and clear
+    /// cached text layouts when new fonts become available.
+    pub fn absorb_fetched_fonts(&mut self) -> bool {
+        if self.fonts.absorb_fetched() {
+            self.layouts.clear();
+            return true;
+        }
+        false
+    }
+
     /// Decode images on two background threads from now on; `image()` returns None until an
     /// image is ready, and [`Renderer::images_arrived`] reports when to redraw.
     pub fn enable_async_images(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
         if self.async_images.is_none() {
             self.async_images = Some(AsyncDecoder::new());
         }
@@ -180,20 +203,27 @@ impl Renderer {
 
     /// True (once) when background-decoded images became available since the last call.
     pub fn images_arrived(&mut self) -> bool {
-        let Some(dec) = &self.async_images else { return false };
-        let done: Vec<(u64, Option<Arc<sk::Pixmap>>)> = std::mem::take(&mut *dec.done.lock().unwrap());
-        let any = !done.is_empty();
-        for (id, px) in done {
-            self.tick += 1;
-            self.images.insert(id, match px {
-                Some(p) => ImageSlot::Ready(p, self.tick),
-                None => ImageSlot::Failed,
-            });
+        #[cfg(target_arch = "wasm32")]
+        {
+            false
         }
-        if any {
-            self.evict();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(dec) = &self.async_images else { return false };
+            let done: Vec<(u64, Option<Arc<sk::Pixmap>>)> = std::mem::take(&mut *dec.done.lock().unwrap());
+            let any = !done.is_empty();
+            for (id, px) in done {
+                self.tick += 1;
+                self.images.insert(id, match px {
+                    Some(p) => ImageSlot::Ready(p, self.tick),
+                    None => ImageSlot::Failed,
+                });
+            }
+            if any {
+                self.evict();
+            }
+            any
         }
-        any
     }
 
     /// A picture to draw at `scale` device pixels per source pixel: the picture itself, or (much

@@ -215,19 +215,50 @@ pub fn open_in_tab(app: &mut App, p: &Path) {
 /// mount where reading can take a while; `poll_opening` opens it when it's read. Scripted
 /// runs open at once.
 pub fn open_later(app: &mut App, p: &Path) {
-    if app.automated {
+    #[cfg(target_arch = "wasm32")]
+    {
         open_in_tab(app, p);
         return;
     }
-    if app.opening.iter().any(|(q, _)| q == p) {
-        return;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if app.automated {
+            open_in_tab(app, p);
+            return;
+        }
+        if app.opening.iter().any(|(q, _)| q == p) {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = p.to_path_buf();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::app::ReadFile::read(&path));
+        });
+        app.opening.push((p.to_path_buf(), rx));
     }
-    let (tx, rx) = std::sync::mpsc::channel();
-    let path = p.to_path_buf();
-    std::thread::spawn(move || {
-        let _ = tx.send(crate::app::ReadFile::read(&path));
-    });
-    app.opening.push((p.to_path_buf(), rx));
+}
+
+/// Open in-memory document bytes in a tab (WebAssembly file picker, drag-and-drop, or
+/// `?host=parent` iframe bridge).
+#[cfg(target_arch = "wasm32")]
+pub fn open_bytes_in_tab(app: &mut App, name: &str, bytes: Vec<u8>) {
+    let p = PathBuf::from(name);
+    let read = crate::app::ReadFile::read_bytes(name, &bytes);
+    let ok = matches!(
+        read,
+        crate::app::ReadFile::Word(Ok(_))
+            | crate::app::ReadFile::Doc(Ok(_))
+            | crate::app::ReadFile::Doc(Err(pg_core::kn_format::Error::NeedsPassword(_)))
+    );
+    if matches!(read, crate::app::ReadFile::Doc(Err(pg_core::kn_format::Error::NeedsPassword(_)))) {
+        app.password_bytes = Some(bytes);
+    } else {
+        app.password_bytes = None;
+    }
+    open_read_in_tab(app, &p, Some(read));
+    if ok {
+        app.chooser = false;
+    }
 }
 
 /// Opens what `open_later` has read, and shows "Opening…" while files are still being read
@@ -306,6 +337,10 @@ pub fn dirty(app: &App, i: usize) -> bool {
     } else {
         app.tabs.slots.get(i).and_then(|t| t.as_ref()).and_then(|t| t.wb.as_ref()).is_some_and(|w| w.doc.dirty)
     }
+}
+
+pub fn any_dirty(app: &App) -> bool {
+    (0..app.tabs.len()).any(|i| dirty(app, i))
 }
 
 pub(crate) fn name(app: &App, i: usize) -> String {

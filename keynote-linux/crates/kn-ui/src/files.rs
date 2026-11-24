@@ -4,5 +4,7 @@
 
 #[cfg(target_os = "android")]
 pub use crate::android::FileDialog;
-#[cfg(not(target_os = "android"))]
+#[cfg(target_arch = "wasm32")]
+pub use crate::web::files::FileDialog;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub use rfd::FileDialog;

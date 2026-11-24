@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use kn_format::ObjId;
@@ -43,36 +43,44 @@ fn writing() -> &'static Mutex<HashSet<PathBuf>> {
 /// Where the movie with `data_id` lives on disk; starts copying it there (in the background)
 /// if it isn't cached yet. Returns the path and the expected size.
 pub fn cache_file(doc: &Document, data_id: u64) -> Option<(PathBuf, u64)> {
-    let bytes = doc.data(data_id)?;
-    let name = doc.data_name(data_id).unwrap_or("movie");
-    let base = name.rsplit('/').next().unwrap_or(name);
-    let clean: String = base.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect();
-    let mut h = 0xcbf2_9ce4_8422_2325u64;
-    let n = bytes.len();
-    fnv(&mut h, &bytes[..n.min(65536)]);
-    fnv(&mut h, &bytes[n.saturating_sub(65536)..]);
-    fnv(&mut h, &(n as u64).to_le_bytes());
-    let path = cache_dir().join(format!("{h:016x}-{clean}"));
-    let len = n as u64;
-    if std::fs::metadata(&path).is_ok_and(|m| m.len() == len) {
-        return Some((path, len));
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (doc, data_id);
+        return None;
     }
-    let mut w = writing().lock().ok()?;
-    if w.insert(path.clone()) {
-        let data = bytes.to_vec();
-        let p = path.clone();
-        std::thread::spawn(move || {
-            let tmp = p.with_extension("part");
-            let ok = std::fs::create_dir_all(cache_dir()).is_ok() && std::fs::write(&tmp, &data).is_ok() && std::fs::rename(&tmp, &p).is_ok();
-            if !ok {
-                eprintln!("couldn't cache movie at {}", p.display());
-            }
-            if let Ok(mut w) = writing().lock() {
-                w.remove(&p);
-            }
-        });
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let bytes = doc.data(data_id)?;
+        let name = doc.data_name(data_id).unwrap_or("movie");
+        let base = name.rsplit('/').next().unwrap_or(name);
+        let clean: String = base.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect();
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        let n = bytes.len();
+        fnv(&mut h, &bytes[..n.min(65536)]);
+        fnv(&mut h, &bytes[n.saturating_sub(65536)..]);
+        fnv(&mut h, &(n as u64).to_le_bytes());
+        let path = cache_dir().join(format!("{h:016x}-{clean}"));
+        let len = n as u64;
+        if std::fs::metadata(&path).is_ok_and(|m| m.len() == len) {
+            return Some((path, len));
+        }
+        let mut w = writing().lock().ok()?;
+        if w.insert(path.clone()) {
+            let data = bytes.to_vec();
+            let p = path.clone();
+            std::thread::spawn(move || {
+                let tmp = p.with_extension("part");
+                let ok = std::fs::create_dir_all(cache_dir()).is_ok() && std::fs::write(&tmp, &data).is_ok() && std::fs::rename(&tmp, &p).is_ok();
+                if !ok {
+                    eprintln!("couldn't cache movie at {}", p.display());
+                }
+                if let Ok(mut w) = writing().lock() {
+                    w.remove(&p);
+                }
+            });
+        }
+        Some((path, len))
     }
-    Some((path, len))
 }
 
 /// What to play.
@@ -187,13 +195,21 @@ pub struct Player {
 impl Player {
     pub fn start(ctx: &egui::Context, drawable: ObjId, data_id: u64, spec: Spec) -> Player {
         let shared = Arc::new(Shared::default());
-        let sh = shared.clone();
-        let ctx2 = ctx.clone();
-        std::thread::spawn(move || {
-            worker(&sh, &spec, &ctx2);
-            sh.reap();
-            sh.done.store(true, Ordering::Relaxed);
-        });
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (ctx, spec);
+            shared.done.store(true, Ordering::Relaxed);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let sh = shared.clone();
+            let ctx2 = ctx.clone();
+            std::thread::spawn(move || {
+                worker(&sh, &spec, &ctx2);
+                sh.reap();
+                sh.done.store(true, Ordering::Relaxed);
+            });
+        }
         Player { drawable, data_id, shared, tex: None, seq: 0 }
     }
 
@@ -217,14 +233,22 @@ impl Player {
     /// filling the frame (cropped to its aspect).
     pub fn camera(ctx: &egui::Context, drawable: ObjId, w: u32, h: u32) -> Player {
         let shared = Arc::new(Shared::default());
-        let sh = shared.clone();
-        let ctx2 = ctx.clone();
-        let (w, h) = ((w.max(2) + 1) & !1, (h.max(2) + 1) & !1);
-        std::thread::spawn(move || {
-            camera_worker(&sh, w, h, &ctx2);
-            sh.reap();
-            sh.done.store(true, Ordering::Relaxed);
-        });
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (ctx, w, h);
+            shared.done.store(true, Ordering::Relaxed);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let sh = shared.clone();
+            let ctx2 = ctx.clone();
+            let (w, h) = ((w.max(2) + 1) & !1, (h.max(2) + 1) & !1);
+            std::thread::spawn(move || {
+                camera_worker(&sh, w, h, &ctx2);
+                sh.reap();
+                sh.done.store(true, Ordering::Relaxed);
+            });
+        }
         Player { drawable, data_id: 0, shared, tex: None, seq: 0 }
     }
 
@@ -652,71 +676,79 @@ fn deno() -> Option<std::path::PathBuf> {
 /// and sound that it merges): None until it's there. Kept, so the next play is instant. A
 /// failed download is tried again after 30 s.
 pub fn web_stream(page: &str) -> Option<String> {
-    use std::collections::HashMap;
-    use std::hash::{Hash, Hasher};
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
-    let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home.join(".cache")).join("keydeck").join("web");
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    page.hash(&mut h);
-    let file = dir.join(format!("{:016x}.mp4", h.finish()));
-    if file.is_file() {
-        return Some(file.to_string_lossy().to_string());
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = page;
+        return None;
     }
-    // page -> when a failed download ended (None while one runs)
-    static TRIES: Mutex<Option<HashMap<String, Option<std::time::Instant>>>> = Mutex::new(None);
-    let mut g = TRIES.lock().ok()?;
-    let map = g.get_or_insert_with(HashMap::new);
-    match map.get(page) {
-        Some(None) => return None,
-        Some(Some(t)) if t.elapsed().as_secs() < 30 => return None,
-        _ => {}
-    }
-    map.insert(page.to_string(), None);
-    let page = page.to_string();
-    std::thread::spawn(move || {
-        let _ = std::fs::create_dir_all(&dir);
-        let part = file.with_extension("download.mp4");
-        let mut cmd = Command::new(yt_dlp());
-        if let Some(d) = deno() {
-            cmd.arg("--js-runtimes").arg(format!("deno:{}", d.display()));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::collections::HashMap;
+        use std::hash::{Hash, Hasher};
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
+        let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| home.join(".cache")).join("keydeck").join("web");
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        page.hash(&mut h);
+        let file = dir.join(format!("{:016x}.mp4", h.finish()));
+        if file.is_file() {
+            return Some(file.to_string_lossy().to_string());
         }
-        // H.264 picture up to 1080p with AAC sound (easy to decode), else whatever plays
-        cmd.args(["--no-playlist", "--no-warnings", "-q", "-f", "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4", "--force-overwrites", "-o"])
-            .arg(&part)
-            .arg(&page)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null());
-        let out = cmd.output();
-        let ok = out.as_ref().is_ok_and(|o| o.status.success()) && part.is_file() && std::fs::rename(&part, &file).is_ok();
-        if !ok {
-            let _ = std::fs::remove_file(&part);
-            let why = match &out {
-                Err(_) => "Web videos need yt-dlp, which isn't installed. Choose Help > Update Video Support.".to_string(),
-                Ok(o) => {
-                    let err = String::from_utf8_lossy(&o.stderr);
-                    eprintln!("web video: couldn't get {page}: {}", err.lines().last().unwrap_or(""));
-                    // (an out-of-date yt-dlp also says "Unable to download ... HTTP Error 400")
-                    let offline = ["Could not resolve", "Temporary failure in name resolution", "Network is unreachable", "No route to host", "timed out", "Connection refused"];
-                    if offline.iter().any(|m| err.contains(m)) {
-                        "This web video can't play: there's no internet connection.".to_string()
-                    } else if err.contains("unavailable") || err.contains("Private video") || err.contains("removed") {
-                        "This web video is no longer available.".to_string()
-                    } else {
-                        "This web video can't play: video support is out of date. Choose Help > Update Video Support.".to_string()
+        // page -> when a failed download ended (None while one runs)
+        static TRIES: Mutex<Option<HashMap<String, Option<Instant>>>> = Mutex::new(None);
+        let mut g = TRIES.lock().ok()?;
+        let map = g.get_or_insert_with(HashMap::new);
+        match map.get(page) {
+            Some(None) => return None,
+            Some(Some(t)) if t.elapsed().as_secs() < 30 => return None,
+            _ => {}
+        }
+        map.insert(page.to_string(), None);
+        let page = page.to_string();
+        std::thread::spawn(move || {
+            let _ = std::fs::create_dir_all(&dir);
+            let part = file.with_extension("download.mp4");
+            let mut cmd = Command::new(yt_dlp());
+            if let Some(d) = deno() {
+                cmd.arg("--js-runtimes").arg(format!("deno:{}", d.display()));
+            }
+            // H.264 picture up to 1080p with AAC sound (easy to decode), else whatever plays
+            cmd.args(["--no-playlist", "--no-warnings", "-q", "-f", "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4", "--force-overwrites", "-o"])
+                .arg(&part)
+                .arg(&page)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null());
+            let out = cmd.output();
+            let ok = out.as_ref().is_ok_and(|o| o.status.success()) && part.is_file() && std::fs::rename(&part, &file).is_ok();
+            if !ok {
+                let _ = std::fs::remove_file(&part);
+                let why = match &out {
+                    Err(_) => "Web videos need yt-dlp, which isn't installed. Choose Help > Update Video Support.".to_string(),
+                    Ok(o) => {
+                        let err = String::from_utf8_lossy(&o.stderr);
+                        eprintln!("web video: couldn't get {page}: {}", err.lines().last().unwrap_or(""));
+                        // (an out-of-date yt-dlp also says "Unable to download ... HTTP Error 400")
+                        let offline = ["Could not resolve", "Temporary failure in name resolution", "Network is unreachable", "No route to host", "timed out", "Connection refused"];
+                        if offline.iter().any(|m| err.contains(m)) {
+                            "This web video can't play: there's no internet connection.".to_string()
+                        } else if err.contains("unavailable") || err.contains("Private video") || err.contains("removed") {
+                            "This web video is no longer available.".to_string()
+                        } else {
+                            "This web video can't play: video support is out of date. Choose Help > Update Video Support.".to_string()
+                        }
                     }
+                };
+                if let Ok(mut e) = WEB_ERROR.lock() {
+                    *e = Some(why);
                 }
-            };
-            if let Ok(mut e) = WEB_ERROR.lock() {
-                *e = Some(why);
             }
-        }
-        if let Ok(mut g) = TRIES.lock() {
-            if let Some(m) = g.as_mut() {
-                m.insert(page, (!ok).then(std::time::Instant::now));
+            if let Ok(mut g) = TRIES.lock() {
+                if let Some(m) = g.as_mut() {
+                    m.insert(page, (!ok).then(Instant::now));
+                }
             }
-        }
-    });
-    None
+        });
+        None
+    }
 }
 
 /// Help > Update Video Support: the latest yt-dlp from its official releases into Keydeck's
@@ -737,6 +769,12 @@ fn make_executable(p: &std::path::Path) -> std::io::Result<()> {
 }
 
 pub fn update_yt_dlp(done: std::sync::mpsc::Sender<Result<String, String>>) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = done.send(Err("Video playback is available in the desktop app.".into()));
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || {
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
         let dir = home.join(".local/share/keydeck/bin");

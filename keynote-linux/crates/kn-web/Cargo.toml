@@ -1,0 +1,13 @@
+[package]
+name = "kn-web"
+version = "0.5.2"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Keydeck in the browser (WebAssembly / eframe web runner)"
+
+[[bin]]
+name = "kn-web"
+path = "src/main.rs"
+
+[dependencies]
+kn-app = { path = "../kn-app" }

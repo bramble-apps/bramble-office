@@ -163,7 +163,7 @@ impl Pages {
 
     /// Insert > Date & Time at stored byte `at`: the formatted date as text plus its field.
     pub fn insert_date(&mut self, h: &mut History, storage: ObjId, at: usize) -> usize {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+        let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
         let text = format_date_full(now);
         crate::edit::replace(&mut self.doc, h, storage, at, at, &text);
         let mut f = Msg::new("TSWP.DateTimeSmartFieldArchive");

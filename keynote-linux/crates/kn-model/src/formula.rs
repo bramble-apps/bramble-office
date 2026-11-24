@@ -852,7 +852,7 @@ fn call(f: &FnDef, args: Vec<Value>, values: &HashMap<(u32, u32), CellValue>) ->
             }
             "PI" => Value::Num(std::f64::consts::PI),
             "RAND" => {
-                let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(1);
+                let t = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(1);
                 Value::Num(f64::from(t.wrapping_mul(2654435761) % 1_000_000) / 1_000_000.0)
             }
             "AND" => Value::Bool(args.iter().map(&truth).collect::<Result<Vec<_>, _>>()?.into_iter().all(|b| b)),
@@ -980,7 +980,7 @@ fn call(f: &FnDef, args: Vec<Value>, values: &HashMap<(u32, u32), CellValue>) ->
                 Value::Text(date_text(d))
             }
             "TODAY" | "NOW" => {
-                let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                 Value::Text(date_text(secs.div_euclid(86400)))
             }
             "YEAR" | "MONTH" | "DAY" => match one(0) {

@@ -61,35 +61,43 @@ static PREVIEWS: Mutex<Option<HashMap<PathBuf, Option<egui::ColorImage>>>> = Mut
 /// The preview iWork keeps in a document (preview.jpg), read on a thread (the file may be on a
 /// slow cloud mount) and cached in ~/.cache/<app>/previews while the file is unchanged.
 fn preview_image(ctx: &egui::Context, app: &str, path: &Path, render: Option<fn(&Path) -> Option<Vec<u8>>>) -> Option<egui::TextureHandle> {
-    let id = egui::Id::unique(("recent-preview", path));
-    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
-        return Some(t);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (ctx, app, path, render);
+        return None;
     }
-    let mut g = PREVIEWS.lock().ok()?;
-    let map = g.get_or_insert_with(HashMap::new);
-    match map.get(path) {
-        Some(Some(img)) => {
-            let tex = ctx.load_texture(format!("recent-{}", path.display()), img.clone(), egui::TextureOptions::LINEAR);
-            ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
-            Some(tex)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let id = egui::Id::unique(("recent-preview", path));
+        if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+            return Some(t);
         }
-        Some(None) => None,
-        None => {
-            map.insert(path.to_path_buf(), None);
-            let (p, ctx, app) = (path.to_path_buf(), ctx.clone(), app.to_string());
-            std::thread::spawn(move || {
-                let img = read_preview(&app, &p, render).and_then(|b| image::load_from_memory(&b).ok()).map(|i| {
-                    let i = i.thumbnail(480, 480).to_rgba8();
-                    egui::ColorImage::from_rgba_unmultiplied([i.width() as usize, i.height() as usize], i.as_raw())
-                });
-                if img.is_some() {
-                    if let Ok(mut g) = PREVIEWS.lock() {
-                        g.get_or_insert_with(HashMap::new).insert(p, img);
+        let mut g = PREVIEWS.lock().ok()?;
+        let map = g.get_or_insert_with(HashMap::new);
+        match map.get(path) {
+            Some(Some(img)) => {
+                let tex = ctx.load_texture(format!("recent-{}", path.display()), img.clone(), egui::TextureOptions::LINEAR);
+                ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
+                Some(tex)
+            }
+            Some(None) => None,
+            None => {
+                map.insert(path.to_path_buf(), None);
+                let (p, ctx, app) = (path.to_path_buf(), ctx.clone(), app.to_string());
+                std::thread::spawn(move || {
+                    let img = read_preview(&app, &p, render).and_then(|b| image::load_from_memory(&b).ok()).map(|i| {
+                        let i = i.thumbnail(480, 480).to_rgba8();
+                        egui::ColorImage::from_rgba_unmultiplied([i.width() as usize, i.height() as usize], i.as_raw())
+                    });
+                    if img.is_some() {
+                        if let Ok(mut g) = PREVIEWS.lock() {
+                            g.get_or_insert_with(HashMap::new).insert(p, img);
+                        }
+                        ctx.request_repaint();
                     }
-                    ctx.request_repaint();
-                }
-            });
-            None
+                });
+                None
+            }
         }
     }
 }

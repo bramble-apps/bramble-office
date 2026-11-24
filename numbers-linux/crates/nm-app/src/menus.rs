@@ -264,15 +264,23 @@ fn help_page() {
             html.push_str(&format!("<h2>{}</h2><table>{t}</table>", m.label));
         }
     }
-    let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))).unwrap_or_else(std::env::temp_dir).join("numdeck");
-    let _ = std::fs::create_dir_all(&dir);
-    let page = dir.join("help.html");
-    let written = std::fs::write(&page, html).is_ok();
-    // (a front end that opens pages itself: Android's)
-    if written && crate::ffi::front_end_opens_urls() {
-        crate::ffi::open_url(&page.to_string_lossy());
-    } else if written && std::env::var_os("NM_SCRIPT").is_none() {
-        let _ = kn_ui::open_command(&page).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = kn_ui::web::files::download_file("values-help.html", html.as_bytes());
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))).unwrap_or_else(std::env::temp_dir).join("numdeck");
+        let _ = std::fs::create_dir_all(&dir);
+        let page = dir.join("help.html");
+        let written = std::fs::write(&page, html).is_ok();
+        // (a front end that opens pages itself: Android's)
+        if written && crate::ffi::front_end_opens_urls() {
+            crate::ffi::open_url(&page.to_string_lossy());
+        } else if written && std::env::var_os("NM_SCRIPT").is_none() {
+            let _ = kn_ui::open_command(&page).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+        }
     }
 }
 
@@ -1426,7 +1434,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         // Insert > Date & Time: today's date and time at the caret, or in the selected cell
         "Date & Time" => {
             let now = nm_core::typed::today() + {
-                let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+                let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
                 secs.rem_euclid(86_400.0)
             };
             let text = nm_core::kn_model::table::format_date(now, "MMMM d, y h:mm a");
@@ -1545,6 +1553,12 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
                 }
                 return;
             }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = text;
+                app.notify("Speech is only available in the desktop app");
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             if !text.trim().is_empty() && std::process::Command::new("spd-say").arg("--").arg(&text).stdin(std::process::Stdio::null()).spawn().is_err() {
                 app.notify("Speech needs speech-dispatcher (spd-say)");
             }
@@ -1555,6 +1569,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
                 crate::ffi::speak(None);
                 return;
             }
+            #[cfg(not(target_arch = "wasm32"))]
             let _ = std::process::Command::new("spd-say").arg("--cancel").spawn();
             return;
         }
@@ -2162,7 +2177,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
             app.edit("Unmerge Cells", |d, h| d.unmerge_cells(h, sel.table, mr, c0));
         }
         "Table > Insert Current Date" | "Table > Insert Current Time" => {
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
             // Apple's reference date (2001-01-01), local time not applied (UTC)
             let secs = now - 978_307_200.0;
             let pattern = if name.ends_with("Date") { "M/d/yy" } else { "h:mm a" };

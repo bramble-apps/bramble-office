@@ -53,6 +53,7 @@ To remove them, run `curl -fsSL https://raw.githubusercontent.com/bramble-apps/b
 | **Linux** Flatpak bundles (x86_64): one file per app, sandboxed | [![Keydeck Flatpak](https://img.shields.io/badge/Keydeck-Flatpak-c2306a?style=for-the-badge&logo=flatpak&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-x86_64.flatpak) [![Values Flatpak](https://img.shields.io/badge/Values-Flatpak-8e3a8a?style=for-the-badge&logo=flatpak&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-x86_64.flatpak) [![Letters Flatpak](https://img.shields.io/badge/Letters-Flatpak-5a7f3c?style=for-the-badge&logo=flatpak&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-x86_64.flatpak) [![Bramble Notes Flatpak](https://img.shields.io/badge/Notes-Flatpak-c99a06?style=for-the-badge&logo=flatpak&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Notes-x86_64.flatpak) |
 | **Android** 8+, tablets and phones (64-bit ARM): one app each. *Beta* | [![Keydeck for Android](https://img.shields.io/badge/Keydeck-Android-c2306a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-android.apk) [![Values for Android](https://img.shields.io/badge/Values-Android-8e3a8a?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-android.apk) [![Letters for Android](https://img.shields.io/badge/Letters-Android-5a7f3c?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-android.apk) [![Bramble Notes for Android](https://img.shields.io/badge/Notes-Android-c99a06?style=for-the-badge&logo=android&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Notes-android.apk) |
 | **Android** with [Obtainium](https://github.com/ImranR98/Obtainium): installs from these releases and keeps the apps up to date | [<img src="https://bramble-apps.github.io/img/badge-obtainium.png" alt="Get it on Obtainium" height="40">](https://bramble-apps.github.io/obtainium.html?app=all) [Keydeck](https://bramble-apps.github.io/obtainium.html?app=keydeck) · [Values](https://bramble-apps.github.io/obtainium.html?app=values) · [Letters](https://bramble-apps.github.io/obtainium.html?app=letters) · [Notes](https://bramble-apps.github.io/obtainium.html?app=notes) |
+| **Web (Browser / WebAssembly)**: static bundles for Keydeck, Values and Letters | [![Keydeck Web](https://img.shields.io/badge/Keydeck-WebAssembly-c2306a?style=for-the-badge&logo=webassembly&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Keydeck-web.zip) [![Values Web](https://img.shields.io/badge/Values-WebAssembly-8e3a8a?style=for-the-badge&logo=webassembly&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Values-web.zip) [![Letters Web](https://img.shields.io/badge/Letters-WebAssembly-5a7f3c?style=for-the-badge&logo=webassembly&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Letters-web.zip) |
 | **Linux**, all four apps in one archive (x86_64) | [![Download for Linux](https://img.shields.io/badge/Linux-.tar.gz-333333?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/bramble-apps/bramble-office/releases/latest/download/Bramble-Office-linux-x86_64.tar.gz) |
 
 Free and open source (GPL-3.0). No account, no subscription, no tracking.
@@ -182,6 +183,46 @@ place. Keydeck for Android is also the remote for Keydeck on your computer (Play
 computer, Settings > Remotes). Things that need desktop programs (movie export, screen recording) aren't
 available on Android.
 
+### Web (WebAssembly)
+
+Keydeck, Values and Letters can run directly in modern desktop and mobile browsers (WebGPU or WebGL2) as
+pure static sites — no server-side backend or special `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy`
+headers are required. Everything stays client-side in your browser.
+
+Download `Keydeck-web.zip`, `Values-web.zip`, `Letters-web.zip` (or `Bramble-Office-web.tar.gz`), unpack it,
+and serve the folder with any static HTTP server (for example `python3 -m http.server 8080`). To keep initial
+downloads fast, metric-matched Apple stand-in fonts (`fonts/matched/`) and Keydeck's extra themes (`themes/`)
+are served alongside the `.wasm` bundle and fetched lazily on demand.
+
+**Query parameters:**
+
+- `?webgl` — force WebGL2 instead of WebGPU.
+- `?host=parent` — enable the same-origin `<iframe>` `postMessage` bridge (see below).
+- `?author=Name` — pre-fill the author name for comments/tracking (Values and Letters) without overwriting saved browser settings.
+- `?fonts=<url>` — override the base URL for lazy-loaded `fonts/matched/*.ttf` assets (defaults to `./fonts/matched`).
+- `?themes=<url>` — override the base URL for Keydeck's lazy-loaded `themes/*.key` assets (defaults to `./themes`).
+
+**Embedding in an `<iframe>` (`?host=parent`):**
+
+Host pages on the same origin can embed any of the three apps in an `<iframe>` with `?host=parent` and exchange
+messages using each app's prefix (`keydeck`, `values`, or `letters`):
+
+| Direction | Message `type` | Payload |
+|---|---|---|
+| iframe → host | `<app>:ready` | `{ version }` — WASM initialized and ready to receive a document |
+| iframe → host | `<app>:failed` | `{ error }` — startup/graphics error |
+| host → iframe | `<app>:open` | `{ name, bytes: ArrayBuffer \| Uint8Array }` — open a document in memory |
+| iframe → host | `<app>:save` | `{ name, bytes: ArrayBuffer, saveAs: boolean }` — sent on Save / Save As / Export (`bytes` is transferred) |
+| iframe → host | `<app>:dirty` | `{ dirty: boolean }` — unsaved changes state changed |
+| host → iframe | `<app>:request` | `{ id, method, params }` — control-protocol calls (`engine.execute`, `engine.commands`, `document.inspect`) |
+| iframe → host | `<app>:response` | `{ id, reply: { ok: true, result } \| { ok: false, error, commandRejected } }` — reply to `<app>:request` |
+
+Supported `engine.execute` commands: `file.new` (`{ template?: "blank" | "layout" }`), `file.save` (`{ path?, keepSource? }`), `file.saveAs` (`{ path, keepSource? }`, supporting native `.key`/`.pptx`/`.numbers`/`.xlsx`/`.pages`/`.docx` plus PDF and document exports), `file.info`, and `ui.hostTheme` (`{ appearance: "light" | "dark" | "system" }` for session-only appearance). When a save command succeeds, `<app>:save` is always posted before `<app>:response`.
+
+**Browser limitations:** Features that rely on external desktop programs or local networking are desktop-only
+(movie/GIF export via `ffmpeg`, audio/screen recording, `yt-dlp` web video fetching, `pdflatex` equations in
+Keydeck, live Yahoo stock quotes in Values, local printer spooling, and the Keydeck Remote LAN server).
+
 ## Building from source
 
 The three apps share one engine for reading, drawing and writing iWork files, which lives in Keydeck's
@@ -192,9 +233,9 @@ folder. Values and Letters build against it by relative path, so keep the three 
   - `crates/kn-model`: documents, slides, text, tables, charts, shapes and undoable edits
   - `crates/kn-render`: drawing (tiny-skia, cosmic-text), animations and transitions
   - `crates/kn-ui`: the shared interface (themes, colour picker, chart panes, Content Hub, icons)
-  - `crates/kn-app`: the `keydeck` app
-- `numbers-linux/`: **Values** (`crates/nm-core`, `crates/nm-app` → the `values` app)
-- `pages-linux/`: **Letters** (`crates/pg-core`, `crates/pg-app` → the `letters` app)
+  - `crates/kn-app`: the `keydeck` desktop app (and `crates/kn-web` for WebAssembly)
+- `numbers-linux/`: **Values** (`crates/nm-core`, `crates/nm-app` → `values`, `crates/nm-web` for WebAssembly)
+- `pages-linux/`: **Letters** (`crates/pg-core`, `crates/pg-app` → `letters`, `crates/pg-web` for WebAssembly)
 - `letters_mobile/`, `keydeck_mobile/`, `values_mobile/`: the Flutter Android apps, built on the same
   engines through each app's `ffi.rs` (keep them beside the three folders above)
 - `notes-linux/`, `notes_mobile/`: **Bramble Notes** for the desktop and Android (in development)
@@ -211,6 +252,18 @@ cd pages-linux   && cargo build --release -p pg-app     # target/release/letters
 cd notes-linux   && cargo build --release -p nt-app     # target/release/bramble-notes
 cd calculator    && cargo build --release -p calc-app   # target/release/calculator
 ```
+
+To build the WebAssembly bundles (requires `rustup target add wasm32-unknown-unknown`,
+[`trunk`](https://trunkrs.dev/), `wasm-bindgen-cli`, and optionally `wasm-opt` from Binaryen):
+
+```sh
+./tools/build-web.sh                              # builds dist/web/{keydeck,values,letters}
+./tools/build-web.sh --package                    # also writes dist/*-web.zip and dist/Bramble-Office-web.tar.gz
+./tools/build-web.sh --package-tag v0.5.2         # writes single-root dist/{keydeck,values,letters}-web-<tag>.tar.gz + SHA-256
+```
+
+For interactive development with hot reload, run `trunk serve` inside `keynote-linux/crates/kn-web`
+(port `8781`), `numbers-linux/crates/nm-web` (port `8782`), or `pages-linux/crates/pg-web` (port `8783`).
 
 The Flutter Android apps build with `tool/build_engine.sh` then `flutter build apk` in their folders (they need
 Flutter, the Android SDK and NDK and a JDK). `keynote-linux/tools/android/build-apk.sh` still builds the older

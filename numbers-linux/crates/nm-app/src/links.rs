@@ -217,6 +217,12 @@ pub fn follow(app: &mut App, url: &str) {
         crate::ffi::open_url(&url);
         return;
     }
+    #[cfg(target_arch = "wasm32")]
+    {
+        kn_ui::open_url(&url);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || {
         let _ = kn_ui::open_command(&url).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
     });

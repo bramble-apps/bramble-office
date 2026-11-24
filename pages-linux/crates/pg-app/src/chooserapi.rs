@@ -30,31 +30,39 @@ fn cache_file(path: &Path) -> Option<PathBuf> {
 /// A recent document's thumbnail file: made on a thread the first time (None meanwhile, and
 /// when the document gives none).
 fn thumbnail(path: &Path) -> Option<PathBuf> {
-    let file = cache_file(path)?;
-    if file.exists() {
-        return Some(file);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        return None;
     }
-    let mut g = MAKING.lock().unwrap_or_else(|e| e.into_inner());
-    let map = g.get_or_insert_with(HashMap::new);
-    if !map.contains_key(path) {
-        map.insert(path.to_path_buf(), false);
-        let p = path.to_path_buf();
-        std::thread::spawn(move || {
-            let packaged = || -> Option<Vec<u8>> {
-                let k = pg_core::kn_format::keyfile::KeyFile::open(&p).ok()?;
-                k.entry_bytes(k.entry("preview.jpg")?).map(|b| b.into_owned())
-            };
-            if let Some(bytes) = packaged().or_else(|| crate::dialogs::first_page_png(&p)) {
-                let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new(".")));
-                let _ = std::fs::write(&file, &bytes);
-            }
-            // (made or not: a document that gives none isn't tried again)
-            if let Some(m) = MAKING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-                m.insert(p, true);
-            }
-        });
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let file = cache_file(path)?;
+        if file.exists() {
+            return Some(file);
+        }
+        let mut g = MAKING.lock().unwrap_or_else(|e| e.into_inner());
+        let map = g.get_or_insert_with(HashMap::new);
+        if !map.contains_key(path) {
+            map.insert(path.to_path_buf(), false);
+            let p = path.to_path_buf();
+            std::thread::spawn(move || {
+                let packaged = || -> Option<Vec<u8>> {
+                    let k = pg_core::kn_format::keyfile::KeyFile::open(&p).ok()?;
+                    k.entry_bytes(k.entry("preview.jpg")?).map(|b| b.into_owned())
+                };
+                if let Some(bytes) = packaged().or_else(|| crate::dialogs::first_page_png(&p)) {
+                    let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new(".")));
+                    let _ = std::fs::write(&file, &bytes);
+                }
+                // (made or not: a document that gives none isn't tried again)
+                if let Some(m) = MAKING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+                    m.insert(p, true);
+                }
+            });
+        }
+        None
     }
-    None
 }
 
 /// Thumbnails still being made (the front end asks again soon).

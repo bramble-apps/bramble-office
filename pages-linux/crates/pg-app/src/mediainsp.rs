@@ -17,7 +17,7 @@ use kn_ui::theme;
 #[derive(Default)]
 struct State {
     /// The movie whose length is known: (movie, seconds, when asked).
-    movie_len: Option<(ObjId, f32, std::time::Instant)>,
+    movie_len: Option<(ObjId, f32, web_time::Instant)>,
     /// The image each gallery shows (picked with its arrows or in the pane).
     gallery_pos: HashMap<ObjId, usize>,
     gallery_desc: Option<(ObjId, String)>,
@@ -65,7 +65,7 @@ pub(crate) fn movie_length(app: &App, id: ObjId, m: &pg_core::kn_model::MovieDat
     });
     known.unwrap_or_else(|| {
         let l = m.movie_data.and_then(|data| app.doc().and_then(|doc| media::cache_file(doc, data))).and_then(|(p, _)| media::duration(&p)).unwrap_or(0.0) as f32;
-        with(|s| s.movie_len = Some((id, l, std::time::Instant::now())));
+        with(|s| s.movie_len = Some((id, l, web_time::Instant::now())));
         l
     })
 }
@@ -82,7 +82,7 @@ pub fn movie_panel(app: &mut App, ui: &mut egui::Ui, d: &Drawable) {
     });
     let len = known.unwrap_or_else(|| {
         let l = m.movie_data.and_then(|data| app.doc().and_then(|doc| media::cache_file(doc, data))).and_then(|(p, _)| media::duration(&p)).unwrap_or(0.0) as f32;
-        with(|s| s.movie_len = Some((id, l, std::time::Instant::now())));
+        with(|s| s.movie_len = Some((id, l, web_time::Instant::now())));
         l
     });
     section(ui, if m.audio_only { "Audio" } else { "Movie" });

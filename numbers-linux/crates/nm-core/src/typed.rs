@@ -200,7 +200,7 @@ pub fn parse_date_in(s: &str, today: f64, day_first: bool) -> Option<(f64, Strin
 
 /// Today (UTC) at midnight, in seconds since 2001-01-01.
 pub fn today() -> f64 {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 978_307_200.0;
+    let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 978_307_200.0;
     (now / 86_400.0).floor() * 86_400.0
 }
 

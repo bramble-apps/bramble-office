@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use egui::{Align, Color32, Layout, RichText};
 use kn_format::ObjId;
@@ -393,18 +393,27 @@ impl App {
     /// Start the background thumbnail worker for the current document (once per open), and take
     /// the thumbnails it finished.
     fn thumb_worker_tick(&mut self, ctx: &egui::Context) {
-        if std::mem::take(&mut self.thumb_worker_pending) {
-            if let Some(doc) = self.doc.as_ref() {
-                let revs = self.slides.iter().map(|s| (s.slide, self.slide_rev(s.slide))).collect();
-                self.thumb_worker = Some(crate::textures::ThumbWorker::start(ctx, doc.file.clone(), self.slides.clone(), revs));
-            }
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.thumb_worker_pending = false;
+            let _ = ctx;
+            return;
         }
-        let Some(w) = self.thumb_worker.as_ref() else { return };
-        let done = w.take_results();
-        for (slide, img) in done {
-            let rev = self.slide_rev(slide);
-            if self.thumb_worker.as_ref().and_then(|w| w.revs.get(&slide)) == Some(&rev) {
-                self.tex.put_thumb(ctx, slide, rev, img);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::mem::take(&mut self.thumb_worker_pending) {
+                if let Some(doc) = self.doc.as_ref() {
+                    let revs = self.slides.iter().map(|s| (s.slide, self.slide_rev(s.slide))).collect();
+                    self.thumb_worker = Some(crate::textures::ThumbWorker::start(ctx, doc.file.clone(), self.slides.clone(), revs));
+                }
+            }
+            let Some(w) = self.thumb_worker.as_ref() else { return };
+            let done = w.take_results();
+            for (slide, img) in done {
+                let rev = self.slide_rev(slide);
+                if self.thumb_worker.as_ref().and_then(|w| w.revs.get(&slide)) == Some(&rev) {
+                    self.tex.put_thumb(ctx, slide, rev, img);
+                }
             }
         }
     }
@@ -526,69 +535,176 @@ impl App {
 
     /// Open, with the password for a protected presentation.
     pub fn open_path_with(&mut self, path: PathBuf, password: Option<(String, String)>) {
-        let (tx, rx) = channel();
-        let p = path.clone();
-        let progress = std::sync::Arc::new(kn_format::progress::Progress::default());
-        let prog = progress.clone();
-        std::thread::spawn(move || {
-            kn_format::progress::watch(Some(prog));
-            let r = std::panic::catch_unwind(|| {
-                let opened = match &password {
-                    _ if crate::pptx::is_pptx(&p) => crate::pptx::open_document(&p),
-                    Some((pw, hint)) => Document::open_with_password(&p, pw, hint),
-                    None => Document::open(&p),
-                };
-                opened.map(|mut d| {
-                    if let Some(dir) = crate::themes::theme_dir() {
-                        d.find_layout_donor(&dir);
-                    }
-                    d
-                })
-            })
-                .map_err(|_| "the file could not be read (internal error)".to_string())
-                .and_then(|r| {
-                    r.map_err(|e| match e {
-                        // asked for in a password sheet (see versions.rs)
-                        kn_format::Error::NeedsPassword(hint) => format!("{PASSWORD_MARK}{hint}"),
-                        e => e.to_string(),
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (path, password);
+            self.notify("Opening files by path is not available in the browser");
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (tx, rx) = channel();
+            let p = path.clone();
+            let progress = std::sync::Arc::new(kn_format::progress::Progress::default());
+            let prog = progress.clone();
+            std::thread::spawn(move || {
+                kn_format::progress::watch(Some(prog));
+                let r = std::panic::catch_unwind(|| {
+                    let opened = match &password {
+                        _ if crate::pptx::is_pptx(&p) => crate::pptx::open_document(&p),
+                        Some((pw, hint)) => Document::open_with_password(&p, pw, hint),
+                        None => Document::open(&p),
+                    };
+                    opened.map(|mut d| {
+                        if let Some(dir) = crate::themes::theme_dir() {
+                            d.find_layout_donor(&dir);
+                        }
+                        d
                     })
-                });
-            // KN_SLOW_OPEN (automated checks): take three seconds, to show the Opening window
-            if std::env::var_os("KN_SLOW_OPEN").is_some() {
-                for i in 0..60 {
-                    kn_format::progress::report(i as f32 / 60.0);
-                    std::thread::sleep(Duration::from_millis(50));
+                })
+                    .map_err(|_| "the file could not be read (internal error)".to_string())
+                    .and_then(|r| {
+                        r.map_err(|e| match e {
+                            // asked for in a password sheet (see versions.rs)
+                            kn_format::Error::NeedsPassword(hint) => format!("{PASSWORD_MARK}{hint}"),
+                            e => e.to_string(),
+                        })
+                    });
+                // KN_SLOW_OPEN (automated checks): take three seconds, to show the Opening window
+                if std::env::var_os("KN_SLOW_OPEN").is_some() {
+                    for i in 0..60 {
+                        kn_format::progress::report(i as f32 / 60.0);
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                }
+                kn_format::progress::report(1.0);
+                kn_format::progress::watch(None);
+                let _ = tx.send(r);
+            });
+            self.jobs.push(Job::Open(path, rx, Instant::now(), progress));
+        }
+    }
+
+    /// Open a presentation from in-memory bytes (WebAssembly file picker, drag-and-drop, or
+    /// `?host=parent` iframe bridge).
+    pub fn open_bytes(&mut self, ctx: &egui::Context, name: String, bytes: Vec<u8>) {
+        let path = PathBuf::from(&name);
+        if crate::pptx::is_pptx(&path) {
+            match crate::pptx::open_document_bytes(&name, &bytes) {
+                Ok(opened) => {
+                    if opened.hybrid {
+                        self.pptx_hybrid.insert(path.clone());
+                        if opened.changed_elsewhere {
+                            self.notify("This file was changed in another app: opened its PowerPoint slides (the Keydeck copy inside was older)");
+                        }
+                    } else {
+                        self.pptx_hybrid.remove(&path);
+                    }
+                    self.finish_open_doc(ctx, path, opened.doc);
+                }
+                Err(e) => self.notify(format!("Couldn't open {name}: {e}")),
+            }
+            return;
+        }
+        match Document::open_bytes(Some(&name), &bytes) {
+            Ok(doc) => self.finish_open_doc(ctx, path, doc),
+            Err(kn_format::Error::NeedsPassword(hint)) => {
+                self.dialogs.password_prompt = Some(crate::versions::PasswordPrompt::new_bytes(name, bytes, hint));
+            }
+            Err(e) => self.notify(format!("Couldn't open {name}: {e}")),
+        }
+    }
+
+    /// Open a password-protected presentation from in-memory bytes.
+    pub fn open_bytes_with_password(&mut self, ctx: &egui::Context, name: String, bytes: Vec<u8>, password: String, hint: String) {
+        let path = PathBuf::from(&name);
+        match Document::open_bytes_with_password(Some(&name), &bytes, &password, &hint) {
+            Ok(doc) => self.finish_open_doc(ctx, path, doc),
+            Err(kn_format::Error::NeedsPassword(h)) => {
+                let h = if h.is_empty() { hint } else { h };
+                self.notify("Incorrect password");
+                self.dialogs.password_prompt = Some(crate::versions::PasswordPrompt::new_bytes(name, bytes, h));
+            }
+            Err(e) => self.notify(format!("Couldn't open {name}: {e}")),
+        }
+    }
+
+    fn finish_open_doc(&mut self, ctx: &egui::Context, path: PathBuf, doc: Document) {
+        let autoplay = doc.show_settings().auto_play_on_open;
+        let already = (0..self.tabs.len()).find(|&i| {
+            let p = if i == self.active_tab { self.doc.as_ref() } else { self.tabs[i].as_ref().and_then(|t| t.doc.as_ref()) };
+            p.and_then(|d| d.path.as_ref()) == Some(&path)
+        });
+        if let Some(i) = already {
+            self.select_tab(ctx, i);
+        } else {
+            self.make_room();
+        }
+        self.set_document(doc);
+        if autoplay {
+            self.start_slideshow(0);
+        }
+        self.fileops.untitled_name = None;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title_for(&path)));
+    }
+
+    /// Insert or replace a picture from raw bytes (WebAssembly picker, drag-and-drop, clipboard paste).
+    pub fn insert_image_bytes(&mut self, name: String, bytes: Vec<u8>) {
+        match self.replace_target.take() {
+            Some(id) => {
+                let slide = self.current_slide().map(|s| s.slide);
+                let mut err = None;
+                if let Some(doc) = self.doc.as_mut() {
+                    doc.begin(&mut self.hist, "Replace Image");
+                    err = doc.replace_image(&mut self.hist, id, bytes, &name).err();
+                    doc.end(&mut self.hist);
+                }
+                if let Some(e) = err {
+                    self.notify(format!("Couldn't replace the picture: {e}"));
+                }
+                if let Some(s) = slide {
+                    self.bump(s);
                 }
             }
-            kn_format::progress::report(1.0);
-            kn_format::progress::watch(None);
-            let _ = tx.send(r);
-        });
-        self.jobs.push(Job::Open(path, rx, Instant::now(), progress));
+            None => crate::editing::insert_object(self, kn_model::insert::NewObject::Image(bytes, name)),
+        }
+    }
+
+    /// Whether any open tab has unsaved changes.
+    pub fn any_dirty(&self) -> bool {
+        self.doc.as_ref().is_some_and(|d| d.dirty)
+            || self.tabs.iter().flatten().any(|t| t.doc.as_ref().is_some_and(|d| d.dirty))
     }
 
     /// Recently opened files (most recent first), kept in ~/.config/keydeck/recent.txt.
     pub fn recent_files() -> Vec<PathBuf> {
-        let Some(p) = recent_path() else { return Vec::new() };
-        let all: Vec<PathBuf> = std::fs::read_to_string(p).unwrap_or_default().lines().map(PathBuf::from).collect();
-        // whether they still exist is checked on another thread: a file on a network or cloud
-        // mount that stops answering must not freeze the window (the menus ask every frame)
-        static GONE: std::sync::Mutex<Option<(std::collections::HashSet<PathBuf>, Instant, bool)>> = std::sync::Mutex::new(None);
-        let mut g = GONE.lock().unwrap();
-        let (gone, checked, busy) = g.get_or_insert_with(|| (Default::default(), Instant::now() - Duration::from_secs(60), false));
-        if !*busy && checked.elapsed() > Duration::from_secs(5) {
-            *busy = true;
-            let list = all.clone();
-            std::thread::spawn(move || {
-                let missing: std::collections::HashSet<PathBuf> = list.into_iter().filter(|p| !p.exists()).collect();
-                if let Some(g) = GONE.lock().unwrap().as_mut() {
-                    *g = (missing, Instant::now(), false);
-                }
-            });
+        #[cfg(target_arch = "wasm32")]
+        {
+            return Vec::new();
         }
-        let gone = gone.clone();
-        drop(g);
-        all.into_iter().filter(|p| !gone.contains(p)).take(10).collect()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(p) = recent_path() else { return Vec::new() };
+            let all: Vec<PathBuf> = std::fs::read_to_string(p).unwrap_or_default().lines().map(PathBuf::from).collect();
+            // whether they still exist is checked on another thread: a file on a network or cloud
+            // mount that stops answering must not freeze the window (the menus ask every frame)
+            static GONE: std::sync::Mutex<Option<(std::collections::HashSet<PathBuf>, Instant, bool)>> = std::sync::Mutex::new(None);
+            let mut g = GONE.lock().unwrap();
+            let (gone, checked, busy) = g.get_or_insert_with(|| (Default::default(), Instant::now() - Duration::from_secs(60), false));
+            if !*busy && checked.elapsed() > Duration::from_secs(5) {
+                *busy = true;
+                let list = all.clone();
+                std::thread::spawn(move || {
+                    let missing: std::collections::HashSet<PathBuf> = list.into_iter().filter(|p| !p.exists()).collect();
+                    if let Some(g) = GONE.lock().unwrap().as_mut() {
+                        *g = (missing, Instant::now(), false);
+                    }
+                });
+            }
+            let gone = gone.clone();
+            drop(g);
+            all.into_iter().filter(|p| !gone.contains(p)).take(10).collect()
+        }
     }
 
     pub fn remember_path(&self, path: &std::path::Path) {
@@ -1105,63 +1221,129 @@ impl App {
     }
 
     pub fn pick_open(&mut self) {
-        let (tx, rx) = channel();
-        std::thread::spawn(move || {
-            let f = kn_ui::files::FileDialog::new().add_filter("Presentations", &["key", "pptx"]).add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_title("Open").pick_file();
-            let _ = tx.send(f);
-        });
-        self.jobs.push(Job::PickOpen(rx));
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::files::pick_open_doc(&["key", "pptx"], false);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let f = kn_ui::files::FileDialog::new().add_filter("Presentations", &["key", "pptx"]).add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_title("Open").pick_file();
+                let _ = tx.send(f);
+            });
+            self.jobs.push(Job::PickOpen(rx));
+        }
     }
 
     /// Insert ▸ Choose File / toolbar Media: pick a picture (read on a background thread).
     /// Insert > Choose…: a picture, movie or sound.
     pub fn pick_media(&mut self) {
-        let (tx, rx) = channel();
-        std::thread::spawn(move || {
-            let mut all: Vec<&str> = crate::media::IMAGE_EXT.to_vec();
-            all.extend(crate::media::MOVIE_EXT);
-            all.extend(crate::media::AUDIO_EXT);
-            let f = kn_ui::files::FileDialog::new()
-                .add_filter("Pictures, Movies and Sounds", &all)
-                .add_filter("Pictures", crate::media::IMAGE_EXT)
-                .add_filter("Movies", crate::media::MOVIE_EXT)
-                .add_filter("Sounds", crate::media::AUDIO_EXT)
-                .set_title("Insert")
-                .pick_file();
-            if let Some(p) = f {
-                let _ = tx.send(crate::media::prepare(&p));
-            }
-        });
-        self.jobs.push(Job::Media(rx));
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::files::pick_insert_image(crate::media::IMAGE_EXT);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let mut all: Vec<&str> = crate::media::IMAGE_EXT.to_vec();
+                all.extend(crate::media::MOVIE_EXT);
+                all.extend(crate::media::AUDIO_EXT);
+                let f = kn_ui::files::FileDialog::new()
+                    .add_filter("Pictures, Movies and Sounds", &all)
+                    .add_filter("Pictures", crate::media::IMAGE_EXT)
+                    .add_filter("Movies", crate::media::MOVIE_EXT)
+                    .add_filter("Sounds", crate::media::AUDIO_EXT)
+                    .set_title("Insert")
+                    .pick_file();
+                if let Some(p) = f {
+                    let _ = tx.send(crate::media::prepare(&p));
+                }
+            });
+            self.jobs.push(Job::Media(rx));
+        }
     }
 
     /// Insert a file from disk (media browsers, recordings): read on a background thread.
     pub fn insert_media_path(&mut self, path: PathBuf) {
-        let (tx, rx) = channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(crate::media::prepare(&path));
-        });
-        self.jobs.push(Job::Media(rx));
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = path;
+            self.notify("Inserting local files by path is not available in the browser");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(crate::media::prepare(&path));
+            });
+            self.jobs.push(Job::Media(rx));
+        }
     }
 
     pub fn pick_image(&mut self) {
-        let (tx, rx) = channel();
-        std::thread::spawn(move || {
-            let f = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Insert Picture").pick_file();
-            let _ = tx.send(f.map(|p| (p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), std::fs::read(&p))));
-        });
-        self.jobs.push(Job::PickImage(rx));
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::files::pick_insert_image(&["png", "jpg", "jpeg", "webp", "gif"]);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let f = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Insert Picture").pick_file();
+                let _ = tx.send(f.map(|p| (p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), std::fs::read(&p))));
+            });
+            self.jobs.push(Job::PickImage(rx));
+        }
     }
 
     pub fn save(&mut self) {
-        let path = self.doc.as_ref().and_then(|d| d.path.clone());
-        match path {
-            Some(p) if p.is_file() => self.save_to(p),
-            _ => self.pick_save(),
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.save_web(false);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let path = self.doc.as_ref().and_then(|d| d.path.clone());
+            match path {
+                Some(p) if p.is_file() => self.save_to(p),
+                _ => self.pick_save(),
+            }
         }
     }
 
     pub fn pick_save(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.save_web(true);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let name = self
+                .doc
+                .as_ref()
+                .and_then(|d| d.path.as_ref())
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .or_else(|| self.fileops.untitled_name.as_ref().map(|n| format!("{n}.key")))
+                .unwrap_or_else(|| "Untitled.key".into());
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let f = if name.to_ascii_lowercase().ends_with(".pptx") {
+                    kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).add_filter("Keynote Presentation", &["key"]).set_file_name(&name).save_file()
+                } else {
+                    kn_ui::files::FileDialog::new().add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_file_name(&name).save_file()
+                };
+                let _ = tx.send(f);
+            });
+            self.jobs.push(Job::PickSave(rx));
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save_web(&mut self, save_as: bool) {
+        self.commit_notes();
         let name = self
             .doc
             .as_ref()
@@ -1169,17 +1351,156 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().to_string())
             .or_else(|| self.fileops.untitled_name.as_ref().map(|n| format!("{n}.key")))
-            .unwrap_or_else(|| "Untitled.key".into());
-        let (tx, rx) = channel();
-        std::thread::spawn(move || {
-            let f = if name.to_ascii_lowercase().ends_with(".pptx") {
-                kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).add_filter("Keynote Presentation", &["key"]).set_file_name(&name).save_file()
-            } else {
-                kn_ui::files::FileDialog::new().add_filter("Keynote Presentation", &["key"]).add_filter("PowerPoint", &["pptx"]).set_file_name(&name).save_file()
+            .unwrap_or_else(|| "Presentation.key".into());
+        let Some(doc) = self.doc.as_mut() else { return };
+        doc.end(&mut self.hist);
+        let is_pptx = name.to_ascii_lowercase().ends_with(".pptx");
+        let bytes_res = if is_pptx {
+            let hybrid = doc.path.as_ref().is_some_and(|p| self.pptx_hybrid.contains(p));
+            let r = &mut self.renderer;
+            crate::textures::guarded("save", || {
+                let key = if hybrid { Some(crate::pptx::key_bytes(doc)?) } else { None };
+                crate::pptx::write_bytes(doc, r, key)
+            })
+        } else {
+            crate::textures::guarded("save", || doc.to_bytes().map_err(|e| e.to_string()))
+        };
+        match bytes_res {
+            Some(Ok(bytes)) => match kn_ui::web::files::deliver_file(&name, &bytes, save_as) {
+                Ok(()) => {
+                    doc.dirty = false;
+                    let verb = if kn_ui::web::is_hosted() { "Saved" } else { "Downloaded" };
+                    self.notify(format!("{verb} {name}"));
+                }
+                Err(e) => self.notify(format!("Couldn't save: {e}")),
+            },
+            Some(Err(e)) => self.notify(format!("Couldn't save: {e}")),
+            None => self.notify("Couldn't save: internal error"),
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn web_active_name(&self) -> String {
+        self.doc
+            .as_ref()
+            .and_then(|d| d.path.as_ref())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .or_else(|| self.fileops.untitled_name.as_ref().map(|n| format!("{n}.key")))
+            .unwrap_or_else(|| "Presentation.key".into())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn handle_host_request(&mut self, ctx: &egui::Context, req: kn_ui::web::host::HostRequest) {
+        use kn_ui::web::host::{parse_host_call, resolve_host_appearance, serde_json, supported_commands_json, HostCall, HostError};
+        let reply = match parse_host_call(&req.method, &req.params) {
+            Err(err) => Err(err),
+            Ok(HostCall::Commands) => Ok(supported_commands_json()),
+            Ok(HostCall::New { .. }) => match crate::themes::open(&None).and_then(kn_model::Document::new_from_theme) {
+                Ok(doc) => {
+                    self.show_theme_chooser = false;
+                    self.changing_theme = false;
+                    self.fileops.untitled_name = None;
+                    self.new_document(doc);
+                    kn_ui::web::set_dirty(false);
+                    ctx.request_repaint();
+                    let name = self.web_active_name();
+                    Ok(serde_json::json!({ "name": name, "dirty": false }))
+                }
+                Err(e) => Err(HostError::failed(format!("Couldn't create presentation: {e}"))),
+            },
+            Ok(HostCall::Inspect) => match self.doc.as_ref() {
+                Some(doc) => {
+                    let name = self.web_active_name();
+                    Ok(serde_json::json!({ "open": true, "name": name, "path": name, "dirty": doc.dirty }))
+                }
+                None => Ok(serde_json::json!({ "open": false, "name": serde_json::Value::Null, "path": serde_json::Value::Null, "dirty": false })),
+            },
+            Ok(HostCall::Info) => match self.doc.as_ref() {
+                Some(doc) => Ok(serde_json::json!({ "name": self.web_active_name(), "dirty": doc.dirty })),
+                None => Err(HostError::failed("No presentation is open.")),
+            },
+            Ok(HostCall::HostTheme { appearance }) => {
+                let dark = resolve_host_appearance(self.settings.dark, appearance);
+                self.settings.dark = dark;
+                kn_ui::theme::apply_appearance(ctx, dark);
+                ctx.request_repaint();
+                Ok(serde_json::json!({ "appearance": if dark { "dark" } else { "light" } }))
+            }
+            Ok(HostCall::Save { path, keep_source }) => {
+                let name = path.unwrap_or_else(|| self.web_active_name());
+                self.host_save_web(name, false, keep_source)
+            }
+            Ok(HostCall::SaveAs { path, keep_source }) => self.host_save_web(path, true, keep_source),
+        };
+        kn_ui::web::respond_host(&req.id, reply);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn host_save_web(
+        &mut self,
+        out_name: String,
+        is_save_as: bool,
+        keep_source: bool,
+    ) -> Result<kn_ui::web::host::serde_json::Value, kn_ui::web::host::HostError> {
+        use kn_ui::web::host::{serde_json, HostError};
+        if self.doc.is_none() {
+            return Err(HostError::failed("No presentation is open."));
+        }
+        self.commit_notes();
+        let ext = std::path::Path::new(&out_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_else(|| "key".to_string());
+        let is_native = matches!(ext.as_str(), "key" | "pptx");
+        let bytes = {
+            let Some(doc) = self.doc.as_mut() else {
+                return Err(HostError::failed("No presentation is open."));
             };
-            let _ = tx.send(f);
-        });
-        self.jobs.push(Job::PickSave(rx));
+            doc.end(&mut self.hist);
+            match ext.as_str() {
+                "key" => crate::textures::guarded("save", || doc.to_bytes().map_err(|e| e.to_string()))
+                    .unwrap_or_else(|| Err("internal error".into()))
+                    .map_err(HostError::failed)?,
+                "pptx" => {
+                    let hybrid = doc.path.as_ref().is_some_and(|p| self.pptx_hybrid.contains(p));
+                    let r = &mut self.renderer;
+                    crate::textures::guarded("save", || {
+                        let key = if hybrid { Some(crate::pptx::key_bytes(doc)?) } else { None };
+                        crate::pptx::write_bytes(doc, r, key)
+                    })
+                    .unwrap_or_else(|| Err("internal error".into()))
+                    .map_err(HostError::failed)?
+                }
+                "pdf" => {
+                    let r = &mut self.renderer;
+                    crate::textures::guarded("export", || crate::export::pdf_bytes_for_doc(doc, r))
+                        .unwrap_or_else(|| Err("internal error".into()))
+                        .map_err(HostError::failed)?
+                }
+                other => return Err(HostError::rejected(format!("Keydeck cannot save .{other} files."))),
+            }
+        };
+        let save_as_flag = is_save_as && !keep_source;
+        kn_ui::web::files::deliver_file(&out_name, &bytes, save_as_flag).map_err(HostError::failed)?;
+        if !keep_source && is_native {
+            if let Some(doc) = self.doc.as_mut() {
+                doc.dirty = false;
+                if is_save_as {
+                    let was_hybrid = doc.path.as_ref().is_some_and(|p| self.pptx_hybrid.contains(p));
+                    let new_path = PathBuf::from(&out_name);
+                    if ext == "pptx" && was_hybrid {
+                        self.pptx_hybrid.insert(new_path.clone());
+                    }
+                    doc.path = Some(new_path);
+                    self.fileops.untitled_name = None;
+                }
+            }
+            kn_ui::web::set_dirty(self.any_dirty());
+        }
+        Ok(serde_json::json!({ "name": out_name }))
     }
 
     pub(crate) fn save_to(&mut self, mut p: PathBuf) {
@@ -1359,7 +1680,7 @@ impl App {
     }
 
     pub fn loading(&self) -> bool {
-        self.jobs.iter().any(|j| matches!(j, Job::Open(..)))
+        self.jobs.iter().any(|j| matches!(j, Job::Open(..))) || crate::themes::is_loading()
     }
 
     // ------------------------------------------------------------------ editing helpers
@@ -2162,8 +2483,15 @@ impl eframe::App for App {
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // transparent around the window: its shadow is drawn there
-        [0.0; 4]
+        #[cfg(target_arch = "wasm32")]
+        {
+            if theme::is_light() { [0.95, 0.95, 0.95, 1.0] } else { [0.12, 0.12, 0.12, 1.0] }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // transparent around the window: its shadow is drawn there
+            [0.0; 4]
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -2224,6 +2552,41 @@ impl App {
             self.tex.invalidate();
             ctx.request_repaint();
         }
+        if self.renderer.absorb_fetched_fonts() {
+            self.tex.clear();
+            ctx.request_repaint();
+        }
+        crate::themes::poll_web(self, &ctx);
+        #[cfg(target_arch = "wasm32")]
+        {
+            for ev in kn_ui::web::take_events() {
+                match ev {
+                    kn_ui::web::files::WebEvent::OpenDoc { name, bytes } => self.open_bytes(&ctx, name, bytes),
+                    kn_ui::web::files::WebEvent::InsertImage { name, bytes }
+                    | kn_ui::web::files::WebEvent::InsertMedia { name, bytes }
+                    | kn_ui::web::files::WebEvent::PastedImage { name, bytes } => {
+                        if self.doc.is_some() {
+                            self.insert_image_bytes(name, bytes);
+                        }
+                    }
+                    kn_ui::web::files::WebEvent::InsertGallery(pics) => {
+                        if self.doc.is_some() {
+                            crate::webmedia::gallery_from_bytes(self, pics);
+                        }
+                    }
+                    kn_ui::web::files::WebEvent::Dropped { name, bytes } => {
+                        let ext = std::path::Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                        if ext == "key" || ext == "pptx" {
+                            self.open_bytes(&ctx, name, bytes);
+                        } else if self.doc.is_some() && crate::media::IMAGE_EXT.iter().any(|e| *e == ext) {
+                            self.insert_image_bytes(name, bytes);
+                        }
+                    }
+                    kn_ui::web::files::WebEvent::HostRequest(req) => self.handle_host_request(&ctx, req),
+                }
+            }
+            kn_ui::web::set_dirty(self.any_dirty());
+        }
         self.snapshot(&ctx);
         self.record_hook();
         self.closing_ui(&ctx);
@@ -2231,13 +2594,16 @@ impl App {
 
         // dropped files (on Android, also files picked in the system picker): presentations
         // open, pictures, movies and sounds go on the slide
-        let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
-        for p in dropped {
-            let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-            if ext == "key" || ext == "pptx" {
-                self.open_path(p);
-            } else if self.doc.is_some() && crate::media::IMAGE_EXT.iter().chain(crate::media::MOVIE_EXT).chain(crate::media::AUDIO_EXT).any(|e| *e == ext) {
-                self.insert_media_path(p);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+            for p in dropped {
+                let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                if ext == "key" || ext == "pptx" {
+                    self.open_path(p);
+                } else if self.doc.is_some() && crate::media::IMAGE_EXT.iter().chain(crate::media::MOVIE_EXT).chain(crate::media::AUDIO_EXT).any(|e| *e == ext) {
+                    self.insert_media_path(p);
+                }
             }
         }
 
@@ -2525,38 +2891,43 @@ fn opening_window(ctx: &egui::Context, path: &std::path::Path, progress: &kn_for
         eprintln!("opening window {:.2}", progress.permille.load(Ordering::Relaxed) as f32 / 1000.0);
     }
     // the first slide's picture (the package's preview), read on another thread
-    static PREVIEW: std::sync::Mutex<Option<(PathBuf, Option<egui::ColorImage>)>> = std::sync::Mutex::new(None);
-    thread_local!(static TEX: std::cell::RefCell<Option<(PathBuf, egui::TextureHandle)>> = const { std::cell::RefCell::new(None) });
-    {
-        let mut pv = PREVIEW.lock().unwrap();
-        if pv.as_ref().is_none_or(|(p, _)| p != path) {
-            *pv = Some((path.to_path_buf(), None));
-            let (p, ctx) = (path.to_path_buf(), ctx.clone());
-            std::thread::spawn(move || {
-                let img = (|| {
-                    let mut z = zip::ZipArchive::new(std::fs::File::open(&p).ok()?).ok()?;
-                    let mut bytes = Vec::new();
-                    let entry = if z.index_for_name("preview-web.jpg").is_some() { "preview-web.jpg" } else { "preview.jpg" };
-                    std::io::Read::read_to_end(&mut z.by_name(entry).ok()?, &mut bytes).ok()?;
-                    let im = image::load_from_memory(&bytes).ok()?.to_rgba8();
-                    Some(egui::ColorImage::from_rgba_unmultiplied([im.width() as usize, im.height() as usize], im.as_raw()))
-                })();
-                if let Some(pv) = PREVIEW.lock().unwrap().as_mut().filter(|(q, _)| *q == p) {
-                    pv.1 = img;
-                }
-                ctx.request_repaint();
-            });
-        }
-    }
-    let thumb = TEX.with(|t| {
-        let mut t = t.borrow_mut();
-        if t.as_ref().is_none_or(|(p, _)| p != path) {
-            if let Some(img) = PREVIEW.lock().unwrap().as_ref().and_then(|(_, i)| i.clone()) {
-                *t = Some((path.to_path_buf(), ctx.load_texture("opening-preview", img, egui::TextureOptions::LINEAR)));
+    #[cfg(not(target_arch = "wasm32"))]
+    let thumb = {
+        static PREVIEW: std::sync::Mutex<Option<(PathBuf, Option<egui::ColorImage>)>> = std::sync::Mutex::new(None);
+        thread_local!(static TEX: std::cell::RefCell<Option<(PathBuf, egui::TextureHandle)>> = const { std::cell::RefCell::new(None) });
+        {
+            let mut pv = PREVIEW.lock().unwrap();
+            if pv.as_ref().is_none_or(|(p, _)| p != path) {
+                *pv = Some((path.to_path_buf(), None));
+                let (p, ctx) = (path.to_path_buf(), ctx.clone());
+                std::thread::spawn(move || {
+                    let img = (|| {
+                        let mut z = zip::ZipArchive::new(std::fs::File::open(&p).ok()?).ok()?;
+                        let mut bytes = Vec::new();
+                        let entry = if z.index_for_name("preview-web.jpg").is_some() { "preview-web.jpg" } else { "preview.jpg" };
+                        std::io::Read::read_to_end(&mut z.by_name(entry).ok()?, &mut bytes).ok()?;
+                        let im = image::load_from_memory(&bytes).ok()?.to_rgba8();
+                        Some(egui::ColorImage::from_rgba_unmultiplied([im.width() as usize, im.height() as usize], im.as_raw()))
+                    })();
+                    if let Some(pv) = PREVIEW.lock().unwrap().as_mut().filter(|(q, _)| *q == p) {
+                        pv.1 = img;
+                    }
+                    ctx.request_repaint();
+                });
             }
         }
-        t.as_ref().filter(|(p, _)| p == path).map(|(_, h)| h.clone())
-    });
+        TEX.with(|t| {
+            let mut t = t.borrow_mut();
+            if t.as_ref().is_none_or(|(p, _)| p != path) {
+                if let Some(img) = PREVIEW.lock().unwrap().as_ref().and_then(|(_, i)| i.clone()) {
+                    *t = Some((path.to_path_buf(), ctx.load_texture("opening-preview", img, egui::TextureOptions::LINEAR)));
+                }
+            }
+            t.as_ref().filter(|(p, _)| p == path).map(|(_, h)| h.clone())
+        })
+    };
+    #[cfg(target_arch = "wasm32")]
+    let thumb: Option<egui::TextureHandle> = None;
     // Keynote's panel: 349 × 112 pt, dark, an empty title strip, then the first slide, the
     // name, a bar with a blue segment sweeping across it, and a round × to cancel
     let dark = !crate::theme::is_light();

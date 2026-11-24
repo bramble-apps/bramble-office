@@ -18,6 +18,7 @@ pub struct EquationDialog {
 }
 
 /// PNG of a LaTeX formula (math mode), or a readable error.
+#[cfg(not(target_arch = "wasm32"))]
 fn typeset(latex: &str) -> Result<Vec<u8>, String> {
     let dir = std::env::temp_dir().join(format!("nm-eq-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
@@ -77,6 +78,9 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
 /// as readable text: x^2 -> x², \alpha -> α).
 pub fn insert_now(app: &mut App) {
     let src = app.equation.source.trim().to_string();
+    #[cfg(target_arch = "wasm32")]
+    let typeset = drawn(app, &src).ok_or_else(|| "Couldn't draw the equation".to_string());
+    #[cfg(not(target_arch = "wasm32"))]
     let typeset = if cfg!(target_os = "android") { drawn(app, &src).ok_or_else(|| "Couldn't draw the equation".to_string()) } else { typeset(&src) };
     match typeset {
         Ok(png) => {

@@ -281,33 +281,41 @@ fn wallpaper_path() -> Option<std::path::PathBuf> {
 }
 
 fn wallpaper(ctx: &egui::Context) -> Option<egui::TextureHandle> {
-    let id = egui::Id::unique("frosted-wallpaper");
-    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
-        return Some(t);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = ctx;
+        return None;
     }
-    let mut g = WALLPAPER.lock().ok()?;
-    match &*g {
-        None => {
-            *g = Some(None);
-            let ctx2 = ctx.clone();
-            std::thread::spawn(move || {
-                let img = wallpaper_path().and_then(|p| image::open(p).ok()).map(|i| {
-                    let i = i.thumbnail(480, 480).to_rgba8();
-                    let ci = egui::ColorImage::from_rgba_unmultiplied([i.width() as usize, i.height() as usize], i.as_raw());
-                    box_blur(&ci, 6, 3)
-                });
-                if let (Some(img), Ok(mut g)) = (img, WALLPAPER.lock()) {
-                    *g = Some(Some(img));
-                    ctx2.request_repaint();
-                }
-            });
-            None
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let id = egui::Id::unique("frosted-wallpaper");
+        if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+            return Some(t);
         }
-        Some(None) => None,
-        Some(Some(img)) => {
-            let t = ctx.load_texture("frosted-wallpaper", img.clone(), egui::TextureOptions::LINEAR);
-            ctx.data_mut(|d| d.insert_temp(id, t.clone()));
-            Some(t)
+        let mut g = WALLPAPER.lock().ok()?;
+        match &*g {
+            None => {
+                *g = Some(None);
+                let ctx2 = ctx.clone();
+                std::thread::spawn(move || {
+                    let img = wallpaper_path().and_then(|p| image::open(p).ok()).map(|i| {
+                        let i = i.thumbnail(480, 480).to_rgba8();
+                        let ci = egui::ColorImage::from_rgba_unmultiplied([i.width() as usize, i.height() as usize], i.as_raw());
+                        box_blur(&ci, 6, 3)
+                    });
+                    if let (Some(img), Ok(mut g)) = (img, WALLPAPER.lock()) {
+                        *g = Some(Some(img));
+                        ctx2.request_repaint();
+                    }
+                });
+                None
+            }
+            Some(None) => None,
+            Some(Some(img)) => {
+                let t = ctx.load_texture("frosted-wallpaper", img.clone(), egui::TextureOptions::LINEAR);
+                ctx.data_mut(|d| d.insert_temp(id, t.clone()));
+                Some(t)
+            }
         }
     }
 }

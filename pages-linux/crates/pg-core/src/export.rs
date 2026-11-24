@@ -253,7 +253,17 @@ fn table_cells(p: &Pages, id: ObjId) -> Option<kn_model::TableData> {
 
 pub(crate) fn zip_files(path: &std::path::Path, files: Vec<(String, Vec<u8>, bool)>) -> Result<(), String> {
     let f = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipWriter::new(f);
+    zip_files_to(f, files)
+}
+
+pub(crate) fn zip_files_bytes(files: Vec<(String, Vec<u8>, bool)>) -> Result<Vec<u8>, String> {
+    let mut cur = std::io::Cursor::new(Vec::new());
+    zip_files_to(&mut cur, files)?;
+    Ok(cur.into_inner())
+}
+
+fn zip_files_to<W: std::io::Write + std::io::Seek>(writer: W, files: Vec<(String, Vec<u8>, bool)>) -> Result<(), String> {
+    let mut z = zip::ZipWriter::new(writer);
     for (name, bytes, store) in files {
         let opts = zip::write::SimpleFileOptions::default().compression_method(if store { zip::CompressionMethod::Stored } else { zip::CompressionMethod::Deflated });
         z.start_file(name, opts).map_err(|e| e.to_string())?;
@@ -271,6 +281,11 @@ fn word_style_id(name: &str) -> String {
 /// Microsoft Word (.docx).
 pub fn to_docx(p: &Pages, path: &std::path::Path) -> Result<(), String> {
     zip_files(path, docx_files(p)?)
+}
+
+/// Microsoft Word (.docx) bytes in memory.
+pub fn to_docx_bytes(p: &Pages) -> Result<Vec<u8>, String> {
+    zip_files_bytes(docx_files(p)?)
 }
 
 /// The parts of a Word file for the document: (name, bytes, stored uncompressed).
@@ -788,11 +803,17 @@ pub fn to_html(p: &Pages, title: &str) -> String {
 
 /// EPUB 3 (reflowable).
 pub fn to_epub(p: &Pages, path: &std::path::Path, title: &str) -> Result<(), String> {
+    let bytes = to_epub_bytes(p, title)?;
+    std::fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
+/// EPUB 3 (reflowable) bytes in memory.
+pub fn to_epub_bytes(p: &Pages, title: &str) -> Result<Vec<u8>, String> {
     let mut images = Vec::new();
     let body = to_html_body(p, Some(&mut images));
     let xhtml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>{}</title><link rel=\"stylesheet\" href=\"css/book.css\"/></head><body>\n{}</body></html>\n", esc_xml(title), body);
     let nav = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>{0}</title></head><body><nav epub:type=\"toc\"><ol><li><a href=\"chapter-1.xhtml\">{0}</a></li></ol></nav></body></html>", esc_xml(title));
-    let id = format!("urn:uuid:letters-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+    let id = format!("urn:uuid:letters-{}", web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let manifest_imgs: String = images.iter().enumerate().map(|(i, (n, _))| format!("<item id=\"img{i}\" href=\"{n}\" media-type=\"image/{}\"/>", if n.ends_with(".png") { "png" } else { "jpeg" })).collect();
     let opf = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"bookid\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"bookid\">{id}</dc:identifier><dc:title>{}</dc:title><dc:language>en</dc:language><meta property=\"dcterms:modified\">2026-01-01T00:00:00Z</meta></metadata><manifest><item id=\"nav\" href=\"toc.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/><item id=\"ch1\" href=\"chapter-1.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"css\" href=\"css/book.css\" media-type=\"text/css\"/>{manifest_imgs}</manifest><spine><itemref idref=\"ch1\"/></spine></package>",
@@ -809,7 +830,7 @@ pub fn to_epub(p: &Pages, path: &std::path::Path, title: &str) -> Result<(), Str
     for (n, b) in images {
         files.push((format!("OPS/{n}"), b, true));
     }
-    zip_files(path, files)
+    zip_files_bytes(files)
 }
 
 /// Every page rendered at `scale` pixels per point.
@@ -830,6 +851,13 @@ pub fn first_page(p: &Pages, scale: f32) -> Option<tiny_skia::Pixmap> {
 
 /// PDF: the pages as printed (pictures of the pages at 200 dpi, as JPEG).
 pub fn to_pdf(p: &Pages, path: &std::path::Path) -> Result<usize, String> {
+    let (n, out) = to_pdf_bytes(p)?;
+    std::fs::write(path, out).map_err(|e| e.to_string())?;
+    Ok(n)
+}
+
+/// PDF bytes in memory; returns `(page_count, bytes)`.
+pub fn to_pdf_bytes(p: &Pages) -> Result<(usize, Vec<u8>), String> {
     let setup = p.setup();
     let pages = render_pages(p, 200.0 / 72.0);
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
@@ -873,8 +901,7 @@ pub fn to_pdf(p: &Pages, path: &std::path::Path) -> Result<usize, String> {
         out.extend(format!("{o:010} 00000 n \n").as_bytes());
     }
     out.extend(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1).as_bytes());
-    std::fs::write(path, out).map_err(|e| e.to_string())?;
-    Ok(n)
+    Ok((n, out))
 }
 
 /// Images: one PNG per page in `dir` ("<stem>-N.png").
@@ -885,6 +912,32 @@ pub fn to_images(p: &Pages, dir: &std::path::Path, stem: &str) -> Result<usize, 
         pm.save_png(dir.join(format!("{stem}-{}.png", i + 1))).map_err(|e| e.to_string())?;
     }
     Ok(pages.len())
+}
+
+/// Images: one PNG per page bundled in a ZIP in memory ("<stem>-N.png").
+pub fn to_images_zip_bytes(p: &Pages, stem: &str) -> Result<(usize, Vec<u8>), String> {
+    let pages = render_pages(p, 2.0);
+    let mut files = Vec::with_capacity(pages.len());
+    for (i, pm) in pages.iter().enumerate() {
+        let png = pm.encode_png().map_err(|e| e.to_string())?;
+        files.push((format!("{stem}-{}.png", i + 1), png, true));
+    }
+    let n = files.len();
+    Ok((n, zip_files_bytes(files)?))
+}
+
+/// Serialize `p` in memory in the format named by `ext` (pdf, docx, rtf, txt, html, epub, png/zip).
+pub fn export_bytes(p: &Pages, ext: &str, title: &str) -> Result<Vec<u8>, String> {
+    match ext.to_ascii_lowercase().as_str() {
+        "pdf" => to_pdf_bytes(p).map(|(_, b)| b),
+        "docx" => to_docx_bytes(p),
+        "rtf" => Ok(to_rtf(p).into_bytes()),
+        "txt" => Ok(to_text(p).into_bytes()),
+        "html" | "htm" => Ok(to_html(p, title).into_bytes()),
+        "epub" => to_epub_bytes(p, title),
+        "png" | "zip" => to_images_zip_bytes(p, title).map(|(_, b)| b),
+        other => Err(format!("can't export to .{other}")),
+    }
 }
 
 /// Write `p` to `path` in the format its extension names.
@@ -903,5 +956,30 @@ pub fn export(p: &Pages, path: &std::path::Path) -> Result<(), String> {
             to_images(p, dir, &title).map(|_| ())
         }
         _ => Err(format!("can't export to .{ext}")),
+    }
+}
+
+#[cfg(test)]
+mod web_bytes_tests {
+    use super::*;
+
+    #[test]
+    fn in_memory_pages_docx_and_exports_roundtrip() {
+        let mut p = crate::import::import_bytes("Hello.md", b"# Greeting\n\nHello **Bramble**!\n").unwrap();
+        let pages_bytes = p.to_bytes().unwrap();
+        let reopened = Pages::open_bytes("Hello.pages", &pages_bytes).unwrap();
+        let plain = to_text(&reopened);
+        assert!(plain.contains("Greeting") && plain.contains("Bramble"));
+
+        let mut p2 = reopened;
+        let docx_bytes = crate::wordmode::save_docx_bytes(&mut p2, true).unwrap();
+        let opened = crate::wordmode::open_docx_bytes(&docx_bytes).unwrap();
+        assert!(opened.hybrid && !opened.changed_elsewhere);
+        assert!(to_text(&opened.pages).contains("Bramble"));
+
+        let pdf = export_bytes(&opened.pages, "pdf", "Hello").unwrap();
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        let epub = export_bytes(&opened.pages, "epub", "Hello").unwrap();
+        assert!(epub.starts_with(b"PK\x03\x04"));
     }
 }

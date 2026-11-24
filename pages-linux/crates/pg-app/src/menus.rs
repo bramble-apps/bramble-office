@@ -846,11 +846,19 @@ fn help_page() {
             html.push_str(&format!("<h2>{}</h2><table>{t}</table>", m.label));
         }
     }
-    let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))).unwrap_or_else(std::env::temp_dir).join("letters");
-    let _ = std::fs::create_dir_all(&dir);
-    let page = dir.join("help.html");
-    if std::fs::write(&page, html).is_ok() && std::env::var_os("CS_SCRIPT").is_none() && std::env::var_os("CS_SNAP").is_none() {
-        let _ = kn_ui::open_command(&page).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = kn_ui::web::files::download_file("letters-help.html", html.as_bytes());
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))).unwrap_or_else(std::env::temp_dir).join("letters");
+        let _ = std::fs::create_dir_all(&dir);
+        let page = dir.join("help.html");
+        if std::fs::write(&page, html).is_ok() && std::env::var_os("CS_SCRIPT").is_none() && std::env::var_os("CS_SNAP").is_none() {
+            let _ = kn_ui::open_command(&page).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+        }
     }
 }
 
@@ -865,6 +873,9 @@ pub fn open_link(app: &mut App, url: &str) {
         }
         return;
     }
+    #[cfg(target_arch = "wasm32")]
+    kn_ui::open_url(url);
+    #[cfg(not(target_arch = "wasm32"))]
     if std::env::var_os("CS_SCRIPT").is_none() && std::env::var_os("CS_SNAP").is_none() {
         let _ = kn_ui::open_command(url).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }

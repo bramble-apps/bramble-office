@@ -171,6 +171,16 @@ impl Pages {
         Ok(Pages { doc: Document::open_with_password(path, password, hint)?, word_layout: false, section_pages: Default::default(), keep_tables: Default::default(), exact_rows: Default::default() })
     }
 
+    pub fn open_bytes(name: &str, bytes: &[u8]) -> Result<Pages, kn_format::Error> {
+        init();
+        Ok(Pages { doc: Document::open_bytes(Some(name), bytes)?, word_layout: false, section_pages: Default::default(), keep_tables: Default::default(), exact_rows: Default::default() })
+    }
+
+    pub fn open_bytes_with_password(name: &str, bytes: &[u8], password: &str, hint: &str) -> Result<Pages, kn_format::Error> {
+        init();
+        Ok(Pages { doc: Document::open_bytes_with_password(Some(name), bytes, password, hint)?, word_layout: false, section_pages: Default::default(), keep_tables: Default::default(), exact_rows: Default::default() })
+    }
+
     /// A new untitled document from the Blank (word processing) or Blank Layout template.
     pub fn new_blank(layout: bool) -> Pages {
         init();

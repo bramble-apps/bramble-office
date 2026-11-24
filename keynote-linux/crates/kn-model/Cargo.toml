@@ -10,6 +10,10 @@ kn-format = { path = "../kn-format" }
 uuid = { version = "1.28.0", features = ["v4"] }
 # tableclip.rs: table cells on the clipboard between the suite's apps (already in the tree via kn-format)
 serde_json = "1.0.154"
+web-time = "1.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1.28.0", features = ["v4", "js"] }
 
 [dev-dependencies]
 zip = "9"

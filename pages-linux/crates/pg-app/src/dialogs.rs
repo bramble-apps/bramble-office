@@ -411,23 +411,31 @@ pub fn equation_done(app: &mut App, src: &str) {
 /// The formula typeset by the system's pdflatex (600 dpi PNG) and its size in points; None
 /// when there's no TeX or it can't typeset this.
 fn typeset(latex: &str) -> Option<(Vec<u8>, f32, f32)> {
-    let dir = std::env::temp_dir().join(format!("cs-eq-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).ok()?;
-    let doc = format!("\\documentclass[border=2pt]{{standalone}}\n\\usepackage{{amsmath,amssymb}}\n\\begin{{document}}\n$\\displaystyle {latex}$\n\\end{{document}}\n");
-    std::fs::write(dir.join("eq.tex"), doc).ok()?;
-    let ok = std::process::Command::new("pdflatex")
-        .args(["-interaction=nonstopmode", "-halt-on-error", "eq.tex"])
-        .current_dir(&dir)
-        .stdin(std::process::Stdio::null())
-        .output()
-        .ok()
-        .is_some_and(|o| o.status.success())
-        && std::process::Command::new("pdftoppm").args(["-png", "-r", "600", "-singlefile", "eq.pdf", "eq"]).current_dir(&dir).status().is_ok_and(|s| s.success());
-    let png = ok.then(|| std::fs::read(dir.join("eq.png")).ok()).flatten();
-    let _ = std::fs::remove_dir_all(&dir);
-    let png = png?;
-    let (w, h) = pg_core::kn_format::objects::image_size(&png)?;
-    Some((png, w as f32 * 72.0 / 600.0, h as f32 * 72.0 / 600.0))
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = latex;
+        return None;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::env::temp_dir().join(format!("cs-eq-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).ok()?;
+        let doc = format!("\\documentclass[border=2pt]{{standalone}}\n\\usepackage{{amsmath,amssymb}}\n\\begin{{document}}\n$\\displaystyle {latex}$\n\\end{{document}}\n");
+        std::fs::write(dir.join("eq.tex"), doc).ok()?;
+        let ok = std::process::Command::new("pdflatex")
+            .args(["-interaction=nonstopmode", "-halt-on-error", "eq.tex"])
+            .current_dir(&dir)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .ok()
+            .is_some_and(|o| o.status.success())
+            && std::process::Command::new("pdftoppm").args(["-png", "-r", "600", "-singlefile", "eq.pdf", "eq"]).current_dir(&dir).status().is_ok_and(|s| s.success());
+        let png = ok.then(|| std::fs::read(dir.join("eq.png")).ok()).flatten();
+        let _ = std::fs::remove_dir_all(&dir);
+        let png = png?;
+        let (w, h) = pg_core::kn_format::objects::image_size(&png)?;
+        Some((png, w as f32 * 72.0 / 600.0, h as f32 * 72.0 / 600.0))
+    }
 }
 
 /// The readable form of a formula drawn in a math face at 4× (PNG) and its size in points.

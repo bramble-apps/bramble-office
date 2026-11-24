@@ -190,11 +190,13 @@ pub struct Hub {
     picked_for_check: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn agent() -> &'static ureq::Agent {
     static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
     AGENT.get_or_init(|| ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(40))).user_agent(UA).build().into())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn get(url: &str, params: &[(&str, &str)]) -> Result<Vec<u8>, String> {
     let mut req = agent().get(url);
     for (k, v) in params {
@@ -202,6 +204,96 @@ fn get(url: &str, params: &[(&str, &str)]) -> Result<Vec<u8>, String> {
     }
     let mut resp = req.call().map_err(|_| "Couldn't reach Wikimedia Commons (no internet connection?)".to_string())?;
     resp.body_mut().with_config().limit(64 << 20).read_to_vec().map_err(|_| "The download stopped part way".to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn get(_url: &str, _params: &[(&str, &str)]) -> Result<Vec<u8>, String> {
+    Err("Synchronous HTTP requests are not available in the browser".into())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn web_get(url: &str, params: &[(&str, &str)]) -> Result<Vec<u8>, String> {
+    let full = if params.is_empty() {
+        url.to_string()
+    } else {
+        let qs: String = params
+            .iter()
+            .map(|(k, v)| format!("{}={}", crate::web::fetch::encode_query_component(k), crate::web::fetch::encode_query_component(v)))
+            .collect::<Vec<_>>()
+            .join("&");
+        format!("{url}?{qs}")
+    };
+    crate::web::fetch::fetch_bytes_async(&full)
+        .await
+        .map_err(|_| "Couldn't reach Wikimedia Commons (no internet connection?)".to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn web_search(words: &str, offset: usize) -> Found {
+    let off = offset.to_string();
+    let limit = PAGE.to_string();
+    let mut params = [
+        ("action", "query"),
+        ("format", "json"),
+        ("formatversion", "2"),
+        ("origin", "*"),
+        ("generator", "search"),
+        ("gsrsearch", words),
+        ("gsrnamespace", "6"),
+        ("gsrlimit", limit.as_str()),
+        ("gsroffset", off.as_str()),
+        ("prop", "imageinfo"),
+        ("iiprop", "url|size|mime|extmetadata"),
+        ("iiextmetadatafilter", "LicenseShortName|Artist|AttributionRequired|ObjectName"),
+        ("iiurlwidth", "480"),
+    ];
+    let mut found = parse(&web_get(API, &params).await?)?;
+    if found.0.is_empty()
+        && offset == 0
+        && let Some(q) = words.strip_suffix(&format!(" incategory:{FEATURED} filetype:bitmap|drawing"))
+    {
+        let fallback = format!("{q} incategory:Quality_images");
+        params[5].1 = fallback.as_str();
+        found = parse(&web_get(API, &params).await?)?;
+    }
+    if words.contains(" -anime") {
+        let drawing = words.contains("_-_vector");
+        found.0.retain(|it| !not_suggested(it, drawing));
+    }
+    Ok(found)
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn web_download(item: &Item) -> Result<Picture, String> {
+    let width = item.w.clamp(1, 2000).to_string();
+    let body = web_get(
+        API,
+        &[
+            ("action", "query"),
+            ("format", "json"),
+            ("formatversion", "2"),
+            ("origin", "*"),
+            ("titles", item.file.as_str()),
+            ("prop", "imageinfo"),
+            ("iiprop", "url"),
+            ("iiurlwidth", width.as_str()),
+        ],
+    )
+    .await?;
+    let v: serde_json::Value = serde_json::from_slice(&body).map_err(|_| "Wikimedia Commons sent an answer that couldn't be read".to_string())?;
+    let url = v["query"]["pages"][0]["imageinfo"][0]["thumburl"].as_str().ok_or("This picture isn't available any more")?.to_string();
+    let bytes = web_get(&url, &[]).await?;
+    let ext = match image::guess_format(&bytes) {
+        Ok(image::ImageFormat::Png) => "png",
+        Ok(image::ImageFormat::Jpeg) => "jpg",
+        _ => {
+            let img = image::load_from_memory(&bytes).map_err(|_| "This picture couldn't be read".to_string())?;
+            let mut out = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+            return Ok(Picture { bytes: out.into_inner(), name: file_name(item, "png"), credit: item.credit() });
+        }
+    };
+    Ok(Picture { bytes, name: file_name(item, ext), credit: item.credit() })
 }
 
 fn cache_dir() -> PathBuf {
@@ -504,8 +596,14 @@ impl Hub {
     fn more(&mut self, ctx: &egui::Context, words: &str, offset: usize) {
         let (tx, rx) = channel();
         let (w, c) = (words.to_string(), ctx.clone());
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(move || {
             let _ = tx.send(search(&w, offset));
+            c.request_repaint();
+        });
+        #[cfg(target_arch = "wasm32")]
+        wasm_bindgen_futures::spawn_local(async move {
+            let _ = tx.send(web_search(&w, offset).await);
             c.request_repaint();
         });
         let f = self.feeds.entry(words.to_string()).or_default();
@@ -554,8 +652,19 @@ impl Hub {
             let tx = self.thumb_tx.clone().unwrap();
             let c = ctx.clone();
             self.running += 1;
+            #[cfg(not(target_arch = "wasm32"))]
             std::thread::spawn(move || {
                 let img = load_thumb(&url);
+                let _ = tx.send((url, img));
+                c.request_repaint();
+            });
+            #[cfg(target_arch = "wasm32")]
+            wasm_bindgen_futures::spawn_local(async move {
+                let img = crate::web::fetch::fetch_bytes_async(&url)
+                    .await
+                    .ok()
+                    .and_then(|b| image::load_from_memory(&b).ok())
+                    .map(|i| i.to_rgba8());
                 let _ = tx.send((url, img));
                 c.request_repaint();
             });
@@ -588,8 +697,14 @@ impl Hub {
         }
         let (tx, rx) = channel();
         let (it, c) = (item.clone(), ctx.clone());
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(move || {
             let _ = tx.send(download(&it));
+            c.request_repaint();
+        });
+        #[cfg(target_arch = "wasm32")]
+        wasm_bindgen_futures::spawn_local(async move {
+            let _ = tx.send(web_download(&it).await);
             c.request_repaint();
         });
         self.fetching = Some((item.thumb_url.clone(), rx));

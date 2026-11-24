@@ -464,8 +464,8 @@ pub fn files(doc: &Document, r: &mut Renderer) -> Result<Vec<(String, Vec<u8>)>,
     Ok(out)
 }
 
-/// Save as PowerPoint: plain, or with the Keynote document inside (`key` = its bytes).
-pub fn write(doc: &Document, r: &mut Renderer, path: &std::path::Path, key: Option<Vec<u8>>) -> Result<(), String> {
+/// Save as PowerPoint bytes: plain, or with the Keynote document inside (`key` = its bytes).
+pub fn write_bytes(doc: &Document, r: &mut Renderer, key: Option<Vec<u8>>) -> Result<Vec<u8>, String> {
     let mut parts = files(doc, r)?;
     if let Some(bytes) = key {
         let print = slides_print(parts.iter().map(|p| (p.0.as_str(), p.1.as_slice())));
@@ -480,18 +480,21 @@ pub fn write(doc: &Document, r: &mut Renderer, path: &std::path::Path, key: Opti
         parts.push((KEY_PART.into(), bytes));
         parts.push((PRINT_PART.into(), print.into_bytes()));
     }
-    let tmp = path.with_extension("pptx.tmp");
-    {
-        let f = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-        let mut z = zip::ZipWriter::new(f);
-        for (name, b) in parts {
-            let store = name.starts_with("ppt/media/") || name == KEY_PART;
-            let o = zip::write::SimpleFileOptions::default().compression_method(if store { zip::CompressionMethod::Stored } else { zip::CompressionMethod::Deflated });
-            z.start_file(name, o).map_err(|e| e.to_string())?;
-            z.write_all(&b).map_err(|e| e.to_string())?;
-        }
-        z.finish().map_err(|e| e.to_string())?;
+    let mut z = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, b) in parts {
+        let store = name.starts_with("ppt/media/") || name == KEY_PART;
+        let o = zip::write::SimpleFileOptions::default().compression_method(if store { zip::CompressionMethod::Stored } else { zip::CompressionMethod::Deflated });
+        z.start_file(name, o).map_err(|e| e.to_string())?;
+        z.write_all(&b).map_err(|e| e.to_string())?;
     }
+    Ok(z.finish().map_err(|e| e.to_string())?.into_inner())
+}
+
+/// Save as PowerPoint: plain, or with the Keynote document inside (`key` = its bytes).
+pub fn write(doc: &Document, r: &mut Renderer, path: &std::path::Path, key: Option<Vec<u8>>) -> Result<(), String> {
+    let bytes = write_bytes(doc, r, key)?;
+    let tmp = path.with_extension("pptx.tmp");
+    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
@@ -733,9 +736,8 @@ pub struct Opened {
     pub changed_elsewhere: bool,
 }
 
-fn read_zip(path: &std::path::Path) -> Result<Package, String> {
-    let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+fn read_zip_reader<R: std::io::Read + std::io::Seek>(reader: R) -> Result<Package, String> {
+    let mut z = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
     let mut files = HashMap::new();
     for i in 0..z.len() {
         let mut e = z.by_index(i).map_err(|e| e.to_string())?;
@@ -759,9 +761,12 @@ fn read_zip(path: &std::path::Path) -> Result<Package, String> {
     Ok(pkg)
 }
 
-/// Open a .pptx: its Keydeck copy when it has a current one, else the slides.
-pub fn open(path: &std::path::Path, theme: kn_format::KeyFile) -> Result<Opened, String> {
-    let pkg = read_zip(path)?;
+fn read_zip(path: &std::path::Path) -> Result<Package, String> {
+    let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    read_zip_reader(f)
+}
+
+fn open_pkg(pkg: Package, theme: kn_format::KeyFile) -> Result<Opened, String> {
     let copy = pkg.files.get(KEY_PART).cloned();
     if let Some(bytes) = &copy {
         let now = slides_print(pkg.files.iter().map(|(n, b)| (n.as_str(), b.as_slice())));
@@ -774,6 +779,16 @@ pub fn open(path: &std::path::Path, theme: kn_format::KeyFile) -> Result<Opened,
     }
     let doc = build(&pkg, theme)?;
     Ok(Opened { doc, hybrid: copy.is_some(), changed_elsewhere: copy.is_some() })
+}
+
+/// Open a .pptx: its Keydeck copy when it has a current one, else the slides.
+pub fn open(path: &std::path::Path, theme: kn_format::KeyFile) -> Result<Opened, String> {
+    open_pkg(read_zip(path)?, theme)
+}
+
+/// Open a .pptx from in-memory bytes.
+pub fn open_bytes(bytes: &[u8], theme: kn_format::KeyFile) -> Result<Opened, String> {
+    open_pkg(read_zip_reader(std::io::Cursor::new(bytes))?, theme)
 }
 
 /// The slides of the presentation built into a Keynote document (from `theme`).
@@ -1279,10 +1294,22 @@ pub fn open_document(p: &std::path::Path) -> Result<Document, kn_format::Error> 
     Ok(o.doc)
 }
 
+/// Open a .pptx from in-memory bytes as a document (WebAssembly).
+pub fn open_document_bytes(name: &str, bytes: &[u8]) -> Result<Opened, kn_format::Error> {
+    let theme = crate::themes::white()?;
+    let mut o = open_bytes(bytes, theme).map_err(kn_format::Error::Invalid)?;
+    o.doc.path = Some(std::path::PathBuf::from(name));
+    Ok(o)
+}
+
 /// (PowerPoint + Keydeck, its Keydeck copy current) — None when it can't be read.
 pub fn mode(p: &std::path::Path) -> Option<(bool, bool)> {
     let f = std::fs::File::open(p).ok()?;
-    let mut z = zip::ZipArchive::new(f).ok()?;
+    mode_reader(f)
+}
+
+fn mode_reader<R: std::io::Read + std::io::Seek>(reader: R) -> Option<(bool, bool)> {
+    let mut z = zip::ZipArchive::new(reader).ok()?;
     if z.by_name(KEY_PART).is_err() {
         return Some((false, false));
     }

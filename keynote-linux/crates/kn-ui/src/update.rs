@@ -18,7 +18,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AO};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 const LATEST_URL: &str = "https://api.github.com/repos/bramble-apps/bramble-office/releases/latest";
 const RELEASES_PAGE: &str = "https://github.com/bramble-apps/bramble-office/releases/latest";
@@ -477,9 +477,10 @@ pub fn init(info: AppInfo) {
         });
         return;
     }
-    if std::env::var_os("BRAMBLE_NO_UPDATE_CHECK").is_some() || cfg!(target_os = "android") {
+    if std::env::var_os("BRAMBLE_NO_UPDATE_CHECK").is_some() || cfg!(any(target_os = "android", target_arch = "wasm32")) {
         return;
     }
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::Builder::new()
         .name("update-check".into())
         .spawn(move || {
@@ -530,11 +531,17 @@ fn check() -> Option<Release> {
     keep
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn fetch_latest() -> Option<Release> {
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(20))).user_agent(UA).build().into();
     let mut resp = agent.get(LATEST_URL).header("Accept", "application/vnd.github+json").call().ok()?;
     let body = resp.body_mut().with_config().limit(4 << 20).read_to_vec().ok()?;
     parse_release(&body)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn fetch_latest() -> Option<Release> {
+    None
 }
 
 /// A newer version is out.
@@ -627,11 +634,7 @@ fn thanks(ui: &mut egui::Ui) {
 }
 
 fn open_url(url: &str) {
-    let url = url.to_string();
-    std::thread::spawn(move || {
-        use std::process::Stdio;
-        let _ = crate::open_command(&url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
-    });
+    crate::open_url(url);
 }
 
 fn mb(n: u64) -> String {
@@ -886,25 +889,33 @@ fn download_choice<'a>(info: &AppInfo, install: &Install, rel: &'a Release) -> O
 
 /// The Update / Download and Install button: does the work in a background thread.
 fn start() {
-    let Some((info, install, rel)) = with(|s| (s.info.clone(), s.install.clone(), s.release.clone())) else { return };
-    let Some(rel) = rel else { return };
-    GOT.store(0, AO::Relaxed);
-    TOTAL.store(0, AO::Relaxed);
-    set_step(Step::Working(match install {
-        Install::Flatpak(_) | Install::Snap(_) => format!("Updating {}…", info.name),
-        _ => format!("Downloading {} {}…", info.name, rel.version()),
-    }));
-    std::thread::spawn(move || {
-        let r = run_update(&info, &install, &rel);
-        match r {
-            Ok((text, cmd)) => {
-                let can = cmd.is_some();
-                with(|s| s.restart = cmd);
-                set_step(Step::Done(text, can));
+    #[cfg(target_arch = "wasm32")]
+    {
+        set_step(Step::Failed("Self-updating is not used in the browser.".into()));
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some((info, install, rel)) = with(|s| (s.info.clone(), s.install.clone(), s.release.clone())) else { return };
+        let Some(rel) = rel else { return };
+        GOT.store(0, AO::Relaxed);
+        TOTAL.store(0, AO::Relaxed);
+        set_step(Step::Working(match install {
+            Install::Flatpak(_) | Install::Snap(_) => format!("Updating {}…", info.name),
+            _ => format!("Downloading {} {}…", info.name, rel.version()),
+        }));
+        std::thread::spawn(move || {
+            let r = run_update(&info, &install, &rel);
+            match r {
+                Ok((text, cmd)) => {
+                    let can = cmd.is_some();
+                    with(|s| s.restart = cmd);
+                    set_step(Step::Done(text, can));
+                }
+                Err(e) => set_step(Step::Failed(e)),
             }
-            Err(e) => set_step(Step::Failed(e)),
-        }
-    });
+        });
+    }
 }
 
 type Restart = Option<std::process::Command>;
@@ -1019,6 +1030,7 @@ fn cleanup_old(install: &Install) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn download(url: &str, to: &Path, size: u64) -> Result<(), String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(20)))
@@ -1049,6 +1061,11 @@ fn download(url: &str, to: &Path, size: u64) -> Result<(), String> {
         return Err("The download stopped part way. Try again in a moment.".into());
     }
     Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn download(_url: &str, _to: &Path, _size: u64) -> Result<(), String> {
+    Err("Self-updating is not used in the browser.".into())
 }
 
 /// The suite archive -> this app's binary (or bundle) in place of the running one; returns what

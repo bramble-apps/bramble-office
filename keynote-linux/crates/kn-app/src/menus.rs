@@ -2037,6 +2037,7 @@ pub fn run(app: &mut App, ctx: &egui::Context, name: &str) {
         "Text Replacement" => toggle(app, |s| &mut s.text_replacement),
         "Start Speaking" => speak(app),
         "Stop Speaking" => {
+            #[cfg(not(target_arch = "wasm32"))]
             let _ = std::process::Command::new("spd-say").arg("--cancel").spawn();
         }
         "Jump to Selection" => {
@@ -2436,6 +2437,12 @@ fn speak(app: &mut App) {
     if text.trim().is_empty() {
         return;
     }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = text;
+        app.notify("Speech is only available in the desktop app");
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if std::process::Command::new("spd-say").arg("--wait").arg("--").arg(&text).stdin(std::process::Stdio::null()).spawn().is_err() {
         app.notify("Speech needs speech-dispatcher (spd-say)");
     }

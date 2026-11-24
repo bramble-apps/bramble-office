@@ -96,4 +96,21 @@ mod tests {
         let data = b"hello keynote".to_vec();
         assert_eq!(decrypt(&key, &encrypt(&key, &data)).unwrap(), data);
     }
+
+    #[test]
+    fn in_memory_encrypted_zip_round_trip() {
+        let orig = crate::KeyFile::from_files(vec![
+            ("Metadata/Properties.plist".into(), b"<plist/>".to_vec()),
+            ("Data/note.bin".into(), b"secret payload".to_vec()),
+        ])
+        .unwrap();
+        let enc = orig.to_zip_encrypted("hunter2", "my hint").unwrap();
+        match crate::KeyFile::from_zip(&enc) {
+            Err(crate::Error::NeedsPassword(hint)) => assert_eq!(hint, "my hint"),
+            other => panic!("expected NeedsPassword, got {other:?}"),
+        }
+        assert!(matches!(crate::KeyFile::from_zip_with_password(&enc, "wrong"), Err(crate::Error::NeedsPassword(_))));
+        let dec = crate::KeyFile::from_zip_with_password(&enc, "hunter2").unwrap();
+        assert_eq!(dec.raw("Data/note.bin").as_deref(), Some(&b"secret payload"[..]));
+    }
 }

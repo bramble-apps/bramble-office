@@ -175,6 +175,9 @@ impl Settings {
 
     pub fn load() -> Settings {
         let mut s = Settings::default();
+        #[cfg(target_arch = "wasm32")]
+        let Some(text) = kn_ui::web::storage::get("bramble.keydeck.settings") else { return s };
+        #[cfg(not(target_arch = "wasm32"))]
         let Some(text) = path().and_then(|p| std::fs::read_to_string(p).ok()) else { return s };
         for line in text.lines() {
             let Some((k, v)) = line.split_once('=') else { continue };
@@ -228,10 +231,6 @@ impl Settings {
     }
 
     pub fn save(&self) {
-        let Some(p) = path() else { return };
-        if let Some(d) = p.parent() {
-            let _ = std::fs::create_dir_all(d);
-        }
         let mut me = self.clone();
         let mut text: String = me.flags().iter().map(|(k, v)| format!("{k}={}\n", **v)).collect();
         text.push_str(&format!("ruler_units={}\n", self.ruler_units));
@@ -244,7 +243,18 @@ impl Settings {
         text.push_str(&format!("saved_colors={}\n", self.saved_colors));
         text.push_str(&format!("toolbar_mode={}\n", self.toolbar_mode));
         text.push_str(&format!("color_theme={}\n", self.color_theme));
-        let _ = std::fs::write(p, text);
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::storage::set("bramble.keydeck.settings", &text);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(p) = path() else { return };
+            if let Some(d) = p.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            let _ = std::fs::write(p, text);
+        }
     }
 }
 

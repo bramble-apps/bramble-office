@@ -138,13 +138,20 @@ fn load() -> Vec<Dictionary> {
 
 /// Dictionaries if loaded (starts loading on first call; never blocks).
 pub fn dicts() -> Option<Arc<Vec<Dictionary>>> {
-    STARTED.call_once(|| {
-        std::thread::spawn(|| {
-            let d = std::panic::catch_unwind(load).unwrap_or_default();
-            let _ = DICTS.set(Arc::new(d));
+    #[cfg(target_arch = "wasm32")]
+    {
+        return Some(DICTS.get_or_init(|| Arc::new(Vec::new())).clone());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        STARTED.call_once(|| {
+            std::thread::spawn(|| {
+                let d = std::panic::catch_unwind(load).unwrap_or_default();
+                let _ = DICTS.set(Arc::new(d));
+            });
         });
-    });
-    DICTS.get().cloned()
+        DICTS.get().cloned()
+    }
 }
 
 fn word_char(c: char) -> bool {

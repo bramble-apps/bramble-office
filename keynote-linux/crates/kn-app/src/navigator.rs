@@ -104,7 +104,7 @@ pub fn ui(app: &mut App, ui: &mut egui::Ui) {
                 ui.painter().rect_filled(r, 2.0, crate::theme::gray(140));
             } else {
                 let r = Rect::from_min_size(pos2(x0, row.min.y + 5.0), vec2(thumb_w - depth * 12.0, thumb_h - depth * 12.0 * aspect));
-                let t0 = std::time::Instant::now();
+                let t0 = web_time::Instant::now();
                 thumb(app, ui, i, r, &mut budget);
                 if std::env::var_os("KN_PERF").is_some() && t0.elapsed().as_millis() >= 3 {
                     eprintln!("perf: thumb {i} took {:?}", t0.elapsed());

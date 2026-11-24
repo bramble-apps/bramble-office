@@ -31,15 +31,31 @@ pub fn pick_more(app: &mut App, id: kn_format::ObjId) {
 
 pub fn pick_gallery(app: &mut App) {
     app.webmedia.adding_to = None;
+    #[cfg(target_arch = "wasm32")]
+    {
+        kn_ui::web::files::pick_insert_gallery(&["png", "jpg", "jpeg"]);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
+            let pics: Vec<(String, Vec<u8>)> = files
+                .iter()
+                .filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?)))
+                .collect();
+            let _ = tx.send(pics);
+        });
+        app.webmedia.picking = Some(rx);
+    }
+}
+
+/// Pictures picked in the browser for a new gallery (or Format > Gallery > +).
+#[cfg(target_arch = "wasm32")]
+pub fn gallery_from_bytes(app: &mut App, pics: Vec<(String, Vec<u8>)>) {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
-        let pics: Vec<(String, Vec<u8>)> = files
-            .iter()
-            .filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?)))
-            .collect();
-        let _ = tx.send(pics);
-    });
+    let _ = tx.send(pics);
     app.webmedia.picking = Some(rx);
 }
 
@@ -109,13 +125,22 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
 
 /// The Web Video sheet's Insert: the video's details fetched in the background (`poll` puts it in).
 pub fn start_fetch(app: &mut App, url: &str) {
-    let (tx, rx) = channel();
-    let u = url.trim().to_string();
-    std::thread::spawn(move || {
-        let _ = tx.send(fetch(u));
-    });
-    app.webmedia.fetching = Some(rx);
-    app.notify("Getting the video's details…");
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = url;
+        app.notify("Web video insertion is available in the desktop app.");
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        let u = url.trim().to_string();
+        std::thread::spawn(move || {
+            let _ = tx.send(fetch(u));
+        });
+        app.webmedia.fetching = Some(rx);
+        app.notify("Getting the video's details…");
+    }
 }
 
 /// Pictures picked by the front end for a new gallery (or the gallery Format > Gallery > + named).

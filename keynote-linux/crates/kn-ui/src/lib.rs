@@ -6,6 +6,8 @@
 
 #[cfg(target_os = "android")]
 pub mod android;
+#[cfg(any(target_arch = "wasm32", test))]
+pub mod web;
 pub mod capsule;
 pub mod cellfmt;
 pub mod chartdata;
@@ -58,6 +60,7 @@ pub fn pointer_over_window(ctx: &egui::Context) -> bool {
 
 /// The system's "open this" command for a web address, file or folder (xdg-open on Linux,
 /// open on macOS, start on Windows), ready to spawn.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn open_command(target: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
     #[cfg(target_os = "windows")]
     {
@@ -82,15 +85,23 @@ pub fn open_command(target: impl AsRef<std::ffi::OsStr>) -> std::process::Comman
 
 /// Opens a web address (or file) with the system's default app, in the background.
 pub fn open_url(url: &str) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        web::open_url(url);
+        return;
+    }
     #[cfg(target_os = "android")]
     if android::open_url(url) {
         return;
     }
-    let url = url.to_string();
-    std::thread::spawn(move || {
-        use std::process::Stdio;
-        let _ = open_command(&url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
-    });
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let url = url.to_string();
+        std::thread::spawn(move || {
+            use std::process::Stdio;
+            let _ = open_command(&url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        });
+    }
 }
 
 /// Bramble Office's donation page (the app menu's Support Development…).

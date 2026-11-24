@@ -300,4 +300,18 @@ impl Pages {
         self.doc.dirty = false;
         Ok(())
     }
+
+    /// Serialize to `.pages` bytes in memory (cleaned copy, encrypted if a password is set).
+    pub fn to_bytes(&mut self) -> Result<Vec<u8>, kn_format::Error> {
+        self.doc.declare_external_refs();
+        let mut k = self.doc.file.clone();
+        sweep(&mut k);
+        let bytes = if let Some((pw, hint)) = &self.doc.password {
+            k.to_zip_encrypted(pw, hint)?
+        } else {
+            k.to_zip()?
+        };
+        self.doc.dirty = false;
+        Ok(bytes)
+    }
 }

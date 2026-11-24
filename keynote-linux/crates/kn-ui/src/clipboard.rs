@@ -156,12 +156,20 @@ pub fn fetch_src(src: &str) -> Option<Vec<u8>> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return None;
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(4))).build().into();
-    let mut resp = agent.get(&url).call().ok()?;
-    resp.body_mut().with_config().limit(40 << 20).read_to_vec().ok()
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(4))).build().into();
+        let mut resp = agent.get(&url).call().ok()?;
+        resp.body_mut().with_config().limit(40 << 20).read_to_vec().ok()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = url;
+        None
+    }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 mod system {
     use super::*;
     use std::sync::{Mutex, OnceLock};
@@ -221,7 +229,7 @@ mod system {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
 mod system {
     use super::*;
     pub fn image() -> Option<Image> {

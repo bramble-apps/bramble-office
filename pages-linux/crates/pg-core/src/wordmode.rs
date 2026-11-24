@@ -31,8 +31,8 @@ pub fn pages_bytes(p: &mut Pages) -> Result<Vec<u8>, String> {
     k.to_zip().map_err(|e| e.to_string())
 }
 
-/// Save as Word: plain (`hybrid` false) or with the Letters copy inside.
-pub fn save_docx(p: &mut Pages, path: &std::path::Path, hybrid: bool) -> Result<(), String> {
+/// Build `.docx` ZIP parts: plain (`hybrid` false) or with the Letters copy inside.
+fn docx_package_files(p: &mut Pages, hybrid: bool) -> Result<Vec<(String, Vec<u8>, bool)>, String> {
     let mut files = crate::export::docx_files(p)?;
     if hybrid {
         let doc = files.iter().find(|f| f.0 == "word/document.xml").map(|f| fingerprint(&f.1)).unwrap_or_default();
@@ -52,12 +52,26 @@ pub fn save_docx(p: &mut Pages, path: &std::path::Path, hybrid: bool) -> Result<
         files.push((PAGES_PART.into(), bytes, true));
         files.push((PRINT_PART.into(), doc.into_bytes(), false));
     }
+    Ok(files)
+}
+
+/// Save as Word: plain (`hybrid` false) or with the Letters copy inside.
+pub fn save_docx(p: &mut Pages, path: &std::path::Path, hybrid: bool) -> Result<(), String> {
+    let files = docx_package_files(p, hybrid)?;
     // written beside, then moved over (a failed save leaves the old file)
     let tmp = path.with_extension("docx.tmp");
     crate::export::zip_files(&tmp, files)?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     p.doc.dirty = false;
     Ok(())
+}
+
+/// Serialize as Word bytes in memory: plain (`hybrid` false) or with the Letters copy inside.
+pub fn save_docx_bytes(p: &mut Pages, hybrid: bool) -> Result<Vec<u8>, String> {
+    let files = docx_package_files(p, hybrid)?;
+    let bytes = crate::export::zip_files_bytes(files)?;
+    p.doc.dirty = false;
+    Ok(bytes)
 }
 
 pub struct Opened {
@@ -70,8 +84,13 @@ pub struct Opened {
 
 /// Open a .docx: its Letters copy when it has a current one, else what Word holds.
 pub fn open_docx(path: &std::path::Path) -> Result<Opened, String> {
-    let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    open_docx_bytes(&bytes)
+}
+
+/// Open .docx bytes in memory: its Letters copy when it has a current one, else what Word holds.
+pub fn open_docx_bytes(bytes: &[u8]) -> Result<Opened, String> {
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut read = |name: &str| -> Option<Vec<u8>> {
         let mut e = z.by_name(name).ok()?;
         let mut b = Vec::new();
@@ -81,9 +100,9 @@ pub fn open_docx(path: &std::path::Path) -> Result<Opened, String> {
     let copy = read(PAGES_PART);
     let saved_print = read(PRINT_PART).map(|b| String::from_utf8_lossy(&b).trim().to_string());
     let now_print = read("word/document.xml").map(|b| fingerprint(&b));
-    if let Some(bytes) = &copy {
+    if let Some(copy_bytes) = &copy {
         if saved_print.is_some() && saved_print == now_print {
-            if let Ok(mut pages) = Pages::from_bytes(bytes) {
+            if let Ok(mut pages) = Pages::from_bytes(copy_bytes) {
                 pages.doc.path = None;
                 pages.doc.dirty = false;
                 // still a Word document: laid out as Word lays it out
@@ -92,7 +111,7 @@ pub fn open_docx(path: &std::path::Path) -> Result<Opened, String> {
             }
         }
     }
-    let w = crate::docx::read(path)?;
+    let w = crate::docx::read_bytes(bytes)?;
     let mut pages = crate::docx::build(&w);
     pages.doc.path = None;
     pages.doc.dirty = false;

@@ -1,0 +1,8 @@
+[package]
+name = "pg-web"
+version = "0.5.2"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+pg-app = { path = "../pg-app" }

@@ -470,7 +470,15 @@ fn xml_attr<'a>(n: &roxmltree::Node<'a, '_>, local: &str) -> Option<&'a str> {
 /// tab-separated lines) and inline pictures.
 pub fn from_docx(path: &std::path::Path) -> Result<Vec<InPara>, String> {
     let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+    from_docx_reader(f)
+}
+
+pub fn from_docx_bytes(bytes: &[u8]) -> Result<Vec<InPara>, String> {
+    from_docx_reader(std::io::Cursor::new(bytes))
+}
+
+fn from_docx_reader<R: std::io::Read + std::io::Seek>(r: R) -> Result<Vec<InPara>, String> {
+    let mut z = zip::ZipArchive::new(r).map_err(|e| e.to_string())?;
     let mut read = |name: &str| -> Option<Vec<u8>> {
         let mut e = z.by_name(name).ok()?;
         let mut b = Vec::new();
@@ -752,26 +760,26 @@ pub fn ps_name(family: &str) -> String {
 }
 
 pub fn import_file(path: &std::path::Path) -> Result<Pages, kn_format::Error> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let bytes = std::fs::read(path)?;
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("Document.txt");
+    import_bytes(name, &bytes)
+}
+
+pub fn import_bytes(name: &str, bytes: &[u8]) -> Result<Pages, kn_format::Error> {
+    let ext = std::path::Path::new(name).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let bad = |e: String| kn_format::Error::Invalid(e);
     if ext == "docx" {
-        let w = crate::docx::read(path).map_err(bad)?;
+        let w = crate::docx::read_bytes(bytes).map_err(bad)?;
         let mut p = crate::docx::build(&w);
         p.doc.path = None;
         return Ok(p);
     }
+    let s = String::from_utf8_lossy(bytes).to_string();
     let paras = match ext.as_str() {
-        "docx" => from_docx(path).map_err(bad)?,
-        _ => {
-            let bytes = std::fs::read(path)?;
-            let s = String::from_utf8_lossy(&bytes).to_string();
-            match ext.as_str() {
-                "md" | "markdown" => from_markdown(&s),
-                "rtf" => from_rtf(&s),
-                "html" | "htm" => from_html(&s),
-                _ => from_text(&s),
-            }
-        }
+        "md" | "markdown" => from_markdown(&s),
+        "rtf" => from_rtf(&s),
+        "html" | "htm" => from_html(&s),
+        _ => from_text(&s),
     };
     let mut p = build(&paras);
     p.doc.path = None;

@@ -16,32 +16,40 @@ pub struct EquationDialog {
 
 /// PNG of a LaTeX formula (math mode), or a readable error.
 fn typeset(latex: &str) -> Result<Vec<u8>, String> {
-    let dir = std::env::temp_dir().join(format!("kn-eq-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
-    let doc = format!("\\documentclass[border=2pt]{{standalone}}\n\\usepackage{{amsmath,amssymb}}\n\\begin{{document}}\n$\\displaystyle {latex}$\n\\end{{document}}\n");
-    std::fs::write(dir.join("eq.tex"), doc).map_err(|e| e.to_string())?;
-    let out = std::process::Command::new("pdflatex")
-        .args(["-interaction=nonstopmode", "-halt-on-error", "eq.tex"])
-        .current_dir(&dir)
-        .stdin(std::process::Stdio::null())
-        .output()
-        .map_err(|_| "Equations need TeX: install it with  sudo apt install texlive-latex-extra".to_string())?;
-    if !out.status.success() {
-        let log = String::from_utf8_lossy(&out.stdout);
-        let msg = log.lines().find(|l| l.starts_with('!')).unwrap_or("LaTeX couldn't typeset this").to_string();
-        return Err(msg);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = latex;
+        return Err("LaTeX equations require the desktop app (pdflatex).".into());
     }
-    let st = std::process::Command::new("pdftoppm")
-        .args(["-png", "-r", "600", "-singlefile", "eq.pdf", "eq"])
-        .current_dir(&dir)
-        .status()
-        .map_err(|e| format!("pdftoppm: {e}"))?;
-    if !st.success() {
-        return Err("couldn't convert the equation to a picture".into());
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::env::temp_dir().join(format!("kn-eq-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let doc = format!("\\documentclass[border=2pt]{{standalone}}\n\\usepackage{{amsmath,amssymb}}\n\\begin{{document}}\n$\\displaystyle {latex}$\n\\end{{document}}\n");
+        std::fs::write(dir.join("eq.tex"), doc).map_err(|e| e.to_string())?;
+        let out = std::process::Command::new("pdflatex")
+            .args(["-interaction=nonstopmode", "-halt-on-error", "eq.tex"])
+            .current_dir(&dir)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|_| "Equations need TeX: install it with  sudo apt install texlive-latex-extra".to_string())?;
+        if !out.status.success() {
+            let log = String::from_utf8_lossy(&out.stdout);
+            let msg = log.lines().find(|l| l.starts_with('!')).unwrap_or("LaTeX couldn't typeset this").to_string();
+            return Err(msg);
+        }
+        let st = std::process::Command::new("pdftoppm")
+            .args(["-png", "-r", "600", "-singlefile", "eq.pdf", "eq"])
+            .current_dir(&dir)
+            .status()
+            .map_err(|e| format!("pdftoppm: {e}"))?;
+        if !st.success() {
+            return Err("couldn't convert the equation to a picture".into());
+        }
+        let png = std::fs::read(dir.join("eq.png")).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(png)
     }
-    let png = std::fs::read(dir.join("eq.png")).map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_dir_all(&dir);
-    Ok(png)
 }
 
 pub fn ui(app: &mut App, ctx: &egui::Context) {

@@ -11,6 +11,9 @@ use crate::app::App;
 static WHITE: &[u8] = include_bytes!("../data/themes/White.key");
 
 /// The built-in themes: (name, theme, preview). A theme's path in the lists is "builtin:Name".
+/// On native targets all 19 `.key` themes are embedded; on WebAssembly only `White.key` and the
+/// small preview PNGs are embedded, while the other 18 `.key` themes are fetched lazily over HTTP.
+#[cfg(not(target_arch = "wasm32"))]
 static BUILTIN: &[(&str, &[u8], &[u8])] = &[
     ("White", WHITE, include_bytes!("../data/themes/White.png")),
     ("Bloom", include_bytes!("../data/themes/Bloom.key"), include_bytes!("../data/themes/Bloom.png")),
@@ -33,6 +36,115 @@ static BUILTIN: &[(&str, &[u8], &[u8])] = &[
     ("Vivid", include_bytes!("../data/themes/Vivid.key"), include_bytes!("../data/themes/Vivid.png")),
 ];
 
+#[cfg(target_arch = "wasm32")]
+static BUILTIN: &[(&str, &[u8], &[u8])] = &[
+    ("White", WHITE, include_bytes!("../data/themes/White.png")),
+    ("Bloom", &[], include_bytes!("../data/themes/Bloom.png")),
+    ("Cirrus", &[], include_bytes!("../data/themes/Cirrus.png")),
+    ("Daylight", &[], include_bytes!("../data/themes/Daylight.png")),
+    ("Dusk", &[], include_bytes!("../data/themes/Dusk.png")),
+    ("Forge", &[], include_bytes!("../data/themes/Forge.png")),
+    ("Gallery", &[], include_bytes!("../data/themes/Gallery.png")),
+    ("Ivory", &[], include_bytes!("../data/themes/Ivory.png")),
+    ("Journal", &[], include_bytes!("../data/themes/Journal.png")),
+    ("Linen", &[], include_bytes!("../data/themes/Linen.png")),
+    ("Midnight", &[], include_bytes!("../data/themes/Midnight.png")),
+    ("Night Tide", &[], include_bytes!("../data/themes/Night Tide.png")),
+    ("Onyx", &[], include_bytes!("../data/themes/Onyx.png")),
+    ("Paper Craft", &[], include_bytes!("../data/themes/Paper Craft.png")),
+    ("Prism", &[], include_bytes!("../data/themes/Prism.png")),
+    ("Storm", &[], include_bytes!("../data/themes/Storm.png")),
+    ("Studio", &[], include_bytes!("../data/themes/Studio.png")),
+    ("Tide", &[], include_bytes!("../data/themes/Tide.png")),
+    ("Vivid", &[], include_bytes!("../data/themes/Vivid.png")),
+];
+
+#[cfg(target_arch = "wasm32")]
+mod web_fetch {
+    use std::collections::HashMap;
+    use std::sync::mpsc::{channel, Receiver};
+    use std::sync::{Mutex, OnceLock};
+
+    static CACHE: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
+    static PENDING: OnceLock<Mutex<Option<(String, bool, Receiver<Result<Vec<u8>, String>>)>>> = OnceLock::new();
+
+    pub fn cached(name: &str) -> Option<Vec<u8>> {
+        CACHE.get()?.lock().ok()?.get(name).cloned()
+    }
+
+    pub fn is_loading() -> bool {
+        PENDING.get().and_then(|m| m.lock().ok()).is_some_and(|g| g.is_some())
+    }
+
+    pub fn request(name: &str, changing: bool) {
+        let (tx, rx) = channel();
+        let file = format!("{}.key", kn_ui::web::fetch::encode_query_component(name));
+        let url = format!("{}/{file}", kn_ui::web::themes_base_url());
+        let key_name = name.to_string();
+        kn_ui::web::fetch::fetch_bytes(url, move |res| {
+            if let Ok(bytes) = &res {
+                let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+                if let Ok(mut g) = cache.lock() {
+                    g.insert(key_name, bytes.clone());
+                }
+            }
+            let _ = tx.send(res);
+        });
+        let pend = PENDING.get_or_init(|| Mutex::new(None));
+        if let Ok(mut g) = pend.lock() {
+            *g = Some((name.to_string(), changing, rx));
+        }
+    }
+
+    pub fn poll() -> Option<(String, bool, Result<Vec<u8>, String>)> {
+        let pend = PENDING.get()?;
+        let mut g = pend.lock().ok()?;
+        let ready = match g.as_ref() {
+            Some((_, _, rx)) => match rx.try_recv() {
+                Ok(res) => Some(res),
+                Err(std::sync::mpsc::TryRecvError::Empty) => None,
+                Err(_) => Some(Err("theme download interrupted".into())),
+            },
+            None => None,
+        };
+        if let Some(res) = ready {
+            let (name, changing, _) = g.take()?;
+            Some((name, changing, res))
+        } else {
+            None
+        }
+    }
+}
+
+/// Whether a WebAssembly theme `.key` download is currently in flight.
+pub fn is_loading() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        web_fetch::is_loading()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        false
+    }
+}
+
+/// Poll any pending lazy theme download on WebAssembly and open/apply it when ready.
+pub fn poll_web(app: &mut App, ctx: &egui::Context) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some((name, changing, res)) = web_fetch::poll() {
+        let file = res
+            .map_err(kn_format::Error::Invalid)
+            .and_then(|bytes| kn_format::KeyFile::from_zip(&bytes));
+        if changing {
+            change_to(app, &name, file);
+        } else {
+            create(app, ctx, &name, file);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = (app, ctx);
+}
+
 fn builtin(p: &std::path::Path) -> Option<&'static (&'static str, &'static [u8], &'static [u8])> {
     let name = p.to_str()?.strip_prefix("builtin:")?;
     BUILTIN.iter().find(|b| b.0 == name)
@@ -42,6 +154,13 @@ fn builtin(p: &std::path::Path) -> Option<&'static (&'static str, &'static [u8],
 pub(crate) fn open(path: &Option<PathBuf>) -> Result<kn_format::KeyFile, kn_format::Error> {
     match path {
         Some(p) => match builtin(p) {
+            Some(b) if !b.1.is_empty() => kn_format::KeyFile::from_zip(b.1),
+            #[cfg(target_arch = "wasm32")]
+            Some(b) => match web_fetch::cached(b.0) {
+                Some(bytes) => kn_format::KeyFile::from_zip(&bytes),
+                None => Err(kn_format::Error::Invalid(format!("theme {} is not downloaded yet", b.0))),
+            },
+            #[cfg(not(target_arch = "wasm32"))]
             Some(b) => kn_format::KeyFile::from_zip(b.1),
             None => kn_format::KeyFile::open(p),
         },
@@ -135,8 +254,19 @@ pub fn chooser(app: &mut App, ctx: &egui::Context) {
     }
     if let Some((name, path)) = pick {
         app.show_theme_chooser = false;
+        let changing = std::mem::take(&mut app.changing_theme);
+        #[cfg(target_arch = "wasm32")]
+        if let Some(p) = &path
+            && let Some(b) = builtin(p)
+            && b.1.is_empty()
+            && web_fetch::cached(b.0).is_none()
+        {
+            web_fetch::request(b.0, changing);
+            app.notify(format!("Loading theme \u{201c}{name}\u{201d}\u{2026}"));
+            return;
+        }
         let file = self::open(&path);
-        if std::mem::take(&mut app.changing_theme) {
+        if changing {
             change_to(app, &name, file);
             return;
         }
@@ -182,6 +312,16 @@ pub(crate) fn change_to_index(app: &mut App, i: usize) {
 
 /// A new presentation on a theme (`path` None = the built-in White).
 pub fn create_from(app: &mut App, ctx: &egui::Context, name: &str, path: Option<PathBuf>) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(p) = &path
+        && let Some(b) = builtin(p)
+        && b.1.is_empty()
+        && web_fetch::cached(b.0).is_none()
+    {
+        web_fetch::request(b.0, false);
+        app.notify(format!("Loading theme \u{201c}{name}\u{201d}\u{2026}"));
+        return;
+    }
     let file = open(&path);
     create(app, ctx, name, file);
 }

@@ -21,7 +21,7 @@ pub fn keep_version(path: &Path) {
     }
     let Some(dir) = versions_dir(path) else { return };
     let _ = std::fs::create_dir_all(&dir);
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let _ = std::fs::copy(path, dir.join(format!("{secs}.numbers")));
     let mut all = list(path);
     while all.len() > 30 {
@@ -42,7 +42,7 @@ pub fn list(path: &Path) -> Vec<(PathBuf, u64)> {
 }
 
 pub(crate) fn when(secs: u64) -> String {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     match now.saturating_sub(secs) {
         a @ 0..=59 => if a < 10 { "Just now".into() } else { format!("{a} seconds ago") },
         a @ 60..=3599 => format!("{} minutes ago", a / 60),
@@ -246,15 +246,29 @@ pub fn reduce_file_size(app: &mut App) {
 pub fn print_now(app: &mut App) {
     crate::canvas::commit(app);
     let Some(w) = app.wb.as_ref() else { return };
-    let out = std::env::temp_dir().join(format!("numdeck-print-{}.pdf", std::process::id()));
-    match crate::pdf::export_with(w, &out, app.canvas.tiles.extras.clone()) {
-        Ok(_) => {
-            std::thread::spawn(move || {
-                let _ = std::process::Command::new("lp").arg(&out).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
-            });
-            app.notify("Sent to the printer");
+    #[cfg(target_arch = "wasm32")]
+    {
+        let name = app.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+        match crate::pdf::export_with_bytes(w, app.canvas.tiles.extras.clone())
+            .and_then(|(_, bytes)| kn_ui::web::files::download_file(&format!("{name}.pdf"), &bytes))
+        {
+            Ok(()) => app.notify(format!("Downloaded {name}.pdf: open it to print")),
+            Err(e) => app.notify(format!("Couldn't print: {e}")),
         }
-        Err(e) => app.notify(format!("Couldn't print: {e}")),
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let out = std::env::temp_dir().join(format!("numdeck-print-{}.pdf", std::process::id()));
+        match crate::pdf::export_with(w, &out, app.canvas.tiles.extras.clone()) {
+            Ok(_) => {
+                std::thread::spawn(move || {
+                    let _ = std::process::Command::new("lp").arg(&out).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                });
+                app.notify("Sent to the printer");
+            }
+            Err(e) => app.notify(format!("Couldn't print: {e}")),
+        }
     }
 }
 

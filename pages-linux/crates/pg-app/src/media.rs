@@ -15,7 +15,7 @@ use crate::app::App;
 #[derive(Default)]
 struct State {
     record_open: bool,
-    recorder: Option<(std::process::Child, PathBuf, std::time::Instant)>,
+    recorder: Option<(std::process::Child, PathBuf, web_time::Instant)>,
     /// Add Web Video: the link typed, and a lookup in flight.
     web_sheet: Option<String>,
     web_fetch: Option<(std::sync::mpsc::Receiver<media::web::Fetched>, String)>,
@@ -86,20 +86,41 @@ pub fn command(app: &mut App, name: &str) -> bool {
         // (the Shape popover's Browse Content Hub)
         "Content Hub Shapes" => app.hub.show_tab(kn_ui::contenthub::Tab::Shapes),
         "Choose Photo or Video…" => {
-            let all: Vec<&str> = media::IMAGE_EXT.iter().chain(media::MOVIE_EXT).copied().collect();
-            for p in pick(&[("Photos and videos", &all)], true) {
-                insert_path(app, &p);
+            #[cfg(target_arch = "wasm32")]
+            {
+                app.replace_target = None;
+                kn_ui::web::files::pick_insert_image(media::IMAGE_EXT);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let all: Vec<&str> = media::IMAGE_EXT.iter().chain(media::MOVIE_EXT).copied().collect();
+                for p in pick(&[("Photos and videos", &all)], true) {
+                    insert_path(app, &p);
+                }
             }
         }
         "Choose Music…" => {
+            #[cfg(target_arch = "wasm32")]
+            {
+                app.notify("Audio playback is only available in the desktop app");
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             for p in pick(&[("Music and sounds", media::AUDIO_EXT)], true) {
                 insert_path(app, &p);
             }
         }
         "Choose File…" => {
-            let all: Vec<&str> = media::IMAGE_EXT.iter().chain(media::MOVIE_EXT).chain(media::AUDIO_EXT).copied().collect();
-            for p in pick(&[("Pictures, movies and sounds", &all)], true) {
-                insert_path(app, &p);
+            #[cfg(target_arch = "wasm32")]
+            {
+                app.replace_target = None;
+                kn_ui::web::files::pick_insert_image(media::IMAGE_EXT);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let all: Vec<&str> = media::IMAGE_EXT.iter().chain(media::MOVIE_EXT).chain(media::AUDIO_EXT).copied().collect();
+                for p in pick(&[("Pictures, movies and sounds", &all)], true) {
+                    insert_path(app, &p);
+                }
             }
         }
         "Add Image Gallery…" => add_gallery(app),
@@ -112,8 +133,34 @@ pub fn command(app: &mut App, name: &str) -> bool {
 
 /// Add Image Gallery: the first picture inserted, the others added to it.
 fn add_gallery(app: &mut App) {
-    let files = pick(&[("Pictures", media::IMAGE_EXT)], true);
-    add_gallery_paths(app, &files);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = app;
+        kn_ui::web::files::pick_insert_gallery(media::IMAGE_EXT);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let files = pick(&[("Pictures", media::IMAGE_EXT)], true);
+        add_gallery_paths(app, &files);
+    }
+}
+
+/// An image gallery of in-memory `(name, bytes)` pictures (WebAssembly file picker).
+#[cfg(target_arch = "wasm32")]
+pub fn add_gallery_bytes(app: &mut App, files: Vec<(String, Vec<u8>)>) {
+    let mut imgs: Vec<(Vec<u8>, String)> = files.into_iter().map(|(n, b)| (b, n)).collect();
+    if imgs.is_empty() {
+        return;
+    }
+    let (first, name) = imgs.remove(0);
+    crate::insert::insert_image_bytes(app, first, &name);
+    let [id] = app.selected_objs()[..] else { return };
+    if !imgs.is_empty() {
+        if let Some(Err(e)) = app.edit("Image Gallery", |d, h| d.make_gallery(h, id, imgs)) {
+            app.notify(format!("Couldn't make the gallery: {e}"));
+        }
+    }
 }
 
 /// An image gallery of these pictures: the first inserted, the others added to it.
@@ -187,21 +234,35 @@ pub fn record_close() {
 
 /// ● Record: the default microphone into a temporary file.
 pub fn record_start(app: &mut App) {
-    let path = std::env::temp_dir().join(format!("letters-recording-{}.wav", std::process::id()));
-    let child = std::process::Command::new("pw-record")
-        .arg(&path)
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
-    match child {
-        Ok(c) => with(|s| s.recorder = Some((c, path, std::time::Instant::now()))),
-        Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+    #[cfg(target_arch = "wasm32")]
+    {
+        app.notify("Audio recording is only available in the desktop app");
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let path = std::env::temp_dir().join(format!("letters-recording-{}.wav", std::process::id()));
+        let child = std::process::Command::new("pw-record")
+            .arg(&path)
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
+        match child {
+            Ok(c) => with(|s| s.recorder = Some((c, path, web_time::Instant::now()))),
+            Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+        }
     }
 }
 
 /// The recording stopped; with `insert`, it goes in as a sound (AAC when ffmpeg is there).
 pub fn record_stop(app: &mut App, insert: bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (app, insert);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some((mut child, path, _)) = with(|s| s.recorder.take()) {
         // stop politely so the file is finished properly
         let _ = std::process::Command::new("kill").args(["-INT", &child.id().to_string()]).status();
@@ -270,19 +331,28 @@ pub fn web_close() {
 
 /// Insert: look the link up in the background (`done` when it's back); the window closes.
 pub fn web_go(url: &str, done: impl FnOnce() + Send + 'static) {
-    let (tx, rx) = std::sync::mpsc::channel();
-    let u = url.trim().to_string();
-    std::thread::spawn({
-        let u = u.clone();
-        move || {
-            let _ = tx.send(media::web::fetch(u));
-            done();
-        }
-    });
-    with(|s| {
-        s.web_fetch = Some((rx, u));
-        s.web_sheet = None;
-    });
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (url, done);
+        with(|s| s.web_sheet = None);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let u = url.trim().to_string();
+        std::thread::spawn({
+            let u = u.clone();
+            move || {
+                let _ = tx.send(media::web::fetch(u));
+                done();
+            }
+        });
+        with(|s| {
+            s.web_fetch = Some((rx, u));
+            s.web_sheet = None;
+        });
+    }
 }
 
 /// A lookup that finished: the poster inserted as a picture that plays the video.

@@ -31,7 +31,7 @@ pub fn system_title_bar() -> bool {
 /// as the setting changes (the system's decorations on or off, the shadow margin with them),
 /// no restart needed. Windows and Android keep the app's own title bar.
 pub fn follow(ctx: &egui::Context, want: bool) {
-    let want = want && !cfg!(any(target_os = "windows", target_os = "android"));
+    let want = want && !cfg!(any(target_os = "windows", target_os = "android", target_arch = "wasm32"));
     if system_title_bar() == want {
         return;
     }
@@ -190,10 +190,10 @@ impl Default for ButtonLayout {
     fn default() -> Self {
         #[cfg(target_os = "macos")]
         return ButtonLayout { left: vec!["close".into(), "minimize".into(), "maximize".into()], right: vec![] };
-        // (Android: apps fill the screen, with no window buttons)
-        #[cfg(target_os = "android")]
+        // (Android and WebAssembly: apps fill the screen / browser viewport, with no window buttons)
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         return ButtonLayout { left: vec![], right: vec![] };
-        #[cfg(not(any(target_os = "macos", target_os = "android")))]
+        #[cfg(not(any(target_os = "macos", target_os = "android", target_arch = "wasm32")))]
         ButtonLayout { left: vec![], right: vec!["minimize".into(), "maximize".into(), "close".into()] }
     }
 }

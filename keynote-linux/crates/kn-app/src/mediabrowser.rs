@@ -2,7 +2,7 @@
 //! ~/Music), and Insert > Record Audio.
 
 use std::path::PathBuf;
-use std::time::Instant;
+use web_time::Instant;
 
 use egui::RichText;
 
@@ -116,16 +116,23 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             }
         });
         if start {
-            let path = std::env::temp_dir().join(format!("keynote-recording-{}.wav", std::process::id()));
-            let child = std::process::Command::new("pw-record")
-                .arg(&path)
-                .stdin(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-                .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
-            match child {
-                Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
-                Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+            #[cfg(target_arch = "wasm32")]
+            {
+                app.notify("Microphone recording is available in the desktop app.");
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let path = std::env::temp_dir().join(format!("keynote-recording-{}.wav", std::process::id()));
+                let child = std::process::Command::new("pw-record")
+                    .arg(&path)
+                    .stdin(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
+                match child {
+                    Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
+                    Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+                }
             }
         }
         if stop || (!open && app.media.recorder.is_some()) {

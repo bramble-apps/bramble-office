@@ -487,8 +487,12 @@ impl TableClip {
 pub fn process_tag() -> &'static str {
     static TAG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     TAG.get_or_init(|| {
-        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        format!("{}-{t:x}", std::process::id())
+        let t = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        #[cfg(target_arch = "wasm32")]
+        let pid = 0u32;
+        #[cfg(not(target_arch = "wasm32"))]
+        let pid = std::process::id();
+        format!("{pid}-{t:x}")
     })
 }
 

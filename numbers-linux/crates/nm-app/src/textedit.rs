@@ -3,7 +3,7 @@
 //! paragraph formatting, and the sheet redraws the text as it really looks. One editing
 //! session is one undo step.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use egui::{Color32, Event, Key, Pos2, Stroke};
 use kn_render::text::{caret, hit_index, TextLayout};

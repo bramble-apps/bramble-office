@@ -13,28 +13,35 @@ pub fn render(bg: &MotionBg, t: f32, w: u32, h: u32) -> Vec<u8> {
     let p = Params::new(bg, t, w, h);
     // per-column data for the column-based families (terrain, waves)
     let cols = Columns::new(&p, &pal, w);
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
-    let rows_per = (h as usize).div_ceil(threads);
-    std::thread::scope(|s| {
-        for (ti, chunk) in out.chunks_mut(rows_per * w as usize * 4).enumerate() {
-            let (p, pal, cols) = (&p, &pal, &cols);
-            s.spawn(move || {
-                let y0 = ti * rows_per;
-                for (ri, row) in chunk.chunks_mut(w as usize * 4).enumerate() {
-                    let y = y0 + ri;
-                    for x in 0..w as usize {
-                        let c = pixel(p, pal, cols, x, y);
-                        let c = post(p, c, x, y);
-                        let o = x * 4;
-                        row[o] = (c[0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                        row[o + 1] = (c[1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                        row[o + 2] = (c[2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-                        row[o + 3] = 255;
-                    }
-                }
-            });
+    let render_chunk = |chunk: &mut [u8], y0: usize| {
+        for (ri, row) in chunk.chunks_mut(w as usize * 4).enumerate() {
+            let y = y0 + ri;
+            for x in 0..w as usize {
+                let c = pixel(&p, &pal, &cols, x, y);
+                let c = post(&p, c, x, y);
+                let o = x * 4;
+                row[o] = (c[0].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                row[o + 1] = (c[1].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                row[o + 2] = (c[2].clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                row[o + 3] = 255;
+            }
         }
-    });
+    };
+    #[cfg(target_arch = "wasm32")]
+    {
+        render_chunk(&mut out, 0);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
+        let rows_per = (h as usize).div_ceil(threads);
+        std::thread::scope(|s| {
+            for (ti, chunk) in out.chunks_mut(rows_per * w as usize * 4).enumerate() {
+                let y0 = ti * rows_per;
+                s.spawn(move || render_chunk(chunk, y0));
+            }
+        });
+    }
     out
 }
 

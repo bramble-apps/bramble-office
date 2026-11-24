@@ -62,6 +62,13 @@ pub fn export(wb: &Workbook, out: &std::path::Path) -> Result<usize, String> {
 
 /// As [`export`], an Excel workbook's cell extras (rotated text, diagonals) drawn as on the sheet.
 pub fn export_with(wb: &Workbook, out: &std::path::Path, extras: std::collections::HashMap<nm_core::kn_format::ObjId, std::collections::HashMap<(u32, u32), nm_core::xlstyle::Extra>>) -> Result<usize, String> {
+    let (n, bytes) = export_with_bytes(wb, extras)?;
+    std::fs::write(out, bytes).map_err(|e| e.to_string())?;
+    Ok(n)
+}
+
+/// As [`export_with`], returning `(page_count, pdf_bytes)` in memory.
+pub fn export_with_bytes(wb: &Workbook, extras: std::collections::HashMap<nm_core::kn_format::ObjId, std::collections::HashMap<(u32, u32), nm_core::xlstyle::Extra>>) -> Result<(usize, Vec<u8>), String> {
     let mut r = Renderer::new();
     let mut tiles = crate::tiles::Tiles::for_print(extras);
     let mut pages = Vec::new();
@@ -122,11 +129,10 @@ pub fn export_with(wb: &Workbook, out: &std::path::Path, extras: std::collection
             pages.push(Page { w: pw, h: ph, px: (wpx, hpx), jpg });
         }
     }
-    write_pdf(&pages, out)?;
-    Ok(pages.len())
+    Ok((pages.len(), pdf_bytes(&pages)))
 }
 
-fn write_pdf(pages: &[Page], path: &std::path::Path) -> Result<(), String> {
+fn pdf_bytes(pages: &[Page]) -> Vec<u8> {
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets: Vec<usize> = Vec::new();
     let n = pages.len();
@@ -164,5 +170,5 @@ fn write_pdf(pages: &[Page], path: &std::path::Path) -> Result<(), String> {
         out.extend(format!("{o:010} 00000 n \n").as_bytes());
     }
     out.extend(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1).as_bytes());
-    std::fs::write(path, out).map_err(|e| e.to_string())
+    out
 }

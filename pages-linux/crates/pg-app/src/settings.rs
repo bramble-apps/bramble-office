@@ -109,7 +109,11 @@ fn config_dir(app: &str) -> Option<PathBuf> {
 impl Settings {
     pub fn load() -> Settings {
         let mut s = Settings::default();
-        let Some(text) = config_dir("letters").and_then(|d| std::fs::read_to_string(d.join("settings.txt")).ok()) else { return s };
+        #[cfg(target_arch = "wasm32")]
+        let text = kn_ui::web::storage::get("bramble.letters.settings");
+        #[cfg(not(target_arch = "wasm32"))]
+        let text = config_dir("letters").and_then(|d| std::fs::read_to_string(d.join("settings.txt")).ok());
+        let Some(text) = text else { return s };
         for line in text.lines() {
             let Some((k, v)) = line.split_once('=') else { continue };
             let (k, v) = (k.trim(), v.trim());
@@ -149,28 +153,51 @@ impl Settings {
     }
 
     pub fn save(&self) {
-        let Some(dir) = config_dir("letters") else { return };
-        let _ = std::fs::create_dir_all(&dir);
+        #[cfg(target_arch = "wasm32")]
+        let author = match kn_ui::web::host_author() {
+            Some(ref host) if host == &self.author => Self::load().author,
+            _ => self.author.clone(),
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let author = self.author.clone();
         let text = format!(
             "show_size_while_moving={}\nautocomplete_cells={}\nformula_suggestions={}\nauthor={}\ndefault_zoom={}\nruler_units={}\nguides_center={}\nguides_edges={}\nguides_spacing={}\nguides_sizing={}\nsmart_quotes={}\nsmart_dashes={}\ncapitalize={}\nauthor_color={}\nsaved_colors={}\ntext_replacement={}\nspell_check={}\ngrammar={}\nautocorrect={}\ntoolbar_items={}\ntoolbar_mode={}\nshow_chooser={}\ndefault_font={}\ndefault_font_size={}\ndetect_lists={}\nui_scale={}\nui_layout={}\n",
-            self.show_size_while_moving, self.autocomplete_cells, self.formula_suggestions, self.author, self.default_zoom, self.ruler_units, self.guides_center, self.guides_edges, self.guides_spacing, self.guides_sizing, self.smart_quotes, self.smart_dashes, self.capitalize, self.author_color, self.saved_colors, self.text_replacement, self.spell_check, self.grammar, self.autocorrect, self.toolbar_items, self.toolbar_mode, self.show_chooser, self.default_font, self.default_font_size, self.detect_lists, self.ui_scale, self.ui_layout
+            self.show_size_while_moving, self.autocomplete_cells, self.formula_suggestions, author, self.default_zoom, self.ruler_units, self.guides_center, self.guides_edges, self.guides_spacing, self.guides_sizing, self.smart_quotes, self.smart_dashes, self.capitalize, self.author_color, self.saved_colors, self.text_replacement, self.spell_check, self.grammar, self.autocorrect, self.toolbar_items, self.toolbar_mode, self.show_chooser, self.default_font, self.default_font_size, self.detect_lists, self.ui_scale, self.ui_layout
         );
-        let _ = std::fs::write(dir.join("settings.txt"), text);
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::storage::set("bramble.letters.settings", &text);
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(dir) = config_dir("letters") else { return };
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("settings.txt"), text);
+        }
     }
 }
 
 impl Look {
     /// Write the look to Letters' own file (Keydeck and the other apps keep theirs).
     pub fn save(&self) {
-        let Some(path) = crate::look::path() else { return };
         let text = format!(
             "dark={}\ncolor_theme={}\nliquid_glass={}\ntranslucent_panes={}\nclassic_look={}\nsystem_title_bar={}\ntoolbar_background={}\n",
             self.dark, self.color_theme, self.liquid_glass, self.translucent_panes, self.classic_look, self.system_title_bar, self.toolbar_background.key()
         );
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::storage::set("bramble.letters.look", &text);
+            return;
         }
-        let _ = std::fs::write(path, text);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(path) = crate::look::path() else { return };
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(path, text);
+        }
     }
 }
 

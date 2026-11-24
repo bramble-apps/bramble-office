@@ -1,9 +1,72 @@
 //! Fonts: Apple PostScript font names -> installed families (with metric-compatible substitutes),
 //! glyph outlines via swash.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use cosmic_text::{fontdb, CacheKey, CacheKeyFlags, FontSystem, SwashCache};
+
+include!(concat!(env!("OUT_DIR"), "/matched_index.rs"));
+
+/// Shared cache of lazily fetched Apple-matched font files (WebAssembly / tests), keyed by
+/// relative path under `fonts/matched/`. Every `Fonts` instance absorbs newly added entries.
+static FETCHED_FONTS: OnceLock<Mutex<Vec<(&'static str, Arc<Vec<u8>>)>>> = OnceLock::new();
+/// Relative paths already requested (or failed) so a missing font isn't re-fetched every frame.
+static REQUESTED_FONTS: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+/// Browser fetcher callback registered by `kn_ui::web` to fetch `fonts/matched/<rel_path>`.
+static FONT_FETCHER: OnceLock<fn(&'static str)> = OnceLock::new();
+
+/// Register the async fetcher called when a document references an unloaded Apple-matched font.
+pub fn set_font_fetcher(f: fn(&'static str)) {
+    let _ = FONT_FETCHER.set(f);
+}
+
+/// Feed a fetched Apple-matched font's bytes into all renderers.
+pub fn push_fetched_font(rel_path: &'static str, bytes: Vec<u8>) {
+    let store = FETCHED_FONTS.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut g) = store.lock() {
+        if !g.iter().any(|(p, _)| *p == rel_path) {
+            g.push((rel_path, Arc::new(bytes)));
+        }
+    }
+}
+
+/// Find the best matched Apple stand-in entry in `MATCHED_INDEX` for `(ps_name, family, weight, italic)`.
+pub(crate) fn lookup_matched_index(ps_name: &str, family: &str, weight: u16, italic: bool) -> Option<&'static MatchedEntry> {
+    let heavy_enough = |e: &MatchedEntry| weight < 700 || e.weight >= 600;
+    let ps = key(ps_name);
+    if let Some(e) = MATCHED_INDEX.iter().find(|e| e.ps == ps && heavy_enough(e)) {
+        return Some(e);
+    }
+    let style = key(ps_name.split_once('-').map_or("", |s| s.1));
+    let fam = stand_in_family(family);
+    let condensed = format!("{fam}condensed");
+    let pick = |want: &str| -> Option<&'static MatchedEntry> {
+        let in_family: Vec<&MatchedEntry> = MATCHED_INDEX.iter().filter(|e| e.family == want).collect();
+        in_family
+            .iter()
+            .find(|e| !style.is_empty() && e.style == style && heavy_enough(e))
+            .or_else(|| in_family.iter().min_by_key(|e| (e.italic != italic, (i32::from(e.weight) - i32::from(weight)).abs())))
+            .copied()
+    };
+    if style.contains("condensed") || style.starts_with("cn") {
+        pick(&condensed).or_else(|| pick(&fam))
+    } else {
+        pick(&fam)
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+fn request_matched_font(ps_name: &str, family: &str, weight: u16, italic: bool) {
+    let Some(entry) = lookup_matched_index(ps_name, family, weight, italic) else { return };
+    let req = REQUESTED_FONTS.get_or_init(|| Mutex::new(HashSet::new()));
+    let should_fetch = req.lock().map(|mut g| g.insert(entry.rel_path)).unwrap_or(false);
+    if should_fetch {
+        if let Some(fetcher) = FONT_FETCHER.get() {
+            fetcher(entry.rel_path);
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontChoice {
@@ -27,6 +90,8 @@ pub struct Fonts {
     win: HashMap<fontdb::ID, Option<(f32, f32, f32)>>,
     /// Installed metric-matched stand-ins (read on the first missing font).
     stand_ins: Option<Vec<StandIn>>,
+    /// How many entries from `FETCHED_FONTS` this `Fonts` instance has already absorbed.
+    absorbed_fetched: usize,
 }
 
 /// An installed font made to stand in for another (an Apple font) with the same spacing: its
@@ -277,21 +342,69 @@ impl Fonts {
             }
         }
         // and the metric-matched stand-ins for Apple fonts (fonts/matched/README.md), read in
-        // place from the program (no copy: they are 50 MB), unless installed already
-        let installed: std::collections::HashSet<String> = fs.db().faces().map(|f| f.post_script_name.clone()).collect();
-        for (name, data) in crate::fonts_matched::MATCHED {
-            if !installed.contains(*name) {
-                fs.db_mut().load_font_source(fontdb::Source::Binary(std::sync::Arc::new(*data)));
+        // place from the program (no copy: they are 50 MB), unless installed already. On
+        // WebAssembly they are fetched lazily over HTTP on demand via `MATCHED_INDEX`.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let installed: HashSet<String> = fs.db().faces().map(|f| f.post_script_name.clone()).collect();
+            for (name, data) in crate::fonts_matched::MATCHED {
+                if !installed.contains(*name) {
+                    fs.db_mut().load_font_source(fontdb::Source::Binary(Arc::new(*data)));
+                }
             }
         }
-        let mut families: Vec<String> = fs
+        let mut fonts = Fonts {
+            fs,
+            cache: SwashCache::new(),
+            families: Vec::new(),
+            resolved: HashMap::new(),
+            outlines: HashMap::new(),
+            word: false,
+            win: HashMap::new(),
+            stand_ins: None,
+            absorbed_fetched: 0,
+        };
+        fonts.absorb_fetched();
+        fonts.refresh_families();
+        fonts
+    }
+
+    fn refresh_families(&mut self) {
+        let mut families: Vec<String> = self
+            .fs
             .db()
             .faces()
             .flat_map(|f| f.families.iter().map(|(n, _)| n.clone()))
             .collect();
         families.sort();
         families.dedup();
-        Fonts { fs, cache: SwashCache::new(), families, resolved: HashMap::new(), outlines: HashMap::new(), word: false, win: HashMap::new(), stand_ins: None }
+        self.families = families;
+    }
+
+    /// Load any lazily fetched Apple-matched fonts that have arrived since the last call.
+    /// Returns `true` if at least one font was added (caches are invalidated).
+    pub fn absorb_fetched(&mut self) -> bool {
+        let Some(store) = FETCHED_FONTS.get() else { return false };
+        let new_fonts: Vec<Arc<Vec<u8>>> = match store.lock() {
+            Ok(g) if g.len() > self.absorbed_fetched => {
+                let slice = g[self.absorbed_fetched..].iter().map(|(_, b)| b.clone()).collect();
+                self.absorbed_fetched = g.len();
+                slice
+            }
+            _ => return false,
+        };
+        if new_fonts.is_empty() {
+            return false;
+        }
+        for data in new_fonts {
+            self.fs.db_mut().load_font_source(fontdb::Source::Binary(data));
+        }
+        self.refresh_families();
+        self.resolved.clear();
+        self.stand_ins = None;
+        self.outlines.clear();
+        self.win.clear();
+        true
     }
 
     pub fn families(&self) -> &[String] {
@@ -436,8 +549,11 @@ impl Fonts {
             }
         }
         // an Apple font that isn't installed, in a Keynote / Pages document: its metric-matched
-        // stand-in when one is installed (the same spacing, so lines and pages break as on a Mac)
+        // stand-in when one is installed (the same spacing, so lines and pages break as on a Mac).
+        // On WebAssembly, request the matched face lazily over HTTP if not loaded yet.
         if !self.word && !self.is_installed(ps_name) {
+            #[cfg(target_arch = "wasm32")]
+            request_matched_font(ps_name, &family, weight, it || italic);
             if let Some(c) = self.stand_in(ps_name, &family, weight, it || italic) {
                 let c = self.snap_to_faces(c);
                 self.resolved.insert(key, c.clone());
@@ -667,5 +783,22 @@ mod stand_in_tests {
         if !f.is_installed("HelveticaNeue") {
             assert_eq!(f.choose("HelveticaNeue", false, false).family, "Liberation Sans");
         }
+    }
+
+    #[test]
+    fn matched_index_resolves_apple_fonts_and_dynamic_absorb_works() {
+        assert!(!MATCHED_INDEX.is_empty(), "matched_index.rs should list matched Apple stand-ins");
+        let e = lookup_matched_index("HelveticaNeue-Bold", "Helvetica Neue", 700, false).expect("HelveticaNeue-Bold in index");
+        assert!(e.rel_path.ends_with(".ttf"));
+        let e2 = lookup_matched_index("Avenir-Book", "Avenir", 400, false).expect("Avenir-Book in index");
+        assert!(e2.rel_path.contains("avelon"));
+        let e3 = lookup_matched_index(".SFNS-Regular", ".SFNS", 400, false).expect("SFNS in index");
+        assert!(e3.rel_path.contains("sfera"));
+
+        // Feeding a font through push_fetched_font + absorb_fetched updates any Fonts instance.
+        let mut f = Fonts::new();
+        push_fetched_font("test-carlito.ttf", include_bytes!("../fonts/carlito/Carlito-Regular.ttf").to_vec());
+        assert!(f.absorb_fetched());
+        assert!(!f.absorb_fetched());
     }
 }

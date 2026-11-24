@@ -33,15 +33,56 @@ mod stocks;
 mod tbicons;
 mod templates;
 mod datarefs;
+#[cfg(not(target_arch = "wasm32"))]
 mod dlgapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod ffi;
+#[cfg(target_arch = "wasm32")]
+mod ffi {
+    pub fn front_end_opens_urls() -> bool {
+        false
+    }
+    pub fn open_url(url: &str) {
+        kn_ui::open_url(url);
+    }
+    pub fn speak(_: Option<&str>) {}
+}
 mod inspapi;
 mod links;
 mod textedit;
 mod tiles;
 mod toolbar;
 
+/// Starts the app on WebAssembly (called from `nm-web`'s `main`).
+#[cfg(target_arch = "wasm32")]
+pub fn start_web() {
+    nm_core::init();
+    kn_render::fonts::set_font_fetcher(|file| {
+        let base = kn_ui::web::fonts_base_url();
+        let url = format!("{base}/{file}");
+        kn_ui::web::fetch::fetch_bytes(url, move |res| {
+            if let Ok(bytes) = res {
+                kn_render::fonts::push_fetched_font(file, bytes);
+                kn_ui::web::request_repaint();
+            }
+        });
+    });
+    let _ = kn_ui::winframe::SYSTEM_TITLE_BAR.set(true);
+    kn_ui::web::start(
+        kn_ui::web::WebConfig {
+            canvas_id: "bramble_canvas",
+            loading_id: "bramble_loading",
+            prefix: "values",
+            default_name: "Spreadsheet.numbers",
+            title: "Values",
+            version: env!("CARGO_PKG_VERSION"),
+        },
+        |cc| app::App::new(cc, None),
+    );
+}
+
 /// Starts the app: the desktop program's main, and android_main on Android.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
     kn_ui::update::init(kn_ui::update::AppInfo { name: "Values", version: env!("CARGO_PKG_VERSION"), bin: "values", appimage: "Values-x86_64.AppImage", mac_bundle: "Values.app" });
@@ -147,6 +188,7 @@ pub fn run() -> eframe::Result {
 }
 
 /// The window icon (X11 and others; Wayland takes it from numdeck.desktop).
+#[cfg(not(target_arch = "wasm32"))]
 fn app_icon() -> egui::IconData {
     let img = image::load_from_memory(include_bytes!("../data/icons/numdeck-256.png")).map(|i| i.into_rgba8()).ok();
     img.map(|i| egui::IconData { width: i.width(), height: i.height(), rgba: i.into_raw() }).unwrap_or_default()
@@ -155,6 +197,7 @@ fn app_icon() -> egui::IconData {
 /// Wayland windows load their cursor from XCURSOR_THEME / XCURSOR_SIZE, which GNOME does not
 /// set, so the window would otherwise show a different (and on HiDPI, blurry) cursor than
 /// every other window: use the desktop's own cursor-theme / cursor-size (as Keydeck does).
+#[cfg(not(target_arch = "wasm32"))]
 fn use_desktop_cursor_theme() {
     let get = |key: &str| {
         std::process::Command::new("gsettings")

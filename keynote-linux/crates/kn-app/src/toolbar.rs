@@ -637,8 +637,11 @@ fn title_item(app: &mut App, ui: &mut egui::Ui, ctx: &egui::Context, tr: Rect, c
                     continue;
                 }
                 if ui.button(format!("{}{name}", if k == 0 { "" } else { "📁 " })).clicked() {
-                    let open = if k == 0 { a.parent().unwrap_or(a) } else { a };
-                    let _ = kn_ui::open_command(open).stdin(std::process::Stdio::null()).spawn();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let open = if k == 0 { a.parent().unwrap_or(a) } else { a };
+                        let _ = kn_ui::open_command(open).stdin(std::process::Stdio::null()).spawn();
+                    }
                     ui.close();
                 }
             }
@@ -826,6 +829,7 @@ fn popup(app: &mut App, id: &str, resp: &egui::Response) {
             egui::Popup::menu(resp).show(|ui| {
                 let path = app.doc.as_ref().and_then(|d| d.path.clone());
                 if ui.add_enabled(path.is_some(), egui::Button::new("Email a Copy…")).on_disabled_hover_text("Save the presentation first").clicked() {
+                    #[cfg(not(target_arch = "wasm32"))]
                     if let Some(p) = &path {
                         let name = p.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                         if std::process::Command::new("xdg-email").arg("--subject").arg(&name).arg("--attach").arg(p).spawn().is_err() {
@@ -834,6 +838,7 @@ fn popup(app: &mut App, id: &str, resp: &egui::Response) {
                     }
                 }
                 if ui.add_enabled(path.is_some(), egui::Button::new("Show in Files")).clicked() {
+                    #[cfg(not(target_arch = "wasm32"))]
                     if let Some(dir) = path.as_ref().and_then(|p| p.parent()) {
                         let _ = kn_ui::open_command(dir).spawn();
                     }

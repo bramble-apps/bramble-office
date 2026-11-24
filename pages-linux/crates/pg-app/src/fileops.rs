@@ -20,7 +20,7 @@ pub fn keep_version(path: &Path) {
     }
     let Some(dir) = versions_dir(path) else { return };
     let _ = std::fs::create_dir_all(&dir);
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let _ = std::fs::copy(path, dir.join(format!("{secs}.pages")));
     let mut all = list(path);
     while all.len() > 30 {
@@ -41,7 +41,7 @@ pub fn list(path: &Path) -> Vec<(PathBuf, u64)> {
 }
 
 pub(crate) fn when(secs: u64) -> String {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     match now.saturating_sub(secs) {
         a @ 0..=59 => if a < 10 { "Just now".into() } else { format!("{a} seconds ago") },
         a @ 60..=3599 => format!("{} minutes ago", a / 60),
@@ -122,23 +122,31 @@ pub fn relocate(app: &mut App, new: PathBuf) {
 /// Another Letters window (File > New with a document open, Duplicate). The child gets none
 /// of the automated-check variables (no runaway windows).
 fn spawn(args: &[&std::ffi::OsStr]) {
-    if std::env::var_os("CS_SNAP").is_some() || std::env::var_os("CS_SCRIPT").is_some() {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = args;
         return;
     }
-    let Ok(mut exe) = std::env::current_exe() else { return };
-    // the binary was rebuilt / updated while this one runs: Linux names the old one
-    // "… (deleted)"; start the file now at that path
-    if let Some(live) = exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")).map(std::path::PathBuf::from) {
-        exe = live;
-    }
-    let mut c = std::process::Command::new(exe);
-    c.args(args);
-    for (k, _) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("CS_") {
-            c.env_remove(k);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if std::env::var_os("CS_SNAP").is_some() || std::env::var_os("CS_SCRIPT").is_some() {
+            return;
         }
+        let Ok(mut exe) = std::env::current_exe() else { return };
+        // the binary was rebuilt / updated while this one runs: Linux names the old one
+        // "… (deleted)"; start the file now at that path
+        if let Some(live) = exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")).map(std::path::PathBuf::from) {
+            exe = live;
+        }
+        let mut c = std::process::Command::new(exe);
+        c.args(args);
+        for (k, _) in std::env::vars_os() {
+            if k.to_string_lossy().starts_with("CS_") {
+                c.env_remove(k);
+            }
+        }
+        let _ = c.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }
-    let _ = c.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
 }
 
 /// Window > Move Tab to New Window: the saved document in a window of its own.
@@ -152,19 +160,30 @@ pub fn duplicate(app: &mut App) {
     crate::text::finish_typing(app);
     let Some(w) = app.wb.as_mut() else { return };
     let stem = app.untitled_name.clone().or_else(|| w.doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string())).unwrap_or_else(|| "Untitled".into());
-    let dir = w.doc.path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).unwrap_or_else(std::env::temp_dir);
-    let mut copy = dir.join(format!("{stem} copy.pages"));
-    let mut n = 2;
-    while copy.exists() {
-        copy = dir.join(format!("{stem} copy {n}.pages"));
-        n += 1;
-    }
     let mut k = w.doc.file.clone();
     pg_core::gc::sweep(&mut k);
     let bytes = k.to_zip();
-    match bytes.map_err(|e| e.to_string()).and_then(|b| std::fs::write(&copy, b).map_err(|e| e.to_string())) {
-        Ok(()) => crate::tabs::open_in_tab(app, &copy),
-        Err(e) => app.notify(format!("Couldn't duplicate: {e}")),
+    #[cfg(target_arch = "wasm32")]
+    {
+        match bytes {
+            Ok(b) => crate::tabs::open_bytes_in_tab(app, &format!("{stem} copy.pages"), b),
+            Err(e) => app.notify(format!("Couldn't duplicate: {e}")),
+        }
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = w.doc.path.as_ref().and_then(|p| p.parent()).map(|d| d.to_path_buf()).unwrap_or_else(std::env::temp_dir);
+        let mut copy = dir.join(format!("{stem} copy.pages"));
+        let mut n = 2;
+        while copy.exists() {
+            copy = dir.join(format!("{stem} copy {n}.pages"));
+            n += 1;
+        }
+        match bytes.map_err(|e| e.to_string()).and_then(|b| std::fs::write(&copy, b).map_err(|e| e.to_string())) {
+            Ok(()) => crate::tabs::open_in_tab(app, &copy),
+            Err(e) => app.notify(format!("Couldn't duplicate: {e}")),
+        }
     }
 }
 
@@ -180,9 +199,25 @@ pub fn export_dialog(app: &mut App, what: &str) {
         "Images…" => ("png", "PNG images (one per page)"),
         _ => ("html", "Web page"),
     };
-    let stem = app.title().trim_end_matches(".pages").to_string();
-    let Some(path) = crate::app::file_dialog(|d| d.add_filter(filter, &[ext]).set_file_name(format!("{stem}.{ext}")).save_file()) else { return };
-    export_to(app, &path);
+    let stem = app.title().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = filter;
+        let Some(w) = app.wb.as_ref() else { return };
+        let out_name = if ext == "png" { format!("{stem}-pages.zip") } else { format!("{stem}.{ext}") };
+        match pg_core::export::export_bytes(w, ext, &stem)
+            .and_then(|bytes| kn_ui::web::files::download_file(&out_name, &bytes))
+        {
+            Ok(()) => app.notify(format!("Exported {out_name}")),
+            Err(e) => app.notify(format!("Couldn't export: {e}")),
+        }
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(path) = crate::app::file_dialog(|d| d.add_filter(filter, &[ext]).set_file_name(format!("{stem}.{ext}")).save_file()) else { return };
+        export_to(app, &path);
+    }
 }
 
 pub fn export_to(app: &mut App, path: &Path) {
@@ -198,20 +233,34 @@ pub fn export_to(app: &mut App, path: &Path) {
 pub fn print(app: &mut App) {
     crate::text::finish_typing(app);
     let Some(w) = app.wb.as_ref() else { return };
-    let out = std::env::temp_dir().join(format!("letters-print-{}.pdf", std::process::id()));
-    match pg_core::export::to_pdf(w, &out) {
-        Ok(n) => {
-            if std::env::var_os("CS_SNAP").is_none() {
-                let viewer = kn_ui::open_command(&out).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
-                if viewer.is_err() {
-                    let o = out.clone();
-                    std::thread::spawn(move || {
-                        let _ = std::process::Command::new("lp").arg(&o).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
-                    });
-                }
-            }
-            app.notify(format!("Prepared {n} {} for printing", if n == 1 { "page" } else { "pages" }));
+    #[cfg(target_arch = "wasm32")]
+    {
+        let stem = app.title().trim_end_matches(".pages").trim_end_matches(".docx").to_string();
+        match pg_core::export::to_pdf_bytes(w)
+            .and_then(|(n, bytes)| kn_ui::web::files::download_file(&format!("{stem}.pdf"), &bytes).map(|()| n))
+        {
+            Ok(n) => app.notify(format!("Downloaded {stem}.pdf ({n} {}): open it to print", if n == 1 { "page" } else { "pages" })),
+            Err(e) => app.notify(format!("Couldn't print: {e}")),
         }
-        Err(e) => app.notify(format!("Couldn't print: {e}")),
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let out = std::env::temp_dir().join(format!("letters-print-{}.pdf", std::process::id()));
+        match pg_core::export::to_pdf(w, &out) {
+            Ok(n) => {
+                if std::env::var_os("CS_SNAP").is_none() {
+                    let viewer = kn_ui::open_command(&out).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+                    if viewer.is_err() {
+                        let o = out.clone();
+                        std::thread::spawn(move || {
+                            let _ = std::process::Command::new("lp").arg(&o).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                        });
+                    }
+                }
+                app.notify(format!("Prepared {n} {} for printing", if n == 1 { "page" } else { "pages" }));
+            }
+            Err(e) => app.notify(format!("Couldn't print: {e}")),
+        }
     }
 }

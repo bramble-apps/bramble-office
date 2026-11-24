@@ -59,15 +59,23 @@ pub fn refresh(app: &mut App, ctx: Option<&egui::Context>) {
 }
 
 fn fetch(app: &mut App, ctx: Option<&egui::Context>, wants: Vec<Want>) {
-    let (tx, rx) = channel();
-    let ctx = ctx.cloned();
-    std::thread::spawn(move || {
-        let _ = tx.send(fetch_all(&wants));
-        if let Some(ctx) = ctx {
-            ctx.request_repaint();
-        }
-    });
-    app.stocks.busy = Some(rx);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (ctx, wants);
+        app.notify("Live stock quotes are only available in the desktop app");
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        let ctx = ctx.cloned();
+        std::thread::spawn(move || {
+            let _ = tx.send(fetch_all(&wants));
+            if let Some(ctx) = ctx {
+                ctx.request_repaint();
+            }
+        });
+        app.stocks.busy = Some(rx);
+    }
 }
 
 /// The dialog, and quotes arriving (call every frame).

@@ -94,6 +94,9 @@ struct Job {
     seconds: f32,
     /// PowerPoint: each slide's text boxes as PowerPoint text (over its picture).
     texts: Vec<String>,
+    /// WebAssembly image export: `(filename, encoded PNG/JPEG bytes)` bundled into a ZIP.
+    #[cfg(target_arch = "wasm32")]
+    web_images: Vec<(String, Vec<u8>)>,
 }
 
 impl ExportState {
@@ -112,12 +115,19 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
 
 /// File > Print…: a PDF of the slides opened in the PDF viewer (print from there).
 pub fn print(app: &mut App) {
-    let Some(dir) = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/keydeck/print")) else { return };
-    let _ = std::fs::create_dir_all(&dir);
     let stem = app.doc.as_ref().and_then(|d| d.path.as_ref()).and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());
     app.export.format = Format::Pdf;
     app.export.print = true;
-    start_job(app, dir.join(format!("{stem}.pdf")));
+    #[cfg(target_arch = "wasm32")]
+    {
+        start_job(app, PathBuf::from(format!("{stem}.pdf")));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(dir) = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/keydeck/print")) else { return };
+        let _ = std::fs::create_dir_all(&dir);
+        start_job(app, dir.join(format!("{stem}.pdf")));
+    }
 }
 
 fn poll_encoding(app: &mut App, ctx: &egui::Context) {
@@ -238,19 +248,38 @@ fn start_pick(app: &mut App) {
         .and_then(|p| p.file_stem())
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "Untitled".into());
-    let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let r = match format {
-            Format::Pdf => kn_ui::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file(),
-            Format::Movie => kn_ui::files::FileDialog::new().add_filter("MPEG-4 Movie", &["mp4"]).set_file_name(format!("{name}.mp4")).save_file(),
-            Format::Gif => kn_ui::files::FileDialog::new().add_filter("Animated GIF", &["gif"]).set_file_name(format!("{name}.gif")).save_file(),
-            Format::Pptx => kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).set_file_name(format!("{name}.pptx")).save_file(),
-            Format::Html => kn_ui::files::FileDialog::new().set_title("Name of the web page folder").set_file_name(name.clone()).save_file(),
-            _ => kn_ui::files::FileDialog::new().set_title("Choose a folder for the images").pick_folder(),
+    #[cfg(target_arch = "wasm32")]
+    {
+        if matches!(format, Format::Movie | Format::Gif) {
+            app.notify("Movie and animated GIF export is only available in the desktop app");
+            return;
+        }
+        let target = match format {
+            Format::Pdf => format!("{name}.pdf"),
+            Format::Pptx => format!("{name}.pptx"),
+            Format::Html => format!("{name}.html"),
+            Format::Png | Format::Jpeg => format!("{name}-slides.zip"),
+            Format::Movie | Format::Gif => unreachable!(),
         };
-        let _ = tx.send(r);
-    });
-    app.export.picking = Some(rx);
+        app.export.print = false;
+        start_job(app, PathBuf::from(target));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let r = match format {
+                Format::Pdf => kn_ui::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file(),
+                Format::Movie => kn_ui::files::FileDialog::new().add_filter("MPEG-4 Movie", &["mp4"]).set_file_name(format!("{name}.mp4")).save_file(),
+                Format::Gif => kn_ui::files::FileDialog::new().add_filter("Animated GIF", &["gif"]).set_file_name(format!("{name}.gif")).save_file(),
+                Format::Pptx => kn_ui::files::FileDialog::new().add_filter("PowerPoint", &["pptx"]).set_file_name(format!("{name}.pptx")).save_file(),
+                Format::Html => kn_ui::files::FileDialog::new().set_title("Name of the web page folder").set_file_name(name.clone()).save_file(),
+                _ => kn_ui::files::FileDialog::new().set_title("Choose a folder for the images").pick_folder(),
+            };
+            let _ = tx.send(r);
+        });
+        app.export.picking = Some(rx);
+    }
 }
 
 fn poll_pick(app: &mut App) {
@@ -290,7 +319,8 @@ fn with_extension(path: PathBuf, format: Format) -> PathBuf {
 
 fn start_job(app: &mut App, path: PathBuf) {
     let path = with_extension(path, app.export.format);
-    // images go in a folder: make it when it isn't there yet
+    // images go in a folder on desktop (a ZIP on WebAssembly)
+    #[cfg(not(target_arch = "wasm32"))]
     if matches!(app.export.format, Format::Png | Format::Jpeg) {
         if let Err(e) = std::fs::create_dir_all(&path) {
             app.notify(format!("Export failed: {e}"));
@@ -301,13 +331,30 @@ fn start_job(app: &mut App, path: PathBuf) {
     if app.export.format == Format::Pptx && !app.export.pptx_pictures {
         let Some(doc) = app.doc.as_ref() else { return };
         let r = &mut app.renderer;
-        let res = crate::textures::guarded("export", || crate::pptx::write(doc, r, &path, None));
-        match res {
-            Some(Ok(())) => app.notify(format!("Exported to {}", path.display())),
-            Some(Err(e)) => app.notify(format!("Export failed: {e}")),
-            None => app.notify("Export failed: internal error"),
+        #[cfg(target_arch = "wasm32")]
+        {
+            let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled.pptx".into());
+            let res = crate::textures::guarded("export", || crate::pptx::write_bytes(doc, r, None));
+            match res {
+                Some(Ok(bytes)) => match kn_ui::web::files::download_file(&name, &bytes) {
+                    Ok(()) => app.notify(format!("Exported {name}")),
+                    Err(e) => app.notify(format!("Export failed: {e}")),
+                },
+                Some(Err(e)) => app.notify(format!("Export failed: {e}")),
+                None => app.notify("Export failed: internal error"),
+            }
+            return;
         }
-        return;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let res = crate::textures::guarded("export", || crate::pptx::write(doc, r, &path, None));
+            match res {
+                Some(Ok(())) => app.notify(format!("Exported to {}", path.display())),
+                Some(Err(e)) => app.notify(format!("Export failed: {e}")),
+                None => app.notify("Export failed: internal error"),
+            }
+            return;
+        }
     }
     let Some(doc) = app.doc.as_ref() else { return };
     let size = doc.slide_size();
@@ -319,6 +366,9 @@ fn start_job(app: &mut App, path: PathBuf) {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "Slide".into());
     let format = app.export.format;
+    #[cfg(target_arch = "wasm32")]
+    let frames: Option<PathBuf> = None;
+    #[cfg(not(target_arch = "wasm32"))]
     let frames = matches!(format, Format::Movie | Format::Gif).then(|| std::env::temp_dir().join(format!("kn-export-{}", std::process::id())));
     // with builds and transitions: record the show itself
     if let (Some(dir), true) = (frames.clone(), app.export.animated) {
@@ -351,7 +401,21 @@ fn start_job(app: &mut App, path: PathBuf) {
         Format::Gif => app.export.quality.width().min(960) / 2 * 2,
         _ => app.export.quality.width(),
     };
-    app.export.job = Some(Job { format, path, indices, next: 0, width, pages: Vec::new(), page_size: (size.w, size.h), stem, frames, seconds: app.export.seconds, texts: Vec::new() });
+    app.export.job = Some(Job {
+        format,
+        path,
+        indices,
+        next: 0,
+        width,
+        pages: Vec::new(),
+        page_size: (size.w, size.h),
+        stem,
+        frames,
+        seconds: app.export.seconds,
+        texts: Vec::new(),
+        #[cfg(target_arch = "wasm32")]
+        web_images: Vec::new(),
+    });
 }
 
 fn tick(app: &mut App, ctx: &egui::Context) {
@@ -403,6 +467,7 @@ fn tick(app: &mut App, ctx: &egui::Context) {
         return;
     }
     // finished
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(dir) = job.frames.clone() {
         let (tx, rx) = channel();
         let (format, out, secs) = (job.format, job.path.clone(), job.seconds);
@@ -415,41 +480,71 @@ fn tick(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let notes: Vec<String> = job.indices.iter().map(|&i| app.slides.get(i).and_then(|s| app.doc.as_ref().map(|d| d.notes(s.slide))).unwrap_or_default()).collect();
-    let result = match job.format {
-        Format::Pdf => write_pdf(&job),
-        Format::Html => write_html(&job, &notes),
-        Format::Pptx => write_pptx(&job, &notes),
-        _ => Ok(()),
-    };
-    match result {
-        Ok(()) if app.export.print => {
-            app.export.print = false;
-            match kn_ui::open_command(&job.path).stdin(std::process::Stdio::null()).spawn() {
-                Ok(_) => app.notify("Opened the slides as a PDF: print from the viewer"),
-                Err(e) => app.notify(format!("Couldn't open the PDF ({e}); it is at {}", job.path.display())),
-            }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let out_name = job.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "export".into());
+        let bytes = match job.format {
+            Format::Pdf => Ok(pdf_bytes(&job)),
+            Format::Html => Ok(html_bytes(&job, &notes)),
+            Format::Pptx => pptx_bytes(&job, &notes),
+            Format::Png | Format::Jpeg => images_zip_bytes(&job.web_images),
+            Format::Movie | Format::Gif => Err("Movie and animated GIF export is only available in the desktop app".into()),
+        };
+        let was_print = app.export.print;
+        app.export.print = false;
+        match bytes.and_then(|b| kn_ui::web::files::download_file(&out_name, &b)) {
+            Ok(()) if was_print => app.notify(format!("Downloaded {out_name}: open it to print")),
+            Ok(()) => app.notify(format!("Exported {out_name}")),
+            Err(e) => app.notify(format!("Export failed: {e}")),
         }
-        Ok(()) => app.notify(format!("Exported to {}", job.path.display())),
-        Err(e) => app.notify(format!("Export failed: {e}")),
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let result = match job.format {
+            Format::Pdf => write_pdf(&job),
+            Format::Html => write_html(&job, &notes),
+            Format::Pptx => write_pptx(&job, &notes),
+            _ => Ok(()),
+        };
+        match result {
+            Ok(()) if app.export.print => {
+                app.export.print = false;
+                match kn_ui::open_command(&job.path).stdin(std::process::Stdio::null()).spawn() {
+                    Ok(_) => app.notify("Opened the slides as a PDF: print from the viewer"),
+                    Err(e) => app.notify(format!("Couldn't open the PDF ({e}); it is at {}", job.path.display())),
+                }
+            }
+            Ok(()) => app.notify(format!("Exported to {}", job.path.display())),
+            Err(e) => app.notify(format!("Export failed: {e}")),
+        }
     }
 }
 
 /// A recorded show (play::Recording) is over: encode its frames in the background.
 pub fn finish_recording(app: &mut App, dir: PathBuf, out: PathBuf, format: Format, fps: f32, frames: u32) {
-    if frames == 0 {
-        let _ = std::fs::remove_dir_all(&dir);
-        app.notify("Export cancelled");
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (dir, out, format, fps, frames);
+        app.notify("Movie recording is only available in the desktop app");
         return;
     }
-    let (tx, rx) = channel();
-    let o = out.clone();
-    std::thread::spawn(move || {
-        let r = encode_frames(format, &dir, &o, fps);
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = tx.send(r);
-    });
-    app.export.encoding = Some((out, rx));
-    app.notify("Encoding the movie…");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if frames == 0 {
+            let _ = std::fs::remove_dir_all(&dir);
+            app.notify("Export cancelled");
+            return;
+        }
+        let (tx, rx) = channel();
+        let o = out.clone();
+        std::thread::spawn(move || {
+            let r = encode_frames(format, &dir, &o, fps);
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = tx.send(r);
+        });
+        app.export.encoding = Some((out, rx));
+        app.notify("Encoding the movie…");
+    }
 }
 
 /// Movie or GIF from the recorded frames f00000.png… at `fps`.
@@ -523,12 +618,33 @@ fn write_slide(job: &mut Job, pm: &kn_render::tiny_skia::Pixmap) -> Result<(), S
             job.pages.push((img.width(), img.height(), bytes));
         }
         Format::Png => {
-            let p = job.path.join(format!("{}.{:03}.png", job.stem, n));
-            img.save(&p).map_err(|e| e.to_string())?;
+            let file_name = format!("{}.{:03}.png", job.stem, n);
+            #[cfg(target_arch = "wasm32")]
+            {
+                let mut buf = Vec::new();
+                image::DynamicImage::ImageRgba8(img)
+                    .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+                    .map_err(|e| e.to_string())?;
+                job.web_images.push((file_name, buf));
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let p = job.path.join(file_name);
+                img.save(&p).map_err(|e| e.to_string())?;
+            }
         }
         Format::Jpeg => {
-            let p = job.path.join(format!("{}.{:03}.jpeg", job.stem, n));
-            std::fs::write(&p, jpeg(&img, 92)?).map_err(|e| e.to_string())?;
+            let file_name = format!("{}.{:03}.jpeg", job.stem, n);
+            let bytes = jpeg(&img, 92)?;
+            #[cfg(target_arch = "wasm32")]
+            {
+                job.web_images.push((file_name, bytes));
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let p = job.path.join(file_name);
+                std::fs::write(&p, bytes).map_err(|e| e.to_string())?;
+            }
         }
         Format::Movie | Format::Gif => {
             let dir = job.frames.as_ref().ok_or("no frame folder")?;
@@ -560,7 +676,7 @@ fn base64(b: &[u8]) -> String {
     out
 }
 
-fn write_html(job: &Job, notes: &[String]) -> Result<(), String> {
+fn html_bytes(job: &Job, notes: &[String]) -> Vec<u8> {
     // one file, the slides inside it: it opens anywhere (moved, mailed, a sandboxed browser)
     let mut slides = String::new();
     for (i, (_, _, bytes)) in job.pages.iter().enumerate() {
@@ -568,7 +684,7 @@ fn write_html(job: &Job, notes: &[String]) -> Result<(), String> {
         slides.push_str(&format!("<figure class=\"s\"><img src=\"data:image/jpeg;base64,{}\" alt=\"Slide {}\"><figcaption>{note}</figcaption></figure>\n", base64(bytes), i + 1));
     }
     let (w, h) = job.page_size;
-    let html = format!(r#"<!doctype html>
+    format!(r#"<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <style>
@@ -587,18 +703,48 @@ function go(k){{i=Math.max(0,Math.min(s.length-1,k));s.forEach((e,j)=>e.classLis
 document.addEventListener('keydown',e=>{{if(['ArrowRight','ArrowDown',' ','PageDown','Enter'].includes(e.key))go(i+1);else if(['ArrowLeft','ArrowUp','PageUp','Backspace'].includes(e.key))go(i-1);else if(e.key=='Home')go(0);else if(e.key=='End')go(s.length-1);else if(e.key=='f')document.documentElement.requestFullscreen();else if(e.key=='n')document.body.classList.toggle('notes')}});
 document.addEventListener('click',e=>go(e.clientX<innerWidth/4?i-1:i+1));
 go((parseInt(location.hash.slice(1))||1)-1);
-</script></body></html>"#, title = esc(&job.stem));
-    std::fs::write(&job.path, html).map_err(|e| e.to_string())
+</script></body></html>"#, title = esc(&job.stem))
+        .into_bytes()
+}
+
+fn write_html(job: &Job, notes: &[String]) -> Result<(), String> {
+    std::fs::write(&job.path, html_bytes(job, notes)).map_err(|e| e.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn images_zip_bytes(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>, String> {
+    use std::io::Write;
+    let mut cur = std::io::Cursor::new(Vec::new());
+    {
+        let mut z = zip::ZipWriter::new(&mut cur);
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for (name, bytes) in files {
+            z.start_file(name, opts).map_err(|e| e.to_string())?;
+            z.write_all(bytes).map_err(|e| e.to_string())?;
+        }
+        z.finish().map_err(|e| e.to_string())?;
+    }
+    Ok(cur.into_inner())
 }
 
 /// File > Export To > PowerPoint: one picture per slide (Office Open XML), notes included.
+fn pptx_bytes(job: &Job, notes: &[String]) -> Result<Vec<u8>, String> {
+    let mut cur = std::io::Cursor::new(Vec::new());
+    write_pptx_to(job, notes, &mut cur)?;
+    Ok(cur.into_inner())
+}
+
 fn write_pptx(job: &Job, notes: &[String]) -> Result<(), String> {
+    let file = std::fs::File::create(&job.path).map_err(|e| e.to_string())?;
+    write_pptx_to(job, notes, file)
+}
+
+fn write_pptx_to<W: std::io::Write + std::io::Seek>(job: &Job, notes: &[String], writer: W) -> Result<(), String> {
     use std::io::Write;
     let emu = |pt: f32| (pt * 12700.0).round() as i64;
     let (cx, cy) = (emu(job.page_size.0), emu(job.page_size.1));
     let n = job.pages.len();
-    let file = std::fs::File::create(&job.path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipWriter::new(file);
+    let mut z = zip::ZipWriter::new(writer);
     let o = zip::write::SimpleFileOptions::default();
     let mut put = |name: &str, body: &[u8]| -> Result<(), String> {
         z.start_file(name, o).map_err(|e| e.to_string())?;
@@ -648,7 +794,7 @@ fn write_pptx(job: &Job, notes: &[String]) -> Result<(), String> {
 }
 
 /// Minimal PDF: one page per slide (page size in points = slide size), each a full-page JPEG.
-fn write_pdf(job: &Job) -> Result<(), String> {
+fn pdf_bytes(job: &Job) -> Vec<u8> {
     let (pw, ph) = job.page_size;
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets: Vec<usize> = Vec::new();
@@ -693,7 +839,41 @@ fn write_pdf(job: &Job) -> Result<(), String> {
         out.extend(format!("{o:010} 00000 n \n").as_bytes());
     }
     out.extend(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1).as_bytes());
-    std::fs::write(&job.path, out).map_err(|e| e.to_string())
+    out
+}
+
+fn write_pdf(job: &Job) -> Result<(), String> {
+    std::fs::write(&job.path, pdf_bytes(job)).map_err(|e| e.to_string())
+}
+
+/// Render every non-skipped slide of `doc` into an in-memory PDF (1920 px wide, matching headless
+/// PDF export). Used by the `?host=parent` web bridge for `file.saveAs` PDF exports.
+#[cfg(target_arch = "wasm32")]
+pub fn pdf_bytes_for_doc(doc: &kn_model::Document, r: &mut kn_render::Renderer) -> Result<Vec<u8>, String> {
+    let slides = doc.slides();
+    let size = doc.slide_size();
+    let mut job = Job {
+        format: Format::Pdf,
+        path: PathBuf::from("export.pdf"),
+        indices: (0..slides.len()).filter(|i| !slides[*i].skipped).collect(),
+        next: 0,
+        width: 1920,
+        pages: Vec::new(),
+        page_size: (size.w, size.h),
+        stem: String::new(),
+        frames: None,
+        seconds: 0.0,
+        texts: Vec::new(),
+        web_images: Vec::new(),
+    };
+    for k in 0..job.indices.len() {
+        let i = job.indices[k];
+        let sc = doc.scene(&slides, i).ok_or("scene")?;
+        let pm = r.render_scene(doc, &sc, job.width).ok_or("render")?;
+        job.next = k;
+        write_slide(&mut job, &pm)?;
+    }
+    Ok(pdf_bytes(&job))
 }
 
 /// Headless export for tests and the command line: `kn-app --export-pdf in.key out.pdf`.
@@ -733,6 +913,9 @@ pub fn export_doc(doc: &kn_model::Document, r: &mut kn_render::Renderer, output:
 fn export_with(doc: &kn_model::Document, r: &mut kn_render::Renderer, output: &std::path::Path, format: Format, width: u32, secs: f32, stem: String) -> Result<usize, String> {
     let slides = doc.slides();
     let size = doc.slide_size();
+    #[cfg(target_arch = "wasm32")]
+    let frames: Option<PathBuf> = None;
+    #[cfg(not(target_arch = "wasm32"))]
     let frames = matches!(format, Format::Movie | Format::Gif).then(|| std::env::temp_dir().join(format!("kn-export-{}", std::process::id())));
     if let Some(f) = &frames {
         std::fs::create_dir_all(f).map_err(|e| e.to_string())?;
@@ -749,6 +932,8 @@ fn export_with(doc: &kn_model::Document, r: &mut kn_render::Renderer, output: &s
         frames: frames.clone(),
         seconds: secs,
         texts: Vec::new(),
+        #[cfg(target_arch = "wasm32")]
+        web_images: Vec::new(),
     };
     for k in 0..job.indices.len() {
         let i = job.indices[k];

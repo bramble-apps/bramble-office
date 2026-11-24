@@ -180,6 +180,17 @@ impl KeyFile {
 
     pub fn from_zip(bytes: &[u8]) -> Result<KeyFile, Error> {
         let mut z = zip::ZipArchive::new(Cursor::new(bytes))?;
+        if z.index_for_name(crate::crypto::VERIFIER).is_some() {
+            let hint = z
+                .by_name(crate::crypto::HINT)
+                .ok()
+                .and_then(|mut f| {
+                    let mut s = String::new();
+                    f.read_to_string(&mut s).ok().map(|_| s)
+                })
+                .unwrap_or_default();
+            return Err(Error::NeedsPassword(hint));
+        }
         let mut files = Vec::new();
         for i in 0..z.len() {
             let mut f = z.by_index(i)?;
@@ -265,6 +276,16 @@ impl KeyFile {
     /// Open a password-protected presentation (wrong password: Error::NeedsPassword).
     pub fn open_with_password(path: impl AsRef<Path>, password: &str) -> Result<KeyFile, Error> {
         let mut z = zip::ZipArchive::new(std::fs::File::open(path.as_ref())?)?;
+        Self::read_encrypted(&mut z, password)
+    }
+
+    /// Open a password-protected presentation from in-memory ZIP bytes.
+    pub fn from_zip_with_password(bytes: &[u8], password: &str) -> Result<KeyFile, Error> {
+        let mut z = zip::ZipArchive::new(Cursor::new(bytes))?;
+        Self::read_encrypted(&mut z, password)
+    }
+
+    fn read_encrypted<R: Read + Seek>(z: &mut zip::ZipArchive<R>, password: &str) -> Result<KeyFile, Error> {
         let mut verifier = Vec::new();
         z.by_name(crate::crypto::VERIFIER)?.read_to_end(&mut verifier)?;
         let key = crate::crypto::check(&verifier, password).ok_or_else(|| Error::NeedsPassword(String::new()))?;
@@ -288,13 +309,15 @@ impl KeyFile {
         KeyFile::from_files(files)
     }
 
-    /// Save password protected: Index/ and Data/ encrypted, with the verifier and hint.
-    pub fn save_encrypted(&self, path: impl AsRef<Path>, password: &str, hint: &str) -> Result<(), Error> {
-        let path = path.as_ref();
+    /// Serialize password-protected to in-memory ZIP bytes: Index/ and Data/ encrypted, with the
+    /// verifier and hint.
+    pub fn to_zip_encrypted(&self, password: &str, hint: &str) -> Result<Vec<u8>, Error> {
+        Ok(self.write_encrypted(Cursor::new(Vec::new()), password, hint)?.into_inner())
+    }
+
+    fn write_encrypted<W: Write + Seek>(&self, out: W, password: &str, hint: &str) -> Result<W, Error> {
         let (verifier, key) = crate::crypto::make_verifier(password);
-        let tmp = path.with_extension("key.tmp");
-        let file = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
-        let mut w = zip::ZipWriter::new(file);
+        let mut w = zip::ZipWriter::new(out);
         let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(false);
         w.start_file(crate::crypto::VERIFIER, opts)?;
         w.write_all(&verifier)?;
@@ -314,7 +337,15 @@ impl KeyFile {
             w.start_file(e.name.as_str(), opts)?;
             w.write_all(&out)?;
         }
-        w.finish()?.flush()?;
+        Ok(w.finish()?)
+    }
+
+    /// Save password protected: Index/ and Data/ encrypted, with the verifier and hint.
+    pub fn save_encrypted(&self, path: impl AsRef<Path>, password: &str, hint: &str) -> Result<(), Error> {
+        let path = path.as_ref();
+        let tmp = path.with_extension("key.tmp");
+        let file = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
+        self.write_encrypted(file, password, hint)?.flush()?;
         if path.is_dir() {
             std::fs::remove_dir_all(path)?;
         }

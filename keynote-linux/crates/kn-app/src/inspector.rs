@@ -29,7 +29,7 @@ pub struct InspectorState {
     /// Chart Axis tab: Value (0) / Category (1) / Value 2; Series tab: the series shown.
     pub charts: kn_ui::chartpanes::ChartPanes,
     /// The selected movie's length in seconds (looked up once).
-    pub movie_len: Option<(kn_format::ObjId, f32, std::time::Instant)>,
+    pub movie_len: Option<(kn_format::ObjId, f32, web_time::Instant)>,
     pub dyn_thumbs: std::collections::HashMap<(kn_format::ObjId, u64), egui::TextureHandle>,
 }
 
@@ -1447,7 +1447,7 @@ fn movie_panel(app: &mut App, ui: &mut egui::Ui, d: &kn_model::Drawable) {
         Some((mid, l, at)) if mid == id && (l > 0.0 || at.elapsed().as_secs_f32() < 2.0) => l,
         _ => {
             let l = m.movie_data.and_then(|data| app.doc.as_ref().and_then(|doc| crate::media::cache_file(doc, data))).and_then(|(p, _)| crate::media::duration(&p)).unwrap_or(0.0) as f32;
-            app.insp.movie_len = Some((id, l, std::time::Instant::now()));
+            app.insp.movie_len = Some((id, l, web_time::Instant::now()));
             l
         }
     };

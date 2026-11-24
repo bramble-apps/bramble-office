@@ -4,16 +4,23 @@
 
 /// Pass the app's `eframe::run_native` result through this.
 pub fn retry_other_backend(r: eframe::Result) -> eframe::Result {
-    let Err(e) = &r else { return r };
-    let next = match std::env::var("WGPU_BACKEND").ok().as_deref() {
-        None => "vulkan",
-        Some("vulkan") => "gl",
-        _ => return r,
-    };
-    eprintln!("couldn't start the window ({e}); trying {next}");
-    let Ok(exe) = std::env::current_exe() else { return r };
-    match std::process::Command::new(exe).args(std::env::args_os().skip(1)).env("WGPU_BACKEND", next).status() {
-        Ok(s) => std::process::exit(s.code().unwrap_or(1)),
-        Err(_) => r,
+    #[cfg(target_arch = "wasm32")]
+    {
+        r
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Err(e) = &r else { return r };
+        let next = match std::env::var("WGPU_BACKEND").ok().as_deref() {
+            None => "vulkan",
+            Some("vulkan") => "gl",
+            _ => return r,
+        };
+        eprintln!("couldn't start the window ({e}); trying {next}");
+        let Ok(exe) = std::env::current_exe() else { return r };
+        match std::process::Command::new(exe).args(std::env::args_os().skip(1)).env("WGPU_BACKEND", next).status() {
+            Ok(s) => std::process::exit(s.code().unwrap_or(1)),
+            Err(_) => r,
+        }
     }
 }

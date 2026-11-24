@@ -118,7 +118,7 @@ pub struct Canvas {
     /// A zoom step on its way (menu, Ctrl+Plus/Minus, Zoom to Selection): from zoom, to zoom,
     /// the sheet point to end at the view's centre (None: the view's top-left stays put, as
     /// Numbers' zoom steps do, Mac N21), seconds it takes, started at.
-    pub(crate) zoom_anim: Option<(f32, f32, Option<Pos2>, f32, std::time::Instant)>,
+    pub(crate) zoom_anim: Option<(f32, f32, Option<Pos2>, f32, web_time::Instant)>,
 }
 
 impl Default for Canvas {
@@ -134,7 +134,7 @@ impl Canvas {
         let fit = (self.size.x / r.width().max(1.0)).min(self.size.y / r.height().max(1.0)) * 0.9;
         let z = crate::chrome::ZOOMS.iter().copied().filter(|z| *z <= fit).last().unwrap_or(0.25);
         // (Mac N21: ~317 ms)
-        self.zoom_anim = Some((self.zoom, z, Some(r.center()), 0.317, std::time::Instant::now()));
+        self.zoom_anim = Some((self.zoom, z, Some(r.center()), 0.317, web_time::Instant::now()));
     }
 
     /// The zoom a step on its way is going to (else the zoom): repeated Ctrl+Plus steps on
@@ -147,7 +147,7 @@ impl Canvas {
     pub fn animate_zoom(&mut self, z: f32) {
         let z = z.clamp(0.25, 4.0);
         // (a step during a step goes on from where the first one has got to)
-        self.zoom_anim = Some((self.zoom, z, None, 0.285, std::time::Instant::now()));
+        self.zoom_anim = Some((self.zoom, z, None, 0.285, web_time::Instant::now()));
     }
 
     /// The part of the sheet in view (sheet points).

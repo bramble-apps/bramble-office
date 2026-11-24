@@ -1,0 +1,7 @@
+[build]
+target = "index.html"
+dist = "../../../dist/web/values"
+public_url = "./"
+
+[serve]
+port = 8782

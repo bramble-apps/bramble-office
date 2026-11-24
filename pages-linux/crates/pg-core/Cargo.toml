@@ -13,3 +13,4 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 roxmltree = "0.20"
 swash = "0.2.10"
+web-time = "1.1"

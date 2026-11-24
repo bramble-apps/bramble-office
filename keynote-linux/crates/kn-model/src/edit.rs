@@ -1,7 +1,7 @@
 //! Editing operations on a [`Document`]. Each operation snapshots the archives it touches so it
 //! can be undone; everything is written straight into the KeyFile (lossless save).
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use kn_format::{Archive, Entry, KeyFile, ObjId};
 

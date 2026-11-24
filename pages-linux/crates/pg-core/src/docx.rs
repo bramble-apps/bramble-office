@@ -824,7 +824,11 @@ impl Ctx {
 
 fn read_zip(path: &std::path::Path) -> Result<HashMap<String, Vec<u8>>, String> {
     let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+    read_zip_reader(f)
+}
+
+fn read_zip_reader<R: std::io::Read + std::io::Seek>(r: R) -> Result<HashMap<String, Vec<u8>>, String> {
+    let mut z = zip::ZipArchive::new(r).map_err(|e| e.to_string())?;
     let mut out = HashMap::new();
     for i in 0..z.len() {
         let mut e = z.by_index(i).map_err(|e| e.to_string())?;
@@ -888,7 +892,14 @@ fn plain(n: Node) -> String {
 }
 
 pub fn read(path: &std::path::Path) -> Result<WordDoc, String> {
-    let files = read_zip(path)?;
+    read_files(read_zip(path)?)
+}
+
+pub fn read_bytes(bytes: &[u8]) -> Result<WordDoc, String> {
+    read_files(read_zip_reader(std::io::Cursor::new(bytes))?)
+}
+
+fn read_files(files: HashMap<String, Vec<u8>>) -> Result<WordDoc, String> {
     // the main part (usually word/document.xml)
     let main = text_of(&files, "_rels/.rels")
         .and_then(|x| {

@@ -26,11 +26,17 @@ pub struct PasswordPrompt {
     pub(crate) hint: String,
     pub(crate) typed: String,
     pub(crate) show_hint: bool,
+    /// In-memory bytes retained when opening a password-protected presentation in WebAssembly.
+    pub(crate) bytes: Option<Vec<u8>>,
 }
 
 impl PasswordPrompt {
     pub fn new(path: PathBuf, hint: String) -> PasswordPrompt {
-        PasswordPrompt { path, hint, typed: String::new(), show_hint: false }
+        PasswordPrompt { path, hint, typed: String::new(), show_hint: false, bytes: None }
+    }
+
+    pub fn new_bytes(name: String, bytes: Vec<u8>, hint: String) -> PasswordPrompt {
+        PasswordPrompt { path: PathBuf::from(name), hint, typed: String::new(), show_hint: false, bytes: Some(bytes) }
     }
 }
 
@@ -51,7 +57,7 @@ pub fn keep_version(path: &Path) {
     }
     let Some(dir) = versions_dir(path) else { return };
     let _ = std::fs::create_dir_all(&dir);
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let _ = std::fs::copy(path, dir.join(format!("{secs}.key")));
     let mut all = list(path);
     while all.len() > 30 {
@@ -72,7 +78,7 @@ pub(crate) fn list(path: &Path) -> Vec<(PathBuf, u64)> {
 }
 
 pub(crate) fn when(secs: u64) -> String {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let ago = now.saturating_sub(secs);
     match ago {
         0..=59 => "Just now".into(),
@@ -134,7 +140,12 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
             });
         });
         if open_it {
-            app.open_path_with(p.path.clone(), Some((p.typed.clone(), p.hint.clone())));
+            if let Some(bytes) = p.bytes {
+                let name = p.path.to_string_lossy().to_string();
+                app.open_bytes_with_password(ctx, name, bytes, p.typed.clone(), p.hint.clone());
+            } else {
+                app.open_path_with(p.path.clone(), Some((p.typed.clone(), p.hint.clone())));
+            }
         } else if !cancel {
             app.dialogs.password_prompt = Some(p);
         }

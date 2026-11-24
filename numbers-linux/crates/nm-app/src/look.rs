@@ -39,6 +39,10 @@ impl Look {
     /// Keydeck's.
     pub fn load() -> Look {
         let mut l = Look::default();
+        #[cfg(target_arch = "wasm32")]
+        let text = kn_ui::web::storage::get("bramble.values.look")
+            .or_else(|| kn_ui::web::storage::get("bramble.keydeck.settings"));
+        #[cfg(not(target_arch = "wasm32"))]
         let text = path().and_then(|p| std::fs::read_to_string(p).ok()).or_else(|| config("keydeck", "settings.txt").and_then(|p| std::fs::read_to_string(p).ok()));
         let Some(text) = text else { return l };
         for line in text.lines() {

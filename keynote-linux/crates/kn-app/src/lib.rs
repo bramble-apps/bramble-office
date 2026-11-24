@@ -10,14 +10,41 @@ mod canvas;
 mod chartedit;
 mod editing;
 // the document library for other front ends (the Flutter app): its C ABI, the inspector as data
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
+#[cfg(not(target_arch = "wasm32"))]
 mod inspapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod showapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod formsapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod objapi;
+#[cfg(not(target_arch = "wasm32"))]
 mod dlgapi;
 // Keydeck Remote: phones and tablets control the slideshow over the local network
+#[cfg(not(target_arch = "wasm32"))]
 mod remote;
+#[cfg(target_arch = "wasm32")]
+mod remote {
+    pub enum Cmd {
+        Next,
+        Prev,
+        Goto(usize),
+        Stop,
+        Play,
+    }
+    pub fn take_cmds() -> Vec<Cmd> {
+        Vec::new()
+    }
+    pub fn tick(_app: &mut crate::app::App, _ctx: &egui::Context) {}
+    pub fn publish(_app: &crate::app::App, _at: Option<(usize, usize)>) {}
+    pub fn draw_overlay(_painter: &egui::Painter, _rect: egui::Rect) {}
+    pub fn settings_tab(ui: &mut egui::Ui) {
+        ui.add_space(12.0);
+        ui.label("Keydeck Remote is available in the desktop app.");
+    }
+}
 mod export;
 mod filemenu;
 mod find;
@@ -48,6 +75,7 @@ mod textures;
 mod transitions;
 
 /// Starts the app: the desktop program's main, and android_main on Android.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() -> eframe::Result {
     kn_ui::windows_folders();
     kn_ui::update::init(kn_ui::update::AppInfo { name: "Keydeck", version: env!("CARGO_PKG_VERSION"), bin: "keydeck", appimage: "Keydeck-x86_64.AppImage", mac_bundle: "Keydeck.app" });
@@ -126,6 +154,7 @@ pub fn run() -> eframe::Result {
 }
 
 /// The window icon (X11 and other systems; on Wayland the desktop takes it from keydeck.desktop).
+#[cfg(not(target_arch = "wasm32"))]
 fn app_icon() -> egui::IconData {
     let img = image::load_from_memory(include_bytes!("../data/icons/keydeck-256.png")).map(|i| i.into_rgba8()).ok();
     img.map(|i| egui::IconData { width: i.width(), height: i.height(), rgba: i.into_raw() }).unwrap_or_default()
@@ -134,6 +163,7 @@ fn app_icon() -> egui::IconData {
 /// Wayland windows load their cursor from XCURSOR_THEME/XCURSOR_SIZE, which GNOME does not set,
 /// so the app would otherwise show a different cursor than every other window. Use the
 /// desktop's own setting (GNOME's cursor-theme / cursor-size) unless already given.
+#[cfg(not(target_arch = "wasm32"))]
 fn use_desktop_cursor_theme() {
     let get = |key: &str| {
         std::process::Command::new("gsettings")
@@ -160,6 +190,7 @@ fn use_desktop_cursor_theme() {
 
 /// The app was first called "keynote-linux": its settings, themes and caches move to the
 /// "keydeck" folders once (when those don't exist yet).
+#[cfg(not(target_arch = "wasm32"))]
 fn move_old_folders() {
     let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else { return };
     let env_dir = |var: &str, fallback: &str| std::env::var_os(var).map(std::path::PathBuf::from).unwrap_or_else(|| home.join(fallback));
@@ -169,6 +200,27 @@ fn move_old_folders() {
             let _ = std::fs::rename(&old, &new);
         }
     }
+}
+
+/// WebAssembly: starts Keydeck inside `eframe::WebRunner` (`kn-web`).
+#[cfg(target_arch = "wasm32")]
+pub fn start_web() {
+    kn_model::table::set_all_rows_fit(true);
+    let _ = winframe::SYSTEM_TITLE_BAR.set(false);
+    kn_render::fonts::set_font_fetcher(|rel_path| {
+        kn_ui::web::fetch_matched_font_asset(rel_path, kn_render::fonts::push_fetched_font);
+    });
+    kn_ui::web::start(
+        kn_ui::web::WebConfig {
+            prefix: "keydeck",
+            title: "Keydeck",
+            version: env!("CARGO_PKG_VERSION"),
+            canvas_id: "bramble_canvas",
+            loading_id: "bramble_loading",
+            default_name: "Presentation.key",
+        },
+        |cc| app::App::new(cc, Vec::new()),
+    );
 }
 
 /// Android: the activity (app.bramble.BrambleActivity, tools/android) starts the app here.

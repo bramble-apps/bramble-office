@@ -66,6 +66,16 @@ impl Workbook {
         Ok(Workbook { doc: Document::open(path)? })
     }
 
+    pub fn open_bytes(name: &str, bytes: &[u8]) -> Result<Workbook, kn_format::Error> {
+        init();
+        Ok(Workbook { doc: Document::open_bytes(Some(name), bytes)? })
+    }
+
+    pub fn open_bytes_with_password(name: &str, bytes: &[u8], password: &str, hint: &str) -> Result<Workbook, kn_format::Error> {
+        init();
+        Ok(Workbook { doc: Document::open_bytes_with_password(Some(name), bytes, password, hint)? })
+    }
+
     pub fn file(&self) -> &KeyFile {
         &self.doc.file
     }

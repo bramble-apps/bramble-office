@@ -4,7 +4,7 @@
 //! are ready (no white flash).
 
 use std::collections::HashMap;
-use std::time::Instant;
+use web_time::Instant;
 
 use kn_render::Renderer;
 use nm_core::kn_format::ObjId;

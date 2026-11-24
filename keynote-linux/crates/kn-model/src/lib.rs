@@ -90,6 +90,44 @@ impl Document {
         Document { file, path: None, dirty: false, package: false, password: None, layout_donor: None }
     }
 
+    /// Open a presentation from in-memory ZIP bytes, remembering its logical file name.
+    pub fn open_bytes(name: Option<&str>, bytes: &[u8]) -> Result<Document, kn_format::Error> {
+        Ok(Document {
+            file: KeyFile::from_zip(bytes)?,
+            path: name.map(PathBuf::from),
+            dirty: false,
+            package: false,
+            password: None,
+            layout_donor: None,
+        })
+    }
+
+    /// Open a password-protected presentation from in-memory ZIP bytes.
+    pub fn open_bytes_with_password(name: Option<&str>, bytes: &[u8], password: &str, hint: &str) -> Result<Document, kn_format::Error> {
+        let file = KeyFile::from_zip_with_password(bytes, password)?;
+        Ok(Document {
+            file,
+            path: name.map(PathBuf::from),
+            dirty: false,
+            package: false,
+            password: Some((password.to_string(), hint.to_string())),
+            layout_donor: None,
+        })
+    }
+
+    /// Serialize the presentation to in-memory ZIP bytes (honoring password protection) and
+    /// clear the dirty flag.
+    pub fn to_bytes(&mut self) -> Result<Vec<u8>, kn_format::Error> {
+        self.declare_external_refs();
+        let bytes = if let Some((pw, hint)) = &self.password {
+            self.file.to_zip_encrypted(pw, hint)?
+        } else {
+            self.file.to_zip()?
+        };
+        self.dirty = false;
+        Ok(bytes)
+    }
+
     pub fn save_as(&mut self, path: impl AsRef<FsPath>) -> Result<(), kn_format::Error> {
         self.declare_external_refs();
         // packages stay packages (File > Advanced > Change File Type); File > Set Password

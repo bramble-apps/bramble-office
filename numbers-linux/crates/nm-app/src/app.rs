@@ -86,6 +86,8 @@ pub struct App {
     pub find_words: bool,
     /// A password-protected file waiting for its password: (path, hint, typed, wrong).
     pub password: Option<(PathBuf, String, String, bool)>,
+    /// Retained bytes for an encrypted file opened in memory on WebAssembly.
+    pub password_bytes: Option<Vec<u8>>,
     /// Add Comment: (table, model row, column, text, author).
     pub comment_dialog: Option<(ObjId, u32, u32, String, String)>,
     /// File > Set Password: (password, again, hint).
@@ -259,6 +261,7 @@ impl App {
             find_words: false,
             formula_cache: None,
             password: None,
+            password_bytes: None,
             set_password: None,
             comment_dialog: None,
             perf: Vec::new(),
@@ -323,7 +326,14 @@ impl App {
             cat_groups: Default::default(),
             script_cmds: Vec::new(),
             look,
-            settings: crate::settings::Settings::load(),
+            settings: {
+                let mut s = crate::settings::Settings::load();
+                #[cfg(target_arch = "wasm32")]
+                if let Some(a) = kn_ui::web::host_author() {
+                    s.author = a;
+                }
+                s
+            },
             show_settings: false,
             saved_views: None,
             undo_where: Vec::new(),
@@ -336,7 +346,14 @@ impl App {
             None => {
                 app.new_document();
                 // a new window starts on the start screen (recent spreadsheets, templates)
-                app.templates.chooser = !app.automated || std::env::var_os("NM_WELCOME").is_some();
+                #[cfg(target_arch = "wasm32")]
+                {
+                    app.templates.chooser = !kn_ui::web::is_hosted();
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    app.templates.chooser = !app.automated || std::env::var_os("NM_WELCOME").is_some();
+                }
             }
         }
         if let Some(n) = std::env::var("NM_SHEET").ok().and_then(|s| s.parse::<usize>().ok()) {
@@ -377,6 +394,11 @@ impl App {
 
     /// File > Open Recent (most recent first, kept in ~/.config/numdeck/recent.txt).
     pub fn recent(&self) -> Vec<PathBuf> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            return Vec::new();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         recent_path().and_then(|p| std::fs::read_to_string(p).ok()).map(|s| s.lines().map(PathBuf::from).filter(|p| p.exists()).collect()).unwrap_or_default()
     }
 
@@ -407,10 +429,10 @@ impl App {
             self.inspector = (i || std::env::var_os("NM_INSPECTOR").is_some()) && !kn_ui::form::was_compact();
         }
         // Numbers' own pivot tables: their fields, to show and refresh (Mac N29-C1)
-        let apple_epoch = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
+        let apple_epoch = web_time::UNIX_EPOCH + web_time::Duration::from_secs(978_307_200);
         self.pivots = nm_core::pivot::native_pivots(wb.file())
             .into_iter()
-            .map(|(pivot, source, spec, ts)| (pivot, crate::pivotui::PivotOf { source, spec, refreshed: ts.map(|t| apple_epoch + std::time::Duration::from_secs_f64(t.max(0.0))), native: true }))
+            .map(|(pivot, source, spec, ts)| (pivot, crate::pivotui::PivotOf { source, spec, refreshed: ts.map(|t| apple_epoch + web_time::Duration::from_secs_f64(t.max(0.0))), native: true }))
             .collect();
         // (another document's rules are for its tables)
         self.sorts.clear();
@@ -479,54 +501,279 @@ impl App {
     }
 
     pub fn open_dialog(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            kn_ui::web::files::pick_open_doc(&["numbers", "xlsx", "xlsm", "csv", "tsv", "txt", "nmbtemplate"], false);
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(p) = file_dialog(|d| d.add_filter("Spreadsheets", &["numbers", "xlsx", "csv", "tsv", "txt"]).add_filter("Numbers spreadsheet", &["numbers"]).add_filter("Excel", &["xlsx", "xlsm"]).add_filter("CSV / TSV", &["csv", "tsv", "txt"]).pick_file()) {
             self.open(&p);
         }
     }
 
-    pub fn save(&mut self, save_as: bool) {
-        // Excel mode: the workbook is written back as Excel (with the Values copy in
-        // compatibility mode); Save As can still make a Numbers spreadsheet of it
-        if let (Some(x), false) = (&self.excel, save_as) {
-            let (mut path, compat) = (x.path.clone(), x.compat);
-            // a new workbook: where to put it
-            if path.as_os_str().is_empty() {
-                let Some(p) = file_dialog(|d| d.add_filter("Excel workbook", &["xlsx"]).set_file_name("Untitled.xlsx").save_file()) else { return };
-                path = p;
+    /// Open a spreadsheet from in-memory bytes (WebAssembly file picker, drag-and-drop, or
+    /// `?host=parent` iframe bridge).
+    #[cfg(target_arch = "wasm32")]
+    pub fn open_bytes(&mut self, name: &str, bytes: Vec<u8>) {
+        let p = PathBuf::from(name);
+        if is_template(&p) {
+            match Workbook::open_bytes(name, &bytes) {
+                Ok(mut wb) => {
+                    wb.doc.path = None;
+                    wb.doc.dirty = false;
+                    self.load(wb);
+                    self.untitled_name = p.file_stem().map(|n| n.to_string_lossy().into_owned());
+                    self.excel = None;
+                    self.apply_rotations();
+                    self.templates.chooser = false;
+                }
+                Err(e) => self.notify(format!("Couldn't open {name}: {e}")),
             }
-            self.save_excel(&path, compat);
             return;
         }
-        if save_as {
-            let stem = self.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
-            let Some(p) = file_dialog(|d| d.add_filter("Numbers spreadsheet", &["numbers"]).add_filter("Excel workbook", &["xlsx"]).set_file_name(format!("{stem}.numbers")).save_file()) else { return };
-            if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xlsx")) {
-                let compat = self.excel.as_ref().is_some_and(|x| x.compat);
-                self.save_excel(&p, compat);
+        let read = read_bytes(name, &bytes);
+        if matches!(read.opened, Err(nm_core::kn_format::Error::NeedsPassword(_))) {
+            self.password_bytes = Some(bytes);
+        } else {
+            self.password_bytes = None;
+        }
+        self.templates.chooser = false;
+        self.finish_open(&p, read);
+    }
+
+    pub fn save(&mut self, save_as: bool) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.save_web(save_as);
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Excel mode: the workbook is written back as Excel (with the Values copy in
+            // compatibility mode); Save As can still make a Numbers spreadsheet of it
+            if let (Some(x), false) = (&self.excel, save_as) {
+                let (mut path, compat) = (x.path.clone(), x.compat);
+                // a new workbook: where to put it
+                if path.as_os_str().is_empty() {
+                    let Some(p) = file_dialog(|d| d.add_filter("Excel workbook", &["xlsx"]).set_file_name("Untitled.xlsx").save_file()) else { return };
+                    path = p;
+                }
+                self.save_excel(&path, compat);
                 return;
             }
-            self.save_numbers_to(&p);
+            if save_as {
+                let stem = self.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+                let Some(p) = file_dialog(|d| d.add_filter("Numbers spreadsheet", &["numbers"]).add_filter("Excel workbook", &["xlsx"]).set_file_name(format!("{stem}.numbers")).save_file()) else { return };
+                if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xlsx")) {
+                    let compat = self.excel.as_ref().is_some_and(|x| x.compat);
+                    self.save_excel(&p, compat);
+                    return;
+                }
+                self.save_numbers_to(&p);
+                return;
+            }
+            let Some(wb) = &mut self.wb else { return };
+            let path = match (&wb.doc.path, save_as) {
+                (Some(p), false) => p.clone(),
+                _ => match file_dialog(|d| d.add_filter("Numbers spreadsheet", &["numbers"]).set_file_name(format!("{}.numbers", self.untitled_name.as_deref().unwrap_or("Untitled"))).save_file()) {
+                    Some(p) => p,
+                    None => return,
+                },
+            };
+            // the file as it was is kept (Revert To > Browse All Versions)
+            if wb.doc.path.as_ref() == Some(&path) {
+                crate::fileops::keep_version(&path);
+            }
+            match wb.doc.save_as(&path) {
+                Ok(()) => {
+                    self.remember(&path);
+                    self.notify(format!("Saved {}", path.display()));
+                }
+                Err(e) => self.notify(format!("Couldn't save: {e}")),
+            }
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save_web(&mut self, save_as: bool) {
+        crate::canvas::commit(self);
+        if let (Some(x), false) = (self.excel.clone(), save_as) {
+            let Some(wb) = &mut self.wb else { return };
+            let name = x
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| "Spreadsheet.xlsx".into());
+            let by_sheet = x.by_sheet.clone();
+            let extras: nm_core::xlsx::Extras = wb.sheets().into_iter().filter_map(|s| Some((s.name.clone(), by_sheet.get(&s.id)?.clone()))).collect();
+            match nm_core::xlsx::write_xlsx_full_bytes(wb, x.compat, &extras)
+                .map_err(|e| e.to_string())
+                .and_then(|(_, bytes)| kn_ui::web::files::deliver_file(&name, &bytes, false))
+            {
+                Ok(()) => {
+                    wb.doc.dirty = false;
+                    let verb = if kn_ui::web::is_hosted() { "Saved" } else { "Downloaded" };
+                    self.notify(format!("{verb} {name}"));
+                }
+                Err(e) => self.notify(format!("Couldn't save the Excel workbook: {e}")),
+            }
             return;
         }
+        let stem = self.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+        let name = self
+            .doc()
+            .and_then(|d| d.path.as_ref())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|n| n.to_ascii_lowercase().ends_with(".numbers"))
+            .unwrap_or_else(|| format!("{stem}.numbers"));
         let Some(wb) = &mut self.wb else { return };
-        let path = match (&wb.doc.path, save_as) {
-            (Some(p), false) => p.clone(),
-            _ => match file_dialog(|d| d.add_filter("Numbers spreadsheet", &["numbers"]).set_file_name(format!("{}.numbers", self.untitled_name.as_deref().unwrap_or("Untitled"))).save_file()) {
-                Some(p) => p,
-                None => return,
-            },
-        };
-        // the file as it was is kept (Revert To > Browse All Versions)
-        if wb.doc.path.as_ref() == Some(&path) {
-            crate::fileops::keep_version(&path);
-        }
-        match wb.doc.save_as(&path) {
+        match wb.doc.to_bytes().map_err(|e| e.to_string()).and_then(|bytes| kn_ui::web::files::deliver_file(&name, &bytes, save_as)) {
             Ok(()) => {
-                self.remember(&path);
-                self.notify(format!("Saved {}", path.display()));
+                wb.doc.dirty = false;
+                let verb = if kn_ui::web::is_hosted() { "Saved" } else { "Downloaded" };
+                self.notify(format!("{verb} {name}"));
             }
             Err(e) => self.notify(format!("Couldn't save: {e}")),
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn web_active_name(&self) -> String {
+        if let Some(name) = self
+            .excel
+            .as_ref()
+            .and_then(|x| x.path.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|n| !n.is_empty())
+        {
+            return name;
+        }
+        if let Some(name) = self
+            .doc()
+            .and_then(|d| d.path.as_ref())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|n| !n.is_empty())
+        {
+            return name;
+        }
+        format!("{}.numbers", self.untitled_name.as_deref().unwrap_or("Spreadsheet"))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn handle_host_request(&mut self, ctx: &egui::Context, req: kn_ui::web::host::HostRequest) {
+        use kn_ui::web::host::{parse_host_call, resolve_host_appearance, serde_json, supported_commands_json, HostCall, HostError};
+        let reply = match parse_host_call(&req.method, &req.params) {
+            Err(err) => Err(err),
+            Ok(HostCall::Commands) => Ok(supported_commands_json()),
+            Ok(HostCall::New { .. }) => {
+                self.new_document();
+                if self.wb.is_some() {
+                    kn_ui::web::set_dirty(false);
+                    ctx.request_repaint();
+                    let name = self.web_active_name();
+                    Ok(serde_json::json!({ "name": name, "dirty": false }))
+                } else {
+                    Err(HostError::failed("Couldn't create spreadsheet."))
+                }
+            }
+            Ok(HostCall::Inspect) => match self.doc() {
+                Some(doc) => {
+                    let name = self.web_active_name();
+                    Ok(serde_json::json!({ "open": true, "name": name, "path": name, "dirty": doc.dirty }))
+                }
+                None => Ok(serde_json::json!({ "open": false, "name": serde_json::Value::Null, "path": serde_json::Value::Null, "dirty": false })),
+            },
+            Ok(HostCall::Info) => match self.doc() {
+                Some(doc) => Ok(serde_json::json!({ "name": self.web_active_name(), "dirty": doc.dirty })),
+                None => Err(HostError::failed("No spreadsheet is open.")),
+            },
+            Ok(HostCall::HostTheme { appearance }) => {
+                let dark = resolve_host_appearance(self.look.dark, appearance);
+                self.look.dark = dark;
+                self.look.apply(ctx);
+                ctx.request_repaint();
+                Ok(serde_json::json!({ "appearance": if dark { "dark" } else { "light" } }))
+            }
+            Ok(HostCall::Save { path, keep_source }) => {
+                let name = path.unwrap_or_else(|| self.web_active_name());
+                self.host_save_web(name, false, keep_source)
+            }
+            Ok(HostCall::SaveAs { path, keep_source }) => self.host_save_web(path, true, keep_source),
+        };
+        kn_ui::web::respond_host(&req.id, reply);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn host_save_web(
+        &mut self,
+        out_name: String,
+        is_save_as: bool,
+        keep_source: bool,
+    ) -> Result<kn_ui::web::host::serde_json::Value, kn_ui::web::host::HostError> {
+        use kn_ui::web::host::{serde_json, HostError};
+        if self.wb.is_none() {
+            return Err(HostError::failed("No spreadsheet is open."));
+        }
+        crate::canvas::commit(self);
+        let ext = Path::new(&out_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_else(|| "numbers".to_string());
+        let is_native = matches!(ext.as_str(), "numbers" | "xlsx");
+        let bytes = {
+            let Some(wb) = self.wb.as_mut() else {
+                return Err(HostError::failed("No spreadsheet is open."));
+            };
+            match ext.as_str() {
+                "numbers" => wb.doc.to_bytes().map_err(|e| HostError::failed(e.to_string()))?,
+                "xlsx" => {
+                    let (compat, extras): (bool, nm_core::xlsx::Extras) = match &self.excel {
+                        Some(x) => (
+                            x.compat,
+                            wb.sheets().into_iter().filter_map(|s| Some((s.name.clone(), x.by_sheet.get(&s.id)?.clone()))).collect(),
+                        ),
+                        None => (false, Default::default()),
+                    };
+                    nm_core::xlsx::write_xlsx_full_bytes(wb, compat, &extras)
+                        .map(|(_, bytes)| bytes)
+                        .map_err(|e| HostError::failed(e.to_string()))?
+                }
+                "pdf" => crate::pdf::export_with_bytes(wb, self.canvas.tiles.extras.clone())
+                    .map(|(_, bytes)| bytes)
+                    .map_err(HostError::failed)?,
+                other => return Err(HostError::rejected(format!("Values cannot save .{other} files."))),
+            }
+        };
+        let save_as_flag = is_save_as && !keep_source;
+        kn_ui::web::files::deliver_file(&out_name, &bytes, save_as_flag).map_err(HostError::failed)?;
+        if !keep_source && is_native {
+            if let Some(wb) = &mut self.wb {
+                wb.doc.dirty = false;
+                if is_save_as {
+                    if ext == "numbers" {
+                        self.excel = None;
+                        wb.doc.path = Some(PathBuf::from(&out_name));
+                    } else if let Some(x) = &mut self.excel {
+                        x.path = PathBuf::from(&out_name);
+                    } else {
+                        self.excel = Some(ExcelMode {
+                            path: PathBuf::from(&out_name),
+                            extras: Default::default(),
+                            by_sheet: Default::default(),
+                            compat: false,
+                        });
+                    }
+                    self.untitled_name = None;
+                }
+            }
+            kn_ui::web::set_dirty(self.doc().is_some_and(|d| d.dirty));
+        }
+        Ok(serde_json::json!({ "name": out_name }))
     }
 
     /// Save as a Numbers spreadsheet at `path` (leaving Excel mode: the document is a Numbers
@@ -898,9 +1145,19 @@ impl App {
 
     /// Image > Replace: a new picture for the replace target.
     pub fn pick_image(&mut self) {
-        let Some(id) = self.replace_target.take() else { return };
-        let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
-        self.replace_image(id, &p);
+        #[cfg(target_arch = "wasm32")]
+        {
+            if self.replace_target.is_some() {
+                kn_ui::web::files::pick_insert_image(&["png", "jpg", "jpeg"]);
+            }
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(id) = self.replace_target.take() else { return };
+            let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
+            self.replace_image(id, &p);
+        }
     }
 
     /// Image > Replace with the picture at `p`.
@@ -909,8 +1166,13 @@ impl App {
             Ok(b) => b,
             Err(e) => return self.notify(format!("Couldn't read the picture: {e}")),
         };
-        let Some((w, h)) = nm_core::kn_format::objects::image_size(&bytes) else { return self.notify("Only PNG and JPEG pictures can be used.") };
         let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "image.png".into());
+        self.replace_image_bytes(id, &name, bytes);
+    }
+
+    pub fn replace_image_bytes(&mut self, id: ObjId, name: &str, bytes: Vec<u8>) {
+        let Some((w, h)) = nm_core::kn_format::objects::image_size(&bytes) else { return self.notify("Only PNG and JPEG pictures can be used.") };
+        let name = name.to_string();
         let res = self.edit("Replace Image", |d, hist| {
             d.structural(hist, &[id], |k| -> Result<(), nm_core::kn_format::Error> {
                 let data = k.add_image_data(bytes, &name)?;
@@ -1838,19 +2100,33 @@ impl App {
 
     /// Insert > Image…: a PNG or JPEG file.
     pub fn insert_image_dialog(&mut self) {
-        let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
-        self.insert_image_file(&p);
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.replace_target = None;
+            kn_ui::web::files::pick_insert_image(&["png", "jpg", "jpeg"]);
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(p) = file_dialog(|d| d.add_filter("Pictures", &["png", "jpg", "jpeg"]).pick_file()) else { return };
+            self.insert_image_file(&p);
+        }
     }
 
     pub fn insert_image_file(&mut self, p: &Path) {
-        crate::canvas::commit(self);
-        let Some(sheet) = self.sheets().get(self.sheet).map(|s| s.id) else { return };
         let bytes = match std::fs::read(p) {
             Ok(b) => b,
             Err(e) => return self.notify(format!("Couldn't read {}: {e}", p.display())),
         };
         let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "image.png".into());
+        self.insert_image_bytes(&name, bytes);
+    }
+
+    pub fn insert_image_bytes(&mut self, name: &str, bytes: Vec<u8>) {
+        crate::canvas::commit(self);
+        let Some(sheet) = self.sheets().get(self.sheet).map(|s| s.id) else { return };
         let (x, y) = self.free_spot();
+        let name = name.to_string();
         match self.edit("Insert Image", |d, h| nm_core::sheets::insert_image(d, h, sheet, bytes, &name, x, y)) {
             Some(Ok(id)) => {
                 self.sel = None;
@@ -1962,20 +2238,51 @@ impl App {
     }
 
     pub fn export_pdf_dialog(&mut self) {
-        let name = self.title().trim_end_matches(".numbers").to_string();
-        let Some(path) = file_dialog(|d| d.add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file()) else { return };
-        let Some(wb) = &self.wb else { return };
-        match crate::pdf::export_with(wb, &path, self.canvas.tiles.extras.clone()) {
-            Ok(n) => self.notify(format!("Exported {n} pages to {}", path.display())),
-            Err(e) => self.notify(format!("Export failed: {e}")),
+        let name = self.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::canvas::commit(self);
+            let Some(wb) = &self.wb else { return };
+            match crate::pdf::export_with_bytes(wb, self.canvas.tiles.extras.clone())
+                .and_then(|(n, bytes)| kn_ui::web::files::download_file(&format!("{name}.pdf"), &bytes).map(|()| n))
+            {
+                Ok(n) => self.notify(format!("Exported {n} pages as {name}.pdf")),
+                Err(e) => self.notify(format!("Export failed: {e}")),
+            }
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(path) = file_dialog(|d| d.add_filter("PDF", &["pdf"]).set_file_name(format!("{name}.pdf")).save_file()) else { return };
+            let Some(wb) = &self.wb else { return };
+            match crate::pdf::export_with(wb, &path, self.canvas.tiles.extras.clone()) {
+                Ok(n) => self.notify(format!("Exported {n} pages to {}", path.display())),
+                Err(e) => self.notify(format!("Export failed: {e}")),
+            }
         }
     }
 
     /// File > Export To > Excel…: the spreadsheet as it is now (nm-core's writer).
     pub fn export_xlsx_dialog(&mut self) {
         let stem = self.doc().and_then(|d| d.path.as_ref()).and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Untitled".into());
-        let Some(out) = file_dialog(|d| d.add_filter("Excel", &["xlsx"]).set_file_name(format!("{stem}.xlsx")).save_file()) else { return };
-        self.export_xlsx_to(&out);
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::canvas::commit(self);
+            let Some(wb) = self.wb.as_ref() else { return };
+            match nm_core::xlsx::write_xlsx_full_bytes(wb, false, &Default::default())
+                .map_err(|e| e.to_string())
+                .and_then(|(n, bytes)| kn_ui::web::files::download_file(&format!("{stem}.xlsx"), &bytes).map(|()| n))
+            {
+                Ok(n) => self.notify(format!("Exported {n} worksheet{} as {stem}.xlsx", if n == 1 { "" } else { "s" })),
+                Err(e) => self.notify(format!("Export failed: {e}")),
+            }
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(out) = file_dialog(|d| d.add_filter("Excel", &["xlsx"]).set_file_name(format!("{stem}.xlsx")).save_file()) else { return };
+            self.export_xlsx_to(&out);
+        }
     }
 
     pub fn export_xlsx_to(&mut self, out: &Path) {
@@ -1989,25 +2296,73 @@ impl App {
 
     /// File > Export To > TSV…: a tab-separated file per table, into a folder.
     pub fn export_tsv_dialog(&mut self) {
-        let Some(dir) = file_dialog(|d| d.pick_folder()) else { return };
-        crate::canvas::commit(self);
-        let Some(wb) = self.wb.as_ref() else { return };
-        match export_delimited(wb, &dir, '\t') {
-            Ok(n) => self.notify(format!("Wrote {n} TSV files to {}", dir.display())),
-            Err(e) => self.notify(format!("Export failed: {e}")),
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.export_delimited_web('\t');
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(dir) = file_dialog(|d| d.pick_folder()) else { return };
+            crate::canvas::commit(self);
+            let Some(wb) = self.wb.as_ref() else { return };
+            match export_delimited(wb, &dir, '\t') {
+                Ok(n) => self.notify(format!("Wrote {n} TSV files to {}", dir.display())),
+                Err(e) => self.notify(format!("Export failed: {e}")),
+            }
         }
     }
 
     pub fn export_csv_dialog(&mut self) {
-        let Some(path) = self.doc().and_then(|d| d.path.clone()) else {
-            self.notify("Save the spreadsheet first.");
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.export_delimited_web(',');
             return;
-        };
-        if let Some(dir) = file_dialog(|d| d.pick_folder()) {
-            match export_csv(&path, &dir) {
-                Ok(n) => self.notify(format!("Wrote {n} CSV files to {}", dir.display())),
-                Err(e) => self.notify(format!("Export failed: {e}")),
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(path) = self.doc().and_then(|d| d.path.clone()) else {
+                self.notify("Save the spreadsheet first.");
+                return;
+            };
+            if let Some(dir) = file_dialog(|d| d.pick_folder()) {
+                match export_csv(&path, &dir) {
+                    Ok(n) => self.notify(format!("Wrote {n} CSV files to {}", dir.display())),
+                    Err(e) => self.notify(format!("Export failed: {e}")),
+                }
             }
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn export_delimited_web(&mut self, sep: char) {
+        use std::io::Write;
+        crate::canvas::commit(self);
+        let Some(wb) = self.wb.as_ref() else { return };
+        let files = delimited_tables(wb, sep);
+        let ext = if sep == '\t' { "tsv" } else { "csv" };
+        let stem = self.title().trim_end_matches(".numbers").trim_end_matches(".xlsx").to_string();
+        let res = if files.len() == 1 {
+            let (name, body) = &files[0];
+            kn_ui::web::files::download_file(name, body.as_bytes()).map(|()| format!("Exported {name}"))
+        } else {
+            let zip_name = format!("{stem}-{ext}.zip");
+            let mut cur = std::io::Cursor::new(Vec::new());
+            let written = (|| -> Result<(), String> {
+                let mut z = zip::ZipWriter::new(&mut cur);
+                let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+                for (name, body) in &files {
+                    z.start_file(name, opts).map_err(|e| e.to_string())?;
+                    z.write_all(body.as_bytes()).map_err(|e| e.to_string())?;
+                }
+                z.finish().map_err(|e| e.to_string())?;
+                Ok(())
+            })();
+            written.and_then(|()| kn_ui::web::files::download_file(&zip_name, cur.get_ref())).map(|()| format!("Exported {} tables as {zip_name}", files.len()))
+        };
+        match res {
+            Ok(msg) => self.notify(msg),
+            Err(e) => self.notify(format!("Export failed: {e}")),
         }
     }
 
@@ -2143,12 +2498,18 @@ impl eframe::App for App {
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let c = theme::CANVAS_BG();
+            return [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, 1.0];
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         // transparent around the window: its shadow is drawn there
         [0.0; 4]
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         kn_ui::glass::native_blur(frame, kn_ui::glass::translucent_panes());
         let ctx = ui.ctx().clone();
         kn_ui::begin_frame(&ctx);
@@ -2156,6 +2517,39 @@ impl eframe::App for App {
         kn_ui::form::set_pref(self.settings.ui_layout);
         if self.canvas.editing.is_some() || self.canvas.edit.is_some() {
             kn_ui::typing(&ctx);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if self.canvas.tiles.renderer_mut().absorb_fetched_fonts() {
+                self.canvas.tiles.clear();
+                self.version += 1;
+                ctx.request_repaint();
+            }
+            for ev in kn_ui::web::take_events() {
+                match ev {
+                    kn_ui::web::files::WebEvent::OpenDoc { name, bytes } => self.open_bytes(&name, bytes),
+                    kn_ui::web::files::WebEvent::InsertImage { name, bytes }
+                    | kn_ui::web::files::WebEvent::InsertMedia { name, bytes }
+                    | kn_ui::web::files::WebEvent::PastedImage { name, bytes } => {
+                        if let Some(id) = self.replace_target.take() {
+                            self.replace_image_bytes(id, &name, bytes);
+                        } else {
+                            self.insert_image_bytes(&name, bytes);
+                        }
+                    }
+                    kn_ui::web::files::WebEvent::InsertGallery(pics) => crate::media::gallery_from_bytes(self, pics),
+                    kn_ui::web::files::WebEvent::Dropped { name, bytes } => {
+                        let ext = Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                        if ["numbers", "xlsx", "xlsm", "csv", "tsv", "txt", "nmbtemplate"].contains(&ext.as_str()) {
+                            self.open_bytes(&name, bytes);
+                        } else if kn_ui::media::IMAGE_EXT.contains(&ext.as_str()) {
+                            self.insert_image_bytes(&name, bytes);
+                        }
+                    }
+                    kn_ui::web::files::WebEvent::HostRequest(req) => self.handle_host_request(&ctx, req),
+                }
+            }
+            kn_ui::web::set_dirty(self.doc().is_some_and(|d| d.dirty));
         }
         self.pointer_held = ctx.input(|i| i.pointer.any_down() || i.pointer.any_released());
         if ctx.input(|i| i.pointer.any_pressed()) {
@@ -2174,15 +2568,18 @@ impl eframe::App for App {
         }
         // dropped files (on Android, also files picked in the system picker): spreadsheets
         // open, pictures, movies and sounds go on the sheet
-        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
-        for p in dropped {
-            let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-            use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
-            if ["numbers", "xlsx", "xlsm", "csv", "tsv", "txt", "nmbtemplate"].contains(&ext.as_str()) {
-                self.templates.chooser = false;
-                self.open(&p);
-            } else if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
-                crate::media::insert_path(self, p);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+            for p in dropped {
+                let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                use kn_ui::media::{AUDIO_EXT, IMAGE_EXT, MOVIE_EXT};
+                if ["numbers", "xlsx", "xlsm", "csv", "tsv", "txt", "nmbtemplate"].contains(&ext.as_str()) {
+                    self.templates.chooser = false;
+                    self.open(&p);
+                } else if IMAGE_EXT.iter().chain(MOVIE_EXT).chain(AUDIO_EXT).any(|e| *e == ext) {
+                    crate::media::insert_path(self, p);
+                }
             }
         }
         // our own frame (Keydeck's): shadow, rounded corners and outline where the desktop
@@ -2250,14 +2647,27 @@ impl App {
                 });
             });
             match done {
-                Some(true) => match Document::open_with_password(path.as_path(), typed, hint) {
-                    Ok(doc) => {
-                        self.password = None;
-                        self.load(Workbook { doc });
+                Some(true) => {
+                    let res = match &self.password_bytes {
+                        Some(bytes) => {
+                            let name = path.to_string_lossy();
+                            Workbook::open_bytes_with_password(&name, bytes, typed, hint).map(|w| w.doc)
+                        }
+                        None => Document::open_with_password(path.as_path(), typed, hint),
+                    };
+                    match res {
+                        Ok(doc) => {
+                            self.password = None;
+                            self.password_bytes = None;
+                            self.load(Workbook { doc });
+                        }
+                        Err(_) => *wrong = true,
                     }
-                    Err(_) => *wrong = true,
-                },
-                Some(false) => self.password = None,
+                }
+                Some(false) => {
+                    self.password = None;
+                    self.password_bytes = None;
+                }
                 None => {}
             }
         }
@@ -2540,11 +2950,10 @@ pub fn export_csv(src: &Path, dir: &Path) -> Result<usize, String> {
 }
 
 /// A file per table of `wb`, fields separated by `sep` ("Sheet - Table.tsv" / ".csv").
-pub fn export_delimited(wb: &Workbook, dir: &Path, sep: char) -> Result<usize, String> {
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+pub fn delimited_tables(wb: &Workbook, sep: char) -> Vec<(String, String)> {
     let ext = if sep == '\t' { "tsv" } else { "csv" };
     let field = |s: &str| if s.contains([sep, '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_string() };
-    let mut n = 0;
+    let mut files = Vec::new();
     for s in wb.sheets() {
         for t in wb.tables(&s) {
             let Some(td) = wb.table_data(t.info) else { continue };
@@ -2555,11 +2964,20 @@ pub fn export_delimited(wb: &Workbook, dir: &Path, sep: char) -> Result<usize, S
                 out.push('\n');
             }
             let name = format!("{} - {}.{ext}", s.name, t.name).replace('/', "-");
-            std::fs::write(dir.join(name), out).map_err(|e| e.to_string())?;
-            n += 1;
+            files.push((name, out));
         }
     }
-    Ok(n)
+    files
+}
+
+/// A file per table of `wb`, fields separated by `sep` ("Sheet - Table.tsv" / ".csv").
+pub fn export_delimited(wb: &Workbook, dir: &Path, sep: char) -> Result<usize, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let files = delimited_tables(wb, sep);
+    for (name, out) in &files {
+        std::fs::write(dir.join(name), out).map_err(|e| e.to_string())?;
+    }
+    Ok(files.len())
 }
 
 fn csv_field(s: &str) -> String {
@@ -2815,6 +3233,26 @@ pub fn read_file(p: &Path) -> ReadFile {
             o.workbook
         }),
         _ => Workbook::open(p),
+    };
+    ReadFile { opened, excel, note, warnings: nm_core::import::take_warnings() }
+}
+
+/// Reads a spreadsheet from in-memory bytes (WebAssembly).
+pub fn read_bytes(name: &str, bytes: &[u8]) -> ReadFile {
+    let p = Path::new(name);
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let mut excel = None;
+    let mut note = None;
+    let opened = match ext.as_str() {
+        "csv" | "tsv" | "txt" => nm_core::import::import_delimited_bytes(name, bytes),
+        "xlsx" | "xlsm" => nm_core::xlsx::open_xlsx_bytes(bytes).map(|o| {
+            excel = Some(ExcelMode { path: PathBuf::from(name), compat: o.compat, extras: o.extras.clone(), by_sheet: Default::default() });
+            if o.changed_elsewhere {
+                note = Some("This workbook was changed in another app since Values saved it: it opened from the Excel data, and the Values-only extras it had are gone.".to_string());
+            }
+            o.workbook
+        }),
+        _ => Workbook::open_bytes(name, bytes),
     };
     ReadFile { opened, excel, note, warnings: nm_core::import::take_warnings() }
 }

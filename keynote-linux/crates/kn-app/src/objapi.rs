@@ -35,7 +35,7 @@ fn movie_length(app: &mut App, id: ObjId, m: &kn_model::MovieData) -> f32 {
         Some((mid, l, at)) if mid == id && (l > 0.0 || at.elapsed().as_secs_f32() < 2.0) => l,
         _ => {
             let l = m.movie_data.and_then(|data| app.doc.as_ref().and_then(|doc| crate::media::cache_file(doc, data))).and_then(|(p, _)| crate::media::duration(&p)).unwrap_or(0.0) as f32;
-            app.insp.movie_len = Some((id, l, std::time::Instant::now()));
+            app.insp.movie_len = Some((id, l, web_time::Instant::now()));
             l
         }
     }

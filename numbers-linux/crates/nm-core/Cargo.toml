@@ -8,6 +8,7 @@ license = "GPL-3.0-only"
 kn-format = { path = "../../../keynote-linux/crates/kn-format" }
 kn-model = { path = "../../../keynote-linux/crates/kn-model" }
 roxmltree = "0.20"
+web-time = "1.1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

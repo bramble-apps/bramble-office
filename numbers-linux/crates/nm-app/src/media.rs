@@ -3,7 +3,7 @@
 //! sounds, Record Audio, Web Video… and Image Gallery; movies and web videos play in place.
 
 use std::path::PathBuf;
-use std::time::Instant;
+use web_time::Instant;
 
 use std::sync::mpsc::{channel, Receiver};
 
@@ -151,21 +151,35 @@ pub fn ui(app: &mut App, ctx: &egui::Context) {
 
 /// Record Audio's ● Record: the default microphone into a temporary file.
 pub fn record_start(app: &mut App) {
-    let path = std::env::temp_dir().join(format!("values-recording-{}.wav", std::process::id()));
-    let child = std::process::Command::new("pw-record")
-        .arg(&path)
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
-    match child {
-        Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
-        Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+    #[cfg(target_arch = "wasm32")]
+    {
+        app.notify("Audio recording is only available in the desktop app");
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let path = std::env::temp_dir().join(format!("values-recording-{}.wav", std::process::id()));
+        let child = std::process::Command::new("pw-record")
+            .arg(&path)
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .or_else(|_| std::process::Command::new("arecord").args(["-f", "cd"]).arg(&path).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn());
+        match child {
+            Ok(child) => app.media.recorder = Some(Recorder { child, path, started: Instant::now() }),
+            Err(e) => app.notify(format!("Couldn't start recording: {e}")),
+        }
     }
 }
 
 /// The recording stopped: on the sheet (`insert`) or thrown away.
 pub fn record_stop(app: &mut App, insert: bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (app, insert);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(mut r) = app.media.recorder.take() {
         // stop politely so the file is finished properly
         let _ = std::process::Command::new("kill").args(["-INT", &r.child.id().to_string()]).status();
@@ -209,40 +223,68 @@ pub fn set_query(app: &mut App, q: &str) {
 
 /// Web Video's Insert: the link's details are looked up in the background, then it goes in.
 pub fn web_go(app: &mut App, url: &str) {
-    let (tx, rx) = channel();
-    let u = url.trim().to_string();
-    std::thread::spawn(move || {
-        let _ = tx.send(fetch(u));
-    });
-    app.media.fetching = Some(rx);
-    app.media.url_sheet = None;
-    app.notify("Getting the video's details…");
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = url;
+        app.media.url_sheet = None;
+        app.notify("Web video fetching is only available in the desktop app");
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        let u = url.trim().to_string();
+        std::thread::spawn(move || {
+            let _ = tx.send(fetch(u));
+        });
+        app.media.fetching = Some(rx);
+        app.media.url_sheet = None;
+        app.notify("Getting the video's details…");
+    }
 }
 
 /// Insert > Choose…: a picture, movie or sound file.
 pub fn choose(app: &mut App) {
-    let mut exts: Vec<&str> = IMAGE_EXT.to_vec();
-    exts.extend(MOVIE_EXT);
-    exts.extend(AUDIO_EXT);
-    if let Some(p) = kn_ui::files::FileDialog::new().add_filter("Pictures, Movies and Sounds", &exts).pick_file() {
-        insert_path(app, p);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = app;
+        kn_ui::web::files::pick_insert_image(IMAGE_EXT);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut exts: Vec<&str> = IMAGE_EXT.to_vec();
+        exts.extend(MOVIE_EXT);
+        exts.extend(AUDIO_EXT);
+        if let Some(p) = kn_ui::files::FileDialog::new().add_filter("Pictures, Movies and Sounds", &exts).pick_file() {
+            insert_path(app, p);
+        }
     }
 }
 
 /// A picture goes in at once; a movie or sound is read (length, poster still) in the
 /// background, then inserted.
 pub fn insert_path(app: &mut App, p: PathBuf) {
-    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-    if IMAGE_EXT.contains(&ext.as_str()) {
-        app.insert_image_file(&p);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = p;
+        app.notify("Inserting local media by path is not available in the browser");
         return;
     }
-    let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(kn_ui::media::prepare(&p));
-    });
-    app.media.preparing = Some(rx);
-    app.notify("Adding the media…");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if IMAGE_EXT.contains(&ext.as_str()) {
+            app.insert_image_file(&p);
+            return;
+        }
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(kn_ui::media::prepare(&p));
+        });
+        app.media.preparing = Some(rx);
+        app.notify("Adding the media…");
+    }
 }
 
 /// A picture's bytes on the sheet where there's room; its id.
@@ -267,13 +309,30 @@ pub fn insert_picture(app: &mut App, bytes: Vec<u8>, name: &str) -> Option<ObjId
 /// Insert > Image Gallery: several pictures in one frame.
 pub fn pick_gallery(app: &mut App, adding_to: Option<ObjId>) {
     app.media.adding_to = adding_to;
+    #[cfg(target_arch = "wasm32")]
+    {
+        kn_ui::web::files::pick_insert_gallery(&["png", "jpg", "jpeg", "webp"]);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
+            let pics: Vec<(String, Vec<u8>)> = files.iter().filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?))).collect();
+            let _ = tx.send(pics);
+        });
+        app.media.picking = Some(rx);
+    }
+}
+
+/// Insert gallery pictures from in-memory `(name, bytes)` pairs (WebAssembly file picker).
+#[cfg(target_arch = "wasm32")]
+pub fn gallery_from_bytes(app: &mut App, pics: Vec<(String, Vec<u8>)>) {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let files = kn_ui::files::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg"]).set_title("Choose Pictures for the Gallery").pick_files().unwrap_or_default();
-        let pics: Vec<(String, Vec<u8>)> = files.iter().filter_map(|p| Some((p.file_name()?.to_string_lossy().to_string(), std::fs::read(p).ok()?))).collect();
-        let _ = tx.send(pics);
-    });
+    let _ = tx.send(pics);
     app.media.picking = Some(rx);
+    jobs(app);
 }
 
 /// The Web Video sheet and the background work coming back.

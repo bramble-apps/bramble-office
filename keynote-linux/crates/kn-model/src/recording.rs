@@ -165,7 +165,7 @@ impl Document {
             }
             rec.set_ref("movie_track", track_id);
             rec.set_f64("duration", duration);
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 978_307_200.0;
+            let now = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0) - 978_307_200.0;
             rec.msg_mut_or_create("modification_date").set_f64("seconds", now);
             rec.msg_mut_or_create("sync_state").set_bool("can_clear_out_of_sync_token", true);
             rec.msg_mut_or_create("correction_history").set_bool("did_add_missing_events_for_radar_49654305", false);
